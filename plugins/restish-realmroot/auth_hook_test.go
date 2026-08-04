@@ -53,7 +53,8 @@ func TestAuthHookEnrollsOnceThenSignsOriginalRequest(t *testing.T) {
 				t.Fatal(err)
 			}
 			if request.Form.Get("grant_type") != "urn:ietf:params:oauth:grant-type:jwt-bearer" ||
-				request.Form.Get("resource") != "https://auth.example.com/api" || request.Header.Get("DPoP") == "" {
+				request.Form.Get("resource") != "https://auth.example.com/api" || request.Form.Get("scope") != platformScopes ||
+				request.Header.Get("DPoP") == "" {
 				t.Fatalf("token request form = %#v", request.Form)
 			}
 			return jsonResponse(200, map[string]any{
@@ -125,6 +126,73 @@ func TestAuthHookUsesConfiguredIssuerToSelectTargetIdentity(t *testing.T) {
 	_, err := authenticateRequest(input, states, roundTripFunc(nil), &promptRecorder{})
 	if err == nil || !strings.Contains(err.Error(), "does not match the active Resource credential issuer") {
 		t.Fatalf("issuer mismatch error = %v", err)
+	}
+}
+
+func TestAuthUseSelectsOperationalTargetIdentity(t *testing.T) {
+	t.Setenv(stateDirectoryEnv, t.TempDir())
+	t.Setenv("AGENT", defaultAgentRuntime)
+	states := newFileStateStore()
+	profiles := newLifecycleProfileStore(states)
+	credential := testCredential(t, "work-token", time.Now().Add(time.Minute))
+	workState := newCredentialState(t, credential).state
+	workTarget := agentTarget{API: "realmroot", Profile: "default", Runtime: defaultAgentRuntime,
+		Origin: "https://auth.example.com", Issuer: "https://auth.example.com/api/auth"}
+	if _, err := states.Create(workTarget, workState); err != nil {
+		t.Fatal(err)
+	}
+	stagingCredential := credential
+	stagingCredential.AccessToken = "staging-token"
+	stagingState := newCredentialState(t, stagingCredential).state
+	stagingState.Identity.Issuer = "https://staging.example.com/api/auth"
+	stagingTarget := agentTarget{API: "realmroot", Profile: "staging", Runtime: "other-runtime",
+		Origin: "https://staging.example.com", Issuer: "https://staging.example.com/api/auth"}
+	if _, err := states.Create(stagingTarget, stagingState); err != nil {
+		t.Fatal(err)
+	}
+	if err := profiles.Put(lifecycleProfile{Name: "work", API: "realmroot", APIProfile: "default",
+		Origin: workTarget.Origin, Issuer: workTarget.Issuer, Runtime: defaultAgentRuntime}); err != nil {
+		t.Fatal(err)
+	}
+	if err := profiles.Put(lifecycleProfile{Name: "staging", API: "realmroot", APIProfile: "staging",
+		Origin: stagingTarget.Origin, Issuer: stagingTarget.Issuer, Runtime: stagingTarget.Runtime}); err != nil {
+		t.Fatal(err)
+	}
+	input := targetHookInput()
+	input.Params["issuer"] = stagingTarget.Issuer
+	output, err := authenticateRequest(input, states, roundTripFunc(nil), &promptRecorder{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if output.Request.Headers["Authorization"] != "DPoP staging-token" {
+		t.Fatalf("authorization = %#v", output.Request.Headers["Authorization"])
+	}
+}
+
+func TestAuthUseRejectsMismatchedRealmrootAPIAlias(t *testing.T) {
+	t.Setenv(stateDirectoryEnv, t.TempDir())
+	t.Setenv("AGENT", defaultAgentRuntime)
+	states := newFileStateStore()
+	profiles := newLifecycleProfileStore(states)
+	if err := profiles.Put(lifecycleProfile{
+		Name: "staging", API: "realmroot-staging", APIProfile: "default", Runtime: defaultAgentRuntime,
+		Origin: "https://staging.example.com", Issuer: "https://staging.example.com/api/auth",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	client := roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		if request.URL.String() != "https://auth.example.com/.well-known/agent-configuration" {
+			t.Fatalf("discovery request = %s", request.URL)
+		}
+		return jsonResponse(http.StatusOK, testAgentConfiguration()), nil
+	})
+	input := plugin.AuthHookInput{
+		API: "realmroot", Profile: "default", Params: map[string]string{"provider": authProvider},
+		Request: plugin.HookRequest{Method: http.MethodGet, URI: "https://auth.example.com/api/agent/status"},
+	}
+	_, err := authenticateRequest(input, states, client, &promptRecorder{})
+	if err == nil || !strings.Contains(err.Error(), "--rsh-profile default") {
+		t.Fatalf("alias mismatch error = %v", err)
 	}
 }
 
@@ -254,7 +322,7 @@ func newCredentialState(t *testing.T, credential dpopCredential) *memoryStateSto
 		PlatformCredential: &dpopCredential{
 			ResourceHref: "https://auth.example.com/api", ResourceIndicator: "https://auth.example.com/api",
 			CredentialEndpoint: "https://auth.example.com/api/auth/oauth2/token",
-			ProofTarget: "https://auth.example.com/api/auth/oauth2/token", PrivateKey: platformKey,
+			ProofTarget:        "https://auth.example.com/api/auth/oauth2/token", PrivateKey: platformKey,
 			AccessToken: "platform-token", ExpiresAt: &platformExpiresAt,
 		},
 	}}

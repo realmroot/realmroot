@@ -1,7 +1,8 @@
-import { forbidden } from '@server/domain/errors'
+import { forbidden, gone } from '@server/domain/errors'
 import {
-  emergencyRetireAgentIdentity,
   getAgent,
+  getAgentIdentityInstallationRevocation,
+  getAgentIdentityRecovery,
   getManagementAgent,
   getManagementAgentAccessGrant,
   getManagementAgentAccessRequest,
@@ -9,7 +10,9 @@ import {
   listManagementAgentAccessGrants,
   listManagementAgentAccessRequests,
   listManagementAgentInstallations,
-  recoverAgentIdentity,
+  replaceAgentIdentityInstallationRevocation,
+  replaceAgentIdentityRecovery,
+  replaceAgentIdentityRetirement,
 } from '@server/usecases/agent-identities'
 import {
   decideAccessRequest,
@@ -22,6 +25,8 @@ import {
   accessGrantSchema,
   accessGrantsResponseSchema,
   accessRequestSchema,
+  agentInstallationRevocationSchema,
+  agentRecoverySchema,
   decideAccessRequestSchema,
   listAgentAuditEventsQuerySchema,
   listAgentsQuerySchema,
@@ -60,8 +65,8 @@ managementAgentsRoute.get('/agents', async (c) => {
 })
 
 managementAgentsRoute.get('/agents/:agentId', async (c) => {
+  await requireAgentByIdConsoleAccess(c, c.req.param('agentId'))
   const result = await getManagementAgent(getDeps(c), c.req.param('agentId'))
-  requireAgentConsoleAccess(c, result.agent)
   return c.json(managementAgentResponseSchema.parse(result))
 })
 
@@ -70,6 +75,29 @@ managementAgentsRoute.get('/agents/:agentId/installations', async (c) => {
   return c.json(
     managementAgentInstallationsResponseSchema.parse(
       await listManagementAgentInstallations(getDeps(c), c.req.param('agentId'), readQuery(c, paginationQuerySchema)),
+    ),
+  )
+})
+
+managementAgentsRoute.get('/agents/:agentId/installations/:installationId/revocation', async (c) => {
+  await requireAgentByIdConsoleAccess(c, c.req.param('agentId'))
+  return c.json(
+    agentInstallationRevocationSchema.parse(
+      await getAgentIdentityInstallationRevocation(getDeps(c), c.req.param('agentId'), c.req.param('installationId')),
+    ),
+  )
+})
+
+managementAgentsRoute.put('/agents/:agentId/installations/:installationId/revocation', async (c) => {
+  await requireAgentByIdConsoleAccess(c, c.req.param('agentId'))
+  return c.json(
+    agentInstallationRevocationSchema.parse(
+      await replaceAgentIdentityInstallationRevocation(
+        getDeps(c),
+        c.req.param('agentId'),
+        c.req.param('installationId'),
+        getActorUserId(c),
+      ),
     ),
   )
 })
@@ -162,20 +190,34 @@ managementAgentsRoute.put('/access/authorizations/:authorizationId/revocation', 
   return c.json({ authorizationId: grant.id, status: 'revoked' as const })
 })
 
+managementAgentsRoute.get('/agents/:agentId/recovery', async (c) => {
+  await requireAgentByIdConsoleAccess(c, c.req.param('agentId'))
+  return c.json(agentRecoverySchema.parse(await getAgentIdentityRecovery(getDeps(c), c.req.param('agentId'))))
+})
+
+managementAgentsRoute.put('/agents/:agentId/recovery', async (c) => {
+  await requireAgentByIdConsoleAccess(c, c.req.param('agentId'))
+  return c.json(
+    agentRecoverySchema.parse(
+      await replaceAgentIdentityRecovery(getDeps(c), c.req.param('agentId'), getActorUserId(c)),
+    ),
+  )
+})
+
 managementAgentsRoute.get('/agents/:agentId/retirement', async (c) => {
-  const result = await getManagementAgent(getDeps(c), c.req.param('agentId'))
-  requireAgentConsoleAccess(c, result.agent)
-  return c.json({ agentId: result.agent.id, status: result.agent.status, retiredAt: result.agent.retiredAt })
+  await requireAgentByIdConsoleAccess(c, c.req.param('agentId'))
+  const agent = await getAgent(getDeps(c), c.req.param('agentId'))
+  return c.json({ agentId: agent.id, status: agent.status, retiredAt: agent.retiredAt })
 })
 
 managementAgentsRoute.put('/agents/:agentId/retirement', async (c) => {
-  await emergencyRetireAgentIdentity(getDeps(c), c.req.param('agentId'), getActorUserId(c))
+  await requireAgentByIdConsoleAccess(c, c.req.param('agentId'))
+  await replaceAgentIdentityRetirement(getDeps(c), c.req.param('agentId'), getActorUserId(c), !getPrincipal(c).agent)
   return c.body(null, 204)
 })
 
-managementAgentsRoute.delete('/agents/:agentId/retirement', async (c) => {
-  await recoverAgentIdentity(getDeps(c), c.req.param('agentId'), getActorUserId(c)!)
-  return c.body(null, 204)
+managementAgentsRoute.delete('/agents/:agentId/retirement', async (_c) => {
+  throw gone('Retirement is irreversible. Use the Agent recovery resource to recover an active identity.')
 })
 
 managementAgentsRoute.get('/realm/audit-events', async (c) => {
@@ -200,6 +242,11 @@ managementAgentsRoute.get('/realm/audit-events', async (c) => {
 })
 
 async function requireAgentByIdConsoleAccess(c: Parameters<typeof getDeps>[0], agentId: string) {
+  const principal = getPrincipal(c).agent
+  if (principal) {
+    if (principal.identityId !== agentId) throw forbidden()
+    return
+  }
   const agent = await getAgent(getDeps(c), agentId)
   requireAgentConsoleAccess(c, agent)
 }

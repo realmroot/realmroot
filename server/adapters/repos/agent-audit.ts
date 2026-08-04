@@ -6,7 +6,7 @@ import { agentAuditEvent, agentIdentity } from '../../db/schema'
 export function createAgentAuditRepository(db: Database): AgentAuditRepository {
   return {
     async append(input) {
-      await db.insert(agentAuditEvent).values(input)
+      await db.insert(agentAuditEvent).values(input).onConflictDoNothing({ target: agentAuditEvent.id })
     },
 
     async list(page, filter) {

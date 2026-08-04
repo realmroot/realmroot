@@ -3,7 +3,7 @@ import type {
   AgentIdentityAggregate,
   AgentIdentityRepository,
 } from '@server/usecases/ports'
-import { and, count, desc, eq, inArray } from 'drizzle-orm'
+import { and, count, desc, eq, exists, inArray, sql } from 'drizzle-orm'
 import type { BatchItem } from 'drizzle-orm/batch'
 import type { Database } from '../../db/client'
 import {
@@ -164,7 +164,21 @@ export function createDrizzleAgentIdentityRepository(db: Database): AgentIdentit
         )
       }
       statements.push(
-        db.insert(agentIdentityBinding).values(input.binding),
+        db.insert(agentIdentityBinding).select(
+          db
+            .select({
+              id: sql<string>`${input.binding.id}`.as('id'),
+              agentIdentityId: agentIdentity.id,
+              protocolAgentId: sql<string>`${input.binding.protocolAgentId}`.as('protocol_agent_id'),
+              status: sql<string>`${input.binding.status}`.as('status'),
+              boundAt: sql<Date>`${input.binding.boundAt.getTime()}`.as('bound_at'),
+              revokedAt: sql<Date | null>`${input.binding.revokedAt?.getTime() ?? null}`.as('revoked_at'),
+              createdAt: sql<Date>`${input.binding.createdAt.getTime()}`.as('created_at'),
+              updatedAt: sql<Date>`${input.binding.updatedAt.getTime()}`.as('updated_at'),
+            })
+            .from(agentIdentity)
+            .where(and(eq(agentIdentity.id, input.binding.agentIdentityId), eq(agentIdentity.status, 'active'))),
+        ),
         db
           .update(agentEnrollmentIntent)
           .set({
@@ -173,11 +187,28 @@ export function createDrizzleAgentIdentityRepository(db: Database): AgentIdentit
             approvedAt: input.approvedAt,
             updatedAt: input.approvedAt,
           })
-          .where(and(eq(agentEnrollmentIntent.id, input.intentId), eq(agentEnrollmentIntent.status, 'pending'))),
+          .where(
+            and(
+              eq(agentEnrollmentIntent.id, input.intentId),
+              eq(agentEnrollmentIntent.status, 'pending'),
+              exists(
+                db
+                  .select({ id: agentIdentityBinding.id })
+                  .from(agentIdentityBinding)
+                  .where(eq(agentIdentityBinding.id, input.binding.id)),
+              ),
+            ),
+          ),
       )
       await db.batch(statements as [BatchItem<'sqlite'>, ...BatchItem<'sqlite'>[]])
       const result = await this.findIdentity(input.binding.agentIdentityId)
-      if (!result) throw new Error('Approved Agent identity was not persisted.')
+      if (
+        !result ||
+        result.identity.status !== 'active' ||
+        !result.bindings.some((binding) => binding.id === input.binding.id && binding.status === 'active')
+      ) {
+        throw new Error('Agent enrollment approval conflicted with an identity lifecycle transition.')
+      }
       return result
     },
 

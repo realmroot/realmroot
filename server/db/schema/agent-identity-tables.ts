@@ -65,6 +65,7 @@ export const agentEnrollmentIntent = sqliteTable(
       .notNull()
       .references(() => agent.id, { onDelete: 'restrict' }),
     idempotencyKey: text('idempotency_key'),
+    recovery: integer('recovery', { mode: 'boolean' }).notNull().default(false),
     status: text('status').notNull().default('pending'),
     createdByUserId: text('created_by_user_id')
       .notNull()

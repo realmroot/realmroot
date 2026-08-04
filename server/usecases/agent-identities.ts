@@ -324,6 +324,7 @@ export async function createAgentEnrollmentIntent(
       ...ownerColumns(homeSpace),
       protocolAgentId: input.protocolAgentId,
       idempotencyKey: null,
+      recovery: false,
       status: 'pending',
       createdByUserId: actorUserId,
       approvedByUserId: null,
@@ -341,10 +342,11 @@ export async function createAdditionalAgentEnrollmentIntent(
   protocolAgentId: string,
   actorUserId: string,
   idempotencyKey: string,
+  recovery = false,
 ): Promise<{ intent: AgentEnrollmentIntent; replayed: boolean }> {
   const existing = await deps.agentIdentities.findIntentByIdempotencyKey(protocolAgentId, idempotencyKey)
   if (existing) {
-    requireMatchingInstallationEnrollment(existing, identityId, actorUserId)
+    requireMatchingInstallationEnrollment(existing, identityId, actorUserId, recovery)
     return { intent: toIntent(existing), replayed: true }
   }
   const aggregate = await requireIdentity(deps, identityId)
@@ -361,6 +363,7 @@ export async function createAdditionalAgentEnrollmentIntent(
     ...ownerColumns(homeSpace),
     protocolAgentId,
     idempotencyKey,
+    recovery,
     status: 'pending',
     createdByUserId: actorUserId,
     approvedByUserId: null,
@@ -369,18 +372,56 @@ export async function createAdditionalAgentEnrollmentIntent(
     createdAt: now,
     updatedAt: now,
   })
-  requireMatchingInstallationEnrollment(reserved.intent, identityId, actorUserId)
+  requireMatchingInstallationEnrollment(reserved.intent, identityId, actorUserId, recovery)
   return { intent: toIntent(reserved.intent), replayed: !reserved.created }
+}
+
+export async function createRecoveryAgentEnrollmentIntent(
+  deps: Deps,
+  identityId: string,
+  protocolAgentId: string,
+  actorUserId: string,
+  idempotencyKey: string,
+) {
+  const existing = await deps.agentIdentities.findIntentByIdempotencyKey(protocolAgentId, idempotencyKey)
+  if (existing) {
+    requireMatchingInstallationEnrollment(existing, identityId, actorUserId, true)
+    if (existing.status !== 'pending') return { intent: toIntent(existing), replayed: true }
+    const identity = await requireIdentity(deps, identityId)
+    if (identity.identity.status === 'retired') throw badRequest('Retired Agent identities cannot be recovered.')
+    const homeSpace = homeSpaceOf(identity.identity)
+    await assertController(deps, homeSpace, actorUserId)
+    await assertProtocolAgentCanEnroll(deps, protocolAgentId, actorUserId)
+    return { intent: toIntent(existing), replayed: true }
+  }
+  const identity = await requireIdentity(deps, identityId)
+  if (identity.identity.status === 'retired') throw badRequest('Retired Agent identities cannot be recovered.')
+  const homeSpace = homeSpaceOf(identity.identity)
+  await assertController(deps, homeSpace, actorUserId)
+  await assertProtocolAgentCanEnroll(deps, protocolAgentId, actorUserId)
+  const enrollment = await createAdditionalAgentEnrollmentIntent(
+    deps,
+    identityId,
+    protocolAgentId,
+    actorUserId,
+    idempotencyKey,
+    true,
+  )
+  return enrollment
 }
 
 function requireMatchingInstallationEnrollment(
   intent: AgentEnrollmentIntentRecord,
   identityId: string,
   actorUserId: string,
+  recovery: boolean,
 ) {
   if (intent.createdByUserId !== actorUserId) throw forbidden('This Agent cannot replay the enrollment request.')
   if (intent.agentIdentityId !== identityId) {
     throw conflict('Idempotency-Key was already used for a different Agent installation enrollment.')
+  }
+  if (intent.recovery !== recovery) {
+    throw conflict('Idempotency-Key was already used for a different Agent installation lifecycle.')
   }
 }
 
@@ -406,6 +447,7 @@ export async function approveAgentEnrollment(
     const existing = await requireIdentity(deps, identityId)
     if (existing.identity.status === 'retired') throw badRequest('Retired Agent identities cannot enroll hosts.')
     assertSameHomeSpace(homeSpace, homeSpaceOf(existing.identity))
+    if (intent.recovery) await replaceAgentIdentityRecovery(deps, identityId, actorUserId)
   } else {
     identityId = createId('agid')
     identity = {
@@ -458,6 +500,150 @@ export async function revokeAgentIdentityHost(
     protocolAgentId,
     hostId: binding?.hostId ?? null,
   })
+}
+
+export async function getAgentIdentityInstallationRevocation(deps: Deps, identityId: string, installationId: string) {
+  const identity = await requireIdentity(deps, identityId)
+  const binding = identity.bindings.find((candidate) => candidate.id === installationId)
+  if (!binding || binding.status !== 'revoked' || !binding.revokedAt) {
+    throw notFound('Agent installation revocation was not found.')
+  }
+  return {
+    agentId: identityId,
+    installationId,
+    status: 'revoked' as const,
+    revokedAt: binding.revokedAt.toISOString(),
+  }
+}
+
+export async function replaceAgentIdentityInstallationRevocation(
+  deps: Deps,
+  identityId: string,
+  installationId: string,
+  actorUserId: string | null,
+) {
+  const identity = await requireIdentity(deps, identityId)
+  if (identity.identity.status === 'retired') throw badRequest('Agent identity is retired.')
+  const binding = identity.bindings.find((candidate) => candidate.id === installationId)
+  if (!binding) throw notFound('Agent installation was not found.')
+  if (binding.status === 'revoked' && binding.revokedAt) {
+    await revokeAgentResourceLeasesForBinding(deps, binding.id)
+    await appendIdentityAudit(
+      deps,
+      'agent.host_revoked',
+      identity,
+      actorUserId,
+      { protocolAgentId: binding.protocolAgentId, hostId: binding.hostId },
+      lifecycleAudit('installation-revocation', binding.id, binding.revokedAt),
+    )
+    return {
+      agentId: identityId,
+      installationId,
+      status: 'revoked' as const,
+      revokedAt: binding.revokedAt.toISOString(),
+    }
+  }
+  const revokedAt = new Date()
+  if (!(await deps.agentIdentities.revokeBinding(identityId, binding.protocolAgentId, revokedAt))) {
+    throw conflict('Agent installation changed before it could be revoked.')
+  }
+  await revokeAgentResourceLeasesForBinding(deps, binding.id)
+  await appendIdentityAudit(
+    deps,
+    'agent.host_revoked',
+    identity,
+    actorUserId,
+    {
+      protocolAgentId: binding.protocolAgentId,
+      hostId: binding.hostId,
+    },
+    lifecycleAudit('installation-revocation', binding.id, revokedAt),
+  )
+  return { agentId: identityId, installationId, status: 'revoked' as const, revokedAt: revokedAt.toISOString() }
+}
+
+export async function getAgentIdentityRecovery(deps: Deps, identityId: string) {
+  const identity = await requireIdentity(deps, identityId)
+  if (identity.identity.status !== 'recovering') throw notFound('Agent recovery was not found.')
+  return {
+    agentId: identityId,
+    status: 'recovering' as const,
+    startedAt: identity.identity.updatedAt.toISOString(),
+  }
+}
+
+export async function replaceAgentIdentityRecovery(deps: Deps, identityId: string, actorUserId: string | null) {
+  const identity = await requireIdentity(deps, identityId)
+  if (identity.identity.status === 'retired') throw badRequest('Retired Agent identities cannot be recovered.')
+  if (identity.identity.status === 'recovering') {
+    await revokeAgentResourceAccess(deps, identityId)
+    await appendIdentityAudit(
+      deps,
+      'agent.identity_recovered',
+      identity,
+      actorUserId,
+      undefined,
+      lifecycleAudit('identity-recovery', identityId, identity.identity.updatedAt),
+    )
+    return {
+      agentId: identityId,
+      status: 'recovering' as const,
+      startedAt: identity.identity.updatedAt.toISOString(),
+    }
+  }
+  const startedAt = new Date()
+  if (!(await deps.agentIdentities.recoverIdentity(identityId, startedAt))) {
+    throw conflict('Agent identity changed before recovery could begin.')
+  }
+  await revokeAgentResourceAccess(deps, identityId)
+  await appendIdentityAudit(
+    deps,
+    'agent.identity_recovered',
+    identity,
+    actorUserId,
+    undefined,
+    lifecycleAudit('identity-recovery', identityId, startedAt),
+  )
+  return { agentId: identityId, status: 'recovering' as const, startedAt: startedAt.toISOString() }
+}
+
+export async function replaceAgentIdentityRetirement(
+  deps: Deps,
+  identityId: string,
+  actorUserId: string | null,
+  emergency = false,
+) {
+  const identity = await requireIdentity(deps, identityId)
+  if (identity.identity.status === 'retired' && identity.identity.retiredAt) {
+    await revokeAgentResourceAccess(deps, identityId)
+    await appendIdentityAudit(
+      deps,
+      'agent.identity_retired',
+      identity,
+      actorUserId,
+      emergency ? { emergency: true } : undefined,
+      lifecycleAudit('identity-retirement', identityId, identity.identity.retiredAt),
+    )
+    return {
+      agentId: identityId,
+      status: 'retired' as const,
+      retiredAt: identity.identity.retiredAt.toISOString(),
+    }
+  }
+  const retiredAt = new Date()
+  if (!(await deps.agentIdentities.retireIdentity(identityId, retiredAt))) {
+    throw conflict('Agent identity changed before it could be retired.')
+  }
+  await revokeAgentResourceAccess(deps, identityId)
+  await appendIdentityAudit(
+    deps,
+    'agent.identity_retired',
+    identity,
+    actorUserId,
+    emergency ? { emergency: true } : undefined,
+    lifecycleAudit('identity-retirement', identityId, retiredAt),
+  )
+  return { agentId: identityId, status: 'retired' as const, retiredAt: retiredAt.toISOString() }
 }
 
 export async function recoverAgentIdentity(deps: Deps, identityId: string, actorUserId: string) {
@@ -539,9 +725,11 @@ async function appendIdentityAudit(
   aggregate: AgentIdentityAggregate,
   controllerUserId: string | null,
   metadata?: Record<string, unknown>,
+  event?: { id: string; occurredAt: Date },
 ) {
   const binding = aggregate.bindings.at(-1)
   await appendAgentGovernanceAudit(deps, {
+    id: event?.id,
     action,
     result: 'allowed',
     controllerUserId,
@@ -550,7 +738,15 @@ async function appendIdentityAudit(
     agentIdentityId: aggregate.identity.id,
     hostId: binding?.hostId ?? null,
     metadata: metadata ?? null,
+    occurredAt: event?.occurredAt,
   })
+}
+
+function lifecycleAudit(kind: string, resourceId: string, occurredAt: Date) {
+  return {
+    id: `agaudit:lifecycle:${kind}:${resourceId}:${occurredAt.toISOString()}`,
+    occurredAt,
+  }
 }
 
 async function loadManagementSummaries(deps: Deps, agents: AgentIdentityAggregate[]) {
@@ -651,6 +847,7 @@ function toIntent(record: AgentEnrollmentIntentRecord): AgentEnrollmentIntent {
     requestedName: record.requestedName,
     homeSpace: homeSpaceOf(record),
     protocolAgentId: record.protocolAgentId,
+    recovery: record.recovery,
     status: record.status as AgentEnrollmentIntent['status'],
     expiresAt: record.expiresAt,
     approvedAt: record.approvedAt,
@@ -703,7 +900,7 @@ export function toAgentEnrollment(intent: AgentEnrollmentIntent, name = intent.r
     id: intent.id,
     agentId: intent.agentIdentityId,
     name,
-    kind: intent.agentIdentityId ? 'additional_host' : 'new_identity',
+    kind: intent.recovery ? 'recovery' : intent.agentIdentityId ? 'additional_host' : 'new_identity',
     homeSpace: intent.homeSpace,
     status: intent.status === 'approved' ? 'approved' : intent.status,
     expiresAt: iso(intent.expiresAt)!,

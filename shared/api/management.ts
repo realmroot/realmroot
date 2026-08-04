@@ -39,6 +39,7 @@ export const managementErrorResponseSchema = z.object({
       'unauthorized',
       'forbidden',
       'not_found',
+      'gone',
       'conflict',
       'resource_in_use',
       'precondition_failed',

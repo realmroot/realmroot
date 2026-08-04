@@ -241,6 +241,7 @@ function createManagementRoute(routeConfig: ManagementRouteConfig) {
     path: routeConfig.path,
     operationId: routeConfig.operationId,
     summary: routeConfig.summary,
+    deprecated: routeConfig.deprecated,
     ...(routeConfig.cli
       ? {
           ...(routeConfig.cli.group ? { tags: [routeConfig.cli.group] } : {}),

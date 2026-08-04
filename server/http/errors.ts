@@ -51,6 +51,7 @@ function statusCode(status: number): ErrorCode {
   if (status === 401) return 'unauthorized'
   if (status === 403) return 'forbidden'
   if (status === 404) return 'not_found'
+  if (status === 410) return 'gone'
   if (status === 409) return 'conflict'
   if (status === 412) return 'precondition_failed'
   if (status === 428) return 'precondition_required'

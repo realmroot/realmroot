@@ -64,6 +64,7 @@ export const agentEnrollmentIntentSchema = z.object({
   requestedName: z.string().nullable(),
   homeSpace: agentHomeSpaceSchema,
   protocolAgentId: z.string(),
+  recovery: z.boolean(),
   status: agentEnrollmentIntentStatusSchema,
   expiresAt: dateValueSchema,
   approvedAt: dateValueSchema.nullable(),

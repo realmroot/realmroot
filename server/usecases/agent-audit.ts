@@ -4,6 +4,7 @@ import type { Deps } from '@server/usecases/deps'
 export function appendAgentGovernanceAudit(
   deps: Deps,
   input: {
+    id?: string
     action: string
     result: 'allowed' | 'denied' | 'pending'
     controllerUserId: string | null
@@ -14,10 +15,11 @@ export function appendAgentGovernanceAudit(
     capabilities?: string[] | null
     reasonCode?: string | null
     metadata?: Record<string, unknown> | null
+    occurredAt?: Date
   },
 ) {
   return deps.agentAudit.append({
-    id: createId('agaudit'),
+    id: input.id ?? createId('agaudit'),
     action: input.action,
     result: input.result,
     controllerUserId: input.controllerUserId,
@@ -31,6 +33,6 @@ export function appendAgentGovernanceAudit(
     scopes: input.capabilities ?? null,
     reasonCode: input.reasonCode ?? null,
     metadata: input.metadata ?? null,
-    occurredAt: new Date(),
+    occurredAt: input.occurredAt ?? new Date(),
   })
 }

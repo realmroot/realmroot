@@ -28,8 +28,10 @@ Feature: Unified Realmroot resource API
     Then routine single-request operations remain discoverable from the published OpenAPI paths
     And those operations use Restish get, post, put, patch, delete, or edit instead of generated commands
     And Resource Server and Resource discovery use Restish's generic get command
-    And only Agent identity, connection approval, and access approval retain generated workflow commands
-    And those workflows are exposed as whoami, connect, and access
+    And only connection approval and access approval retain non-deprecated generated API workflow commands
+    And those workflows are exposed as connect and access
+    And the deprecated realmroot auth whoami status alias remains available during the adapter 0.10 transition
+    And the Realmroot plugin contributes one top-level auth command group for local Agent identity lifecycle operations
     And polling and short-lived credential issuance remain hidden behind the plugin's generic response protocols
 
 
@@ -37,7 +39,8 @@ Feature: Unified Realmroot resource API
   Scenario: Restish transparently authenticates as an Agent
     Given Restish is connected to the unified Realmroot API
     When a new Agent invokes its first protected OpenAPI operation
-    Then the Restish authentication adapter starts Agent enrollment without a login command
+    Then the Restish authentication adapter starts Agent enrollment without requiring an explicit login command
+    And the Agent can instead start or resume enrollment explicitly with auth login
     And the adapter uses the endpoints and issuer published by AgentAuth discovery
     And Realmroot does not provision a shared CLI OAuth application
     And the original operation waits for one controller approval

@@ -2,6 +2,7 @@ import { applyD1Migrations, env, reset } from 'cloudflare:test'
 import {
   agent,
   agentCapabilityGrant,
+  agentEnrollmentIntent,
   agentHost,
   agentIdentity,
   agentIdentityBinding,
@@ -226,6 +227,55 @@ describe('Agent identity enrollment over real D1', () => {
       sub_profile: 'ai_agent',
       name: 'Release Agent',
     })
+  })
+
+  it('does not approve a replacement binding after concurrent retirement [spec: agent-identity/agent-identity-retirement]', async () => {
+    const first = await seedAgent(harness, userId, 'retirement-race-first')
+    const firstIntent = await createIntent(harness, userId, {
+      name: 'Retirement Race Agent',
+      protocolAgentId: first.agentId,
+    })
+    const approved = await approveIntent(harness, ownerCookie, firstIntent.id)
+    const replacement = await seedAgent(harness, userId, 'retirement-race-replacement')
+    const reservation = await createAdditionalAgentEnrollmentIntent(
+      harness.deps,
+      approved.agent.id,
+      replacement.agentId,
+      userId,
+      'retirement-race-replacement',
+    )
+    const now = new Date()
+    await expect(harness.deps.agentIdentities.retireIdentity(approved.agent.id, now)).resolves.toBe(true)
+
+    await expect(
+      harness.deps.agentIdentities.approveIntent({
+        intentId: reservation.intent.id,
+        identity: null,
+        binding: {
+          id: 'retirement-race-binding',
+          agentIdentityId: approved.agent.id,
+          protocolAgentId: replacement.agentId,
+          status: 'active',
+          boundAt: now,
+          revokedAt: null,
+          createdAt: now,
+          updatedAt: now,
+        },
+        approvedByUserId: userId,
+        approvedAt: now,
+      }),
+    ).rejects.toThrow('conflicted with an identity lifecycle transition')
+
+    const bindings = await harness.db
+      .select()
+      .from(agentIdentityBinding)
+      .where(eq(agentIdentityBinding.protocolAgentId, replacement.agentId))
+    const [intentRow] = await harness.db
+      .select()
+      .from(agentEnrollmentIntent)
+      .where(eq(agentEnrollmentIntent.id, reservation.intent.id))
+    expect(bindings).toHaveLength(0)
+    expect(intentRow.status).toBe('pending')
   })
 
   it('rejects anonymous Agent enrollment', async () => {

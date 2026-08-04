@@ -337,6 +337,8 @@ export const operationsWithoutRequestBody = new Set([
   'PUT /access/consents/{param}/revocation',
   'PUT /access/assignments/{param}/revocation',
   'PUT /access/authorizations/{param}/revocation',
+  'PUT /agents/{param}/installations/{param}/revocation',
+  'PUT /agents/{param}/recovery',
   'PUT /agents/{param}/retirement',
 ])
 

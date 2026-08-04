@@ -30,6 +30,7 @@ describe('Agent protocol routes', () => {
       requestedName: null,
       homeSpace: { type: 'personal' as const, userId: 'user-1' },
       protocolAgentId: 'protocol-agent-1',
+      recovery: false,
       status: 'pending' as const,
       expiresAt: new Date(expiresAt),
       approvedAt: null,
@@ -61,6 +62,66 @@ describe('Agent protocol routes', () => {
     expect(created.status).toBe(201)
     expect(created.headers.get('location')).toBe('https://auth.example.com/api/agent/enrollments/enrollment-1')
     expect((await app.request('/api/agent/enrollments/enrollment-1')).status).toBe(200)
+  })
+
+  it('creates a pending recovery for dedicated controller approval [spec: agent-identity/restish-agent-recovery]', async () => {
+    const intent = {
+      id: 'recovery-enrollment-1',
+      agentIdentityId: 'identity-1',
+      requestedName: null,
+      homeSpace: { type: 'personal' as const, userId: 'user-1' },
+      protocolAgentId: 'protocol-agent-1',
+      recovery: true,
+      status: 'pending' as const,
+      expiresAt: new Date(expiresAt),
+      approvedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    }
+    const createRecovery = vi
+      .spyOn(agentIdentities, 'createRecoveryAgentEnrollmentIntent')
+      .mockResolvedValue({ intent, replayed: false })
+    const approve = vi
+      .spyOn(agentIdentities, 'approveAgentEnrollment')
+      .mockResolvedValue({ identity: activeIdentity() })
+    vi.spyOn(agentIdentities, 'getPublicAgentEnrollment').mockResolvedValue({
+      id: intent.id,
+      agentId: 'identity-1',
+      name: 'Build Agent',
+      kind: 'recovery',
+      homeSpace: intent.homeSpace,
+      status: 'pending',
+      expiresAt,
+      decidedAt: now.toISOString(),
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+    })
+
+    const response = await createRouteApp().request('/api/agent/enrollments', {
+      method: 'POST',
+      headers: { ...jsonHeaders(), 'idempotency-key': 'recovery-key-1' },
+      body: JSON.stringify({ kind: 'recovery_installation', agentId: 'identity-1' }),
+    })
+
+    expect(response.status, await response.clone().text()).toBe(201)
+    expect(response.headers.get('location')).toBe(
+      'https://auth.example.com/api/agent/enrollments/recovery-enrollment-1',
+    )
+    expect(approve).not.toHaveBeenCalled()
+
+    approve.mockClear()
+    createRecovery.mockResolvedValue({
+      intent: { ...intent, status: 'approved', approvedAt: now },
+      replayed: true,
+    })
+    const replay = await createRouteApp().request('/api/agent/enrollments', {
+      method: 'POST',
+      headers: { ...jsonHeaders(), 'idempotency-key': 'recovery-key-1' },
+      body: JSON.stringify({ kind: 'recovery_installation', agentId: 'identity-1' }),
+    })
+    expect(replay.status).toBe(201)
+    expect(replay.headers.get('idempotency-replayed')).toBe('true')
+    expect(approve).not.toHaveBeenCalled()
   })
 
   it('lists Resource Servers and provider-owned Resources without exposing RFC 9396 details [spec: agent-identity/agent-resource-server-model]', async () => {
