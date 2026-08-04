@@ -1,32 +1,25 @@
 import { createRoute, OpenAPIHono } from '@hono/zod-openapi'
 import {
   accessRequestSchema,
-  agentEnrollmentSchema,
-  agentInstallationEnrollmentResponseSchema,
-  agentInstallationEnrollmentSchema,
   agentStatusSchema,
   createAccessRequestSchema,
-  createAgentSelfEnrollmentSchema,
   createResourceConnectionRequestSchema,
   resourceConnectionRequestSchema,
   resourceServerResourceSchema,
   resourceServerResourcesResponseSchema,
 } from '@shared/api/agent-api'
 import { paginationQuerySchema } from '@shared/api/pagination'
-import { protectedResourceCapabilityNames, requiredProtectedCapability } from '@shared/authz'
+import { realmrootOAuthScopes, requiredProtectedScope } from '@shared/authz'
 import { z } from 'zod'
 import { agentGovernanceRoutes } from './management-routes/agent-governance'
 import { applicationAuthorizationRoutes } from './management-routes/applications-authorization'
 import {
   errorResponse,
-  idempotencyKeyHeader,
-  idempotencyReplayResponseHeader,
   interactiveResourceResponseHeaders,
   jsonBody,
   jsonContentType,
   locationResponseHeader,
   type ManagementRouteConfig,
-  managementSecurity,
   uploadedAssetResponseSchema,
 } from './management-routes/helpers'
 import { platformWebhookRoutes } from './management-routes/platform-webhooks'
@@ -53,7 +46,7 @@ interface RestishCliConfig {
 }
 interface RestishAgentProfile {
   credentials: {
-    agentAuth: {
+    dpop: {
       auth: {
         type: string
         params: Record<string, string>
@@ -106,39 +99,15 @@ const managementRoutes: ManagementRouteConfig[] = [
     operationId: 'getAgentStatus',
     summary: 'Read the current Agent status',
     cli: { group: 'auth', name: 'whoami' },
-    security: [{ agentAuth: [] }],
+    security: [{ dpop: ['agent:read'] }],
     response: agentStatusSchema,
-  },
-  {
-    method: 'post',
-    path: '/agent/enrollments',
-    operationId: 'createAgentEnrollment',
-    summary: 'Create an Agent enrollment',
-    security: [{ agentAuth: [] }],
-    request: { headers: idempotencyKeyHeader, body: jsonBody(createAgentSelfEnrollmentSchema) },
-    response: z.union([agentEnrollmentSchema, agentInstallationEnrollmentResponseSchema]),
-    status: 201,
-    responseHeaders: { ...locationResponseHeader, ...idempotencyReplayResponseHeader },
-    errors: {
-      400: 'Idempotency-Key is missing or invalid.',
-      409: 'Idempotency-Key was already used for a different Agent installation enrollment.',
-    },
-  },
-  {
-    method: 'get',
-    path: '/agent/enrollments/{enrollmentId}',
-    operationId: 'getAgentEnrollment',
-    summary: 'Read an Agent enrollment',
-    security: [{ agentAuth: [] }],
-    request: { params: z.object({ enrollmentId: z.string() }) },
-    response: agentInstallationEnrollmentSchema,
   },
   {
     method: 'get',
     path: '/resource-servers/{resourceServerId}/resources',
     operationId: 'listResourceServerResources',
     summary: 'List provider-owned Resources available through a Resource Server',
-    security: [{ agentAuth: [] }],
+    security: [{ dpop: ['resources:read'] }],
     request: {
       params: z.object({ resourceServerId: z.string() }),
       query: paginationQuerySchema,
@@ -150,7 +119,7 @@ const managementRoutes: ManagementRouteConfig[] = [
     path: '/resource-servers/{resourceServerId}/resources/{resourceId}',
     operationId: 'getResourceServerResource',
     summary: 'Read a provider-owned Resource',
-    security: [{ agentAuth: [] }],
+    security: [{ dpop: ['resources:read'] }],
     request: {
       params: z.object({ resourceServerId: z.string(), resourceId: z.string() }),
     },
@@ -163,7 +132,7 @@ const managementRoutes: ManagementRouteConfig[] = [
     operationId: 'createConnectionRequest',
     summary: 'Request a controller-managed Resource Server connection',
     cli: { name: 'connect' },
-    security: [{ agentAuth: [] }],
+    security: [{ dpop: ['connection-requests:write'] }],
     request: {
       params: z.object({ resourceServerId: z.string() }),
       body: jsonBody(createResourceConnectionRequestSchema),
@@ -177,7 +146,7 @@ const managementRoutes: ManagementRouteConfig[] = [
     path: '/resource-servers/{resourceServerId}/connection-requests/{requestId}',
     operationId: 'getConnectionRequest',
     summary: 'Read a Resource Server connection request',
-    security: [{ agentAuth: [] }],
+    security: [{ dpop: ['connection-requests:read'] }],
     request: { params: z.object({ resourceServerId: z.string(), requestId: z.string() }) },
     response: resourceConnectionRequestSchema,
     responseHeaders: interactiveResourceResponseHeaders,
@@ -188,7 +157,7 @@ const managementRoutes: ManagementRouteConfig[] = [
     operationId: 'createAgentAuthorizationRequest',
     summary: 'Create an Agent authorization request',
     cli: { name: 'access' },
-    security: [{ agentAuth: [] }],
+    security: [{ dpop: ['access-requests:write'] }],
     request: { body: jsonBody(createAccessRequestSchema) },
     response: accessRequestSchema,
     status: 201,
@@ -204,18 +173,17 @@ export const unifiedOpenApi = buildUnifiedOpenApi()
 
 function createManagementOpenApiApp() {
   const app = new OpenAPIHono()
-  app.openAPIRegistry.registerComponent('securitySchemes', 'browserSession', {
+  app.openAPIRegistry.registerComponent('securitySchemes', 'sessionCookie', {
     type: 'apiKey',
     in: 'cookie',
     name: 'better-auth.session_token',
     description: 'Authenticated browser session; each operation applies Realm, Organization, or account visibility.',
   })
-  app.openAPIRegistry.registerComponent('securitySchemes', 'agentAuth', {
-    type: 'apiKey',
-    in: 'header',
-    name: 'Authorization',
+  app.openAPIRegistry.registerComponent('securitySchemes', 'dpop', {
+    type: 'http',
+    scheme: 'DPoP',
     description:
-      'AgentAuth possession proof supplied transparently by the Realmroot Restish authentication adapter. Required capabilities are declared per operation.',
+      'RFC 9449 DPoP authentication with a short-lived, sender-constrained OAuth 2.0 access token. Discover token acquisition through the protected-resource and authorization-server metadata endpoints.',
   })
   for (const routeConfig of managementRoutes) app.openAPIRegistry.registerPath(createManagementRoute(routeConfig))
   return app
@@ -232,7 +200,6 @@ function buildUnifiedOpenApi(): UnifiedOpenApiDocument {
           'Unified API for Agent identity, self-service resources, and permission-gated tenant administration.',
       },
       servers: [{ url: '/api' }],
-      security: managementSecurity,
     },
     { unionPreferredType: 'oneOf' },
   )
@@ -250,26 +217,24 @@ function buildUnifiedOpenApi(): UnifiedOpenApiDocument {
 function restishAgentProfile(): RestishAgentProfile {
   return {
     credentials: {
-      agentAuth: {
+      dpop: {
         auth: {
-          type: 'api-key',
+          type: 'bearer',
           params: {
-            in: 'header',
-            name: 'Authorization',
-            value: 'AgentAuth',
+            token: 'realmroot-plugin-managed',
             provider: 'realmroot-agent',
           },
         },
-        satisfies: protectedResourceCapabilityNames,
+        satisfies: realmrootOAuthScopes,
       },
     },
   }
 }
 
 function createManagementRoute(routeConfig: ManagementRouteConfig) {
-  const requiredAgentCapability =
+  const requiredScope =
     routeConfig.security === undefined
-      ? requiredProtectedCapability(routeConfig.method.toUpperCase(), routeConfig.path)
+      ? requiredProtectedScope(routeConfig.method.toUpperCase(), routeConfig.path)
       : null
   return createRoute({
     method: routeConfig.method,
@@ -282,8 +247,9 @@ function createManagementRoute(routeConfig: ManagementRouteConfig) {
           'x-cli-name': routeConfig.cli.name,
         }
       : { 'x-cli-hidden': true }),
-    security: routeConfig.security ?? managementSecurity,
-    ...(requiredAgentCapability ? { 'x-required-agent-capability': requiredAgentCapability } : {}),
+    security:
+      routeConfig.security ??
+      (requiredScope ? [{ dpop: [requiredScope] }, { sessionCookie: [requiredScope] }] : [{ sessionCookie: [] }]),
     request: routeConfig.request as never,
     responses: routeResponses(routeConfig) as never,
   })

@@ -46,17 +46,19 @@ func TestAuthHookEnrollsOnceThenSignsOriginalRequest(t *testing.T) {
 		case 3:
 			return jsonResponse(200, map[string]any{"status": "active"}), nil
 		case 4:
-			if request.Method != http.MethodPost || request.URL.String() != "https://auth.example.com/api/agent/enrollments" {
-				t.Fatalf("enrollment request = %s %s", request.Method, request.URL)
+			if request.Method != http.MethodPost || request.URL.String() != "https://auth.example.com/api/auth/oauth2/token" {
+				t.Fatalf("token request = %s %s", request.Method, request.URL)
 			}
-			var body map[string]any
-			if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
+			if err := request.ParseForm(); err != nil {
 				t.Fatal(err)
 			}
-			if body["kind"] != "new_identity" || body["name"] != "Build Agent" {
-				t.Fatalf("enrollment body = %#v", body)
+			if request.Form.Get("grant_type") != "urn:ietf:params:oauth:grant-type:jwt-bearer" ||
+				request.Form.Get("resource") != "https://auth.example.com/api" || request.Header.Get("DPoP") == "" {
+				t.Fatalf("token request form = %#v", request.Form)
 			}
-			return jsonResponse(201, map[string]any{"id": "enrollment-1", "kind": "new_identity"}), nil
+			return jsonResponse(200, map[string]any{
+				"access_token": "platform-token", "token_type": "DPoP", "expires_in": 300,
+			}), nil
 		case 5:
 			if request.Method != http.MethodGet || request.URL.String() != "https://auth.example.com/api/agent/status" {
 				t.Fatalf("status request = %s %s", request.Method, request.URL)
@@ -78,8 +80,8 @@ func TestAuthHookEnrollsOnceThenSignsOriginalRequest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if authorization, _ := output.Request.Headers["Authorization"].(string); !strings.HasPrefix(authorization, "Bearer ") {
-		t.Fatalf("missing Agent proof: %q", authorization)
+	if authorization, _ := output.Request.Headers["Authorization"].(string); authorization != "DPoP platform-token" {
+		t.Fatalf("missing OAuth DPoP token: %q", authorization)
 	}
 	if prompt.uri != "https://auth.example.com/agent/approve?code=abc" {
 		t.Fatalf("approval URI = %q", prompt.uri)
@@ -109,7 +111,7 @@ func TestAuthHookSignsTargetRequestWithCachedShortLivedCredential(t *testing.T) 
 		t.Fatalf("authorization = %#v", output.Request.Headers["Authorization"])
 	}
 	claims := decodeJWTPayload(t, output.Request.Headers["DPoP"].(string))
-	if claims["htm"] != http.MethodGet || claims["htu"] != input.Request.URI || claims["ath"] == "" {
+	if claims["htm"] != http.MethodGet || claims["htu"] != "https://api.example.com/v1/projects" || claims["ath"] == "" {
 		t.Fatalf("unexpected DPoP claims: %#v", claims)
 	}
 }
@@ -156,12 +158,24 @@ func TestAuthHookRenewsExpiredCredentialFromStoredOffer(t *testing.T) {
 			if request.Method != http.MethodPost || request.URL.String() != credential.CredentialEndpoint {
 				t.Fatalf("credential request = %s %s", request.Method, request.URL)
 			}
-			if !strings.HasPrefix(request.Header.Get("Authorization"), "Bearer ") {
-				t.Fatal("missing Agent assertion")
+			if request.Header.Get("Authorization") != "DPoP platform-token" {
+				t.Fatal("missing Realmroot OAuth credential")
 			}
 			claims := decodeJWTPayload(t, request.Header.Get("DPoP"))
-			if claims["htu"] != credential.ProofTarget || claims["htm"] != http.MethodPost {
-				t.Fatalf("credential proof = %#v", claims)
+			if claims["htu"] != credential.CredentialEndpoint || claims["htm"] != http.MethodPost || claims["ath"] == "" {
+				t.Fatalf("Realmroot request proof = %#v", claims)
+			}
+			var body struct {
+				Proof struct {
+					Value string `json:"value"`
+				} `json:"proof"`
+			}
+			if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
+				t.Fatal(err)
+			}
+			targetClaims := decodeJWTPayload(t, body.Proof.Value)
+			if targetClaims["htu"] != credential.ProofTarget || targetClaims["htm"] != http.MethodPost {
+				t.Fatalf("target proof = %#v", targetClaims)
 			}
 			return jsonResponse(200, map[string]any{
 				"accessToken": "renewed-token", "tokenType": "DPoP", "expiresAt": time.Now().Add(time.Minute),
@@ -225,6 +239,11 @@ func newCredentialState(t *testing.T, credential dpopCredential) *memoryStateSto
 	if err != nil {
 		t.Fatal(err)
 	}
+	platformExpiresAt := time.Now().Add(time.Minute)
+	platformKey, err := newDPoPPrivateKey()
+	if err != nil {
+		t.Fatal(err)
+	}
 	return &memoryStateStore{exists: true, state: agentState{
 		Version: agentStateVersion, Origin: "https://auth.example.com", Issuer: "https://auth.example.com/api/auth",
 		Runtime: defaultAgentRuntime, AgentID: "agent-123", HostID: "host-123", AgentKeyID: "agent-key", HostKeyID: "host-key",
@@ -232,6 +251,12 @@ func newCredentialState(t *testing.T, credential dpopCredential) *memoryStateSto
 		Identity:              &stableIdentity{ID: "identity-1", Issuer: "https://auth.example.com/api/auth", Subject: "agt_123"},
 		DPoPCredentials:       map[string]dpopCredential{credential.ResourceHref: credential},
 		ActiveDPoPCredentials: map[string]string{credentialSelectionKey(credential.ResourceIndicator): credential.ResourceHref},
+		PlatformCredential: &dpopCredential{
+			ResourceHref: "https://auth.example.com/api", ResourceIndicator: "https://auth.example.com/api",
+			CredentialEndpoint: "https://auth.example.com/api/auth/oauth2/token",
+			ProofTarget: "https://auth.example.com/api/auth/oauth2/token", PrivateKey: platformKey,
+			AccessToken: "platform-token", ExpiresAt: &platformExpiresAt,
+		},
 	}}
 }
 
@@ -250,6 +275,7 @@ func testAgentConfiguration() map[string]any {
 		"agent_identity_issuer":     "https://auth.example.com/api/auth",
 		"agent_enrollment_endpoint": "https://auth.example.com/api/agent/enrollments",
 		"agent_endpoint":            "https://auth.example.com/api/agent/status",
+		"agent_token_endpoint":      "https://auth.example.com/api/auth/oauth2/token",
 		"endpoints": map[string]any{
 			"register": "https://auth.example.com/api/auth/agent/register",
 			"status":   "https://auth.example.com/api/auth/agent/status",

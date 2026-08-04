@@ -32,13 +32,7 @@ type registrationResponse struct {
 }
 
 type agentStatusResponse struct {
-	Status                string                   `json:"status"`
-	AgentCapabilityGrants []capabilityGrantSummary `json:"agent_capability_grants"`
-}
-
-type capabilityGrantSummary struct {
-	Capability string `json:"capability"`
-	Status     string `json:"status"`
+	Status string `json:"status"`
 }
 
 type agentSelfStatusResponse struct {
@@ -62,6 +56,7 @@ type agentConfiguration struct {
 	AgentIdentityIssuer     string            `json:"agent_identity_issuer"`
 	AgentEnrollmentEndpoint string            `json:"agent_enrollment_endpoint"`
 	AgentEndpoint           string            `json:"agent_endpoint"`
+	AgentTokenEndpoint      string            `json:"agent_token_endpoint"`
 	Endpoints               map[string]string `json:"endpoints"`
 }
 
@@ -115,11 +110,22 @@ func authenticateRequest(
 	if err != nil {
 		return plugin.AuthHookOutput{}, err
 	}
-	token, err := signAgentJWT(state, configuration.Issuer, time.Now())
+	state, credential, err := ensurePlatformCredential(context.Background(), states, client, target, state, configuration)
 	if err != nil {
 		return plugin.AuthHookOutput{}, err
 	}
-	headers := map[string]any{"Authorization": "Bearer " + token}
+	if credentials, ok := states.(resourceCredentialStore); ok {
+		if _, lookupErr := credentials.FindByResourceURL(input.Request.URI, runtime, state.Issuer); lookupErr == nil {
+			return authenticateTargetRequest(input, credentials, client, runtime, state.Issuer)
+		} else if !errors.Is(lookupErr, os.ErrNotExist) {
+			return plugin.AuthHookOutput{}, lookupErr
+		}
+	}
+	proof, err := signDPoPProof(credential.PrivateKey, input.Request.Method, input.Request.URI, credential.AccessToken, time.Now())
+	if err != nil {
+		return plugin.AuthHookOutput{}, err
+	}
+	headers := map[string]any{"Authorization": "DPoP " + credential.AccessToken, "DPoP": proof}
 	return plugin.AuthHookOutput{
 		Request: &plugin.HookRequestHeaderUpdate{
 			Headers: headers,
@@ -209,7 +215,21 @@ func refreshTargetToken(
 	if !sameOrigin(credential.CredentialEndpoint, state.Origin) {
 		return dpopCredential{}, errors.New("stored Resource credential endpoint does not belong to its issuer")
 	}
-	proof, err := signDPoPProof(credential.PrivateKey, http.MethodPost, credential.ProofTarget, "", time.Now())
+	targetProof, err := signDPoPProof(credential.PrivateKey, http.MethodPost, credential.ProofTarget, "", time.Now())
+	if err != nil {
+		return dpopCredential{}, err
+	}
+	platform, err := usablePlatformCredential(ctx, client, state)
+	if err != nil {
+		return dpopCredential{}, err
+	}
+	requestProof, err := signDPoPProof(
+		platform.PrivateKey,
+		http.MethodPost,
+		credential.CredentialEndpoint,
+		platform.AccessToken,
+		time.Now(),
+	)
 	if err != nil {
 		return dpopCredential{}, err
 	}
@@ -220,10 +240,10 @@ func refreshTargetToken(
 		http.MethodPost,
 		credential.CredentialEndpoint,
 		map[string]string{
-			"Authorization": "Bearer " + mustAgentJWT(state, state.Issuer),
-			"DPoP":          proof,
+			"Authorization": "DPoP " + platform.AccessToken,
+			"DPoP":          requestProof,
 		},
-		nil,
+		map[string]any{"proof": map[string]any{"type": "dpop+jwt", "value": targetProof}},
 		&token,
 	); err != nil {
 		return dpopCredential{}, fmt.Errorf("issue target API access token: %w", err)
@@ -236,6 +256,18 @@ func refreshTargetToken(
 	credential.AccessToken = token.AccessToken
 	credential.ExpiresAt = &token.ExpiresAt
 	return credential, nil
+}
+
+func usablePlatformCredential(ctx context.Context, client httpDoer, state agentState) (dpopCredential, error) {
+	if state.PlatformCredential == nil {
+		return dpopCredential{}, errors.New("Realmroot platform OAuth credential is unavailable")
+	}
+	platform := *state.PlatformCredential
+	if platform.AccessToken != "" && platform.ExpiresAt != nil && time.Now().Add(5*time.Second).Before(*platform.ExpiresAt) {
+		return platform, nil
+	}
+	configuration := agentConfiguration{Issuer: state.Issuer, AgentTokenEndpoint: platform.CredentialEndpoint}
+	return requestPlatformToken(ctx, client, state, platform, configuration)
 }
 
 func ensureAgentIdentity(
@@ -274,38 +306,6 @@ func ensureAgentIdentity(
 		return agentState{}, err
 	}
 
-	var enrollment map[string]any
-	if err := requestJSON(
-		ctx,
-		client,
-		http.MethodPost,
-		configuration.AgentEnrollmentEndpoint,
-		mustAgentJWT(state, configuration.Issuer),
-		map[string]any{"kind": "new_identity", "name": state.Name},
-		&enrollment,
-	); err != nil {
-		return agentState{}, err
-	}
-	var status agentSelfStatusResponse
-	if err := requestJSON(
-		ctx,
-		client,
-		http.MethodGet,
-		configuration.AgentEndpoint,
-		mustAgentJWT(state, configuration.Issuer),
-		nil,
-		&status,
-	); err != nil {
-		return agentState{}, err
-	}
-	if status.Agent == nil || status.Agent.ID == "" || status.Agent.Issuer != configuration.AgentIdentityIssuer || status.Agent.Subject == "" {
-		return agentState{}, errors.New("Agent identity response is missing issuer or subject")
-	}
-	state.Identity = status.Agent
-	state.RegistrationApproval = nil
-	if err := states.Update(target, state); err != nil {
-		return agentState{}, err
-	}
 	return state, nil
 }
 
@@ -341,6 +341,7 @@ func discoverAgentConfiguration(
 		configuration.Issuer,
 		configuration.AgentEnrollmentEndpoint,
 		configuration.AgentEndpoint,
+		configuration.AgentTokenEndpoint,
 		configuration.Endpoints["register"],
 		configuration.Endpoints["status"],
 	} {
@@ -349,6 +350,100 @@ func discoverAgentConfiguration(
 		}
 	}
 	return configuration, nil
+}
+
+func ensurePlatformCredential(
+	ctx context.Context,
+	states stateStore,
+	client httpDoer,
+	target agentTarget,
+	state agentState,
+	configuration agentConfiguration,
+) (agentState, dpopCredential, error) {
+	credential := state.PlatformCredential
+	if credential == nil {
+		issuerURL, err := validatedAbsoluteURL(configuration.Issuer)
+		if err != nil {
+			return state, dpopCredential{}, errors.New("Realmroot OAuth issuer is invalid")
+		}
+		resourceIndicator := issuerURL.Scheme + "://" + issuerURL.Host + "/api"
+		privateKey, err := newDPoPPrivateKey()
+		if err != nil {
+			return state, dpopCredential{}, err
+		}
+		credential = &dpopCredential{
+			ResourceHref:       resourceIndicator,
+			ResourceIndicator:  resourceIndicator,
+			CredentialEndpoint: configuration.AgentTokenEndpoint,
+			ProofTarget:        configuration.AgentTokenEndpoint,
+			PrivateKey:         privateKey,
+		}
+	}
+	if credential.AccessToken == "" || credential.ExpiresAt == nil || !time.Now().Add(5*time.Second).Before(*credential.ExpiresAt) {
+		updated, err := requestPlatformToken(ctx, client, state, *credential, configuration)
+		if err != nil {
+			return state, dpopCredential{}, err
+		}
+		credential = &updated
+	}
+	state.PlatformCredential = credential
+	if state.Identity == nil {
+		proof, err := signDPoPProof(credential.PrivateKey, http.MethodGet, configuration.AgentEndpoint, credential.AccessToken, time.Now())
+		if err != nil {
+			return state, dpopCredential{}, err
+		}
+		var status agentSelfStatusResponse
+		if err := requestJSONHeaders(ctx, client, http.MethodGet, configuration.AgentEndpoint, map[string]string{
+			"Authorization": "DPoP " + credential.AccessToken,
+			"DPoP":          proof,
+		}, nil, &status); err != nil {
+			return state, dpopCredential{}, err
+		}
+		if status.Agent == nil || status.Agent.ID == "" || status.Agent.Issuer != configuration.AgentIdentityIssuer || status.Agent.Subject == "" {
+			return state, dpopCredential{}, errors.New("Agent identity response is missing issuer or subject")
+		}
+		state.Identity = status.Agent
+		state.RegistrationApproval = nil
+	}
+	if err := states.Update(target, state); err != nil {
+		return state, dpopCredential{}, err
+	}
+	return state, *credential, nil
+}
+
+func requestPlatformToken(
+	ctx context.Context,
+	client httpDoer,
+	state agentState,
+	credential dpopCredential,
+	configuration agentConfiguration,
+) (dpopCredential, error) {
+	proof, err := signDPoPProof(credential.PrivateKey, http.MethodPost, configuration.AgentTokenEndpoint, "", time.Now())
+	if err != nil {
+		return credential, err
+	}
+	var response struct {
+		AccessToken string `json:"access_token"`
+		TokenType   string `json:"token_type"`
+		ExpiresIn   int    `json:"expires_in"`
+	}
+	if err := requestForm(ctx, client, configuration.AgentTokenEndpoint, map[string]string{
+		"DPoP": proof,
+	}, url.Values{
+		"grant_type": {"urn:ietf:params:oauth:grant-type:jwt-bearer"},
+		"assertion":  {mustAgentJWT(state, configuration.Issuer)},
+		"resource":   {credential.ResourceIndicator},
+		"scope":      {"agent:read resource-servers:read resources:read connection-requests:read connection-requests:write access-requests:read access-requests:write access-authorizations:read access-authorizations:issue"},
+	}, &response); err != nil {
+		return credential, fmt.Errorf("obtain Realmroot OAuth access token: %w", err)
+	}
+	if response.TokenType != "DPoP" || response.AccessToken == "" || response.ExpiresIn <= 0 {
+		return credential, errors.New("Realmroot returned an invalid OAuth access token")
+	}
+	credential.AccessToken = response.AccessToken
+	expiresAt := time.Now().Add(time.Duration(response.ExpiresIn) * time.Second)
+	credential.ExpiresAt = &expiresAt
+	return credential, nil
 }
 
 func sameOrigin(value string, origin string) bool {
@@ -561,6 +656,41 @@ func requestJSONHeaders(
 	}
 	if err := json.Unmarshal(encoded, output); err != nil {
 		return fmt.Errorf("decode Realmroot response: %w", err)
+	}
+	return nil
+}
+
+func requestForm(
+	ctx context.Context,
+	client httpDoer,
+	uri string,
+	headers map[string]string,
+	form url.Values,
+	output any,
+) error {
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, uri, strings.NewReader(form.Encode()))
+	if err != nil {
+		return fmt.Errorf("create Realmroot OAuth request: %w", err)
+	}
+	request.Header.Set("Accept", "application/json")
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	for name, value := range headers {
+		request.Header.Set(name, value)
+	}
+	response, err := client.Do(request)
+	if err != nil {
+		return fmt.Errorf("call Realmroot OAuth endpoint: %w", err)
+	}
+	defer response.Body.Close()
+	encoded, err := io.ReadAll(io.LimitReader(response.Body, 1<<20))
+	if err != nil {
+		return fmt.Errorf("read Realmroot OAuth response: %w", err)
+	}
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return &httpResponseError{StatusCode: response.StatusCode, Body: strings.TrimSpace(string(encoded))}
+	}
+	if err := json.Unmarshal(encoded, output); err != nil {
+		return fmt.Errorf("decode Realmroot OAuth response: %w", err)
 	}
 	return nil
 }

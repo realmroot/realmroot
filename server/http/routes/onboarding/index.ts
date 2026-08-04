@@ -1,11 +1,12 @@
 import { forbidden } from '@server/domain/errors'
 import { hashPassword } from '@server/domain/password'
+import { ensureRealmrootResourceServer } from '@server/usecases/authorization'
 import { onboardingAdminRequestSchema } from '@shared/api/onboarding'
 import { Hono } from 'hono'
 import { getDeps } from '../../middleware/deps'
 import { readJson } from '../validation'
 
-export function onboardingRoutes() {
+export function onboardingRoutes(canonicalOrigin?: string) {
   const app = new Hono()
 
   app.get('/status', async (c) => c.json({ required: !(await getDeps(c).onboarding.hasUsers()) }))
@@ -21,6 +22,7 @@ export function onboardingRoutes() {
       ...body,
       passwordHash: await hashPassword(body.password),
     })
+    if (canonicalOrigin) await ensureRealmrootResourceServer(getDeps(c), canonicalOrigin)
 
     return c.json(
       {

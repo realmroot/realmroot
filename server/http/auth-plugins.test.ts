@@ -5,7 +5,6 @@ import { createApp } from '@server/http/app'
 import * as authorizationUsecase from '@server/usecases/authorization'
 import type { Deps } from '@server/usecases/deps'
 import type { ManagementSignInSettingsResponse } from '@shared/api/management'
-import { protectedResourceCapabilityNames } from '@shared/authz'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createTestDeps } from './test-deps'
 
@@ -14,7 +13,7 @@ describe('auth.test 2', () => {
     vi.restoreAllMocks()
   })
 
-  it('serves account and resource-scoped management capabilities [spec: admin-console/agent-discovery]', async () => {
+  it('publishes Agent identity enrollment without legacy capability execution [spec: admin-console/agent-discovery]', async () => {
     const auth = createAuth(
       {} as Database,
       '01234567890123456789012345678901',
@@ -34,25 +33,15 @@ describe('auth.test 2', () => {
       agent_enrollment_endpoint: 'https://auth.example.com/api/agent/enrollments',
       agent_token_endpoint: 'https://auth.example.com/api/auth/oauth2/token',
       agent_jwks_uri: 'https://auth.example.com/api/auth/jwks',
-      default_location: 'https://auth.example.com/api/auth/capability/execute',
       modes: ['delegated'],
       approval_methods: ['device_authorization'],
       endpoints: {
         register: 'https://auth.example.com/api/auth/agent/register',
-        execute: 'https://auth.example.com/api/auth/capability/execute',
       },
     })
 
     const capabilitiesResponse = await app.request('https://auth.example.com/api/auth/capability/list')
-    expect(capabilitiesResponse.status).toBe(200)
-    const capabilities = (await capabilitiesResponse.json()) as { capabilities: Array<{ name: string }> }
-    expect(capabilities.capabilities.map((capability) => capability.name)).toEqual([
-      'account.profile.read',
-      'account.sessions.list',
-      'account.authorized_apps.list',
-      ...protectedResourceCapabilityNames,
-    ])
-    expect(capabilities.capabilities.map((capability) => capability.name)).not.toContain('management.users.delete')
+    expect(capabilitiesResponse.status).toBe(404)
   })
 
   it('configures organization access control with teams disabled', () => {

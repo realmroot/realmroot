@@ -142,7 +142,6 @@ export interface ManagementRouteConfig {
 }
 export const jsonContentType = 'application/json'
 export const multipartContentType = 'multipart/form-data'
-export const managementSecurity: Array<Record<string, string[]>> = [{ agentAuth: [] }, { browserSession: [] }]
 export function errorResponse(description: string) {
   return { description, content: { [jsonContentType]: { schema: managementErrorResponseSchema } } }
 }

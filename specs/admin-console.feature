@@ -315,9 +315,9 @@ Feature: Admin Console
   Scenario: AgentAuth discovery exposes a narrow delegated protocol surface
     When an agent client requests /.well-known/agent-configuration
     Then Realmroot advertises delegated mode and device authorization approval
-    And the advertised capabilities include read-only account data and explicit resource scopes
+    And AgentAuth advertises no Resource API capabilities
     And the advertised endpoints, issuer, and proof algorithms are authoritative for the client
-    And individual Management API operations are not generated as AgentAuth capabilities
+    And Management API authority is expressed only as OAuth scopes
 
   @entrypoint:product-ui @journey:admin-agent-inventory
   Scenario: Admins govern Agents without managing protocol internals

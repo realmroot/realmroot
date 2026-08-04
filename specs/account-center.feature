@@ -147,11 +147,11 @@ Feature: Account Center
     And its membership grants no access to technical resource management APIs
 
   @entrypoint:product-ui @journey:agent-approval
-  Scenario: Delegated agents can request read-only account access
-    Given an agent requests delegated access through AgentAuth device authorization
-    When I approve account profile, session list, and authorized app list capabilities
-    Then the agent receives a delegated identity scoped to those read-only account capabilities
-    And account mutations remain unavailable through AgentAuth capabilities
+  Scenario: Delegated Agents receive identity separately from Resource authority
+    Given an Agent requests delegated identity through AgentAuth device authorization
+    When I approve the Agent identity enrollment
+    Then the Agent receives a delegated identity without Resource API authority
+    And account access requires a separately approved OAuth Resource scope
 
   @entrypoint:product-ui @journey:account-agent-management
   Scenario: Delegated agent access can be managed from Account Center

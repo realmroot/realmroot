@@ -1,7 +1,10 @@
 import { oauthProviderAuthServerMetadata, oauthProviderOpenIdConfigMetadata } from '@better-auth/oauth-provider'
 import type { Auth } from '@server/auth'
-import { forbidden, notFound, oauthError } from '@server/domain/errors'
+import { ApiError, forbidden, notFound, oauthError } from '@server/domain/errors'
 import { handleApiError } from '@server/http/errors'
+import { createAgentLoginIdentity } from '@server/usecases/agent-identities'
+import { issueAgentBootstrapAccessToken } from '@server/usecases/agent-oauth'
+import { ensureRealmrootResourceServer } from '@server/usecases/authorization'
 import type { Deps } from '@server/usecases/deps'
 import {
   exchangeToken,
@@ -11,7 +14,7 @@ import {
   refreshTokenGrantType,
   tokenExchangeGrantType,
 } from '@server/usecases/token-exchange'
-import { resourceByRoutePrefix } from '@shared/authz'
+import { realmrootOAuthScopes, resourceByRoutePrefix } from '@shared/authz'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
 import {
@@ -89,7 +92,12 @@ export function createApp(auth: AuthHandler, deps: Deps, config: AppConfig = {})
   app.use('/api/*', authn(auth))
   app.use('/api/*', requireSecurityPolicy(deps.security))
 
-  app.onError((error, c) => handleApiError(error, c))
+  app.onError((error, c) => {
+    if (error instanceof ApiError && error.status === 401 && c.req.path.startsWith('/api/')) {
+      c.header('WWW-Authenticate', `DPoP resource_metadata="${protectedResourceMetadataUrl(config, c.req.url)}"`)
+    }
+    return handleApiError(error, c)
+  })
   app.notFound((c) => handleApiError(notFound(), c))
 
   mountApiRoutes(app, auth, config)
@@ -105,8 +113,14 @@ export function createApp(auth: AuthHandler, deps: Deps, config: AppConfig = {})
     return auth.api.getAgentConfiguration({ request: c.req.raw, asResponse: false }).then((configuration) => {
       const issuer = oauthIssuer(config, c.req.url)
       const mounted = mountAgentConfiguration({ ...configuration, issuer })
+      const endpoints = Object.fromEntries(
+        Object.entries(mounted.endpoints).filter(([name]) => name === 'register' || name === 'status'),
+      )
       return c.json({
         ...mounted,
+        default_location: undefined,
+        capabilities: [],
+        endpoints,
         agent_identity_issuer: issuer,
         agent_enrollment_endpoint: new URL('/api/agent/enrollments', issuer).toString(),
         agent_endpoint: new URL('/api/agent/status', issuer).toString(),
@@ -125,8 +139,9 @@ export function createApp(auth: AuthHandler, deps: Deps, config: AppConfig = {})
     await requireOnboardingComplete(c.get('deps'))
     await requireHostedAuthMethodEnabled(c, configzOptions(c, config.securityPolicy))
     await requireLinkedSiweWallet(c, c.get('deps').wallets)
+    if (isLegacyAgentCapabilityPath(c.req.path)) throw notFound()
 
-    const tokenExchangeResponse = await maybeHandleTokenExchange(c, oauthIssuer(config, c.req.url))
+    const tokenExchangeResponse = await maybeHandleTokenExchange(c, oauthIssuer(config, c.req.url), auth)
     if (tokenExchangeResponse) return tokenExchangeResponse
 
     return auth.handler(c.req.raw)
@@ -134,9 +149,17 @@ export function createApp(auth: AuthHandler, deps: Deps, config: AppConfig = {})
   app.get('/.well-known/oauth-authorization-server/api/auth', async (c) =>
     extendAgentOAuthMetadata(await oauthProviderAuthServerMetadata(auth)(c.req.raw)),
   )
+  app.get('/.well-known/oauth-protected-resource/api', (c) => {
+    c.header('Access-Control-Allow-Origin', '*')
+    return c.json(protectedResourceMetadata(config, c.req.url))
+  })
   app.route('/api', createUnifiedApiRoutes(auth, config))
 
   return app
+}
+
+function isLegacyAgentCapabilityPath(path: string) {
+  return path.startsWith('/api/auth/capability/') || path === '/api/auth/agent/request-capability'
 }
 
 async function publishJwks(c: Context, auth: AuthHandler) {
@@ -178,7 +201,8 @@ function mountApiRoutes(app: Hono, auth: AuthHandler, config: AppConfig) {
     .route('/api/configz', createConfigzRoutes(config.securityPolicy))
     .route('/api/assets', createAssetRoutes())
     .use('/api/*', unifiedOpenApiDiscoveryHeader())
-  protectResourceRoutes(api, auth)
+  protectResourceRoutes(api, auth, config)
+  api.use('/api/agent/status', authn(auth, { allowAgent: true, required: true, oauth: agentOAuth(config) }))
   return api
     .route('/api', createProtectedResourceAssetRoutes())
     .route(
@@ -189,17 +213,17 @@ function mountApiRoutes(app: Hono, auth: AuthHandler, config: AppConfig) {
         securityPolicy: config.securityPolicy,
       }),
     )
-    .route('/api/onboarding', onboardingRoutes())
+    .route('/api/onboarding', onboardingRoutes(canonicalOrigin || undefined))
     .route('/api/account', accountRoutes(managementApi, config.securityPolicy, canonicalOrigin || undefined))
     .route('/api/account', createAccountAssetRoutes(config.securityPolicy))
     .route('/api/account-connections', createResourceConnectionRoutes(canonicalOrigin || undefined))
     .route('/api', createAgentProtocolRoutes(auth.api, issuer || undefined))
 }
 
-export function protectResourceRoutes(app: Hono, auth: SessionReader) {
+export function protectResourceRoutes(app: Hono, auth: SessionReader, config: AppConfig = {}) {
   for (const prefix of Object.keys(resourceByRoutePrefix)) {
-    app.use(`/api/${prefix}`, authn(auth, { allowAgent: true, required: true }))
-    app.use(`/api/${prefix}/*`, authn(auth, { allowAgent: true, required: true }))
+    app.use(`/api/${prefix}`, authn(auth, { allowAgent: true, required: true, oauth: agentOAuth(config) }))
+    app.use(`/api/${prefix}/*`, authn(auth, { allowAgent: true, required: true, oauth: agentOAuth(config) }))
     app.use(`/api/${prefix}`, authzForProtectedPath())
     app.use(`/api/${prefix}/*`, authzForProtectedPath())
   }
@@ -208,12 +232,19 @@ export function protectResourceRoutes(app: Hono, auth: SessionReader) {
       await next()
       return
     }
-    await authn(auth, { allowAgent: true, required: true })(c, async () => {
+    await authn(auth, { allowAgent: true, required: true, oauth: agentOAuth(config) })(c, async () => {
       await authz('applications')(c, next)
     })
   }
   app.use('/api/assets', protectAssetCreation)
   app.use('/api/assets/*', protectAssetCreation)
+}
+
+function agentOAuth(config: AppConfig) {
+  return {
+    issuer: (requestUrl: string) => oauthIssuer(config, requestUrl),
+    audience: (requestUrl: string) => `${(config.baseURL ?? new URL(requestUrl).origin).replace(/\/$/, '')}/api`,
+  }
 }
 
 function createUnifiedApiRoutes(_auth: AuthHandler, _config: AppConfig) {
@@ -238,7 +269,7 @@ async function requireOnboardingComplete(deps: Deps) {
   }
 }
 
-async function maybeHandleTokenExchange(c: Context, issuer: string) {
+async function maybeHandleTokenExchange(c: Context, issuer: string, auth: AuthHandler) {
   if (c.req.method !== 'POST') return null
   if (c.req.path !== '/api/auth/oauth2/token' && c.req.path !== '/api/auth/oauth2/introspect') return null
 
@@ -249,6 +280,9 @@ async function maybeHandleTokenExchange(c: Context, issuer: string) {
   if (!form) return null
 
   const grantType = formString(form, 'grant_type')
+  if (c.req.path === '/api/auth/oauth2/token' && grantType === 'urn:ietf:params:oauth:grant-type:jwt-bearer') {
+    return issueAgentToken(c, issuer, auth, form)
+  }
   if (c.req.path === '/api/auth/oauth2/introspect' && !(formString(form, 'token') ?? '').startsWith('fatx_')) {
     return null
   }
@@ -302,6 +336,70 @@ async function maybeHandleTokenExchange(c: Context, issuer: string) {
   return c.json(introspection)
 }
 
+async function issueAgentToken(c: Context, issuer: string, auth: AuthHandler, form: FormData) {
+  if (!auth.api.getAgentSession || !auth.api.signJWT) {
+    throw oauthError('temporarily_unavailable', 'Agent OAuth token issuance is unavailable.', 503)
+  }
+  const assertion = formString(form, 'assertion')
+  if (!assertion) throw oauthError('invalid_request', 'The assertion parameter is required.')
+  const headers = new Headers({ authorization: `Bearer ${assertion}` })
+  const session = await auth.api.getAgentSession({ headers, asResponse: false }).catch(() => null)
+  if (!session) throw oauthError('invalid_grant', 'The Agent assertion is invalid.')
+  const deps = c.get('deps')
+  await ensureRealmrootResourceServer(deps, new URL(issuer).origin)
+  let aggregate = await deps.agentIdentities.findActiveByProtocolAgent(session.agent.id)
+  if (!aggregate) {
+    if (!session.host?.userId) throw oauthError('invalid_grant', 'The Agent has no approved controller.')
+    const protocolAgent = await deps.agentIdentities.findProtocolAgent(session.agent.id)
+    await createAgentLoginIdentity(
+      deps,
+      { protocolAgentId: session.agent.id, name: protocolAgent?.name ?? 'Agent' },
+      issuer,
+      session.host.userId,
+    )
+    aggregate = await deps.agentIdentities.findActiveByProtocolAgent(session.agent.id)
+  }
+  if (!aggregate) throw oauthError('invalid_grant', 'The Agent identity could not be established.')
+  const binding = aggregate.bindings.find(
+    (candidate) =>
+      candidate.protocolAgentId === session.agent.id &&
+      candidate.hostId === session.agent.hostId &&
+      candidate.status === 'active',
+  )
+  if (!binding) throw oauthError('invalid_grant', 'The Agent host binding is inactive.')
+  const tokenEndpoint = `${issuer.replace(/\/$/, '')}/oauth2/token`
+  const resource = formString(form, 'resource') ?? ''
+  const dpopProof = c.req.header('DPoP')
+  if (!dpopProof) throw oauthError('invalid_dpop_proof', 'A DPoP proof is required.')
+  const response = await issueAgentBootstrapAccessToken(
+    c.get('deps'),
+    {
+      scope: formString(form, 'scope') ?? undefined,
+      resource,
+      expectedResource: `${new URL(issuer).origin}/api`,
+      dpopProof,
+      tokenEndpoint,
+    },
+    {
+      issuer: aggregate.identity.issuer,
+      subject: aggregate.identity.subject,
+      identityId: aggregate.identity.id,
+      protocolAgentId: session.agent.id,
+      hostId: session.agent.hostId,
+    },
+    {
+      issuer,
+      sign: (payload, type) =>
+        auth.api.signJWT!({ body: { payload, overrideOptions: { jwt: { type } } }, asResponse: false }).then(
+          ({ token }) => token,
+        ),
+    },
+  )
+  c.header('Cache-Control', 'no-store')
+  c.header('Pragma', 'no-cache')
+  return c.json(response)
+}
+
 async function extendAgentOAuthMetadata(response: Response) {
   const metadata = (await response.json()) as Record<string, unknown>
   const issuer = metadata.issuer
@@ -311,12 +409,35 @@ async function extendAgentOAuthMetadata(response: Response) {
   return Response.json(
     {
       ...metadata,
+      grant_types_supported: [
+        ...new Set([
+          ...(Array.isArray(metadata.grant_types_supported) ? metadata.grant_types_supported : []),
+          'urn:ietf:params:oauth:grant-type:jwt-bearer',
+        ]),
+      ],
       dpop_signing_alg_values_supported: ['ES256', 'EdDSA'],
       agentinfo_endpoint: `${issuer.replace(/\/$/, '')}/agentinfo`,
       agentinfo_claims_supported: agentInfoClaimsSupported,
     },
     { status: response.status, headers },
   )
+}
+
+function protectedResourceMetadata(config: AppConfig, requestUrl: string) {
+  const origin = (config.baseURL ?? new URL(requestUrl).origin).replace(/\/$/, '')
+  return {
+    resource: `${origin}/api`,
+    authorization_servers: [`${origin}/api/auth`],
+    scopes_supported: realmrootOAuthScopes,
+    bearer_methods_supported: [],
+    dpop_signing_alg_values_supported: ['ES256', 'EdDSA'],
+    dpop_bound_access_tokens_required: true,
+  }
+}
+
+function protectedResourceMetadataUrl(config: AppConfig, requestUrl: string) {
+  const origin = (config.baseURL ?? new URL(requestUrl).origin).replace(/\/$/, '')
+  return `${origin}/.well-known/oauth-protected-resource/api`
 }
 
 const agentInfoClaimsSupported = ['iss', 'sub', 'sub_profile', 'name', 'picture', 'updated_at'] as const

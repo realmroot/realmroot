@@ -2634,6 +2634,51 @@ describe('external API resource authorization', () => {
     })
   })
 
+  it('exposes Realm, Organization, and Account authority as separate Realmroot Resources [spec: agent-identity/realmroot-built-in-resource-server]', async () => {
+    const deps = createTestDeps()
+    const builtIn = {
+      ...nativeResource(),
+      id: 'res_realmroot',
+      identifier: 'realmroot',
+      name: 'Realmroot',
+      resourceUrl: 'https://auth.example.com/api',
+    }
+    vi.mocked(deps.authorization.findResource).mockResolvedValue(builtIn)
+    vi.mocked(deps.authorization.listUserMemberships).mockResolvedValue([{ organizationId: 'org-1' } as never])
+    vi.mocked(deps.authorization.findOrganization).mockResolvedValue({
+      id: 'org-1',
+      name: 'Example Organization',
+      displayName: null,
+      disabled: false,
+    } as never)
+    vi.mocked(deps.users.getUser).mockResolvedValue({
+      id: 'user-1',
+      email: 'user@example.com',
+      displayName: 'Example User',
+      role: 'admin',
+    } as never)
+    vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
+    mockResourceOpenApi(deps, builtIn.resourceUrl)
+
+    const result = await listAgentAuthorizationDetailCatalog(
+      deps,
+      builtIn.id,
+      principal(),
+      { limit: 10, offset: 0 },
+      'https://auth.example.com',
+    )
+
+    expect(result.pagination.total).toBe(3)
+    expect(result.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'realmroot_authority', name: 'Realm' }),
+        expect.objectContaining({ type: 'realmroot_authority', name: 'Example Organization' }),
+        expect.objectContaining({ type: 'realmroot_authority', name: 'Example User' }),
+      ]),
+    )
+    expect(new Set(result.items.map((item) => item.links.self)).size).toBe(3)
+  })
+
   it('discovers enabled resources independently of archived management pagination', async () => {
     const deps = createTestDeps()
     const active = nativeResource()
@@ -3498,6 +3543,65 @@ describe('external API resource authorization', () => {
         signer,
       ),
     ).resolves.toMatchObject({ accessToken: 'native-token' })
+  })
+
+  it('binds a Realmroot management token to exactly one authority Resource', async () => {
+    const deps = createTestDeps()
+    const builtIn = {
+      ...nativeResource(),
+      id: 'res_realmroot',
+      identifier: 'realmroot',
+      resourceUrl: 'https://auth.example.com/api',
+    }
+    const authority = { type: 'realmroot_authority', authority: 'organization', id: 'org-1' }
+    authorizationDeps(deps)
+    vi.mocked(deps.authorization.listAgentRoleAssignments).mockResolvedValue([])
+    vi.mocked(deps.authorization.findResource).mockResolvedValue(builtIn)
+    vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
+    vi.mocked(deps.externalResources.findGrant).mockResolvedValue({
+      ...grantRecord(),
+      resourceId: builtIn.id,
+      connectionId: null,
+      scopes: ['users:read'],
+      authorizationDetails: [authority],
+      mode: 'persistent',
+    })
+    vi.mocked(deps.externalResources.findAccessRequestByGrant).mockResolvedValue({
+      ...requestRecord(),
+      resourceId: builtIn.id,
+      connectionId: null,
+      scopes: ['users:read'],
+      authorizationDetails: [authority],
+      status: 'approved',
+    })
+    const signer = { issuer: principal().issuer, sign: vi.fn().mockResolvedValue('realmroot-token') }
+    const tokenUrl = 'https://auth.example.com/api/access/authorizations/grant-1/credentials'
+
+    const result = await issueTargetAccessToken(
+      deps,
+      'grant-1',
+      await createDpopProof(tokenUrl),
+      tokenUrl,
+      principal(),
+      signer,
+    )
+
+    expect(result).toMatchObject({
+      accessToken: 'realmroot-token',
+      authorizationDetails: [authority],
+      resourceUrl: builtIn.resourceUrl,
+    })
+    expect(signer.sign).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sub: principal().subject,
+        aud: builtIn.resourceUrl,
+        host_id: principal().hostId,
+        groups: ['org-1'],
+        realmroot_authority: authority,
+        scope: expect.stringContaining('users:read'),
+      }),
+      'at+jwt',
+    )
   })
 
   it('enforces organization controllers and handles revocation error paths', async () => {

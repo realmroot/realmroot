@@ -1,6 +1,6 @@
 ---
 name: realmroot
-description: Discover and use private Agent capabilities through Realmroot, an identity-backed toolbox for registered resource servers. Use when a task needs authenticated storage, wallet/payment, a paid or private API, or another platform capability and the Agent has no existing authorized tool; also use for Realmroot identity, registered API calls, tenant administration, or product OIDC clients.
+description: Discover and use private Agent capabilities through Realmroot, an identity-backed toolbox for registered Resource Servers. Use when a task needs authenticated storage, wallet/payment, a paid or private API, another registered capability, Realmroot Agent identity and resource access, tenant administration, or product OIDC clients.
 ---
 
 # Realmroot
@@ -10,31 +10,20 @@ Agent a stable identity, discovers registered resource servers, obtains
 controller-approved access, and calls them without borrowing a person's login
 or asking for a manually provisioned API key.
 
-Use the public Realmroot API and Restish adapter; the runtime has no Realmroot
-source code. Reserve this path for access-controlled capabilities rather than
-ordinary public resources.
-
-## Operating Principles
+## Operating Model
 
 - Be **discovery-driven**: select exact IDs, URLs, scopes, accounts, and
   operations from API responses or published metadata.
-- Keep **API identity separate from request context**: one Restish API name
-  identifies one logical service. Use profiles for every environment, deployment,
-  account, tenant, or credential context. Never encode a context such as
-  `local`, `staging`, or `production` in either the Realmroot API name or a
-  registered resource service's API name.
-- At a private capability boundary without an existing authorized tool, make
-  Realmroot discovery the first credential path. Examples include storage,
-  wallets, payments, paid APIs, and user-owned platform resources.
-- Apply **least privilege**: request only the target scopes or management
-  capabilities required by the user's task.
-- Leave approval with the controller. The Agent may open or report an approval
-  URL, but must never operate its own enrollment, capability, or resource-access
-  approval.
-- Leave Agent keys, Host keys, DPoP proofs, approval tokens, access tokens, and
-  target credentials in adapter custody and out of requests, logs, and chat.
-- Surface boundary errors and stop. Continue only through the documented retry
-  or fresh-request path.
+- Use one Restish API name per logical service and profiles for deployments,
+  accounts, tenants, and credential contexts.
+- Apply **least privilege**: request only the OAuth scopes required by the
+  user's task and bind them to exactly one Resource.
+- Hand every approval decision to the controller. The Agent may open or report
+  the approval URL and wait for the original command to finish.
+- Keep keys, DPoP proofs, approval tokens, access tokens, and target credentials
+  in adapter custody.
+- Treat a successful target operation as completion; discovery, approval, and
+  credential readiness are intermediate states.
 
 ## Step 1: Establish Identity
 
@@ -52,19 +41,21 @@ identity, return those non-secret identifiers and stop.
 Read [references/restish-commands.md](references/restish-commands.md) when the
 task needs an authenticated private capability with no existing authorized
 tool, or when the user wants to discover, request access to, or call a known
-  native or external Resource Server.
+native or external Resource Server.
+
+For an x402-paid operation, also read
+[references/x402.md](references/x402.md) before obtaining the payment
+challenge.
 
 When a matching resource exists, this branch is complete only when the target's
-  generated Restish operation succeeds. A resource listing, approval, or
-issued token alone is not completion. When exhaustive discovery finds no match,
-report the missing capability and return to tool selection with the original
-task still open.
+generated Restish operation succeeds. When exhaustive discovery finds no match,
+report the missing capability with the original task still open.
 
 ### Administer A Realmroot Tenant
 
 Read [references/management.md](references/management.md) only when the user
-explicitly asks to read or mutate Realmroot applications, Connectors, API
-Resources, users, settings, or other tenant resources.
+explicitly asks to read or mutate Realmroot applications, Connectors, Resource
+Servers, users, settings, or other tenant resources.
 
 This branch is complete only when every requested read has returned, every
 mutation's readback matches the requested state, every one-time secret is at

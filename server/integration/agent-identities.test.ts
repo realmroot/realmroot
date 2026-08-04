@@ -301,6 +301,12 @@ describe('Agent identity enrollment over real D1', () => {
         description: 'Read private code repositories',
         connection: { status: 'not_required', displayName: null, authorizedScopes: [] },
       }),
+      expect.objectContaining({
+        id: 'res_realmroot',
+        identifier: 'realmroot',
+        resourceIndicator: 'http://localhost/api',
+        connection: expect.objectContaining({ status: 'not_required' }),
+      }),
     ])
 
     const accessRequest = await createAccessRequest(

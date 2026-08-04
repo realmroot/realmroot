@@ -121,6 +121,18 @@ Feature: Agent identity and delegated API authorization
 
   Rule: Resource Servers expose provider-owned Resources through one Agent access workflow
 
+    @entrypoint:agent-protocol @journey:realmroot-built-in-resource-server
+    Scenario: Realmroot exposes its own API as a system-managed Resource Server
+      Given a Realmroot deployment has completed onboarding
+      When an Agent lists Resource Servers
+      Then exactly one enabled native Resource Server represents that deployment's Realmroot API
+      And its service URL and OAuth resource indicator use the deployment's canonical API URL
+      And its account connection status is not-required
+      And it cannot be disabled, archived, deleted, or reassigned through tenant management
+      When the Agent lists that Resource Server's Resources
+      Then Realm, Organization, and personal Account Resources reflect the controller boundaries available for approval
+      And a token for one Resource cannot authorize another Resource
+
     @entrypoint:agent-protocol @journey:agent-resource-server-model
     Scenario: An Agent discovers Resource Servers before provider-owned Resources
       Given Realmroot has registered native and external Resource Servers

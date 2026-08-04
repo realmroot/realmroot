@@ -7,11 +7,34 @@ import type {
 import type { Database } from '@server/db/client'
 import { createApp } from '@server/http/app'
 import type { ManagementSignInSettingsResponse } from '@shared/api/management'
-import { protectedResourceCapabilityNames } from '@shared/authz'
 import { describe, expect, it, vi } from 'vitest'
 import { createTestDeps } from './test-deps'
 
 describe('auth.test 1', () => {
+  it('publishes RFC 9728 metadata for the DPoP-protected Realmroot API', async () => {
+    const auth = createAuth(
+      {} as Database,
+      '01234567890123456789012345678901',
+      'https://auth.example.com',
+      ['https://auth.example.com'],
+      createEmailSenderMock(),
+      createSecurityPolicy(),
+    )
+
+    const response = await createApp(auth, createTestDeps()).request(
+      'https://auth.example.com/.well-known/oauth-protected-resource/api',
+    )
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toMatchObject({
+      resource: 'https://auth.example.com/api',
+      authorization_servers: ['https://auth.example.com/api/auth'],
+      dpop_signing_alg_values_supported: ['ES256', 'EdDSA'],
+      dpop_bound_access_tokens_required: true,
+      scopes_supported: expect.arrayContaining(['agent:read', 'users:read', 'resource-servers:write']),
+    })
+  })
+
   it('serves OIDC discovery from the mounted Better Auth issuer', async () => {
     const auth = createAuth(
       {} as Database,
@@ -42,6 +65,7 @@ describe('auth.test 1', () => {
         'client_credentials',
         'refresh_token',
         'urn:ietf:params:oauth:grant-type:device_code',
+        'urn:ietf:params:oauth:grant-type:jwt-bearer',
       ],
       code_challenge_methods_supported: ['S256'],
       scopes_supported: ['openid', 'profile', 'email', 'offline_access'],
@@ -209,7 +233,7 @@ describe('auth.test 1', () => {
     )
   })
 
-  it('configures AgentAuth as delegated-only with account and coarse management capabilities', async () => {
+  it('configures AgentAuth only for delegated identity enrollment', async () => {
     const auth = createAuth(
       {} as Database,
       '01234567890123456789012345678901',
@@ -229,13 +253,9 @@ describe('auth.test 1', () => {
       defaultHostCapabilities: [],
       requireAuthForCapabilities: false,
     })
-    expect(agentAuthPlugin.options.capabilities.map((capability) => capability.name)).toEqual([
-      'account.profile.read',
-      'account.sessions.list',
-      'account.authorized_apps.list',
-      ...protectedResourceCapabilityNames,
-    ])
-    expect(agentAuthPlugin.options.validateCapabilities(['account.profile.read', 'applications:read'])).toBe(true)
+    expect(agentAuthPlugin.options.capabilities).toEqual([])
+    expect(agentAuthPlugin.options.validateCapabilities([])).toBe(true)
+    expect(agentAuthPlugin.options.validateCapabilities(['applications:read'])).toBe(false)
     expect(agentAuthPlugin.options.validateCapabilities(['tenant:read'])).toBe(false)
     expect(agentAuthPlugin.options.validateCapabilities(['management.users.delete'])).toBe(false)
     expect(agentAuthPlugin.options.resolveAutonomousUser).toBeUndefined()

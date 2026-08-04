@@ -181,7 +181,8 @@ describe('Agent protocol routes', () => {
     expect(await created.clone().json()).not.toHaveProperty('grantId')
     const issued = await app.request('/api/access/authorizations/grant-1/credentials', {
       method: 'POST',
-      headers: { DPoP: 'proof' },
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ proof: { type: 'dpop+jwt', value: 'proof' } }),
     })
     expect(issued.status).toBe(200)
     await expect(issued.json()).resolves.toEqual({
@@ -210,7 +211,7 @@ function createRouteApp(overrides: { signJWT?: () => Promise<{ token: string }> 
     ...overrides,
   }
   const deps = createTestDeps()
-  vi.mocked(deps.agentIdentities.findActiveByProtocolAgent).mockResolvedValue({
+  const aggregate = {
     identity: {
       id: 'identity-1',
       issuer: 'https://auth.example.com/api/auth',
@@ -236,7 +237,9 @@ function createRouteApp(overrides: { signJWT?: () => Promise<{ token: string }> 
         updatedAt: now,
       },
     ],
-  })
+  }
+  vi.mocked(deps.agentIdentities.findActiveByProtocolAgent).mockResolvedValue(aggregate)
+  vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(aggregate)
   vi.mocked(deps.externalResources.findGrant).mockResolvedValue({
     id: 'grant-1',
     agentIdentityId: 'identity-1',
@@ -244,6 +247,31 @@ function createRouteApp(overrides: { signJWT?: () => Promise<{ token: string }> 
   vi.mocked(deps.externalResources.findAccessRequestByGrant).mockResolvedValue({ id: 'request-1' } as never)
   return new Hono()
     .use('*', depsMiddleware(deps))
+    .use('*', async (c, next) => {
+      c.set('principal', {
+        session: null,
+        user: null,
+        agent: {
+          issuer: 'https://auth.example.com/api/auth',
+          subject: 'agt_1',
+          identityId: 'identity-1',
+          protocolAgentId: 'protocol-agent-1',
+          hostId: 'host-1',
+          scopes: [
+            'agent:read',
+            'resource-servers:read',
+            'resources:read',
+            'connection-requests:read',
+            'connection-requests:write',
+            'access-requests:read',
+            'access-requests:write',
+            'access-authorizations:read',
+          ],
+          authority: null,
+        },
+      })
+      await next()
+    })
     .onError((error, c) => handleApiError(error, c))
     .route('/api', createAgentProtocolRoutes(authApi, 'https://auth.example.com/api/auth'))
 }

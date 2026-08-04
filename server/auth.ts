@@ -8,7 +8,6 @@ import { createDrizzleAgentRepository } from '@server/adapters/repos/agents'
 import { createDrizzleApplicationRepository } from '@server/adapters/repos/applications'
 import { createDrizzleAuthorizationRepository } from '@server/adapters/repos/authorization'
 import { createDrizzleConfigzRepository } from '@server/adapters/repos/configz'
-import { executeReadOnlyCapability } from '@server/usecases/agents'
 import { assertApplicationAudience } from '@server/usecases/applications'
 import type { AuthConnectorConfig } from '@server/usecases/connectors'
 import type { Deps } from '@server/usecases/deps'
@@ -35,7 +34,6 @@ import { parseSiweMessage, validateSiweMessage } from 'viem/siwe'
 import { deviceCodeGrantType, userConfigurableApplicationScopes } from '../shared/api/applications'
 import type { ManagementSignInSettingsResponse } from '../shared/api/management'
 import type { SecurityPolicy } from '../shared/api/security'
-import { agentCapabilities } from './auth-capabilities'
 import {
   buildOAuthAccessTokenClaims,
   buildOAuthIdTokenClaims,
@@ -49,7 +47,6 @@ import {
 import { betterAuthTranslations } from './auth-i18n'
 import type { Database } from './db/client'
 import * as schema from './db/schema'
-import { areKnownAgentCapabilities } from './domain/agents/capabilities'
 import { hashPassword, verifyPassword } from './domain/password'
 
 export { buildOAuthAccessTokenClaims, buildOAuthIdTokenClaims, buildOAuthUserInfoClaims } from './auth-helpers'
@@ -327,8 +324,8 @@ export function createAuth(
         allowDynamicHostRegistration: true,
         defaultHostCapabilities: [],
         requireAuthForCapabilities: false,
-        capabilities: agentCapabilities,
-        validateCapabilities: areKnownAgentCapabilities,
+        capabilities: [],
+        validateCapabilities: (capabilities) => capabilities.length === 0,
         consumeJti: async (jti, maxAgeSec) => {
           const now = new Date()
           return deps.agentTokens.consumeAgentAuthJti({
@@ -337,8 +334,6 @@ export function createAuth(
             expiresAt: new Date(now.getTime() + maxAgeSec * 1000),
           })
         },
-        onExecute: ({ capability, arguments: args, agentSession }) =>
-          executeReadOnlyCapability(deps, { capability, arguments: args, agentSession }),
       }),
       deviceAuthorization({
         verificationUri: '/device',

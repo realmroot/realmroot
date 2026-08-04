@@ -1,4 +1,5 @@
 import { ApiError, badGateway, badRequest, forbidden, notFound, oauthError, unauthorized } from '@server/domain/errors'
+import { isRealmrootResourceServer } from '@server/domain/realmroot-resource-server'
 import type { Deps } from '@server/usecases/deps'
 import type {
   AgentAccessGrantRecord,
@@ -30,9 +31,10 @@ import type {
   DecideAgentAccessRequest,
 } from '@shared/api/external-resources'
 import { type PaginationInput, paginationMetadata } from '@shared/api/pagination'
-import { calculateJwkThumbprint, compactVerify, decodeProtectedHeader, importJWK, type JWK } from 'jose'
+import { agentBootstrapScopes, realmrootOAuthScopes } from '@shared/authz'
 import { getAgentRoleAuthorization } from './authorization'
 import { ensureDynamicConnectorScopes, refreshDynamicConnectorMetadata } from './connectors'
+import { validateDpopTokenProof } from './dpop'
 import { readDeclaredScopes, validateRequestedScopes } from './resource-openapi'
 
 const tokenExchangeGrantType = 'urn:ietf:params:oauth:grant-type:token-exchange'
@@ -451,7 +453,7 @@ export async function discoverAgentResources(deps: Deps, principal: AgentResourc
     ) {
       continue
     }
-    const scopes = await discoverAgentResourceScopes(deps, resource.resourceUrl)
+    const scopes = await discoverAgentResourceScopes(deps, resource)
     const storedConnection = activeConnections.find((candidate) => candidate.resourceId === resourceId) ?? null
     const connection =
       storedConnection && (await isConnectionUsable(deps, resourceId, storedConnection)) ? storedConnection : null
@@ -493,12 +495,32 @@ export async function discoverAgentResources(deps: Deps, principal: AgentResourc
   return { resources }
 }
 
-async function discoverAgentResourceScopes(deps: Deps, resourceUrl: string) {
+async function discoverAgentResourceScopes(
+  deps: Deps,
+  resource: NonNullable<Awaited<ReturnType<Deps['authorization']['findResource']>>>,
+) {
+  if (isRealmrootResourceServer(resource.id)) {
+    return realmrootOAuthScopes.map((value) => ({ value, description: `Authorize ${value}.` }))
+  }
   try {
-    return await readDeclaredScopes(deps, resourceUrl)
+    return await readDeclaredScopes(deps, resource.resourceUrl)
   } catch {
     return null
   }
+}
+
+async function validateResourceRequestedScopes(
+  deps: Deps,
+  resource: NonNullable<Awaited<ReturnType<Deps['authorization']['findResource']>>>,
+  scopes: string[],
+) {
+  if (isRealmrootResourceServer(resource.id)) {
+    if (scopes.some((scope) => !realmrootOAuthScopes.includes(scope as (typeof realmrootOAuthScopes)[number]))) {
+      throw badRequest('Requested scope is not declared by the Realmroot OpenAPI document.')
+    }
+    return
+  }
+  await validateRequestedScopes(deps, resource.resourceUrl, scopes)
 }
 
 export async function listAgentResourceServers(
@@ -540,6 +562,13 @@ export async function listAgentResourceServerResources(
   const identity = await requireActiveIdentityAndBinding(deps, principal)
   const resource = await requireEnabledResource(deps, resourceServerId)
   const origin = apiOrigin.replace(/\/$/, '')
+  if (isRealmrootResourceServer(resource.id)) {
+    const items = await realmrootAuthorityResources(deps, identity, principal.identityId, resource, origin)
+    return {
+      items: items.slice(pagination.offset, pagination.offset + pagination.limit),
+      pagination: paginationMetadata({ ...pagination, total: items.length }),
+    }
+  }
   if (resource.connectorId === null) {
     const item = await toResourceServerResource(
       resourceServerId,
@@ -550,8 +579,7 @@ export async function listAgentResourceServerResources(
         metadata: {},
         connectionStatus: 'not_required',
         authorizedScopes: await activeResourceScopes(deps, principal.identityId, resourceServerId, []),
-        requestableScopes:
-          (await discoverAgentResourceScopes(deps, resource.resourceUrl))?.map((scope) => scope.value) ?? [],
+        requestableScopes: (await discoverAgentResourceScopes(deps, resource))?.map((scope) => scope.value) ?? [],
       },
       origin,
     )
@@ -644,7 +672,7 @@ export async function createAgentConnectionRequest(
   const resource = await requireEnabledResource(deps, resourceServerId)
   if (resource.connectorId === null) throw badRequest('Native Resource Servers do not use account connections.')
   await refreshDynamicConnectorMetadata(deps, resource.connectorId)
-  await validateRequestedScopes(deps, resource.resourceUrl, input.scopes)
+  await validateResourceRequestedScopes(deps, resource, input.scopes)
   await requireAgentScopeEligibility(
     deps,
     principal.identityId,
@@ -662,7 +690,7 @@ export async function createAgentConnectionRequest(
     resource,
     connection?.status === 'active' ? connection : null,
     input.resources ?? [],
-    principal.identityId,
+    identity,
     apiOrigin,
   )
   const now = new Date()
@@ -796,7 +824,7 @@ export async function createAgentAccessRequest(
       throw notFound('Active resource account connection was not found.')
     }
   }
-  await validateRequestedScopes(deps, resource.resourceUrl, input.scopes)
+  await validateResourceRequestedScopes(deps, resource, input.scopes)
   const authorizationDetails = input.authorizationDetails ?? []
   assertAccessRequestAuthorizationDetails(resource, connection, authorizationDetails)
   await requireAgentScopeEligibility(
@@ -904,7 +932,7 @@ export async function createAccessRequest(
     resourceServer,
     connection?.status === 'active' ? connection : null,
     [input.resource],
-    principal.identityId,
+    identity,
     approvalOrigin,
   )
   const request = await createAgentAccessRequest(
@@ -1033,6 +1061,16 @@ async function resolveApprovalResource(
       metadata: {},
     }
   }
+  if (isRealmrootResourceServer(resourceServer.id)) {
+    const display = await realmrootAuthorityDisplay(deps, detail)
+    return {
+      id: resourceIdentifier(detail),
+      name: display.label,
+      type: detail.type,
+      description: display.description,
+      metadata: display.metadata,
+    }
+  }
   if (!request.connectionId) throw notFound('Resource account connection was not found.')
   const connection = await deps.externalResources.findConnection(request.connectionId)
   if (!connection || connection.status !== 'active') throw notFound('Active resource account connection was not found.')
@@ -1114,7 +1152,7 @@ export async function decideAgentAccessRequest(
   if (!authorizationDetailsMatchRequest(authorizationDetails, request.authorizationDetails)) {
     throw invalidAuthorizationDetails('Approved authorization details do not match the pending access request.')
   }
-  await validateRequestedScopes(deps, resource.resourceUrl, request.scopes)
+  await validateResourceRequestedScopes(deps, resource, request.scopes)
   const requestIdentity = await deps.agentIdentities.findIdentity(request.agentIdentityId)
   if (!requestIdentity) throw notFound('Active Agent identity was not found.')
   await requireAgentScopeEligibility(
@@ -1228,7 +1266,7 @@ export async function issueTargetAccessToken(
     throw forbidden('Active Agent access grant is required.')
   }
   assertScopeSubset(request.scopes, grant.scopes, 'Agent access grant')
-  await validateRequestedScopes(deps, resource.resourceUrl, request.scopes)
+  await validateResourceRequestedScopes(deps, resource, request.scopes)
   const roleAuthorization = await requireAgentScopeEligibility(
     deps,
     principal.identityId,
@@ -1275,7 +1313,7 @@ export async function issueTargetAccessToken(
   assertScopeSubset(request.scopes, connection.grantedScopes, 'connected account')
   assertAuthorizationDetailsSelection(resource, connection, grant.authorizationDetails)
   assertAuthorizationDetailsSubset(grant.authorizationDetails, connection.authorizationDetails, 'connected account')
-  const confirmationJkt = await dpopThumbprint(deps, dpopProof, authorization.tokenEndpoint)
+  const confirmationJkt = await validateDpopTokenProof(deps, dpopProof, authorization.tokenEndpoint)
   const subjectToken = await refreshConnectionToken(deps, connection, authorization)
   const nowSeconds = Math.floor(Date.now() / 1000)
   const agentAssertion = await signer.sign(
@@ -1439,25 +1477,37 @@ async function issueNativeAccessToken(
   if (signer.issuer !== principal.issuer) {
     throw forbidden('Agent identity does not belong to the active OAuth issuer.')
   }
-  const confirmationJkt = await dpopThumbprint(deps, dpopProof, tokenRequestUrl)
+  const confirmationJkt = await validateDpopTokenProof(deps, dpopProof, tokenRequestUrl)
   const now = new Date()
   const maximumExpiresAt = new Date(now.getTime() + 5 * 60 * 1000)
   const expiresAt =
     grant.expiresAt && grant.expiresAt.getTime() < maximumExpiresAt.getTime() ? grant.expiresAt : maximumExpiresAt
   const subject = identity.identity.ownerUserId ?? identity.identity.ownerOrganizationId
   if (!subject) throw forbidden('Agent home-space controller is unavailable.')
+  const realmroot = isRealmrootResourceServer(resource.id)
+  const realmrootAuthority = realmroot ? grant.authorizationDetails[0] : undefined
+  if (realmroot) assertRealmrootAuthoritySelection(grant.authorizationDetails)
+  const issuedScopes = realmroot ? [...new Set([...agentBootstrapScopes, ...request.scopes])] : request.scopes
   const accessToken = await signer.sign(
     {
       iss: signer.issuer,
-      sub: subject,
+      sub: realmroot ? principal.subject : subject,
       aud: resource.resourceUrl,
       jti: createId('resat'),
       iat: Math.floor(now.getTime() / 1000),
       exp: Math.floor(expiresAt.getTime() / 1000),
-      scope: request.scopes.join(' '),
-      groups: identity.identity.ownerOrganizationId ? [identity.identity.ownerOrganizationId] : [],
+      scope: issuedScopes.join(' '),
+      groups:
+        realmrootAuthority?.authority === 'organization' && typeof realmrootAuthority.id === 'string'
+          ? [realmrootAuthority.id]
+          : identity.identity.ownerOrganizationId
+            ? [identity.identity.ownerOrganizationId]
+            : [],
       roles: roleAuthorization.roles,
       client_id: principal.protocolAgentId,
+      ...(realmroot
+        ? { host_id: principal.hostId, sub_profile: 'ai_agent', realmroot_authority: realmrootAuthority }
+        : {}),
       cnf: { jkt: confirmationJkt },
       act: {
         iss: principal.issuer,
@@ -1479,7 +1529,7 @@ async function issueNativeAccessToken(
     tokenHash: await sha256(accessToken),
     confirmationJkt,
     scopes: request.scopes,
-    authorizationDetails: [],
+    authorizationDetails: realmroot ? grant.authorizationDetails : [],
     expiresAt,
     revokedAt: null,
     createdAt: now,
@@ -1496,7 +1546,7 @@ async function issueNativeAccessToken(
     request,
     grantId: grant.id,
     scopes: request.scopes,
-    authorizationDetails: [],
+    authorizationDetails: realmroot ? grant.authorizationDetails : [],
     reasonCode: null,
   })
   return {
@@ -1505,7 +1555,7 @@ async function issueNativeAccessToken(
     expiresIn: Math.max(1, Math.floor((expiresAt.getTime() - now.getTime()) / 1000)),
     expiresAt: expiresAt.toISOString(),
     scopes: request.scopes,
-    authorizationDetails: [],
+    authorizationDetails: realmroot ? grant.authorizationDetails : [],
     resourceUrl: resource.resourceUrl,
   }
 }
@@ -1795,6 +1845,92 @@ async function activeResourceScopes(
   ].sort()
 }
 
+async function realmrootAuthorityResources(
+  deps: Deps,
+  identity: Awaited<ReturnType<typeof requireActiveIdentityAndBinding>>,
+  agentIdentityId: string,
+  resource: NonNullable<Awaited<ReturnType<Deps['authorization']['findResource']>>>,
+  apiOrigin: string,
+) {
+  const requestableScopes = (await discoverAgentResourceScopes(deps, resource))?.map((scope) => scope.value) ?? []
+  const details = await realmrootAuthorityDetails(deps, identity)
+  return Promise.all(
+    details.map(async (detail) => {
+      const display = await realmrootAuthorityDisplay(deps, detail)
+      return toResourceServerResource(
+        resource.id,
+        detail,
+        {
+          ...display,
+          connectionStatus: 'not_required',
+          authorizedScopes: await activeResourceScopes(deps, agentIdentityId, resource.id, [detail]),
+          requestableScopes,
+        },
+        apiOrigin,
+      )
+    }),
+  )
+}
+
+async function realmrootAuthorityDetails(
+  deps: Deps,
+  identity: Awaited<ReturnType<typeof requireActiveIdentityAndBinding>>,
+): Promise<AuthorizationDetail[]> {
+  const details: AuthorizationDetail[] = []
+  const ownerUserId = identity.identity.ownerUserId
+  if (ownerUserId) {
+    const user = await deps.users.getUser(ownerUserId)
+    const roles = String(user.role ?? '')
+      .split(',')
+      .map((role) => role.trim())
+    if (roles.includes('admin')) details.push({ type: 'realmroot_authority', authority: 'realm', id: 'realm' })
+    details.push({ type: 'realmroot_authority', authority: 'account', id: ownerUserId })
+    const memberships = await deps.authorization.listUserMemberships(ownerUserId)
+    for (const organizationId of [...new Set(memberships.map((membership) => membership.organizationId))].sort()) {
+      const organization = await deps.authorization.findOrganization(organizationId)
+      if (organization && !organization.disabled) {
+        details.push({ type: 'realmroot_authority', authority: 'organization', id: organizationId })
+      }
+    }
+  } else if (identity.identity.ownerOrganizationId) {
+    details.push({
+      type: 'realmroot_authority',
+      authority: 'organization',
+      id: identity.identity.ownerOrganizationId,
+    })
+  }
+  return details
+}
+
+async function realmrootAuthorityDisplay(
+  deps: Deps,
+  detail: AuthorizationDetail,
+): Promise<{ label: string; description: string | null; metadata: Record<string, string> }> {
+  const authority = detail.authority
+  const id = detail.id
+  if (authority === 'realm') {
+    return { label: 'Realm', description: 'Realm-wide administration authority.', metadata: { authority: 'realm' } }
+  }
+  if (authority === 'organization' && typeof id === 'string') {
+    const organization = await deps.authorization.findOrganization(id)
+    if (!organization) throw notFound('Organization authority was not found.')
+    return {
+      label: organization.displayName ?? organization.name,
+      description: 'Organization-scoped administration authority.',
+      metadata: { authority: 'organization', organizationId: id },
+    }
+  }
+  if (authority === 'account' && typeof id === 'string') {
+    const user = await deps.users.getUser(id)
+    return {
+      label: user.displayName || user.email,
+      description: 'Personal-account administration authority.',
+      metadata: { authority: 'account', userId: id },
+    }
+  }
+  throw badRequest('Realmroot authority Resource is invalid.')
+}
+
 async function toResourceServerResource(
   resourceServerId: string,
   authorizationDetail: AuthorizationDetail | null,
@@ -1855,15 +1991,25 @@ async function resolveResourceReferences(
   resourceServer: NonNullable<Awaited<ReturnType<Deps['authorization']['findResource']>>>,
   connection: ResourceAccountConnectionRecord | null,
   references: Array<{ href: string }>,
-  agentIdentityId: string,
+  identity: Awaited<ReturnType<typeof requireActiveIdentityAndBinding>>,
   apiOrigin: string,
 ) {
   if (references.length === 0) return []
   const ids = references.map(({ href }) => parseResourceHref(href, resourceServer.id, apiOrigin))
   if (new Set(ids).size !== ids.length) throw badRequest('Resources must be unique.')
   if (resourceServer.connectorId === null) {
-    if (ids.length !== 1 || ids[0] !== 'service') throw notFound('Resource was not found.')
-    return []
+    if (!isRealmrootResourceServer(resourceServer.id)) {
+      if (ids.length !== 1 || ids[0] !== 'service') throw notFound('Resource was not found.')
+      return []
+    }
+    const available = new Map(
+      (await realmrootAuthorityDetails(deps, identity)).map((detail) => [resourceIdentifier(detail), detail]),
+    )
+    return ids.map((id) => {
+      const detail = available.get(id)
+      if (!detail) throw notFound('Resource was not found.')
+      return detail
+    })
   }
   if (!connection) throw badRequest('Connect the Resource Server before selecting Resources.')
   if (await serviceResourceFallbackAuthorization(deps, resourceServer, connection)) {
@@ -1872,7 +2018,10 @@ async function resolveResourceReferences(
   }
   const available = new Map<string, AuthorizationDetail>()
   for (let offset = 0; ; ) {
-    const catalog = await readResourceCatalog(deps, resourceServer, connection, agentIdentityId, { limit: 100, offset })
+    const catalog = await readResourceCatalog(deps, resourceServer, connection, identity.identity.id, {
+      limit: 100,
+      offset,
+    })
     for (const item of catalog.items)
       available.set(resourceIdentifier(item.authorizationDetail), item.authorizationDetail)
     if (!catalog.pagination.hasMore || catalog.pagination.nextOffset === null) break
@@ -2034,39 +2183,6 @@ async function refreshConnectionToken(
     updatedAt: now,
   })
   return accessToken
-}
-
-async function dpopThumbprint(deps: Deps, proof: string, tokenEndpoint: string) {
-  const header = decodeProtectedHeader(proof)
-  if (header.typ?.toLowerCase() !== 'dpop+jwt' || !header.alg || header.alg === 'none' || !header.jwk) {
-    throw badRequest('A public-key DPoP proof is required.')
-  }
-  let payload: Record<string, unknown>
-  try {
-    const key = await importJWK(header.jwk as JWK, header.alg)
-    const verified = await compactVerify(proof, key)
-    payload = JSON.parse(new TextDecoder().decode(verified.payload)) as Record<string, unknown>
-  } catch {
-    throw badRequest('DPoP proof signature is invalid.')
-  }
-  if (payload.htm !== 'POST' || payload.htu !== tokenEndpoint || typeof payload.jti !== 'string') {
-    throw badRequest('DPoP proof is not bound to the target token endpoint.')
-  }
-  if (typeof payload.iat !== 'number' || Math.abs(Date.now() / 1000 - payload.iat) > 300) {
-    throw badRequest('DPoP proof is outside the accepted time window.')
-  }
-  const thumbprint = await calculateJwkThumbprint(header.jwk as JWK)
-  if (
-    !(await deps.agentTokens.consumeDpopJti({
-      jtiHash: await sha256(payload.jti),
-      keyThumbprint: thumbprint,
-      expiresAt: new Date((payload.iat + 300) * 1000),
-      createdAt: new Date(),
-    }))
-  ) {
-    throw badRequest('DPoP proof was already used.')
-  }
-  return thumbprint
 }
 
 async function requirePendingAccessRequestByToken(deps: Deps, token: string) {
@@ -2376,6 +2492,10 @@ function assertAuthorizationDetailsSelection(
   authorizationDetails: AuthorizationDetail[],
 ) {
   if (resource.connectorId === null) {
+    if (isRealmrootResourceServer(resource.id)) {
+      assertRealmrootAuthoritySelection(authorizationDetails)
+      return
+    }
     if (authorizationDetails.length > 0) {
       throw invalidAuthorizationDetails('Native API resources do not accept authorization details.')
     }
@@ -2404,6 +2524,10 @@ function assertAccessRequestAuthorizationDetails(
   authorizationDetails: AuthorizationDetail[],
 ) {
   if (resource.connectorId === null) {
+    if (isRealmrootResourceServer(resource.id)) {
+      assertRealmrootAuthoritySelection(authorizationDetails)
+      return
+    }
     if (authorizationDetails.length > 0) {
       throw invalidAuthorizationDetails('Native API resources do not accept authorization details.')
     }
@@ -2428,6 +2552,18 @@ function assertAccessRequestAuthorizationDetails(
   }
   if (!connection || !isAuthorizationDetailsSubset(authorizationDetails, connection.authorizationDetails)) {
     throw invalidAuthorizationDetails('Requested authorization details exceed the connected account boundary.')
+  }
+}
+
+function assertRealmrootAuthoritySelection(authorizationDetails: AuthorizationDetail[]) {
+  const detail = authorizationDetails[0]
+  if (
+    authorizationDetails.length !== 1 ||
+    detail?.type !== 'realmroot_authority' ||
+    !['realm', 'organization', 'account'].includes(String(detail.authority)) ||
+    typeof detail.id !== 'string'
+  ) {
+    throw invalidAuthorizationDetails('Select exactly one Realmroot authority Resource.')
   }
 }
 

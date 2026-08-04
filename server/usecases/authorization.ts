@@ -1,5 +1,10 @@
 import { badRequest, forbidden, notFound, resourceInUse } from '@server/domain/errors'
 import { platformOrganization } from '@server/domain/platform-organization'
+import {
+  isRealmrootResourceServer,
+  realmrootResourceServer,
+  realmrootResourceUrl,
+} from '@server/domain/realmroot-resource-server'
 import { type AuthorizationTokenClaimInput, createId, toTokenClaims } from '@server/usecases/authorization-utils'
 import type { Deps } from '@server/usecases/deps'
 import { validateExternalResourceConnector } from '@server/usecases/resource-connectors'
@@ -175,6 +180,31 @@ export async function createResource(deps: Deps, input: CreateApiResourceRequest
   })
 }
 
+export async function ensureRealmrootResourceServer(deps: Deps, apiOrigin: string) {
+  const resourceUrl = realmrootResourceUrl(apiOrigin)
+  const existing = await deps.authorization.findResource(realmrootResourceServer.id)
+  if (existing) {
+    if (
+      existing.identifier !== realmrootResourceServer.identifier ||
+      existing.resourceUrl !== resourceUrl ||
+      existing.ownerOrganizationId !== realmrootResourceServer.ownerOrganizationId ||
+      existing.connectorId !== null
+    ) {
+      throw new Error('The persisted Realmroot Resource Server does not match this deployment.')
+    }
+    return existing
+  }
+  return deps.authorization.createResource({
+    ...realmrootResourceServer,
+    resourceUrl,
+    connectorId: null,
+    authorizationDetails: [],
+    enabled: true,
+    accessEligibility: { mode: 'realm', organizationIds: [] },
+    availableToAgents: true,
+  })
+}
+
 export function listResources(deps: Deps, pagination: PaginationQuery) {
   return deps.authorization
     .listResources(pagination)
@@ -198,6 +228,7 @@ export async function getResourceContract(deps: Deps, id: string) {
 
 export async function updateResource(deps: Deps, id: string, input: UpdateApiResourceRequest) {
   const resource = await getResource(deps, id)
+  if (isRealmrootResourceServer(id)) throw badRequest('The Realmroot Resource Server is system-managed.')
   if (resource.archivedAt) throw badRequest('Archived API resources must be restored before updating.')
   if (input.resourceUrl !== undefined) validateResourceUrl(input.resourceUrl)
   if (input.ownerOrganizationId) await requireActiveOrganization(deps, input.ownerOrganizationId)
@@ -237,6 +268,7 @@ async function validateResourceEligibility(deps: Deps, eligibility: ApiResourceR
 
 export async function archiveResource(deps: Deps, id: string, actor: ResourceMutationActor) {
   const resource = await getResource(deps, id)
+  if (isRealmrootResourceServer(id)) throw badRequest('The Realmroot Resource Server is system-managed.')
   if (!resource.archivedAt) {
     const now = new Date()
     await deps.authorization.archiveResource(id, now, resourceMutationAudit('api_resource.archived', id, now, actor))
@@ -246,6 +278,7 @@ export async function archiveResource(deps: Deps, id: string, actor: ResourceMut
 
 export async function restoreResource(deps: Deps, id: string, actor: ResourceMutationActor) {
   const resource = await getResource(deps, id)
+  if (isRealmrootResourceServer(id)) throw badRequest('The Realmroot Resource Server is system-managed.')
   if (resource.archivedAt) {
     const now = new Date()
     await deps.authorization.restoreResource(id, now, resourceMutationAudit('api_resource.restored', id, now, actor))
@@ -280,6 +313,7 @@ function resourceMutationAudit(
 
 export async function deleteResource(deps: Deps, id: string) {
   await getResource(deps, id)
+  if (isRealmrootResourceServer(id)) throw badRequest('The Realmroot Resource Server is system-managed.')
   const references = await deps.authorization.deleteResource(id)
   if (references) {
     throw resourceInUse('API resource has authorization history and cannot be permanently deleted.', { ...references })

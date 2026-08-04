@@ -9,6 +9,7 @@ configure a product OIDC client.
 - [Create a browser client](#create-a-browser-client)
 - [Create a native client](#create-a-native-client)
 - [Create a confidential client](#create-a-confidential-client)
+- [Update client resources](#update-client-resources)
 - [Use device authorization](#use-device-authorization)
 
 ## Select The Client
@@ -19,7 +20,8 @@ Use issuer discovery at:
 AUTH_ORIGIN/api/auth/.well-known/openid-configuration
 ```
 
-Choose by runtime:
+Request `applications:read` and `applications:write` through `management.md`,
+then choose the client by runtime:
 
 | Client type | Use for | Secret | Typical grants |
 | --- | --- | --- | --- |
@@ -27,20 +29,28 @@ Choose by runtime:
 | `public_native` | Mobile, desktop, CLI, runners | No | `authorization_code`, `refresh_token`, device code |
 | `confidential_web` | Server-side apps that protect secrets | Yes | `authorization_code`, `refresh_token`, optional `client_credentials` |
 
-Use `openid profile email` for common clients. Add `offline_access` only when
-refresh tokens are required. Add `client_credentials` only when a confidential
-backend must act without a user.
+Use `openid profile email` for common clients. Add `offline_access` with the
+refresh-token grant. Use `client_credentials` only for a confidential backend
+that acts without a user.
 
-Public clients use PKCE and Realmroot-selected token endpoint authentication.
-Keep `firstParty` and `trusted` at their safe default `false`. Set either to
-`true` only when the user explicitly requests that policy; `trusted: true`
-skips user consent.
+Public clients use PKCE and token endpoint authentication method `none`.
+Confidential clients use `client_secret_basic` or `client_secret_post` as
+returned by the Application representation. `firstParty` and `trusted` default
+to `false`; `trusted: true` skips user consent and therefore requires explicit
+user intent.
+
+Select these authorization dimensions before creation:
+
+- `ownerOrganizationId`: the Organization responsible for the Application;
+- `audience.mode`: `realm`, `organizations`, `users`, or `public`;
+- `audience.organizationIds` or `audience.userIds` for a constrained audience;
+- `oidcClaims`: optional access-token, ID-token, and UserInfo claim selection.
 
 Client selection is complete when its runtime, redirects, grants, scopes,
 consent policy, and secret-handling capability are explicit.
 
-Treat every name, slug, origin, and redirect in the examples as a template.
-Replace it with an exact user-confirmed value before mutation.
+Treat every name, slug, owner, audience, origin, and redirect in the examples
+as a template. Replace it with an exact user-confirmed value before mutation.
 
 List applications before mutation. When a discovered application overlaps the
 requested slug, client identity, or redirect URIs, present it and obtain an
@@ -58,6 +68,8 @@ restish post "$API_NAME/applications" -o json <<JSON
   "name": "Customer Portal",
   "slug": "customer-portal",
   "clientType": "public_spa",
+  "ownerOrganizationId": "${OWNER_ORGANIZATION_ID}",
+  "audience": {"mode": "public"},
   "redirectUris": ["${APP_ORIGIN}/oidc/callback"],
   "postLogoutRedirectUris": ["${APP_ORIGIN}/signed-out"],
   "corsOrigins": ["${APP_ORIGIN}"],
@@ -80,6 +92,8 @@ restish post "$API_NAME/applications" -o json <<'JSON'
   "name": "Desktop App",
   "slug": "desktop-app",
   "clientType": "public_native",
+  "ownerOrganizationId": "org_123",
+  "audience": {"mode": "realm"},
   "redirectUris": ["com.example.desktop:/callback", "http://127.0.0.1:8484/callback"],
   "allowedGrantTypes": ["authorization_code", "refresh_token"],
   "allowedScopes": ["openid", "profile", "email", "offline_access"]
@@ -95,6 +109,8 @@ restish post "$API_NAME/applications" -o json <<'JSON'
   "name": "Runner CLI",
   "slug": "runner-cli",
   "clientType": "public_native",
+  "ownerOrganizationId": "org_123",
+  "audience": {"mode": "organizations", "organizationIds": ["org_123"]},
   "redirectUris": ["com.example.runner:/callback"],
   "allowedGrantTypes": ["urn:ietf:params:oauth:grant-type:device_code"],
   "allowedScopes": ["openid", "profile", "email", "offline_access"]
@@ -119,6 +135,8 @@ CLIENT_OUTPUT_FILE=/protected/path/client.json
   "name": "Admin Backend",
   "slug": "admin-backend",
   "clientType": "confidential_web",
+  "ownerOrganizationId": "${OWNER_ORGANIZATION_ID}",
+  "audience": {"mode": "organizations", "organizationIds": ["${OWNER_ORGANIZATION_ID}"]},
   "redirectUris": ["${APP_ORIGIN}/oidc/callback"],
   "postLogoutRedirectUris": ["${APP_ORIGIN}/signed-out"],
   "allowedGrantTypes": ["authorization_code", "refresh_token"],
@@ -132,6 +150,30 @@ test -s "$CLIENT_OUTPUT_FILE"
 The `noclobber` guard requires a new path and the `umask` creates it
 owner-readable only. Report the protected file path and its lifecycle, not the
 returned `clientSecret` or file contents.
+
+## Update Client Resources
+
+Read the current Application first. Use `PATCH /applications/{applicationId}`
+for representation fields and the dedicated subresources for replace/create
+semantics:
+
+```bash
+restish put "$API_NAME/applications/$APPLICATION_ID/redirect-uris" -o json <<'JSON'
+{"redirectUris": ["https://app.example.com/oidc/callback"]}
+JSON
+
+restish post "$API_NAME/applications/$APPLICATION_ID/client-secrets" -o json > "$CLIENT_OUTPUT_FILE"
+```
+
+The redirect URI operation replaces the complete collection. Client-secret
+creation returns a one-time `clientSecret`; its list operation returns metadata
+only. Federated credentials live under
+`/applications/{applicationId}/federated-credentials` and use their published
+GET, POST, PATCH, and DELETE contracts.
+
+Use `oidcClaims` on create or update to select optional authorization, scopes,
+groups, roles, Organization ID, and Organization name claims independently for
+the access token, ID token, and UserInfo response.
 
 ## Use Device Authorization
 

@@ -1,7 +1,8 @@
 import { createApp } from '@server/http/app'
 import { unifiedOpenApi } from '@server/http/openapi/management'
 import { protectedResourceCollectionRoutes } from '@shared/api/management'
-import { protectedResourceCapabilityNames, requiredProtectedCapability } from '@shared/authz'
+import { realmrootOAuthScopes, requiredProtectedScope } from '@shared/authz'
+import { calculateJwkThumbprint, exportJWK, generateKeyPair, SignJWT } from 'jose'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createTestDeps } from '../test-deps'
@@ -44,28 +45,27 @@ describe('management routes 1', () => {
     const operationIds = openApiOperationObjects().map((operation) => operation.operationId)
     expect(operationIds).not.toContain(undefined)
     expect(new Set(operationIds).size).toBe(operationIds.length)
-    expect(unifiedOpenApi.security).toEqual([{ agentAuth: [] }, { browserSession: [] }])
-    expect(unifiedOpenApi.components.securitySchemes.agentAuth).toMatchObject({
-      type: 'apiKey',
-      in: 'header',
-      name: 'Authorization',
+    expect(unifiedOpenApi.security).toBeUndefined()
+    expect(unifiedOpenApi.components.securitySchemes.dpop).toMatchObject({
+      type: 'http',
+      scheme: 'DPoP',
     })
+    expect(unifiedOpenApi.components.securitySchemes.sessionCookie).toMatchObject({ type: 'apiKey', in: 'cookie' })
+    expect(unifiedOpenApi.components.securitySchemes).not.toHaveProperty('agentAuth')
     expect(unifiedOpenApi['x-cli-config']).toEqual({
       command_layout: 'tags',
       profiles: {
         default: {
           credentials: {
-            agentAuth: {
+            dpop: {
               auth: {
-                type: 'api-key',
+                type: 'bearer',
                 params: {
-                  in: 'header',
-                  name: 'Authorization',
-                  value: 'AgentAuth',
+                  token: 'realmroot-plugin-managed',
                   provider: 'realmroot-agent',
                 },
               },
-              satisfies: protectedResourceCapabilityNames,
+              satisfies: realmrootOAuthScopes,
             },
           },
         },
@@ -83,13 +83,12 @@ describe('management routes 1', () => {
         expect(operation.responses, operation.key).toHaveProperty('403')
       }
       expect(operation.declaredPathParameters, operation.key).toEqual(operation.pathParameters)
-      const requiredCapability = requiredProtectedCapability(
-        operation.method,
-        operation.key.slice(operation.method.length + 1),
-      )
-      if (operation.requiredAgentCapability) {
-        expect(operation.security, operation.key).toEqual([{ agentAuth: [] }, { browserSession: [] }])
-        expect(operation.requiredAgentCapability, operation.key).toBe(requiredCapability)
+      const requiredScope = requiredProtectedScope(operation.method, operation.key.slice(operation.method.length + 1))
+      if (requiredScope && JSON.stringify(operation.security).includes('sessionCookie')) {
+        expect(operation.security, operation.key).toEqual([
+          { dpop: [requiredScope] },
+          { sessionCookie: [requiredScope] },
+        ])
       }
 
       if (methodsWithJsonRequestBody.has(operation.method) && !operationsWithoutRequestBody.has(operation.key)) {
@@ -229,16 +228,26 @@ describe('management routes 1', () => {
 
   it('uses one Agent principal for permission-gated management operations [spec: agent-identity/agent-single-cli-principal] [spec: agent-identity/agent-management-authority] [spec: management-api/management-restish-agent-auth] [spec: management-api/management-restish-user-crud] [spec: agent-identity/agent-public-resource-model]', async () => {
     const auth = createAuthMock()
-    auth.api.getAgentSession.mockResolvedValue({
-      agentId: 'protocol-agent-1',
-      agent: { id: 'protocol-agent-1', hostId: 'host-1', mode: 'delegated', capabilityGrants: [] },
-      host: { id: 'host-1', userId: 'controller-1', status: 'active' },
+    const dpop = await createTestDpopKey()
+    let scopes = ['agent:read']
+    Object.assign(auth.api, {
+      verifyJWT: vi.fn().mockImplementation(async () => ({
+        payload: {
+          iss: 'http://localhost/api/auth',
+          sub: 'agt_1',
+          client_id: 'protocol-agent-1',
+          host_id: 'host-1',
+          scope: scopes.join(' '),
+          cnf: { jkt: dpop.thumbprint },
+          realmroot_authority: { type: 'realmroot_authority', authority: 'realm', id: 'realm' },
+        },
+      })),
     })
     const now = new Date()
     const identity = {
       identity: {
         id: 'identity-1',
-        issuer: 'http://localhost',
+        issuer: 'http://localhost/api/auth',
         subject: 'agt_1',
         name: 'Build Agent',
         ownerUserId: 'controller-1',
@@ -267,73 +276,38 @@ describe('management routes 1', () => {
       users,
       agentIdentities: {
         findActiveByProtocolAgent: vi.fn().mockResolvedValue(identity),
+        findIdentity: vi.fn().mockResolvedValue(identity),
       },
-    })
-    const capabilityGrant = (capability: string) => ({
-      id: `grant-${capability}`,
-      agentId: 'protocol-agent-1',
-      capability,
-      deniedBy: null,
-      grantedBy: 'controller-1',
-      expiresAt: null,
-      createdAt: now,
-      updatedAt: now,
-      status: 'active',
-      reason: null,
-      constraints: null,
     })
     const app = createApp(auth, deps)
-    const headers = {
-      'content-type': 'application/json',
-      authorization: 'Bearer eyJ0eXAiOiJhZ2VudCtqd3QifQ.e30.c2lnbmF0dXJl',
-    }
+    const headers = (method: string, path: string) => dpop.headers(method, `http://localhost${path}`)
 
-    const agent = await app.request('/api/agent/status', { headers })
+    const agent = await app.request('/api/agent/status', { headers: await headers('GET', '/api/agent/status') })
     expect(agent.status).toBe(200)
     await expect(agent.json()).resolves.toMatchObject({
-      agent: { issuer: 'http://localhost', subject: 'agt_1' },
+      agent: { issuer: 'http://localhost/api/auth', subject: 'agt_1' },
     })
 
-    const denied = await app.request('/api/users', { headers })
+    scopes = ['resource-servers:read']
+    const discovery = await app.request('/api/resource-servers', {
+      headers: await headers('GET', '/api/resource-servers'),
+    })
+    expect(discovery.status, await discovery.clone().text()).toBe(200)
+
+    const denied = await app.request('/api/users', { headers: await headers('GET', '/api/users') })
     expect(denied.status, await denied.clone().text()).toBe(403)
     await expect(denied.json()).resolves.toMatchObject({
-      error: { message: 'Agent capability "users:read" is required.' },
+      error: { message: 'OAuth scope "users:read" is required.' },
     })
 
-    auth.api.getAgentSession.mockResolvedValue({
-      agentId: 'protocol-agent-1',
-      agent: {
-        id: 'protocol-agent-1',
-        hostId: 'host-1',
-        mode: 'delegated',
-        capabilityGrants: [{ capability: 'users:read', status: 'active' }],
-      },
-      host: { id: 'host-1', userId: 'controller-1', status: 'active' },
-    })
-    vi.mocked(deps.agents.listCapabilityGrantsForAgent).mockResolvedValue([capabilityGrant('users:read')])
-    const allowed = await app.request('/api/users', { headers })
+    scopes = ['users:read']
+    const allowed = await app.request('/api/users', { headers: await headers('GET', '/api/users') })
     expect(allowed.status).toBe(200)
 
-    auth.api.getAgentSession.mockResolvedValue({
-      agentId: 'protocol-agent-1',
-      agent: {
-        id: 'protocol-agent-1',
-        hostId: 'host-1',
-        mode: 'delegated',
-        capabilityGrants: [
-          { capability: 'users:read', status: 'active' },
-          { capability: 'users:write', status: 'active' },
-        ],
-      },
-      host: { id: 'host-1', userId: 'controller-1', status: 'active' },
-    })
-    vi.mocked(deps.agents.listCapabilityGrantsForAgent).mockResolvedValue([
-      capabilityGrant('users:read'),
-      capabilityGrant('users:write'),
-    ])
+    scopes = ['users:write']
     const created = await app.request('/api/users', {
       method: 'POST',
-      headers,
+      headers: { ...(await headers('POST', '/api/users')), 'content-type': 'application/json' },
       body: JSON.stringify({
         email: 'managed@example.com',
         displayName: 'Managed User',
@@ -343,12 +317,12 @@ describe('management routes 1', () => {
     })
     const updated = await app.request('/api/users/user-1', {
       method: 'PATCH',
-      headers,
+      headers: { ...(await headers('PATCH', '/api/users/user-1')), 'content-type': 'application/json' },
       body: JSON.stringify({ displayName: 'Updated User' }),
     })
     const removed = await app.request('/api/users/user-1', {
       method: 'DELETE',
-      headers,
+      headers: await headers('DELETE', '/api/users/user-1'),
     })
 
     expect(created.status).toBe(201)
@@ -430,6 +404,33 @@ describe('management routes 1', () => {
     expect(response.status).toBe(404)
   })
 })
+
+async function createTestDpopKey() {
+  const accessToken = 'test-oauth-access-token'
+  const { privateKey, publicKey } = await generateKeyPair('ES256')
+  const jwk = await exportJWK(publicKey)
+  const thumbprint = await calculateJwkThumbprint(jwk)
+  return {
+    thumbprint,
+    async headers(method: string, requestUrl: string) {
+      const url = new URL(requestUrl)
+      url.search = ''
+      url.hash = ''
+      const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(accessToken))
+      const ath = Buffer.from(digest).toString('base64url')
+      const proof = await new SignJWT({
+        htm: method,
+        htu: url.toString(),
+        ath,
+        iat: Math.floor(Date.now() / 1000),
+        jti: crypto.randomUUID(),
+      })
+        .setProtectedHeader({ typ: 'dpop+jwt', alg: 'ES256', jwk })
+        .sign(privateKey)
+      return { authorization: `DPoP ${accessToken}`, DPoP: proof }
+    },
+  }
+}
 
 function agentSession() {
   return {

@@ -1,64 +1,64 @@
 export const resourceAccess = {
   applications: {
     routePrefixes: ['applications'],
-    capabilities: { read: 'applications:read', write: 'applications:write' },
+    scopes: { read: 'applications:read', write: 'applications:write' },
   },
   users: {
     routePrefixes: ['users'],
-    capabilities: { read: 'users:read', write: 'users:write' },
+    scopes: { read: 'users:read', write: 'users:write' },
   },
   organizations: {
     routePrefixes: ['organizations'],
-    capabilities: { read: 'organizations:read', write: 'organizations:write' },
+    scopes: { read: 'organizations:read', write: 'organizations:write' },
   },
   roles: {
     routePrefixes: [],
-    capabilities: { read: 'roles:read', write: 'roles:write' },
+    scopes: { read: 'roles:read', write: 'roles:write' },
   },
   apiResources: {
     routePrefixes: ['resource-servers'],
-    capabilities: { read: 'api-resources:read', write: 'api-resources:write' },
+    scopes: { read: 'resource-servers:read', write: 'resource-servers:write' },
   },
   connectors: {
     routePrefixes: ['connectors'],
-    capabilities: { read: 'connectors:read', write: 'connectors:write' },
+    scopes: { read: 'connectors:read', write: 'connectors:write' },
   },
   settings: {
     routePrefixes: ['realm'],
-    capabilities: { read: 'settings:read', write: 'settings:write' },
+    scopes: { read: 'settings:read', write: 'settings:write' },
   },
   security: {
     routePrefixes: [],
-    capabilities: { read: 'security:read', write: 'security:write' },
+    scopes: { read: 'security:read', write: 'security:write' },
   },
   webhooks: {
     routePrefixes: ['webhooks'],
-    capabilities: { read: 'webhooks:read', write: 'webhooks:write' },
+    scopes: { read: 'webhooks:read', write: 'webhooks:write' },
   },
   agents: {
     routePrefixes: ['agents', 'access'],
-    capabilities: { read: 'agents:read', write: 'agents:write' },
+    scopes: { read: 'agents:read', write: 'agents:write' },
   },
   auditEvents: {
     routePrefixes: [],
-    capabilities: { read: 'audit-events:read' },
+    scopes: { read: 'audit-events:read' },
   },
   readiness: {
     routePrefixes: [],
-    capabilities: { read: 'readiness:read' },
+    scopes: { read: 'readiness:read' },
   },
 } as const
 
 export type ProtectedResource = keyof typeof resourceAccess
 
-export const protectedResourceCapabilityNames = Object.values(resourceAccess).flatMap(({ capabilities }) =>
-  'write' in capabilities ? [capabilities.read, capabilities.write] : [capabilities.read],
+export const protectedResourceScopes = Object.values(resourceAccess).flatMap(({ scopes }) =>
+  'write' in scopes ? [scopes.read, scopes.write] : [scopes.read],
 )
 
-export type ProtectedResourceCapability = (typeof protectedResourceCapabilityNames)[number]
+export type ProtectedResourceScope = (typeof protectedResourceScopes)[number]
 
-export function isProtectedResourceCapability(value: string): value is ProtectedResourceCapability {
-  return protectedResourceCapabilityNames.includes(value as ProtectedResourceCapability)
+export function isProtectedResourceScope(value: string): value is ProtectedResourceScope {
+  return protectedResourceScopes.includes(value as ProtectedResourceScope)
 }
 
 export const resourceByRoutePrefix = Object.fromEntries(
@@ -83,17 +83,59 @@ export function protectedResourceForPath(path: string): ProtectedResource | null
   return prefix ? (resourceByRoutePrefix[prefix] ?? null) : null
 }
 
-export function requiredProtectedCapability(method: string, path: string): ProtectedResourceCapability | null {
+export function requiredProtectedScope(method: string, path: string): ProtectedResourceScope | null {
   const resource = protectedResourceForPath(path)
   if (!resource) return null
-  return requiredResourceCapability(method, resource)
+  return requiredResourceScope(method, resource)
 }
 
-export function requiredResourceCapability(
-  method: string,
-  resource: ProtectedResource,
-): ProtectedResourceCapability | null {
-  const capabilities = resourceAccess[resource].capabilities
-  if (method === 'GET' || method === 'HEAD') return capabilities.read
-  return 'write' in capabilities ? capabilities.write : null
+export function requiredResourceScope(method: string, resource: ProtectedResource): ProtectedResourceScope | null {
+  const scopes = resourceAccess[resource].scopes
+  if (method === 'GET' || method === 'HEAD') return scopes.read
+  return 'write' in scopes ? scopes.write : null
+}
+
+export const agentBootstrapScopes = [
+  'agent:read',
+  'resource-servers:read',
+  'resources:read',
+  'connection-requests:read',
+  'connection-requests:write',
+  'access-requests:read',
+  'access-requests:write',
+  'access-authorizations:read',
+  'access-authorizations:issue',
+] as const
+
+export type AgentBootstrapScope = (typeof agentBootstrapScopes)[number]
+
+export const realmrootOAuthScopes = [...new Set([...agentBootstrapScopes, ...protectedResourceScopes])]
+
+export function requiredAgentSelfServiceScope(method: string, path: string): AgentBootstrapScope | null {
+  const normalized = path.replace(/^\/api\/?/, '')
+  if (normalized === 'agent/status' && method === 'GET') return 'agent:read'
+  if (/^resource-servers(?:\/[^/]+)?$/.test(normalized) && (method === 'GET' || method === 'HEAD')) {
+    return 'resource-servers:read'
+  }
+  if (/^resource-servers\/[^/]+\/resources(?:\/[^/]+)?$/.test(normalized) && (method === 'GET' || method === 'HEAD')) {
+    return 'resources:read'
+  }
+  if (/^resource-servers\/[^/]+\/connection-requests$/.test(normalized) && method === 'POST') {
+    return 'connection-requests:write'
+  }
+  if (/^resource-servers\/[^/]+\/connection-requests\/[^/]+$/.test(normalized) && method === 'GET') {
+    return 'connection-requests:read'
+  }
+  if (normalized === 'access/requests') {
+    if (method === 'GET') return 'access-requests:read'
+    if (method === 'POST') return 'access-requests:write'
+  }
+  if (/^access\/requests\/[^/]+$/.test(normalized) && method === 'GET') return 'access-requests:read'
+  if (/^access\/authorizations(?:\/[^/]+)?$/.test(normalized) && method === 'GET') {
+    return 'access-authorizations:read'
+  }
+  if (/^access\/authorizations\/[^/]+\/credentials$/.test(normalized) && method === 'POST') {
+    return 'access-authorizations:issue'
+  }
+  return null
 }

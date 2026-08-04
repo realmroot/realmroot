@@ -53,7 +53,7 @@ type credentialOffer struct {
 func handleProfiledResponse(
 	input plugin.ResponseMiddlewareInput,
 	opener browserOpener,
-	states capabilityStateFinder,
+	states agentStateFinder,
 	client httpDoer,
 ) (plugin.ResponseMiddlewareOutput, error) {
 	if input.Response.Status == http.StatusUnauthorized && requestUsedDPoP(input.Request.Headers) {
@@ -116,7 +116,7 @@ func handleInteractiveResource(
 	interval time.Duration,
 	origin string,
 	opener browserOpener,
-	states capabilityStateFinder,
+	states agentStateFinder,
 	client httpDoer,
 ) (plugin.ResponseMiddlewareOutput, error) {
 	if resource.AgentID == "" || resource.Links.Self == "" || resource.Interaction.Type != "user-approval" {
@@ -160,12 +160,23 @@ func handleInteractiveResource(
 			case <-timer.C:
 			}
 			var polledRepresentation map[string]any
-			if err := requestJSON(
+			platform, err := usablePlatformCredential(ctx, client, state)
+			if err != nil {
+				return plugin.ResponseMiddlewareOutput{}, err
+			}
+			proof, err := signDPoPProof(platform.PrivateKey, http.MethodGet, resource.Links.Self, platform.AccessToken, time.Now())
+			if err != nil {
+				return plugin.ResponseMiddlewareOutput{}, err
+			}
+			if err := requestJSONHeaders(
 				ctx,
 				client,
 				http.MethodGet,
 				resource.Links.Self,
-				mustAgentJWT(state, state.Issuer),
+				map[string]string{
+					"Authorization": "DPoP " + platform.AccessToken,
+					"DPoP":          proof,
+				},
 				nil,
 				&polledRepresentation,
 			); err != nil {
@@ -193,7 +204,7 @@ func acceptCredentialOffer(
 	offer credentialOffer,
 	origin string,
 	state agentState,
-	states capabilityStateFinder,
+	states agentStateFinder,
 	client httpDoer,
 ) (plugin.ResponseMiddlewareOutput, error) {
 	if offer.Type != "dpop" || offer.Proof.Algorithm != "ES256" || offer.Proof.Method != http.MethodPost ||
@@ -250,7 +261,7 @@ func acceptCredentialOffer(
 	}}}, nil
 }
 
-func stateForInteractiveResource(states capabilityStateFinder, origin string, agentID string) (agentState, error) {
+func stateForInteractiveResource(states agentStateFinder, origin string, agentID string) (agentState, error) {
 	if finder, ok := states.(resourceStateFinder); ok {
 		state, err := finder.FindByOriginAndIdentityID(origin, agentID)
 		if err == nil {
@@ -260,7 +271,7 @@ func stateForInteractiveResource(states capabilityStateFinder, origin string, ag
 	return states.FindByOriginAndAgentID(origin, agentID)
 }
 
-func removeRejectedTargetCredential(requestURI string, states capabilityStateFinder) (bool, error) {
+func removeRejectedTargetCredential(requestURI string, states agentStateFinder) (bool, error) {
 	credentials, ok := states.(resourceCredentialStore)
 	if !ok {
 		return false, nil

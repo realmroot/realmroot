@@ -33,6 +33,7 @@ import {
   resourceConnectionRequestSchema,
   resourceServerResourceSchema,
   resourceServerResourcesResponseSchema,
+  targetCredentialProofSchema,
   targetTokenSchema,
 } from '@shared/api/agent-api'
 import { idempotencyKeySchema } from '@shared/api/idempotency'
@@ -55,9 +56,13 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
   const app = new Hono()
 
   app.get('/agent/status', async (c) => {
-    const session = await requireAgentSession(authApi, c.req.raw.headers)
-    const aggregate = await getDeps(c).agentIdentities.findActiveByProtocolAgent(session.agent.id)
-    const binding = aggregate?.bindings.find((candidate) => candidate.protocolAgentId === session.agent.id) ?? null
+    const principal = getPrincipal(c).agent
+    if (!principal) throw unauthorized('An OAuth-authenticated Agent is required.')
+    if (!principal.scopes.includes('agent:read')) throw forbidden('OAuth scope "agent:read" is required.')
+    const aggregate = await getDeps(c).agentIdentities.findIdentity(principal.identityId)
+    const binding = aggregate?.bindings.find(
+      (candidate) => candidate.protocolAgentId === principal.protocolAgentId && candidate.hostId === principal.hostId,
+    )
     return c.json(
       agentStatusSchema.parse({
         enrollment: { state: aggregate ? 'enrolled' : 'unenrolled', pending: null },
@@ -211,8 +216,8 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
   app.post('/access/authorizations/:authorizationId/credentials', async (c) => {
     if (!authApi.signJWT) throw unauthorized('Agent assertion signing is unavailable.')
     const principal = await resourcePrincipal(authApi, getDeps(c), c)
-    const dpopProof = c.req.header('DPoP')
-    if (!dpopProof) throw unauthorized('A DPoP proof is required.')
+    const { proof } = await readJson(c, targetCredentialProofSchema)
+    const dpopProof = proof.value
     const grant = await getDeps(c).externalResources.findGrant(c.req.param('authorizationId'))
     if (!grant || grant.agentIdentityId !== principal.identityId) {
       throw forbidden('Agent authorization was not found.')

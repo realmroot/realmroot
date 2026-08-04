@@ -135,7 +135,6 @@ export function openApiOperationObjects() {
           requestBody: resolvedOperation.requestBody,
           responses: resolvedOperation.responses,
           security: resolvedOperation.security,
-          requiredAgentCapability: resolvedOperation['x-required-agent-capability'],
           jsonResponseSchemas: Object.values(resolvedOperation.responses)
             .map((response) => openApiJsonResponseSchema(response))
             .filter((schema) => schema !== null),
@@ -160,6 +159,7 @@ export function toManagementOperationKey(route: HonoRoute) {
   if (route.path === '/api/openapi.json') {
     return `${route.method} /openapi.json`
   }
+  if (route.path === '/api/agent/enrollments' || route.path.startsWith('/api/agent/enrollments/')) return null
   const agentResourcePaths = ['/api/agent', '/api/resource-servers', '/api/access', '/api/assets']
   if (agentResourcePaths.some((path) => route.path === path || route.path.startsWith(`${path}/`))) {
     return `${route.method} ${normalizeManagementPath(route.path.replace('/api', ''))}`
@@ -337,7 +337,6 @@ export const operationsWithoutRequestBody = new Set([
   'PUT /access/consents/{param}/revocation',
   'PUT /access/assignments/{param}/revocation',
   'PUT /access/authorizations/{param}/revocation',
-  'POST /access/authorizations/{param}/credentials',
   'PUT /agents/{param}/retirement',
 ])
 
@@ -355,7 +354,6 @@ export interface OpenApiOperation {
   tags?: string[]
   'x-cli-hidden'?: boolean
   'x-cli-name'?: string
-  'x-required-agent-capability'?: string
 }
 
 export interface OpenApiParameter {

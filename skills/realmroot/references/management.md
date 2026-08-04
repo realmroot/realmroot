@@ -1,72 +1,74 @@
 # Realmroot Tenant Management
 
-Use this reference after Step 1 in `SKILL.md`.
+Use this reference only when the user explicitly requests Realmroot tenant
+administration.
 
-## Contents
+Realmroot is a built-in Resource Server in its own Resource Server inventory.
+Its Resources are authority boundaries: the Realm, one Organization, or one
+personal Account. AgentAuth enrollment establishes identity only. Management
+requests use a short-lived OAuth 2.0 access token bound to the selected Resource
+with DPoP.
 
-- [Request authority](#request-authority)
-- [Operate resources](#operate-resources)
-- [Management boundaries](#management-boundaries)
+## Obtain Management Access
 
-## Request Authority
+Follow the normal Resource Server flow in
+[restish-commands.md](restish-commands.md):
 
-Realmroot management requests keep the Agent's stable `(issuer, subject)`
-principal. Request `{resource}:read` for reads and `{resource}:write` for
-mutations, limited to the resources in the user's task.
+1. discover the Resource Server whose `identifier` is `realmroot`;
+2. list its `links.resources` collection;
+3. select exactly one Realm, Organization, or Account Resource;
+4. inspect the intended operations in the live OpenAPI document;
+5. request the union of their declared OAuth scopes with the `access` command.
 
-For application administration:
+The controller may approve several scopes together, but every issued token is
+short-lived and restricted to exactly one authority Resource. Reuse that token
+for the task. Request another Resource when changing authority boundaries.
 
-```bash
-restish "$API_NAME" request-capabilities --rsh-validate -o json <<'JSON'
-{
-  "capabilities": ["applications:read", "applications:write"],
-  "reason": "Administer Realmroot applications"
-}
-JSON
-```
+Do not request AgentAuth capabilities, use an Agent assertion as a Resource API
+credential, or provision an API key. The adapter keeps the Agent assertion for
+the OAuth token endpoint and manages DPoP access tokens locally.
 
-The adapter opens the controller approval page and waits. Approval is complete
-when the response contains active grants for every requested capability. A
-denied or expired request must be replaced with a fresh request.
+## Current Resource Groups
 
-After approval, rerun the intended management operation. Capability approval
-does not replay mutations.
+| Resource group | Collection path | OAuth scope prefix |
+| --- | --- | --- |
+| Applications and OIDC clients | `/applications` | `applications` |
+| Application consents | `/access/consents` | `applications` |
+| Resource Servers | `/resource-servers` | `resource-servers` |
+| Organizations | `/organizations` | `organizations` |
+| Roles and assignments | `/access/roles`, `/access/assignments` | `roles` |
+| Users and security state | `/users` | `users` |
+| Agents and Resource access | `/agents`, `/access/requests`, `/access/authorizations` | `agents` |
+| Connectors | `/connectors` | `connectors` |
+| Realm settings | `/realm` | `settings` |
+| Realm security policy | `/realm/security-policy` | `security` |
+| Webhooks and deliveries | `/webhooks` | `webhooks` |
+| Audit events | `/realm/audit-events` | `audit-events` |
+
+The live OpenAPI operation is authoritative for its exact scope, request
+schema, ETag requirements, and response headers.
 
 ## Operate Resources
 
-Use generic HTTP commands for routine resource operations:
+Use Restish's generic resource operations; the adapter automatically selects
+the cached Realmroot credential for the active authority Resource:
 
 ```bash
-restish doctor api "$API_NAME"
-restish get "$API_NAME/applications" -o json
+restish get "$API_NAME/applications?limit=100&offset=0" -o json
 restish get "$API_NAME/applications/app_123" -o json
-```
-
-Read the current resource before mutation, select the exact ID from that
-response, and apply the smallest requested change:
-
-```bash
 restish post "$API_NAME/applications" -o json < application.json
+restish patch "$API_NAME/applications/app_123" -o json < changes.json
 ```
 
-After mutation, read the exact resource again for verification. Approval and
-credential workflows remain visible under the API command:
-
-```bash
-restish "$API_NAME" --help
-restish doctor api "$API_NAME"
-restish api auth inspect "$API_NAME" --redact
-```
-
-Confirm the exact target before a destructive operation.
+Read before mutation, use canonical IDs and links from responses, apply the
+smallest requested change, and read the resource again afterward. Use
+`If-Match` whenever the operation contract declares it.
 
 ## Management Boundaries
 
-- State the resolved `AUTH_ORIGIN` before mutation. When it defaulted to the
-  production origin `https://id.realmroot.dev` instead of being supplied for
-  the task, obtain confirmation before mutating.
-- Keep management capabilities separate from product OAuth scopes and target
-  API scopes.
+- State the resolved deployment before mutation and obtain confirmation when a
+  production mutation was not explicit in the task.
+- Never reuse a token for another Realmroot authority Resource.
 - Send asset uploads as `multipart/form-data` with one `file` field.
-- Treat raw secrets as create/rotation-only output; list and detail operations
-  return metadata.
+- Route one-time secrets directly to a user-approved protected destination.
+- Confirm the exact target before destructive operations.

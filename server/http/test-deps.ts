@@ -123,6 +123,7 @@ export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> =
     authorization: {
       countEffectiveAgentRoles: vi.fn().mockResolvedValue(new Map()),
       listAgentRoleAssignments: vi.fn().mockResolvedValue([]),
+      listEnabledResources: vi.fn().mockResolvedValue([]),
       listUserMemberships: vi.fn().mockResolvedValue([]),
       findMemberByOrganizationUser: vi.fn().mockResolvedValue(null),
       findOrganization: vi.fn().mockResolvedValue(null),

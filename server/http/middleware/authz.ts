@@ -1,6 +1,12 @@
 import { forbidden, unauthorized } from '@server/domain/errors'
 import { resolveDeveloperAccess } from '@server/usecases/developer-access'
-import { type ProtectedResource, protectedResourceForPath, requiredResourceCapability } from '@shared/authz'
+import {
+  isProtectedResourceScope,
+  type ProtectedResource,
+  protectedResourceForPath,
+  requiredAgentSelfServiceScope,
+  requiredResourceScope,
+} from '@shared/authz'
 import type { MiddlewareHandler } from 'hono'
 import { getPrincipal } from './authn'
 import { getDeps } from './deps'
@@ -50,17 +56,35 @@ export function authz(resource: ProtectedResource): MiddlewareHandler {
       return
     }
 
-    if (agentSelfServiceAllowed(c.req.method, c.req.path)) {
+    const selfServiceScope = requiredAgentSelfServiceScope(c.req.method, c.req.path)
+    const required = selfServiceScope ?? requiredResourceScope(c.req.method, resource)
+    if (!required || !agent!.scopes.includes(required)) {
+      throw forbidden(required ? `OAuth scope "${required}" is required.` : 'This resource is read-only.')
+    }
+    if (selfServiceScope || !isProtectedResourceScope(required)) {
+      c.set('consoleOrganizationIds', [])
+      c.set('managementAccessScope', { kind: 'account', userId: '', organizationIds: [] })
       await next()
       return
     }
-    const required = requiredResourceCapability(c.req.method, resource)
-    if (!required || !agent!.capabilities.includes(required)) {
-      throw forbidden(required ? `Agent capability "${required}" is required.` : 'This resource is read-only.')
+    if (!agent!.authority) throw forbidden('A Realmroot authority Resource is required for management scopes.')
+    if (agent!.authority.kind === 'realm') {
+      c.set('consoleOrganizationIds', null)
+      c.set('managementAccessScope', { kind: 'realm' })
+    } else if (agent!.authority.kind === 'organization') {
+      const organizationIds = [agent!.authority.organizationId]
+      c.set('consoleOrganizationIds', organizationIds)
+      c.set('managementAccessScope', { kind: 'organizations', organizationIds })
+    } else {
+      const memberships = await getDeps(c).authorization.listUserMemberships(agent!.authority.userId)
+      const organizationIds = memberships.map((membership) => membership.organizationId)
+      c.set('consoleOrganizationIds', [])
+      c.set('managementAccessScope', {
+        kind: 'account',
+        userId: agent!.authority.userId,
+        organizationIds,
+      })
     }
-
-    c.set('consoleOrganizationIds', null)
-    c.set('managementAccessScope', { kind: 'realm' })
     await next()
   }
 }
@@ -78,18 +102,6 @@ export function authzForProtectedPath(): MiddlewareHandler {
     }
     return authz(resource)(c, next)
   }
-}
-
-function agentSelfServiceAllowed(method: string, path: string) {
-  if (path.startsWith('/api/resource-servers')) {
-    return method === 'GET' || (method === 'POST' && /\/connection-requests$/.test(path))
-  }
-  if (path === '/api/access/requests') return method === 'GET' || method === 'POST'
-  if (/^\/api\/access\/requests\/[^/]+$/.test(path)) return method === 'GET'
-  if (path === '/api/access/authorizations' || /^\/api\/access\/authorizations\/[^/]+$/.test(path)) {
-    return method === 'GET'
-  }
-  return method === 'POST' && /^\/api\/access\/authorizations\/[^/]+\/credentials$/.test(path)
 }
 
 export function getManagementAccessScope(c: Parameters<typeof getPrincipal>[0]) {

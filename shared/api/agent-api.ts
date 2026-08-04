@@ -304,6 +304,10 @@ export const interactionSchema = z.object({
   expiresAt: z.iso.datetime().nullable(),
 })
 
+export const targetCredentialProofSchema = z.object({
+  proof: z.object({ type: z.literal('dpop+jwt'), value: nonEmptyString }),
+})
+
 export const resourceLinksSchema = z.object({ self: nonEmptyString })
 
 export const capabilityRequestSchema = z.object({

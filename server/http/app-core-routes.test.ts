@@ -34,6 +34,7 @@ describe('app.test 1', () => {
         'refresh_token',
         'client_credentials',
         'urn:ietf:params:oauth:grant-type:device_code',
+        'urn:ietf:params:oauth:grant-type:jwt-bearer',
       ],
       code_challenge_methods_supported: ['S256'],
       token_endpoint_auth_methods_supported: ['client_secret_basic', 'client_secret_post'],
@@ -59,6 +60,7 @@ describe('app.test 1', () => {
         'refresh_token',
         'client_credentials',
         'urn:ietf:params:oauth:grant-type:device_code',
+        'urn:ietf:params:oauth:grant-type:jwt-bearer',
       ],
       code_challenge_methods_supported: ['S256'],
     })
@@ -177,12 +179,10 @@ describe('app.test 1', () => {
       agent_enrollment_endpoint: 'https://tenant.example.net/api/agent/enrollments',
       agentinfo_endpoint: 'https://tenant.example.net/api/auth/agentinfo',
       agentinfo_claims_supported: ['iss', 'sub', 'sub_profile', 'name', 'picture', 'updated_at'],
-      default_location: 'https://tenant.example.net/api/auth/capability/execute',
       modes: ['delegated'],
       approval_methods: ['device_authorization'],
       endpoints: {
         register: 'https://tenant.example.net/api/auth/agent/register',
-        execute: 'https://tenant.example.net/api/auth/capability/execute',
         status: 'https://tenant.example.net/api/auth/agent/status',
       },
     })

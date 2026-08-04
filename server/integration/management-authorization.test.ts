@@ -646,7 +646,7 @@ describe('authorization management over real D1', () => {
     ).json()) as { id: string }
 
     const list = await harness.request('/api/resource-servers', { headers: { cookie } })
-    expect(((await list.json()) as { items: unknown[] }).items.length).toBe(1)
+    expect(((await list.json()) as { items: unknown[] }).items.length).toBe(2)
 
     const fetched = await harness.request(`/api/resource-servers/${resource.id}`, { headers: { cookie } })
     expect(fetched.status).toBe(200)
@@ -924,7 +924,9 @@ describe('authorization management over real D1', () => {
         protocolAgentId: 'archive-agent',
         hostId: 'archive-host',
       }),
-    ).resolves.toEqual({ resources: [] })
+    ).resolves.toMatchObject({
+      resources: [expect.objectContaining({ id: 'res_realmroot', identifier: 'realmroot' })],
+    })
 
     const [[connection], [intent], [request], [grant], [lease]] = await Promise.all([
       harness.db.select().from(resourceAccountConnection).where(eq(resourceAccountConnection.id, 'archive-connection')),

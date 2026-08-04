@@ -100,6 +100,8 @@ func normalizedDPoPURL(value string) (string, error) {
 		return "", fmt.Errorf("DPoP request URL is invalid: %w", err)
 	}
 	parsed.Fragment = ""
+	parsed.RawQuery = ""
+	parsed.ForceQuery = false
 	return parsed.String(), nil
 }
 

@@ -12,7 +12,8 @@ The plugin performs only work that must happen on the Agent's machine:
 - generate and protect Agent, Host, and DPoP private keys;
 - enroll or reuse the stable Agent identity discovered from
   `/.well-known/agent-configuration`;
-- add a fresh Agent possession proof to Realmroot requests;
+- exchange the Agent assertion at the OAuth token endpoint and add a
+  short-lived DPoP access token to Realmroot requests;
 - recognize generic response profiles declared with `Link: ...; rel="profile"`;
 - open a `user-approval` interaction and poll its supplied `links.self`;
 - accept a generic DPoP credential offer, obtain and cache a short-lived
@@ -53,16 +54,15 @@ canonical polling link:
     "expiresAt": "2026-08-03T16:30:00Z"
   },
   "links": {
-    "self": "https://id.realmroot.dev/api/access-requests/request-1"
+    "self": "https://id.realmroot.dev/api/access/requests/request-1"
   }
 }
 ```
 
 The plugin validates same-origin control links, opens the supplied URL, and
-polls `links.self` using the current Agent proof until the interaction is
-completed, denied, failed, or expired. Capability, connection, and access
-requests all use this contract; adding another interactive resource requires
-no plugin path change.
+polls `links.self` using the current OAuth credential until the interaction is
+completed, denied, failed, or expired. Connection and access requests use this
+contract; adding another interactive resource requires no plugin path change.
 
 For a non-interactive process, set `REALMROOT_PLUGIN_APPROVAL_FILE` to a
 protected path. The plugin writes the approval URL with mode `0600` instead of
@@ -78,7 +78,7 @@ An approved access request may include:
     "type": "dpop",
     "resource": {"href": "https://id.realmroot.dev/api/resource-servers/zpan/resources/workspace-1"},
     "resourceIndicator": "https://drive.zpan.space/api",
-    "endpoint": "https://id.realmroot.dev/api/access-requests/request-1/credentials",
+    "endpoint": "https://id.realmroot.dev/api/access/authorizations/grant-1/credentials",
     "proof": {
       "algorithm": "ES256",
       "method": "POST",

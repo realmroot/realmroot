@@ -1,9 +1,5 @@
-import type { AgentSession } from '@better-auth/agent-auth'
-import { agentCapabilities } from '@server/auth-capabilities'
-import { areKnownAgentCapabilities } from '@server/domain/agents/capabilities'
 import {
   decideAgentApproval,
-  executeReadOnlyCapability,
   listAccountAgents,
   listAgentApprovalRequests,
   listAgentCapabilityGrants,
@@ -16,101 +12,9 @@ import {
   revokeAgentHost,
 } from '@server/usecases/agents'
 import type { Deps } from '@server/usecases/deps'
-import { protectedResourceCapabilityNames } from '@shared/authz'
 import { describe, expect, it, vi } from 'vitest'
 
 describe('AgentService', () => {
-  it('executes only read-only account capabilities through the user repository', async () => {
-    const users = createUserRepositoryMock()
-    const deps = {
-      users,
-      agents: createAgentRepositoryMock(),
-      agentIdentities: createAgentIdentityRepositoryMock(),
-    } as unknown as Deps
-    const agentSession = createAgentSession()
-
-    await expect(
-      executeReadOnlyCapability(deps, {
-        capability: 'account.profile.read',
-        agentSession,
-      }),
-    ).resolves.toEqual({ user: { id: 'user-1', email: 'user@example.com' } })
-    await expect(
-      executeReadOnlyCapability(deps, {
-        capability: 'account.sessions.list',
-        arguments: { limit: 25, offset: 50 },
-        agentSession,
-      }),
-    ).resolves.toEqual({
-      sessions: [{ id: 'session-1' }],
-      pagination: { limit: 25, offset: 50, total: 1, hasMore: false, nextOffset: null },
-    })
-    await expect(
-      executeReadOnlyCapability(deps, {
-        capability: 'account.authorized_apps.list',
-        arguments: { limit: 10 },
-        agentSession,
-      }),
-    ).resolves.toEqual({
-      applications: [{ id: 'consent-1' }],
-      pagination: { limit: 10, offset: 0, total: 1, hasMore: false, nextOffset: null },
-    })
-
-    expect(users.getUser).toHaveBeenCalledWith('user-1')
-    expect(users.listSessions).toHaveBeenCalledWith('user-1', { limit: 25, offset: 50 })
-    expect(users.listConsentedApplications).toHaveBeenCalledWith('user-1', { limit: 10, offset: 0 })
-  })
-
-  it('uses default pagination when list capability arguments are omitted', async () => {
-    const users = createUserRepositoryMock()
-    users.listSessions.mockResolvedValue({
-      items: [],
-      total: 0,
-      limit: 50,
-      offset: 0,
-    })
-    const deps = {
-      users,
-      agents: createAgentRepositoryMock(),
-      agentIdentities: createAgentIdentityRepositoryMock(),
-    } as unknown as Deps
-
-    await expect(
-      executeReadOnlyCapability(deps, {
-        capability: 'account.sessions.list',
-        agentSession: createAgentSession(),
-      }),
-    ).resolves.toEqual({
-      sessions: [],
-      pagination: { limit: 50, offset: 0, total: 0, hasMore: false, nextOffset: null },
-    })
-
-    expect(users.listSessions).toHaveBeenCalledWith('user-1', { limit: 50, offset: 0 })
-  })
-
-  it('rejects unknown capabilities and invalid pagination arguments', async () => {
-    const deps = {
-      users: createUserRepositoryMock(),
-      agents: createAgentRepositoryMock(),
-      agentIdentities: createAgentIdentityRepositoryMock(),
-    } as unknown as Deps
-    const agentSession = createAgentSession()
-
-    await expect(
-      executeReadOnlyCapability(deps, {
-        capability: 'account.profile.write',
-        agentSession,
-      }),
-    ).rejects.toMatchObject({ status: 400 })
-    await expect(
-      executeReadOnlyCapability(deps, {
-        capability: 'account.sessions.list',
-        arguments: { limit: 101 },
-        agentSession,
-      }),
-    ).rejects.toThrow()
-  })
-
   it('delegates protocol inventory reads to the repository', async () => {
     const repository = createAgentRepositoryMock()
     repository.listHosts.mockResolvedValue({ items: [{ id: 'host-1' }], total: 1, limit: 10, offset: 0 })
@@ -129,24 +33,6 @@ describe('AgentService', () => {
     await expect(listAgents(deps, page)).resolves.toMatchObject({ items: [{ id: 'agent-1' }] })
     await expect(listAgentCapabilityGrants(deps, page)).resolves.toMatchObject({ items: [{ id: 'grant-1' }] })
     await expect(listAgentApprovalRequests(deps, page)).resolves.toMatchObject({ items: [{ id: 'approval-1' }] })
-  })
-
-  it('fails closed when a protocol Agent has no active stable identity binding [spec: agent-identity/agent-identity-enrollment]', async () => {
-    const agentIdentities = createAgentIdentityRepositoryMock()
-    agentIdentities.findActiveByProtocolAgent.mockResolvedValue(null)
-    const deps = {
-      users: createUserRepositoryMock(),
-      agents: createAgentRepositoryMock(),
-      agentIdentities,
-    } as unknown as Deps
-
-    await expect(
-      executeReadOnlyCapability(deps, {
-        capability: 'account.profile.read',
-        agentSession: createAgentSession(),
-      }),
-    ).rejects.toMatchObject({ status: 403 })
-    expect(deps.users.getUser).not.toHaveBeenCalled()
   })
 
   it('maps account-owned agents with capability grants and delegates revokes', async () => {
@@ -299,18 +185,6 @@ describe('AgentService', () => {
       expect.objectContaining({ action: 'agent.capability_decided', result: 'denied', scopes: ['users:write'] }),
     )
   })
-
-  it('declares account data capabilities and resource-scoped management permissions', () => {
-    expect(agentCapabilities.map((capability) => capability.name)).toEqual([
-      'account.profile.read',
-      'account.sessions.list',
-      'account.authorized_apps.list',
-      ...protectedResourceCapabilityNames,
-    ])
-    expect(areKnownAgentCapabilities(['account.profile.read', 'applications:read'])).toBe(true)
-    expect(areKnownAgentCapabilities(['tenant:read'])).toBe(false)
-    expect(areKnownAgentCapabilities(['management.openapi.generate'])).toBe(false)
-  })
 })
 
 function createUserRepositoryMock() {
@@ -373,33 +247,5 @@ function createAgentIdentityRepositoryMock() {
       bindings: [],
     }),
     findProtocolAgent: vi.fn().mockResolvedValue({ hostId: 'host-1' }),
-  }
-}
-
-function createAgentSession(): AgentSession {
-  return {
-    type: 'delegated',
-    agentId: 'agent-1',
-    userId: 'user-1',
-    agent: {
-      id: 'agent-1',
-      name: 'Test Agent',
-      mode: 'delegated',
-      capabilityGrants: [],
-      hostId: 'host-1',
-      createdAt: new Date('2026-01-01T00:00:00.000Z'),
-      activatedAt: null,
-      metadata: null,
-    },
-    host: {
-      id: 'host-1',
-      userId: 'user-1',
-      status: 'active',
-    },
-    user: {
-      id: 'user-1',
-      name: 'User',
-      email: 'user@example.com',
-    },
   }
 }

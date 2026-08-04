@@ -15,8 +15,9 @@ Feature: Unified Realmroot resource API
     And the default hosted Restish profile targets https://id.realmroot.dev/api
     And Restish v2 exposes the current Agent and resource operations from the same contract
     And resources are not grouped under a management path
-    And every protected operation declares its exact required Agent capability through an OpenAPI operation extension
-    And AgentAuth and cookie-session security requirements accurately describe their transport without claiming OAuth scopes
+    And every protected operation declares its exact authorization scope through an OpenAPI security requirement
+    And the contract declares only RFC 9449 DPoP and session-cookie security schemes
+    And no AgentAuth, API-key, capability extension, or plugin provider name appears as a public security scheme
     And Restish can validate structured authorization detail request bodies without the root OpenAPI document
 
 
@@ -40,8 +41,21 @@ Feature: Unified Realmroot resource API
     And the adapter uses the endpoints and issuer published by AgentAuth discovery
     And Realmroot does not provision a shared CLI OAuth application
     And the original operation waits for one controller approval
-    And every later command-line request is authenticated as the same Agent issuer and subject
+    And the adapter exchanges the Agent identity assertion only at the OAuth token endpoint
+    And every later command-line request uses a short-lived audience-restricted DPoP access token
+    And every protected Realmroot operation authenticates the same Agent issuer and subject from that token
     And the approving user's identity is never used as the command-line principal
+
+
+  @entrypoint:agent-protocol @journey:management-standard-agent-oauth
+  Scenario: Realmroot authenticates Agent API requests through standard OAuth security
+    Given an enrolled Agent has a locally protected signing key
+    When the plugin requests Realmroot API access from the OAuth token endpoint
+    Then it uses the RFC 7523 JWT bearer grant and an RFC 9449 DPoP proof
+    And Realmroot issues a short-lived DPoP-bound access token restricted to the Realmroot API audience
+    And the issued scopes are a subset of the Agent's automatic or controller-approved authority
+    And the Agent identity assertion is never accepted directly by a Realmroot Resource API operation
+    And Realmroot publishes its authorization server and DPoP requirements through standard OAuth metadata
 
 
   @entrypoint:restish @journey:management-native-device-approval
@@ -90,7 +104,7 @@ Feature: Unified Realmroot resource API
 
   @entrypoint:restish @journey:management-restish-api-resource-crud
   Scenario: An authorized Agent manages API resources without duplicating business authorization definitions
-    Given the Agent has approved api-resources:read and api-resources:write scopes
+    Given the Agent has approved resource-servers:read and resource-servers:write scopes
     When I create, update, list, and delete an API resource with Restish
     Then the unified API applies each API authorization change
     And API resource creation returns its canonical location
@@ -99,7 +113,7 @@ Feature: Unified Realmroot resource API
 
   @entrypoint:restish @journey:management-api-resource-delete-conflict
   Scenario: API resources with authorization history cannot be permanently deleted
-    Given the Agent has approved api-resources:write scope
+    Given the Agent has approved resource-servers:write scope
     And an API resource has authorization history
     When I delete the API resource with Restish
     Then the unified API returns a conflict with the blocking reference counts
@@ -107,7 +121,7 @@ Feature: Unified Realmroot resource API
 
   @entrypoint:restish @journey:management-api-resource-archival
   Scenario: An authorized Agent archives and restores an API resource without reviving authorization
-    Given the Agent has approved api-resources:write scope
+    Given the Agent has approved resource-servers:write scope
     And an enabled API resource has active connections, grants, requests, and token leases
     When I archive the API resource with Restish
     Then the resource is disabled and hidden from Agent discovery

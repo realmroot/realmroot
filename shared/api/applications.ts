@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { isProtectedResourceCapability } from '../authz'
+import { isProtectedResourceScope } from '../authz'
 import { paginationMetadataSchema, paginationQuerySchema } from './pagination'
 
 export const applicationClientTypes = ['public_spa', 'public_native', 'confidential_web'] as const
@@ -20,8 +20,8 @@ export const customApplicationScopeSchema = z
   .min(1)
   .max(120)
   .regex(/^[A-Za-z0-9._-]+:[A-Za-z0-9:._-]+$/)
-  .refine((value) => !isProtectedResourceCapability(value), {
-    message: 'Realmroot resource capabilities are reserved.',
+  .refine((value) => !isProtectedResourceScope(value), {
+    message: 'Realmroot resource scopes are reserved.',
   })
 
 export const applicationClientTypeSchema = z.enum(applicationClientTypes)

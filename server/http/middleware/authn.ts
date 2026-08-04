@@ -1,6 +1,7 @@
 import { forbidden, unauthorized } from '@server/domain/errors'
 import type { ProtocolAgentSession } from '@server/usecases/agent-session'
 import type { Deps } from '@server/usecases/deps'
+import { validateDpopResourceProof } from '@server/usecases/dpop'
 import type { Context, MiddlewareHandler } from 'hono'
 import { toBoundaryError } from '../routes/auth-api'
 
@@ -32,7 +33,12 @@ export interface PrincipalContext {
     identityId: string
     protocolAgentId: string
     hostId: string
-    capabilities: string[]
+    scopes: string[]
+    authority:
+      | { kind: 'realm' }
+      | { kind: 'organization'; organizationId: string }
+      | { kind: 'account'; userId: string }
+      | null
   } | null
 }
 
@@ -40,6 +46,10 @@ export interface SessionReader {
   api: {
     getSession: (context: { headers: Headers; asResponse: false }) => Promise<AuthSessionResult | null>
     getAgentSession?: (context: { headers: Headers; asResponse: false }) => Promise<ProtocolAgentSession | null>
+    verifyJWT?: (context: {
+      body: { token: string; issuer?: string; audience?: string | string[] }
+      asResponse?: false
+    }) => Promise<{ payload: Record<string, unknown> | null }>
   }
 }
 
@@ -51,6 +61,10 @@ declare module 'hono' {
 
 interface AuthnOptions {
   allowAgent?: boolean
+  oauth?: {
+    issuer(requestUrl: string): string
+    audience(requestUrl: string): string
+  }
   required?: boolean
 }
 
@@ -70,7 +84,9 @@ export function authn(auth: SessionReader, options: AuthnOptions = {}): Middlewa
     }
 
     if (options.allowAgent) {
-      const agent = current?.agent ?? (await authenticateAgent(auth, c))
+      const agent =
+        current?.agent ??
+        (options.oauth ? await authenticateOAuthAgent(auth, c, options.oauth) : await authenticateAgent(auth, c))
       if (agent) {
         c.set('principal', { session: null, user: null, agent })
         await next()
@@ -81,6 +97,60 @@ export function authn(auth: SessionReader, options: AuthnOptions = {}): Middlewa
     c.set('principal', { session, user: null, agent: null })
     if (options.required) throw unauthorized()
     await next()
+  }
+}
+
+async function authenticateOAuthAgent(
+  auth: SessionReader,
+  c: Context,
+  oauth: NonNullable<AuthnOptions['oauth']>,
+): Promise<NonNullable<PrincipalContext['agent']> | null> {
+  const authorization = c.req.header('Authorization')
+  if (!authorization?.startsWith('DPoP ')) return null
+  if (!auth.api.verifyJWT) throw unauthorized('OAuth access-token verification is unavailable.')
+  const accessToken = authorization.slice('DPoP '.length).trim()
+  const issuer = oauth.issuer(c.req.url)
+  const audience = oauth.audience(c.req.url)
+  const verified = await auth.api
+    .verifyJWT({ body: { token: accessToken, issuer, audience }, asResponse: false })
+    .catch(() => null)
+  const payload = verified?.payload
+  if (!payload) throw unauthorized('OAuth access token is invalid.')
+  const subject = stringClaim(payload, 'sub')
+  const protocolAgentId = stringClaim(payload, 'client_id')
+  const hostId = stringClaim(payload, 'host_id')
+  const confirmationJkt = objectStringClaim(payload, 'cnf', 'jkt')
+  const proof = c.req.header('DPoP')
+  if (!subject || !protocolAgentId || !hostId || !confirmationJkt || !proof) {
+    throw unauthorized('OAuth access token is missing its Agent or DPoP binding.')
+  }
+  await validateDpopResourceProof(c.get('deps') as Deps, {
+    proof,
+    accessToken,
+    method: c.req.method,
+    url: c.req.url,
+    confirmationJkt,
+  }).catch((error: unknown) => {
+    throw unauthorized(error instanceof Error ? error.message : 'DPoP proof is invalid.')
+  })
+  const aggregate = await (c.get('deps') as Deps).agentIdentities.findActiveByProtocolAgent(protocolAgentId)
+  const binding = aggregate?.bindings.find(
+    (candidate) =>
+      candidate.protocolAgentId === protocolAgentId && candidate.hostId === hostId && candidate.status === 'active',
+  )
+  if (!aggregate || !binding || aggregate.identity.issuer !== issuer || aggregate.identity.subject !== subject) {
+    throw forbidden('The OAuth token does not belong to an active Agent identity and Host binding.')
+  }
+  const scopes = typeof payload.scope === 'string' ? [...new Set(payload.scope.split(/\s+/).filter(Boolean))] : []
+  const authority = authorityClaim(payload.realmroot_authority)
+  return {
+    issuer,
+    subject,
+    identityId: aggregate.identity.id,
+    protocolAgentId,
+    hostId,
+    scopes,
+    authority,
   }
 }
 
@@ -107,23 +177,36 @@ async function authenticateAgent(
   )
   if (!identity || !binding) throw forbidden('The Agent host is not bound to an active Agent identity.')
 
-  const now = new Date()
-  const capabilityGrants = await deps.agents.listCapabilityGrantsForAgent(session.agent.id)
-
   return {
     issuer: identity.identity.issuer,
     subject: identity.identity.subject,
     identityId: identity.identity.id,
     protocolAgentId: session.agent.id,
     hostId: session.agent.hostId,
-    capabilities: [
-      ...new Set(
-        capabilityGrants
-          .filter((grant) => grant.status === 'active' && (!grant.expiresAt || grant.expiresAt > now))
-          .map((grant) => grant.capability),
-      ),
-    ],
+    scopes: [],
+    authority: null,
   }
+}
+
+function authorityClaim(value: unknown): NonNullable<PrincipalContext['agent']>['authority'] {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const detail = value as Record<string, unknown>
+  if (detail.type !== 'realmroot_authority' || typeof detail.id !== 'string') return null
+  if (detail.authority === 'realm' && detail.id === 'realm') return { kind: 'realm' }
+  if (detail.authority === 'organization') return { kind: 'organization', organizationId: detail.id }
+  if (detail.authority === 'account') return { kind: 'account', userId: detail.id }
+  return null
+}
+
+function stringClaim(payload: Record<string, unknown>, name: string) {
+  return typeof payload[name] === 'string' ? payload[name] : null
+}
+
+function objectStringClaim(payload: Record<string, unknown>, objectName: string, memberName: string) {
+  const value = payload[objectName]
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const member = (value as Record<string, unknown>)[memberName]
+  return typeof member === 'string' ? member : null
 }
 
 export function getPrincipal(c: Context): PrincipalContext {

@@ -1,47 +1,8 @@
-import { badRequest } from '@server/domain/errors'
 import { appendAgentGovernanceAudit } from '@server/usecases/agent-audit'
 import type { Deps } from '@server/usecases/deps'
 import type { AgentRepository } from '@server/usecases/ports'
 import type { AccountAgent, AccountAgentsResponse } from '@shared/api/agents'
-import { type PaginationInput, paginationMetadata, paginationQuerySchema } from '@shared/api/pagination'
-import { requireActiveAgentIdentity } from './agent-identities'
-
-/**
- * Minimal mirror of better-auth's AgentSession, capturing only the fields this
- * usecase reads. Keeps the usecase free of the @better-auth/agent-auth import.
- */
-interface AgentSession {
-  agent: { id: string }
-  user: { id: string }
-}
-
-export async function executeReadOnlyCapability(
-  deps: Deps,
-  input: {
-    capability: string
-    arguments?: Record<string, unknown>
-    agentSession: AgentSession
-  },
-) {
-  await requireActiveAgentIdentity(deps, input.agentSession.agent.id)
-  const userId = input.agentSession.user.id
-
-  if (input.capability === 'account.profile.read') {
-    return { user: await deps.users.getUser(userId) }
-  }
-
-  if (input.capability === 'account.sessions.list') {
-    const page = await deps.users.listSessions(userId, readPagination(input.arguments))
-    return { sessions: page.items, pagination: paginationMetadata(page) }
-  }
-
-  if (input.capability === 'account.authorized_apps.list') {
-    const page = await deps.users.listConsentedApplications(userId, readPagination(input.arguments))
-    return { applications: page.items, pagination: paginationMetadata(page) }
-  }
-
-  throw badRequest(`Unsupported agent capability: ${input.capability}.`)
-}
+import { type PaginationInput, paginationMetadata } from '@shared/api/pagination'
 
 export function listAgentHosts(deps: Deps, page: PaginationInput) {
   return deps.agents.listHosts(page)
@@ -175,8 +136,4 @@ function hostSummary(host: Awaited<ReturnType<AgentRepository['listHostsForAgent
     name: host.name,
     status: host.status,
   }
-}
-
-function readPagination(value: Record<string, unknown> | undefined) {
-  return paginationQuerySchema.parse(value ?? {})
 }

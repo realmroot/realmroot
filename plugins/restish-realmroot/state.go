@@ -14,7 +14,7 @@ import (
 
 const (
 	stateDirectoryEnv = "REALMROOT_PLUGIN_STATE_DIR"
-	agentStateVersion = 7
+	agentStateVersion = 8
 	identityDirectory = "identities"
 )
 
@@ -64,6 +64,7 @@ type agentState struct {
 	Identity              *stableIdentity           `json:"identity,omitempty"`
 	DPoPCredentials       map[string]dpopCredential `json:"dpop_credentials,omitempty"`
 	ActiveDPoPCredentials map[string]string         `json:"active_dpop_credentials,omitempty"`
+	PlatformCredential    *dpopCredential           `json:"platform_credential,omitempty"`
 }
 
 type stateStore interface {
@@ -72,7 +73,7 @@ type stateStore interface {
 	Update(target agentTarget, state agentState) error
 }
 
-type capabilityStateFinder interface {
+type agentStateFinder interface {
 	FindByOriginAndAgentID(origin string, agentID string) (agentState, error)
 }
 
@@ -189,8 +190,11 @@ func (s *fileStateStore) loadPath(path string) (agentState, error) {
 		return agentState{}, fmt.Errorf("decode Agent state: %w", err)
 	}
 	if state.Version > 0 && state.Version < agentStateVersion {
-		state.DPoPCredentials = nil
-		state.ActiveDPoPCredentials = nil
+		if state.Version < 7 {
+			state.DPoPCredentials = nil
+			state.ActiveDPoPCredentials = nil
+		}
+		state.PlatformCredential = nil
 		state.Version = agentStateVersion
 		if err := s.updatePath(path, state); err != nil {
 			return agentState{}, fmt.Errorf("upgrade Agent state: %w", err)
@@ -405,7 +409,7 @@ func (s *fileStateStore) DeleteCredential(reference resourceCredentialReference)
 }
 
 func (s *fileStateStore) FindByOriginAndAgentID(origin string, agentID string) (agentState, error) {
-	return s.find(origin, func(state agentState) bool { return state.AgentID == agentID }, "capability request")
+	return s.find(origin, func(state agentState) bool { return state.AgentID == agentID }, "Agent interaction")
 }
 
 func (s *fileStateStore) FindByOriginAndIdentityID(origin string, identityID string) (agentState, error) {
@@ -578,6 +582,18 @@ func validateAgentStateCredentials(state agentState) error {
 		}
 		if (credential.AccessToken == "") != (credential.ExpiresAt == nil) {
 			return errors.New("Agent state contains an incomplete target API token")
+		}
+	}
+	if state.PlatformCredential != nil {
+		credential := state.PlatformCredential
+		if credential.ResourceIndicator == "" || credential.CredentialEndpoint == "" || credential.ProofTarget == "" {
+			return errors.New("Agent state contains invalid Realmroot OAuth credential metadata")
+		}
+		if _, err := decodeDPoPPrivateKey(credential.PrivateKey); err != nil {
+			return fmt.Errorf("Agent state Realmroot OAuth credential is invalid: %w", err)
+		}
+		if (credential.AccessToken == "") != (credential.ExpiresAt == nil) {
+			return errors.New("Agent state contains an incomplete Realmroot OAuth credential")
 		}
 	}
 	for selectionKey, resourceHref := range state.ActiveDPoPCredentials {

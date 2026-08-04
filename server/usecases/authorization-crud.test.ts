@@ -12,6 +12,7 @@ import {
   deleteOrganization,
   deleteResource,
   deleteRole,
+  ensureRealmrootResourceServer,
   getAgentRoleAuthorization,
   getOrganization,
   getResource,
@@ -106,6 +107,31 @@ const role: RoleResponse = {
 }
 
 describe('authorization CRUD and assignment policy', () => {
+  it('persists one immutable built-in Realmroot Resource Server', async () => {
+    const authorization = repository()
+    authorization.createResource.mockImplementation(async (input) => ({
+      ...input,
+      archivedAt: null,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    }))
+    const deps = { authorization } as unknown as Deps
+
+    const created = await ensureRealmrootResourceServer(deps, 'https://auth.example.com')
+    expect(created).toMatchObject({
+      id: 'res_realmroot',
+      identifier: 'realmroot',
+      resourceUrl: 'https://auth.example.com/api',
+      connectorId: null,
+      ownerOrganizationId: 'org_platform',
+    })
+
+    authorization.findResource.mockResolvedValue(created)
+    await expect(updateResource(deps, created.id, { name: 'Changed' })).rejects.toThrow('system-managed')
+    await expect(archiveResource(deps, created.id, actor)).rejects.toThrow('system-managed')
+    await expect(deleteResource(deps, created.id)).rejects.toThrow('system-managed')
+  })
+
   it('manages organizations, members, and invitations through repository ports', async () => {
     const authorization = repository()
     authorization.createOrganization.mockResolvedValue(organization)
