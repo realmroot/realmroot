@@ -1,5 +1,6 @@
 import { createTestDeps } from '@server/http/test-deps'
 import { issueAgentBootstrapAccessToken } from '@server/usecases/agent-oauth'
+import { agentBootstrapScopes } from '@shared/authz'
 import { exportJWK, generateKeyPair, SignJWT } from 'jose'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -89,6 +90,86 @@ describe('Agent OAuth token issuance', () => {
         signer,
       ),
     ).rejects.toMatchObject({ error: 'invalid_target' })
+  })
+
+  it('defaults, deduplicates, and sorts bootstrap scopes', async () => {
+    const deps = createTestDeps()
+    const endpoint = 'https://auth.example.com/api/auth/oauth2/token'
+    const signer = { issuer: 'https://auth.example.com/api/auth', sign: vi.fn().mockResolvedValue('token') }
+    const principal = {
+      issuer: signer.issuer,
+      subject: 'agt_1',
+      identityId: 'identity-1',
+      protocolAgentId: 'protocol-agent-1',
+      hostId: 'host-1',
+    }
+
+    await expect(
+      issueAgentBootstrapAccessToken(
+        deps,
+        {
+          resource: 'https://auth.example.com/api',
+          expectedResource: 'https://auth.example.com/api',
+          dpopProof: await dpopProof(endpoint),
+          tokenEndpoint: endpoint,
+        },
+        principal,
+        signer,
+      ),
+    ).resolves.toMatchObject({ scope: [...agentBootstrapScopes].sort().join(' ') })
+
+    await expect(
+      issueAgentBootstrapAccessToken(
+        deps,
+        {
+          scope: ' resource-servers:read  agent:read resource-servers:read ',
+          resource: 'https://auth.example.com/api',
+          expectedResource: 'https://auth.example.com/api',
+          dpopProof: await dpopProof(endpoint),
+          tokenEndpoint: endpoint,
+        },
+        principal,
+        signer,
+      ),
+    ).resolves.toMatchObject({ scope: 'agent:read resource-servers:read' })
+  })
+
+  it('returns OAuth errors for an empty scope or invalid DPoP proof', async () => {
+    const deps = createTestDeps()
+    const input = {
+      resource: 'https://auth.example.com/api',
+      expectedResource: 'https://auth.example.com/api',
+      dpopProof: 'malformed',
+      tokenEndpoint: 'https://auth.example.com/api/auth/oauth2/token',
+    }
+    const principal = {
+      issuer: 'https://auth.example.com/api/auth',
+      subject: 'agt_1',
+      identityId: 'identity-1',
+      protocolAgentId: 'protocol-agent-1',
+      hostId: 'host-1',
+    }
+    const signer = { issuer: principal.issuer, sign: vi.fn() }
+
+    await expect(
+      issueAgentBootstrapAccessToken(deps, { ...input, scope: '   ' }, principal, signer),
+    ).rejects.toMatchObject({
+      error: 'invalid_scope',
+    })
+    await expect(issueAgentBootstrapAccessToken(deps, input, principal, signer)).rejects.toMatchObject({
+      error: 'invalid_dpop_proof',
+      message: 'DPoP proof is malformed.',
+    })
+
+    vi.mocked(deps.agentTokens.consumeDpopJti).mockRejectedValueOnce('storage unavailable')
+    await expect(
+      issueAgentBootstrapAccessToken(
+        deps,
+        { ...input, dpopProof: await dpopProof(input.tokenEndpoint) },
+        principal,
+        signer,
+      ),
+    ).rejects.toMatchObject({ error: 'invalid_dpop_proof', message: 'The DPoP proof is invalid.' })
   })
 })
 

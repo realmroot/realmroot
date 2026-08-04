@@ -127,9 +127,23 @@ describe('authorization CRUD and assignment policy', () => {
     })
 
     authorization.findResource.mockResolvedValue(created)
+    await expect(ensureRealmrootResourceServer(deps, 'https://auth.example.com')).resolves.toBe(created)
     await expect(updateResource(deps, created.id, { name: 'Changed' })).rejects.toThrow('system-managed')
     await expect(archiveResource(deps, created.id, actor)).rejects.toThrow('system-managed')
+    await expect(restoreResource(deps, created.id, actor)).rejects.toThrow('system-managed')
     await expect(deleteResource(deps, created.id)).rejects.toThrow('system-managed')
+
+    for (const invalid of [
+      { ...created, identifier: 'changed' },
+      { ...created, resourceUrl: 'https://other.example.com/api' },
+      { ...created, ownerOrganizationId: 'org-other' },
+      { ...created, connectorId: 'connector-1' },
+    ]) {
+      authorization.findResource.mockResolvedValueOnce(invalid)
+      await expect(ensureRealmrootResourceServer(deps, 'https://auth.example.com')).rejects.toThrow(
+        'does not match this deployment',
+      )
+    }
   })
 
   it('manages organizations, members, and invitations through repository ports', async () => {

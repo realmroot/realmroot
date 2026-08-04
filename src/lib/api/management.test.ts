@@ -7,6 +7,33 @@ afterEach(() => {
 })
 
 describe('management API client', () => {
+  it('reads user security and exposes remaining management wrappers', async () => {
+    const { calls, management } = await loadManagementApi({ userSecurity: { mfaEnabled: true } })
+
+    await expect(management.getUserSecurity('user-1')).resolves.toEqual({ security: { mfaEnabled: true } })
+    await management.listWebhookDeliveryAttempts('wh-1', 'delivery-1', { limit: 10 })
+    await management.addOrganizationMember('org/1', { userId: 'user-1', role: 'member' })
+
+    expect(calls).toEqual([
+      ['user.get', { param: { id: 'user-1' } }],
+      ['webhookDeliveryAttempts.get', { param: { id: 'wh-1', deliveryId: 'delivery-1' }, query: { limit: '10' } }],
+      [
+        'fetch',
+        '/api/organizations/org%2F1/members',
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ userId: 'user-1', role: 'member' }),
+        },
+      ],
+    ])
+  })
+
+  it('rejects user security reads outside Realm authority', async () => {
+    const { management } = await loadManagementApi({ userSecurity: null })
+    await expect(management.getUserSecurity('user-1')).rejects.toThrow('require Realm-level access')
+  })
+
   it('maps management resource helpers to the Hono RPC boundary', async () => {
     const { calls, management } = await loadManagementApi()
 
@@ -289,7 +316,7 @@ describe('management API client', () => {
   })
 })
 
-async function loadManagementApi() {
+async function loadManagementApi(options: { userSecurity?: unknown } = {}) {
   const calls: Array<[string, unknown?, unknown?]> = []
   vi.stubGlobal(
     'fetch',
@@ -309,7 +336,9 @@ async function loadManagementApi() {
       return Promise.resolve(
         key === 'apiResources.get'
           ? { key, input, items: [], pagination: { limit: 50, offset: 0, total: 0 } }
-          : { key, input },
+          : key === 'user.get' && 'userSecurity' in options
+            ? { key, input, security: options.userSecurity }
+            : { key, input },
       )
     })
 
@@ -487,7 +516,10 @@ async function loadManagementApi() {
               $get: endpoint('webhookRequests.get'),
               ':deliveryId': {
                 $get: endpoint('webhookRequest.get'),
-                attempts: { $post: endpoint('webhookDeliveryAttempt.post') },
+                attempts: {
+                  $get: endpoint('webhookDeliveryAttempts.get'),
+                  $post: endpoint('webhookDeliveryAttempt.post'),
+                },
               },
             },
           },

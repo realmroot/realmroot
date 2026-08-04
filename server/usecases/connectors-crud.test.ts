@@ -221,6 +221,12 @@ describe('service.test 2', () => {
       ensureDynamicConnectorScopes(manualDeps, manual.id, ['projects:read'], 'https://auth.example.com'),
     ).resolves.toBe(1)
 
+    const legacyManual = dynamicConnector({ registrationMode: 'manual', clientGeneration: undefined })
+    const legacyManualDeps = { connectors: createRepository({ byId: legacyManual }) } as unknown as Deps
+    await expect(
+      ensureDynamicConnectorScopes(legacyManualDeps, legacyManual.id, ['projects:read'], 'https://auth.example.com'),
+    ).resolves.toBe(1)
+
     const incomplete = dynamicConnector({ clientSecret: null })
     const incompleteDeps = { connectors: createRepository({ byId: incomplete }) } as unknown as Deps
     await expect(
@@ -636,6 +642,24 @@ describe('service.test 2', () => {
         revocationEndpoint: 'https://idp.example.com/revoke',
         providerMetadata: discovery,
       }),
+    )
+
+    vi.mocked(repository.findById).mockResolvedValueOnce(null)
+    await expect(refreshDynamicConnectorMetadata(deps, 'missing')).rejects.toThrow('Connector not found.')
+    vi.mocked(repository.findById).mockResolvedValueOnce({ ...current, registrationMode: 'manual' })
+    await expect(refreshDynamicConnectorMetadata(deps, current.id)).resolves.toBeUndefined()
+    vi.mocked(repository.findById).mockResolvedValueOnce({ ...current, issuer: null })
+    await expect(refreshDynamicConnectorMetadata(deps, current.id)).rejects.toThrow(
+      'Dynamic OIDC connector is incomplete.',
+    )
+    vi.mocked(repository.findById).mockResolvedValueOnce(current)
+    vi.mocked(deps.externalHttp.fetch).mockResolvedValueOnce(
+      Response.json(discoveryMetadata({ registration_endpoint: undefined, revocation_endpoint: undefined })),
+    )
+    await refreshDynamicConnectorMetadata(deps, current.id)
+    expect(repository.update).toHaveBeenLastCalledWith(
+      current.id,
+      expect.objectContaining({ registrationEndpoint: null, revocationEndpoint: null }),
     )
   })
 
