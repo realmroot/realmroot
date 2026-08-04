@@ -14,6 +14,7 @@ const settings = {
 
 let config = readFileSync(sourcePath, 'utf8')
 config = replaceOnce(config, /^name = .+$/m, `name = ${tomlString(settings.workerName)}`)
+config = removeArrayTables(config, 'routes')
 config = removeOptionalLine(config, /^BETTER_AUTH_URL = .+$/m)
 config = removeOptionalLine(config, /^TRUSTED_ORIGINS = .+$/m)
 config = removeOptionalLine(config, /^WEBAUTHN_RP_ID = .+$/m)
@@ -70,6 +71,24 @@ function replaceOnce(content, pattern, replacement) {
 
 function removeOptionalLine(content, pattern) {
   return content.replace(pattern, '')
+}
+
+function removeArrayTables(content, name) {
+  const header = `[[${name}]]`
+  const lines = content.split('\n')
+  const result = []
+  let removing = false
+
+  for (const line of lines) {
+    if (line.trim() === header) {
+      removing = true
+      continue
+    }
+    if (removing && line.trimStart().startsWith('[')) removing = false
+    if (!removing) result.push(line)
+  }
+
+  return result.join('\n')
 }
 
 function tomlString(value) {
