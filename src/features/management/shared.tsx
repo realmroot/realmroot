@@ -121,7 +121,7 @@ import { SignInCardBody, SignInMethodButtons } from '@/features/auth/pages/contr
 import { SignUpCardBody, SignUpForm } from '@/features/auth/pages/sign-up'
 import { tt } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
-import { ConsoleActionBar, ConsoleDetailStack, ConsoleToolbar } from './console-primitives'
+import { ConsoleActionBar, ConsoleDetailStack, ConsoleToolbar } from './primitives'
 
 type FormState = Record<string, string>
 const emptyForm: FormState = {}

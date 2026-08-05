@@ -1,7 +1,6 @@
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ApplicationsPage } from '@/features/console/extracted/applications/applications-list'
-import { ConsoleScopeProvider } from '@/lib/console-context'
+import { ApplicationsPage } from '@/features/applications/management/applications-list'
 import { queryClient } from '@/router'
 
 globalThis.ResizeObserver ??= class ResizeObserver {
@@ -40,11 +39,7 @@ describe('admin console applications-list', () => {
       return consoleSharedFetch(input, init)
     })
 
-    renderWithQuery(
-      <ConsoleScopeProvider value={{ organizationId: 'org-1', realmOperator: false }}>
-        <ApplicationsPage />
-      </ConsoleScopeProvider>,
-    )
+    renderWithQuery(<ApplicationsPage organizationId="org-1" />)
 
     const applicationLink = await screen.findByRole('link', { name: 'Customer portal' })
     expect(applicationLink.getAttribute('href')).toBe('/organizations/org-1/applications/app-1')

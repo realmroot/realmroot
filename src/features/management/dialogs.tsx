@@ -28,7 +28,7 @@ import {
   tt,
   useQuery,
   useState,
-} from '../console-shared'
+} from './shared'
 
 export function SummaryRow({ meta, status, title }: { meta: string; status: ReactNode; title: string }) {
   return (

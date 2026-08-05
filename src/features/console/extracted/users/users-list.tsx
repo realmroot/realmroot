@@ -1,6 +1,7 @@
 import { Link } from '@tanstack/react-router'
-import { consoleQueryKeys, createUser, listUsers, requestUserPasswordReset, updateUser } from '@/lib/api/management'
-import { useConsoleScope } from '@/lib/console-context'
+import { CreateUserDialog } from '@/features/management/create-dialogs'
+import { StatusBadge } from '@/features/management/dialogs'
+import { ListToolbar, ResourcePage } from '@/features/management/resource-components'
 import {
   Button,
   DropdownMenu,
@@ -23,10 +24,7 @@ import {
   useQuery,
   useQueryClient,
   useState,
-} from '../../console-shared'
-import { CreateUserDialog } from '../../helpers/helpers-create'
-import { StatusBadge } from '../../helpers/helpers-dialogs'
-import { ListToolbar, ResourcePage } from '../../helpers/helpers-resource'
+} from '@/features/management/shared'
 import {
   formatDate,
   formatRealmAccess,
@@ -34,10 +32,10 @@ import {
   setRealmAdminAccess,
   useAdminMutation,
   userDisplayName,
-} from '../../helpers/helpers-utils'
+} from '@/features/management/utils'
+import { consoleQueryKeys, createUser, listUsers, requestUserPasswordReset, updateUser } from '@/lib/api/management'
 
 export function UsersPage() {
-  const { organizationId: context, realmOperator } = useConsoleScope()
   const [search, setSearch] = useState('')
   const [role, setRole] = useState('')
   const [banned, setBanned] = useState('')
@@ -50,7 +48,6 @@ export function UsersPage() {
         role,
         banned,
         offset,
-        context,
       },
     ],
     queryFn: () =>
@@ -72,7 +69,6 @@ export function UsersPage() {
           : {}),
         limit: 10,
         offset,
-        organizationId: realmOperator ? undefined : context,
       }),
   })
   const queryClient = useQueryClient()
@@ -92,22 +88,18 @@ export function UsersPage() {
       title={tt('Users')}
       description={tt('Manage the human identities that sign in, join Organizations, and delegate authority.')}
       action={
-        realmOperator ? (
-          <Button onClick={() => setDialogOpen(true)}>
-            <Plus data-icon="inline-start" /> {tt('New user')}{' '}
-          </Button>
-        ) : null
+        <Button onClick={() => setDialogOpen(true)}>
+          <Plus data-icon="inline-start" /> {tt('New user')}{' '}
+        </Button>
       }
       auxiliary={
-        realmOperator ? (
-          <CreateUserDialog
-            error={createMutation.errorMessage}
-            onClose={() => setDialogOpen(false)}
-            onSubmit={createMutation.mutate}
-            open={dialogOpen}
-            pending={createMutation.isPending}
-          />
-        ) : null
+        <CreateUserDialog
+          error={createMutation.errorMessage}
+          onClose={() => setDialogOpen(false)}
+          onSubmit={createMutation.mutate}
+          open={dialogOpen}
+          pending={createMutation.isPending}
+        />
       }
       error={query.error}
       empty={users.length === 0}
@@ -175,7 +167,6 @@ export function UsersPage() {
                     <Link
                       className="font-medium hover:underline"
                       params={{ userId: user.id }}
-                      search={context ? { context } : {}}
                       to="/console/users/$userId"
                     >
                       {userDisplayName(user)}
@@ -194,41 +185,39 @@ export function UsersPage() {
                   </TableCell>
                   <TableCell>{formatDate(user.createdAt)}</TableCell>
                   <TableCell className="text-right">
-                    {realmOperator ? (
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button aria-label={`Actions for ${user.email ?? user.id}`} size="icon-sm" variant="ghost">
-                            <MoreHorizontal />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent>
-                          <DropdownMenuGroup>
-                            {user.email ? (
-                              <DropdownMenuItem onClick={() => requestUserPasswordReset(user.id)}>
-                                {' '}
-                                {tt('Send password reset')}{' '}
-                              </DropdownMenuItem>
-                            ) : null}
-                            <DropdownMenuItem
-                              onClick={() =>
-                                updateUser(user.id, {
-                                  role: setRealmAdminAccess(user.role, !hasRealmAdminAccess(user.role)),
-                                }).then(() =>
-                                  queryClient.invalidateQueries({
-                                    queryKey: consoleQueryKeys.users,
-                                  }),
-                                )
-                              }
-                            >
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button aria-label={`Actions for ${user.email ?? user.id}`} size="icon-sm" variant="ghost">
+                          <MoreHorizontal />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent>
+                        <DropdownMenuGroup>
+                          {user.email ? (
+                            <DropdownMenuItem onClick={() => requestUserPasswordReset(user.id)}>
                               {' '}
-                              {hasRealmAdminAccess(user.role)
-                                ? tt('Remove Realm administrator')
-                                : tt('Make Realm administrator')}{' '}
+                              {tt('Send password reset')}{' '}
                             </DropdownMenuItem>
-                          </DropdownMenuGroup>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    ) : null}
+                          ) : null}
+                          <DropdownMenuItem
+                            onClick={() =>
+                              updateUser(user.id, {
+                                role: setRealmAdminAccess(user.role, !hasRealmAdminAccess(user.role)),
+                              }).then(() =>
+                                queryClient.invalidateQueries({
+                                  queryKey: consoleQueryKeys.users,
+                                }),
+                              )
+                            }
+                          >
+                            {' '}
+                            {hasRealmAdminAccess(user.role)
+                              ? tt('Remove Realm administrator')
+                              : tt('Make Realm administrator')}{' '}
+                          </DropdownMenuItem>
+                        </DropdownMenuGroup>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </TableCell>
                 </TableRow>
               ))

@@ -1,7 +1,6 @@
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { WebhooksPage } from '@/features/console/extracted/deployment-misc/webhooks'
-import { ConsoleScopeProvider } from '@/lib/console-context'
+import { WebhooksPage } from '@/features/webhooks/management-webhooks'
 import { queryClient } from '@/router'
 import {
   emptyPagination,
@@ -236,11 +235,7 @@ describe('webhook endpoint and delivery operations', () => {
       throw new Error(`Unexpected request: ${request.method} ${request.path}`)
     })
 
-    const { unmount } = renderWithQuery(
-      <ConsoleScopeProvider value={{ organizationId: 'org-2', realmOperator: false }}>
-        <WebhooksPage />
-      </ConsoleScopeProvider>,
-    )
+    const { unmount } = renderWithQuery(<WebhooksPage organizationId="org-2" realmOperator={false} />)
     expect(await screen.findByText('No webhook endpoints')).toBeTruthy()
     expect(screen.queryByLabelText('Filter webhook scope')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Create endpoint' }))
@@ -249,11 +244,7 @@ describe('webhook endpoint and delivery operations', () => {
     unmount()
 
     queryClient.clear()
-    const missing = renderWithQuery(
-      <ConsoleScopeProvider value={{ organizationId: 'org-missing', realmOperator: false }}>
-        <WebhooksPage />
-      </ConsoleScopeProvider>,
-    )
+    const missing = renderWithQuery(<WebhooksPage organizationId="org-missing" realmOperator={false} />)
     expect(await screen.findByText('No webhook endpoints')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Create endpoint' }))
     expect(await screen.findByText('org-missing')).toBeTruthy()

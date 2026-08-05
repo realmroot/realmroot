@@ -1,7 +1,6 @@
 import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { UsersPage } from '@/features/console/extracted/users/users-list'
-import { ConsoleScopeProvider } from '@/lib/console-context'
 import { queryClient } from '@/router'
 
 globalThis.ResizeObserver ??= class ResizeObserver {
@@ -21,7 +20,7 @@ afterEach(() => {
 import { consoleSharedFetch, jsonResponse, pagination, renderWithQuery, user } from './console.test-utils'
 
 describe('admin console users-list', () => {
-  it('uses permissions rather than selected context to scope inventory and Realm actions', async () => {
+  it('loads Realm inventory and exposes Realm actions', async () => {
     const requests: string[] = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const raw = input instanceof Request ? input.url : String(input)
@@ -33,27 +32,13 @@ describe('admin console users-list', () => {
       return consoleSharedFetch(input, init)
     })
 
-    const realmView = renderWithQuery(
-      <ConsoleScopeProvider value={{ organizationId: 'org-1', realmOperator: true }}>
-        <UsersPage />
-      </ConsoleScopeProvider>,
-    )
+    const realmView = renderWithQuery(<UsersPage />)
     expect(await screen.findByText('jane@example.com')).toBeTruthy()
     expect(requests[0]).not.toContain('organizationId')
     expect(screen.getByRole('button', { name: 'New user' })).toBeTruthy()
     expect(screen.getByLabelText('Actions for jane@example.com')).toBeTruthy()
 
     realmView.unmount()
-    requests.length = 0
-    renderWithQuery(
-      <ConsoleScopeProvider value={{ organizationId: 'org-1', realmOperator: false }}>
-        <UsersPage />
-      </ConsoleScopeProvider>,
-    )
-    expect(await screen.findByText('jane@example.com')).toBeTruthy()
-    expect(requests[0]).toContain('organizationId=org-1')
-    expect(screen.queryByRole('button', { name: 'New user' })).toBeNull()
-    expect(screen.queryByLabelText('Actions for jane@example.com')).toBeNull()
   })
 
   it('creates users with optional credentials [spec: admin-console/admin-create-user]', async () => {

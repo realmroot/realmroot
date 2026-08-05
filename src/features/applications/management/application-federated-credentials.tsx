@@ -1,12 +1,5 @@
 import { DestructiveConfirmation } from '@/components/destructive-confirmation'
-import { consoleQueryKeys } from '@/lib/api/console-query-keys'
-import {
-  createFederatedCredential,
-  deleteFederatedCredential,
-  listApiResources,
-  listFederatedCredentials,
-  updateFederatedCredential,
-} from '@/lib/api/management'
+import { MutationError } from '@/features/management/dialogs'
 import {
   Badge,
   Button,
@@ -43,9 +36,16 @@ import {
   useQuery,
   useQueryClient,
   useState,
-} from '../../console-shared'
-import { MutationError } from '../../helpers/helpers-dialogs'
-import { parseForm } from '../../helpers/helpers-utils'
+} from '@/features/management/shared'
+import { parseForm } from '@/features/management/utils'
+import { consoleQueryKeys } from '@/lib/api/console-query-keys'
+import {
+  createFederatedCredential,
+  deleteFederatedCredential,
+  listApiResources,
+  listFederatedCredentials,
+  updateFederatedCredential,
+} from '@/lib/api/management'
 
 type JwkRecord = Record<string, unknown>
 

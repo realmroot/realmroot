@@ -9,6 +9,15 @@ import {
   SettingsSwitchField,
 } from '@/components/settings-form'
 import { Switch } from '@/components/ui/switch'
+import { useConnectorPreviewProviders } from '@/features/management/dialogs'
+import {
+  HostedAuthPreview,
+  SignInExperienceEditorLayout,
+  SignInExperiencePreviewPanel,
+} from '@/features/management/previews'
+import { ResourcePage } from '@/features/management/resource-components'
+import type { HostedAuthPreviewState } from '@/features/management/shared'
+import { useAdminMutation } from '@/features/management/utils'
 import {
   consoleQueryKeys,
   getBrandingSettings,
@@ -18,15 +27,6 @@ import {
   updateSignInSettings,
 } from '@/lib/api/management'
 import { tt } from '@/lib/i18n'
-import type { HostedAuthPreviewState } from '../console-shared'
-import { useConnectorPreviewProviders } from '../helpers/helpers-dialogs'
-import {
-  HostedAuthPreview,
-  SignInExperienceEditorLayout,
-  SignInExperiencePreviewPanel,
-} from '../helpers/helpers-preview'
-import { ResourcePage } from '../helpers/helpers-resource'
-import { useAdminMutation } from '../helpers/helpers-utils'
 
 type SignInForm = {
   signupEnabled: boolean

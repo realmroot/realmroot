@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { ApiResourceDetailPage } from '@/features/console/extracted/api-resources'
+import { ApiResourceDetailPage } from '@/features/resource-servers/management-resource-servers'
 
 export const Route = createFileRoute('/console/api-resources/$resourceId/authority')({
   component: ResourceAuthorityRoute,

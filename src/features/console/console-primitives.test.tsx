@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { TextInput } from '@/components/product-form'
-import { ConsoleActionBar, ConsoleDetailStack, ConsoleToolbar } from '@/features/console/console-primitives'
+import { ConsoleActionBar, ConsoleDetailStack, ConsoleToolbar } from '@/features/management/primitives'
 
 describe('console primitives', () => {
   it('renders toolbar, detail stack, and sticky action structure', () => {

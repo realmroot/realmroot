@@ -21,6 +21,20 @@ import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetT
 import { Switch } from '@/components/ui/switch'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { FormDialog } from '@/features/management/create-dialogs'
+import { DangerConfirmDialog, ErrorState, LoadingState, StatusBadge } from '@/features/management/dialogs'
+import {
+  IdentityMultiSelect,
+  OrganizationOwnerField,
+  organizationOptions,
+  ownerLabel,
+  resourceEligibilityLabel,
+  selectionSummary,
+} from '@/features/management/ownership-controls'
+import { ListToolbar, navigateConsoleTab, ResourcePage } from '@/features/management/resource-components'
+import type { ApiResourceDetailSection, FormState } from '@/features/management/shared'
+import { emptyForm } from '@/features/management/shared'
+import { formatDate, nullableString, parseForm, setValue, useAdminMutation } from '@/features/management/utils'
 import {
   archiveApiResource,
   consoleQueryKeys,
@@ -34,28 +48,12 @@ import {
   restoreApiResource,
   updateApiResource,
 } from '@/lib/api/management'
-import { useConsoleScope } from '@/lib/console-context'
 import { tt } from '@/lib/i18n'
-import type { ApiResourceDetailSection, FormState } from '../console-shared'
-import { emptyForm } from '../console-shared'
-import { FormDialog } from '../helpers/helpers-create'
-import { DangerConfirmDialog, ErrorState, LoadingState, StatusBadge } from '../helpers/helpers-dialogs'
-import { ListToolbar, navigateConsoleTab, ResourcePage } from '../helpers/helpers-resource'
-import { formatDate, nullableString, parseForm, setValue, useAdminMutation } from '../helpers/helpers-utils'
-import {
-  IdentityMultiSelect,
-  OrganizationOwnerField,
-  organizationOptions,
-  ownerLabel,
-  resourceEligibilityLabel,
-  selectionSummary,
-} from '../helpers/ownership-access-controls'
 
 type ResourceEditor = 'details' | 'eligibility' | 'connector' | null
 
-export function ApiResourcesPage() {
-  const { organizationId: context } = useConsoleScope()
-  const [owner, setOwner] = useState(context ?? '')
+export function ApiResourcesPage({ organizationId }: { organizationId?: string } = {}) {
+  const [owner, setOwner] = useState(organizationId ?? '')
   const query = useQuery({
     queryKey: [...consoleQueryKeys.apiResources, { ownerOrganizationId: owner || undefined }],
     queryFn: () => listApiResources({ ownerOrganizationId: owner || undefined }),
@@ -67,7 +65,7 @@ export function ApiResourcesPage() {
   const [search, setSearch] = useState('')
   const [authorization, setAuthorization] = useState('')
   const [status, setStatus] = useState('')
-  useEffect(() => setOwner(context ?? ''), [context])
+  useEffect(() => setOwner(organizationId ?? ''), [organizationId])
   const createMutation = useAdminMutation({
     mutationFn: createApiResource,
     onSuccess: () => {
@@ -96,7 +94,7 @@ export function ApiResourcesPage() {
     <ResourcePage
       title={tt('Resource servers')}
       description={tt(
-        context
+        organizationId
           ? 'Manage protected APIs owned by this Organization and their authorization lifecycle.'
           : 'Review protected APIs, their authorization model, ownership, and lifecycle across this Realm.',
       )}
@@ -109,10 +107,10 @@ export function ApiResourcesPage() {
       auxiliary={
         <ApiResourceCreateDialog
           connectors={connectors}
-          defaultOwnerOrganizationId={context}
-          fixedOwnerOrganizationId={context}
+          defaultOwnerOrganizationId={organizationId}
+          fixedOwnerOrganizationId={organizationId}
           error={createMutation.errorMessage}
-          key={context ?? 'realm'}
+          key={organizationId ?? 'realm'}
           onClose={() => setDialogOpen(false)}
           onSubmit={createMutation.mutate}
           open={dialogOpen}
@@ -153,7 +151,7 @@ export function ApiResourcesPage() {
             <option value="disabled">{tt('Disabled')}</option>
             <option value="archived">{tt('Archived')}</option>
           </SelectInput>
-          {context ? null : (
+          {organizationId ? null : (
             <SelectInput
               aria-label={tt('Filter owner')}
               onChange={(event) => setOwner(event.target.value)}
@@ -187,10 +185,10 @@ export function ApiResourcesPage() {
             visibleResources.map((resource) => (
               <TableRow key={resource.id}>
                 <TableCell className="min-w-0">
-                  {context ? (
+                  {organizationId ? (
                     <Link
                       className="block truncate font-medium hover:underline"
-                      params={{ organizationId: context, resourceId: resource.id }}
+                      params={{ organizationId, resourceId: resource.id }}
                       to="/organizations/$organizationId/resource-servers/$resourceId"
                     >
                       {resource.name}
@@ -227,9 +225,9 @@ export function ApiResourcesPage() {
                 <TableCell>{formatDate(resource.updatedAt)}</TableCell>
                 <TableCell className="text-right">
                   <Button asChild size="sm" variant="ghost">
-                    {context ? (
+                    {organizationId ? (
                       <Link
-                        params={{ organizationId: context, resourceId: resource.id }}
+                        params={{ organizationId, resourceId: resource.id }}
                         to="/organizations/$organizationId/resource-servers/$resourceId"
                       >
                         {tt('Open')}
@@ -440,13 +438,14 @@ function ApiResourceCreateDialog({
 }
 
 export function ApiResourceDetailPage({
+  organizationId,
   resourceId,
   section = 'overview',
 }: {
+  organizationId?: string
   resourceId: string
   section?: ApiResourceDetailSection
 }) {
-  const { organizationId: context } = useConsoleScope()
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const [selectedTab, setSelectedTab] = useState<ApiResourceDetailSection>(section)
@@ -493,15 +492,18 @@ export function ApiResourceDetailPage({
       />
     )
   if (!resource) return <ErrorState error={new Error(tt('Resource server not found.'))} />
+  if (organizationId && resource.ownerOrganizationId !== organizationId) {
+    return <ErrorState error={new Error(tt('Resource server does not belong to this Organization.'))} />
+  }
   const organizations = organizationsQuery.data?.organizations ?? []
   const mode = resource.connectorId ? 'external' : 'native'
   return (
     <>
       <div className="consoleDetailStack">
-        {context ? (
+        {organizationId ? (
           <Link
             className="consoleBackLink"
-            params={{ organizationId: context }}
+            params={{ organizationId }}
             to="/organizations/$organizationId/resource-servers"
           >
             <ArrowLeft />
@@ -533,10 +535,9 @@ export function ApiResourceDetailPage({
             setSelectedTab(next)
             navigateConsoleTab(
               navigate,
-              context
-                ? `/organizations/${context}/resource-servers/${resourceId}/${next}`
+              organizationId
+                ? `/organizations/${organizationId}/resource-servers/${resourceId}/${next}`
                 : `/console/api-resources/${resourceId}/${next}`,
-              context,
             )
           }}
           value={selectedTab}
@@ -559,7 +560,7 @@ export function ApiResourceDetailPage({
             />
           </TabsContent>
           <TabsContent className="mt-5" value="authority">
-            <ResourceAuthority context={context} mode={mode} resource={resource} />
+            <ResourceAuthority organizationId={organizationId} mode={mode} resource={resource} />
           </TabsContent>
           <TabsContent className="mt-5" value="settings">
             <ResourceSettings
@@ -583,7 +584,7 @@ export function ApiResourceDetailPage({
         )}
         editor={editor}
         error={updateMutation.errorMessage}
-        fixedOwnerOrganizationId={context}
+        fixedOwnerOrganizationId={organizationId}
         onClose={() => setEditor(null)}
         onSave={(input) => updateMutation.mutate(input)}
         organizations={organizations}
@@ -729,18 +730,18 @@ function ScopeRequirements({ scopeSets }: { scopeSets: string[][] }) {
 }
 
 function ResourceAuthority({
-  context,
+  organizationId,
   mode,
   resource,
 }: {
-  context?: string
+  organizationId?: string
   mode: 'native' | 'external'
   resource: ApiResource
 }) {
   const rolesQuery = useQuery({
-    enabled: mode === 'native' && Boolean(context),
-    queryFn: () => listRoles(context!),
-    queryKey: [...consoleQueryKeys.roles, context],
+    enabled: mode === 'native' && Boolean(organizationId),
+    queryFn: () => listRoles(organizationId!),
+    queryKey: [...consoleQueryKeys.roles, organizationId],
   })
   const roles = rolesQuery.data?.roles ?? []
   if (mode === 'external') {
@@ -791,10 +792,10 @@ function ResourceAuthority({
             rows.map(({ permissions, role }) => (
               <TableRow key={role.key}>
                 <TableCell>
-                  {context ? (
+                  {organizationId ? (
                     <Link
                       className="font-medium hover:underline"
-                      params={{ organizationId: context, roleId: role.key }}
+                      params={{ organizationId, roleId: role.key }}
                       to="/organizations/$organizationId/roles/$roleId"
                     >
                       {role.displayName}

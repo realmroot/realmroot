@@ -1,13 +1,12 @@
 import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ApiResourcesPage } from '@/features/console/extracted/api-resources'
-import { ApplicationsPage } from '@/features/console/extracted/applications/applications-list'
+import { ApplicationsPage } from '@/features/applications/management/applications-list'
 import { ConnectorsPage } from '@/features/console/extracted/connectors'
 import { OrganizationsPage } from '@/features/console/extracted/organizations'
-import { RolesPage } from '@/features/console/extracted/roles'
 import { UsersPage } from '@/features/console/extracted/users/users-list'
 import { ConsoleDashboardPage } from '@/features/console/pages/dashboard-page'
-import { ConsoleScopeProvider } from '@/lib/console-context'
+import { ApiResourcesPage } from '@/features/resource-servers/management-resource-servers'
+import { RolesPage } from '@/features/roles/management-roles'
 import { queryClient } from '@/router'
 import {
   apiResource,
@@ -136,11 +135,7 @@ describe('console authorization dashboard', () => {
     expect(screen.getByRole('button', { name: 'Provision organization' })).toBeTruthy()
 
     cleanup()
-    renderWithQuery(
-      <ConsoleScopeProvider value={{ organizationId: 'org-1', realmOperator: true }}>
-        <RolesPage />
-      </ConsoleScopeProvider>,
-    )
+    renderWithQuery(<RolesPage organizationId="org-1" />)
     expect(await screen.findByText('No Roles')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'New role' })).toBeTruthy()
 

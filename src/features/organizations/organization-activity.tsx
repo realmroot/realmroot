@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { TableEmptyRow } from '@/components/table-empty-row'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { ErrorState, LoadingState } from '@/features/console/helpers/helpers-dialogs'
+import { ErrorState, LoadingState } from '@/features/management/dialogs'
 import { consoleQueryKeys, getAgentAuditEvents } from '@/lib/api/management'
 import { tt } from '@/lib/i18n'
 

@@ -8,6 +8,8 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { ErrorState, LoadingState, MutationError } from '@/features/management/dialogs'
+import { navigateConsoleTab } from '@/features/management/resource-components'
 import {
   consoleQueryKeys,
   emergencyRetireAgent,
@@ -17,15 +19,19 @@ import {
   listAgentAccessRequests,
   listAgentInstallations,
 } from '@/lib/api/management'
-import { useConsoleScope } from '@/lib/console-context'
 import { tt } from '@/lib/i18n'
-import { ErrorState, LoadingState, MutationError } from '../helpers/helpers-dialogs'
-import { navigateConsoleTab } from '../helpers/helpers-resource'
 
 export type AgentDetailSection = 'overview' | 'hosts' | 'requests' | 'grants' | 'activity' | 'settings'
 
-export function AgentDetailPage({ agentId, section = 'overview' }: { agentId: string; section?: AgentDetailSection }) {
-  const { organizationId: context } = useConsoleScope()
+export function AgentDetailPage({
+  agentId,
+  organizationId,
+  section = 'overview',
+}: {
+  agentId: string
+  organizationId?: string
+  section?: AgentDetailSection
+}) {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const [tab, setTab] = useState<AgentDetailSection>(section)
@@ -44,8 +50,8 @@ export function AgentDetailPage({ agentId, section = 'overview' }: { agentId: st
     queryFn: () => listAgentAccessGrants({ agentId, limit: 100 }),
   })
   const audit = useQuery({
-    queryKey: [...consoleQueryKeys.agents, agentId, 'audit', { organizationId: context }],
-    queryFn: () => getAgentAuditEvents({ agentId, organizationId: context }),
+    queryKey: [...consoleQueryKeys.agents, agentId, 'audit', { organizationId }],
+    queryFn: () => getAgentAuditEvents({ agentId, organizationId }),
   })
   const agent = agentQuery.data?.agent
   const retire = useMutation({
@@ -53,9 +59,9 @@ export function AgentDetailPage({ agentId, section = 'overview' }: { agentId: st
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: consoleQueryKeys.agents })
       setRetireOpen(false)
-      if (context) {
+      if (organizationId) {
         await navigate({
-          params: { organizationId: context },
+          params: { organizationId },
           search: {},
           to: '/organizations/$organizationId/agents',
         })
@@ -74,6 +80,9 @@ export function AgentDetailPage({ agentId, section = 'overview' }: { agentId: st
   if (loadError)
     return <ErrorState error={loadError} onRetry={() => Promise.all(detailQueries.map((query) => query.refetch()))} />
   if (!agent) return <ErrorState error={new Error(tt('Agent not found.'))} />
+  if (organizationId && (agent.owner.type !== 'organization' || agent.owner.id !== organizationId)) {
+    return <ErrorState error={new Error(tt('Agent does not belong to this Organization.'))} />
+  }
   const events = (audit.data?.items ?? []).filter((event) => event.agentIdentityId === agent.id)
   const resources = new Map(
     [...(requests.data?.items ?? []), ...(grants.data?.items ?? [])].map((item) => [item.resource.id, item.resource]),
@@ -84,12 +93,8 @@ export function AgentDetailPage({ agentId, section = 'overview' }: { agentId: st
   return (
     <>
       <div className="consoleDetailStack">
-        {context ? (
-          <Link
-            className="consoleBackLink"
-            params={{ organizationId: context }}
-            to="/organizations/$organizationId/agents"
-          >
+        {organizationId ? (
+          <Link className="consoleBackLink" params={{ organizationId }} to="/organizations/$organizationId/agents">
             <ArrowLeft />
             {tt('Agents')}
           </Link>
@@ -117,8 +122,9 @@ export function AgentDetailPage({ agentId, section = 'overview' }: { agentId: st
             setTab(next)
             navigateConsoleTab(
               navigate,
-              context ? `/organizations/${context}/agents/${agentId}/${next}` : `/console/agents/${agentId}/${next}`,
-              context,
+              organizationId
+                ? `/organizations/${organizationId}/agents/${agentId}/${next}`
+                : `/console/agents/${agentId}/${next}`,
             )
           }}
           value={tab}

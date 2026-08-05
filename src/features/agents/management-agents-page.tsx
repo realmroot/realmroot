@@ -8,19 +8,17 @@ import { TableEmptyRow } from '@/components/table-empty-row'
 import { Badge } from '@/components/ui/badge'
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { ListToolbar, ResourcePage } from '@/features/management/resource-components'
 import { consoleQueryKeys, getAgentInventory } from '@/lib/api/management'
-import { useConsoleScope } from '@/lib/console-context'
 import { tt } from '@/lib/i18n'
-import { ListToolbar, ResourcePage } from '../helpers/helpers-resource'
 
-export function AgentsPage() {
-  const { organizationId: context } = useConsoleScope()
+export function AgentsPage({ organizationId }: { organizationId?: string } = {}) {
   const [search, setSearch] = useState('')
   const [ownerType, setOwnerType] = useState('any')
   const [status, setStatus] = useState('any')
   const query = useQuery({
-    queryKey: [...consoleQueryKeys.agents, { organizationId: context }],
-    queryFn: () => getAgentInventory({ organizationId: context }),
+    queryKey: [...consoleQueryKeys.agents, { organizationId }],
+    queryFn: () => getAgentInventory({ organizationId }),
   })
   const agents = (query.data?.items ?? []).filter((agent) => {
     const type = agent.homeSpace.type === 'personal' ? 'user' : 'organization'
@@ -33,7 +31,7 @@ export function AgentsPage() {
   return (
     <ResourcePage
       description={tt(
-        context
+        organizationId
           ? 'Review stable Agent identities belonging to this Organization.'
           : 'Review stable Agent identities belonging to people and Organizations across this Realm.',
       )}
@@ -59,7 +57,7 @@ export function AgentsPage() {
               value={search}
             />
           </InputGroup>
-          {context ? null : (
+          {organizationId ? null : (
             <SelectInput
               aria-label={tt('Filter owner type')}
               onChange={(event) => setOwnerType(event.target.value)}
@@ -95,7 +93,7 @@ export function AgentsPage() {
         </TableHeader>
         <TableBody>
           {agents.length ? (
-            agents.map((agent) => <AgentRow agent={agent} context={context} key={agent.id} />)
+            agents.map((agent) => <AgentRow agent={agent} organizationId={organizationId} key={agent.id} />)
           ) : (
             <TableEmptyRow
               colSpan={6}
@@ -109,14 +107,14 @@ export function AgentsPage() {
   )
 }
 
-function AgentRow({ agent, context }: { agent: ManagementAgent; context?: string }) {
+function AgentRow({ agent, organizationId }: { agent: ManagementAgent; organizationId?: string }) {
   return (
     <TableRow className="cursor-pointer">
       <TableCell>
-        {context ? (
+        {organizationId ? (
           <Link
             className="block"
-            params={{ agentId: agent.id, organizationId: context }}
+            params={{ agentId: agent.id, organizationId }}
             to="/organizations/$organizationId/agents/$agentId"
           >
             <strong>{agent.name}</strong>
@@ -145,10 +143,10 @@ function AgentRow({ agent, context }: { agent: ManagementAgent; context?: string
       </TableCell>
       <TableCell className="whitespace-nowrap">{new Date(agent.updatedAt).toLocaleDateString()}</TableCell>
       <TableCell className="text-right">
-        {context ? (
+        {organizationId ? (
           <Link
             aria-label={tt('Open {{name}}', { name: agent.name })}
-            params={{ agentId: agent.id, organizationId: context }}
+            params={{ agentId: agent.id, organizationId }}
             to="/organizations/$organizationId/agents/$agentId"
           >
             <ChevronRight className="ml-auto size-4 text-muted-foreground" />

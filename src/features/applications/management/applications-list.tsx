@@ -1,12 +1,7 @@
-import {
-  consoleQueryKeys,
-  createApplication,
-  listApplications,
-  listOrganizations,
-  listUsers,
-  updateApplication,
-} from '@/lib/api/management'
-import { useConsoleScope } from '@/lib/console-context'
+import { CreateApplicationDialog } from '@/features/management/create-dialogs'
+import { MutationError } from '@/features/management/dialogs'
+import { organizationOptions } from '@/features/management/ownership-controls'
+import { ListToolbar, ResourcePage } from '@/features/management/resource-components'
 import {
   Button,
   Plus,
@@ -17,17 +12,20 @@ import {
   useQuery,
   useQueryClient,
   useState,
-} from '../../console-shared'
-import { CreateApplicationDialog } from '../../helpers/helpers-create'
-import { MutationError } from '../../helpers/helpers-dialogs'
-import { ListToolbar, ResourcePage } from '../../helpers/helpers-resource'
-import { useAdminMutation } from '../../helpers/helpers-utils'
-import { organizationOptions } from '../../helpers/ownership-access-controls'
+} from '@/features/management/shared'
+import { useAdminMutation } from '@/features/management/utils'
+import {
+  consoleQueryKeys,
+  createApplication,
+  listApplications,
+  listOrganizations,
+  listUsers,
+  updateApplication,
+} from '@/lib/api/management'
 import { ApplicationsTableContent } from './application-detail-sections'
 
-export function ApplicationsPage() {
-  const { organizationId: context } = useConsoleScope()
-  const [owner, setOwner] = useState(context ?? '')
+export function ApplicationsPage({ organizationId }: { organizationId?: string } = {}) {
+  const [owner, setOwner] = useState(organizationId ?? '')
   const query = useQuery({
     queryKey: [...consoleQueryKeys.applications, { ownerOrganizationId: owner || undefined }],
     queryFn: () => listApplications({ ownerOrganizationId: owner || undefined }),
@@ -37,15 +35,15 @@ export function ApplicationsPage() {
     queryFn: listOrganizations,
   })
   const usersQuery = useQuery({
-    queryKey: [...consoleQueryKeys.users, { limit: 100, organizationId: context, purpose: 'application-audience' }],
-    queryFn: () => listUsers({ limit: 100, organizationId: context }),
+    queryKey: [...consoleQueryKeys.users, { limit: 100, organizationId, purpose: 'application-audience' }],
+    queryFn: () => listUsers({ limit: 100, organizationId }),
   })
   const queryClient = useQueryClient()
   const [dialogOpen, setDialogOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [type, setType] = useState('')
   const [audience, setAudience] = useState('')
-  useEffect(() => setOwner(context ?? ''), [context])
+  useEffect(() => setOwner(organizationId ?? ''), [organizationId])
   const createMutation = useAdminMutation({
     mutationFn: createApplication,
     onSuccess: () => {
@@ -84,7 +82,7 @@ export function ApplicationsPage() {
     <ResourcePage
       title={tt('Applications')}
       description={tt(
-        context
+        organizationId
           ? 'Manage this Organization’s OIDC clients, redirect URIs, grant types, and client security posture.'
           : 'Manage OIDC clients, redirect URIs, grant types, and client security posture across this Realm.',
       )}
@@ -95,9 +93,9 @@ export function ApplicationsPage() {
       }
       auxiliary={
         <CreateApplicationDialog
-          defaultOwnerOrganizationId={context}
-          fixedOwnerOrganizationId={context}
-          key={context ?? 'realm'}
+          defaultOwnerOrganizationId={organizationId}
+          fixedOwnerOrganizationId={organizationId}
+          key={organizationId ?? 'realm'}
           organizations={organizations}
           users={users}
           createdApplication={createMutation.data ?? null}
@@ -125,7 +123,7 @@ export function ApplicationsPage() {
             placeholder={tt('Search applications')}
             value={search}
           />
-          {context ? null : (
+          {organizationId ? null : (
             <SelectInput
               aria-label={tt('Filter owner')}
               onChange={(event) => setOwner(event.target.value)}
@@ -162,7 +160,7 @@ export function ApplicationsPage() {
       <MutationError error={toggleMutation.error} />
       <ApplicationsTableContent
         applications={visibleApplications}
-        context={context}
+        organizationId={organizationId}
         organizations={organizations}
         emptyDescription={
           search || owner || type || audience

@@ -33,7 +33,7 @@ reviewed.
 | Area | Route or route family | Data status before rebuild | Target |
 | --- | --- | --- | --- |
 | Dashboard | `/console` | Real | Realm health, activity, and attention queue |
-| Users | `/console/users` | Real | Searchable inventory with Organization filter |
+| Users | `/console/users` | Real | Searchable Realm identity inventory |
 | User detail | `/console/users/:id/*` | Real | Overview, Authentication, Sessions, Agents, Authorized apps, Settings |
 | Agents | `/console/agents` | Real | Stable Agent inventory; no create action |
 | Agent detail | `/console/agents/:id/*` | Partial | Overview, Requests & grants, Hosts, Activity, Settings |
@@ -51,7 +51,7 @@ reviewed.
 | Security policies | `/console/security/*` | Real, old split | Authentication protection, Human verification, Other restrictions |
 | Experience | canonicalized from branding/content routes | Real, old split | Brand assets, Color scheme, Legal & support with live preview |
 | Realm settings | `/console/tenant-settings/*` | Partial | Realm access, Developer access, Deployment |
-| Organization settings | Organization Workspace route | Missing | Organization profile and lifecycle only |
+| Organization settings | Organization Workspace route | Real | Organization profile and lifecycle only |
 
 ## Account Center
 
@@ -63,7 +63,7 @@ reviewed.
 | Applications | canonical sibling route | Real but grouped elsewhere | Authorized apps and revocation |
 | Agents | canonical sibling route | Partial | Personal Agent inventory, grants, and retirement |
 | Organizations | canonical sibling route | Missing | Memberships, invitations, and conditional creation |
-| Organization detail | `/organizations/:organizationId/*` | Partial | Canonical Organization Workspace with Overview, Members, Roles, Agents, Applications, Resource Servers, Webhooks, Activity, and Settings |
+| Organization detail | `/organizations/:organizationId/*` | Implemented | Canonical Organization Workspace with Overview, Members, Roles, Agents, Applications, Resource Servers, Webhooks, Activity, and Settings |
 
 ## Hosted Auth
 

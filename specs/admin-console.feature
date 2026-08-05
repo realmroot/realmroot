@@ -26,6 +26,14 @@ Feature: Admin Console
     Then I am redirected to my Organizations page
     And Realm management API data requests are not made
 
+  @e2e @entrypoint:product-ui @journey:organization-workspace-platform-boundary
+  Scenario: Organization Owners use their Workspace without Console authority
+    Given I am an Organization Owner without Realm platform authority
+    When I open my Organization Workspace and navigate its resource sections
+    Then the Organization remains the explicit resource boundary
+    When I open Console
+    Then I am redirected to my Organizations page before Realm inventory loads
+
   @entrypoint:product-ui @journey:admin-setup-gate
   Scenario: Console setup gate handles missing OIDC applications
     Given no OIDC application exists

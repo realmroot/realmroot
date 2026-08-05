@@ -1,14 +1,14 @@
 import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ApplicationDetailPage } from '@/features/console/extracted/applications/application-detail'
+import { ApplicationDetailPage } from '@/features/applications/management/application-detail'
 import {
   ApplicationFederatedCredentialsPanel,
   parseFederatedCredentialForm,
   parseKeyMaterial,
-} from '@/features/console/extracted/applications/application-federated-credentials'
+} from '@/features/applications/management/application-federated-credentials'
 import { jsonResponse, renderWithQuery } from './console.test-utils'
 
-vi.mock('@/features/console/extracted/applications/application-detail', () => ({
+vi.mock('@/features/applications/management/application-detail', () => ({
   ApplicationDetailPage: ({ applicationId, section }: { applicationId: string; section: string }) =>
     `${applicationId}:${section}`,
 }))

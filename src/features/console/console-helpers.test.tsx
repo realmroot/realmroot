@@ -1,14 +1,15 @@
 import { cleanup } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { clientConfig, clientTypeLabel, listItems, listValue } from '@/features/console/helpers/helpers-dialogs'
-import { hostedAuthMode, passwordSignupEnabled, previewSignInAction } from '@/features/console/helpers/helpers-preview'
+import { dashboardChartLabels, formatDashboardDate } from '@/features/console/pages/dashboard-page'
+import { clientConfig, clientTypeLabel, listItems, listValue } from '@/features/management/dialogs'
+import { hostedAuthMode, passwordSignupEnabled, previewSignInAction } from '@/features/management/previews'
 import {
   apiResourceDetailTabs,
   navigateConsoleTab,
   organizationDetailTabs,
   roleDetailTabs,
   userDetailTabs,
-} from '@/features/console/helpers/helpers-resource'
+} from '@/features/management/resource-components'
 import {
   connectorFieldLabel,
   connectorToForm,
@@ -25,8 +26,7 @@ import {
   removeBlankValues,
   shallowEqual,
   userDisplayName,
-} from '@/features/console/helpers/helpers-utils'
-import { dashboardChartLabels, formatDashboardDate } from '@/features/console/pages/dashboard-page'
+} from '@/features/management/utils'
 import { queryClient } from '@/router'
 
 globalThis.ResizeObserver ??= class ResizeObserver {

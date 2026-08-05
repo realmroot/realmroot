@@ -1,8 +1,7 @@
 import type { ApiResource } from '@shared/api/agent-api'
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ApiResourceDetailPage, ApiResourcesPage } from '@/features/console/extracted/api-resources'
-import { ConsoleScopeProvider } from '@/lib/console-context'
+import { ApiResourceDetailPage, ApiResourcesPage } from '@/features/resource-servers/management-resource-servers'
 import {
   apiResource,
   emptyPagination,
@@ -111,11 +110,7 @@ describe('console API resources and roles', () => {
       throw new Error(`Unexpected request: ${url.pathname}${url.search}`)
     })
 
-    renderWithQuery(
-      <ConsoleScopeProvider value={{ organizationId: organization.id, realmOperator: false }}>
-        <ApiResourcesPage />
-      </ConsoleScopeProvider>,
-    )
+    renderWithQuery(<ApiResourcesPage organizationId={organization.id} />)
 
     const resourceLink = await screen.findByRole('link', { name: apiResource.name })
     expect(resourceLink.getAttribute('href')).toBe(
@@ -150,11 +145,7 @@ describe('console API resources and roles', () => {
       throw new Error(`Unexpected request: ${url}`)
     })
 
-    renderWithQuery(
-      <ConsoleScopeProvider value={{ organizationId: organization.id, realmOperator: true }}>
-        <ApiResourcesPage />
-      </ConsoleScopeProvider>,
-    )
+    renderWithQuery(<ApiResourcesPage organizationId={organization.id} />)
 
     expect(await screen.findByText('Projects API')).toBeTruthy()
     expect(screen.getByRole('columnheader', { name: 'Authorization' })).toBeTruthy()
@@ -547,9 +538,7 @@ describe('console API resources and roles', () => {
     })
 
     renderWithQuery(
-      <ConsoleScopeProvider value={{ organizationId: organization.id, realmOperator: false }}>
-        <ApiResourceDetailPage resourceId="resource-1" section="authority" />
-      </ConsoleScopeProvider>,
+      <ApiResourceDetailPage organizationId={organization.id} resourceId="resource-1" section="authority" />,
     )
     expect(await screen.findByText('Human members only')).toBeTruthy()
     expect(screen.getByText('Operator')).toBeTruthy()
@@ -580,9 +569,7 @@ describe('console API resources and roles', () => {
     })
 
     renderWithQuery(
-      <ConsoleScopeProvider value={{ organizationId: organization.id, realmOperator: false }}>
-        <ApiResourceDetailPage resourceId="resource-1" section="authority" />
-      </ConsoleScopeProvider>,
+      <ApiResourceDetailPage organizationId={organization.id} resourceId="resource-1" section="authority" />,
     )
     fireEvent.click(await screen.findByRole('button', { name: 'Retry' }))
     expect(await screen.findByText('No Roles use this server')).toBeTruthy()
@@ -734,5 +721,23 @@ describe('console API resources and roles', () => {
       { url: '/api/resource-servers/resource-1/archival', method: 'PUT' },
       { url: '/api/resource-servers/resource-1/archival', method: 'DELETE' },
     ])
+  })
+
+  it('rejects a Resource Server detail route under a different Organization', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const { url } = requestParts(input)
+      if (url === '/api/resource-servers/resource-1') return Promise.resolve(jsonResponse(apiResource))
+      if (url === '/api/connectors') {
+        return Promise.resolve(jsonResponse({ connectors: [], pagination: emptyPagination }))
+      }
+      if (url === '/api/organizations') {
+        return Promise.resolve(jsonResponse({ organizations: [organization], pagination }))
+      }
+      throw new Error(`Unexpected request: ${url}`)
+    })
+
+    renderWithQuery(<ApiResourceDetailPage organizationId="org-other" resourceId="resource-1" />)
+
+    expect(await screen.findByText('Resource server does not belong to this Organization.')).toBeTruthy()
   })
 })

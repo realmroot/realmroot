@@ -1,7 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { AccountOrganizationDetailPage } from '@/features/account/account-center'
-import { WebhooksPage } from '@/features/console/extracted/deployment-misc/webhooks'
-import { ConsoleScopeProvider } from '@/lib/console-context'
+import { WebhooksPage } from '@/features/webhooks/management-webhooks'
 
 export const Route = createFileRoute('/organizations/$organizationId/webhooks/endpoints')({
   component: OrganizationWebhookEndpointsRoute,
@@ -10,12 +9,10 @@ export const Route = createFileRoute('/organizations/$organizationId/webhooks/en
 function OrganizationWebhookEndpointsRoute() {
   const { organizationId } = Route.useParams()
   return (
-    <ConsoleScopeProvider value={{ organizationId, realmOperator: false }}>
-      <AccountOrganizationDetailPage
-        content={<WebhooksPage section="endpoints" />}
-        organizationId={organizationId}
-        section="webhooks"
-      />
-    </ConsoleScopeProvider>
+    <AccountOrganizationDetailPage
+      content={<WebhooksPage organizationId={organizationId} realmOperator={false} section="endpoints" />}
+      organizationId={organizationId}
+      section="webhooks"
+    />
   )
 }

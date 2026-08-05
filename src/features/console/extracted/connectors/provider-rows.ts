@@ -3,7 +3,7 @@ import type {
   ConnectorTemplate,
   ManagementSignInSettingsResponse,
   SecurityPolicy,
-} from '../../console-shared'
+} from '@/features/management/shared'
 
 export type ConnectorProviderRow = {
   key: string

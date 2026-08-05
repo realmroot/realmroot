@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import { organizationDetailTabs } from '@/features/management/resource-components'
 import { developerPolicyOptions } from './extracted/deployment-misc/deployment'
-import { organizationDetailTabs } from './helpers/helpers-resource'
 
 describe('Console product model', () => {
   it('[spec: admin-console/admin-govern-organization] keeps Organization governance separate from Develop inventory', () => {

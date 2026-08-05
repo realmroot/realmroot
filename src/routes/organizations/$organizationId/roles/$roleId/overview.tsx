@@ -1,7 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { AccountOrganizationDetailPage } from '@/features/account/account-center'
-import { RoleDetailPage } from '@/features/console/extracted/roles'
-import { ConsoleScopeProvider } from '@/lib/console-context'
+import { RoleDetailPage } from '@/features/roles/management-roles'
 
 export const Route = createFileRoute('/organizations/$organizationId/roles/$roleId/overview')({
   component: OrganizationRoleOverviewRoute,
@@ -10,12 +9,10 @@ export const Route = createFileRoute('/organizations/$organizationId/roles/$role
 function OrganizationRoleOverviewRoute() {
   const { organizationId, roleId } = Route.useParams()
   return (
-    <ConsoleScopeProvider value={{ organizationId, realmOperator: false }}>
-      <AccountOrganizationDetailPage
-        content={<RoleDetailPage roleId={roleId} section="overview" />}
-        organizationId={organizationId}
-        section="roles"
-      />
-    </ConsoleScopeProvider>
+    <AccountOrganizationDetailPage
+      content={<RoleDetailPage organizationId={organizationId} roleId={roleId} section="overview" />}
+      organizationId={organizationId}
+      section="roles"
+    />
   )
 }

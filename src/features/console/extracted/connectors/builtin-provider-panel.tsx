@@ -13,8 +13,8 @@ import {
   useEffect,
   useState,
   type z,
-} from '../../console-shared'
-import { shallowEqual } from '../../helpers/helpers-utils'
+} from '@/features/management/shared'
+import { shallowEqual } from '@/features/management/utils'
 import {
   BuiltInProviderSwitch,
   BuiltinProviderForm,

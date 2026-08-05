@@ -1,6 +1,6 @@
 # Tenant Ownership And Management Surfaces
 
-Status: proposed for implementation review
+Status: accepted; Part One implemented, Part Two tracked separately
 
 ## Context
 
@@ -252,10 +252,14 @@ from the route parameter and is passed explicitly into feature operations.
 7. Remove obsolete Organization Console components, context helpers, search
    state, tests, and copy.
 
-Part One does not redesign the server ownership schema. It may add only the
-minimal read models or authorization-context response required to render the
-new navigation correctly. Any required public API change is reviewed separately
-before implementation.
+Part One is complete. Capability modules now own Applications, Resource
+Servers, Agents, Webhooks, and Roles; Organization routes pass their
+`organizationId` explicitly; and Console no longer provides or consumes an
+Organization context. The public HTTP contract remains unchanged by this
+module-boundary refactor.
+
+Part One does not redesign the server ownership schema. The backend ownership
+work below is intentionally isolated in a follow-up pull request.
 
 ### Part Two: Backend Ownership Normalization
 

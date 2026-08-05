@@ -1,11 +1,11 @@
 import type { ApplicationResponse } from '@shared/api/applications'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ApplicationBrandingCard } from '@/features/console/extracted/applications/application-branding-card'
+import { ApplicationBrandingCard } from '@/features/applications/management/application-branding-card'
 import {
   ApplicationOidcClaimsForm,
   ApplicationsTableContent,
-} from '@/features/console/extracted/applications/application-detail-sections'
+} from '@/features/applications/management/application-detail-sections'
 import { application, renderWithQuery } from './console.test-utils'
 
 globalThis.ResizeObserver ??= class ResizeObserver {

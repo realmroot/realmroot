@@ -10,6 +10,15 @@ export const admin = {
   name: 'Realmroot Admin',
 }
 
+export const organizationOwner = {
+  email: 'owner@example.com',
+  username: 'organization-owner',
+  password: 'Violet!927Cloud',
+  name: 'Organization Owner',
+  organizationId: 'org_e2e_owner',
+  organizationName: 'E2E Organization',
+}
+
 export const baseURL = process.env.E2E_BASE_URL ?? `http://localhost:${process.env.PLAYWRIGHT_PORT ?? '4189'}`
 const e2eWranglerConfig = process.env.E2E_WRANGLER_CONFIG ?? 'e2e/wrangler.toml'
 const e2ePersistStatePath = process.env.CF_PERSIST_STATE_PATH ?? 'e2e/.wrangler/state'
@@ -124,6 +133,20 @@ export function resetLocalData() {
     DELETE FROM uploaded_asset;
     DELETE FROM organization;
     PRAGMA foreign_keys = ON;
+  `)
+}
+
+export function seedOrganizationOwner() {
+  sql(`
+    UPDATE user
+    SET email_verified = 1
+    WHERE email = '${organizationOwner.email}';
+    INSERT INTO organization (id, slug, name)
+    VALUES ('${organizationOwner.organizationId}', 'e2e-organization', '${organizationOwner.organizationName}');
+    INSERT INTO member (id, organization_id, user_id, role)
+    SELECT 'member_e2e_owner', '${organizationOwner.organizationId}', id, 'owner'
+    FROM user
+    WHERE email = '${organizationOwner.email}';
   `)
 }
 

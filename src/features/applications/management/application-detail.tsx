@@ -20,6 +20,29 @@ import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetT
 import { Switch } from '@/components/ui/switch'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import {
+  CopyButton,
+  clientConfig,
+  clientTypeLabel,
+  DeleteApplicationDialog,
+  ErrorState,
+  LoadingState,
+  listValue,
+  MutationError,
+  SecretDisclosureDialog,
+} from '@/features/management/dialogs'
+import {
+  applicationAudienceLabel,
+  IdentityMultiSelect,
+  OrganizationOwnerField,
+  organizationOptions,
+  ownerLabel,
+  selectionSummary,
+  userOptions,
+} from '@/features/management/ownership-controls'
+import { navigateConsoleTab } from '@/features/management/resource-components'
+import type { ApplicationDetailSection } from '@/features/management/shared'
+import { formatDate, nullableString, parseForm, parseLineList, useAdminMutation } from '@/features/management/utils'
 import { consoleQueryKeys } from '@/lib/api/console-query-keys'
 import {
   deleteApplication,
@@ -32,43 +55,20 @@ import {
   rotateApplicationClientSecret,
   updateApplication,
 } from '@/lib/api/management'
-import { useConsoleScope } from '@/lib/console-context'
 import { tt } from '@/lib/i18n'
-import type { ApplicationDetailSection } from '../../console-shared'
-import {
-  CopyButton,
-  clientConfig,
-  clientTypeLabel,
-  DeleteApplicationDialog,
-  ErrorState,
-  LoadingState,
-  listValue,
-  MutationError,
-  SecretDisclosureDialog,
-} from '../../helpers/helpers-dialogs'
-import { navigateConsoleTab } from '../../helpers/helpers-resource'
-import { formatDate, nullableString, parseForm, parseLineList, useAdminMutation } from '../../helpers/helpers-utils'
-import {
-  applicationAudienceLabel,
-  IdentityMultiSelect,
-  OrganizationOwnerField,
-  organizationOptions,
-  ownerLabel,
-  selectionSummary,
-  userOptions,
-} from '../../helpers/ownership-access-controls'
 import { ApplicationFederatedCredentialsPanel } from './application-federated-credentials'
 
 type Editor = 'details' | 'redirects' | 'authorization' | 'claims' | 'audience' | 'consent' | null
 
 export function ApplicationDetailPage({
   applicationId,
+  organizationId,
   section = 'overview',
 }: {
   applicationId: string
+  organizationId?: string
   section?: ApplicationDetailSection
 }) {
-  const { organizationId: context } = useConsoleScope()
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const [selectedTab, setSelectedTab] = useState<ApplicationDetailSection>(section)
@@ -83,8 +83,8 @@ export function ApplicationDetailPage({
   })
   const organizationsQuery = useQuery({ queryKey: consoleQueryKeys.organizations, queryFn: listOrganizations })
   const usersQuery = useQuery({
-    queryKey: [...consoleQueryKeys.users, { limit: 100, organizationId: context, purpose: 'application-audience' }],
-    queryFn: () => listUsers({ limit: 100, organizationId: context }),
+    queryKey: [...consoleQueryKeys.users, { limit: 100, organizationId, purpose: 'application-audience' }],
+    queryFn: () => listUsers({ limit: 100, organizationId }),
   })
   const application = query.data
   const secretsQuery = useQuery({
@@ -120,8 +120,8 @@ export function ApplicationDetailPage({
         exact: true,
         refetchType: 'none',
       })
-      if (context) {
-        await navigate({ params: { organizationId: context }, to: '/organizations/$organizationId/applications' })
+      if (organizationId) {
+        await navigate({ params: { organizationId }, to: '/organizations/$organizationId/applications' })
       } else {
         await navigate({ to: '/console/applications' })
       }
@@ -140,16 +140,19 @@ export function ApplicationDetailPage({
       />
     )
   if (!application) return <ErrorState error={new Error(tt('Application not found.'))} />
+  if (organizationId && application.ownerOrganizationId !== organizationId) {
+    return <ErrorState error={new Error(tt('Application does not belong to this Organization.'))} />
+  }
   const organizations = organizationsQuery.data?.organizations ?? []
   const users = usersQuery.data?.users ?? []
 
   return (
     <>
       <div className="consoleDetailStack">
-        {context ? (
+        {organizationId ? (
           <Link
             className="consoleBackLink"
-            params={{ organizationId: context }}
+            params={{ organizationId }}
             to="/organizations/$organizationId/applications"
           >
             <ArrowLeft />
@@ -181,10 +184,9 @@ export function ApplicationDetailPage({
             setSelectedTab(next)
             navigateConsoleTab(
               navigate,
-              context
-                ? `/organizations/${context}/applications/${applicationId}/${next}`
+              organizationId
+                ? `/organizations/${organizationId}/applications/${applicationId}/${next}`
                 : `/console/applications/${applicationId}/${next}`,
-              context,
             )
           }}
           value={selectedTab}
@@ -237,7 +239,7 @@ export function ApplicationDetailPage({
         application={application}
         editor={editor}
         error={updateMutation.errorMessage}
-        fixedOwnerOrganizationId={context}
+        fixedOwnerOrganizationId={organizationId}
         onClose={() => setEditor(null)}
         onSave={(input) => updateMutation.mutate(input)}
         organizations={organizations}

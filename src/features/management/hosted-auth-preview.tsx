@@ -11,8 +11,8 @@ import {
   SignUpForm,
   tt,
   useState,
-} from '../console-shared'
-import { customCssProperties } from './helpers-utils'
+} from './shared'
+import { customCssProperties } from './utils'
 
 export function HostedAuthPreview({ preview }: { preview: HostedAuthPreviewState }) {
   const [flow, setFlow] = useState<HostedAuthPreviewFlow>('sign-in')

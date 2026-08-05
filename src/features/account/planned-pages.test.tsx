@@ -611,6 +611,8 @@ describe('planned Account Center journeys', () => {
     await waitFor(() => expect(actions.some((action) => action.path.endsWith('/update'))).toBe(true))
 
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
     fireEvent.click(screen.getByRole('button', { name: 'Delete organization' }))
     await waitFor(() => expect(actions.some((action) => action.path.endsWith('/delete'))).toBe(true))
     expect(navigate).toHaveBeenCalledWith({ to: '/organizations' })
@@ -634,10 +636,39 @@ describe('planned Account Center journeys', () => {
     await waitFor(() => expect(actions.some((action) => action.path.endsWith('/leave'))).toBe(true))
   })
 
+  it('composes capability content into its Organization section', async () => {
+    server.use(...organizationDetailHandlers('member'))
+
+    renderWithClient(
+      <AccountOrganizationDetailPage
+        content={<p>Organization applications inventory</p>}
+        organizationId="org-family"
+        section="applications"
+      />,
+    )
+
+    expect(await screen.findByText('Organization applications inventory')).toBeTruthy()
+  })
+
   it('keeps Organization management editors open when server mutations fail', async () => {
     store.access.realmOperator = true
     server.use(
       ...organizationDetailHandlers('owner'),
+      http.get(`${base}/api/organizations/org-family/roles`, () =>
+        json({
+          roles: ['owner', 'admin', 'developer', 'member'].map((key) => ({ key, displayName: key, predefined: true })),
+          pagination: pagination(4),
+        }),
+      ),
+      http.post(`${base}/api/organizations/org-family/invitations`, () =>
+        json({ message: 'Organization mutation failed.' }, { status: 500 }),
+      ),
+      http.delete(`${base}/api/organizations/org-family/members/:memberId`, () =>
+        json({ message: 'Organization mutation failed.' }, { status: 500 }),
+      ),
+      http.delete(`${base}/api/organizations/org-family/invitations/:invitationId`, () =>
+        json({ message: 'Organization mutation failed.' }, { status: 500 }),
+      ),
       http.post(`${base}/api/auth/organization/:action`, () =>
         json({ message: 'Organization mutation failed.' }, { status: 500 }),
       ),
@@ -648,6 +679,10 @@ describe('planned Account Center journeys', () => {
     openTab('Members')
     fireEvent.click(await screen.findByRole('button', { name: 'Invite member' }))
     fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'failed@example.com' } })
+    fireEvent.click(await screen.findByLabelText('member'))
+    fireEvent.click(screen.getByRole('button', { name: 'Send invitation' }))
+    expect(await screen.findByText('Select at least one Role.')).toBeTruthy()
+    fireEvent.click(screen.getByLabelText('member'))
     fireEvent.click(screen.getByRole('button', { name: 'Send invitation' }))
     await waitFor(() => expect(screen.getByLabelText('Email')).toBeTruthy())
     fireEvent.click(screen.getByRole('button', { name: 'Close' }))
@@ -657,6 +692,18 @@ describe('planned Account Center journeys', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save access level' }))
     await waitFor(() => expect(screen.getByLabelText('Access level')).toBeTruthy())
     fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Manage' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Remove member' }))
+    fireEvent.click(screen.getAllByRole('button', { name: 'Remove member' }).at(-1)!)
+    await waitFor(() => expect(screen.getByRole('alertdialog')).toBeTruthy())
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Review' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel invitation' }))
+    fireEvent.click(screen.getAllByRole('button', { name: 'Cancel invitation' }).at(-1)!)
+    await waitFor(() => expect(screen.getByRole('alertdialog')).toBeTruthy())
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
 
     openTab('Settings')
     fireEvent.click(screen.getByRole('button', { name: 'Edit' }))

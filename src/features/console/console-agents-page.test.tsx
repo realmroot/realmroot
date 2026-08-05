@@ -1,7 +1,6 @@
 import { cleanup, fireEvent, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { AgentsPage } from '@/features/console/pages/agents-page'
-import { ConsoleScopeProvider } from '@/lib/console-context'
+import { AgentsPage } from '@/features/agents/management-agents-page'
 import { queryClient } from '@/router'
 import { emptyPagination, jsonResponse, renderWithQuery } from './console.test-utils'
 
@@ -22,11 +21,7 @@ describe('console Agents page', () => {
       throw new Error(`Unexpected request: ${url.pathname}${url.search}`)
     })
 
-    renderWithQuery(
-      <ConsoleScopeProvider value={{ organizationId: 'org-1', realmOperator: false }}>
-        <AgentsPage />
-      </ConsoleScopeProvider>,
-    )
+    renderWithQuery(<AgentsPage organizationId="org-1" />)
 
     const agentLink = await screen.findByRole('link', { name: 'Open Stable Build Agent' })
     expect(agentLink.getAttribute('href')).toBe('/organizations/org-1/agents/agent-1')

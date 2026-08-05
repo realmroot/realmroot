@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { ApplicationDetailPage } from '@/features/console/extracted/applications/application-detail'
+import { ApplicationDetailPage } from '@/features/applications/management/application-detail'
 
 export const Route = createFileRoute('/console/applications/$applicationId/authorizations')({
   component: ApplicationAuthorizationsRoute,

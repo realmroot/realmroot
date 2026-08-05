@@ -1,3 +1,4 @@
+import { MutationError } from './dialogs'
 import {
   Button,
   Field,
@@ -10,8 +11,7 @@ import {
   tt,
   useId,
   useState,
-} from '../console-shared'
-import { MutationError } from './helpers-dialogs'
+} from './shared'
 
 export function AuthorizationForm({
   buttonLabel,

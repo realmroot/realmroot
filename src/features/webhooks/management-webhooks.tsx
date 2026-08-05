@@ -23,6 +23,16 @@ import {
 } from '@/components/ui/dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { DangerConfirmDialog, StatusBadge } from '@/features/management/dialogs'
+import { WebhookRequestDialog, WebhookSecretDisclosureDialog } from '@/features/management/previews'
+import {
+  DataTablePanel,
+  ListToolbar,
+  ResourcePage,
+  RoutedSettingsTabs,
+} from '@/features/management/resource-components'
+import type { WebhooksSection } from '@/features/management/shared'
+import { formatDate, useAdminMutation } from '@/features/management/utils'
 import {
   consoleQueryKeys,
   createWebhookDeliveryAttempt,
@@ -34,17 +44,18 @@ import {
   rotateWebhookEndpointSecret,
   updateWebhookEndpoint,
 } from '@/lib/api/management'
-import { useConsoleScope } from '@/lib/console-context'
 import { tt } from '@/lib/i18n'
-import type { WebhooksSection } from '../../console-shared'
-import { DangerConfirmDialog, StatusBadge } from '../../helpers/helpers-dialogs'
-import { WebhookRequestDialog, WebhookSecretDisclosureDialog } from '../../helpers/helpers-preview'
-import { DataTablePanel, ListToolbar, ResourcePage, RoutedSettingsTabs } from '../../helpers/helpers-resource'
-import { formatDate, useAdminMutation } from '../../helpers/helpers-utils'
 
-export function WebhooksPage({ section = 'endpoints' }: { section?: WebhooksSection }) {
+export function WebhooksPage({
+  organizationId,
+  realmOperator = true,
+  section = 'endpoints',
+}: {
+  organizationId?: string
+  realmOperator?: boolean
+  section?: WebhooksSection
+}) {
   const queryClient = useQueryClient()
-  const { organizationId, realmOperator } = useConsoleScope()
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('')
   const [organizationFilter, setOrganizationFilter] = useState('')

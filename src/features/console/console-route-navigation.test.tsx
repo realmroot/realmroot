@@ -259,7 +259,7 @@ describe('console route navigation', () => {
 
     expect(await screen.findByRole('heading', { name: 'Jane Stone' })).toBeTruthy()
     expect(window.location.pathname).toBe('/console/users/user-1/overview')
-    expect(window.location.search).toBe('?context=org-1')
+    expect(window.location.search).toBe('')
     expect(screen.getByRole('tab', { name: 'Authentication' })).toBeTruthy()
 
     cleanup()

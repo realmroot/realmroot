@@ -1,5 +1,7 @@
 import type { OrganizationResponse } from '@shared/api/authorization'
 import { Link } from '@tanstack/react-router'
+import { clientTypeLabel, MutationError, StatusBadge, SwitchRow } from '@/features/management/dialogs'
+import { applicationAudienceLabel, ownerLabel } from '@/features/management/ownership-controls'
 import {
   type ApplicationOidcClaims,
   type ApplicationResponse,
@@ -28,9 +30,7 @@ import {
   tt,
   useEffect,
   useState,
-} from '../../console-shared'
-import { clientTypeLabel, MutationError, StatusBadge, SwitchRow } from '../../helpers/helpers-dialogs'
-import { applicationAudienceLabel, ownerLabel } from '../../helpers/ownership-access-controls'
+} from '@/features/management/shared'
 
 type OidcClaimDestination = keyof ApplicationOidcClaims
 type OidcClaimKey = keyof ApplicationOidcClaims[OidcClaimDestination]
@@ -130,7 +130,7 @@ export function ApplicationsTableContent({
   hasApplications,
   onToggleDisabled,
   organizations,
-  context,
+  organizationId,
 }: {
   applications: ApplicationResponse[]
   emptyDescription: string
@@ -138,7 +138,7 @@ export function ApplicationsTableContent({
   hasApplications: boolean
   onToggleDisabled: (application: ApplicationResponse) => void
   organizations: OrganizationResponse[]
-  context?: string
+  organizationId?: string
 }) {
   if (!applications.length && hasApplications) {
     return (
@@ -178,10 +178,10 @@ export function ApplicationsTableContent({
           applications.map((application) => (
             <TableRow key={application.id}>
               <TableCell className="min-w-0">
-                {context ? (
+                {organizationId ? (
                   <Link
                     className="block truncate font-medium hover:underline"
-                    params={{ applicationId: application.id, organizationId: context }}
+                    params={{ applicationId: application.id, organizationId }}
                     to="/organizations/$organizationId/applications/$applicationId"
                   >
                     {application.name}

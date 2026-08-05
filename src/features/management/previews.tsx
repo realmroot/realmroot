@@ -7,6 +7,8 @@ export {
   previewSignInAction,
 } from './hosted-auth-preview'
 
+import { CopyButton, SwitchRow } from './dialogs'
+import { ResourcePage, RoutedSettingsTabs } from './resource-components'
 import {
   Button,
   Dialog,
@@ -26,9 +28,7 @@ import {
   Undo2,
   type WebhookEndpoint,
   type WebhookRequest,
-} from '../console-shared'
-import { CopyButton, SwitchRow } from './helpers-dialogs'
-import { ResourcePage, RoutedSettingsTabs } from './helpers-resource'
+} from './shared'
 
 export function WebhookEndpointRow({
   endpoint,

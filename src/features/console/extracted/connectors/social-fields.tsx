@@ -8,8 +8,8 @@ import {
   TextInput,
   tt,
   useId,
-} from '../../console-shared'
-import { connectorFieldLabel, setValue } from '../../helpers/helpers-utils'
+} from '@/features/management/shared'
+import { connectorFieldLabel, setValue } from '@/features/management/utils'
 
 export function GenericConnectorFields({
   form,

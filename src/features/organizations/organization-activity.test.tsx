@@ -1,4 +1,4 @@
-import { cleanup, screen } from '@testing-library/react'
+import { cleanup, fireEvent, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { emptyPagination, jsonResponse, renderWithQuery } from '@/features/console/console.test-utils'
 import { OrganizationActivityPage } from '@/features/organizations/organization-activity'
@@ -46,5 +46,53 @@ describe('Organization activity', () => {
     expect(await screen.findByText('agent.access.granted')).toBeTruthy()
     expect(screen.getByText('projects')).toBeTruthy()
     expect(requests).toEqual(['/api/realm/audit-events?organizationId=org-1'])
+  })
+
+  it('renders empty activity and failed loads with retry', async () => {
+    const fetch = vi
+      .spyOn(window, 'fetch')
+      .mockResolvedValueOnce(jsonResponse({ items: [], pagination: emptyPagination }))
+
+    const empty = renderWithQuery(<OrganizationActivityPage organizationId="org-1" />)
+    expect(await screen.findByText('No recent activity')).toBeTruthy()
+    empty.unmount()
+
+    fetch.mockResolvedValueOnce(jsonResponse({ message: 'Activity unavailable.' }, 503))
+    renderWithQuery(<OrganizationActivityPage organizationId="org-1" />)
+    expect(await screen.findByText('Activity unavailable.')).toBeTruthy()
+    fetch.mockResolvedValueOnce(jsonResponse({ items: [], pagination: emptyPagination }))
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    expect(await screen.findByText('No recent activity')).toBeTruthy()
+  })
+
+  it('renders denied events without a resource target', async () => {
+    vi.spyOn(window, 'fetch').mockResolvedValue(
+      jsonResponse({
+        items: [
+          {
+            id: 'audit-2',
+            action: 'agent.access.denied',
+            result: 'denied',
+            controllerUserId: null,
+            subjectIssuer: null,
+            subject: null,
+            agentIdentityId: null,
+            hostId: null,
+            resourceId: null,
+            resourceConnectionId: null,
+            accessGrantId: null,
+            scopes: [],
+            reasonCode: 'missing_scope',
+            metadata: null,
+            occurredAt: '2026-08-05T12:00:00.000Z',
+          },
+        ],
+        pagination: { ...emptyPagination, total: 1 },
+      }),
+    )
+
+    renderWithQuery(<OrganizationActivityPage organizationId="org-1" />)
+    expect(await screen.findByText('agent.access.denied')).toBeTruthy()
+    expect(screen.getByText('Realmroot')).toBeTruthy()
   })
 })

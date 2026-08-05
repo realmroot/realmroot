@@ -17,46 +17,30 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { ErrorState, LoadingState, MutationError } from '@/features/management/dialogs'
+import { DetailTabs, navigateConsoleTab, ResourcePage } from '@/features/management/resource-components'
+import type { RoleDetailSection } from '@/features/management/shared'
 import { createRole, deleteRole, getRole, listRoles, updateRole } from '@/lib/api/management'
-import { useConsoleScope } from '@/lib/console-context'
 import { tt } from '@/lib/i18n'
-import type { RoleDetailSection } from '../console-shared'
-import { ErrorState, LoadingState, MutationError } from '../helpers/helpers-dialogs'
-import { DetailTabs, navigateConsoleTab, ResourcePage } from '../helpers/helpers-resource'
 
 function rolesKey(organizationId: string) {
   return ['console', 'organizations', organizationId, 'roles'] as const
 }
 
-export function RolesPage() {
-  const { organizationId } = useConsoleScope()
+export function RolesPage({ organizationId }: { organizationId: string }) {
   const queryClient = useQueryClient()
   const [createOpen, setCreateOpen] = useState(false)
   const query = useQuery({
-    queryKey: rolesKey(organizationId ?? ''),
-    queryFn: () => listRoles(organizationId!),
-    enabled: Boolean(organizationId),
+    queryKey: rolesKey(organizationId),
+    queryFn: () => listRoles(organizationId),
   })
   const createMutation = useMutation({
-    mutationFn: (input: CreateRoleRequest) => createRole(organizationId!, input),
+    mutationFn: (input: CreateRoleRequest) => createRole(organizationId, input),
     onSuccess: async () => {
       setCreateOpen(false)
-      await queryClient.invalidateQueries({ queryKey: rolesKey(organizationId!) })
+      await queryClient.invalidateQueries({ queryKey: rolesKey(organizationId) })
     },
   })
-  if (!organizationId) {
-    return (
-      <ResourcePage
-        description={tt('Roles exist only inside an Organization. Open a Role from its Organization Workspace.')}
-        empty
-        emptyDescription={tt('Choose an Organization from the Organizations page.')}
-        emptyTitle={tt('Organization context required')}
-        title={tt('Roles')}
-      >
-        {null}
-      </ResourcePage>
-    )
-  }
   return (
     <ResourcePage
       action={
@@ -127,35 +111,41 @@ export function RolesPage() {
   )
 }
 
-export function RoleDetailPage({ roleId, section = 'overview' }: { roleId: string; section?: RoleDetailSection }) {
-  const { organizationId } = useConsoleScope()
+export function RoleDetailPage({
+  organizationId,
+  roleId,
+  section = 'overview',
+}: {
+  organizationId: string
+  roleId: string
+  section?: RoleDetailSection
+}) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [editOpen, setEditOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const query = useQuery({
-    queryKey: [...rolesKey(organizationId ?? ''), roleId],
-    queryFn: () => getRole(organizationId!, roleId),
-    enabled: Boolean(organizationId),
+    queryKey: [...rolesKey(organizationId), roleId],
+    queryFn: () => getRole(organizationId, roleId),
   })
   const updateMutation = useMutation({
-    mutationFn: (input: UpdateRoleRequest) => updateRole(organizationId!, roleId, input),
+    mutationFn: (input: UpdateRoleRequest) => updateRole(organizationId, roleId, input),
     onSuccess: async () => {
       setEditOpen(false)
-      await queryClient.invalidateQueries({ queryKey: rolesKey(organizationId!) })
+      await queryClient.invalidateQueries({ queryKey: rolesKey(organizationId) })
     },
   })
   const deleteMutation = useMutation({
-    mutationFn: () => deleteRole(organizationId!, roleId),
+    mutationFn: () => deleteRole(organizationId, roleId),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: rolesKey(organizationId!) })
-      await navigate({ params: { organizationId: organizationId! }, to: '/organizations/$organizationId/roles' })
+      await queryClient.invalidateQueries({ queryKey: rolesKey(organizationId) })
+      await navigate({ params: { organizationId }, to: '/organizations/$organizationId/roles' })
     },
   })
-  if (!organizationId) return <ErrorState error={new Error('Organization context is required.')} />
   if (query.isLoading) return <LoadingState label={tt('Loading Role…')} />
   if (query.error || !query.data) return <ErrorState error={query.error ?? new Error('Role was not found.')} />
   const role = query.data
+  const activeSection = section === 'settings' ? 'overview' : section
   return (
     <ResourcePage
       action={
@@ -205,16 +195,14 @@ export function RoleDetailPage({ roleId, section = 'overview' }: { roleId: strin
       </Link>
       <DetailTabs
         label={tt('Role detail sections')}
-        onChange={(next) =>
-          navigateConsoleTab(navigate, `/organizations/${organizationId}/roles/${roleId}/${next}`, organizationId)
-        }
+        onChange={(next) => navigateConsoleTab(navigate, `/organizations/${organizationId}/roles/${roleId}/${next}`)}
         tabs={[
           { label: tt('Overview'), value: 'overview' },
           { label: tt('Permissions'), value: 'permissions' },
         ]}
-        value={section === 'settings' ? 'overview' : section}
+        value={activeSection}
       />
-      {section === 'overview' ? <RoleOverview role={role} /> : <RoleScopes role={role} />}
+      {activeSection === 'overview' ? <RoleOverview role={role} /> : <RoleScopes role={role} />}
     </ResourcePage>
   )
 }

@@ -1,7 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { AccountOrganizationDetailPage } from '@/features/account/account-center'
-import { ApiResourcesPage } from '@/features/console/extracted/api-resources'
-import { ConsoleScopeProvider } from '@/lib/console-context'
+import { ApiResourcesPage } from '@/features/resource-servers/management-resource-servers'
 
 export const Route = createFileRoute('/organizations/$organizationId/resource-servers')({
   component: OrganizationResourceServersRoute,
@@ -10,12 +9,10 @@ export const Route = createFileRoute('/organizations/$organizationId/resource-se
 function OrganizationResourceServersRoute() {
   const { organizationId } = Route.useParams()
   return (
-    <ConsoleScopeProvider value={{ organizationId, realmOperator: false }}>
-      <AccountOrganizationDetailPage
-        content={<ApiResourcesPage />}
-        organizationId={organizationId}
-        section="resource-servers"
-      />
-    </ConsoleScopeProvider>
+    <AccountOrganizationDetailPage
+      content={<ApiResourcesPage organizationId={organizationId} />}
+      organizationId={organizationId}
+      section="resource-servers"
+    />
   )
 }

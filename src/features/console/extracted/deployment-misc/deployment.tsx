@@ -13,6 +13,9 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { IdentityMultiSelectControl, userOptions } from '@/features/management/ownership-controls'
+import { ResourcePage } from '@/features/management/resource-components'
+import { useAdminMutation } from '@/features/management/utils'
 import {
   consoleQueryKeys,
   getDeveloperSettings,
@@ -25,9 +28,6 @@ import {
   updateRealm,
 } from '@/lib/api/management'
 import { tt } from '@/lib/i18n'
-import { ResourcePage } from '../../helpers/helpers-resource'
-import { useAdminMutation } from '../../helpers/helpers-utils'
-import { IdentityMultiSelectControl, userOptions } from '../../helpers/ownership-access-controls'
 
 export type SettingsSection = 'general' | 'email' | 'developer' | 'deployment'
 type SettingsState = {

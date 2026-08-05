@@ -1,3 +1,4 @@
+import { ErrorState, LoadingState } from './dialogs'
 import {
   AlertCircle,
   Badge,
@@ -17,8 +18,7 @@ import {
   TabsList,
   TabsTrigger,
   useNavigate,
-} from '../console-shared'
-import { ErrorState, LoadingState } from './helpers-dialogs'
+} from './shared'
 
 export function ResourcePage({
   action,
@@ -150,7 +150,7 @@ export function DetailTabs({
     </Tabs>
   )
 }
-export function navigateConsoleTab(navigate: ReturnType<typeof useNavigate>, href: string, _context?: string) {
+export function navigateConsoleTab(navigate: ReturnType<typeof useNavigate>, href: string) {
   if (window.location.pathname.startsWith('/console/') || window.location.pathname.startsWith('/organizations/'))
     void navigate({
       to: href,

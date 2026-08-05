@@ -1,16 +1,6 @@
-import {
-  consoleQueryKeys,
-  createConnector,
-  deleteConnector,
-  getConnector,
-  getSecurityPolicy,
-  getSignInSettings,
-  listConnectors,
-  listConnectorTemplates,
-  updateConnector,
-  updateSecurityPolicy,
-  updateSignInSettings,
-} from '@/lib/api/management'
+import { ConfirmDialog } from '@/features/management/create-dialogs'
+import { StatusBadge } from '@/features/management/dialogs'
+import { DataTablePanel, ListToolbar, ResourcePage } from '@/features/management/resource-components'
 import {
   Button,
   type ConnectorResponse,
@@ -52,10 +42,7 @@ import {
   useQueryClient,
   useState,
   type z,
-} from '../console-shared'
-import { ConfirmDialog } from '../helpers/helpers-create'
-import { StatusBadge } from '../helpers/helpers-dialogs'
-import { DataTablePanel, ListToolbar, ResourcePage } from '../helpers/helpers-resource'
+} from '@/features/management/shared'
 import {
   connectorToForm,
   connectorUpdateForm,
@@ -63,7 +50,20 @@ import {
   parseForm,
   setValue,
   useAdminMutation,
-} from '../helpers/helpers-utils'
+} from '@/features/management/utils'
+import {
+  consoleQueryKeys,
+  createConnector,
+  deleteConnector,
+  getConnector,
+  getSecurityPolicy,
+  getSignInSettings,
+  listConnectors,
+  listConnectorTemplates,
+  updateConnector,
+  updateSecurityPolicy,
+  updateSignInSettings,
+} from '@/lib/api/management'
 import { BuiltinProviderPanel } from './connectors/builtin-provider-panel'
 import { type ConnectorProviderRow, connectorProviderRows } from './connectors/provider-rows'
 import {

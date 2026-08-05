@@ -1,4 +1,5 @@
-import { consoleQueryKeys, getAccountCenterSettings, updateAccountCenterSettings } from '@/lib/api/management'
+import { SwitchRow } from '@/features/management/dialogs'
+import { ChangesSection, SettingsSection, SettingsSections, SignInExperiencePage } from '@/features/management/previews'
 import {
   Button,
   ExternalLink,
@@ -8,10 +9,9 @@ import {
   useQuery,
   useQueryClient,
   useState,
-} from '../../console-shared'
-import { SwitchRow } from '../../helpers/helpers-dialogs'
-import { ChangesSection, SettingsSection, SettingsSections, SignInExperiencePage } from '../../helpers/helpers-preview'
-import { shallowEqual, useAdminMutation } from '../../helpers/helpers-utils'
+} from '@/features/management/shared'
+import { shallowEqual, useAdminMutation } from '@/features/management/utils'
+import { consoleQueryKeys, getAccountCenterSettings, updateAccountCenterSettings } from '@/lib/api/management'
 
 export function AccountCenterSettingsPage() {
   const query = useQuery({

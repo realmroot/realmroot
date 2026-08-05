@@ -1,12 +1,12 @@
 import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ConsoleScopeProvider } from '@/lib/console-context'
+import { RoleDetailPage, RolesPage } from '@/features/roles/management-roles'
 import { jsonResponse, renderWithQuery } from './console.test-utils'
-import { RoleDetailPage, RolesPage } from './extracted/roles'
 
 afterEach(() => {
   cleanup()
   vi.restoreAllMocks()
+  window.history.pushState(null, '', '/')
 })
 
 const dynamicRole = {
@@ -20,11 +20,6 @@ const dynamicRole = {
 }
 
 describe('Organization Role lifecycle', () => {
-  it('requires Organization context', async () => {
-    renderWithQuery(<RolesPage />)
-    expect(await screen.findByText(/Roles exist only inside an Organization/)).toBeTruthy()
-  })
-
   it('lists Organization Roles and creates a dynamic Role', async () => {
     const requests: Array<{ method: string; path: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
@@ -47,11 +42,7 @@ describe('Organization Role lifecycle', () => {
       })
     })
 
-    renderWithQuery(
-      <ConsoleScopeProvider value={{ organizationId: 'org-1', realmOperator: false }}>
-        <RolesPage />
-      </ConsoleScopeProvider>,
-    )
+    renderWithQuery(<RolesPage organizationId="org-1" />)
     expect(await screen.findByText('Operator')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'New role' }))
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
@@ -85,11 +76,7 @@ describe('Organization Role lifecycle', () => {
     vi.spyOn(window, 'fetch').mockResolvedValue(
       jsonResponse({ ...dynamicRole, key: 'admin', displayName: 'Admin', predefined: true }),
     )
-    renderWithQuery(
-      <ConsoleScopeProvider value={{ organizationId: 'org-1', realmOperator: false }}>
-        <RoleDetailPage roleId="admin" section="permissions" />
-      </ConsoleScopeProvider>,
-    )
+    renderWithQuery(<RoleDetailPage organizationId="org-1" roleId="admin" section="permissions" />)
     expect(await screen.findByText('projects:read')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Delete' })).toBeNull()
@@ -97,11 +84,7 @@ describe('Organization Role lifecycle', () => {
     vi.spyOn(window, 'fetch').mockImplementation(() =>
       Promise.resolve(jsonResponse({ ...dynamicRole, key: 'admin', displayName: 'Admin', predefined: true })),
     )
-    renderWithQuery(
-      <ConsoleScopeProvider value={{ organizationId: 'org-1', realmOperator: false }}>
-        <RoleDetailPage roleId="admin" />
-      </ConsoleScopeProvider>,
-    )
+    renderWithQuery(<RoleDetailPage organizationId="org-1" roleId="admin" section="settings" />)
     expect(await screen.findByText('Predefined')).toBeTruthy()
   })
 
@@ -122,11 +105,7 @@ describe('Organization Role lifecycle', () => {
       return jsonResponse(dynamicRole)
     })
 
-    const { router } = renderWithQuery(
-      <ConsoleScopeProvider value={{ organizationId: 'org-1', realmOperator: false }}>
-        <RoleDetailPage roleId="operator" />
-      </ConsoleScopeProvider>,
-    )
+    const { router } = renderWithQuery(<RoleDetailPage organizationId="org-1" roleId="operator" />)
     expect(await screen.findByText('Operates projects.')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
@@ -159,29 +138,18 @@ describe('Organization Role lifecycle', () => {
     await waitFor(() => expect(router.state.location.pathname).toBe('/organizations/org-1/roles'))
   })
 
-  it('renders dynamic Role empty fields, empty scopes, and missing Organization context', async () => {
+  it('renders dynamic Role empty fields, empty scopes, and empty scopes', async () => {
     vi.spyOn(window, 'fetch').mockImplementation(() =>
       Promise.resolve(
         jsonResponse({ ...dynamicRole, description: null, scopes: [], createdAt: null, updatedAt: null }),
       ),
     )
-    const overview = renderWithQuery(
-      <ConsoleScopeProvider value={{ organizationId: 'org-1', realmOperator: false }}>
-        <RoleDetailPage roleId="operator" />
-      </ConsoleScopeProvider>,
-    )
+    const overview = renderWithQuery(<RoleDetailPage organizationId="org-1" roleId="operator" />)
     expect(await screen.findByText('Organization Role')).toBeTruthy()
     expect(screen.getAllByText('—')).toHaveLength(2)
     overview.unmount()
-    renderWithQuery(
-      <ConsoleScopeProvider value={{ organizationId: 'org-1', realmOperator: false }}>
-        <RoleDetailPage roleId="operator" section="permissions" />
-      </ConsoleScopeProvider>,
-    )
+    renderWithQuery(<RoleDetailPage organizationId="org-1" roleId="operator" section="permissions" />)
     expect(await screen.findByText('No scopes')).toBeTruthy()
-    cleanup()
-    renderWithQuery(<RoleDetailPage roleId="operator" />)
-    expect(await screen.findByText('Organization context is required.')).toBeTruthy()
   })
 
   it('keeps failed dynamic Role mutations open with actionable errors', async () => {
@@ -194,11 +162,7 @@ describe('Organization Role lifecycle', () => {
       if (method !== 'GET') return jsonResponse({ message: 'Role change failed.' }, 409)
       return jsonResponse(dynamicRole)
     })
-    renderWithQuery(
-      <ConsoleScopeProvider value={{ organizationId: 'org-1', realmOperator: false }}>
-        <RoleDetailPage roleId="operator" />
-      </ConsoleScopeProvider>,
-    )
+    renderWithQuery(<RoleDetailPage organizationId="org-1" roleId="operator" />)
     expect(await screen.findByText('Operates projects.')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
     fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Changed' } })
@@ -215,22 +179,39 @@ describe('Organization Role lifecycle', () => {
 
   it('renders missing and failed Role detail reads', async () => {
     vi.spyOn(window, 'fetch').mockImplementation(() => Promise.resolve(jsonResponse(null)))
-    const missing = renderWithQuery(
-      <ConsoleScopeProvider value={{ organizationId: 'org-1', realmOperator: false }}>
-        <RoleDetailPage roleId="missing" />
-      </ConsoleScopeProvider>,
-    )
+    const missing = renderWithQuery(<RoleDetailPage organizationId="org-1" roleId="missing" />)
     expect(await screen.findByText('Role was not found.')).toBeTruthy()
     missing.unmount()
 
     vi.spyOn(window, 'fetch').mockImplementation(() =>
       Promise.resolve(jsonResponse({ message: 'Role unavailable.' }, 503)),
     )
-    renderWithQuery(
-      <ConsoleScopeProvider value={{ organizationId: 'org-1', realmOperator: false }}>
-        <RoleDetailPage roleId="missing" />
-      </ConsoleScopeProvider>,
-    )
+    renderWithQuery(<RoleDetailPage organizationId="org-1" roleId="missing" />)
     expect(await screen.findByText('Role unavailable.')).toBeTruthy()
+  })
+
+  it('retries failed Role lists and navigates between detail sections', async () => {
+    const fetch = vi
+      .spyOn(window, 'fetch')
+      .mockResolvedValueOnce(jsonResponse({ message: 'Roles unavailable.' }, 503))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          roles: [],
+          pagination: { limit: 50, offset: 0, total: 0, hasMore: false, nextOffset: null },
+        }),
+      )
+
+    const list = renderWithQuery(<RolesPage organizationId="org-1" />)
+    expect(await screen.findByText('Roles unavailable.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    expect(await screen.findByText('No Roles')).toBeTruthy()
+    list.unmount()
+
+    fetch.mockResolvedValueOnce(jsonResponse(dynamicRole))
+    const { router } = renderWithQuery(<RoleDetailPage organizationId="org-1" roleId="operator" />)
+    expect(await screen.findByText('Operates projects.')).toBeTruthy()
+    window.history.pushState(null, '', '/organizations/org-1/roles/operator/overview')
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Permissions' }), { button: 0, ctrlKey: false })
+    await waitFor(() => expect(router.state.location.pathname).toBe('/organizations/org-1/roles/operator/permissions'))
   })
 })

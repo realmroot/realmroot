@@ -1,7 +1,7 @@
 import type { ApplicationResponse } from '@shared/api/applications'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, SettingRow, tt } from '../../console-shared'
-import { MutationError } from '../../helpers/helpers-dialogs'
-import { AssetUploadControl } from '../../helpers/helpers-forms'
+import { MutationError } from '@/features/management/dialogs'
+import { AssetUploadControl } from '@/features/management/forms'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, SettingRow, tt } from '@/features/management/shared'
 
 export function ApplicationBrandingCard({
   application,

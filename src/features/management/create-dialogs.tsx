@@ -2,6 +2,14 @@ import { type ApplicationAudienceMode, deviceCodeGrantType } from '@shared/api/a
 import type { OrganizationResponse } from '@shared/api/authorization'
 import type { ManagementUserResponse } from '@shared/api/management'
 import { DestructiveConfirmation } from '@/components/destructive-confirmation'
+import { CopyButton, listValue, SwitchRow } from './dialogs'
+import {
+  applicationAudienceLabel,
+  IdentityMultiSelect,
+  OrganizationOwnerField,
+  organizationOptions,
+  userOptions,
+} from './ownership-controls'
 import {
   type ApplicationResponse,
   applicationTypeOptions,
@@ -30,16 +38,8 @@ import {
   useEffect,
   useState,
   type z,
-} from '../console-shared'
-import { CopyButton, listValue, SwitchRow } from './helpers-dialogs'
-import { parseForm, setValue } from './helpers-utils'
-import {
-  applicationAudienceLabel,
-  IdentityMultiSelect,
-  OrganizationOwnerField,
-  organizationOptions,
-  userOptions,
-} from './ownership-access-controls'
+} from './shared'
+import { parseForm, setValue } from './utils'
 
 export function createApplicationGrantTypes(clientType: string, deviceLoginEnabled: boolean) {
   if (clientType === 'public_native' && deviceLoginEnabled) {
