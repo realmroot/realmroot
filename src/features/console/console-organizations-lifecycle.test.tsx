@@ -75,6 +75,16 @@ describe('console Organization lifecycle', () => {
       }),
     )
 
+    openMemberMenu('Morgan Multi-role')
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Remove Administrator' }))
+    await waitFor(() =>
+      expect(mutations).toContainEqual({
+        method: 'PUT',
+        path: '/api/organizations/org-1/members/member-multi/roles',
+        body: { roles: ['developer'] },
+      }),
+    )
+
     openMemberMenu('Dana Developer')
     fireEvent.click(screen.getByRole('menuitem', { name: 'Remove member' }))
     fireEvent.click(screen.getByRole('button', { name: 'Remove member' }))
@@ -336,6 +346,16 @@ const users = [
     createdAt: timestamp,
     updatedAt: timestamp,
   },
+  {
+    id: 'user-multi',
+    email: 'multi@example.com',
+    name: 'Morgan Multi-role',
+    displayName: 'Morgan Multi-role',
+    role: 'user',
+    banned: false,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  },
 ]
 const members = [
   { id: 'member-owner', organizationId: 'org-1', userId: 'user-owner', roles: ['owner'], createdAt: timestamp },
@@ -348,6 +368,13 @@ const members = [
     createdAt: timestamp,
   },
   { id: 'member-name', organizationId: 'org-1', userId: 'user-name', roles: ['member'], createdAt: timestamp },
+  {
+    id: 'member-multi',
+    organizationId: 'org-1',
+    userId: 'user-multi',
+    roles: ['admin', 'developer'],
+    createdAt: timestamp,
+  },
   { id: 'member-missing', organizationId: 'org-1', userId: 'user-missing', roles: ['custom'], createdAt: timestamp },
 ]
 const invitations = [

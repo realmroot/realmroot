@@ -469,6 +469,91 @@ describe('console API resources and roles', () => {
     expect(screen.getByText('Pending validation')).toBeTruthy()
   })
 
+  it('shows Organization Roles that grant scopes from a native Resource Server', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const { url } = requestParts(input)
+      if (url === '/api/resource-servers/resource-1') return Promise.resolve(jsonResponse(apiResource))
+      if (url === '/api/connectors') {
+        return Promise.resolve(jsonResponse({ connectors: [], pagination: emptyPagination }))
+      }
+      if (url === '/api/organizations') {
+        return Promise.resolve(jsonResponse({ organizations: [organization], pagination }))
+      }
+      if (url === `/api/organizations/${organization.id}/roles`) {
+        return Promise.resolve(
+          jsonResponse({
+            roles: [
+              {
+                key: 'operator',
+                displayName: 'Operator',
+                description: null,
+                predefined: false,
+                scopes: [
+                  { resourceId: apiResource.id, scope: 'projects:read' },
+                  { resourceId: 'resource-2', scope: 'other:read' },
+                ],
+                createdAt: apiResource.createdAt,
+                updatedAt: apiResource.updatedAt,
+              },
+              {
+                key: 'unrelated',
+                displayName: 'Unrelated',
+                description: null,
+                predefined: false,
+                scopes: [{ resourceId: 'resource-2', scope: 'other:read' }],
+                createdAt: apiResource.createdAt,
+                updatedAt: apiResource.updatedAt,
+              },
+            ],
+            pagination,
+          }),
+        )
+      }
+      throw new Error(`Unexpected request: ${url}`)
+    })
+
+    renderWithQuery(
+      <ConsoleScopeProvider value={{ organizationId: organization.id, realmOperator: false }}>
+        <ApiResourceDetailPage resourceId="resource-1" section="authority" />
+      </ConsoleScopeProvider>,
+    )
+    expect(await screen.findByText('Human members only')).toBeTruthy()
+    expect(screen.getByText('Operator')).toBeTruthy()
+    expect(screen.getByText('projects:read')).toBeTruthy()
+    expect(screen.queryByText('Unrelated')).toBeNull()
+  })
+
+  it('retries Organization Role loading and renders an empty native authority', async () => {
+    let attempts = 0
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const { url } = requestParts(input)
+      if (url === '/api/resource-servers/resource-1') return Promise.resolve(jsonResponse(apiResource))
+      if (url === '/api/connectors') {
+        return Promise.resolve(jsonResponse({ connectors: [], pagination: emptyPagination }))
+      }
+      if (url === '/api/organizations') {
+        return Promise.resolve(jsonResponse({ organizations: [organization], pagination }))
+      }
+      if (url === `/api/organizations/${organization.id}/roles`) {
+        attempts += 1
+        return Promise.resolve(
+          attempts === 1
+            ? jsonResponse({ message: 'Roles unavailable.' }, 503)
+            : jsonResponse({ roles: [], pagination: emptyPagination }),
+        )
+      }
+      throw new Error(`Unexpected request: ${url}`)
+    })
+
+    renderWithQuery(
+      <ConsoleScopeProvider value={{ organizationId: organization.id, realmOperator: false }}>
+        <ApiResourceDetailPage resourceId="resource-1" section="authority" />
+      </ConsoleScopeProvider>,
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'Retry' }))
+    expect(await screen.findByText('No Roles use this server')).toBeTruthy()
+  })
+
   it('uses section-level editors and preserves native/external authorization differences', async () => {
     const requests: Array<{ url: string; method: string; body: unknown }> = []
     let selected: ApiResource = apiResource

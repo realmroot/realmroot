@@ -105,6 +105,7 @@ describe('management API client', () => {
     await management.listOrganizations()
     await management.createOrganization({ slug: 'acme', name: 'Acme' })
     await management.updateOrganization('org-1', { disabled: true })
+    await management.updateOrganizationMember('org-1', 'member-1', { title: 'Staff engineer' })
     await management.uploadOrganizationLogo('org-1', new File(['logo'], 'logo.png'))
     await management.uploadBrandingLogo(new File(['logo'], 'logo.png'))
     await management.uploadBrandingFavicon(new File(['icon'], 'favicon.png'))
@@ -234,6 +235,15 @@ describe('management API client', () => {
       ['organizations.get'],
       ['organizations.post', { json: { slug: 'acme', name: 'Acme' } }],
       ['organizations.patch', { param: { id: 'org-1' }, json: { disabled: true } }],
+      [
+        'fetch',
+        '/api/organizations/org-1/members/member-1',
+        {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ title: 'Staff engineer' }),
+        },
+      ],
       ['uploadAsset', 'organization_logo', expect.any(File)],
       ['organizations.patch', { param: { id: 'org-1' }, json: { logo: '/api/assets/asset-1' } }],
       ['uploadAsset', 'branding_logo', expect.any(File)],

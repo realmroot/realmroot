@@ -533,13 +533,6 @@ export function listAgentInstallations(agentId: string, query: Partial<Paginatio
   )
 }
 
-export async function listAgentRoles(_agentId: string, query: Partial<PaginationQuery> = {}) {
-  return {
-    items: [] as RoleResponse[],
-    pagination: { limit: query.limit ?? 50, offset: query.offset ?? 0, total: 0, hasMore: false, nextOffset: null },
-  }
-}
-
 export function listAgentAccessRequests(
   query: Partial<import('@shared/api/agent-api').ListManagementAgentAccessRequestsQuery> = {},
 ) {

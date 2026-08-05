@@ -1,6 +1,7 @@
 import {
   addMember,
   archiveResource,
+  buildTokenClaims,
   cancelInvitation,
   createInvitation,
   createOrganization,
@@ -19,6 +20,7 @@ import {
   listMembers,
   listOrganizations,
   listResources,
+  listRoles,
   removeMember,
   replaceMemberRoles,
   restoreResource,
@@ -266,6 +268,53 @@ describe('authorization CRUD and assignment policy', () => {
     ).rejects.toMatchObject({ status: 403 })
   })
 
+  it('replaces multiple Roles atomically and validates Owner and dynamic Role assignments', async () => {
+    const authorization = repository()
+    authorization.findOrganization.mockResolvedValue(organization)
+    authorization.findMember.mockResolvedValue({ ...member, roles: ['owner'] })
+    authorization.countMembersByRole.mockResolvedValue(2)
+    authorization.replaceMemberRoles.mockResolvedValue(true)
+    authorization.addMember.mockResolvedValue(member)
+    authorization.listOrganizationRoles.mockResolvedValue([
+      {
+        key: 'operator',
+        displayName: 'Operator',
+        description: null,
+        predefined: false,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      },
+    ])
+    const deps = { authorization } as unknown as Deps
+
+    await expect(
+      replaceMemberRoles(deps, organization.id, member.id, { roles: ['admin', 'operator'] }, 'admin-1', false),
+    ).resolves.toEqual({ roles: ['admin', 'operator'] })
+    expect(authorization.replaceMemberRoles).toHaveBeenCalledWith(
+      organization.id,
+      member.id,
+      ['admin', 'operator'],
+      timestamp,
+      expect.objectContaining({ action: 'organization.member.roles-replaced' }),
+    )
+
+    authorization.replaceMemberRoles.mockResolvedValue(false)
+    await expect(
+      replaceMemberRoles(deps, organization.id, member.id, { roles: ['admin'] }, 'admin-1', false),
+    ).rejects.toMatchObject({ status: 412 })
+
+    await expect(
+      addMember(deps, organization.id, { userId: 'owner-2', roles: ['owner'] }, 'realm-admin', true),
+    ).resolves.toBe(member)
+    authorization.findMemberByOrganizationUser.mockResolvedValue({ ...member, userId: 'owner-1', roles: ['owner'] })
+    await expect(
+      addMember(deps, organization.id, { userId: 'owner-3', roles: ['owner'] }, 'owner-1', false),
+    ).resolves.toBe(member)
+    await expect(
+      addMember(deps, organization.id, { userId: 'unknown', roles: ['missing-role'] }, 'owner-1', false),
+    ).rejects.toMatchObject({ status: 400 })
+  })
+
   it('keeps predefined Roles immutable and dynamic Roles Organization-scoped [spec: management-api/management-restish-role-crud]', async () => {
     const authorization = repository()
     authorization.findOrganization.mockResolvedValue(organization)
@@ -309,6 +358,204 @@ describe('authorization CRUD and assignment policy', () => {
       { scope: ['res_realmroot/applications%3Aread'] },
       expect.objectContaining({ action: 'organization.role.created' }),
     )
+  })
+
+  it('lists, updates, and deletes dynamic Organization Roles with optimistic concurrency', async () => {
+    const authorization = repository()
+    const dynamicRole = {
+      key: 'operator',
+      displayName: 'Operator',
+      description: null,
+      predefined: false,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    }
+    authorization.findOrganization.mockResolvedValue(organization)
+    authorization.listOrganizationRoles.mockResolvedValue([dynamicRole])
+    authorization.listOrganizationRoleScopes.mockResolvedValue(
+      new Map([['operator', [{ resourceId: 'res_realmroot', scope: 'applications:read' }]]]),
+    )
+    authorization.findOrganizationRole.mockResolvedValue(dynamicRole)
+    authorization.updateOrganizationRole.mockResolvedValue(true)
+    authorization.deleteOrganizationRole.mockResolvedValue('deleted')
+    const deps = { authorization } as unknown as Deps
+
+    await expect(listRoles(deps, organization.id, { limit: 2, offset: 0 })).resolves.toMatchObject({
+      roles: [{ key: 'admin' }, { key: 'developer' }],
+      pagination: { limit: 2, offset: 0, total: 5, hasMore: true },
+    })
+    await expect(getRole(deps, organization.id, 'operator')).resolves.toMatchObject({
+      key: 'operator',
+      scopes: [{ resourceId: 'res_realmroot', scope: 'applications:read' }],
+    })
+    await expect(
+      updateRole(deps, organization.id, 'operator', { displayName: 'Tenant operator' }, 'user-1'),
+    ).resolves.toMatchObject({ key: 'operator' })
+    expect(authorization.updateOrganizationRole).toHaveBeenCalledWith(
+      organization.id,
+      'operator',
+      { displayName: 'Tenant operator' },
+      undefined,
+      timestamp,
+      expect.objectContaining({ action: 'organization.role.updated' }),
+    )
+    await expect(deleteRole(deps, organization.id, 'operator', 'user-1')).resolves.toBeUndefined()
+    expect(authorization.deleteOrganizationRole).toHaveBeenCalledWith(
+      organization.id,
+      'operator',
+      timestamp,
+      expect.objectContaining({ action: 'organization.role.deleted' }),
+    )
+
+    authorization.findOrganizationRole.mockResolvedValue(null)
+    await expect(getRole(deps, organization.id, 'missing')).rejects.toMatchObject({ status: 404 })
+    authorization.findOrganizationRole.mockResolvedValue(dynamicRole)
+    authorization.updateOrganizationRole.mockResolvedValue(false)
+    await expect(
+      updateRole(deps, organization.id, 'operator', { description: 'Changed' }, 'user-1'),
+    ).rejects.toMatchObject({ status: 412 })
+    authorization.deleteOrganizationRole.mockResolvedValue('assigned')
+    await expect(deleteRole(deps, organization.id, 'operator', 'user-1')).rejects.toMatchObject({ status: 409 })
+    authorization.deleteOrganizationRole.mockResolvedValue('not_found')
+    await expect(deleteRole(deps, organization.id, 'operator', 'user-1')).rejects.toMatchObject({ status: 412 })
+  })
+
+  it('validates and normalizes internal and external dynamic Role scopes', async () => {
+    const authorization = repository()
+    authorization.findOrganization.mockResolvedValue(organization)
+    authorization.findResource.mockImplementation(async (id) =>
+      id === 'res_realmroot'
+        ? { ...resource, id, identifier: 'realmroot', resourceUrl: 'https://auth.example.com/api' }
+        : id === resource.id
+          ? resource
+          : null,
+    )
+    authorization.findOrganizationRole.mockResolvedValue({
+      key: 'operator',
+      displayName: 'Operator',
+      description: null,
+      predefined: false,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    })
+    authorization.updateOrganizationRole.mockResolvedValue(true)
+    const deps = {
+      authorization,
+      externalHttp: { fetch: vi.fn(resourceScopeOpenApiFetch(resource.resourceUrl, ['projects:read'])) },
+    } as unknown as Deps
+
+    await expect(
+      createRole(deps, organization.id, { key: 'owner', displayName: 'Reserved', scopes: [] }, 'user-1'),
+    ).rejects.toMatchObject({ status: 409 })
+    await expect(
+      createRole(
+        deps,
+        organization.id,
+        {
+          key: 'invalid',
+          displayName: 'Invalid',
+          scopes: [{ resourceId: 'res_realmroot', scope: 'unknown:scope' }],
+        },
+        'user-1',
+      ),
+    ).rejects.toMatchObject({ status: 400 })
+
+    await updateRole(
+      deps,
+      organization.id,
+      'operator',
+      {
+        scopes: [
+          { resourceId: resource.id, scope: 'projects:read' },
+          { resourceId: resource.id, scope: 'projects:read' },
+          { resourceId: 'res_realmroot', scope: 'applications:read' },
+        ],
+      },
+      'user-1',
+    )
+    expect(authorization.updateOrganizationRole).toHaveBeenCalledWith(
+      organization.id,
+      'operator',
+      expect.anything(),
+      { scope: ['res_realmroot/applications%3Aread', 'resource-1/projects%3Aread'] },
+      timestamp,
+      expect.anything(),
+    )
+
+    authorization.findResource.mockResolvedValue({
+      ...resource,
+      accessEligibility: { mode: 'organizations', organizationIds: ['org-2'] },
+    })
+    await expect(
+      updateRole(
+        deps,
+        organization.id,
+        'operator',
+        { scopes: [{ resourceId: resource.id, scope: 'projects:read' }] },
+        'user-1',
+      ),
+    ).rejects.toMatchObject({ status: 400 })
+  })
+
+  it('builds tenant-bound user and workload token claims fail closed', async () => {
+    const authorization = repository()
+    authorization.findResourceByResourceUrl.mockResolvedValue(resource)
+    authorization.findOrganization.mockResolvedValue(organization)
+    authorization.findMemberByOrganizationUser.mockResolvedValue({ ...member, roles: ['member', 'operator'] })
+    const deps = { authorization } as unknown as Deps
+    const selection = {
+      authorization: true,
+      roles: true,
+      groups: true,
+      scopes: true,
+      organizationId: true,
+      organizationName: true,
+    }
+
+    await expect(
+      buildTokenClaims(deps, {
+        userId: member.userId,
+        organizationId: organization.id,
+        resource: resource.resourceUrl,
+        scopes: ['projects:read', 'projects:write'],
+        authorizedScopes: ['projects:read'],
+        claimSelection: selection,
+      }),
+    ).resolves.toMatchObject({
+      roles: ['member', 'operator'],
+      groups: [organization.id],
+      scope: 'projects:read',
+      organization_id: organization.id,
+      organization_name: organization.displayName,
+      authorization: { scopes: ['projects:read'], resource: resource.identifier },
+    })
+
+    authorization.findMemberByOrganizationUser.mockResolvedValue(null)
+    await expect(
+      buildTokenClaims(deps, {
+        userId: member.userId,
+        organizationId: organization.id,
+        resource: resource.resourceUrl,
+        scopes: ['projects:read'],
+      }),
+    ).rejects.toMatchObject({ status: 403 })
+
+    authorization.findResourceByResourceUrl.mockResolvedValue(null)
+    await expect(
+      buildTokenClaims(deps, { resource: 'https://missing.example.com', scopes: ['projects:read'] }),
+    ).resolves.toMatchObject({ authorization: { scopes: [] } })
+
+    authorization.findResourceByResourceUrl.mockResolvedValue({
+      ...resource,
+      accessEligibility: { mode: 'owner_organization', organizationIds: [] },
+    })
+    await expect(
+      buildTokenClaims(deps, { organizationId: 'org-2', resource: resource.resourceUrl, scopes: ['projects:read'] }),
+    ).resolves.toMatchObject({ authorization: { scopes: [] } })
+
+    await expect(
+      buildTokenClaims(deps, { organizationId: organization.id, scopes: ['organizations:read'] }),
+    ).resolves.toMatchObject({ authorization: { scopes: ['organizations:read'] } })
   })
 
   it('unions multiple Better Auth Roles on each authorization decision', async () => {
@@ -599,6 +846,19 @@ describe('authorization CRUD and assignment policy', () => {
         enabled: false,
       }),
     ).rejects.toMatchObject({ status: 400 })
+
+    authorization.findOrganization.mockResolvedValue(organization)
+    authorization.createResource.mockResolvedValue(resource)
+    await expect(
+      createResource(deps, {
+        identifier: 'organization-api',
+        name: 'Organization API',
+        resourceUrl: resource.resourceUrl,
+        ownerOrganizationId: organization.id,
+        accessEligibility: { mode: 'organizations', organizationIds: [organization.id] },
+        enabled: false,
+      }),
+    ).resolves.toBe(resource)
   })
 
   it('validates the resource contract before enabling it [spec: agent-identity/api-resource-contract-validation]', async () => {
@@ -681,6 +941,34 @@ function resourceOpenApiFetch(resourceUrl: string) {
     }
     if (request.url === new URL('/openapi.json', resourceUrl).toString()) {
       return Response.json({ openapi: '3.1.0', paths: {} })
+    }
+    return new Response(null, { status: 404 })
+  }
+}
+
+function resourceScopeOpenApiFetch(resourceUrl: string, scopes: string[]) {
+  return async (request: Request) => {
+    if (request.url === new URL(resourceUrl).toString()) {
+      return new Response(null, { headers: { link: '</openapi.json>; rel="service-desc"' } })
+    }
+    if (request.url === new URL('/openapi.json', resourceUrl).toString()) {
+      return Response.json({
+        openapi: '3.1.0',
+        components: {
+          securitySchemes: {
+            oauth: {
+              type: 'oauth2',
+              flows: {
+                clientCredentials: {
+                  tokenUrl: '/token',
+                  scopes: Object.fromEntries(scopes.map((scope) => [scope, scope])),
+                },
+              },
+            },
+          },
+        },
+        paths: { '/projects': { get: { security: [{ oauth: scopes }] } } },
+      })
     }
     return new Response(null, { status: 404 })
   }

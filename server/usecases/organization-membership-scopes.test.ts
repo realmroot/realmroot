@@ -1,6 +1,7 @@
 import { realmrootResourceServer } from '@server/domain/realmroot-resource-server'
 import type { Deps } from '@server/usecases/deps'
 import {
+  filterCurrentResourceScopes,
   organizationUserHasScope,
   resolveOrganizationMembershipScopes,
 } from '@server/usecases/organization-membership-scopes'
@@ -122,6 +123,24 @@ describe('Organization membership scope resolution', () => {
   it('denies a user without an Organization membership', async () => {
     const deps = dependencies()
     await expect(organizationUserHasScope(deps, 'org-1', 'user-1', 'organizations:read')).resolves.toBe(false)
+  })
+
+  it('filters direct internal Resource Server scopes without external discovery', async () => {
+    const deps = dependencies()
+    const internalResource: ApiResourceResponse = {
+      ...externalResource,
+      ...realmrootResourceServer,
+      resourceUrl: 'https://auth.example.com/api',
+      enabled: true,
+      archivedAt: null,
+      accessEligibility: { mode: 'realm', organizationIds: [] },
+    }
+
+    await expect(filterCurrentResourceScopes(deps, internalResource, 'org-1', [])).resolves.toEqual([])
+    await expect(
+      filterCurrentResourceScopes(deps, internalResource, 'org-1', ['organizations:read', 'removed:scope']),
+    ).resolves.toEqual(['organizations:read'])
+    expect(deps.externalHttp.fetch).not.toHaveBeenCalled()
   })
 })
 
