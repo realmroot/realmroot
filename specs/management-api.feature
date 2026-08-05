@@ -68,55 +68,59 @@ Feature: Unified Realmroot resource API
 
 
   @entrypoint:restish @journey:management-restish-oauth-crud
-  Scenario: An authorized Agent manages applications through the unified API
+  Scenario: Delegated application management is explicit and auditable
     Given the Agent has approved applications:read and applications:write scopes
-    When I create, update, list, and delete an application with Restish
-    Then the unified API applies each application change
+    When I create, list, or rotate credentials for an application with Restish
+    Then the unified API applies the change and records the Agent actor atomically
+    And application update and deletion require a human controller session
     And Application authorizations form one Realm inventory whose application and status filters are optional
 
 
   @entrypoint:restish @journey:management-restish-user-crud
-  Scenario: An authorized Agent manages users through the unified API
+  Scenario: User mutations require a human controller
     Given the Agent has Realm authority with approved users:read and users:write scopes
-    When I create, update, list, and delete a user with Restish
-    Then the unified API applies each user change
+    When I list or inspect users with Restish
+    Then the unified API applies the Realm owner boundary
+    And user creation, update, suspension, session revocation, and deletion require a human controller session
 
 
   @entrypoint:restish @journey:management-restish-organization-crud
-  Scenario: An authorized Agent manages organizations through the unified API
+  Scenario: Delegated Organization management is explicit and auditable
     Given the Agent has Realm authority with approved organizations:read and organizations:write scopes
-    When I create, update, list, and delete an organization with Restish
-    Then the unified API applies each organization change
-    And Organization, member, and invitation creation return their canonical locations
-    And an Organization authority can manage only its existing Organization and cannot create another Organization
+    When I list Organizations or create an invitation with Restish
+    Then the unified API applies the owner boundary and records invitation creation atomically
+    And Organization creation, update, deletion, and membership mutation require a human controller session
+    And an Organization authority can inspect only its existing Organization and cannot create another Organization
 
 
   @entrypoint:restish @journey:management-restish-role-crud
-  Scenario: An authorized Agent manages roles and their scope eligibility through the unified API
+  Scenario: Delegated role assignment is explicit and auditable
     Given the Agent has Realm authority with approved roles:read and roles:write scopes
-    When I create, update, list, and delete a role and replace its OpenAPI scope references with Restish
-    Then the unified API applies each role change
+    When I list roles or create a role assignment with Restish
+    Then the unified API applies the owner boundary and records assignment creation atomically
+    And role lifecycle, scope replacement, and assignment revocation require a human controller session
     And each role scope must exist in its business resource server OpenAPI contract
     And complete permission replacement uses conditional requests to prevent lost updates
     And Role creation returns its canonical location
     And Role assignment creation returns its canonical location and duplicate active assignments conflict
     And Role assignment revocation is an idempotent child resource
     And an Organization authority can manage assignments only inside its Organization
-    And an Account authority can read only its own Realm assignments
+    And Account role relationships are read only through Account Center resources
 
 
   @entrypoint:restish @journey:management-restish-api-resource-crud
-  Scenario: An authorized Agent manages API resources without duplicating business authorization definitions
+  Scenario: An authorized Agent registers and archives API resources without duplicating business authorization definitions
     Given the Agent has approved resource-servers:read and resource-servers:write scopes
-    When I create, update, list, and delete an API resource with Restish
-    Then the unified API applies each API authorization change
+    When I create, list, archive, or restore an API resource with Restish
+    Then the unified API applies each API authorization change and records each mutation atomically
+    And API resource update and permanent deletion require a human controller session
     And API resource creation returns its canonical location
     And no permission catalog, scope catalog, or scope mutation operation exists
     And requestable scopes come only from each business resource server's OpenAPI security requirements
 
   @entrypoint:restish @journey:management-api-resource-delete-conflict
   Scenario: API resources with authorization history cannot be permanently deleted
-    Given the Agent has approved resource-servers:write scope
+    Given a human controller has resource-servers:write capability
     And an API resource has authorization history
     When I delete the API resource with Restish
     Then the unified API returns a conflict with the blocking reference counts
@@ -138,10 +142,11 @@ Feature: Unified Realmroot resource API
 
 
   @entrypoint:restish @journey:management-restish-webhook-crud
-  Scenario: An authorized Agent manages webhook endpoints
+  Scenario: Delegated webhook creation and secret rotation are explicit and auditable
     Given the Agent has approved webhooks:read and webhooks:write scopes
-    When I create, update, rotate, list, and delete a webhook endpoint with Restish
-    Then the unified API applies each webhook change
+    When I create, list, or rotate a webhook endpoint secret with Restish
+    Then the unified API applies the change and records the Agent actor atomically
+    And webhook update, deletion, and delivery retry require a human controller session
     And retrying a delivery request creates a new delivery attempt resource
     And every retry requires an idempotency key scoped to the delivery request
     And replaying the same key returns the same attempt without delivering twice
@@ -174,9 +179,9 @@ Feature: Unified Realmroot resource API
 
 
   @entrypoint:restish @journey:management-restish-settings-update
-  Scenario: An authorized Agent manages tenant settings
-    Given the Agent has Realm authority with approved settings:read and settings:write scopes
-    When I update branding, Account Center, sign-in, Realm, Organization creation policy, Developer Console access policy, Email delivery configuration, and security resources with Restish
-    Then the unified API persists each tenant setting change
-    And security policy mutations require an authenticated human controller session
+  Scenario: Tenant setting mutations require a human controller
+    Given the Agent has Realm authority with approved settings:read scope
+    When I inspect branding, Account Center, sign-in, Realm, Organization creation policy, Developer Console access policy, Email delivery configuration, and security resources with Restish
+    Then the unified API applies the Realm owner boundary
+    And all tenant setting and security policy mutations require an authenticated human controller session
     And replacing Realm, Organization creation, Developer Console access, or Email delivery state requires the current strong entity tag

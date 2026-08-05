@@ -147,7 +147,7 @@ export async function cancelInvitation(deps: Deps, organizationId: string, id: s
   return deps.authorization.cancelInvitation(id)
 }
 
-export async function createResource(deps: Deps, input: CreateApiResourceRequest) {
+export async function createResource(deps: Deps, input: CreateApiResourceRequest, actor?: ManagementActor) {
   const enabled = input.enabled ?? true
   const ownerOrganizationId = input.ownerOrganizationId ?? platformOrganization.id
   if (input.ownerOrganizationId) await requireActiveOrganization(deps, input.ownerOrganizationId)
@@ -168,7 +168,7 @@ export async function createResource(deps: Deps, input: CreateApiResourceRequest
   } else if (enabled) {
     await validateResourceContract(deps, input.resourceUrl)
   }
-  return deps.authorization.createResource({
+  const resource = {
     id: createId('res'),
     identifier: input.identifier,
     name: input.name,
@@ -180,7 +180,19 @@ export async function createResource(deps: Deps, input: CreateApiResourceRequest
     ownerOrganizationId,
     accessEligibility,
     availableToAgents: input.availableToAgents ?? true,
-  })
+  }
+  const audit = actor
+    ? {
+        ...managementActorAuditRecord({
+          action: 'api_resource.created',
+          actor,
+          owner: { kind: 'organization', organizationId: ownerOrganizationId },
+          metadata: { resourceId: resource.id },
+        }),
+        resourceId: resource.id,
+      }
+    : undefined
+  return audit ? deps.authorization.createResource(resource, audit) : deps.authorization.createResource(resource)
 }
 
 export async function ensureRealmrootResourceServer(deps: Deps, apiOrigin: string) {

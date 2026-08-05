@@ -4,6 +4,7 @@ import type { Database } from '../../db/client'
 import {
   agentAccessGrant,
   agentAccessRequest,
+  agentAuditEvent,
   agentConnectionRequest,
   agentIdentity,
   apiResource,
@@ -340,6 +341,152 @@ export function createExternalResourceRepository(db: Database): ExternalResource
         .where(and(...conditions))
         .returning()
       return row ?? null
+    },
+
+    async approveAccessRequest(input) {
+      const grant = input.grant
+      const [grants, requests] = await db.batch([
+        db
+          .insert(agentAccessGrant)
+          .select(
+            db
+              .select({
+                id: sql<string>`${grant.id}`.as('id'),
+                resourceId: agentAccessRequest.resourceId,
+                connectionId: agentAccessRequest.connectionId,
+                agentIdentityId: agentAccessRequest.agentIdentityId,
+                scopes: sql<string[]>`${JSON.stringify(grant.scopes)}`.as('scopes'),
+                authorizationDetails: sql<
+                  typeof grant.authorizationDetails
+                >`${JSON.stringify(grant.authorizationDetails)}`.as('authorization_details'),
+                mode: sql<string>`${grant.mode}`.as('mode'),
+                status: sql<string>`${grant.status}`.as('status'),
+                grantedByUserId: sql<string>`${grant.grantedByUserId}`.as('granted_by_user_id'),
+                expiresAt: sql<Date | null>`${grant.expiresAt?.getTime() ?? null}`.as('expires_at'),
+                revokedAt: sql<Date | null>`${grant.revokedAt?.getTime() ?? null}`.as('revoked_at'),
+                createdAt: sql<Date>`${grant.createdAt.getTime()}`.as('created_at'),
+                updatedAt: sql<Date>`${grant.updatedAt.getTime()}`.as('updated_at'),
+              })
+              .from(agentAccessRequest)
+              .innerJoin(apiResource, eq(apiResource.id, agentAccessRequest.resourceId))
+              .where(
+                and(
+                  eq(agentAccessRequest.id, input.requestId),
+                  eq(agentAccessRequest.status, 'pending'),
+                  eq(agentAccessRequest.resourceId, grant.resourceId),
+                  eq(agentAccessRequest.agentIdentityId, grant.agentIdentityId),
+                  eq(apiResource.enabled, true),
+                  isNull(apiResource.archivedAt),
+                ),
+              ),
+          )
+          .returning(),
+        db
+          .update(agentAccessRequest)
+          .set({
+            status: 'approved',
+            grantId: grant.id,
+            connectionId: grant.connectionId,
+            decidedAt: grant.updatedAt,
+            updatedAt: grant.updatedAt,
+          })
+          .where(
+            and(
+              eq(agentAccessRequest.id, input.requestId),
+              eq(agentAccessRequest.status, 'pending'),
+              exists(db.select({ id: agentAccessGrant.id }).from(agentAccessGrant).where(eq(agentAccessGrant.id, grant.id))),
+            ),
+          )
+          .returning(),
+        db
+          .insert(agentAuditEvent)
+          .select(
+            db
+              .select({
+                id: sql<string>`${input.audit.id}`.as('id'),
+                action: sql<string>`${input.audit.action}`.as('action'),
+                result: sql<string>`${input.audit.result}`.as('result'),
+                controllerUserId: sql<string | null>`${input.audit.controllerUserId}`.as('controller_user_id'),
+                subjectIssuer: sql<string | null>`${input.audit.subjectIssuer}`.as('subject_issuer'),
+                subject: sql<string | null>`${input.audit.subject}`.as('subject'),
+                agentIdentityId: sql<string | null>`${input.audit.agentIdentityId}`.as('agent_identity_id'),
+                hostId: sql<string | null>`${input.audit.hostId}`.as('host_id'),
+                ownerUserId: sql<string | null>`${input.audit.ownerUserId}`.as('owner_user_id'),
+                ownerOrganizationId: sql<string | null>`${input.audit.ownerOrganizationId}`.as(
+                  'owner_organization_id',
+                ),
+                resourceId: sql<string | null>`${input.audit.resourceId}`.as('resource_id'),
+                resourceConnectionId: sql<string | null>`${input.audit.resourceConnectionId}`.as(
+                  'resource_connection_id',
+                ),
+                accessGrantId: agentAccessGrant.id,
+                scopes: sql<string[] | null>`${
+                  input.audit.scopes === null ? null : JSON.stringify(input.audit.scopes)
+                }`.as('scopes'),
+                reasonCode: sql<string | null>`${input.audit.reasonCode}`.as('reason_code'),
+                metadata: sql<Record<string, unknown> | null>`${
+                  input.audit.metadata === null ? null : JSON.stringify(input.audit.metadata)
+                }`.as('metadata'),
+                occurredAt: sql<Date>`${input.audit.occurredAt.getTime()}`.as('occurred_at'),
+              })
+              .from(agentAccessGrant)
+              .innerJoin(agentAccessRequest, eq(agentAccessRequest.grantId, agentAccessGrant.id))
+              .where(
+                and(
+                  eq(agentAccessGrant.id, grant.id),
+                  eq(agentAccessRequest.id, input.requestId),
+                  eq(agentAccessRequest.status, 'approved'),
+                ),
+              ),
+          ),
+      ])
+      const createdGrant = grants[0]
+      const decidedRequest = requests[0]
+      if (!createdGrant || !decidedRequest) return null
+      return { grant: createdGrant, request: decidedRequest }
+    },
+
+    async denyAccessRequest(input) {
+      const [_, requests] = await db.batch([
+        db
+          .insert(agentAuditEvent)
+          .select(
+            db
+              .select({
+                id: sql<string>`${input.audit.id}`.as('id'),
+                action: sql<string>`${input.audit.action}`.as('action'),
+                result: sql<string>`${input.audit.result}`.as('result'),
+                controllerUserId: sql<string | null>`${input.audit.controllerUserId}`.as('controller_user_id'),
+                subjectIssuer: sql<string | null>`${input.audit.subjectIssuer}`.as('subject_issuer'),
+                subject: sql<string | null>`${input.audit.subject}`.as('subject'),
+                agentIdentityId: agentAccessRequest.agentIdentityId,
+                hostId: sql<string | null>`${input.audit.hostId}`.as('host_id'),
+                ownerUserId: sql<string | null>`${input.audit.ownerUserId}`.as('owner_user_id'),
+                ownerOrganizationId: sql<string | null>`${input.audit.ownerOrganizationId}`.as(
+                  'owner_organization_id',
+                ),
+                resourceId: agentAccessRequest.resourceId,
+                resourceConnectionId: agentAccessRequest.connectionId,
+                accessGrantId: sql<string | null>`null`.as('access_grant_id'),
+                scopes: sql<string[] | null>`${
+                  input.audit.scopes === null ? null : JSON.stringify(input.audit.scopes)
+                }`.as('scopes'),
+                reasonCode: sql<string | null>`${input.audit.reasonCode}`.as('reason_code'),
+                metadata: sql<Record<string, unknown> | null>`${
+                  input.audit.metadata === null ? null : JSON.stringify(input.audit.metadata)
+                }`.as('metadata'),
+                occurredAt: sql<Date>`${input.audit.occurredAt.getTime()}`.as('occurred_at'),
+              })
+              .from(agentAccessRequest)
+              .where(and(eq(agentAccessRequest.id, input.requestId), eq(agentAccessRequest.status, 'pending'))),
+          ),
+        db
+          .update(agentAccessRequest)
+          .set({ status: 'denied', grantId: null, decidedAt: input.decidedAt, updatedAt: input.decidedAt })
+          .where(and(eq(agentAccessRequest.id, input.requestId), eq(agentAccessRequest.status, 'pending')))
+          .returning(),
+      ])
+      return requests[0] ?? null
     },
 
     async consumeAccessRequest(id, now) {

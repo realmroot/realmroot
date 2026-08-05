@@ -117,14 +117,20 @@ and delegated Agents. Authentication produces two values:
 
 - an actor, which records the human user or stable Agent that performed the
   operation; and
-- one owner boundary: the Realm, an exact set of Organizations, or one personal
-  Account.
+- one owner boundary: the Realm, or a restricted boundary containing one
+  personal Account, an exact set of Organizations, or both for an eligible
+  browser session.
 
 Every management operation has one canonical declaration containing its OAuth
 scope, accepted authority kinds, and whether it requires a human controller.
 Runtime checks, OpenAPI security, and authority-specific scope discovery all
 consume that declaration. Collection queries apply the same owner boundary
 before pagination that item routes apply before reads or mutations.
+
+A delegated Agent mutation is exposed only when its business change and actor
+audit record commit atomically. Operations without that guarantee require a
+human controller session; a write scope by itself never removes that actor
+requirement.
 
 Account authority is exact. It covers resources owned by that Account and does
 not inherit the user's Organization memberships. Organization authority covers

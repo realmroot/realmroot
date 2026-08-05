@@ -186,7 +186,7 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
       await db.update(invitation).set({ status: 'canceled', revokedAt: new Date() }).where(eq(invitation.id, id))
     },
 
-    async createResource(input) {
+    async createResource(input, audit) {
       const now = new Date()
       const { accessEligibility, ...resource } = input
       const statements: [BatchItem<'sqlite'>, ...BatchItem<'sqlite'>[]] = [
@@ -207,6 +207,7 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
           ),
         )
       }
+      if (audit) statements.push(db.insert(agentAuditEvent).values(audit))
       await db.batch(statements)
       return { ...input, archivedAt: null, createdAt: now.toISOString(), updatedAt: now.toISOString() }
     },

@@ -105,16 +105,16 @@ async function sessionManagementBoundary(
   policy: NonNullable<ReturnType<typeof managementOperationPolicy>>,
 ): Promise<ManagementBoundary> {
   if (hasRole(role, 'admin')) {
-    if (!policy.authorities.includes('realm')) throw forbidden()
+    if (!policy.sessionAuthorities.includes('realm')) throw forbidden()
     return { kind: 'realm' }
   }
 
   const deps = getDeps(c)
   const access = await resolveDeveloperAccess(deps, await deps.users.getUser(userId))
-  const organizationIds = policy.authorities.includes('organization')
+  const organizationIds = policy.sessionAuthorities.includes('organization')
     ? access.consoleOrganizations.map((item) => item.organizationId)
     : []
-  const accountUserId = policy.authorities.includes('account') ? userId : null
+  const accountUserId = policy.sessionAuthorities.includes('account') ? userId : null
   if (organizationIds.length || accountUserId) {
     return { kind: 'restricted', accountUserId, organizationIds }
   }

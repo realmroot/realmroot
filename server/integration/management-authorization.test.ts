@@ -17,7 +17,7 @@ import {
 import { createResource } from '@server/usecases/authorization'
 import { discoverAgentResources } from '@server/usecases/external-resources'
 import type { AgentAuditEventRecord } from '@server/usecases/ports'
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { calculateJwkThumbprint, exportJWK, generateKeyPair, SignJWT } from 'jose'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createHarness, createUser, type Harness, resourceOpenApiFetch, signIn, signInAdmin } from './harness'
@@ -429,7 +429,7 @@ describe('authorization management over real D1', () => {
           headers: await organization.headers('PUT', '/api/agents/owned-organization-agent/retirement'),
         })
       ).status,
-    ).toBe(204)
+    ).toBe(403)
     expect(
       (
         await harness.request('/api/access/requests/nonexistent/decision', {
@@ -497,17 +497,7 @@ describe('authorization management over real D1', () => {
       .select()
       .from(agentAuditEvent)
       .where(eq(agentAuditEvent.agentIdentityId, 'owned-organization-agent'))
-    expect(retiredAudit).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          action: 'agent.identity_retired',
-          controllerUserId: null,
-          metadata: expect.objectContaining({
-            actor: expect.objectContaining({ identityId: 'boundary-principal', authority: expect.any(Object) }),
-          }),
-        }),
-      ]),
-    )
+    expect(retiredAudit.some((event) => event.action === 'agent.identity_retired')).toBe(false)
   })
 
   it('constrains Organization Console inventory and exposes governed Agent detail [spec: admin-console/organization-console-resource-boundary] [spec: admin-console/admin-agent-governance-detail] [spec: management-api/management-canonical-authority-inventory] [spec: agent-identity/agent-public-resource-model]', async () => {
@@ -729,6 +719,22 @@ describe('authorization management over real D1', () => {
       },
     ])
     const developerCookie = await signIn(harness, 'developer@example.com', 'developer-password-2026')
+
+    const organizationMutation = await harness.request(`/api/organizations/${ownedOrganization.id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', cookie: developerCookie },
+      body: JSON.stringify({ displayName: 'Escalated organization name' }),
+    })
+    expect(organizationMutation.status).toBe(403)
+    const memberMutation = await harness.request(
+      `/api/organizations/${ownedOrganization.id}/members/${developerId}`,
+      {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json', cookie: developerCookie },
+        body: JSON.stringify({ role: 'owner' }),
+      },
+    )
+    expect(memberMutation.status).toBe(403)
 
     const webhookInventory = await harness.request('/api/webhooks', {
       headers: { cookie: developerCookie },
@@ -1396,7 +1402,12 @@ describe('authorization management over real D1', () => {
     const [archiveAudit] = await harness.db
       .select()
       .from(agentAuditEvent)
-      .where(eq(agentAuditEvent.resourceId, resource.id))
+      .where(
+        and(
+          eq(agentAuditEvent.resourceId, resource.id),
+          eq(agentAuditEvent.action, 'api_resource.archived'),
+        ),
+      )
     expect(archiveAudit).toMatchObject({
       action: 'api_resource.archived',
       controllerUserId: admin.id,
@@ -1480,7 +1491,11 @@ describe('authorization management over real D1', () => {
     expect(restoredConnection.status).toBe('revoked')
     expect(restoredGrant.status).toBe('revoked')
     const audits = await harness.db.select().from(agentAuditEvent).where(eq(agentAuditEvent.resourceId, resource.id))
-    expect(audits.map((event) => event.action)).toEqual(['api_resource.archived', 'api_resource.restored'])
+    expect(audits.map((event) => event.action)).toEqual([
+      'api_resource.created',
+      'api_resource.archived',
+      'api_resource.restored',
+    ])
   })
 
   it('manages role scope references and a user role assignment through real SQL [spec: management-api/management-restish-role-crud]', async () => {

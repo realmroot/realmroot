@@ -657,6 +657,16 @@ export interface ExternalResourceRepository {
       updatedAt: Date
     },
   ): Promise<AgentAccessRequestRecord | null>
+  approveAccessRequest(input: {
+    requestId: string
+    grant: AgentAccessGrantRecord
+    audit: AgentAuditEventRecord
+  }): Promise<{ request: AgentAccessRequestRecord; grant: AgentAccessGrantRecord } | null>
+  denyAccessRequest(input: {
+    requestId: string
+    decidedAt: Date
+    audit: AgentAuditEventRecord
+  }): Promise<AgentAccessRequestRecord | null>
   consumeAccessRequest(id: string, now: Date): Promise<boolean>
   listPendingAccessRequestsByConnections(connectionIds: string[]): Promise<AgentAccessRequestRecord[]>
   createGrant(input: AgentAccessGrantRecord): Promise<AgentAccessGrantRecord | null>
@@ -1122,7 +1132,7 @@ export interface AuthorizationRepository {
   ): Promise<AuthorizationPaginatedResult<InvitationResponse>>
   findInvitation(id: string): Promise<InvitationResponse | null>
   cancelInvitation(id: string): Promise<void>
-  createResource(input: ApiResourceRecordInput): Promise<ApiResourceResponse>
+  createResource(input: ApiResourceRecordInput, audit?: AgentAuditEventRecord): Promise<ApiResourceResponse>
   listResources(
     pagination: PaginationQuery,
     ownerOrganizationIds?: string[],

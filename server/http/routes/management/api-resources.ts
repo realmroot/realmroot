@@ -47,7 +47,7 @@ export function createManagementApiResourcesRoute(canonicalOrigin?: string) {
   app.post('/', async (c) => {
     const input = await readJson(c, createApiResourceSchema)
     requireManagementOwnedOrganization(c, input.ownerOrganizationId)
-    const resource = await createResource(getDeps(c), input)
+    const resource = await createResource(getDeps(c), input, getManagementActor(c))
     c.header('Location', `/api/resource-servers/${encodeURIComponent(resource.id)}`)
     return c.json(apiResourceSchema.parse(await getApiResource(getDeps(c), resource.id)), 201)
   })

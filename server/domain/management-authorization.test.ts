@@ -125,6 +125,8 @@ describe('canonical management authorization', () => {
     expect(managementOperationPolicy('POST', '/api/organizations')).toMatchObject({ authorities: ['realm'] })
     expect(managementOperationPolicy('PATCH', '/api/organizations/org-1')).toMatchObject({
       authorities: ['realm', 'organization'],
+      sessionAuthorities: ['realm'],
+      actor: 'human-controller',
     })
     expect(managementOperationPolicy('GET', '/api/access/roles/role-1')).toMatchObject({ authorities: ['realm'] })
     expect(managementOperationPolicy('GET', '/api/access/assignments')).toMatchObject({
@@ -137,12 +139,15 @@ describe('canonical management authorization', () => {
       authorities: ['realm'],
       actor: 'human-controller',
     })
+    expect(managementOperationPolicy('GET', '/api/organizations/org-1/unregistered-child')).toBeNull()
+    expect(managementOperationPolicy('POST', '/api/applications/app-1/unregistered-action')).toBeNull()
   })
 
   it('publishes only scopes meaningful to each authority', () => {
     expect(managementScopesForAuthority('account')).toEqual(
-      expect.arrayContaining(['agents:read', 'agents:write', 'audit-events:read']),
+      expect.arrayContaining(['agents:read', 'audit-events:read']),
     )
+    expect(managementScopesForAuthority('account')).not.toContain('agents:write')
     expect(managementScopesForAuthority('account')).not.toEqual(
       expect.arrayContaining(['users:read', 'organizations:write', 'roles:read', 'settings:read']),
     )

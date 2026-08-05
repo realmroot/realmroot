@@ -1152,14 +1152,7 @@ export async function decideAgentAccessRequest(
   const controlledConnection = await requireControlledRequestTarget(deps, request, actorUserId)
   const now = new Date()
   if (input.decision === 'deny') {
-    const decided = await deps.externalResources.decideAccessRequest(request.id, {
-      status: 'denied',
-      grantId: null,
-      decidedAt: now,
-      updatedAt: now,
-    })
-    if (!decided) throw badRequest('Agent access request was already decided.')
-    await appendResourceAudit(deps, {
+    const audit = await resourceAuditRecord(deps, {
       action: 'api_resource.access_decided',
       result: 'denied',
       resourceId: request.resourceId,
@@ -1171,6 +1164,8 @@ export async function decideAgentAccessRequest(
       authorizationDetails: request.authorizationDetails,
       reasonCode: 'controller_denied',
     })
+    const decided = await deps.externalResources.denyAccessRequest({ requestId: request.id, decidedAt: now, audit })
+    if (!decided) throw badRequest('Agent access request was already decided.')
     return toAgentAccessRequest(decided, await requestHostId(deps, request), null)
   }
 
@@ -1216,7 +1211,7 @@ export async function decideAgentAccessRequest(
   }
   const expiresAt = input.mode === 'until' ? new Date(input.expiresAt!) : null
   if (expiresAt && expiresAt.getTime() <= now.getTime()) throw badRequest('Grant expiry must be in the future.')
-  const grant = await deps.externalResources.createGrant({
+  const grant = {
     id: createId('accessgrant'),
     resourceId: request.resourceId,
     connectionId,
@@ -1230,17 +1225,8 @@ export async function decideAgentAccessRequest(
     revokedAt: null,
     createdAt: now,
     updatedAt: now,
-  })
-  if (!grant) throw badRequest('The API resource was archived before access could be approved.')
-  const decided = await deps.externalResources.decideAccessRequest(request.id, {
-    status: 'approved',
-    grantId: grant.id,
-    connectionId,
-    decidedAt: now,
-    updatedAt: now,
-  })
-  if (!decided) throw badRequest('Agent access request was already decided.')
-  await appendResourceAudit(deps, {
+  }
+  const audit = await resourceAuditRecord(deps, {
     action: 'api_resource.access_decided',
     result: 'allowed',
     resourceId: request.resourceId,
@@ -1252,7 +1238,9 @@ export async function decideAgentAccessRequest(
     authorizationDetails,
     reasonCode: null,
   })
-  return toAgentAccessRequest(decided, await requestHostId(deps, request), null)
+  const approved = await deps.externalResources.approveAccessRequest({ requestId: request.id, grant, audit })
+  if (!approved) throw badRequest('Agent access request was already decided or its API resource was archived.')
+  return toAgentAccessRequest(approved.request, await requestHostId(deps, request), null)
 }
 
 export async function decideAccessRequest(
@@ -2484,6 +2472,25 @@ async function appendResourceAudit(
     reasonCode: string | null
   },
 ) {
+  await deps.agentAudit.append(await resourceAuditRecord(deps, input))
+}
+
+async function resourceAuditRecord(
+  deps: Deps,
+  input: {
+    action: string
+    result: string
+    principal?: AgentResourcePrincipal
+    request?: AgentAccessRequestRecord
+    resourceId: string
+    connection: ResourceAccountConnectionRecord | null
+    grantId: string | null
+    controllerUserId?: string
+    scopes: string[]
+    authorizationDetails?: AuthorizationDetail[]
+    reasonCode: string | null
+  },
+) {
   const authorizationDetails =
     input.authorizationDetails ?? input.request?.authorizationDetails ?? input.connection?.authorizationDetails ?? []
   const authorizationDetailProjections = authorizationDetails.map((detail) => ({
@@ -2491,7 +2498,7 @@ async function appendResourceAudit(
     ...(typeof detail.identifier === 'string' ? { identifier: detail.identifier } : {}),
   }))
   const agentIdentityId = input.principal?.identityId ?? input.request?.agentIdentityId ?? null
-  await deps.agentAudit.append({
+  return {
     id: createId('agaudit'),
     action: input.action,
     result: input.result,
@@ -2509,7 +2516,7 @@ async function appendResourceAudit(
     metadata:
       authorizationDetailProjections.length > 0 ? { authorizationDetails: authorizationDetailProjections } : null,
     occurredAt: new Date(),
-  })
+  }
 }
 
 async function resourceAuditOwnerColumns(

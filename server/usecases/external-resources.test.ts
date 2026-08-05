@@ -1038,10 +1038,9 @@ describe('external API resource authorization', () => {
     vi.mocked(deps.externalResources.findAccessRequest).mockResolvedValue(request)
     vi.mocked(deps.externalResources.findAccessRequestByGrant).mockResolvedValue(request)
     vi.mocked(deps.externalResources.findConnection).mockResolvedValue(connectionRecord())
-    vi.mocked(deps.externalResources.createGrant).mockImplementation(async (record) => record)
-    vi.mocked(deps.externalResources.decideAccessRequest).mockImplementation(async (_id, decision) => ({
-      ...request,
-      ...decision,
+    vi.mocked(deps.externalResources.approveAccessRequest).mockImplementation(async ({ grant }) => ({
+      grant,
+      request: { ...request, status: 'approved', grantId: grant.id, connectionId: grant.connectionId },
     }))
     vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
 
@@ -1052,22 +1051,22 @@ describe('external API resource authorization', () => {
       'user-1',
     )
     expect(decided).toMatchObject({ status: 'approved', hostId: 'host-1', scopes: ['projects:read'] })
-    expect(deps.externalResources.createGrant).toHaveBeenCalledWith(
+    expect(deps.externalResources.approveAccessRequest).toHaveBeenCalledWith(
       expect.objectContaining({
-        connectionId: 'connection-1',
-        mode: 'once',
-        scopes: ['projects:read'],
-        grantedByUserId: 'user-1',
+        requestId: 'request-1',
+        grant: expect.objectContaining({
+          connectionId: 'connection-1',
+          mode: 'once',
+          scopes: ['projects:read'],
+          grantedByUserId: 'user-1',
+        }),
+        audit: expect.objectContaining({ action: 'api_resource.access_decided' }),
       }),
     )
-    expect(deps.externalResources.decideAccessRequest).toHaveBeenCalledWith(
-      'request-1',
-      expect.objectContaining({ connectionId: 'connection-1' }),
-    )
-    vi.mocked(deps.externalResources.createGrant).mockResolvedValueOnce(null)
+    vi.mocked(deps.externalResources.approveAccessRequest).mockResolvedValueOnce(null)
     await expect(
       decideAgentAccessRequestByToken(deps, 'approval-token', { decision: 'approve', mode: 'once' }, 'user-1'),
-    ).rejects.toThrow('archived before access could be approved')
+    ).rejects.toThrow('already decided or its API resource was archived')
   })
 
   it('[spec: agent-identity/external-resource-contextual-delegation] requests and approves exact granted detail sets', async () => {
@@ -1223,10 +1222,15 @@ describe('external API resource authorization', () => {
 
     const request = { ...requestRecord(), authorizationDetails: selected }
     vi.mocked(deps.externalResources.findAccessRequest).mockResolvedValue(request)
-    vi.mocked(deps.externalResources.createGrant).mockImplementation(async (record) => record)
-    vi.mocked(deps.externalResources.decideAccessRequest).mockImplementation(async (_id, decision) => ({
-      ...request,
-      ...decision,
+    vi.mocked(deps.externalResources.approveAccessRequest).mockImplementation(async ({ grant }) => ({
+      grant,
+      request: {
+        ...request,
+        authorizationDetails: grant.authorizationDetails,
+        status: 'approved',
+        grantId: grant.id,
+        connectionId: grant.connectionId,
+      },
     }))
     const outOfBounds = [{ type: 'project_access', identifier: 'project-3', actions: ['read'] }]
     vi.mocked(deps.externalResources.findAccessRequest).mockResolvedValue({
@@ -1268,8 +1272,8 @@ describe('external API resource authorization', () => {
       { decision: 'approve', mode: 'persistent', authorizationDetails: selected },
       'user-1',
     )
-    expect(deps.externalResources.createGrant).toHaveBeenCalledWith(
-      expect.objectContaining({ authorizationDetails: selected }),
+    expect(deps.externalResources.approveAccessRequest).toHaveBeenCalledWith(
+      expect.objectContaining({ grant: expect.objectContaining({ authorizationDetails: selected }) }),
     )
 
     const multiDetailRequest = { ...request, authorizationDetails: connection.authorizationDetails }
@@ -1284,8 +1288,10 @@ describe('external API resource authorization', () => {
       },
       'user-1',
     )
-    expect(deps.externalResources.createGrant).toHaveBeenLastCalledWith(
-      expect.objectContaining({ authorizationDetails: connection.authorizationDetails }),
+    expect(deps.externalResources.approveAccessRequest).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        grant: expect.objectContaining({ authorizationDetails: connection.authorizationDetails }),
+      }),
     )
 
     const genericRequest = {
@@ -3010,9 +3016,9 @@ describe('external API resource authorization', () => {
   it('scopes Realmroot access decision audits to the selected target authority', async () => {
     const deps = createTestDeps()
     vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
-    vi.mocked(deps.externalResources.decideAccessRequest).mockImplementation(async (_id, decision) => ({
+    vi.mocked(deps.externalResources.denyAccessRequest).mockImplementation(async () => ({
       ...requestRecord(),
-      ...decision,
+      status: 'denied',
     }))
 
     const authorities = [
@@ -3038,7 +3044,9 @@ describe('external API resource authorization', () => {
         authorizationDetails: [detail],
       })
       await decideAgentAccessRequest(deps, requestRecord().id, { decision: 'deny' }, 'user-1')
-      expect(deps.agentAudit.append).toHaveBeenLastCalledWith(expect.objectContaining(owner))
+      expect(deps.externalResources.denyAccessRequest).toHaveBeenLastCalledWith(
+        expect.objectContaining({ audit: expect.objectContaining(owner) }),
+      )
     }
   })
 
@@ -3759,14 +3767,17 @@ describe('external API resource authorization', () => {
       id: 'request-1',
     })
 
-    vi.mocked(deps.externalResources.decideAccessRequest).mockImplementation(async (_id, decision) => ({
+    vi.mocked(deps.externalResources.denyAccessRequest).mockImplementation(async () => ({
       ...pendingExternal,
-      ...decision,
+      status: 'denied',
     }))
     await expect(decideAgentAccessRequest(deps, 'request-1', { decision: 'deny' }, 'user-1')).resolves.toMatchObject({
       status: 'denied',
     })
-    vi.mocked(deps.externalResources.createGrant).mockImplementation(async (record) => record)
+    vi.mocked(deps.externalResources.approveAccessRequest).mockImplementation(async ({ grant }) => ({
+      grant,
+      request: { ...pendingExternal, status: 'approved', grantId: grant.id, connectionId: grant.connectionId },
+    }))
     await expect(
       decideAccessRequest(
         deps,
@@ -4328,7 +4339,7 @@ describe('external API resource authorization', () => {
     vi.mocked(deps.externalResources.findConnection).mockResolvedValue(connectionRecord())
     vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
     vi.mocked(deps.externalResources.findAccessRequest).mockResolvedValue(requestRecord())
-    vi.mocked(deps.externalResources.decideAccessRequest).mockResolvedValueOnce(null)
+    vi.mocked(deps.externalResources.denyAccessRequest).mockResolvedValueOnce(null)
     await expect(decideAgentAccessRequest(deps, 'request-1', { decision: 'deny' }, 'user-1')).rejects.toThrow(
       'already decided',
     )
@@ -4347,8 +4358,7 @@ describe('external API resource authorization', () => {
       ),
     ).rejects.toThrow('Grant expiry must be in the future.')
 
-    vi.mocked(deps.externalResources.createGrant).mockImplementation(async (record) => record)
-    vi.mocked(deps.externalResources.decideAccessRequest).mockResolvedValue(null)
+    vi.mocked(deps.externalResources.approveAccessRequest).mockResolvedValue(null)
     await expect(
       decideAgentAccessRequest(deps, 'request-1', { decision: 'approve', mode: 'persistent' }, 'user-1'),
     ).rejects.toThrow('already decided')

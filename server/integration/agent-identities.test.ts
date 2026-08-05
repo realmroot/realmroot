@@ -1,6 +1,9 @@
 import { applyD1Migrations, env, reset } from 'cloudflare:test'
 import {
   agent,
+  agentAccessGrant,
+  agentAccessRequest,
+  agentAuditEvent,
   agentCapabilityGrant,
   agentHost,
   agentIdentity,
@@ -337,13 +340,34 @@ describe('Agent identity enrollment over real D1', () => {
     })
     expect(invalidApproval.status).toBe(400)
 
-    const approval = await harness.request(`/api/account/access-requests/${accessRequest.id}/decision`, {
-      method: 'PUT',
-      headers: jsonHeaders(ownerCookie),
-      body: JSON.stringify({ decision: 'approve', mode: 'persistent' }),
-    })
+    const approvals = await Promise.all(
+      [0, 1].map(() =>
+        harness.request(`/api/account/access-requests/${accessRequest.id}/decision`, {
+          method: 'PUT',
+          headers: jsonHeaders(ownerCookie),
+          body: JSON.stringify({ decision: 'approve', mode: 'persistent' }),
+        }),
+      ),
+    )
+    expect(approvals.map((response) => response.status).sort()).toEqual([200, 400])
+    const approval = approvals.find((response) => response.status === 200)!
     expect(approval.status, await approval.clone().text()).toBe(200)
     expect(await approval.json()).not.toHaveProperty('grantId')
+    const [persistedRequest] = await harness.db
+      .select()
+      .from(agentAccessRequest)
+      .where(eq(agentAccessRequest.id, accessRequest.id))
+    const persistedGrants = await harness.db
+      .select()
+      .from(agentAccessGrant)
+      .where(eq(agentAccessGrant.agentIdentityId, approved.agent.id))
+    const approvalAudits = await harness.db
+      .select()
+      .from(agentAuditEvent)
+      .where(eq(agentAuditEvent.action, 'api_resource.access_decided'))
+    expect(persistedRequest).toMatchObject({ status: 'approved', grantId: persistedGrants[0]?.id })
+    expect(persistedGrants).toHaveLength(1)
+    expect(approvalAudits).toHaveLength(1)
     const tokenUrl = `http://localhost/api/access-requests/${accessRequest.id}/credentials`
     const proof = await createDpopProof('POST', tokenUrl, 'native-token-proof')
     const issued = await createAccessRequestCredential(
