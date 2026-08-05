@@ -977,14 +977,20 @@ function organizationSlug(name: string) {
     .replace(/^-|-$/g, '')
 }
 
-export function AccountOrganizationDetailPage({ organizationId }: { organizationId: string }) {
+export function AccountOrganizationDetailPage({
+  organizationId,
+  section = 'overview',
+}: {
+  organizationId: string
+  section?: 'overview' | 'members' | 'agents' | 'roles' | 'settings'
+}) {
   const navigate = useNavigate()
+  const [activeSection, setActiveSection] = useState(section)
   const organizationQuery = useAccountOrganization(organizationId)
-  const organizationRolesQuery = useAccountOrganizationRoles(organizationId)
+  const organizationRolesQuery = useAccountOrganizationRoles(organizationId, activeSection === 'members')
   const agentsQuery = useAccountOrganizationAgents(organizationId)
-  const agentAccessGrantsQuery = useAccountOrganizationAgentAccessGrants(organizationId)
+  const agentAccessGrantsQuery = useAccountOrganizationAgentAccessGrants(organizationId, activeSection === 'roles')
   const mutate = useAccountMutation()
-  const [tab, setTab] = useState('overview')
   const [editOpen, setEditOpen] = useState(false)
   const [inviteOpen, setInviteOpen] = useState(false)
   const [selectedMember, setSelectedMember] = useState<OrganizationMemberRow | null>(null)
@@ -998,9 +1004,10 @@ export function AccountOrganizationDetailPage({ organizationId }: { organization
   const organization = organizationQuery.data
   const agents = agentsQuery.data?.items ?? []
   const agentAccessGrants = agentAccessGrantsQuery.data?.grants ?? []
+  useEffect(() => setActiveSection(section), [section])
   return (
     <AccountSurface section="organizations">
-      {(profile, access) => {
+      {(profile) => {
         if (organizationQuery.isLoading)
           return <p className="text-sm text-muted-foreground">{tt('Loading Organization…')}</p>
         if (organizationQuery.error || !organization)
@@ -1016,8 +1023,6 @@ export function AccountOrganizationDetailPage({ organizationId }: { organization
         const canManageOrganization = organizationMemberRoles(membership?.role).some(
           (role) => role === 'owner' || role === 'admin',
         )
-        const canOpenConsole =
-          access.realmOperator || access.consoleOrganizations.some((item) => item.organizationId === organization.id)
         const pendingInvitations = organization.invitations.filter((invitation) => invitation.status === 'pending')
         return (
           <>
@@ -1025,26 +1030,32 @@ export function AccountOrganizationDetailPage({ organizationId }: { organization
               ← {tt('Organizations')}
             </Link>
             <AccountPageHeader
-              action={
-                canOpenConsole ? (
-                  <Button asChild variant="outline">
-                    <a href={`/console?context=${encodeURIComponent(organization.id)}`}>{tt('Open Console')}</a>
-                  </Button>
-                ) : undefined
-              }
               description={tt('Manage members, Agent identities, shared authority, and Organization settings.')}
               title={organization.name}
             />
             <AccountTabs
-              onValueChange={setTab}
+              onValueChange={(next) => {
+                const routes = {
+                  overview: '/organizations/$organizationId/overview',
+                  members: '/organizations/$organizationId/members',
+                  agents: '/organizations/$organizationId/agents',
+                  roles: '/organizations/$organizationId/roles',
+                  settings: '/organizations/$organizationId/settings',
+                } as const
+                const route = routes[next as keyof typeof routes]
+                if (route) {
+                  setActiveSection(next as typeof activeSection)
+                  void navigate({ params: { organizationId }, to: route })
+                }
+              }}
               tabs={[
                 { value: 'overview', label: tt('Overview') },
                 { value: 'members', label: tt('Members') },
                 { value: 'agents', label: tt('Agents') },
-                { value: 'authority', label: tt('Roles & grants') },
+                { value: 'roles', label: tt('Roles & grants') },
                 { value: 'settings', label: tt('Settings') },
               ]}
-              value={tab}
+              value={activeSection}
             >
               <AccountTabContent surface value="overview">
                 <AccountRows>
@@ -1111,7 +1122,7 @@ export function AccountOrganizationDetailPage({ organizationId }: { organization
                   </p>
                 ) : null}
               </AccountTabContent>
-              <AccountTabContent surface value="authority">
+              <AccountTabContent surface value="roles">
                 {agentAccessGrantsQuery.isLoading ? (
                   <p className="text-sm text-muted-foreground">{tt('Loading Organization authority…')}</p>
                 ) : null}

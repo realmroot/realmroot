@@ -566,7 +566,7 @@ describe('planned Account Center journeys', () => {
 
     renderWithClient(<AccountOrganizationDetailPage organizationId="org-family" />)
     expect(await screen.findByRole('heading', { name: 'Family' })).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Open Console' })).toBeTruthy()
+    expect(screen.queryByRole('link', { name: 'Open Console' })).toBeNull()
 
     openTab('Members')
     fireEvent.click(await screen.findByRole('button', { name: 'Invite member' }))

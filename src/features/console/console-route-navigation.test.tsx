@@ -249,9 +249,8 @@ describe('console route navigation', () => {
     window.history.pushState(null, '', '/console/roles/role-1?context=org-1')
     render(<AppRouter />)
 
-    expect(await screen.findByRole('heading', { name: 'Admin' })).toBeTruthy()
-    expect(window.location.pathname).toBe('/console/roles/role-1/overview')
-    expect(window.location.search).toBe('?context=org-1')
+    await waitFor(() => expect(window.location.pathname).toBe('/organizations'))
+    expect(window.location.search).toBe('')
 
     cleanup()
     queryClient.clear()
@@ -276,8 +275,7 @@ describe('console route navigation', () => {
     window.history.pushState(null, '', '/console/organizations/org-1')
     render(<AppRouter />)
 
-    expect(await screen.findByRole('heading', { name: 'Acme' })).toBeTruthy()
-    expect(window.location.pathname).toBe('/console/organizations/org-1/overview')
+    await waitFor(() => expect(window.location.pathname).toBe('/organizations/org-1/overview'))
 
     cleanup()
     queryClient.clear()

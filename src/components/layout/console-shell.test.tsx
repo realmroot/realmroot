@@ -20,32 +20,8 @@ const profile = {
   image: null,
   role: 'admin',
 }
-const organizations = [
-  {
-    id: 'org-1',
-    name: 'payments-team',
-    displayName: 'Payments Team',
-    slug: 'payments-team',
-    logo: null,
-    disabled: false,
-    disabledReason: null,
-    createdAt: '2026-07-01T00:00:00.000Z',
-    updatedAt: '2026-07-01T00:00:00.000Z',
-  },
-]
-const access = {
-  canCreateOrganization: true,
-  showOrganizations: true,
-  realmOperator: true,
-  consoleOrganizations: [],
-}
-
 function TestConsoleShell({ children }: { children: ReactNode }) {
-  return (
-    <ConsoleShell access={access} organizations={organizations} profile={profile}>
-      {children}
-    </ConsoleShell>
-  )
+  return <ConsoleShell profile={profile}>{children}</ConsoleShell>
 }
 
 let pathname = '/console'
@@ -72,7 +48,6 @@ vi.mock('@tanstack/react-router', () => ({
   ),
   useRouterState: ({ select }: { select: (state: { location: { pathname: string } }) => string }) =>
     select({ location: { pathname } }),
-  useSearch: () => ({ context: undefined }),
   useNavigate: () => navigate,
 }))
 
@@ -89,29 +64,11 @@ afterEach(() => {
 })
 
 describe('ConsoleShell', () => {
-  it('preserves the current route when switching organizations', async () => {
-    pathname = '/console/role-assignments'
-    render(<TestConsoleShell>Organization roles</TestConsoleShell>)
-
-    fireEvent.pointerDown(screen.getByRole('button', { name: 'Switch organization' }), {
-      button: 0,
-      ctrlKey: false,
-    })
-    fireEvent.click(await screen.findByRole('menuitemradio', { name: /Payments Team/ }))
-
-    expect(navigate).toHaveBeenCalledWith({
-      replace: true,
-      search: { context: 'org-1' },
-      to: '/console/role-assignments',
-    })
-  })
-
   it('renders Console navigation and marks the exact dashboard route active', () => {
     render(<TestConsoleShell>Dashboard content</TestConsoleShell>)
 
     expect(screen.getAllByText('Console').length).toBeGreaterThan(0)
-    expect(screen.getByRole('button', { name: 'Switch organization' })).toBeTruthy()
-    expect(screen.getByText('All organizations')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Switch organization' })).toBeNull()
     expect(screen.getAllByRole('button', { name: 'Account menu' }).length).toBeGreaterThan(0)
     expect(screen.queryByRole('link', { name: /Account center/i })).toBeNull()
     expect(screen.getByText('Dashboard content')).toBeTruthy()
@@ -136,7 +93,7 @@ describe('ConsoleShell', () => {
     fireEvent.change(await screen.findByPlaceholderText('Search Console…'), { target: { value: 'applications' } })
     fireEvent.click(await screen.findByRole('option', { name: /Applications/ }))
 
-    expect(navigate).toHaveBeenCalledWith({ search: {}, to: '/console/applications' })
+    expect(navigate).toHaveBeenCalledWith({ to: '/console/applications' })
     expect(screen.queryByPlaceholderText('Search Console…')).toBeNull()
   })
 
@@ -186,7 +143,7 @@ describe('ConsoleShell', () => {
     render(<TestConsoleShell>Dashboard content</TestConsoleShell>)
 
     const consoleNav = screen.getByRole('navigation', { name: 'Console' })
-    const groups = ['Identity', 'Develop', 'Authorization', 'Authentication', 'Configuration']
+    const groups = ['Identity', 'Develop', 'Authentication', 'Configuration']
     expect(groups.map((group) => within(consoleNav).getByText(group).textContent)).toEqual(groups)
     expect(within(consoleNav).getByRole('link', { name: /Webhooks/ })).toBeTruthy()
     expect(screen.queryByText('Enterprise SSO')).toBeNull()
@@ -272,7 +229,7 @@ describe('ConsoleShell', () => {
 
     const dialog = screen.getByRole('dialog')
     expect(within(dialog).getByRole('navigation', { name: 'Console' })).toBeTruthy()
-    expect(within(dialog).getByRole('button', { name: 'Switch organization' })).toBeTruthy()
+    expect(within(dialog).queryByRole('button', { name: 'Switch organization' })).toBeNull()
     expect(screen.getAllByRole('link', { name: /Sign-in & registration/ }).length).toBeGreaterThan(0)
     expect(screen.queryByRole('link', { name: /Onboarding/ })).toBeNull()
     expect(screen.queryByRole('link', { name: /Audit logs/ })).toBeNull()

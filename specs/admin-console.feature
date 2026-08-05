@@ -1,5 +1,5 @@
 Feature: Admin Console
-  As a tenant administrator
+  As a Realm platform administrator
   I want Console pages to manage applications, users, connectors, security, and deployment settings
   So that Realmroot can be configured from the browser
 
@@ -18,6 +18,13 @@ Feature: Admin Console
     When I open a Console route
     Then I am redirected to admin sign-in
     And management API data requests are not made
+
+  @entrypoint:product-ui @journey:admin-platform-only
+  Scenario: Organization authority does not grant Console access
+    Given I am an Organization Owner without Realm platform authority
+    When I open a Console route
+    Then I am redirected to my Organizations page
+    And Realm management API data requests are not made
 
   @entrypoint:product-ui @journey:admin-setup-gate
   Scenario: Console setup gate handles missing OIDC applications
@@ -42,8 +49,8 @@ Feature: Admin Console
   Scenario: Console navigation exposes persistent route-backed pages
     When I use Console navigation
     Then each visible product page has a canonical route
-    And the Organization switcher sits above the scoped navigation and identifies Realm-wide access as all organizations
-    And breadcrumbs link to the current Console context and parent collection without repeating navigation groups
+    And the Console has no Organization context switch or context query state
+    And breadcrumbs link to the Realm Console and parent collection without repeating navigation groups
     And breadcrumb labels match the actual route-backed page or selected tab
     And the current page is identified without a redundant link
     And primary Console pages use a compact page header before their navigation or data controls
@@ -164,13 +171,14 @@ Feature: Admin Console
   @entrypoint:product-ui @journey:admin-govern-organization
   Scenario: Organization detail separates inventory from governance operations
     Given an organization exists
-    When I open its Console detail
-    Then I can review its overview, members, Agent identities, activity, and settings in separate tabs
+    When I select it from the Realm inventory
+    Then I enter its canonical Organization Workspace
+    And I can review its overview, members, Roles, Agent identities, technical resources, activity, and settings in separate routes
     And only pending invitations are counted and offered as member actions
     And the last Organization Owner cannot be demoted or removed through generic member actions
     And profile changes and lifecycle operations use a secondary management surface
     And deleting an Organization returns to inventory without refetching its removed detail
-    And applications and Resource servers remain in the shared Develop inventory
+    And Realm Console retains only the cross-Organization inventory
 
   @entrypoint:product-ui @journey:admin-create-role
   Scenario: Organization Roles page creates a dynamic role
@@ -215,7 +223,6 @@ Feature: Admin Console
     And each Organization member exposes its sorted Role keys
     And replacing member Roles rejects unknown and cross-Organization Role keys
     And the last Owner cannot be removed by a Role replacement
-    And switching Console context preserves the current authorization page
     And each dynamic Role references only scopes from eligible Resource servers
 
   @entrypoint:product-ui @journey:admin-branding-settings
@@ -235,7 +242,7 @@ Feature: Admin Console
     When I create, edit, disable, enable, rotate, and delete a webhook endpoint
     Then each endpoint change is persisted
     And each endpoint is explicitly Realm-wide or scoped to one Organization
-    And Organization Console can list and manage only endpoints and deliveries scoped to its authorized Organization
+    And Organization Workspace can list and manage only endpoints and deliveries scoped to its Organization
     And endpoint and request filters form the header of the same surface as their active table
     And invalid endpoint URLs remain actionable inside the form
 
@@ -272,22 +279,22 @@ Feature: Admin Console
     And Console reports the binding and configuration state separately
 
   @entrypoint:product-ui @journey:admin-developer-access-policy
-  Scenario: Organization creation and Console developer access are independent
+  Scenario: Organization creation is independent from platform Console access
     When I configure Realm developer access
     Then I can choose an Organization creation policy without changing Console access
-    And I can choose a Console access policy and eligible Organization access levels independently
-    And each policy is replaced through its own canonical resource
+    And Console access is displayed as restricted to Realm platform administrators
+    And Organization access levels are not offered as Console access controls
     And changing an Organization access level never grants business API scopes
 
   @entrypoint:product-ui @journey:organization-console-resource-boundary
-  Scenario: Organization Console access is constrained to authorized inventory
-    Given a developer can open Console for one Organization
-    When the developer browses or manages development resources
+  Scenario: Organization administration uses the Organization Workspace
+    Given a developer administers one Organization without Realm platform authority
+    When the developer browses or manages resources in that Organization Workspace
     Then applications and API resource servers are limited to that Organization's owned inventory
     And Agent identities and activity are limited to authorized Organizations
     And member inventory exposes identity details without Realm-wide authentication state
     And direct detail or mutation requests for another Organization's resources are rejected
-    And Realm operators retain the complete Realm inventory
+    And Realm operators retain the complete Realm inventory in Console
 
   @entrypoint:product-ui @journey:admin-agent-governance-detail
   Scenario: Agent detail presents the stable identity governance model

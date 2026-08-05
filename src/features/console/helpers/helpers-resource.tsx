@@ -1,4 +1,3 @@
-import { useConsoleScope } from '@/lib/console-context'
 import {
   AlertCircle,
   Badge,
@@ -151,11 +150,10 @@ export function DetailTabs({
     </Tabs>
   )
 }
-export function navigateConsoleTab(navigate: ReturnType<typeof useNavigate>, href: string, context?: string) {
+export function navigateConsoleTab(navigate: ReturnType<typeof useNavigate>, href: string, _context?: string) {
   if (window.location.pathname.startsWith('/console/'))
     void navigate({
       to: href,
-      search: context ? { context } : {},
     })
 }
 export function userDetailTabs(): DetailTab[] {
@@ -306,7 +304,6 @@ export function RoutedSettingsTabs<TValue extends string>({
   tabs: ReadonlyArray<readonly [TValue, string, string]>
 }) {
   const navigate = useNavigate()
-  const { organizationId } = useConsoleScope()
   return (
     <nav aria-label={ariaLabel} className="flex flex-wrap gap-6 border-b border-border">
       {tabs.map(([value, label, to]) => (
@@ -316,14 +313,14 @@ export function RoutedSettingsTabs<TValue extends string>({
             'relative -mb-px inline-flex min-h-10 items-center justify-center border-b-2 border-transparent px-1 text-sm font-medium text-muted-foreground',
             active === value && 'border-primary text-primary',
           )}
-          href={organizationId ? `${to}?context=${encodeURIComponent(organizationId)}` : to}
+          href={to}
           key={value}
           onClick={(event) => {
             if (event.defaultPrevented || event.button !== 0) return
             if (event.metaKey || event.altKey || event.ctrlKey || event.shiftKey) return
             event.preventDefault()
             onSelect?.(value)
-            navigateConsoleTab(navigate, to, organizationId)
+            navigateConsoleTab(navigate, to)
           }}
         >
           {label}

@@ -137,7 +137,7 @@ export function OrganizationsPage() {
             visibleOrganizations.map((organization) => (
               <TableRow key={organization.id}>
                 <TableCell>
-                  <a className="font-medium hover:underline" href={`/console/organizations/${organization.id}`}>
+                  <a className="font-medium hover:underline" href={`/organizations/${organization.id}/overview`}>
                     {organization.displayName ?? organization.name}
                   </a>
                   <div className="font-mono text-xs text-muted-foreground">{organization.id}</div>
@@ -160,7 +160,7 @@ export function OrganizationsPage() {
                 <TableCell className="text-right">
                   <a
                     aria-label={tt('Open {{name}}', { name: organization.name })}
-                    href={`/console/organizations/${organization.id}`}
+                    href={`/organizations/${organization.id}/overview`}
                   >
                     →
                   </a>

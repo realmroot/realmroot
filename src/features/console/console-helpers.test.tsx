@@ -69,7 +69,7 @@ describe('admin console helpers', () => {
     const navigate = vi.fn()
     window.history.pushState(null, '', '/console/users/user-1')
     navigateConsoleTab(navigate, '/console/users/user-1/security')
-    expect(navigate).toHaveBeenCalledWith({ search: {}, to: '/console/users/user-1/security' })
+    expect(navigate).toHaveBeenCalledWith({ to: '/console/users/user-1/security' })
     window.history.pushState(null, '', '/profile')
     navigateConsoleTab(navigate, '/console/users/user-1/security')
     expect(navigate).toHaveBeenCalledTimes(1)

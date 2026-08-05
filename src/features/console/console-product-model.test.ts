@@ -14,9 +14,9 @@ describe('Console product model', () => {
     expect(organizationDetailTabs().map((tab) => tab.value)).not.toContain('applications')
   })
 
-  it('[spec: admin-console/admin-developer-access-policy] models creation and Console access as independent choices', () => {
+  it('[spec: admin-console/admin-developer-access-policy] keeps creation configurable and Console platform-only', () => {
     expect(developerPolicyOptions.organizationCreation).toContain('Any verified user')
-    expect(developerPolicyOptions.consoleAccess).toContain('Realm operators only')
-    expect(developerPolicyOptions.organizationCreation).not.toEqual(developerPolicyOptions.consoleAccess)
+    expect(developerPolicyOptions).not.toHaveProperty('consoleAccess')
+    expect(developerPolicyOptions).not.toHaveProperty('eligibleLevels')
   })
 })

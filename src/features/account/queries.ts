@@ -104,10 +104,11 @@ export function useAccountOrganization(organizationId: string) {
   })
 }
 
-export function useAccountOrganizationRoles(organizationId: string) {
+export function useAccountOrganizationRoles(organizationId: string, enabled = true) {
   return useQuery({
     queryKey: accountQueryKeys.organizationRoles(organizationId),
     queryFn: () => listAccountOrganizationRoles(organizationId),
+    enabled,
     ...accountQueryOptions,
   })
 }
@@ -120,10 +121,11 @@ export function useAccountOrganizationAgents(organizationId: string) {
   })
 }
 
-export function useAccountOrganizationAgentAccessGrants(organizationId: string) {
+export function useAccountOrganizationAgentAccessGrants(organizationId: string, enabled = true) {
   return useQuery({
     queryKey: accountQueryKeys.organizationAgentAccessGrants(organizationId),
     queryFn: () => listAccountOrganizationAgentAccessGrants(organizationId),
+    enabled,
     ...accountQueryOptions,
   })
 }

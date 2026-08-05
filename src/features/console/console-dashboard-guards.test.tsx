@@ -272,7 +272,7 @@ describe('console dashboard guards', () => {
     ])
   })
 
-  it('redirects signed-in non-admin Console routes before management requests start', async () => {
+  it('redirects an Organization admin away from the platform Console before realm data loads [spec: admin-console/admin-platform-only]', async () => {
     const requests: string[] = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
@@ -302,7 +302,7 @@ describe('console dashboard guards', () => {
 
     render(<AppRouter />)
 
-    await waitFor(() => expect(window.location.pathname).toBe('/profile'))
+    await waitFor(() => expect(window.location.pathname).toBe('/organizations'))
     expect(
       requests.filter((url) => url.startsWith('/api') && !url.startsWith('/api/account/') && url !== '/api/configz'),
     ).toEqual([])
