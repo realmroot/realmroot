@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 const rolePermissionMigration = migration('20260801120140_natural_exodus.sql')
 const roleCleanupMigration = migration('20260801121526_worthless_ultragirl.sql')
 const ownershipMigration = migration('20260801123349_next_tattoo.sql')
+const organizationRbacMigration = migration('20260805160616_round_wither.sql')
 
 describe('D1 migration upgrades', () => {
   it('preserves populated Application and Resource server dependents [spec: platform-onboarding/existing-d1-upgrade]', () => {
@@ -16,22 +17,28 @@ describe('D1 migration upgrades', () => {
       applyMigration(database, rolePermissionMigration)
       applyMigration(database, roleCleanupMigration)
       applyMigration(database, ownershipMigration)
+      applyMigration(database, organizationRbacMigration)
 
       expect(database.prepare('SELECT count(*) AS count FROM application_consent').get()).toEqual({ count: 1 })
       expect(database.prepare('SELECT count(*) AS count FROM agent_access_grant').get()).toEqual({ count: 1 })
-      expect(database.prepare('SELECT count(*) AS count FROM role').get()).toEqual({ count: 1 })
       expect(
-        database.prepare('SELECT resource_id, organization_id, application_id FROM role WHERE id = ?').get('role-1'),
-      ).toEqual({ application_id: null, organization_id: null, resource_id: null })
-      expect(database.prepare('SELECT role_id, resource_id, scope FROM role_permission').get()).toEqual({
-        resource_id: 'resource-1',
-        role_id: 'role-1',
-        scope: 'items:read',
-      })
-      expect(database.prepare('SELECT role_id, subject_type, subject_id FROM role_assignment').get()).toEqual({
-        role_id: 'role-1',
-        subject_id: 'user-admin',
-        subject_type: 'user',
+        database.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'role'").get(),
+      ).toBeUndefined()
+      expect(
+        database.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'role_permission'").get(),
+      ).toBeUndefined()
+      expect(
+        database.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'role_assignment'").get(),
+      ).toBeUndefined()
+      expect(
+        database.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'organization_role'").get(),
+      ).toEqual({ name: 'organization_role' })
+      expect(
+        database.prepare('SELECT organization_id, user_id, role FROM member WHERE id = ?').get('member-1'),
+      ).toEqual({
+        organization_id: 'org-1',
+        role: 'owner,developer',
+        user_id: 'user-admin',
       })
       expect(
         database
@@ -183,6 +190,8 @@ const legacySchema = `
 
 const legacyData = `
   INSERT INTO user (id, role, created_at) VALUES ('user-admin', 'admin', 1);
+  INSERT INTO organization (id, slug, name) VALUES ('org-1', 'acme', 'Acme');
+  INSERT INTO member (id, organization_id, user_id, role) VALUES ('member-1', 'org-1', 'user-admin', 'owner,developer');
   INSERT INTO oauth_client (client_id) VALUES ('client-1');
   INSERT INTO application (
     id, oauth_client_id, slug, name, owner_user_id, created_at, updated_at

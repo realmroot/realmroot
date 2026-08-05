@@ -147,20 +147,6 @@ describe('account self-service over real D1', () => {
       (await harness.request('/api/account/developer-console-access', { headers: { cookie } })).json(),
     ).resolves.toMatchObject({ realmOperator: false, consoleOrganizations: [] })
 
-    const roleResponse = await harness.request('/api/access/roles', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', cookie: adminCookie },
-      body: JSON.stringify({ key: 'household.viewer', name: 'Household viewer' }),
-    })
-    expect(roleResponse.status, await roleResponse.clone().text()).toBe(201)
-    const roleId = ((await roleResponse.json()) as { id: string }).id
-    const assignment = await harness.request('/api/access/assignments', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', cookie: adminCookie },
-      body: JSON.stringify({ roleId, subjectType: 'user', subjectId: userId, organizationId }),
-    })
-    expect(assignment.status, await assignment.clone().text()).toBe(201)
-
     const resourceResponse = await harness.request('/api/resource-servers', {
       method: 'POST',
       headers: { 'content-type': 'application/json', cookie: adminCookie },
@@ -236,13 +222,10 @@ describe('account self-service over real D1', () => {
     })
     expect(agents.status, await agents.clone().text()).toBe(200)
     await expect(agents.json()).resolves.toMatchObject({ items: [{ id: 'household-agent' }] })
-    const roleAssignments = await harness.request(
-      `/api/access/assignments?organizationId=${organizationId}&status=active`,
-      { headers: { cookie } },
-    )
-    expect(roleAssignments.status, await roleAssignments.clone().text()).toBe(200)
-    await expect(roleAssignments.json()).resolves.toMatchObject({
-      assignments: [{ roleId, subjectId: userId, organizationId }],
+    const roles = await harness.request(`/api/organizations/${organizationId}/roles`, { headers: { cookie } })
+    expect(roles.status, await roles.clone().text()).toBe(200)
+    await expect(roles.json()).resolves.toMatchObject({
+      roles: expect.arrayContaining([expect.objectContaining({ key: 'owner', predefined: true })]),
     })
     const agentAccessGrants = await harness.request(
       `/api/access/authorizations?organizationId=${organizationId}&status=active`,
@@ -263,7 +246,7 @@ describe('account self-service over real D1', () => {
       realmOperator: false,
       consoleOrganizations: [],
     })
-    expect((await harness.request('/api/applications', { headers: { cookie } })).status).toBe(403)
+    expect((await harness.request('/api/applications', { headers: { cookie } })).status).toBe(200)
   })
 
   it('rejects an invalid profile update with 400', async () => {

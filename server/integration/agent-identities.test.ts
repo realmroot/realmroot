@@ -8,7 +8,7 @@ import {
   approvalRequest,
 } from '@server/db/schema'
 import { createAdditionalAgentEnrollmentIntent, createAgentEnrollmentIntent } from '@server/usecases/agent-identities'
-import { assignAgentRole, createResource, createRole, replaceRolePermissions } from '@server/usecases/authorization'
+import { createResource } from '@server/usecases/authorization'
 import {
   createAccessRequest,
   createAccessRequestCredential,
@@ -259,12 +259,6 @@ describe('Agent identity enrollment over real D1', () => {
       resourceUrl: 'https://api.example.com',
       description: 'Read private code repositories',
     })
-    const resourceRole = await createRole(harness.deps, {
-      key: 'native-api-reader',
-      name: 'Native API reader',
-    })
-    await replaceRolePermissions(harness.deps, resourceRole.id, [{ resourceId: resource.id, scope: 'repo:read' }])
-    await assignAgentRole(harness.deps, { roleId: resourceRole.id, subjectId: approved.agent.id }, userId)
     const principal = {
       issuer: approved.agent.issuer,
       subject: approved.agent.subject,

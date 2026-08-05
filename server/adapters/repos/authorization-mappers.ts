@@ -1,5 +1,20 @@
 import type { ApiResourceResponse } from '@shared/api/authorization'
-import type { apiResource, invitation, member, organization, role } from '../../db/schema'
+import type { apiResource, invitation, member, organization, organizationRole } from '../../db/schema'
+
+export function deserializeRoles(value: string) {
+  return [
+    ...new Set(
+      value
+        .split(',')
+        .map((role) => role.trim())
+        .filter(Boolean),
+    ),
+  ].sort()
+}
+
+export function serializeRoles(roles: string[]) {
+  return [...new Set(roles)].sort().join(',')
+}
 
 export function toOrganization(row: typeof organization.$inferSelect) {
   return {
@@ -20,7 +35,7 @@ export function toMember(row: typeof member.$inferSelect) {
     id: row.id,
     organizationId: row.organizationId,
     userId: row.userId,
-    role: row.role,
+    roles: deserializeRoles(row.role),
     title: row.title,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
@@ -32,7 +47,7 @@ export function toInvitation(row: typeof invitation.$inferSelect) {
     id: row.id,
     organizationId: row.organizationId,
     email: row.email,
-    role: row.role,
+    roles: deserializeRoles(row.role),
     inviterId: row.inviterId,
     status: row.status,
     expiresAt: row.expiresAt.toISOString(),
@@ -69,13 +84,13 @@ function toResourceEligibilityMode(value: string): ApiResourceResponse['accessEl
   return 'realm'
 }
 
-export function toRole(row: typeof role.$inferSelect) {
+export function toOrganizationRole(row: typeof organizationRole.$inferSelect) {
   return {
-    id: row.id,
-    key: row.key,
-    name: row.name,
+    key: row.role,
+    displayName: row.displayName,
     description: row.description,
-    system: row.system,
+    predefined: false,
+    scopes: [],
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   }

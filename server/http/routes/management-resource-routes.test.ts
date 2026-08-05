@@ -53,7 +53,7 @@ describe('management resource routes', () => {
     expect(applicationService.revokeAuthorization).toHaveBeenCalledWith('authorization-1')
   })
 
-  it('routes organization and membership requests to the authorization service', async () => {
+  it('routes organization and membership requests to the authorization service [spec: admin-console/organization-console-resource-boundary]', async () => {
     const { app, authorizationService } = await loadAuthorizationRoutes()
 
     await expectJson(app, '/organizations', 'GET', undefined, 200)
@@ -67,18 +67,19 @@ describe('management resource routes', () => {
       app,
       '/organizations/org-1/members',
       'POST',
-      { userId: 'user-1', role: 'member' },
+      { userId: 'user-1', roles: ['member'] },
       201,
     )
     expect(createdMember.headers.get('location')).toBe('/api/organizations/org-1/members/member-1')
-    await expectJson(app, '/organizations/org-1/members/member-1', 'PATCH', { role: 'owner' }, 200)
+    await expectJson(app, '/organizations/org-1/members/member-1', 'PATCH', { title: 'Lead' }, 200)
+    await expectJson(app, '/organizations/org-1/members/member-1/roles', 'PUT', { roles: ['developer', 'member'] }, 200)
     await expectStatus(app, '/organizations/org-1/members/member-1', 'DELETE', undefined, 204)
     await expectJson(app, '/organizations/org-1/invitations', 'GET', undefined, 200)
     const createdInvitation = await expectJson(
       app,
       '/organizations/org-1/invitations',
       'POST',
-      { email: 'new@example.com', role: 'member' },
+      { email: 'new@example.com', roles: ['member'] },
       201,
     )
     expect(createdInvitation.headers.get('location')).toBe('/api/organizations/org-1/invitations/invitation-1')
@@ -86,14 +87,15 @@ describe('management resource routes', () => {
 
     expect(authorizationService.createInvitation).toHaveBeenCalledWith(
       'org-1',
-      { email: 'new@example.com', role: 'member' },
+      { email: 'new@example.com', roles: ['member'] },
       'admin-1',
+      true,
     )
-    expect(authorizationService.removeMember).toHaveBeenCalledWith('org-1', 'member-1')
+    expect(authorizationService.removeMember).toHaveBeenCalledWith('org-1', 'member-1', 'admin-1')
   })
 
-  it('routes API resource, role permission, and assignment requests', async () => {
-    const { app, authorizationService } = await loadAuthorizationRoutes()
+  it('routes API resource and Organization Role requests', async () => {
+    const { app } = await loadAuthorizationRoutes()
 
     await expectJson(app, '/resource-servers', 'GET', undefined, 200)
     const createdResource = await expectJson(
@@ -115,45 +117,23 @@ describe('management resource routes', () => {
     await expectJson(app, '/resource-servers/resource-1/archival', 'PUT', undefined, 200)
     await expectJson(app, '/resource-servers/resource-1/archival', 'DELETE', undefined, 200)
     await expectStatus(app, '/resource-servers/resource-1', 'DELETE', undefined, 204)
-    await expectJson(app, '/access/roles', 'GET', undefined, 200)
-    const createdRole = await expectJson(app, '/access/roles', 'POST', { key: 'admin', name: 'Admin' }, 201)
-    expect(createdRole.headers.get('location')).toBe('/api/access/roles/role-1')
-    await expectJson(app, '/access/roles/role-1', 'GET', undefined, 200)
-    await expectJson(app, '/access/roles/role-1', 'PATCH', { name: 'Owner' }, 200)
-    await expectStatus(app, '/access/roles/role-1', 'DELETE', undefined, 204)
-    const permissionsResponse = await request(app, '/access/roles/role-1/scopes', 'GET', undefined)
-    expect(permissionsResponse.status).toBe(200)
-    const etag = permissionsResponse.headers.get('etag')
-    expect(etag).toBeTruthy()
-    const replacePermissionsResponse = await request(
-      app,
-      '/access/roles/role-1/scopes',
-      'PUT',
-      { scopes: [{ resourceId: 'resource-1', scope: 'contacts.read' }] },
-      { 'if-match': etag! },
-    )
-    expect(replacePermissionsResponse.status).toBe(200)
-    await expectJson(app, '/access/assignments', 'GET', undefined, 200)
+    await expectJson(app, '/organizations/org-1/roles', 'GET', undefined, 200)
     const createdAssignment = await expectJson(
       app,
-      '/access/assignments',
+      '/organizations/org-1/roles',
       'POST',
-      { roleId: 'role-1', subjectType: 'user', subjectId: 'user-1' },
+      {
+        key: 'operator',
+        displayName: 'Operator',
+        description: null,
+        scopes: [{ resourceId: 'resource-1', scope: 'contacts.read' }],
+      },
       201,
     )
-    expect(createdAssignment.headers.get('location')).toBe('/api/access/assignments/assignment-1')
-    await expectJson(app, '/access/assignments/assignment-1', 'GET', undefined, 200)
-    await expectJson(app, '/access/assignments/assignment-1/revocation', 'GET', undefined, 200)
-    await expectJson(app, '/access/assignments/assignment-1/revocation', 'PUT', undefined, 200)
-
-    expect(authorizationService.replaceRolePermissions).toHaveBeenCalledWith('role-1', [
-      { resourceId: 'resource-1', scope: 'contacts.read' },
-    ])
-    expect(authorizationService.createRoleAssignment).toHaveBeenCalledWith(
-      { roleId: 'role-1', subjectType: 'user', subjectId: 'user-1' },
-      'admin-1',
-    )
-    expect(authorizationService.putRoleAssignmentRevocation).toHaveBeenCalledWith('assignment-1')
+    expect(createdAssignment.headers.get('location')).toBe('/api/organizations/org-1/roles/operator')
+    await expectJson(app, '/organizations/org-1/roles/operator', 'GET', undefined, 200)
+    await expectJson(app, '/organizations/org-1/roles/operator', 'PATCH', { displayName: 'Operator 2' }, 200)
+    await expectStatus(app, '/organizations/org-1/roles/operator', 'DELETE', undefined, 204)
   })
 
   it('routes management connector requests to the connector service', async () => {
@@ -280,14 +260,10 @@ async function loadAuthorizationRoutes() {
 
   const { createManagementApiResourcesRoute } = await import('@server/http/routes/management/api-resources')
   const { managementOrganizationsRoute } = await import('@server/http/routes/management/organizations')
-  const { managementRolesRoute } = await import('@server/http/routes/management/roles')
-  const { managementRoleAssignmentsRoute } = await import('@server/http/routes/management/role-assignments')
   const { createProtectedResourceRoutes } = await import('@server/http/routes/management')
   const app = withAdminContext()
   app.route('/resource-servers', createManagementApiResourcesRoute())
   app.route('/organizations', managementOrganizationsRoute)
-  app.route('/access/roles', managementRolesRoute)
-  app.route('/access/assignments', managementRoleAssignmentsRoute)
   app.route('/', createProtectedResourceRoutes({ authApi: {} as never, canonicalOrigin: 'https://auth.example.com' }))
   return { app, authorizationService }
 }
@@ -409,7 +385,7 @@ function authorizationServiceMock() {
     id: 'member-1',
     organizationId: 'org-1',
     userId: 'user-1',
-    role: 'member',
+    roles: ['member'],
     title: null,
     createdAt: timestamp,
     updatedAt: timestamp,
@@ -418,7 +394,7 @@ function authorizationServiceMock() {
     id: 'invitation-1',
     organizationId: 'org-1',
     email: 'new@example.com',
-    role: 'member',
+    roles: ['member'],
     inviterId: 'admin-1',
     status: 'pending',
     expiresAt: '2026-08-03T00:00:00.000Z',
@@ -427,11 +403,11 @@ function authorizationServiceMock() {
     createdAt: timestamp,
   }
   const role = {
-    id: 'role-1',
-    key: 'admin',
-    name: 'Admin',
+    key: 'operator',
+    displayName: 'Operator',
     description: null,
-    system: false,
+    predefined: false,
+    scopes: [{ resourceId: 'resource-1', scope: 'contacts.read' }],
     createdAt: timestamp,
     updatedAt: timestamp,
   }
@@ -443,7 +419,7 @@ function authorizationServiceMock() {
     deleteOrganization: vi.fn().mockResolvedValue(undefined),
     listMembers: vi.fn().mockResolvedValue(page),
     addMember: vi.fn().mockResolvedValue(member),
-    updateMember: vi.fn().mockResolvedValue({ id: 'member-1' }),
+    updateMember: vi.fn().mockResolvedValue(member),
     removeMember: vi.fn().mockResolvedValue(undefined),
     listInvitations: vi.fn().mockResolvedValue(page),
     createInvitation: vi.fn().mockResolvedValue(invitation),
@@ -455,41 +431,13 @@ function authorizationServiceMock() {
     archiveResource: vi.fn().mockResolvedValue({ id: 'resource-1' }),
     restoreResource: vi.fn().mockResolvedValue({ id: 'resource-1' }),
     deleteResource: vi.fn().mockResolvedValue(undefined),
-    listRoles: vi.fn().mockResolvedValue(page),
+    listRoles: vi.fn().mockResolvedValue({ roles: [role], pagination: page.pagination }),
     createRole: vi.fn().mockResolvedValue(role),
     getRole: vi.fn().mockResolvedValue(role),
-    updateRole: vi.fn().mockResolvedValue({ id: 'role-1' }),
+    updateRole: vi.fn().mockResolvedValue(role),
     deleteRole: vi.fn().mockResolvedValue(undefined),
-    listRolePermissions: vi.fn().mockResolvedValue({ permissions: [] }),
-    replaceRolePermissions: vi.fn().mockResolvedValue(undefined),
-    listRoleAssignments: vi.fn().mockResolvedValue({ assignments: [], pagination: page.pagination }),
-    getRoleAssignment: vi.fn().mockResolvedValue({
-      id: 'assignment-1',
-      roleId: 'role-1',
-      subjectType: 'user',
-      subjectId: 'user-1',
-      organizationId: null,
-      assignedByUserId: 'admin-1',
-      expiresAt: null,
-      revokedAt: null,
-      createdAt: '2026-08-01T00:00:00.000Z',
-      updatedAt: '2026-08-01T00:00:00.000Z',
-    }),
-    createRoleAssignment: vi.fn().mockResolvedValue({
-      id: 'assignment-1',
-      roleId: 'role-1',
-      subjectType: 'user',
-      subjectId: 'user-1',
-      organizationId: null,
-      assignedByUserId: 'admin-1',
-      expiresAt: null,
-      revokedAt: null,
-      createdAt: '2026-08-01T00:00:00.000Z',
-      updatedAt: '2026-08-01T00:00:00.000Z',
-    }),
-    putRoleAssignmentRevocation: vi.fn().mockResolvedValue({
-      roleAssignmentId: 'assignment-1',
-      revokedAt: '2026-08-01T00:00:00.000Z',
+    replaceMemberRoles: vi.fn().mockResolvedValue({
+      roles: ['developer', 'member'],
     }),
   }
 }

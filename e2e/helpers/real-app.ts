@@ -87,11 +87,9 @@ export function resetLocalData() {
     DELETE FROM agent_host;
     DELETE FROM webhook_delivery_request;
     DELETE FROM webhook_endpoint;
-    DELETE FROM role_assignment;
-    DELETE FROM role_permission;
+    DELETE FROM organization_role;
     DELETE FROM invitation;
     DELETE FROM member;
-    DELETE FROM role;
     DELETE FROM token_exchange_access_token;
     DELETE FROM token_exchange_refresh_token;
     DELETE FROM federated_credential;

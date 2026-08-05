@@ -28,8 +28,8 @@ describe('console Organization lifecycle', () => {
           currentOrganization = { ...currentOrganization, ...(body as object) }
           return jsonResponse(currentOrganization)
         }
-        if (request.method === 'PATCH' && request.url.pathname.includes('/members/')) {
-          return jsonResponse({ ...members[1], ...(body as object) })
+        if (request.method === 'PUT' && request.url.pathname.includes('/members/')) {
+          return jsonResponse(body)
         }
         if (request.method === 'POST' && request.url.pathname.endsWith('/invitations')) {
           return jsonResponse({ ...invitations[0], ...(body as object) }, 201)
@@ -56,22 +56,32 @@ describe('console Organization lifecycle', () => {
     fireEvent.click(await screen.findByRole('option', { name: 'Any access level' }))
 
     openMemberMenu('Alex Admin')
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Change to Member' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Remove Administrator' }))
     await waitFor(() =>
       expect(mutations).toContainEqual({
-        method: 'PATCH',
-        path: '/api/organizations/org-1/members/member-admin',
-        body: { role: 'member' },
+        method: 'PUT',
+        path: '/api/organizations/org-1/members/member-admin/roles',
+        body: { roles: ['member'] },
       }),
     )
 
     openMemberMenu('Dana Developer')
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Change to Administrator' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Add Administrator' }))
     await waitFor(() =>
       expect(mutations).toContainEqual({
-        method: 'PATCH',
-        path: '/api/organizations/org-1/members/member-developer',
-        body: { role: 'admin' },
+        method: 'PUT',
+        path: '/api/organizations/org-1/members/member-developer/roles',
+        body: { roles: ['admin', 'developer'] },
+      }),
+    )
+
+    openMemberMenu('Morgan Multi-role')
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Remove Administrator' }))
+    await waitFor(() =>
+      expect(mutations).toContainEqual({
+        method: 'PUT',
+        path: '/api/organizations/org-1/members/member-multi/roles',
+        body: { roles: ['developer'] },
       }),
     )
 
@@ -98,13 +108,14 @@ describe('console Organization lifecycle', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Invite member' }))
     fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'new@example.com' } })
-    fireEvent.change(screen.getByLabelText('Access level'), { target: { value: 'developer' } })
+    fireEvent.click(screen.getByLabelText('Member'))
+    fireEvent.click(screen.getByLabelText('Developer'))
     fireEvent.click(screen.getByRole('button', { name: 'Send invitation' }))
     await waitFor(() =>
       expect(mutations).toContainEqual({
         method: 'POST',
         path: '/api/organizations/org-1/invitations',
-        body: { email: 'new@example.com', role: 'developer' },
+        body: { email: 'new@example.com', roles: ['developer'] },
       }),
     )
 
@@ -260,6 +271,9 @@ function organizationResponse(url: URL, currentOrganization: typeof organization
   if (url.pathname === '/api/organizations/org-1/invitations') {
     return jsonResponse({ invitations: empty ? [] : invitations, pagination: page(empty ? 0 : invitations.length) })
   }
+  if (url.pathname === '/api/organizations/org-1/roles') {
+    return jsonResponse({ roles: organizationRoles, pagination: page(organizationRoles.length) })
+  }
   if (url.pathname === '/api/users')
     return jsonResponse({ users: empty ? [] : users, pagination: page(empty ? 0 : users.length) })
   if (url.pathname === '/api/agents')
@@ -270,6 +284,15 @@ function organizationResponse(url: URL, currentOrganization: typeof organization
 }
 
 const timestamp = '2026-01-01T00:00:00.000Z'
+const organizationRoles = ['owner', 'admin', 'developer', 'member'].map((key) => ({
+  key,
+  displayName: key[0]!.toUpperCase() + key.slice(1),
+  description: null,
+  predefined: true,
+  scopes: [],
+  createdAt: timestamp,
+  updatedAt: timestamp,
+}))
 const organization = {
   id: 'org-1',
   name: 'Acme Engineering',
@@ -323,26 +346,43 @@ const users = [
     createdAt: timestamp,
     updatedAt: timestamp,
   },
+  {
+    id: 'user-multi',
+    email: 'multi@example.com',
+    name: 'Morgan Multi-role',
+    displayName: 'Morgan Multi-role',
+    role: 'user',
+    banned: false,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  },
 ]
 const members = [
-  { id: 'member-owner', organizationId: 'org-1', userId: 'user-owner', role: 'owner', createdAt: timestamp },
-  { id: 'member-admin', organizationId: 'org-1', userId: 'user-admin', role: 'admin', createdAt: timestamp },
+  { id: 'member-owner', organizationId: 'org-1', userId: 'user-owner', roles: ['owner'], createdAt: timestamp },
+  { id: 'member-admin', organizationId: 'org-1', userId: 'user-admin', roles: ['admin'], createdAt: timestamp },
   {
     id: 'member-developer',
     organizationId: 'org-1',
     userId: 'user-developer',
-    role: 'developer',
+    roles: ['developer'],
     createdAt: timestamp,
   },
-  { id: 'member-name', organizationId: 'org-1', userId: 'user-name', role: 'member', createdAt: timestamp },
-  { id: 'member-missing', organizationId: 'org-1', userId: 'user-missing', role: 'custom', createdAt: timestamp },
+  { id: 'member-name', organizationId: 'org-1', userId: 'user-name', roles: ['member'], createdAt: timestamp },
+  {
+    id: 'member-multi',
+    organizationId: 'org-1',
+    userId: 'user-multi',
+    roles: ['admin', 'developer'],
+    createdAt: timestamp,
+  },
+  { id: 'member-missing', organizationId: 'org-1', userId: 'user-missing', roles: ['custom'], createdAt: timestamp },
 ]
 const invitations = [
   {
     id: 'invitation-1',
     organizationId: 'org-1',
     email: 'invited@example.com',
-    role: 'member',
+    roles: ['member'],
     inviterId: 'user-owner',
     status: 'pending',
     expiresAt: '2099-01-01T00:00:00.000Z',
@@ -354,7 +394,7 @@ const invitations = [
     id: 'invitation-old',
     organizationId: 'org-1',
     email: 'old@example.com',
-    role: 'member',
+    roles: ['member'],
     inviterId: 'user-owner',
     status: 'accepted',
     expiresAt: timestamp,

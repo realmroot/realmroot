@@ -9,7 +9,6 @@ import {
   CheckCircle2,
   cn,
   createApplicationRequestSchema,
-  createRoleRequestSchema,
   Dialog,
   DialogContent,
   DialogDescription,
@@ -352,52 +351,6 @@ export function CreateUserDialog({
             onChange={(event) => setValue(setForm, 'password', event.target.value)}
             type="password"
           />
-        </Field>
-      </FormDialog>
-    </Dialog>
-  )
-}
-export function CreateRoleDialog({
-  error,
-  onClose,
-  onSubmit,
-  open,
-  pending,
-}: {
-  error: string | null
-  onClose: () => void
-  onSubmit: (input: z.infer<typeof createRoleRequestSchema>) => void
-  open: boolean
-  pending: boolean
-}) {
-  const [form, setForm] = useState<FormState>(emptyForm)
-  const [validationError, setValidationError] = useState<string | null>(null)
-  return (
-    <Dialog open={open}>
-      <FormDialog
-        description={tt('Define a reusable set of Resource server permissions for contextual assignment.')}
-        error={validationError ?? error}
-        onClose={onClose}
-        onSubmit={(event) => {
-          event.preventDefault()
-          try {
-            setValidationError(null)
-            onSubmit(parseForm(createRoleRequestSchema, form))
-          } catch (submitError) {
-            setValidationError(submitError instanceof Error ? tt(submitError.message) : tt('Invalid form input.'))
-          }
-        }}
-        pending={pending}
-        title={tt('Create role')}
-      >
-        <Field label={tt('Key')}>
-          <TextInput name="key" onChange={(event) => setValue(setForm, 'key', event.target.value)} required />
-        </Field>
-        <Field label={tt('Name')}>
-          <TextInput name="name" onChange={(event) => setValue(setForm, 'name', event.target.value)} required />
-        </Field>
-        <Field label={tt('Description')}>
-          <TextInput name="description" onChange={(event) => setValue(setForm, 'description', event.target.value)} />
         </Field>
       </FormDialog>
     </Dialog>

@@ -34,10 +34,6 @@ describe('console Agent detail', () => {
     expect(screen.getByText('Public key')).toBeTruthy()
     expect(screen.getByText('Never')).toBeTruthy()
 
-    openTab('Roles')
-    expect(await screen.findByText('Build operator')).toBeTruthy()
-    expect(screen.getByText('No description')).toBeTruthy()
-
     openTab('Access requests')
     expect(await screen.findByText('request-pending')).toBeTruthy()
     expect(screen.getByText('request-approved')).toBeTruthy()
@@ -101,7 +97,6 @@ describe('console Agent detail', () => {
 
     const emptyTabs: Array<[string, string]> = [
       ['Installations', 'No installations'],
-      ['Roles', 'No effective Roles'],
       ['Access requests', 'No access requests'],
       ['Access grants', 'No active access grants'],
       ['Activity', 'No Agent activity'],
@@ -182,11 +177,6 @@ function agentDetailResponse(url: URL, collections: AgentCollections) {
   if (path === '/api/agents/agent-1/installations') {
     return jsonResponse({ items: collections.installations, pagination: page(collections.installations.length) })
   }
-  if (path === '/api/access/assignments') {
-    return jsonResponse({ assignments: collections.assignments, pagination: page(collections.assignments.length) })
-  }
-  if (path === '/api/access/roles')
-    return jsonResponse({ roles: collections.roles, pagination: page(collections.roles.length) })
   if (path === '/api/access/requests') {
     return jsonResponse({ items: collections.requests, pagination: page(collections.requests.length) })
   }
@@ -259,46 +249,6 @@ const populatedCollections = {
       credentialType: 'public_key',
       boundAt: timestamp,
       lastSeenAt: null,
-    },
-  ],
-  assignments: [
-    {
-      id: 'assignment-1',
-      roleId: 'role-1',
-      subjectType: 'agent',
-      subjectId: 'agent-1',
-      organizationId: null,
-      assignedByUserId: 'user-1',
-      expiresAt: null,
-      revokedAt: null,
-      createdAt: timestamp,
-      updatedAt: timestamp,
-    },
-  ],
-  roles: [
-    {
-      id: 'role-1',
-      key: 'build.operator',
-      name: 'Build operator',
-      description: null,
-      system: false,
-      applicationId: null,
-      organizationId: null,
-      resourceId: null,
-      createdAt: timestamp,
-      updatedAt: timestamp,
-    },
-    {
-      id: 'role-unused',
-      key: 'unused',
-      name: 'Unused',
-      description: 'Unused',
-      system: false,
-      applicationId: null,
-      organizationId: null,
-      resourceId: null,
-      createdAt: timestamp,
-      updatedAt: timestamp,
     },
   ],
   requests: [
@@ -377,8 +327,6 @@ const populatedCollections = {
 const emptyCollections = {
   agent,
   installations: [],
-  assignments: [],
-  roles: [],
   requests: [],
   grants: [],
   events: [],

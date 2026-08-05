@@ -165,7 +165,7 @@ export function consoleRouteFetch(input: RequestInfo | URL) {
     return Promise.resolve(jsonResponse({ organizations: [organization], pagination }))
   }
   if (url === '/api/organizations/org-1') return Promise.resolve(jsonResponse(organization))
-  if (url === '/api/access/roles') return Promise.resolve(jsonResponse({ roles: [role], pagination }))
+  if (url === '/api/organizations/org-1/roles') return Promise.resolve(jsonResponse({ roles: [role], pagination }))
   if (url === '/api/resource-servers') {
     return Promise.resolve(jsonResponse({ items: [{ ...apiResource, authorization: null }], pagination }))
   }

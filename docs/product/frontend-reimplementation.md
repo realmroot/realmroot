@@ -44,9 +44,7 @@ reviewed.
 | Native resource detail | `/console/api-resources/:id/*` | Partial | Overview, Resources, Authority, Settings |
 | External resource detail | `/console/api-resources/:id/*` | Partial | Overview, Resources, Authority, Settings |
 | Webhooks | `/console/webhooks/*` | Real | Endpoints and Requests tabs |
-| Roles | `/console/roles` | Real, old ownership model | Realm-global reusable Role inventory |
-| Role detail | `/console/roles/:id/*` | Partial | Overview, Permissions, Assignments, Activity, Settings |
-| Role assignments | new canonical Console route | Missing | Cross-Role assignment inventory and assignment flow |
+| Organization Roles | Organization-scoped Console route | Implemented | Better Auth Role definitions and member Role replacement |
 | Identity providers | `/console/connectors` | Real | Built-in connectors, Social login, OIDC connectors |
 | Sign-in & registration | `/console/sign-in-experience/*` | Real, old split | Methods, Profile collection, Legal & support with navigable preview |
 | Security policies | `/console/security/*` | Real, old split | Authentication protection, Human verification, Other restrictions |
@@ -87,7 +85,7 @@ reviewed.
 
 - GitHub issue #126 implements independent Organization creation and Developer
   Console policies, platform Organization, ownership, audience/eligibility,
-  Realm-global multi-resource Roles, contextual assignments, and Account Center
+  Organization-scoped Better Auth Roles for humans, direct workload scopes, and Account Center
   Organization management.
 - Application consent policy persists through the existing `trusted` API field
   while presenting it as an explicit user-consent policy.

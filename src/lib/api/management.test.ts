@@ -12,7 +12,7 @@ describe('management API client', () => {
 
     await expect(management.getUserSecurity('user-1')).resolves.toEqual({ security: { mfaEnabled: true } })
     await management.listWebhookDeliveryAttempts('wh-1', 'delivery-1', { limit: 10 })
-    await management.addOrganizationMember('org/1', { userId: 'user-1', role: 'member' })
+    await management.addOrganizationMember('org/1', { userId: 'user-1', roles: ['member'] })
 
     expect(calls).toEqual([
       ['user.get', { param: { id: 'user-1' } }],
@@ -23,7 +23,7 @@ describe('management API client', () => {
         {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ userId: 'user-1', role: 'member' }),
+          body: JSON.stringify({ userId: 'user-1', roles: ['member'] }),
         },
       ],
     ])
@@ -105,23 +105,22 @@ describe('management API client', () => {
     await management.listOrganizations()
     await management.createOrganization({ slug: 'acme', name: 'Acme' })
     await management.updateOrganization('org-1', { disabled: true })
+    await management.updateOrganizationMember('org-1', 'member-1', { title: 'Staff engineer' })
     await management.uploadOrganizationLogo('org-1', new File(['logo'], 'logo.png'))
     await management.uploadBrandingLogo(new File(['logo'], 'logo.png'))
     await management.uploadBrandingFavicon(new File(['icon'], 'favicon.png'))
-    await management.listRoles()
-    await management.getRole('role-1')
-    await management.createRole({ key: 'admin', name: 'Admin' })
-    await management.updateRole('role-1', { description: 'Tenant admin' })
-    await management.deleteRole('role-1')
-    await management.listRolePermissions('role-1')
-    await management.replaceRolePermissions(
-      'role-1',
-      [{ resourceId: 'resource-1', scope: 'orders.read' }],
-      '"permissions-v1"',
-    )
-    await management.listRoleAssignments({ roleId: 'role-1', status: 'active' })
-    await management.createRoleAssignment({ roleId: 'role-1', subjectType: 'user', subjectId: 'user-1' })
-    await management.revokeRoleAssignment('assignment-1')
+    await management.listRoles('org-1')
+    await management.getRole('org-1', 'operator')
+    await management.createRole('org-1', {
+      key: 'operator',
+      displayName: 'Operator',
+      description: null,
+      scopes: [{ resourceId: 'resource-1', scope: 'orders.read' }],
+    })
+    await management.updateRole('org-1', 'operator', { description: 'Tenant operator' })
+    await management.deleteRole('org-1', 'operator')
+    await management.getOrganizationMemberRoles('org-1', 'member-1')
+    await management.replaceOrganizationMemberRoles('org-1', 'member-1', { roles: ['developer', 'member'] })
     await management.listApiResources()
     await management.listApiResources({ ownerOrganizationId: 'org-1' })
     await management.getApiResource('resource-1')
@@ -236,31 +235,51 @@ describe('management API client', () => {
       ['organizations.get'],
       ['organizations.post', { json: { slug: 'acme', name: 'Acme' } }],
       ['organizations.patch', { param: { id: 'org-1' }, json: { disabled: true } }],
+      [
+        'fetch',
+        '/api/organizations/org-1/members/member-1',
+        {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ title: 'Staff engineer' }),
+        },
+      ],
       ['uploadAsset', 'organization_logo', expect.any(File)],
       ['organizations.patch', { param: { id: 'org-1' }, json: { logo: '/api/assets/asset-1' } }],
       ['uploadAsset', 'branding_logo', expect.any(File)],
       ['branding.patch', { json: { branding: { logoUrl: '/api/assets/asset-1' } } }],
       ['uploadAsset', 'favicon', expect.any(File)],
       ['branding.patch', { json: { branding: { faviconUrl: '/api/assets/asset-1' } } }],
-      ['roles.get'],
-      ['role.get', { param: { id: 'role-1' } }],
-      ['roles.post', { json: { key: 'admin', name: 'Admin' } }],
-      ['roles.patch', { param: { id: 'role-1' }, json: { description: 'Tenant admin' } }],
-      ['roles.delete', { param: { id: 'role-1' } }],
-      ['fetch', '/api/access/roles/role-1/scopes', { credentials: 'same-origin' }],
+      ['organizationRoles.get', { param: { organizationId: 'org-1' } }],
+      ['organizationRole.get', { param: { organizationId: 'org-1', roleKey: 'operator' } }],
       [
-        'fetch',
-        '/api/access/roles/role-1/scopes',
+        'organizationRoles.post',
         {
-          method: 'PUT',
-          credentials: 'same-origin',
-          headers: { 'content-type': 'application/json', 'if-match': '"permissions-v1"' },
-          body: JSON.stringify({ scopes: [{ resourceId: 'resource-1', scope: 'orders.read' }] }),
+          param: { organizationId: 'org-1' },
+          json: {
+            key: 'operator',
+            displayName: 'Operator',
+            description: null,
+            scopes: [{ resourceId: 'resource-1', scope: 'orders.read' }],
+          },
         },
       ],
-      ['roleAssignments.get', { query: { roleId: 'role-1', status: 'active' } }],
-      ['roleAssignments.post', { json: { roleId: 'role-1', subjectType: 'user', subjectId: 'user-1' } }],
-      ['roleAssignmentRevocation.put', { param: { id: 'assignment-1' } }],
+      [
+        'organizationRole.patch',
+        {
+          param: { organizationId: 'org-1', roleKey: 'operator' },
+          json: { description: 'Tenant operator' },
+        },
+      ],
+      ['organizationRole.delete', { param: { organizationId: 'org-1', roleKey: 'operator' } }],
+      ['memberRoles.get', { param: { organizationId: 'org-1', memberId: 'member-1' } }],
+      [
+        'memberRoles.put',
+        {
+          param: { organizationId: 'org-1', memberId: 'member-1' },
+          json: { roles: ['developer', 'member'] },
+        },
+      ],
       ['apiResources.get'],
       ['apiResources.get', { query: { ownerOrganizationId: 'org-1' } }],
       ['apiResource.get', { param: { id: 'resource-1' } }],
@@ -308,7 +327,6 @@ describe('management API client', () => {
       users: { key: 'users.get' },
       connectors: { key: 'connectors.get' },
       organizations: { key: 'organizations.get' },
-      roles: { key: 'roles.get' },
       apiResources: { resources: [] },
       signIn: { key: 'signIn.get' },
       security: { key: 'security.get' },
@@ -472,24 +490,25 @@ async function loadManagementApi(options: { userSecurity?: unknown } = {}) {
           $get: endpoint('organizations.get'),
           $post: endpoint('organizations.post'),
           ':id': { $patch: endpoint('organizations.patch') },
-        },
-        roles: {
-          $get: endpoint('roles.get'),
-          $post: endpoint('roles.post'),
-          ':id': {
-            $get: endpoint('role.get'),
-            $patch: endpoint('roles.patch'),
-            $delete: endpoint('roles.delete'),
-            permissions: {
-              $get: endpoint('rolePermissions.get'),
-              $put: endpoint('rolePermissions.put'),
+          ':organizationId': {
+            roles: {
+              $get: endpoint('organizationRoles.get'),
+              $post: endpoint('organizationRoles.post'),
+              ':roleKey': {
+                $get: endpoint('organizationRole.get'),
+                $patch: endpoint('organizationRole.patch'),
+                $delete: endpoint('organizationRole.delete'),
+              },
+            },
+            members: {
+              ':memberId': {
+                roles: {
+                  $get: endpoint('memberRoles.get'),
+                  $put: endpoint('memberRoles.put'),
+                },
+              },
             },
           },
-        },
-        'role-assignments': {
-          $get: endpoint('roleAssignments.get'),
-          $post: endpoint('roleAssignments.post'),
-          ':id': { revocation: { $put: endpoint('roleAssignmentRevocation.put') } },
         },
         'resource-servers': {
           $get: endpoint('apiResources.get'),

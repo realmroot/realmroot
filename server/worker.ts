@@ -78,6 +78,7 @@ async function getAuth(env: Env, config: RuntimeConfig, deps: ReturnType<typeof 
         builtInProviders,
         twoFactorEmailOtpEnabled: config.securityPolicy.mfa.emailOtpEnabled,
         validAudiences,
+        externalHttp: deps.externalHttp,
         publishWebhookEvent: async (event, data) => {
           await publishWebhookEvent(deps, event, data)
         },

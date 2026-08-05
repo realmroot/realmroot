@@ -16,12 +16,10 @@ import type { AssetPurpose } from '@shared/api/assets'
 import type {
   ApiResourceResponse,
   InvitationResponse,
-  ListRoleAssignmentsQuery,
   MemberResponse,
   OrganizationResponse,
-  RoleAssignmentResponse,
-  RolePermission,
   RoleResponse,
+  RoleScope,
   UpdateApiResourceRequest,
   UpdateMemberRequest,
   UpdateOrganizationRequest,
@@ -823,8 +821,8 @@ export interface AgentIdentityAggregate {
 export interface AgentIdentityRepository {
   listPersonal(userId: string): Promise<AgentIdentityAggregate[]>
   listOrganization(organizationId: string): Promise<AgentIdentityAggregate[]>
-  listOwnedByOrganizations(
-    organizationIds: string[],
+  listOwned(
+    scope: AgentAuthorityInventoryScope,
     page: PaginationInput,
   ): Promise<PaginatedResult<AgentIdentityAggregate>>
   listAll(page: PaginationInput): Promise<PaginatedResult<AgentIdentityAggregate>>
@@ -1055,17 +1053,11 @@ export interface AuthorizationPaginatedResult<T> {
   pagination: PaginationMetadata
 }
 
-export interface RoleAssignmentRecord {
-  role: RoleResponse
-  scopes: string[]
-}
-
 export type OrganizationRecordInput = Omit<OrganizationResponse, 'createdAt' | 'updatedAt'>
 export type MemberRecordInput = Omit<MemberResponse, 'createdAt' | 'updatedAt'>
 export type InvitationRecordInput = Omit<InvitationResponse, 'createdAt' | 'acceptedAt' | 'revokedAt'>
 export type ApiResourceRecordInput = Omit<ApiResourceResponse, 'archivedAt' | 'createdAt' | 'updatedAt'>
-export type RoleRecordInput = Omit<RoleResponse, 'createdAt' | 'updatedAt'>
-export type ContextualRoleAssignmentInput = Omit<RoleAssignmentResponse, 'createdAt' | 'updatedAt' | 'revokedAt'>
+export type OrganizationRoleRecordInput = Omit<RoleResponse, 'predefined' | 'createdAt' | 'updatedAt'>
 
 export interface ApiResourceReferenceCounts {
   federatedCredentials: number
@@ -1073,11 +1065,6 @@ export interface ApiResourceReferenceCounts {
   connectionIntents: number
   agentAccessRequests: number
   agentAccessGrants: number
-}
-
-export interface RoleAssignmentScope {
-  resourceId?: string
-  organizationId?: string
 }
 
 export interface AuthorizationRepository {
@@ -1101,7 +1088,19 @@ export interface AuthorizationRepository {
   countMembersByRole(organizationId: string, role: string): Promise<number>
   hasPendingInvitation(email: string, now: Date): Promise<boolean>
   updateMember(id: string, patch: UpdateMemberRequest): Promise<void>
-  removeMember(id: string): Promise<void>
+  replaceMemberRoles(
+    organizationId: string,
+    memberId: string,
+    roles: string[],
+    expectedUpdatedAt: string,
+    audit: AgentAuditEventRecord,
+  ): Promise<boolean>
+  removeMember(
+    organizationId: string,
+    memberId: string,
+    expectedUpdatedAt: string,
+    audit: AgentAuditEventRecord,
+  ): Promise<boolean>
   createInvitation(input: InvitationRecordInput): Promise<InvitationResponse>
   listInvitations(
     organizationId: string,
@@ -1121,29 +1120,29 @@ export interface AuthorizationRepository {
   archiveResource(id: string, now: Date, audit: AgentAuditEventRecord): Promise<void>
   restoreResource(id: string, now: Date, audit: AgentAuditEventRecord): Promise<void>
   deleteResource(id: string): Promise<ApiResourceReferenceCounts | null>
-  createRole(input: RoleRecordInput): Promise<RoleResponse>
-  listRoles(pagination: PaginationQuery): Promise<AuthorizationPaginatedResult<RoleResponse>>
-  findRole(id: string): Promise<RoleResponse | null>
-  updateRole(id: string, patch: UpdateRoleRequest): Promise<void>
-  deleteRole(id: string): Promise<void>
-  listRolePermissions(roleId: string): Promise<RolePermission[]>
-  replaceRolePermissions(roleId: string, permissions: RolePermission[]): Promise<void>
-  listRoleAssignments(
-    query: ListRoleAssignmentsQuery & {
-      organizationIds?: string[]
-      includeRealmAssignments?: boolean
-      contextualOrganizationId?: string
-    },
-  ): Promise<AuthorizationPaginatedResult<RoleAssignmentResponse>>
-  countEffectiveAgentRoles(
-    agents: Array<{ agentIdentityId: string; organizationId: string | null }>,
-  ): Promise<Map<string, number>>
-  findRoleAssignment(id: string): Promise<RoleAssignmentResponse | null>
-  createRoleAssignment(input: ContextualRoleAssignmentInput): Promise<RoleAssignmentResponse>
-  revokeRoleAssignment(id: string, revokedAt: Date): Promise<boolean>
-  listUserRoleAssignments(userId: string, scope: RoleAssignmentScope): Promise<RoleAssignmentRecord[]>
-  listApplicationRoleAssignments(applicationId: string, scope: RoleAssignmentScope): Promise<RoleAssignmentRecord[]>
-  listAgentRoleAssignments(agentIdentityId: string, scope: RoleAssignmentScope): Promise<RoleAssignmentRecord[]>
+  createOrganizationRole(
+    organizationId: string,
+    input: OrganizationRoleRecordInput,
+    permission: Record<string, string[]>,
+    audit: AgentAuditEventRecord,
+  ): Promise<RoleResponse>
+  listOrganizationRoles(organizationId: string): Promise<RoleResponse[]>
+  findOrganizationRole(organizationId: string, roleKey: string): Promise<RoleResponse | null>
+  updateOrganizationRole(
+    organizationId: string,
+    roleKey: string,
+    patch: UpdateRoleRequest,
+    permission: Record<string, string[]> | undefined,
+    expectedUpdatedAt: string,
+    audit: AgentAuditEventRecord,
+  ): Promise<boolean>
+  deleteOrganizationRole(
+    organizationId: string,
+    roleKey: string,
+    expectedUpdatedAt: string,
+    audit: AgentAuditEventRecord,
+  ): Promise<'deleted' | 'not_found' | 'assigned'>
+  listOrganizationRoleScopes(organizationId: string): Promise<Map<string, RoleScope[]>>
 }
 
 // --- token-exchange ---------------------------------------------------------
@@ -1178,6 +1177,7 @@ export interface ResolvedFederatedCredential {
   id: string
   applicationId: string
   applicationClientId: string
+  ownerOrganizationId: string
   name: string
   issuer: string
   subject: string

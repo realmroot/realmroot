@@ -8,7 +8,7 @@ import {
 } from '@shared/api/authorization'
 import { authorizationDetailsSchema } from '@shared/api/authorization-details'
 import type { ConnectorResponse } from '@shared/api/connectors'
-import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { ArrowLeft, Plus } from 'lucide-react'
 import { type FormEvent, type ReactNode, useEffect, useState } from 'react'
@@ -30,8 +30,6 @@ import {
   listApiResources,
   listConnectors,
   listOrganizations,
-  listRoleAssignments,
-  listRolePermissions,
   listRoles,
   restoreApiResource,
   updateApiResource,
@@ -692,25 +690,11 @@ function ResourceAuthority({
   resource: ApiResource
 }) {
   const rolesQuery = useQuery({
-    enabled: mode === 'native',
-    queryFn: listRoles,
-    queryKey: consoleQueryKeys.roles,
+    enabled: mode === 'native' && Boolean(context),
+    queryFn: () => listRoles(context!),
+    queryKey: [...consoleQueryKeys.roles, context],
   })
   const roles = rolesQuery.data?.roles ?? []
-  const permissionsQueries = useQueries({
-    queries: roles.map((role) => ({
-      enabled: mode === 'native',
-      queryFn: () => listRolePermissions(role.id),
-      queryKey: [...consoleQueryKeys.roles, role.id, 'permissions'],
-    })),
-  })
-  const assignmentsQueries = useQueries({
-    queries: roles.map((role) => ({
-      enabled: mode === 'native',
-      queryFn: () => listRoleAssignments({ limit: 1, roleId: role.id, status: 'active' }),
-      queryKey: [...consoleQueryKeys.roles, role.id, 'assignments', { status: 'active' }],
-    })),
-  })
   if (mode === 'external') {
     return (
       <div className="detailFlatRows">
@@ -727,39 +711,18 @@ function ResourceAuthority({
       </div>
     )
   }
-  if (
-    rolesQuery.isLoading ||
-    permissionsQueries.some((query) => query.isLoading) ||
-    assignmentsQueries.some((query) => query.isLoading)
-  ) {
+  if (rolesQuery.isLoading) {
     return <LoadingState label={tt('Loading roles and grants')} />
   }
-  const error =
-    rolesQuery.error ??
-    permissionsQueries.find((query) => query.error)?.error ??
-    assignmentsQueries.find((query) => query.error)?.error
+  const error = rolesQuery.error
   if (error) {
-    return (
-      <ErrorState
-        error={error}
-        onRetry={() =>
-          Promise.all([
-            rolesQuery.refetch(),
-            ...permissionsQueries.map((query) => query.refetch()),
-            ...assignmentsQueries.map((query) => query.refetch()),
-          ])
-        }
-      />
-    )
+    return <ErrorState error={error} onRetry={() => rolesQuery.refetch()} />
   }
-  const rows = roles.flatMap((role, index) => {
-    const permissions = (permissionsQueries[index]?.data?.permissions ?? []).filter(
-      (permission) => permission.resourceId === resource.id,
-    )
+  const rows = roles.flatMap((role) => {
+    const permissions = role.scopes.filter((permission) => permission.resourceId === resource.id)
     if (!permissions.length) return []
     return [
       {
-        assignments: assignmentsQueries[index]?.data?.pagination.total ?? 0,
         permissions,
         role,
       },
@@ -772,21 +735,21 @@ function ResourceAuthority({
           <TableRow>
             <TableHead>{tt('Role')}</TableHead>
             <TableHead>{tt('Permissions from this server')}</TableHead>
-            <TableHead>{tt('Active assignments')}</TableHead>
+            <TableHead>{tt('Assignment model')}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {rows.length ? (
-            rows.map(({ assignments, permissions, role }) => (
-              <TableRow key={role.id}>
+            rows.map(({ permissions, role }) => (
+              <TableRow key={role.key}>
                 <TableCell>
                   <Link
                     className="font-medium hover:underline"
-                    params={{ roleId: role.id }}
+                    params={{ roleId: role.key }}
                     search={context ? { context } : {}}
                     to="/console/roles/$roleId"
                   >
-                    {role.name}
+                    {role.displayName}
                   </Link>
                   <code className="mt-0.5 block text-xs text-muted-foreground">{role.key}</code>
                 </TableCell>
@@ -799,13 +762,13 @@ function ResourceAuthority({
                     ))}
                   </div>
                 </TableCell>
-                <TableCell>{assignments}</TableCell>
+                <TableCell>{tt('Human members only')}</TableCell>
               </TableRow>
             ))
           ) : (
             <TableEmptyRow
               colSpan={3}
-              description={tt('Assign one of this server’s scopes to a Realm Role to make it reusable.')}
+              description={tt('Add one of this server’s scopes to an Organization Role to make it reusable.')}
               title={tt('No Roles use this server')}
             />
           )}

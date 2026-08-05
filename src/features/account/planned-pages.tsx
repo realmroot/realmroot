@@ -62,7 +62,7 @@ import {
   useAccountOrganizationAgentAccessGrants,
   useAccountOrganizationAgents,
   useAccountOrganizationInvitations,
-  useAccountOrganizationRoleAssignments,
+  useAccountOrganizationRoles,
   useAccountOrganizations,
   useAccountSecurity,
   useAccountSessions,
@@ -156,7 +156,7 @@ export function AccountOverviewPage() {
                     label={invitation.organizationName}
                     value={
                       <Badge variant="outline">
-                        {organizationAccessLevelLabel(invitation.role as OrganizationAccessLevel)}
+                        {organizationAccessLevelLabel(organizationAccessLevel(invitation.role))}
                       </Badge>
                     }
                   />
@@ -788,7 +788,7 @@ export function AccountOrganizationsPage() {
                     })}
                     key={invitation.id}
                     label={invitation.organizationName}
-                    value={organizationAccessLevelLabel(invitation.role as OrganizationAccessLevel)}
+                    value={organizationAccessLevelLabel(organizationAccessLevel(invitation.role))}
                   />
                 ))}
               </AccountRows>
@@ -980,8 +980,8 @@ function organizationSlug(name: string) {
 export function AccountOrganizationDetailPage({ organizationId }: { organizationId: string }) {
   const navigate = useNavigate()
   const organizationQuery = useAccountOrganization(organizationId)
+  const organizationRolesQuery = useAccountOrganizationRoles(organizationId)
   const agentsQuery = useAccountOrganizationAgents(organizationId)
-  const roleAssignmentsQuery = useAccountOrganizationRoleAssignments(organizationId)
   const agentAccessGrantsQuery = useAccountOrganizationAgentAccessGrants(organizationId)
   const mutate = useAccountMutation()
   const [tab, setTab] = useState('overview')
@@ -997,7 +997,6 @@ export function AccountOrganizationDetailPage({ organizationId }: { organization
   >(null)
   const organization = organizationQuery.data
   const agents = agentsQuery.data?.items ?? []
-  const roleAssignments = roleAssignmentsQuery.data?.assignments ?? []
   const agentAccessGrants = agentAccessGrantsQuery.data?.grants ?? []
   return (
     <AccountSurface section="organizations">
@@ -1013,8 +1012,10 @@ export function AccountOrganizationDetailPage({ organizationId }: { organization
             </p>
           )
         const membership = organization.members.find((member) => member.userId === profile.id)
-        const accessLevel = membership?.role as OrganizationAccessLevel | undefined
-        const canManageOrganization = accessLevel === 'owner' || accessLevel === 'admin'
+        const accessLevel = organizationAccessLevel(membership?.role)
+        const canManageOrganization = organizationMemberRoles(membership?.role).some(
+          (role) => role === 'owner' || role === 'admin',
+        )
         const canOpenConsole =
           access.realmOperator || access.consoleOrganizations.some((item) => item.organizationId === organization.id)
         const pendingInvitations = organization.invitations.filter((invitation) => invitation.status === 'pending')
@@ -1040,7 +1041,7 @@ export function AccountOrganizationDetailPage({ organizationId }: { organization
                 { value: 'overview', label: tt('Overview') },
                 { value: 'members', label: tt('Members') },
                 { value: 'agents', label: tt('Agents') },
-                { value: 'authority', label: tt('Role assignments') },
+                { value: 'authority', label: tt('Roles & grants') },
                 { value: 'settings', label: tt('Settings') },
               ]}
               value={tab}
@@ -1111,54 +1112,28 @@ export function AccountOrganizationDetailPage({ organizationId }: { organization
                 ) : null}
               </AccountTabContent>
               <AccountTabContent surface value="authority">
-                {roleAssignmentsQuery.isLoading || agentAccessGrantsQuery.isLoading ? (
+                {agentAccessGrantsQuery.isLoading ? (
                   <p className="text-sm text-muted-foreground">{tt('Loading Organization authority…')}</p>
                 ) : null}
-                {roleAssignmentsQuery.error || agentAccessGrantsQuery.error ? (
+                {agentAccessGrantsQuery.error ? (
                   <p className="text-sm text-destructive" role="alert">
-                    {roleAssignmentsQuery.error instanceof Error
-                      ? roleAssignmentsQuery.error.message
-                      : agentAccessGrantsQuery.error instanceof Error
-                        ? agentAccessGrantsQuery.error.message
-                        : tt('Unable to load Organization authority.')}
+                    {agentAccessGrantsQuery.error instanceof Error
+                      ? agentAccessGrantsQuery.error.message
+                      : tt('Unable to load Organization authority.')}
                   </p>
                 ) : null}
-                {!roleAssignmentsQuery.isLoading && !agentAccessGrantsQuery.isLoading ? (
+                {!agentAccessGrantsQuery.isLoading ? (
                   <div className="accountSectionStack">
                     <AccountObjectSection
-                      description={tt(
-                        'Realm-wide and Organization-context Roles currently effective for your account.',
-                      )}
-                      title={tt('Your effective Roles')}
+                      description={tt('Better Auth Organization Roles assigned to your membership.')}
+                      title={tt('Your Organization Roles')}
                     >
                       <AccountRows>
-                        {roleAssignments.map(({ assignment, role, permissions }) => (
-                          <AccountRow
-                            description={role.description ?? role.key}
-                            key={assignment.id}
-                            label={role.name}
-                            value={
-                              permissions.length ? (
-                                <span className="flex max-w-xl flex-wrap justify-end gap-1">
-                                  {permissions.map((permission) => (
-                                    <code key={`${permission.resourceId}:${permission.scope}`}>
-                                      {permission.resourceId} · {permission.scope}
-                                    </code>
-                                  ))}
-                                </span>
-                              ) : (
-                                tt('No permissions')
-                              )
-                            }
-                          />
-                        ))}
-                        {!roleAssignments.length ? (
-                          <AccountRow
-                            description={tt('Organization access levels do not grant business API scopes.')}
-                            label={tt('No effective Role assignments')}
-                            value="—"
-                          />
-                        ) : null}
+                        <AccountRow
+                          description={tt('Roles are resolved to scopes for this Organization only.')}
+                          label={tt('Assigned Roles')}
+                          value={<code>{membership?.role ?? 'member'}</code>}
+                        />
                       </AccountRows>
                     </AccountObjectSection>
                     <AccountObjectSection
@@ -1257,6 +1232,9 @@ export function AccountOrganizationDetailPage({ organizationId }: { organization
                 if (!failed) setInviteOpen(false)
               }}
               open={inviteOpen}
+              roleError={organizationRolesQuery.error instanceof Error ? organizationRolesQuery.error.message : null}
+              roleLoading={organizationRolesQuery.isLoading}
+              roles={organizationRolesQuery.data?.roles ?? []}
             />
             <OrganizationMemberDialog
               member={selectedMember}
@@ -1267,9 +1245,15 @@ export function AccountOrganizationDetailPage({ organizationId }: { organization
               }}
               onSave={async (member, role) => {
                 let failed = false
+                const roles = [
+                  ...organizationMemberRoles(member.role).filter(
+                    (assigned) => !['owner', 'admin', 'developer', 'member'].includes(assigned),
+                  ),
+                  role,
+                ].sort()
                 await mutate(
                   'Access level updated.',
-                  () => updateAccountOrganizationMemberRole(organization.id, member.id, role),
+                  () => updateAccountOrganizationMemberRole(organization.id, member.id, roles),
                   {
                     invalidate: [[...accountQueryKeys.organizations, organization.id]],
                     onError: () => {
@@ -1427,7 +1411,7 @@ function OrganizationMembersTable({
                 <strong>{member.user.name}</strong>
                 <span className="block text-xs text-muted-foreground">{member.user.email}</span>
               </TableCell>
-              <TableCell>{organizationAccessLevelLabel(member.role as OrganizationAccessLevel)}</TableCell>
+              <TableCell>{organizationAccessLevelLabel(organizationAccessLevel(member.role))}</TableCell>
               <TableCell>
                 <Badge variant="secondary">{tt('Active')}</Badge>
               </TableCell>
@@ -1451,7 +1435,7 @@ function OrganizationMembersTable({
                   {tt('Invitation expires {{date}}', { date: formatDate(invitation.expiresAt) })}
                 </span>
               </TableCell>
-              <TableCell>{organizationAccessLevelLabel(invitation.role as OrganizationAccessLevel)}</TableCell>
+              <TableCell>{organizationAccessLevelLabel(organizationAccessLevel(invitation.role))}</TableCell>
               <TableCell>
                 <Badge variant="outline">{tt(invitation.status)}</Badge>
               </TableCell>
@@ -1469,6 +1453,18 @@ function OrganizationMembersTable({
       </Table>
     </div>
   )
+}
+
+function organizationMemberRoles(role?: string | null) {
+  return (role ?? '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean)
+}
+
+function organizationAccessLevel(role?: string | null): OrganizationAccessLevel {
+  return (organizationMemberRoles(role).find((value) => ['owner', 'admin', 'developer', 'member'].includes(value)) ??
+    'member') as OrganizationAccessLevel
 }
 
 function organizationAccessLevelLabel(role?: OrganizationAccessLevel) {
@@ -1511,7 +1507,7 @@ function OrganizationMemberDialog({
             </DialogHeader>
             <div className="grid gap-4 py-5">
               <Field label={tt('Access level')}>
-                <SelectInput defaultValue={member.role} name="role">
+                <SelectInput defaultValue={organizationAccessLevel(member.role)} name="role">
                   <option value="owner">{tt('Owner')}</option>
                   <option value="admin">{tt('Administrator')}</option>
                   <option value="developer">{tt('Developer')}</option>
@@ -1565,7 +1561,7 @@ function OrganizationInvitationDialog({
             <AccountRow label={tt('Email')} value={invitation.email} />
             <AccountRow
               label={tt('Access level')}
-              value={organizationAccessLevelLabel(invitation.role as OrganizationAccessLevel)}
+              value={organizationAccessLevelLabel(organizationAccessLevel(invitation.role))}
             />
             <AccountRow label={tt('Expires')} value={formatDate(invitation.expiresAt)} />
           </AccountRows>
@@ -1641,11 +1637,18 @@ function InviteOrganizationMemberDialog({
   onClose,
   onInvite,
   open,
+  roleError,
+  roleLoading,
+  roles,
 }: {
   onClose: () => void
-  onInvite: (input: { email: string; role: 'owner' | 'admin' | 'developer' | 'member' }) => void
+  onInvite: (input: { email: string; roles: string[] }) => void
   open: boolean
+  roleError: string | null
+  roleLoading: boolean
+  roles: { key: string; displayName: string }[]
 }) {
+  const [selectionError, setSelectionError] = useState<string | null>(null)
   return (
     <Dialog
       onOpenChange={(next) => {
@@ -1658,9 +1661,15 @@ function InviteOrganizationMemberDialog({
           onSubmit={(event) => {
             event.preventDefault()
             const form = new FormData(event.currentTarget)
+            const selectedRoles = form.getAll('roles').map(String).sort()
+            if (selectedRoles.length === 0) {
+              setSelectionError(tt('Select at least one Role.'))
+              return
+            }
+            setSelectionError(null)
             onInvite({
               email: String(form.get('email')),
-              role: String(form.get('role')) as 'owner' | 'admin' | 'developer' | 'member',
+              roles: selectedRoles,
             })
           }}
         >
@@ -1674,20 +1683,35 @@ function InviteOrganizationMemberDialog({
             <Field label={tt('Email')}>
               <TextInput name="email" required type="email" />
             </Field>
-            <Field label={tt('Access level')}>
-              <SelectInput defaultValue="member" name="role">
-                <option value="owner">{tt('Owner')}</option>
-                <option value="admin">{tt('Administrator')}</option>
-                <option value="developer">{tt('Developer')}</option>
-                <option value="member">{tt('Member')}</option>
-              </SelectInput>
+            <Field label={tt('Roles')}>
+              <div className="grid gap-2 rounded-md border p-3">
+                {roles.map((role) => (
+                  <label className="flex items-center gap-2 text-sm" key={role.key}>
+                    <input defaultChecked={role.key === 'member'} name="roles" type="checkbox" value={role.key} />
+                    {role.displayName}
+                  </label>
+                ))}
+              </div>
             </Field>
+            {roleLoading ? <p className="text-sm text-muted-foreground">{tt('Loading Roles…')}</p> : null}
+            {roleError ? (
+              <p className="text-sm text-destructive" role="alert">
+                {roleError}
+              </p>
+            ) : null}
+            {selectionError ? (
+              <p className="text-sm text-destructive" role="alert">
+                {selectionError}
+              </p>
+            ) : null}
           </div>
           <DialogFooter>
             <Button onClick={onClose} type="button" variant="outline">
               {tt('Cancel')}
             </Button>
-            <Button type="submit">{tt('Send invitation')}</Button>
+            <Button disabled={roleLoading || Boolean(roleError) || roles.length === 0} type="submit">
+              {tt('Send invitation')}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>

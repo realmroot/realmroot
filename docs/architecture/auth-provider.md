@@ -73,14 +73,13 @@ Resource-aware authorization adds:
 - `authorization.resource` and `authorization.audience`;
 - top-level `groups` and `roles` for standard consumers.
 
-Roles are policy objects that reference scope strings published by a business
-resource's OpenAPI contract. Assignments contribute matching role claims and,
-for Agents with resource roles, impose an additional ceiling on requestable
-scopes. Roles never add scopes to a token; the actual consent or Agent grant
-determines its exact scope set.
+Better Auth Organization Roles map human memberships to scopes within exactly
+one Organization. Agents, Applications, and workloads do not receive Roles;
+their consent, grant, or token exchange determines the exact tenant-bound scope
+set directly.
 
 See [Authorization boundaries](authorization-boundaries.md) for scope ownership,
-role assignment subjects, issuance policy, and resource-server enforcement.
+Organization Role mapping, issuance policy, and resource-server enforcement.
 
 ## Native Agent Tokens
 
@@ -91,7 +90,8 @@ product OAuth tokens. They are five-minute `at+jwt` access tokens containing:
 - the stable Agent as the RFC 8693 `act` actor, including its issuer, subject,
   and `ai_agent` subject profile;
 - the exact approved `scope`;
-- effective resource `roles` and applicable `groups`;
+- applicable Organization `roles` and `groups` for human tokens; Agent tokens
+  rely on the exact approved scope instead;
 - the DPoP key thumbprint in `cnf.jkt`.
 
 The Host remains internal AgentAuth credential, binding, revocation, and audit

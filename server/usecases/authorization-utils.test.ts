@@ -5,20 +5,10 @@ import {
   selectTokenClaims,
   toTokenClaims,
 } from '@server/usecases/authorization-utils'
-import type { RoleAssignmentRecord } from '@server/usecases/ports'
-import type { ApiResourceResponse, OrganizationResponse, RoleResponse } from '@shared/api/authorization'
+import type { ApiResourceResponse, OrganizationResponse } from '@shared/api/authorization'
 import { describe, expect, it } from 'vitest'
 
 const timestamp = '2026-07-30T00:00:00.000Z'
-const role: RoleResponse = {
-  id: 'role-1',
-  key: 'reader',
-  name: 'Reader',
-  description: null,
-  system: false,
-  createdAt: timestamp,
-  updatedAt: timestamp,
-}
 const resource: ApiResourceResponse = {
   id: 'resource-1',
   identifier: 'projects',
@@ -46,7 +36,7 @@ const organization: OrganizationResponse = {
   createdAt: timestamp,
   updatedAt: timestamp,
 }
-const assignments = [{ role, scopes: ['projects:read'] }] as RoleAssignmentRecord[]
+const roleAuthorization = { roles: ['reader'], scopes: ['projects:read'] }
 
 describe('authorization claim helpers', () => {
   it('creates entity identifiers and deduplicates claim values', () => {
@@ -58,7 +48,7 @@ describe('authorization claim helpers', () => {
     expect(
       toTokenClaims(
         { organizationId: organization.id, scopes: ['projects:read'] },
-        assignments,
+        roleAuthorization,
         resource,
         organization,
       ),
@@ -66,16 +56,16 @@ describe('authorization claim helpers', () => {
       authorization: {
         scopes: ['projects:read'],
         groups: [organization.id],
-        roles: [role.key],
+        roles: ['reader'],
         organization_id: organization.id,
         organization_name: organization.name,
         resource: resource.identifier,
         audience: resource.resourceUrl,
       },
       groups: [organization.id],
-      roles: [role.key],
+      roles: ['reader'],
     })
-    expect(toTokenClaims({ scopes: [] }, [], null)).toEqual({
+    expect(toTokenClaims({ scopes: [] }, null, null)).toEqual({
       authorization: { scopes: [], groups: [], roles: [] },
       groups: [],
       roles: [],
@@ -96,14 +86,14 @@ describe('authorization claim helpers', () => {
           organizationName: true,
         },
       },
-      assignments,
+      roleAuthorization,
       resource,
       organization,
     )
     expect(claims).toEqual({
       authorization: expect.any(Object),
       groups: [organization.id],
-      roles: [role.key],
+      roles: ['reader'],
       scope: 'projects:read',
       organization_id: organization.id,
       organization_name: organization.name,

@@ -1,4 +1,4 @@
-import { badRequest, notFound } from '@server/domain/errors'
+import { badRequest, forbidden, notFound } from '@server/domain/errors'
 import { validateEmailPolicy, validatePasswordPolicy } from '@server/domain/security/policy'
 import { publishWebhookEvent } from '@server/usecases/webhooks'
 import {
@@ -18,12 +18,7 @@ import type { Context } from 'hono'
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { getPrincipal, isAutomationPrincipal } from '../../middleware/authn'
-import {
-  getConsoleOrganizationScope,
-  requireConsoleUserAccess,
-  requireRealmConsoleAccess,
-  resolveOrganizationInventoryScope,
-} from '../../middleware/authz'
+import { authorizedOrganizationIds, hasPlatformAccess, requirePlatformAccess } from '../../middleware/authz'
 import { getDeps } from '../../middleware/deps'
 import type { ManagementAuthApi } from '../auth-api'
 import { toBoundaryError } from '../auth-api'
@@ -39,7 +34,7 @@ export function managementUserRoutes(authApi: ManagementAuthApi, options: Manage
   app.get('/', async (c) => {
     const users = getDeps(c).users
     const query = readQuery(c, adminUserListQuerySchema)
-    const organizationIds = resolveOrganizationInventoryScope(c, query.organizationId)
+    const organizationIds = await filterOrganizationSelection(c, query.organizationId)
 
     if (isAutomationPrincipal(c) || organizationIds) {
       const userIds = organizationIds ? await getDeps(c).authorization.listMemberUserIds(organizationIds) : undefined
@@ -77,6 +72,7 @@ export function managementUserRoutes(authApi: ManagementAuthApi, options: Manage
   })
 
   app.post('/', async (c) => {
+    requirePlatformAccess(c, 'users:write')
     const users = getDeps(c).users
     const body = await readJson(c, adminCreateUserSchema)
     await users.assertAdminAvatarReference(body.avatarAssetId)
@@ -119,16 +115,17 @@ export function managementUserRoutes(authApi: ManagementAuthApi, options: Manage
   })
 
   app.get('/:id', async (c) => {
-    await requireConsoleUserAccess(c, c.req.param('id'))
+    await requireManagedUserRead(c, c.req.param('id'))
     const deps = getDeps(c)
     const user = await deps.users.getUser(c.req.param('id'))
-    if (getConsoleOrganizationScope(c)) return c.json(managementUserDetailResponseSchema.parse({ user }))
+    if (!hasPlatformAccess(c, 'users:read')) return c.json(managementUserDetailResponseSchema.parse({ user }))
     return c.json(
       managementUserDetailResponseSchema.parse({ user, security: await deps.security.getSecurityState(user.id) }),
     )
   })
 
   app.post('/:id/password-reset-requests', async (c) => {
+    requirePlatformAccess(c, 'users:write')
     const body = await readJson(c, adminPasswordResetSchema.pick({ redirectTo: true }))
     const user = await getDeps(c).users.getUser(c.req.param('id'))
 
@@ -160,14 +157,14 @@ export function managementUserRoutes(authApi: ManagementAuthApi, options: Manage
   })
 
   app.get('/:id/password-reset-requests/:requestId', async (c) => {
-    await requireConsoleUserAccess(c, c.req.param('id'))
+    requirePlatformAccess(c, 'users:read')
     const request = await getDeps(c).users.findPasswordResetRequest!(c.req.param('id'), c.req.param('requestId'))
     if (!request) throw notFound('Password reset request was not found.')
     return c.json(passwordResetRequestResponseSchema.parse({ ...request, createdAt: request.createdAt.toISOString() }))
   })
 
   app.get('/:id/suspension', async (c) => {
-    await requireConsoleUserAccess(c, c.req.param('id'))
+    requirePlatformAccess(c, 'users:read')
     const user = await getDeps(c).users.getUser(c.req.param('id'))
     return c.json({
       userId: user.id,
@@ -178,23 +175,25 @@ export function managementUserRoutes(authApi: ManagementAuthApi, options: Manage
   })
 
   app.get('/:id/linked-accounts', async (c) => {
-    requireRealmConsoleAccess(c)
+    requirePlatformAccess(c, 'users:read')
     const page = await getDeps(c).users.listLinkedAccounts(c.req.param('id'), readQuery(c, paginationQuerySchema))
     return c.json({ accounts: page.items, pagination: paginationMetadata(page) })
   })
 
   app.get('/:id/passkeys', async (c) => {
-    requireRealmConsoleAccess(c)
+    requirePlatformAccess(c, 'users:read')
     const page = await getDeps(c).security.listPasskeys(c.req.param('id'), readQuery(c, paginationQuerySchema))
     return c.json({ passkeys: page.items, pagination: paginationMetadata(page) })
   })
 
   app.delete('/:id/passkeys/:passkeyId', async (c) => {
+    requirePlatformAccess(c, 'users:write')
     await getDeps(c).security.deletePasskey(c.req.param('id'), c.req.param('passkeyId'))
     return c.body(null, 204)
   })
 
   app.patch('/:id', async (c) => {
+    requirePlatformAccess(c, 'users:write')
     const users = getDeps(c).users
     const body = await readJson(c, adminUpdateUserSchema)
     await users.assertAdminAvatarReference(body.avatarAssetId)
@@ -228,6 +227,7 @@ export function managementUserRoutes(authApi: ManagementAuthApi, options: Manage
   })
 
   const banUser = async (c: Context) => {
+    requirePlatformAccess(c, 'users:write')
     const body = await readJson(c, adminBanUserSchema)
 
     try {
@@ -249,6 +249,7 @@ export function managementUserRoutes(authApi: ManagementAuthApi, options: Manage
   app.put('/:id/suspension', banUser)
 
   const unbanUser = async (c: Context) => {
+    requirePlatformAccess(c, 'users:write')
     try {
       return c.json(await authApi.unbanUser({ body: { userId: userIdParam(c) }, headers: c.req.raw.headers }))
     } catch (error) {
@@ -259,6 +260,7 @@ export function managementUserRoutes(authApi: ManagementAuthApi, options: Manage
   app.delete('/:id/suspension', unbanUser)
 
   app.delete('/:id', async (c) => {
+    requirePlatformAccess(c, 'users:write')
     const userId = c.req.param('id')
     if (isAutomationPrincipal(c)) {
       const actor = getPrincipal(c).user
@@ -279,12 +281,13 @@ export function managementUserRoutes(authApi: ManagementAuthApi, options: Manage
   })
 
   app.get('/:id/sessions', async (c) => {
-    requireRealmConsoleAccess(c)
+    requirePlatformAccess(c, 'users:read')
     const page = await getDeps(c).users.listSessions(c.req.param('id'), readQuery(c, paginationQuerySchema))
     return c.json({ sessions: page.items, pagination: paginationMetadata(page) })
   })
 
   app.delete('/:id/sessions', async (c) => {
+    requirePlatformAccess(c, 'users:write')
     try {
       return c.json(
         await authApi.revokeUserSessions({ body: { userId: c.req.param('id') }, headers: c.req.raw.headers }),
@@ -295,7 +298,7 @@ export function managementUserRoutes(authApi: ManagementAuthApi, options: Manage
   })
 
   app.get('/:id/sessions/:sessionId', async (c) => {
-    requireRealmConsoleAccess(c)
+    requirePlatformAccess(c, 'users:read')
     const page = await getDeps(c).users.listSessions(c.req.param('id'), { limit: 100, offset: 0 })
     const session = page.items.find(({ id }) => id === c.req.param('sessionId'))
     if (!session) throw notFound('User session was not found.')
@@ -303,6 +306,7 @@ export function managementUserRoutes(authApi: ManagementAuthApi, options: Manage
   })
 
   app.delete('/:id/sessions/:sessionId', async (c) => {
+    requirePlatformAccess(c, 'users:write')
     const token = await getDeps(c).users.getSessionToken(c.req.param('id'), c.req.param('sessionId'))
 
     try {
@@ -313,6 +317,21 @@ export function managementUserRoutes(authApi: ManagementAuthApi, options: Manage
   })
 
   return app
+}
+
+async function filterOrganizationSelection(c: Context, requestedOrganizationId?: string) {
+  const allowed = await authorizedOrganizationIds(c, 'users:read')
+  if (!allowed) return requestedOrganizationId ? [requestedOrganizationId] : undefined
+  if (!requestedOrganizationId) return allowed
+  return allowed.includes(requestedOrganizationId) ? [requestedOrganizationId] : []
+}
+
+async function requireManagedUserRead(c: Context, userId: string) {
+  if (hasPlatformAccess(c, 'users:read')) return
+  const organizationIds = await authorizedOrganizationIds(c, 'users:read')
+  if (!organizationIds?.length) throw forbidden()
+  const allowedUserIds = await getDeps(c).authorization.listMemberUserIds(organizationIds)
+  if (!allowedUserIds.includes(userId)) throw forbidden()
 }
 
 function userIdParam(c: Context) {

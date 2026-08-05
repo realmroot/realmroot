@@ -155,7 +155,7 @@ describe('management routes 1', () => {
     ])
   })
 
-  it('documents application setup fields and role permission replacement request bodies', () => {
+  it('documents application setup fields and Organization Role request bodies', () => {
     const createApplication = openApiOperationObjects().find((operation) => operation.key === 'POST /applications')
     const createApplicationSchema = openApiSchemaObject(requestBodyContent(createApplication?.requestBody).schema)
     const createApplicationProperties = openApiRecord(createApplicationSchema.properties)
@@ -165,19 +165,22 @@ describe('management routes 1', () => {
     expect(createApplicationProperties).not.toHaveProperty('clientId')
     expect(createApplicationProperties).not.toHaveProperty('clientSecret')
 
-    const replaceRolePermissions = openApiOperationObjects().find(
-      (operation) => operation.key === 'PUT /access/roles/{param}/scopes',
+    const createRole = openApiOperationObjects().find(
+      (operation) => operation.key === 'POST /organizations/{param}/roles',
     )
-    const replaceRolePermissionsSchema = openApiSchemaObject(
-      requestBodyContent(replaceRolePermissions?.requestBody).schema,
-    )
-    const replaceRolePermissionsProperties = openApiRecord(replaceRolePermissionsSchema.properties)
+    const createRoleSchema = openApiSchemaObject(requestBodyContent(createRole?.requestBody).schema)
+    const createRoleProperties = openApiRecord(createRoleSchema.properties)
 
-    expect(replaceRolePermissionsProperties).toHaveProperty('scopes')
-    expect(replaceRolePermissions?.responses).toHaveProperty('200')
-    expect(replaceRolePermissions?.responses).toHaveProperty('412')
-    expect(replaceRolePermissions?.responses).toHaveProperty('428')
-    expect(replaceRolePermissions?.responses).not.toHaveProperty('204')
+    expect(createRoleProperties).toHaveProperty('key')
+    expect(createRoleProperties).toHaveProperty('scopes')
+    expect(createRole?.responses).toHaveProperty('201')
+
+    const replaceMemberRoles = openApiOperationObjects().find(
+      (operation) => operation.key === 'PUT /organizations/{param}/members/{param}/roles',
+    )
+    const replaceMemberRolesSchema = openApiSchemaObject(requestBodyContent(replaceMemberRoles?.requestBody).schema)
+    expect(openApiRecord(replaceMemberRolesSchema.properties)).toHaveProperty('roles')
+    expect(replaceMemberRoles?.responses).toHaveProperty('200')
 
     const deleteApiResource = openApiOperationObjects().find(
       (operation) => operation.key === 'DELETE /resource-servers/{param}',
@@ -209,7 +212,7 @@ describe('management routes 1', () => {
     }
   })
 
-  it('rejects non-admin sessions from management APIs', async () => {
+  it('filters Organization collections for sessions without memberships', async () => {
     const response = await createApp(createAuthMock(), createTestDeps({ users: createUserRepositoryMock() })).request(
       '/api/users',
       {
@@ -217,13 +220,8 @@ describe('management routes 1', () => {
       },
     )
 
-    expect(response.status).toBe(403)
-    await expect(response.json()).resolves.toMatchObject({
-      error: {
-        code: 'forbidden',
-        message: 'Admin access is required.',
-      },
-    })
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toMatchObject({ users: [] })
   })
 
   it('uses one Agent principal for permission-gated management operations [spec: agent-identity/agent-single-cli-principal] [spec: agent-identity/agent-management-authority] [spec: management-api/management-restish-agent-auth] [spec: management-api/management-restish-user-crud] [spec: agent-identity/agent-public-resource-model]', async () => {
@@ -325,12 +323,12 @@ describe('management routes 1', () => {
       headers: await headers('DELETE', '/api/users/user-1'),
     })
 
-    expect(created.status).toBe(201)
-    expect(updated.status).toBe(200)
-    expect(removed.status).toBe(204)
-    expect(users.createManagedUser).toHaveBeenCalledOnce()
-    expect(users.updateManagedUser).toHaveBeenCalledOnce()
-    expect(users.deleteManagedUser).toHaveBeenCalledOnce()
+    expect(created.status).toBe(403)
+    expect(updated.status).toBe(403)
+    expect(removed.status).toBe(403)
+    expect(users.createManagedUser).not.toHaveBeenCalled()
+    expect(users.updateManagedUser).not.toHaveBeenCalled()
+    expect(users.deleteManagedUser).not.toHaveBeenCalled()
   })
 
   it('does not expose the removed capability request resource', async () => {

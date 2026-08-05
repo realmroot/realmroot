@@ -1,4 +1,4 @@
-import { apiResourceEligibilitySchema, replaceRolePermissionsRequestSchema } from '@shared/api/authorization'
+import { apiResourceEligibilitySchema, replaceMemberRolesRequestSchema } from '@shared/api/authorization'
 import { describe, expect, it } from 'vitest'
 
 describe('authorization API schemas', () => {
@@ -13,22 +13,9 @@ describe('authorization API schemas', () => {
     })
   })
 
-  it('deduplicates and deterministically orders role permissions', () => {
-    expect(
-      replaceRolePermissionsRequestSchema.parse({
-        permissions: [
-          { resourceId: 'resource-b', scope: 'read' },
-          { resourceId: 'resource-a', scope: 'write' },
-          { resourceId: 'resource-a', scope: 'read' },
-          { resourceId: 'resource-a', scope: 'read' },
-        ],
-      }),
-    ).toEqual({
-      permissions: [
-        { resourceId: 'resource-a', scope: 'read' },
-        { resourceId: 'resource-a', scope: 'write' },
-        { resourceId: 'resource-b', scope: 'read' },
-      ],
+  it('deduplicates and deterministically orders member Roles', () => {
+    expect(replaceMemberRolesRequestSchema.parse({ roles: ['developer', 'admin', 'developer'] })).toEqual({
+      roles: ['admin', 'developer'],
     })
   })
 })

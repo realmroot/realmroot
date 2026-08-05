@@ -8,7 +8,7 @@ describe('management users and account routes', () => {
     vi.spyOn(console, 'info').mockImplementation(() => undefined)
   })
 
-  it('rejects normal users from admin user APIs', async () => {
+  it('returns an empty tenant-filtered user collection to users without Organization memberships', async () => {
     const auth = createAuthMock()
     const response = await createApp(auth, createTestDeps({ users: createUserRepositoryMock() })).request(
       '/api/users',
@@ -20,7 +20,8 @@ describe('management users and account routes', () => {
       },
     )
 
-    expect(response.status).toBe(403)
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toMatchObject({ users: [] })
     expect(auth.api.listUsers).not.toHaveBeenCalled()
   })
 

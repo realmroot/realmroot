@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ApiResourcesPage } from '@/features/console/extracted/api-resources'
 import { OrganizationDetailPage, OrganizationsPage } from '@/features/console/extracted/organizations'
 import { RolesPage } from '@/features/console/extracted/roles'
+import { ConsoleScopeProvider } from '@/lib/console-context'
 import { queryClient } from '@/router'
 import {
   apiResource,
@@ -31,17 +32,17 @@ afterEach(() => {
 })
 
 describe('admin console authorization creation and Organization detail', () => {
-  it('creates Organizations, global Roles, and Resource servers from secondary dialogs [spec: admin-console/admin-create-organization] [spec: admin-console/admin-create-role] [spec: admin-console/admin-create-api-resource]', async () => {
+  it('creates Organizations, Organization Roles, and Resource servers from secondary dialogs [spec: admin-console/admin-create-organization] [spec: admin-console/admin-create-role] [spec: admin-console/admin-create-api-resource]', async () => {
     const requests: Array<{ url: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input).split('?')[0]
       if (
-        ['/api/organizations', '/api/access/roles', '/api/resource-servers'].includes(url) &&
+        ['/api/organizations', '/api/organizations/org-1/roles', '/api/resource-servers'].includes(url) &&
         init?.method === 'POST'
       ) {
         requests.push({ url, body: JSON.parse(String(init.body)) })
         if (url === '/api/organizations') return Promise.resolve(jsonResponse(organization, 201))
-        if (url === '/api/access/roles') return Promise.resolve(jsonResponse(role, 201))
+        if (url === '/api/organizations/org-1/roles') return Promise.resolve(jsonResponse(role, 201))
         return Promise.resolve(jsonResponse(apiResource, 201))
       }
       if (url === '/api/organizations') {
@@ -50,10 +51,7 @@ describe('admin console authorization creation and Organization detail', () => {
       if (url === '/api/organizations/org-1/members') {
         return Promise.resolve(jsonResponse({ members: [], pagination: emptyPagination }))
       }
-      if (url === '/api/access/roles') return Promise.resolve(jsonResponse({ roles: [role], pagination }))
-      if (url === '/api/access/roles/role-1/scopes') {
-        return Promise.resolve(jsonResponse({ roleId: 'role-1', scopes: [] }))
-      }
+      if (url === '/api/organizations/org-1/roles') return Promise.resolve(jsonResponse({ roles: [role], pagination }))
       if (url === '/api/resource-servers') {
         return Promise.resolve(jsonResponse({ items: [{ ...apiResource, authorization: null }], pagination }))
       }
@@ -69,13 +67,17 @@ describe('admin console authorization creation and Organization detail', () => {
     await waitFor(() => expect(requests).toHaveLength(1))
 
     unmount()
-    renderWithQuery(<RolesPage />)
+    renderWithQuery(
+      <ConsoleScopeProvider value={{ organizationId: 'org-1', realmOperator: true }}>
+        <RolesPage />
+      </ConsoleScopeProvider>,
+    )
     expect(await screen.findByText('Admin')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'New role' }))
     fireEvent.change(await screen.findByLabelText('Key'), { target: { value: 'auditor' } })
-    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Auditor' } })
+    fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'Auditor' } })
     fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Reads audit events' } })
-    expect(screen.queryByLabelText('Permissions')).toBeNull()
+    expect(screen.getByLabelText('Scopes')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(requests).toHaveLength(2))
 
@@ -97,7 +99,10 @@ describe('admin console authorization creation and Organization detail', () => {
     await waitFor(() =>
       expect(requests).toEqual([
         { url: '/api/organizations', body: { slug: 'northwind', name: 'Northwind Traders' } },
-        { url: '/api/access/roles', body: { key: 'auditor', name: 'Auditor', description: 'Reads audit events' } },
+        {
+          url: '/api/organizations/org-1/roles',
+          body: { key: 'auditor', displayName: 'Auditor', description: 'Reads audit events', scopes: [] },
+        },
         {
           url: '/api/resource-servers',
           body: {
@@ -142,7 +147,7 @@ describe('admin console authorization creation and Organization detail', () => {
                 id: 'member-owner',
                 organizationId: 'org-1',
                 userId: user.id,
-                role: 'owner',
+                roles: ['owner'],
                 title: null,
                 createdAt: '2026-01-01T00:00:00.000Z',
                 updatedAt: '2026-01-01T00:00:00.000Z',
@@ -160,7 +165,7 @@ describe('admin console authorization creation and Organization detail', () => {
                 id: 'invitation-canceled',
                 organizationId: 'org-1',
                 email: 'canceled@example.com',
-                role: 'member',
+                roles: ['member'],
                 inviterId: 'user-1',
                 status: 'canceled',
                 expiresAt: '2026-01-08T00:00:00.000Z',
@@ -170,6 +175,14 @@ describe('admin console authorization creation and Organization detail', () => {
               },
             ],
             pagination: { ...emptyPagination, total: 1 },
+          }),
+        )
+      }
+      if (url === '/api/organizations/org-1/roles') {
+        return Promise.resolve(
+          jsonResponse({
+            roles: ['owner', 'admin', 'developer', 'member'].map((key) => ({ key, displayName: key })),
+            pagination: { ...emptyPagination, total: 4 },
           }),
         )
       }

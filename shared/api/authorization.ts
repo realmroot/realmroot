@@ -3,6 +3,10 @@ import { paginationMetadataSchema, paginationQuerySchema } from './applications'
 import { authorizationDetailsSchema } from './authorization-details'
 
 const nonEmptyString = z.string().trim().min(1)
+const rolesSchema = z
+  .array(nonEmptyString)
+  .min(1)
+  .transform((roles) => [...new Set(roles)].sort())
 const optionalText = z.string().trim().max(1000).nullable().optional()
 const slugSchema = z
   .string()
@@ -48,7 +52,7 @@ export const memberResponseSchema = z.object({
   id: z.string(),
   organizationId: z.string(),
   userId: z.string(),
-  role: z.string(),
+  roles: z.array(z.string()),
   title: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -56,12 +60,11 @@ export const memberResponseSchema = z.object({
 
 export const addMemberRequestSchema = z.object({
   userId: nonEmptyString,
-  role: nonEmptyString.default('member'),
+  roles: rolesSchema.default(['member']),
   title: z.string().trim().max(200).nullable().optional(),
 })
 
 export const updateMemberRequestSchema = z.object({
-  role: nonEmptyString.optional(),
   title: z.string().trim().max(200).nullable().optional(),
 })
 
@@ -69,7 +72,7 @@ export const invitationResponseSchema = z.object({
   id: z.string(),
   organizationId: z.string(),
   email: z.email(),
-  role: z.string(),
+  roles: z.array(z.string()),
   inviterId: z.string().nullable(),
   status: z.string(),
   expiresAt: z.string(),
@@ -80,7 +83,7 @@ export const invitationResponseSchema = z.object({
 
 export const createInvitationRequestSchema = z.object({
   email: z.email(),
-  role: nonEmptyString.default('member'),
+  roles: rolesSchema.default(['member']),
   expiresAt: z.iso.datetime().optional(),
 })
 
@@ -143,101 +146,39 @@ export const updateApiResourceRequestSchema = z.object({
   availableToAgents: z.boolean().optional(),
 })
 
-export const roleResponseSchema = z.object({
-  id: z.string(),
-  key: z.string(),
-  name: z.string(),
-  description: z.string().nullable(),
-  system: z.boolean(),
-  createdAt: z.string(),
-  updatedAt: z.string(),
-})
-
-export const createRoleRequestSchema = z.object({
-  key: nonEmptyString,
-  name: nonEmptyString,
-  description: optionalText,
-  system: z.boolean().optional(),
-})
-
-export const updateRoleRequestSchema = createRoleRequestSchema.omit({ key: true, system: true }).partial().strict()
-
-export const assignRoleRequestSchema = z.object({
-  roleId: nonEmptyString,
-  subjectId: nonEmptyString,
-  expiresAt: z.iso.datetime().nullable().optional(),
-})
-
-export const rolePermissionSchema = z.object({
+export const roleScopeSchema = z.object({
   resourceId: nonEmptyString,
   scope: nonEmptyString,
 })
 
-export const rolePermissionsResponseSchema = z.object({
-  permissions: z.array(rolePermissionSchema),
+const roleKeySchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(100)
+  .regex(/^[a-z0-9]+(?:[-_][a-z0-9]+)*$/)
+
+export const roleResponseSchema = z.object({
+  key: roleKeySchema,
+  displayName: nonEmptyString.max(200),
+  description: z.string().nullable(),
+  predefined: z.boolean(),
+  scopes: z.array(roleScopeSchema),
+  createdAt: z.string().nullable(),
+  updatedAt: z.string().nullable(),
 })
 
-export const replaceRolePermissionsRequestSchema = z.object({
-  permissions: z
-    .array(rolePermissionSchema)
-    .transform((values) =>
-      [
-        ...new Map(
-          values.map((permission) => [`${permission.resourceId}\u0000${permission.scope}`, permission]),
-        ).values(),
-      ].sort((left, right) => left.resourceId.localeCompare(right.resourceId) || left.scope.localeCompare(right.scope)),
-    ),
+export const createRoleRequestSchema = z.object({
+  key: roleKeySchema,
+  displayName: nonEmptyString.max(200),
+  description: optionalText,
+  scopes: z.array(roleScopeSchema).default([]),
 })
 
-export const roleScopesResponseSchema = z.object({
-  scopes: z.array(rolePermissionSchema),
-})
+export const updateRoleRequestSchema = createRoleRequestSchema.omit({ key: true }).partial().strict()
 
-export const replaceRoleScopesRequestSchema = z.object({
-  scopes: replaceRolePermissionsRequestSchema.shape.permissions,
-})
-
-export const roleAssignmentSubjectTypeSchema = z.enum(['user', 'agent', 'workload'])
-
-export const createRoleAssignmentRequestSchema = z.object({
-  roleId: nonEmptyString,
-  subjectType: roleAssignmentSubjectTypeSchema,
-  subjectId: nonEmptyString,
-  organizationId: nonEmptyString.nullable().optional(),
-  expiresAt: z.iso.datetime().nullable().optional(),
-})
-
-export const roleAssignmentResponseSchema = z.object({
-  id: z.string(),
-  roleId: z.string(),
-  subjectType: roleAssignmentSubjectTypeSchema,
-  subjectId: z.string(),
-  organizationId: z.string().nullable(),
-  assignedByUserId: z.string().nullable(),
-  expiresAt: z.string().nullable(),
-  revokedAt: z.string().nullable(),
-  createdAt: z.string(),
-  updatedAt: z.string(),
-})
-
-export const roleAssignmentRevocationSchema = z.object({
-  roleAssignmentId: z.string(),
-  revokedAt: z.string(),
-})
-
-export const listRoleAssignmentsQuerySchema = paginationQuerySchema.extend({
-  roleId: z.string().optional(),
-  subjectType: roleAssignmentSubjectTypeSchema.optional(),
-  subjectId: z.string().optional(),
-  organizationId: z.string().optional(),
-  context: z.enum(['realm', 'organization']).optional(),
-  status: z.enum(['active', 'expired', 'revoked']).optional(),
-})
-
-export const listRoleAssignmentsResponseSchema = z.object({
-  assignments: z.array(roleAssignmentResponseSchema),
-  pagination: paginationMetadataSchema,
-})
+export const memberRolesResponseSchema = z.object({ roles: z.array(roleKeySchema) })
+export const replaceMemberRolesRequestSchema = z.object({ roles: rolesSchema })
 
 export const listOrganizationsResponseSchema = z.object({
   organizations: z.array(organizationResponseSchema),
@@ -310,17 +251,11 @@ export type ListApiResourcesQuery = z.infer<typeof listApiResourcesQuerySchema>
 export type ApiResourceContractResponse = z.infer<typeof apiResourceContractResponseSchema>
 export type ListOrganizationsResponse = z.infer<typeof listOrganizationsResponseSchema>
 export type ListRolesResponse = z.infer<typeof listRolesResponseSchema>
-export type RolePermission = z.infer<typeof rolePermissionSchema>
-export type RolePermissionsResponse = z.infer<typeof rolePermissionsResponseSchema>
-export type ReplaceRolePermissionsRequest = z.infer<typeof replaceRolePermissionsRequestSchema>
-export type RoleAssignmentResponse = z.infer<typeof roleAssignmentResponseSchema>
-export type RoleAssignmentRevocation = z.infer<typeof roleAssignmentRevocationSchema>
-export type CreateRoleAssignmentRequest = z.infer<typeof createRoleAssignmentRequestSchema>
-export type ListRoleAssignmentsQuery = z.infer<typeof listRoleAssignmentsQuerySchema>
-export type ListRoleAssignmentsResponse = z.infer<typeof listRoleAssignmentsResponseSchema>
 export type CreateApiResourceRequest = z.input<typeof createApiResourceRequestSchema>
 export type UpdateApiResourceRequest = z.infer<typeof updateApiResourceRequestSchema>
 export type RoleResponse = z.infer<typeof roleResponseSchema>
 export type CreateRoleRequest = z.infer<typeof createRoleRequestSchema>
 export type UpdateRoleRequest = z.infer<typeof updateRoleRequestSchema>
-export type AssignRoleRequest = z.infer<typeof assignRoleRequestSchema>
+export type RoleScope = z.infer<typeof roleScopeSchema>
+export type MemberRolesResponse = z.infer<typeof memberRolesResponseSchema>
+export type ReplaceMemberRolesRequest = z.infer<typeof replaceMemberRolesRequestSchema>

@@ -32,7 +32,6 @@ import {
   organization,
   pagination,
   renderWithQuery,
-  role,
   securityPolicy,
   signInSettings,
   user,
@@ -63,8 +62,8 @@ describe('console dashboard guards', () => {
       if (url.pathname === '/api/agents') {
         return Promise.resolve(jsonResponse({ items, pagination: contextualPagination }))
       }
-      if (url.pathname === '/api/access/assignments') {
-        return Promise.resolve(jsonResponse({ assignments: items, pagination: contextualPagination }))
+      if (url.pathname === '/api/organizations/org-1/roles') {
+        return Promise.resolve(jsonResponse({ roles: items, pagination: contextualPagination }))
       }
       throw new Error(`Unexpected Organization dashboard request: ${request?.method ?? init?.method ?? 'GET'} ${url}`)
     })
@@ -77,7 +76,6 @@ describe('console dashboard guards', () => {
     expect(await screen.findByRole('heading', { name: 'Acme Inc.' })).toBeTruthy()
     expect(screen.getByText('Register an application')).toBeTruthy()
     expect(screen.getByText('Register a resource server')).toBeTruthy()
-    expect(screen.getByText('Assign a role')).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Open Register an application' }).getAttribute('href')).toContain(
       'context=org-1',
     )
@@ -109,7 +107,6 @@ describe('console dashboard guards', () => {
       if (url.startsWith('/api/organizations')) {
         return Promise.resolve(jsonResponse({ organizations: [organization], pagination }))
       }
-      if (url.startsWith('/api/access/roles')) return Promise.resolve(jsonResponse({ roles: [role], pagination }))
       if (url === '/api/resource-servers') {
         return Promise.resolve(jsonResponse({ items: [{ ...apiResource, authorization: null }], pagination }))
       }
@@ -147,7 +144,6 @@ describe('console dashboard guards', () => {
       if (url.startsWith('/api/organizations')) {
         return Promise.resolve(jsonResponse({ organizations: [], pagination: emptyPagination }))
       }
-      if (url === '/api/access/roles') return Promise.resolve(jsonResponse({ roles: [], pagination: emptyPagination }))
       if (url === '/api/resource-servers') {
         return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
       }
@@ -175,7 +171,6 @@ describe('console dashboard guards', () => {
     expect(metricValue('Organizations')).toBe('0')
     expect(screen.getByText('Register an application')).toBeTruthy()
     expect(screen.getByText('Register a resource server')).toBeTruthy()
-    expect(screen.getByText('Define a role')).toBeTruthy()
     expect(screen.queryByText('Enable a sign-in method')).toBeNull()
     expect(screen.queryByText('Setup progress')).toBeNull()
     expect(screen.queryByText('Private cloud')).toBeNull()
@@ -197,9 +192,6 @@ describe('console dashboard guards', () => {
       }
       if (url.startsWith('/api/organizations')) {
         return Promise.resolve(jsonResponse({ organizations: [], pagination: emptyPagination }))
-      }
-      if (url.startsWith('/api/access/roles')) {
-        return Promise.resolve(jsonResponse({ roles: [], pagination: emptyPagination }))
       }
       if (url === '/api/resource-servers') {
         return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
@@ -232,9 +224,6 @@ describe('console dashboard guards', () => {
       }
       if (url.startsWith('/api/organizations')) {
         return Promise.resolve(jsonResponse({ organizations: [], pagination: emptyPagination }))
-      }
-      if (url.startsWith('/api/access/roles')) {
-        return Promise.resolve(jsonResponse({ roles: [], pagination: emptyPagination }))
       }
       if (url === '/api/resource-servers') {
         return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))

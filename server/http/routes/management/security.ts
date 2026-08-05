@@ -7,11 +7,17 @@ import {
 } from '@shared/api/security'
 import { Hono } from 'hono'
 import { getPrincipal } from '../../middleware/authn'
+import { requirePlatformAccess } from '../../middleware/authz'
 import { getDeps } from '../../middleware/deps'
 import { readJson } from '../validation'
 
 export function managementSecurityRoutes() {
   const app = new Hono()
+
+  app.use('*', async (c, next) => {
+    requirePlatformAccess(c, c.req.method === 'GET' ? 'security:read' : 'security:write')
+    await next()
+  })
 
   app.get('/', async (c) => c.json({ policy: managementSecurityPolicy(await getDeps(c).security.getPolicy()) }))
 

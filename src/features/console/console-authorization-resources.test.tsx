@@ -2,19 +2,14 @@ import type { ApiResource } from '@shared/api/agent-api'
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ApiResourceDetailPage, ApiResourcesPage } from '@/features/console/extracted/api-resources'
-import { RoleDetailPage } from '@/features/console/extracted/roles'
-import { RoleAssignmentsPage } from '@/features/console/pages/role-assignments-page'
 import { ConsoleScopeProvider } from '@/lib/console-context'
 import {
   apiResource,
-  application,
   emptyPagination,
   jsonResponse,
   organization,
   pagination,
   renderWithQuery,
-  role,
-  user,
 } from './console.test-utils'
 
 const navigate = vi.fn()
@@ -93,219 +88,11 @@ const contract = {
   ],
 }
 
-function rolePermissionsResponse(permissions: Array<{ resourceId: string; scope: string }>) {
+function _rolePermissionsResponse(permissions: Array<{ resourceId: string; scope: string }>) {
   return jsonResponse({ roleId: 'role-1', scopes: permissions }, 200, { etag: '"permissions-v1"' })
 }
 
 describe('console API resources and roles', () => {
-  it('shows Roles that use a native Resource server and their active assignment counts', async () => {
-    let permissionAttempts = 0
-    vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
-      const request = requestParts(input, init)
-      if (request.url === '/api/resource-servers/resource-1') return jsonResponse(apiResource)
-      if (request.url === '/api/organizations') {
-        return jsonResponse({ organizations: [organization], pagination })
-      }
-      if (request.url === '/api/connectors') {
-        return jsonResponse({ connectors: [], pagination: emptyPagination })
-      }
-      if (request.url === '/api/access/roles') return jsonResponse({ roles: [role], pagination })
-      if (request.url === '/api/access/roles/role-1/scopes') {
-        permissionAttempts += 1
-        if (permissionAttempts === 1) return jsonResponse({ error: 'permissions unavailable' }, 503)
-        return rolePermissionsResponse([{ resourceId: apiResource.id, scope: 'projects:read' }])
-      }
-      if (request.url === '/api/access/assignments') {
-        return jsonResponse({ assignments: [], pagination: { ...pagination, total: 2 } })
-      }
-      throw new Error(`Unexpected request: ${request.method} ${request.url}`)
-    })
-
-    renderWithQuery(
-      <ConsoleScopeProvider value={{ organizationId: organization.id, realmOperator: true }}>
-        <ApiResourceDetailPage resourceId="resource-1" section="authority" />
-      </ConsoleScopeProvider>,
-    )
-
-    fireEvent.click(await screen.findByRole('button', { name: 'Retry' }))
-    const row = (await screen.findByRole('link', { name: role.name })).closest('tr') as HTMLElement
-    expect(within(row).getByText('projects:read')).toBeTruthy()
-    expect(within(row).getByText('2')).toBeTruthy()
-    expect(screen.getByRole('columnheader', { name: 'Active assignments' })).toBeTruthy()
-    expect(screen.queryByRole('columnheader', { name: 'Status' })).toBeNull()
-  })
-
-  it('filters and revokes assignments from the Realm-wide role inventory', async () => {
-    let revokedAt: string | null = null
-    const requests: Array<{ url: string; method: string }> = []
-    const creations: unknown[] = []
-    const agent = {
-      id: 'agent-1',
-      issuer: 'https://identity.example.com',
-      subject: 'agt_build',
-      name: 'Build Agent',
-      homeSpace: { type: 'organization', organizationId: organization.id },
-      owner: { id: organization.id, type: 'organization', displayName: organization.displayName },
-      status: 'active',
-      retiredAt: null,
-      installationCount: 1,
-      roleCount: 1,
-      pendingRequestCount: 0,
-      activeGrantCount: 0,
-      createdAt: '2026-01-01T00:00:00.000Z',
-      updatedAt: '2026-01-01T00:00:00.000Z',
-    }
-    vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
-      const request = requestParts(input, init)
-      if (request.url === '/api/access/assignments' && request.method === 'GET') {
-        return jsonResponse({
-          assignments: [
-            {
-              id: 'assignment-1',
-              roleId: role.id,
-              subjectType: 'user',
-              subjectId: user.id,
-              organizationId: organization.id,
-              expiresAt: null,
-              revokedAt,
-              assignedByUserId: user.id,
-              createdAt: '2026-01-01T00:00:00.000Z',
-              updatedAt: '2026-01-01T00:00:00.000Z',
-            },
-            {
-              id: 'assignment-expired',
-              roleId: role.id,
-              subjectType: 'workload',
-              subjectId: application.id,
-              organizationId: null,
-              expiresAt: '2020-01-01T00:00:00.000Z',
-              revokedAt: null,
-              assignedByUserId: null,
-              createdAt: '2020-01-01T00:00:00.000Z',
-              updatedAt: '2020-01-01T00:00:00.000Z',
-            },
-            {
-              id: 'assignment-revoked',
-              roleId: 'role-missing',
-              subjectType: 'agent',
-              subjectId: agent.id,
-              organizationId: 'org-missing',
-              expiresAt: null,
-              revokedAt: '2026-01-01T00:00:00.000Z',
-              assignedByUserId: 'user-missing',
-              createdAt: '2026-01-01T00:00:00.000Z',
-              updatedAt: '2026-01-01T00:00:00.000Z',
-            },
-            {
-              id: 'assignment-unknown-subject',
-              roleId: role.id,
-              subjectType: 'user',
-              subjectId: 'user-unknown',
-              organizationId: null,
-              expiresAt: null,
-              revokedAt: '2026-01-01T00:00:00.000Z',
-              assignedByUserId: null,
-              createdAt: '2026-01-01T00:00:00.000Z',
-              updatedAt: '2026-01-01T00:00:00.000Z',
-            },
-          ],
-          pagination,
-        })
-      }
-      if (request.url === '/api/access/assignments' && request.method === 'POST') {
-        const body = await request.body
-        creations.push(body)
-        return jsonResponse(
-          {
-            id: 'assignment-created',
-            ...(body as object),
-            assignedByUserId: user.id,
-            revokedAt: null,
-            createdAt: '2026-01-01T00:00:00.000Z',
-            updatedAt: '2026-01-01T00:00:00.000Z',
-          },
-          201,
-        )
-      }
-      if (request.url === '/api/access/assignments/assignment-1/revocation' && request.method === 'PUT') {
-        requests.push({ url: request.url, method: request.method })
-        revokedAt = '2026-01-02T00:00:00.000Z'
-        return jsonResponse({ roleAssignmentId: 'assignment-1', revokedAt })
-      }
-      if (request.url === '/api/access/roles') return jsonResponse({ roles: [role], pagination })
-      if (request.url === '/api/users') return jsonResponse({ users: [user], pagination })
-      if (request.url === '/api/applications') return jsonResponse({ applications: [application], pagination })
-      if (request.url === '/api/agents') return jsonResponse({ items: [agent], pagination })
-      if (request.url === '/api/organizations') {
-        return jsonResponse({
-          organizations: [organization, { ...organization, id: 'org-2', displayName: null, name: 'Plain Org' }],
-          pagination,
-        })
-      }
-      throw new Error(`Unexpected request: ${request.method} ${request.url}`)
-    })
-
-    renderWithQuery(<RoleAssignmentsPage />)
-    expect((await screen.findAllByText('Jane Doe')).length).toBeGreaterThan(0)
-    const dataPanel = screen.getByRole('table').closest('.consoleDataTablePanel')
-    expect(screen.getByLabelText('Search role assignments').closest('.consoleDataTablePanel')).toBe(dataPanel)
-    expect(screen.getByText('Customer portal')).toBeTruthy()
-    expect(screen.getByText('Build Agent')).toBeTruthy()
-    expect(screen.getAllByText('Expired').some((element) => element.tagName === 'SPAN')).toBe(true)
-    expect(screen.getAllByText('System')).toHaveLength(2)
-    fireEvent.click(screen.getByRole('button', { name: 'Assign role' }))
-    let assignmentDialog = screen.getByRole('dialog', { name: 'Assign role' })
-    fireEvent.change(within(assignmentDialog).getByLabelText('Subject type'), { target: { value: 'agent' } })
-    fireEvent.click(within(assignmentDialog).getByLabelText('Subject'))
-    fireEvent.click(await screen.findByRole('option', { name: 'Build Agent' }))
-    fireEvent.change(within(assignmentDialog).getByLabelText('Subject type'), { target: { value: 'application' } })
-    fireEvent.change(within(assignmentDialog).getByLabelText('Subject'), { target: { value: application.id } })
-    fireEvent.change(within(assignmentDialog).getByLabelText('Role'), { target: { value: role.id } })
-    fireEvent.change(within(assignmentDialog).getByLabelText('Context'), { target: { value: organization.id } })
-    fireEvent.change(within(assignmentDialog).getByLabelText('Expires'), { target: { value: 'date' } })
-    fireEvent.change(within(assignmentDialog).getByLabelText('Expiry date and time'), {
-      target: { value: '2030-01-02T03:04' },
-    })
-    fireEvent.click(within(assignmentDialog).getByRole('button', { name: 'Assign role' }))
-    await waitFor(() =>
-      expect(creations).toEqual([
-        {
-          roleId: role.id,
-          subjectId: application.id,
-          expiresAt: new Date('2030-01-02T03:04').toISOString(),
-          subjectType: 'workload',
-          organizationId: organization.id,
-        },
-      ]),
-    )
-    fireEvent.click(screen.getByRole('button', { name: 'Assign role' }))
-    assignmentDialog = screen.getByRole('dialog', { name: 'Assign role' })
-    expect(within(assignmentDialog).getByLabelText('Expires')).toHaveProperty('value', 'never')
-    expect(within(assignmentDialog).queryByLabelText('Expiry date and time')).toBeNull()
-    fireEvent.click(within(assignmentDialog).getByRole('button', { name: 'Cancel' }))
-    fireEvent.change(screen.getByLabelText('Search role assignments'), { target: { value: 'absent-value' } })
-    expect(screen.getByRole('heading', { name: 'No matching role assignments' })).toBeTruthy()
-    fireEvent.change(screen.getByLabelText('Search role assignments'), { target: { value: '' } })
-    fireEvent.change(screen.getByLabelText('Filter assignment subject type'), { target: { value: 'workload' } })
-    expect(screen.getByText('Customer portal')).toBeTruthy()
-    fireEvent.click(screen.getByLabelText('Filter assignment subject type'))
-    fireEvent.click(await screen.findByRole('option', { name: 'Any subject type' }))
-    fireEvent.change(screen.getByLabelText('Filter assignments by role'), { target: { value: role.id } })
-    fireEvent.change(screen.getByLabelText('Filter assignments by context'), { target: { value: 'realm' } })
-    expect(screen.getByText('Customer portal')).toBeTruthy()
-    fireEvent.change(screen.getByLabelText('Filter assignments by context'), { target: { value: organization.id } })
-    fireEvent.change(screen.getByLabelText('Filter assignment status'), { target: { value: 'active' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Revoke' }))
-    const dialog = screen.getByRole('alertdialog', { name: 'Revoke role assignment' })
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Revoke assignment' }))
-
-    await waitFor(() =>
-      expect(requests).toEqual([{ url: '/api/access/assignments/assignment-1/revocation', method: 'PUT' }]),
-    )
-    fireEvent.change(screen.getByLabelText('Filter assignment status'), { target: { value: 'revoked' } })
-    await waitFor(() => expect(screen.getAllByText('Revoked').some((element) => element.tagName === 'SPAN')).toBe(true))
-  })
-
   it('renders and filters the unified Resource server inventory', async () => {
     const external = {
       ...apiResource,
@@ -682,6 +469,91 @@ describe('console API resources and roles', () => {
     expect(screen.getByText('Pending validation')).toBeTruthy()
   })
 
+  it('shows Organization Roles that grant scopes from a native Resource Server', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const { url } = requestParts(input)
+      if (url === '/api/resource-servers/resource-1') return Promise.resolve(jsonResponse(apiResource))
+      if (url === '/api/connectors') {
+        return Promise.resolve(jsonResponse({ connectors: [], pagination: emptyPagination }))
+      }
+      if (url === '/api/organizations') {
+        return Promise.resolve(jsonResponse({ organizations: [organization], pagination }))
+      }
+      if (url === `/api/organizations/${organization.id}/roles`) {
+        return Promise.resolve(
+          jsonResponse({
+            roles: [
+              {
+                key: 'operator',
+                displayName: 'Operator',
+                description: null,
+                predefined: false,
+                scopes: [
+                  { resourceId: apiResource.id, scope: 'projects:read' },
+                  { resourceId: 'resource-2', scope: 'other:read' },
+                ],
+                createdAt: apiResource.createdAt,
+                updatedAt: apiResource.updatedAt,
+              },
+              {
+                key: 'unrelated',
+                displayName: 'Unrelated',
+                description: null,
+                predefined: false,
+                scopes: [{ resourceId: 'resource-2', scope: 'other:read' }],
+                createdAt: apiResource.createdAt,
+                updatedAt: apiResource.updatedAt,
+              },
+            ],
+            pagination,
+          }),
+        )
+      }
+      throw new Error(`Unexpected request: ${url}`)
+    })
+
+    renderWithQuery(
+      <ConsoleScopeProvider value={{ organizationId: organization.id, realmOperator: false }}>
+        <ApiResourceDetailPage resourceId="resource-1" section="authority" />
+      </ConsoleScopeProvider>,
+    )
+    expect(await screen.findByText('Human members only')).toBeTruthy()
+    expect(screen.getByText('Operator')).toBeTruthy()
+    expect(screen.getByText('projects:read')).toBeTruthy()
+    expect(screen.queryByText('Unrelated')).toBeNull()
+  })
+
+  it('retries Organization Role loading and renders an empty native authority', async () => {
+    let attempts = 0
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const { url } = requestParts(input)
+      if (url === '/api/resource-servers/resource-1') return Promise.resolve(jsonResponse(apiResource))
+      if (url === '/api/connectors') {
+        return Promise.resolve(jsonResponse({ connectors: [], pagination: emptyPagination }))
+      }
+      if (url === '/api/organizations') {
+        return Promise.resolve(jsonResponse({ organizations: [organization], pagination }))
+      }
+      if (url === `/api/organizations/${organization.id}/roles`) {
+        attempts += 1
+        return Promise.resolve(
+          attempts === 1
+            ? jsonResponse({ message: 'Roles unavailable.' }, 503)
+            : jsonResponse({ roles: [], pagination: emptyPagination }),
+        )
+      }
+      throw new Error(`Unexpected request: ${url}`)
+    })
+
+    renderWithQuery(
+      <ConsoleScopeProvider value={{ organizationId: organization.id, realmOperator: false }}>
+        <ApiResourceDetailPage resourceId="resource-1" section="authority" />
+      </ConsoleScopeProvider>,
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'Retry' }))
+    expect(await screen.findByText('No Roles use this server')).toBeTruthy()
+  })
+
   it('uses section-level editors and preserves native/external authorization differences', async () => {
     const requests: Array<{ url: string; method: string; body: unknown }> = []
     let selected: ApiResource = apiResource
@@ -828,149 +700,5 @@ describe('console API resources and roles', () => {
       { url: '/api/resource-servers/resource-1/archival', method: 'PUT' },
       { url: '/api/resource-servers/resource-1/archival', method: 'DELETE' },
     ])
-  })
-
-  it('edits global role permissions with search and Resource server filtering', async () => {
-    const customRole = { ...role, system: false }
-    let assigned = [{ resourceId: 'resource-1', scope: 'projects:read' }]
-    const requests: Array<{ url: string; method: string; body: unknown }> = []
-    vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
-      const request = requestParts(input, init)
-      if (request.url === '/api/access/roles/role-1/scopes' && request.method === 'PUT') {
-        const body = (await request.body) as { scopes: typeof assigned }
-        requests.push({ ...request, body })
-        assigned = body.scopes
-        return rolePermissionsResponse(assigned)
-      }
-      if (request.url === '/api/access/roles/role-1/scopes') {
-        return rolePermissionsResponse(assigned)
-      }
-      if (request.url === '/api/access/roles/role-1') return jsonResponse(customRole)
-      if (request.url === '/api/resource-servers/resource-1/contract') return jsonResponse(contract)
-      if (request.url === '/api/resource-servers') return jsonResponse({ items: [apiResource], pagination })
-      throw new Error(`Unexpected request: ${request.method} ${request.url}`)
-    })
-
-    renderWithQuery(<RoleDetailPage roleId="role-1" section="permissions" />)
-    expect(await screen.findByText('projects:read')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Edit permissions' }))
-    const search = await screen.findByLabelText('Search available permissions')
-    fireEvent.change(search, { target: { value: 'missing' } })
-    expect(screen.getByRole('heading', { name: 'No matching permissions' })).toBeTruthy()
-    fireEvent.change(search, { target: { value: 'write' } })
-    expect(screen.getByText('projects:write')).toBeTruthy()
-    fireEvent.change(screen.getByLabelText('Filter available permissions by resource server'), {
-      target: { value: 'resource-1' },
-    })
-    fireEvent.click(screen.getByLabelText('Select projects:write'))
-    fireEvent.change(search, { target: { value: '' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save permissions' }))
-
-    await waitFor(() =>
-      expect(requests).toContainEqual({
-        url: '/api/access/roles/role-1/scopes',
-        method: 'PUT',
-        body: {
-          scopes: [
-            { resourceId: 'resource-1', scope: 'projects:read' },
-            { resourceId: 'resource-1', scope: 'projects:write' },
-          ],
-        },
-      }),
-    )
-  })
-
-  it('keeps the Role key stable while editing human-readable metadata [spec: admin-console/admin-create-role]', async () => {
-    const customRole = { ...role, system: false }
-    const requests: Array<{ url: string; method: string; body: unknown }> = []
-    let deleted = false
-    vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
-      const request = requestParts(input, init)
-      if (request.url === '/api/access/roles/role-1' && request.method === 'DELETE') {
-        deleted = true
-        return new Response(null, { status: 204 })
-      }
-      if (deleted && request.url.startsWith('/api/access/roles/role-1')) {
-        throw new Error(`Removed Role detail was refetched: ${request.method} ${request.url}`)
-      }
-      if (request.url === '/api/access/roles/role-1' && request.method === 'PATCH') {
-        requests.push({ ...request, body: await request.body })
-        return jsonResponse({ ...customRole, ...(requests[0]!.body as object) })
-      }
-      if (request.url === '/api/access/roles/role-1/scopes') {
-        return rolePermissionsResponse([])
-      }
-      if (request.url === '/api/access/roles/role-1') return jsonResponse(customRole)
-      if (request.url === '/api/resource-servers') return jsonResponse({ items: [], pagination: emptyPagination })
-      throw new Error(`Unexpected request: ${request.method} ${request.url}`)
-    })
-
-    renderWithQuery(<RoleDetailPage roleId="role-1" section="settings" />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
-    expect((screen.getByLabelText('Key') as HTMLInputElement).disabled).toBe(true)
-    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Updated role' } })
-    fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Updated description' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
-
-    await waitFor(() => expect(requests).toHaveLength(1))
-    expect(requests[0]).toMatchObject({
-      url: '/api/access/roles/role-1',
-      method: 'PATCH',
-      body: { name: 'Updated role', description: 'Updated description' },
-    })
-    expect(requests[0]!.body).not.toHaveProperty('key')
-
-    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
-    expect(screen.getByText(/Permanently deletes this role and all active and historical assignments/)).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Delete role' }))
-    await waitFor(() => expect(deleted).toBe(true))
-  })
-
-  it('assigns a global role to a selected actor with an exact expiry date and time', async () => {
-    const requests: Array<{ url: string; method: string; body: unknown }> = []
-    vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
-      const request = requestParts(input, init)
-      if (request.url === '/api/access/assignments' && request.method === 'POST') {
-        requests.push({ ...request, body: await request.body })
-        return jsonResponse({ id: 'assignment-1' }, 201)
-      }
-      if (request.url === '/api/access/assignments') {
-        return jsonResponse({ assignments: [], pagination: emptyPagination })
-      }
-      if (request.url === '/api/access/roles/role-1/scopes') {
-        return rolePermissionsResponse([])
-      }
-      if (request.url === '/api/access/roles/role-1') return jsonResponse({ ...role, system: false })
-      if (request.url === '/api/resource-servers') return jsonResponse({ items: [], pagination: emptyPagination })
-      if (request.url === '/api/users') return jsonResponse({ users: [user], pagination })
-      if (request.url === '/api/applications') return jsonResponse({ applications: [application], pagination })
-      if (request.url === '/api/agents') return jsonResponse({ items: [], pagination: emptyPagination })
-      if (request.url === '/api/organizations') {
-        return jsonResponse({ organizations: [organization], pagination })
-      }
-      throw new Error(`Unexpected request: ${request.method} ${request.url}`)
-    })
-
-    renderWithQuery(<RoleDetailPage roleId="role-1" section="assignments" />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Assign role' }))
-    fireEvent.click(await screen.findByLabelText('Subject'))
-    fireEvent.click(await screen.findByRole('option', { name: 'Jane Doe' }))
-    fireEvent.change(screen.getByLabelText('Expires'), { target: { value: 'date' } })
-    fireEvent.change(screen.getByLabelText('Expiry date and time'), { target: { value: '2030-01-02T15:30' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Assign role' }))
-
-    await waitFor(() => expect(requests).toHaveLength(1))
-    expect(requests[0]).toMatchObject({
-      url: '/api/access/assignments',
-      method: 'POST',
-      body: {
-        roleId: 'role-1',
-        subjectId: 'user-1',
-        subjectType: 'user',
-        organizationId: null,
-        expiresAt: expect.any(String),
-      },
-    })
-    expect(new Date((requests[0]!.body as { expiresAt: string }).expiresAt).toString()).not.toBe('Invalid Date')
   })
 })

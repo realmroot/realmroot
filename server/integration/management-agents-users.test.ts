@@ -1,4 +1,5 @@
 import { applyD1Migrations, env, reset } from 'cloudflare:test'
+import { agentIdentity } from '@server/db/schema'
 import { createAgentLoginIdentity } from '@server/usecases/agent-identities'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
@@ -75,6 +76,50 @@ describe('agent protocol management over real D1', () => {
       userId,
     )
 
+    const authorizedOrganization = await createOrganization(harness, adminCookie, 'authorized-agents-org')
+    const unauthorizedOrganization = await createOrganization(harness, adminCookie, 'unauthorized-agents-org')
+    const membership = await harness.request(`/api/organizations/${authorizedOrganization}/members`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie: adminCookie },
+      body: JSON.stringify({ userId, roles: ['developer'] }),
+    })
+    expect(membership.status, await membership.clone().text()).toBe(201)
+    const now = new Date()
+    await harness.db.insert(agentIdentity).values([
+      {
+        id: 'authorized-org-agent',
+        issuer: 'http://localhost/api/auth',
+        subject: 'authorized-org-subject',
+        name: 'Authorized Organization Agent',
+        ownerUserId: null,
+        ownerOrganizationId: authorizedOrganization,
+        status: 'active',
+        retiredAt: null,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: 'unauthorized-org-agent',
+        issuer: 'http://localhost/api/auth',
+        subject: 'unauthorized-org-subject',
+        name: 'Unauthorized Organization Agent',
+        ownerUserId: null,
+        ownerOrganizationId: unauthorizedOrganization,
+        status: 'active',
+        retiredAt: null,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ])
+
+    const managementList = await harness.request('/api/agents', { headers: { cookie: ownerCookie } })
+    expect(managementList.status).toBe(200)
+    const managedAgentIds = ((await managementList.json()) as { items: Array<{ id: string }> }).items.map(
+      (agent) => agent.id,
+    )
+    expect(managedAgentIds).toEqual(expect.arrayContaining([stableAgent.id, 'authorized-org-agent']))
+    expect(managedAgentIds).not.toContain('unauthorized-org-agent')
+
     const list = await harness.request('/api/account/agents', { headers: { cookie: ownerCookie } })
     expect(list.status).toBe(200)
     expect(((await list.json()) as { items: unknown[] }).items.length).toBe(1)
@@ -90,6 +135,16 @@ describe('agent protocol management over real D1', () => {
   })
 })
 
+async function createOrganization(harness: Harness, cookie: string, slug: string) {
+  const response = await harness.request('/api/organizations', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', cookie },
+    body: JSON.stringify({ slug, name: slug }),
+  })
+  expect(response.status, await response.clone().text()).toBe(201)
+  return ((await response.json()) as { id: string }).id
+}
+
 describe('user management over real D1', () => {
   let harness: Harness
 
@@ -102,7 +157,7 @@ describe('user management over real D1', () => {
     expect((await harness.request('/api/users')).status).toBe(401)
   })
 
-  it('rejects a signed-in non-admin with 403', async () => {
+  it('returns an empty tenant-filtered collection to a user without Organization access', async () => {
     const adminCookie = await signInAdmin(harness)
     await createUser(harness, adminCookie, {
       email: 'plain@example.com',
@@ -111,7 +166,9 @@ describe('user management over real D1', () => {
       password: 'plain-password-2026',
     })
     const memberCookie = await signIn(harness, 'plain@example.com', 'plain-password-2026')
-    expect((await harness.request('/api/users', { headers: { cookie: memberCookie } })).status).toBe(403)
+    const response = await harness.request('/api/users', { headers: { cookie: memberCookie } })
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toMatchObject({ users: [], pagination: { total: 0 } })
   })
 
   it('runs admin user CRUD through the user repository (real SQL)', async () => {

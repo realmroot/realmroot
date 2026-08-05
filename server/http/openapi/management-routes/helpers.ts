@@ -34,7 +34,6 @@ export {
   createApiResourceRequestSchema,
   createInvitationRequestSchema,
   createOrganizationRequestSchema,
-  createRoleAssignmentRequestSchema,
   createRoleRequestSchema,
   invitationResponseSchema,
   listApiResourcesQuerySchema,
@@ -42,16 +41,12 @@ export {
   listInvitationsResponseSchema,
   listMembersResponseSchema,
   listOrganizationsResponseSchema,
-  listRoleAssignmentsQuerySchema,
-  listRoleAssignmentsResponseSchema,
   listRolesResponseSchema,
   memberResponseSchema,
+  memberRolesResponseSchema,
   organizationResponseSchema,
-  replaceRoleScopesRequestSchema,
-  roleAssignmentResponseSchema,
-  roleAssignmentRevocationSchema,
+  replaceMemberRolesRequestSchema,
   roleResponseSchema,
-  roleScopesResponseSchema,
   updateApiResourceRequestSchema,
   updateMemberRequestSchema,
   updateOrganizationRequestSchema,
@@ -170,8 +165,7 @@ export const authorizationIdParam = params('consentId')
 export const federatedCredentialParam = params('applicationId', 'credentialId')
 export const organizationIdParam = params('organizationId')
 export const resourceServerIdParam = params('resourceServerId')
-export const roleIdParam = params('roleId')
-export const assignmentIdParam = params('assignmentId')
+export const roleKeyParam = params('roleKey')
 export const userIdParam = params('userId')
 export const userSessionParam = params('userId', 'sessionId')
 export const userPasskeyParam = params('userId', 'passkeyId')

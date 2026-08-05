@@ -7,8 +7,6 @@ import { managementApplicationAuthorizationsRoute, managementApplicationsRoute }
 import { createManagementConnectorRoutes } from './connectors'
 import { managementOrganizationsRoute } from './organizations'
 import { createManagementReadinessRoute } from './readiness'
-import { managementRoleAssignmentsRoute } from './role-assignments'
-import { managementRolesRoute } from './roles'
 import { managementSecurityRoutes } from './security'
 import { createManagementSettingsRoutes } from './settings'
 import { managementUserRoutes } from './users'
@@ -28,8 +26,6 @@ export function createProtectedResourceRoutes(options: ProtectedResourceRoutesOp
   app.route('/resource-servers', createManagementApiResourcesRoute(options.canonicalOrigin))
   app.route('/', managementAgentsRoute)
   app.route('/organizations', managementOrganizationsRoute)
-  app.route('/access/roles', managementRolesRoute)
-  app.route('/access/assignments', managementRoleAssignmentsRoute)
   app.route('/users', managementUserRoutes(options.authApi, { normalizeListResponse: true }))
   app.route('/realm/security-policy', managementSecurityRoutes())
 

@@ -385,7 +385,7 @@ describe('management routes 4', () => {
     })
 
     expect(unauthenticated.status).toBe(401)
-    expect(nonAdmin.status).toBe(403)
+    expect(nonAdmin.status).toBe(200)
     expect(invalid.status).toBe(400)
     expect(missingIdempotencyKey.status).toBe(400)
     expect(webhooks.createEndpoint).not.toHaveBeenCalled()

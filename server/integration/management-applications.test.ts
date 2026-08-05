@@ -47,7 +47,7 @@ describe('applications management over real D1', () => {
     expect(response.status).toBe(401)
   })
 
-  it('rejects a signed-in non-admin with 403', async () => {
+  it('returns an empty tenant-filtered collection to a user without Organization access', async () => {
     const adminCookie = await signInAdmin(harness)
     await createUser(harness, adminCookie, {
       email: 'member@example.com',
@@ -58,7 +58,8 @@ describe('applications management over real D1', () => {
     const memberCookie = await signIn(harness, 'member@example.com', 'member-password-2026')
 
     const response = await harness.request('/api/applications', { headers: { cookie: memberCookie } })
-    expect(response.status).toBe(403)
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toMatchObject({ applications: [], pagination: { total: 0 } })
   })
 
   it('rejects an invalid create payload with 400', async () => {

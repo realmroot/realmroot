@@ -12,7 +12,6 @@ import {
   Gauge,
   Globe2,
   HelpCircle,
-  Link2,
   Menu,
   Palette,
   Search,
@@ -97,10 +96,7 @@ const consoleNavGroups: ConsoleNavGroup[] = [
   },
   {
     label: 'Authorization',
-    items: [
-      { href: '/console/roles', label: 'Roles', icon: ShieldCheck },
-      { href: '/console/role-assignments', label: 'Role assignments', icon: Link2 },
-    ],
+    items: [{ href: '/console/roles', label: 'Roles', icon: ShieldCheck }],
   },
   {
     label: 'Authentication',
@@ -493,7 +489,6 @@ const consoleBreadcrumbRoutes: Array<{ href: string; label: string }> = [
   { href: '/console/sign-in-experience/sign-in', label: 'Sign-in & registration' },
   { href: '/console/sign-in-experience', label: 'Experience' },
   { href: '/console/tenant-settings', label: 'Settings' },
-  { href: '/console/role-assignments', label: 'Role assignments' },
   { href: '/console/api-resources', label: 'Resource servers' },
   { href: '/console/webhooks', label: 'Webhooks' },
   { href: '/console/organizations', label: 'Organizations' },

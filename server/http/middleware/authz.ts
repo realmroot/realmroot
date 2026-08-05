@@ -1,179 +1,152 @@
+import { type AuthorizationContext, type AuthorizationTenant, authorize } from '@server/domain/authorization-context'
 import { forbidden, unauthorized } from '@server/domain/errors'
-import { resolveDeveloperAccess } from '@server/usecases/developer-access'
-import {
-  isProtectedResourceScope,
-  type ProtectedResource,
-  protectedResourceForPath,
-  requiredAgentSelfServiceScope,
-  requiredResourceScope,
-} from '@shared/authz'
-import type { MiddlewareHandler } from 'hono'
+import { realmrootResourceServer } from '@server/domain/realmroot-resource-server'
+import { resolveOrganizationMembershipScopes } from '@server/usecases/organization-membership-scopes'
+import { type ProtectedResource, requiredResourceScope } from '@shared/authz'
+import { predefinedOrganizationRoleScopes } from '@shared/organization-access'
+import type { RealmrootOrganizationScope } from '@shared/scope-registry'
+import type { Context, MiddlewareHandler } from 'hono'
 import { getPrincipal } from './authn'
 import { getDeps } from './deps'
-
-declare module 'hono' {
-  interface ContextVariableMap {
-    consoleOrganizationIds: string[] | null
-    managementAccessScope:
-      | { kind: 'realm' }
-      | { kind: 'organizations'; organizationIds: string[] }
-      | { kind: 'account'; userId: string; organizationIds: string[] }
-  }
-}
 
 export function authz(resource: ProtectedResource): MiddlewareHandler {
   return async (c, next) => {
     const { user, agent } = getPrincipal(c)
     if (!user && !agent) throw unauthorized()
-
-    if (user) {
-      if (hasRole(user.role, 'admin')) {
-        c.set('consoleOrganizationIds', null)
-        c.set('managementAccessScope', { kind: 'realm' })
-        await next()
-        return
+    if (agent) {
+      const required = requiredResourceScope(c.req.method, resource)
+      if (!required || !agent.scopes.includes(required)) {
+        throw forbidden(required ? `OAuth scope "${required}" is required.` : 'This resource is read-only.')
       }
-      const deps = getDeps(c)
-      const access = await resolveDeveloperAccess(deps, await deps.users.getUser(user.id))
-      const organizationIds = access.consoleOrganizations.map((item) => item.organizationId)
-      if (organizationIds.length && developerResourceAllowed(c.req.method, c.req.path, resource)) {
-        c.set('consoleOrganizationIds', organizationIds)
-        c.set('managementAccessScope', { kind: 'organizations', organizationIds })
-        await next()
-        return
-      }
-      if (!accountAuthorityReadAllowed(c.req.method, c.req.path)) throw forbidden()
-      const memberships = await deps.authorization.listUserMemberships(user.id)
-      const activeOrganizations = await Promise.all(
-        memberships.map((membership) => deps.authorization.findOrganization(membership.organizationId)),
-      )
-      const accountOrganizationIds = activeOrganizations.flatMap((organization) =>
-        organization && !organization.disabled ? [organization.id] : [],
-      )
-      c.set('consoleOrganizationIds', [])
-      c.set('managementAccessScope', { kind: 'account', userId: user.id, organizationIds: accountOrganizationIds })
-      await next()
-      return
-    }
-
-    const selfServiceScope = requiredAgentSelfServiceScope(c.req.method, c.req.path)
-    const required = selfServiceScope ?? requiredResourceScope(c.req.method, resource)
-    if (!required || !agent!.scopes.includes(required)) {
-      throw forbidden(required ? `OAuth scope "${required}" is required.` : 'This resource is read-only.')
-    }
-    if (selfServiceScope || !isProtectedResourceScope(required)) {
-      c.set('consoleOrganizationIds', [])
-      c.set('managementAccessScope', { kind: 'account', userId: '', organizationIds: [] })
-      await next()
-      return
-    }
-    if (!agent!.authority) throw forbidden('A Realmroot authority Resource is required for management scopes.')
-    if (agent!.authority.kind === 'realm') {
-      c.set('consoleOrganizationIds', null)
-      c.set('managementAccessScope', { kind: 'realm' })
-    } else if (agent!.authority.kind === 'organization') {
-      const organizationIds = [agent!.authority.organizationId]
-      c.set('consoleOrganizationIds', organizationIds)
-      c.set('managementAccessScope', { kind: 'organizations', organizationIds })
-    } else {
-      const memberships = await getDeps(c).authorization.listUserMemberships(agent!.authority.userId)
-      const organizationIds = memberships.map((membership) => membership.organizationId)
-      c.set('consoleOrganizationIds', [])
-      c.set('managementAccessScope', {
-        kind: 'account',
-        userId: agent!.authority.userId,
-        organizationIds,
-      })
     }
     await next()
   }
 }
 
-export function authzForProtectedPath(): MiddlewareHandler {
-  return async (c, next) => {
-    if ((c.req.method === 'GET' || c.req.method === 'HEAD') && /^\/api\/assets\/[^/]+$/.test(c.req.path)) {
-      await next()
-      return
-    }
-    const resource = protectedResourceForPath(c.req.path.replace(/^\/api\/?/, ''))
-    if (!resource) {
-      await next()
-      return
-    }
-    return authz(resource)(c, next)
+export function requireAgentScope(c: Context, requiredScope: string) {
+  const agent = getPrincipal(c).agent
+  if (agent && !agent.scopes.includes(requiredScope)) {
+    throw forbidden(`OAuth scope "${requiredScope}" is required.`)
   }
 }
 
-export function getManagementAccessScope(c: Parameters<typeof getPrincipal>[0]) {
-  return c.get('managementAccessScope')
-}
-
-export function getConsoleOrganizationScope(c: Parameters<typeof getPrincipal>[0]) {
-  return c.get('consoleOrganizationIds')
-}
-
-export function requireConsoleOrganizationAccess(c: Parameters<typeof getPrincipal>[0], organizationId: string) {
-  const organizationIds = getConsoleOrganizationScope(c)
-  if (organizationIds && !organizationIds.includes(organizationId)) throw forbidden()
-}
-
-export function requireConsoleOwnedOrganization(
-  c: Parameters<typeof getPrincipal>[0],
-  organizationId: string | null | undefined,
+export async function authorizeOrganization(
+  c: Context,
+  organizationId: string,
+  requiredScope: RealmrootOrganizationScope,
 ) {
-  const organizationIds = getConsoleOrganizationScope(c)
-  if (!organizationIds) return
-  if (!organizationId || !organizationIds.includes(organizationId)) throw forbidden()
+  const target = { type: 'organization' as const, id: organizationId }
+  authorize(await resolveAuthorizationContext(c, target), target, requiredScope)
 }
 
-export async function requireConsoleUserAccess(c: Parameters<typeof getPrincipal>[0], userId: string) {
-  const organizationIds = getConsoleOrganizationScope(c)
-  if (!organizationIds) return
-  const allowedUserIds = await getDeps(c).authorization.listMemberUserIds(organizationIds)
-  if (!allowedUserIds.includes(userId)) throw forbidden()
+export async function authorizedOrganizationIds(
+  c: Context,
+  requiredScope: RealmrootOrganizationScope,
+): Promise<string[] | undefined> {
+  const tenants = await authorizedTenantInventory(c, requiredScope)
+  if (!tenants) return undefined
+  return [...new Set(tenants.filter((tenant) => tenant.type === 'organization').map((tenant) => tenant.id))].sort()
 }
 
-export function requireRealmConsoleAccess(c: Parameters<typeof getPrincipal>[0]) {
-  if (getConsoleOrganizationScope(c)) throw forbidden()
-}
-
-export function resolveOrganizationInventoryScope(
-  c: Parameters<typeof getPrincipal>[0],
-  requestedOrganizationId?: string,
-) {
-  const organizationIds = getConsoleOrganizationScope(c)
-  if (!organizationIds) return requestedOrganizationId ? [requestedOrganizationId] : undefined
-  if (!requestedOrganizationId) return organizationIds
-  return organizationIds.includes(requestedOrganizationId) ? [requestedOrganizationId] : []
-}
-
-function developerResourceAllowed(method: string, path: string, resource: ProtectedResource) {
-  if (method === 'GET' || method === 'HEAD') {
-    return [
-      'applications',
-      'users',
-      'organizations',
-      'roles',
-      'apiResources',
-      'agents',
-      'auditEvents',
-      'connectors',
-      'webhooks',
-    ].includes(resource)
+export async function authorizedTenantInventory(
+  c: Context,
+  requiredScope: RealmrootOrganizationScope,
+): Promise<AuthorizationTenant[] | undefined> {
+  const principal = getPrincipal(c)
+  if (principal.user && hasRealmAdminRole(principal.user.role)) return undefined
+  if (principal.user) {
+    const memberships = await getDeps(c).authorization.listUserMemberships(principal.user.id)
+    const userTenant = { type: 'user' as const, id: principal.user.id }
+    const userContext = await resolveAuthorizationContext(c, userTenant)
+    const tenants: AuthorizationTenant[] = userContext.scopes.has(requiredScope) ? [userTenant] : []
+    for (const membership of memberships) {
+      const target = { type: 'organization' as const, id: membership.organizationId }
+      const context = await resolveAuthorizationContext(c, target)
+      if (context.scopes.has(requiredScope)) tenants.push(target)
+    }
+    return tenants
   }
-  if (resource === 'applications' || resource === 'apiResources' || resource === 'webhooks') return true
-  return resource === 'roles' && path.startsWith('/api/access/assignments')
+  const agent = principal.agent
+  if (!agent?.scopes.includes(requiredScope)) {
+    throw forbidden(`OAuth scope "${requiredScope}" is required.`)
+  }
+  if (agent.authority?.kind === 'organization') {
+    return [{ type: 'organization', id: agent.authority.organizationId }]
+  }
+  if (agent.authority?.kind === 'user') return [{ type: 'user', id: agent.authority.userId }]
+  return []
 }
 
-function accountAuthorityReadAllowed(method: string, path: string) {
-  if (method !== 'GET' && method !== 'HEAD') return false
-  return (
-    path === '/api/access/assignments' ||
-    /^\/api\/access\/assignments\/[^/]+$/.test(path) ||
-    /^\/api\/access\/roles\/[^/]+(?:\/scopes)?$/.test(path) ||
-    path === '/api/access/authorizations' ||
-    /^\/api\/access\/authorizations\/[^/]+$/.test(path)
-  )
+export function requirePlatformAccess(c: Context, requiredScope: string) {
+  if (hasPlatformAccess(c, requiredScope)) return
+  throw forbidden('Platform administrator access is required.')
+}
+
+export function hasPlatformAccess(c: Context, _requiredScope: string) {
+  const principal = getPrincipal(c)
+  return Boolean(principal.user && hasRealmAdminRole(principal.user.role))
+}
+
+export async function authorizeUser(c: Context, userId: string, requiredScope: string) {
+  const target = { type: 'user' as const, id: userId }
+  authorize(await resolveAuthorizationContext(c, target), target, requiredScope)
+}
+
+export async function resolveAuthorizationContext(
+  c: Context,
+  targetTenant: AuthorizationTenant,
+): Promise<AuthorizationContext> {
+  const principal = getPrincipal(c)
+  if (principal.user) {
+    if (targetTenant.type === 'user') {
+      const platformAdministrator = hasRealmAdminRole(principal.user.role)
+      return {
+        subject: { type: 'user', id: principal.user.id },
+        tenant: platformAdministrator ? targetTenant : { type: 'user', id: principal.user.id },
+        scopes: new Set(
+          platformAdministrator || principal.user.id === targetTenant.id
+            ? ['self:read', 'self:write', 'agents:read', 'agents:write']
+            : [],
+        ),
+      }
+    }
+    if (hasRealmAdminRole(principal.user.role)) {
+      return {
+        subject: { type: 'user', id: principal.user.id },
+        tenant: targetTenant,
+        scopes: new Set(Object.values(predefinedOrganizationRoleScopes).flat()),
+      }
+    }
+    const membership = await getDeps(c).authorization.findMemberByOrganizationUser(targetTenant.id, principal.user.id)
+    return {
+      subject: { type: 'user', id: principal.user.id },
+      tenant: targetTenant,
+      scopes: new Set(
+        membership
+          ? await resolveOrganizationMembershipScopes(
+              getDeps(c),
+              targetTenant.id,
+              membership.roles,
+              realmrootResourceServer.id,
+            )
+          : [],
+      ),
+    }
+  }
+  const agent = principal.agent
+  if (!agent) throw unauthorized()
+  const authority = agent.authority
+  const tenant: AuthorizationTenant =
+    authority?.kind === 'organization'
+      ? { type: 'organization', id: authority.organizationId }
+      : authority?.kind === 'user'
+        ? { type: 'user', id: authority.userId }
+        : { type: 'user', id: '' }
+  return {
+    subject: { type: 'agent', id: agent.identityId },
+    tenant,
+    scopes: new Set(agent.scopes),
+  }
 }
 
 export function authenticatedUser(): MiddlewareHandler {
@@ -183,9 +156,9 @@ export function authenticatedUser(): MiddlewareHandler {
   }
 }
 
-function hasRole(value: string | null | undefined, required: string) {
+function hasRealmAdminRole(value: string | null | undefined) {
   return (value ?? '')
     .split(',')
     .map((role) => role.trim())
-    .includes(required)
+    .includes('admin')
 }

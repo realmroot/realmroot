@@ -79,8 +79,8 @@ separately:
 - Realm operators can inspect Realm inventory;
 - Organization developers can inspect only inventory owned by Organizations
   available to them in Console;
-- Account Center members can inspect only their own effective Role assignments
-  and Agent grants owned by their personal or member Organization spaces;
+- Account Center members can inspect only their own Better Auth membership Roles
+  and Agent grants owned by their User or member Organization tenants;
 - Agent principals require the exact operation capability published by the
   OpenAPI operation.
 

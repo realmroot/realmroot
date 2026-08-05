@@ -1,5 +1,5 @@
 diff --git a/dist/index.mjs b/dist/index.mjs
-index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..ac1c2660b1beb772b0e120fe689cbc974314f25f 100644
+index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..afbbe07f98e8291d3fd5d5b7f784d50fcb193107 100644
 --- a/dist/index.mjs
 +++ b/dist/index.mjs
 @@ -262,6 +262,7 @@ async function userInfoEndpoint(ctx, opts) {
@@ -18,7 +18,21 @@ index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..ac1c2660b1beb772b0e120fe689cbc97
  		case void 0: throw new APIError("BAD_REQUEST", {
  			error_description: "missing required grant_type",
  			error: "unsupported_grant_type"
-@@ -505,6 +507,7 @@ async function createUserTokens(ctx, opts, params) {
+@@ -502 +504,12 @@ async function createUserTokens(ctx, opts, params) {
+-	const { client, scopes, user, grantType, referenceId, sessionId, nonce, refreshToken: existingRefreshToken, authTime, verificationValue } = params;
++	const { client, scopes: requestedScopes, user, grantType, referenceId, sessionId, nonce, refreshToken: existingRefreshToken, authTime, verificationValue } = params;
++	const resource = ctx.body.resource ?? verificationValue?.query.resource;
++	const filteredScopes = opts.filterAccessTokenScopes ? await opts.filterAccessTokenScopes({
++		user,
++		scopes: requestedScopes,
++		resource: typeof resource === "string" ? resource : void 0,
++		referenceId,
++		metadata: parseClientMetadata(client.metadata),
++		grantType
++	}) : requestedScopes;
++	const allowedScopes = new Set(filteredScopes);
++	const scopes = requestedScopes.filter((scope) => allowedScopes.has(scope));
+@@ -505,6 +518,7 @@ async function createUserTokens(ctx, opts, params) {
  	const exp = opts.scopeExpirations ? scopes.map((sc) => opts.scopeExpirations?.[sc] ? toExpJWT(opts.scopeExpirations[sc], iat) : defaultExp).reduce((prev, curr) => {
  		return prev < curr ? prev : curr;
  	}, defaultExp) : defaultExp;
@@ -26,7 +40,7 @@ index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..ac1c2660b1beb772b0e120fe689cbc97
  	const audience = await checkResource(ctx, opts, scopes);
  	const isRefreshToken = user && clientAllowsGrant(client, "refresh_token") && (existingRefreshToken?.scopes?.includes("offline_access") || scopes.includes("offline_access"));
  	const isJwtAccessToken = audience && !opts.disableJwtPlugin;
-@@ -682,6 +685,125 @@ async function handleAuthorizationCodeGrant(ctx, opts) {
+@@ -682,6 +695,125 @@ async function handleAuthorizationCodeGrant(ctx, opts) {
  		verificationValue
  	});
  }
@@ -152,7 +166,7 @@ index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..ac1c2660b1beb772b0e120fe689cbc97
  /**
  * Grant that allows direct access to an API using the application's credentials
  * This grant is for M2M so the concept of a user id does not exist on the token.
-@@ -771,13 +893,10 @@ async function handleRefreshTokenGrant(ctx, opts) {
+@@ -771,13 +903,10 @@ async function handleRefreshTokenGrant(ctx, opts) {
  		error_description: "invalid refresh token",
  		error: "invalid_grant"
  	});
@@ -167,7 +181,7 @@ index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..ac1c2660b1beb772b0e120fe689cbc97
  	const scopes = refreshToken?.scopes;
  	const requestedScopes = scope?.split(" ");
  	if (requestedScopes) {
-@@ -1658,7 +1777,8 @@ const adminCreateOAuthClient = (opts) => createAuthEndpoint("/admin/oauth2/creat
+@@ -1658,7 +1787,8 @@ const adminCreateOAuthClient = (opts) => createAuthEndpoint("/admin/oauth2/creat
  		grant_types: z.array(z.enum([
  			"authorization_code",
  			"client_credentials",
@@ -177,7 +191,7 @@ index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..ac1c2660b1beb772b0e120fe689cbc97
  		])).default(["authorization_code"]).optional(),
  		response_types: z.array(z.enum(["code"])).default(["code"]).optional(),
  		type: z.enum([
-@@ -1842,7 +1962,8 @@ const createOAuthClient = (opts) => createAuthEndpoint("/oauth2/create-client",
+@@ -1842,7 +1972,8 @@ const createOAuthClient = (opts) => createAuthEndpoint("/oauth2/create-client",
  		grant_types: z.array(z.enum([
  			"authorization_code",
  			"client_credentials",
@@ -187,7 +201,7 @@ index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..ac1c2660b1beb772b0e120fe689cbc97
  		])).default(["authorization_code"]).optional(),
  		response_types: z.array(z.enum(["code"])).default(["code"]).optional(),
  		type: z.enum([
-@@ -1944,7 +2065,8 @@ const createOAuthClient = (opts) => createAuthEndpoint("/oauth2/create-client",
+@@ -1944,7 +2075,8 @@ const createOAuthClient = (opts) => createAuthEndpoint("/oauth2/create-client",
  							enum: [
  								"authorization_code",
  								"client_credentials",
@@ -197,7 +211,7 @@ index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..ac1c2660b1beb772b0e120fe689cbc97
  							]
  						},
  						description: "Requested authentication method for the token endpoint"
-@@ -2044,7 +2166,8 @@ const adminUpdateOAuthClient = (opts) => createAuthEndpoint("/admin/oauth2/updat
+@@ -2044,7 +2176,8 @@ const adminUpdateOAuthClient = (opts) => createAuthEndpoint("/admin/oauth2/updat
  			grant_types: z.array(z.enum([
  				"authorization_code",
  				"client_credentials",
@@ -207,7 +221,7 @@ index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..ac1c2660b1beb772b0e120fe689cbc97
  			])).optional(),
  			response_types: z.array(z.enum(["code"])).optional(),
  			type: z.enum([
-@@ -2086,7 +2209,8 @@ const updateOAuthClient = (opts) => createAuthEndpoint("/oauth2/update-client",
+@@ -2086,7 +2219,8 @@ const updateOAuthClient = (opts) => createAuthEndpoint("/oauth2/update-client",
  			grant_types: z.array(z.enum([
  				"authorization_code",
  				"client_credentials",
@@ -217,7 +231,7 @@ index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..ac1c2660b1beb772b0e120fe689cbc97
  			])).optional(),
  			response_types: z.array(z.enum(["code"])).optional(),
  			type: z.enum([
-@@ -2800,7 +2924,8 @@ const oauthProvider = (options) => {
+@@ -2800,7 +2934,8 @@ const oauthProvider = (options) => {
  		grantTypes: [
  			"authorization_code",
  			"client_credentials",
@@ -227,7 +241,7 @@ index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..ac1c2660b1beb772b0e120fe689cbc97
  		],
  		...options,
  		scopes: Array.from(scopes),
-@@ -2863,6 +2988,7 @@ const oauthProvider = (options) => {
+@@ -2863,6 +2998,7 @@ const oauthProvider = (options) => {
  			request_uri: z.string().optional(),
  			code_challenge: z.string().optional(),
  			code_challenge_method: z.enum(["S256"]).optional(),
@@ -235,7 +249,7 @@ index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..ac1c2660b1beb772b0e120fe689cbc97
  			nonce: z.string().optional(),
  			prompt: z.enum([
  				"none",
-@@ -3152,11 +3278,13 @@ const oauthProvider = (options) => {
+@@ -3152,11 +3288,13 @@ const oauthProvider = (options) => {
  					grant_type: z.enum([
  						"authorization_code",
  						"client_credentials",
@@ -250,7 +264,7 @@ index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..ac1c2660b1beb772b0e120fe689cbc97
  					code_verifier: z.string().optional(),
  					redirect_uri: SafeUrlSchema.optional(),
  					refresh_token: z.string().optional(),
-@@ -3174,11 +3302,12 @@ const oauthProvider = (options) => {
+@@ -3174,11 +3312,12 @@ const oauthProvider = (options) => {
  								properties: {
  									grant_type: {
  										type: "string",
@@ -268,7 +282,7 @@ index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..ac1c2660b1beb772b0e120fe689cbc97
  										description: "OAuth2 grant type"
  									},
  									client_id: {
-@@ -3193,6 +3322,10 @@ const oauthProvider = (options) => {
+@@ -3193,6 +3332,10 @@ const oauthProvider = (options) => {
  										type: "string",
  										description: "Authorization code (for authorization_code grant)"
  									},
@@ -279,7 +293,7 @@ index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..ac1c2660b1beb772b0e120fe689cbc97
  									code_verifier: {
  										type: "string",
  										description: "PKCE code verifier (for authorization_code grant)"
-@@ -3600,7 +3733,8 @@ const oauthProvider = (options) => {
+@@ -3600,7 +3743,8 @@ const oauthProvider = (options) => {
  					grant_types: z.array(z.enum([
  						"authorization_code",
  						"client_credentials",
@@ -289,7 +303,7 @@ index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..ac1c2660b1beb772b0e120fe689cbc97
  					])).default(["authorization_code"]).optional(),
  					response_types: z.array(z.enum(["code"])).default(["code"]).optional(),
  					type: z.enum([
-@@ -4083,12 +4217,14 @@ function authServerMetadata(ctx, opts, overrides) {
+@@ -4083,12 +4227,14 @@ function authServerMetadata(ctx, opts, overrides) {
  		registration_endpoint: overrides?.dynamic_client_registration_supported ? `${baseURL}/oauth2/register` : void 0,
  		introspection_endpoint: `${baseURL}/oauth2/introspect`,
  		revocation_endpoint: `${baseURL}/oauth2/revoke`,
@@ -306,10 +320,36 @@ index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..ac1c2660b1beb772b0e120fe689cbc97
  		token_endpoint_auth_methods_supported: [
  			...overrides?.public_client_supported ? ["none"] : [],
 diff --git a/dist/oauth-BFBataE_.d.mts b/dist/oauth-BFBataE_.d.mts
-index 21db9f619b24c6ddf16a2b7e805bab38426672d1..9b293b791639db28f0d21b71c9860875e0d32e90 100644
+index 21db9f619b24c6ddf16a2b7e805bab38426672d1..eb9206620175ac8e4a3ff0d1a098299df380f5bf 100644
 --- a/dist/oauth-BFBataE_.d.mts
 +++ b/dist/oauth-BFBataE_.d.mts
-@@ -1349,7 +1349,7 @@ type OAuthConsent<Scopes extends readonly Scope[] = InternallySupportedScopes[]>
+@@ -772,6 +772,25 @@ interface OAuthOptions<Scopes extends readonly Scope[] = InternallySupportedScop
+     /** oAuthClient metadata */
+     metadata?: Record<string, any>;
+   }) => Awaitable<Record<string, any>>;
++  /**
++   * Attenuate the scopes used for access-token signing, persistence, refresh,
++   * introspection, and the token response. Returned scopes that were not in
++   * the original grant are ignored.
++   */
++  filterAccessTokenScopes?: (info: {
++    /** The user object if token is associated to a user. */
++    user?: (User & Record<string, unknown>) | null;
++    /** Scopes granted before application-specific attenuation. */
++    scopes: Scopes;
++    /** The resource requesting. */
++    resource?: string;
++    /** Reference of the consent/authorization. */
++    referenceId?: string;
++    /** OAuth client metadata. */
++    metadata?: Record<string, any>;
++    /** Grant type being processed. */
++    grantType: GrantType;
++  }) => Awaitable<Scopes>;
+   /**
+    * Custom fields to include in the token response body.
+    *
+@@ -1349,7 +1368,7 @@ type OAuthConsent<Scopes extends readonly Scope[] = InternallySupportedScopes[]>
  /**
   * Supported grant types of the token endpoint
   */
@@ -318,7 +358,7 @@ index 21db9f619b24c6ddf16a2b7e805bab38426672d1..9b293b791639db28f0d21b71c9860875
  type AuthMethod = "client_secret_basic" | "client_secret_post";
  type TokenEndpointAuthMethod = AuthMethod | "none";
  type BearerMethodsSupported = "header" | "body";
-@@ -1379,6 +1379,12 @@ interface AuthServerMetadata {
+@@ -1379,6 +1398,12 @@ interface AuthServerMetadata {
     * @default `/oauth2/token`
     */
    token_endpoint: string;

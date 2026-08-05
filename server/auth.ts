@@ -39,6 +39,7 @@ import {
   buildOAuthIdTokenClaims,
   buildOAuthUserInfoClaims,
   createNonce,
+  filterOAuthAccessTokenScopes,
   readString,
   sendPasswordChangedNotification,
   sendSmsOtp,
@@ -49,7 +50,12 @@ import type { Database } from './db/client'
 import * as schema from './db/schema'
 import { hashPassword, verifyPassword } from './domain/password'
 
-export { buildOAuthAccessTokenClaims, buildOAuthIdTokenClaims, buildOAuthUserInfoClaims } from './auth-helpers'
+export {
+  buildOAuthAccessTokenClaims,
+  buildOAuthIdTokenClaims,
+  buildOAuthUserInfoClaims,
+  filterOAuthAccessTokenScopes,
+} from './auth-helpers'
 
 import { createUserRepository } from '@server/adapters/repos/users'
 import type { WebhookEvent } from '@shared/api/webhooks'
@@ -74,6 +80,7 @@ export function createAuth(
     builtInProviders?: ManagementSignInSettingsResponse['builtInProviders']
     twoFactorEmailOtpEnabled?: boolean
     validAudiences?: string[]
+    externalHttp?: Deps['externalHttp']
     publishWebhookEvent?: (event: WebhookEvent, data: Record<string, unknown>) => Promise<void>
   } = {},
 ) {
@@ -83,9 +90,11 @@ export function createAuth(
   // and agent-capability usecases read are populated here.
   const deps = {
     authorization: createDrizzleAuthorizationRepository(db),
+    applications,
     users: createUserRepository(db),
     agents: createDrizzleAgentRepository(db),
     agentTokens: createDrizzleAgentTokenRepository(db),
+    externalHttp: options.externalHttp,
   } as unknown as Deps
 
   return betterAuth({
@@ -424,6 +433,7 @@ export function createAuth(
         },
         ac: organizationAccessControl,
         roles: organizationRoles,
+        dynamicAccessControl: { enabled: true },
         sendInvitationEmail: async ({ email, id, inviter }) => {
           await emailSender.send({
             to: email,
@@ -443,6 +453,12 @@ export function createAuth(
         consentPage: '/oauth/consent',
         scopes: oauthScopes,
         validAudiences: options.validAudiences,
+        postLogin: {
+          page: '/oauth/consent',
+          shouldRedirect: async () => false,
+          consentReferenceId: async ({ session }) => readString(session, 'activeOrganizationId'),
+        },
+        filterAccessTokenScopes: (input) => filterOAuthAccessTokenScopes(deps, input),
         customAccessTokenClaims: (input) => buildOAuthAccessTokenClaims(deps, input),
         customUserInfoClaims: async ({ user, scopes, jwt }) => {
           const clientId = readString(jwt, 'client_id') ?? readString(jwt, 'azp')

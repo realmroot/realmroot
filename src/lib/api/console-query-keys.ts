@@ -12,7 +12,6 @@ export const consoleQueryKeys = {
   security: ['console', 'security-policy'] as const,
   organizations: ['console', 'organizations'] as const,
   roles: ['console', 'roles'] as const,
-  roleAssignments: ['console', 'role-assignments'] as const,
   apiResources: ['console', 'api-resources'] as const,
   webhookEndpoints: ['console', 'webhooks', 'endpoints'] as const,
   webhookRequests: ['console', 'webhooks', 'requests'] as const,

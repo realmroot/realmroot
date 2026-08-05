@@ -40,6 +40,7 @@ import { idempotencyKeySchema } from '@shared/api/idempotency'
 import { paginationQuerySchema } from '@shared/api/pagination'
 import { type Context, Hono } from 'hono'
 import { getPrincipal } from '../middleware/authn'
+import { requireAgentScope } from '../middleware/authz'
 import { getDeps } from '../middleware/deps'
 import { toBoundaryError } from './auth-api'
 import { readJson, readQuery } from './validation'
@@ -130,6 +131,7 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
   })
 
   app.get('/resource-servers/:resourceServerId/resources', async (c) => {
+    requireAgentScope(c, 'resources:read')
     const principal = await resourcePrincipal(authApi, getDeps(c), c)
     return c.json(
       resourceServerResourcesResponseSchema.parse(
@@ -145,6 +147,7 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
   })
 
   app.get('/resource-servers/:resourceServerId/resources/:resourceId', async (c) => {
+    requireAgentScope(c, 'resources:read')
     const principal = await resourcePrincipal(authApi, getDeps(c), c)
     return c.json(
       resourceServerResourceSchema.parse(
@@ -160,6 +163,7 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
   })
 
   app.post('/resource-servers/:resourceServerId/connection-requests', async (c) => {
+    requireAgentScope(c, 'connection-requests:write')
     const principal = await resourcePrincipal(authApi, getDeps(c), c)
     const result = await createAgentConnectionRequest(
       getDeps(c),
@@ -174,6 +178,7 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
   })
 
   app.get('/resource-servers/:resourceServerId/connection-requests/:requestId', async (c) => {
+    requireAgentScope(c, 'connection-requests:read')
     const principal = await resourcePrincipal(authApi, getDeps(c), c)
     const result = await getAgentConnectionRequest(
       getDeps(c),
@@ -189,6 +194,7 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
   })
 
   app.post('/access/requests', async (c) => {
+    requireAgentScope(c, 'access-requests:write')
     const principal = await resourcePrincipal(authApi, getDeps(c), c)
     const result = await createAccessRequest(
       getDeps(c),
@@ -202,6 +208,7 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
   })
 
   app.get('/access/requests/:requestId', async (c) => {
+    requireAgentScope(c, 'access-requests:read')
     const principal = await resourcePrincipal(authApi, getDeps(c), c)
     const result = await getAccessRequest(
       getDeps(c),
@@ -214,6 +221,7 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
   })
 
   app.post('/access/authorizations/:authorizationId/credentials', async (c) => {
+    requireAgentScope(c, 'access-authorizations:issue')
     if (!authApi.signJWT) throw unauthorized('Agent assertion signing is unavailable.')
     const principal = await resourcePrincipal(authApi, getDeps(c), c)
     const { proof } = await readJson(c, targetCredentialProofSchema)

@@ -247,7 +247,7 @@ describe('Agent identity lifecycle', () => {
     await expect(getProtocolAgentEnrollment(deps, 'intent-1', 'another-agent')).rejects.toMatchObject({ status: 403 })
   })
 
-  it('maps management summaries, installations, access requests, and access grants', async () => {
+  it('maps management summaries, installations, access requests, and access grants [spec: admin-console/admin-agent-governance-detail]', async () => {
     const deps = managementDeps()
     const stored = aggregate()
     vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(stored)
@@ -463,7 +463,7 @@ describe('Agent identity lifecycle', () => {
   it('maps Organization-owned management Agents and validates summary invariants', async () => {
     const deps = managementDeps()
     const organizationOwned = aggregate({ ownerUserId: null, ownerOrganizationId: 'org-1' })
-    vi.mocked(deps.agentIdentities.listOwnedByOrganizations).mockResolvedValue({
+    vi.mocked(deps.agentIdentities.listOwned).mockResolvedValue({
       items: [organizationOwned],
       total: 1,
       limit: 20,
@@ -475,12 +475,14 @@ describe('Agent identity lifecycle', () => {
       displayName: null,
     } as never)
 
-    await expect(listAllAgents(deps, { limit: 20, offset: 0 }, ['org-1'])).resolves.toMatchObject({
+    await expect(
+      listAllAgents(deps, { limit: 20, offset: 0 }, { ownerOrganizationIds: ['org-1'] }),
+    ).resolves.toMatchObject({
       items: [{ owner: { id: 'org-1', type: 'organization', displayName: 'acme' } }],
     })
 
     vi.mocked(deps.authorization.findOrganization).mockResolvedValue(null)
-    await expect(listAllAgents(deps, { limit: 20, offset: 0 }, ['org-1'])).rejects.toThrow(
+    await expect(listAllAgents(deps, { limit: 20, offset: 0 }, { ownerOrganizationIds: ['org-1'] })).rejects.toThrow(
       'owner Organization org-1 was not found',
     )
 
@@ -495,8 +497,9 @@ describe('Agent identity lifecycle', () => {
     vi.mocked(deps.externalResources.summarizeAgentAccess).mockResolvedValue(
       new Map([['identity-1', { pendingRequestCount: 0, activeGrantCount: 0 }]]),
     )
-    vi.mocked(deps.authorization.countEffectiveAgentRoles).mockResolvedValue(new Map())
-    await expect(listAllAgents(deps, { limit: 20, offset: 0 })).rejects.toThrow('Role summary was not resolved')
+    await expect(listAllAgents(deps, { limit: 20, offset: 0 })).resolves.toMatchObject({
+      items: [{ roleCount: 0 }],
+    })
   })
 
   it('gets only active protocol-bound identities', async () => {
@@ -769,11 +772,6 @@ function identityDeps() {
   return createTestDeps({
     authorization: {
       findMemberByOrganizationUser: vi.fn().mockResolvedValue(null),
-      countEffectiveAgentRoles: vi
-        .fn()
-        .mockImplementation((agents: Array<{ agentIdentityId: string }>) =>
-          Promise.resolve(new Map(agents.map((agent) => [agent.agentIdentityId, 0]))),
-        ),
     },
     externalResources: {
       summarizeAgentAccess: vi
@@ -789,9 +787,6 @@ function identityDeps() {
 
 function managementDeps() {
   const deps = createTestDeps()
-  vi.mocked(deps.authorization.countEffectiveAgentRoles).mockImplementation((agents) =>
-    Promise.resolve(new Map(agents.map((agent) => [agent.agentIdentityId, 0]))),
-  )
   vi.mocked(deps.externalResources.summarizeAgentAccess).mockImplementation((agentIds) =>
     Promise.resolve(new Map(agentIds.map((agentId) => [agentId, { pendingRequestCount: 0, activeGrantCount: 0 }]))),
   )
@@ -803,7 +798,7 @@ function member(role: string) {
     id: 'member-1',
     organizationId: 'org-1',
     userId: 'user-1',
-    role,
+    roles: [role],
     title: null,
     createdAt: '2026-08-01T00:00:00.000Z',
     updatedAt: '2026-08-01T00:00:00.000Z',

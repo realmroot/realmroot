@@ -1,4 +1,3 @@
-import { forbidden } from '@server/domain/errors'
 import {
   emergencyRetireAgentIdentity,
   getAgent,
@@ -40,10 +39,12 @@ import { paginationMetadata, paginationQuerySchema } from '@shared/api/paginatio
 import { Hono } from 'hono'
 import { getActorUserId, getPrincipal } from '../../middleware/authn'
 import {
-  getManagementAccessScope,
-  requireConsoleOrganizationAccess,
-  requireRealmConsoleAccess,
-  resolveOrganizationInventoryScope,
+  authorizedOrganizationIds,
+  authorizedTenantInventory,
+  authorizeOrganization,
+  authorizeUser,
+  requireAgentScope,
+  requirePlatformAccess,
 } from '../../middleware/authz'
 import { getDeps } from '../../middleware/deps'
 import { readJson, readQuery } from '../validation'
@@ -54,14 +55,14 @@ managementAgentsRoute.get('/agents', async (c) => {
   const query = readQuery(c, listAgentsQuerySchema)
   return c.json(
     managementAgentsResponseSchema.parse(
-      await listAllAgents(getDeps(c), query, resolveOrganizationInventoryScope(c, query.organizationId)),
+      await listAllAgents(getDeps(c), query, await agentInventoryScope(c, query.organizationId)),
     ),
   )
 })
 
 managementAgentsRoute.get('/agents/:agentId', async (c) => {
   const result = await getManagementAgent(getDeps(c), c.req.param('agentId'))
-  requireAgentConsoleAccess(c, result.agent)
+  await requireAgentAccess(c, result.agent)
   return c.json(managementAgentResponseSchema.parse(result))
 })
 
@@ -77,12 +78,13 @@ managementAgentsRoute.get('/agents/:agentId/installations', async (c) => {
 managementAgentsRoute.get('/access/requests', async (c) => {
   const query = readQuery(c, listManagementAgentAccessRequestsQuerySchema)
   const principal = getPrincipal(c).agent
+  if (principal) requireAgentScope(c, 'access-requests:read')
   return c.json(
     managementAgentAccessRequestsResponseSchema.parse(
       await listManagementAgentAccessRequests(
         getDeps(c),
         principal ? { ...query, agentId: principal.identityId } : query,
-        principal ? undefined : authorityInventoryScope(c, query.organizationId),
+        principal ? undefined : await authorityInventoryScope(c, query.organizationId),
       ),
     ),
   )
@@ -91,6 +93,7 @@ managementAgentsRoute.get('/access/requests', async (c) => {
 managementAgentsRoute.get('/access/requests/:requestId', async (c) => {
   const principal = getPrincipal(c).agent
   if (principal) {
+    requireAgentScope(c, 'access-requests:read')
     return c.json(
       accessRequestSchema.parse(
         await getAccessRequest(getDeps(c), c.req.param('requestId'), principal, new URL(c.req.url).origin),
@@ -123,6 +126,7 @@ managementAgentsRoute.put('/access/requests/:requestId/decision', async (c) => {
 managementAgentsRoute.get('/access/authorizations', async (c) => {
   const principal = getPrincipal(c).agent
   if (principal) {
+    requireAgentScope(c, 'access-authorizations:read')
     return c.json(
       accessGrantsResponseSchema.parse(
         await listAgentAccessGrants(getDeps(c), principal, readQuery(c, paginationQuerySchema)),
@@ -132,7 +136,7 @@ managementAgentsRoute.get('/access/authorizations', async (c) => {
   const query = readQuery(c, listManagementAgentAccessGrantsQuerySchema)
   return c.json(
     managementAgentAccessGrantsResponseSchema.parse(
-      await listManagementAgentAccessGrants(getDeps(c), query, authorityInventoryScope(c, query.organizationId)),
+      await listManagementAgentAccessGrants(getDeps(c), query, await authorityInventoryScope(c, query.organizationId)),
     ),
   )
 })
@@ -140,6 +144,7 @@ managementAgentsRoute.get('/access/authorizations', async (c) => {
 managementAgentsRoute.get('/access/authorizations/:authorizationId', async (c) => {
   const principal = getPrincipal(c).agent
   if (principal) {
+    requireAgentScope(c, 'access-authorizations:read')
     return c.json(
       accessGrantSchema.parse(await getAgentAccessGrant(getDeps(c), c.req.param('authorizationId'), principal)),
     )
@@ -164,29 +169,33 @@ managementAgentsRoute.put('/access/authorizations/:authorizationId/revocation', 
 
 managementAgentsRoute.get('/agents/:agentId/retirement', async (c) => {
   const result = await getManagementAgent(getDeps(c), c.req.param('agentId'))
-  requireAgentConsoleAccess(c, result.agent)
+  await requireAgentAccess(c, result.agent)
   return c.json({ agentId: result.agent.id, status: result.agent.status, retiredAt: result.agent.retiredAt })
 })
 
 managementAgentsRoute.put('/agents/:agentId/retirement', async (c) => {
+  const agent = await getAgent(getDeps(c), c.req.param('agentId'))
+  await requireAgentAccess(c, agent, true)
   await emergencyRetireAgentIdentity(getDeps(c), c.req.param('agentId'), getActorUserId(c))
   return c.body(null, 204)
 })
 
 managementAgentsRoute.delete('/agents/:agentId/retirement', async (c) => {
+  const agent = await getAgent(getDeps(c), c.req.param('agentId'))
+  await requireAgentAccess(c, agent, true)
   await recoverAgentIdentity(getDeps(c), c.req.param('agentId'), getActorUserId(c)!)
   return c.body(null, 204)
 })
 
 managementAgentsRoute.get('/realm/audit-events', async (c) => {
   const query = readQuery(c, listAgentAuditEventsQuerySchema)
-  const organizationIds = resolveOrganizationInventoryScope(c, query.organizationId)
+  const organizationIds = await organizationSelection(c, query.organizationId, 'audit-events:read')
   if (query.agentId) {
     const agent = await getAgent(getDeps(c), query.agentId)
     if (agent.homeSpace.type === 'organization') {
-      requireConsoleOrganizationAccess(c, agent.homeSpace.organizationId)
+      await authorizeOrganization(c, agent.homeSpace.organizationId, 'audit-events:read')
     } else {
-      requireRealmConsoleAccess(c)
+      requirePlatformAccess(c, 'audit-events:read')
     }
   }
   const result = await getDeps(c).agentAudit.list(query, {
@@ -201,44 +210,52 @@ managementAgentsRoute.get('/realm/audit-events', async (c) => {
 
 async function requireAgentByIdConsoleAccess(c: Parameters<typeof getDeps>[0], agentId: string) {
   const agent = await getAgent(getDeps(c), agentId)
-  requireAgentConsoleAccess(c, agent)
+  await requireAgentAccess(c, agent)
 }
 
 async function requireAgentByIdAccess(c: Parameters<typeof getDeps>[0], agentId: string) {
   const agent = await getAgent(getDeps(c), agentId)
-  const access = getManagementAccessScope(c)
-  if (access?.kind === 'account') {
-    if (
-      (agent.homeSpace.type === 'personal' && agent.homeSpace.userId !== access.userId) ||
-      (agent.homeSpace.type === 'organization' && !access.organizationIds.includes(agent.homeSpace.organizationId))
-    ) {
-      throw forbidden()
+  await requireAgentAccess(c, agent, c.req.method !== 'GET' && c.req.method !== 'HEAD')
+}
+
+async function authorityInventoryScope(c: Parameters<typeof getDeps>[0], requestedOrganizationId?: string) {
+  return agentInventoryScope(c, requestedOrganizationId)
+}
+
+async function agentInventoryScope(c: Parameters<typeof getDeps>[0], requestedOrganizationId?: string) {
+  const tenants = await authorizedTenantInventory(c, 'agents:read')
+  if (!tenants) return requestedOrganizationId ? { ownerOrganizationIds: [requestedOrganizationId] } : undefined
+  const ownerOrganizationIds = tenants.filter((tenant) => tenant.type === 'organization').map((tenant) => tenant.id)
+  if (requestedOrganizationId) {
+    return {
+      ownerOrganizationIds: ownerOrganizationIds.includes(requestedOrganizationId) ? [requestedOrganizationId] : [],
     }
-    return
   }
-  requireAgentConsoleAccess(c, agent)
-}
-
-function authorityInventoryScope(c: Parameters<typeof getDeps>[0], requestedOrganizationId?: string) {
-  const access = getManagementAccessScope(c)
-  if (!access || access.kind === 'realm') {
-    return requestedOrganizationId ? { ownerOrganizationIds: [requestedOrganizationId] } : undefined
-  }
-  const organizationIds = requestedOrganizationId
-    ? access.organizationIds.includes(requestedOrganizationId)
-      ? [requestedOrganizationId]
-      : []
-    : access.organizationIds
   return {
-    ownerOrganizationIds: organizationIds,
-    ...(access.kind === 'account' ? { ownerUserId: access.userId } : {}),
+    ownerUserId: tenants.find((tenant) => tenant.type === 'user')?.id,
+    ownerOrganizationIds,
   }
 }
 
-function requireAgentConsoleAccess(c: Parameters<typeof getDeps>[0], agent: Awaited<ReturnType<typeof getAgent>>) {
+async function requireAgentAccess(
+  c: Parameters<typeof getDeps>[0],
+  agent: Awaited<ReturnType<typeof getAgent>>,
+  write = false,
+) {
   if (agent.homeSpace.type === 'organization') {
-    requireConsoleOrganizationAccess(c, agent.homeSpace.organizationId)
+    await authorizeOrganization(c, agent.homeSpace.organizationId, write ? 'agents:write' : 'agents:read')
     return
   }
-  requireRealmConsoleAccess(c)
+  await authorizeUser(c, agent.homeSpace.userId, write ? 'agents:write' : 'agents:read')
+}
+
+async function organizationSelection(
+  c: Parameters<typeof getDeps>[0],
+  requestedOrganizationId: string | undefined,
+  scope: 'agents:read' | 'audit-events:read',
+) {
+  const allowed = await authorizedOrganizationIds(c, scope)
+  if (!allowed) return requestedOrganizationId ? [requestedOrganizationId] : undefined
+  if (!requestedOrganizationId) return allowed
+  return allowed.includes(requestedOrganizationId) ? [requestedOrganizationId] : []
 }

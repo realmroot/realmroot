@@ -52,17 +52,13 @@ import type { UploadedAssetResponse } from '@shared/api/assets'
 import type {
   ApiResourceContractResponse,
   CreateOrganizationRequest,
-  CreateRoleAssignmentRequest,
   CreateRoleRequest,
   ListApiResourcesQuery,
   ListOrganizationsResponse,
-  ListRoleAssignmentsQuery,
-  ListRoleAssignmentsResponse,
   ListRolesResponse,
+  MemberRolesResponse,
   OrganizationResponse,
-  RoleAssignmentResponse,
-  RoleAssignmentRevocation,
-  RolePermissionsResponse,
+  ReplaceMemberRolesRequest,
   RoleResponse,
   UpdateOrganizationRequest,
   UpdateRoleRequest,
@@ -499,35 +495,21 @@ export type RpcSchema = {
     $get: RpcEndpoint<{ param: { id: string } }, OrganizationResponse>
     $patch: RpcEndpoint<{ param: { id: string }; json: UpdateOrganizationRequest }, OrganizationResponse>
   }
-  '/api/access/roles': {
-    $get: RpcEndpoint<RpcNoInput, ListRolesResponse>
-    $post: RpcEndpoint<{ json: CreateRoleRequest }, RoleResponse, 201>
+  '/api/organizations/:organizationId/roles': {
+    $get: RpcEndpoint<{ param: { organizationId: string } }, ListRolesResponse>
+    $post: RpcEndpoint<{ param: { organizationId: string }; json: CreateRoleRequest }, RoleResponse, 201>
   }
-  '/api/access/roles/:id': {
-    $get: RpcEndpoint<{ param: { id: string } }, RoleResponse>
-    $patch: RpcEndpoint<{ param: { id: string }; json: UpdateRoleRequest }, RoleResponse>
-    $delete: RpcEndpoint<{ param: { id: string } }, EmptyResponse, 204>
+  '/api/organizations/:organizationId/roles/:roleKey': {
+    $get: RpcEndpoint<{ param: { organizationId: string; roleKey: string } }, RoleResponse>
+    $patch: RpcEndpoint<{ param: { organizationId: string; roleKey: string }; json: UpdateRoleRequest }, RoleResponse>
+    $delete: RpcEndpoint<{ param: { organizationId: string; roleKey: string } }, EmptyResponse, 204>
   }
-  '/api/access/roles/:id/scopes': {
-    $get: RpcEndpoint<{ param: { id: string } }, RolePermissionsResponse>
+  '/api/organizations/:organizationId/members/:memberId/roles': {
+    $get: RpcEndpoint<{ param: { organizationId: string; memberId: string } }, MemberRolesResponse>
     $put: RpcEndpoint<
-      {
-        param: { id: string }
-        header: { 'If-Match': string }
-        json: { scopes: Array<{ resourceId: string; scope: string }> }
-      },
-      RolePermissionsResponse
+      { param: { organizationId: string; memberId: string }; json: ReplaceMemberRolesRequest },
+      MemberRolesResponse
     >
-  }
-  '/api/access/assignments': {
-    $get: RpcEndpoint<{ query?: Partial<Record<keyof ListRoleAssignmentsQuery, string>> }, ListRoleAssignmentsResponse>
-    $post: RpcEndpoint<{ json: CreateRoleAssignmentRequest }, RoleAssignmentResponse, 201>
-  }
-  '/api/access/assignments/:id': {
-    $get: RpcEndpoint<{ param: { id: string } }, RoleAssignmentResponse>
-  }
-  '/api/access/assignments/:id/revocation': {
-    $put: RpcEndpoint<{ param: { id: string } }, RoleAssignmentRevocation>
   }
   '/api/resource-servers': {
     $get: RpcEndpoint<

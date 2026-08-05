@@ -1,6 +1,5 @@
 import { z } from 'zod'
 import type { Agent } from './agent-api'
-import type { RoleAssignmentResponse, RolePermission, RoleResponse } from './authorization'
 import type { PaginationMetadata } from './pagination'
 import { usernameSchema } from './users'
 
@@ -72,15 +71,6 @@ export type AccountOrganizationContextResponse = {
 
 export type AccountOrganizationAgentsResponse = {
   items: Agent[]
-  pagination: PaginationMetadata
-}
-
-export type AccountOrganizationRoleAssignmentsResponse = {
-  assignments: Array<{
-    assignment: RoleAssignmentResponse
-    role: RoleResponse
-    permissions: RolePermission[]
-  }>
   pagination: PaginationMetadata
 }
 

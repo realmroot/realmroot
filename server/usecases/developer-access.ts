@@ -31,13 +31,16 @@ export async function resolveDeveloperAccess(
   const eligibleLevels = new Set(consoleAccessPolicy.eligibleAccessLevels)
   const consoleOrganizations = activeMemberships.flatMap(({ membership, organization }) => {
     if (!organization || organization.id === 'org_platform') return []
-    if (!eligibleLevels.has(membership.role as 'owner' | 'admin' | 'developer')) return []
+    const accessLevel = (['owner', 'admin', 'developer'] as const).find(
+      (role) => membership.roles.includes(role) && eligibleLevels.has(role),
+    )
+    if (!accessLevel) return []
     if (consoleAccessPolicy.mode === 'realm_operators') return []
     if (consoleAccessPolicy.mode === 'selected_organizations' && !selected.has(organization.id)) return []
     return [
       {
         organizationId: organization.id,
-        accessLevel: membership.role as 'owner' | 'admin' | 'developer',
+        accessLevel,
       },
     ]
   })

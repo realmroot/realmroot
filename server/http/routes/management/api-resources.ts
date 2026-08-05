@@ -1,3 +1,4 @@
+import { platformOrganization } from '@server/domain/platform-organization'
 import {
   archiveResource,
   createResource,
@@ -22,11 +23,7 @@ import {
 import { apiResourceContractResponseSchema, listApiResourcesQuerySchema } from '@shared/api/authorization'
 import { Hono } from 'hono'
 import { getPrincipal } from '../../middleware/authn'
-import {
-  requireConsoleOrganizationAccess,
-  requireConsoleOwnedOrganization,
-  resolveOrganizationInventoryScope,
-} from '../../middleware/authz'
+import { authorizedOrganizationIds, authorizeOrganization } from '../../middleware/authz'
 import { getDeps } from '../../middleware/deps'
 import { readJson, readQuery } from '../validation'
 
@@ -55,14 +52,14 @@ export function createManagementApiResourcesRoute(canonicalOrigin?: string) {
     const query = readQuery(c, listApiResourcesQuerySchema)
     return c.json(
       apiResourcesResponseSchema.parse(
-        await listApiResources(getDeps(c), query, resolveOrganizationInventoryScope(c, query.ownerOrganizationId)),
+        await listApiResources(getDeps(c), query, await filterOrganizationSelection(c, query.ownerOrganizationId)),
       ),
     )
   })
 
   app.post('/', async (c) => {
     const input = await readJson(c, createApiResourceSchema)
-    requireConsoleOwnedOrganization(c, input.ownerOrganizationId)
+    await authorizeOrganization(c, input.ownerOrganizationId ?? platformOrganization.id, 'resource-servers:write')
     const resource = await createResource(getDeps(c), input)
     c.header('Location', `/api/resource-servers/${encodeURIComponent(resource.id)}`)
     return c.json(apiResourceSchema.parse(await getApiResource(getDeps(c), resource.id)), 201)
@@ -88,7 +85,9 @@ export function createManagementApiResourcesRoute(canonicalOrigin?: string) {
   app.patch('/:resourceId', async (c) => {
     await requireResourceAccess(c)
     const input = await readJson(c, updateApiResourceSchema)
-    if (input.ownerOrganizationId !== undefined) requireConsoleOwnedOrganization(c, input.ownerOrganizationId)
+    if (input.ownerOrganizationId !== undefined) {
+      await authorizeOrganization(c, input.ownerOrganizationId, 'resource-servers:write')
+    }
     await updateResource(getDeps(c), c.req.param('resourceId'), input)
     return c.json(apiResourceSchema.parse(await getApiResource(getDeps(c), c.req.param('resourceId'))))
   })
@@ -118,8 +117,19 @@ export function createManagementApiResourcesRoute(canonicalOrigin?: string) {
 
 async function requireResourceAccess(c: Parameters<typeof getPrincipal>[0]) {
   const resource = await getApiResource(getDeps(c), c.req.param('resourceId')!)
-  requireConsoleOrganizationAccess(c, resource.ownerOrganizationId)
+  await authorizeOrganization(
+    c,
+    resource.ownerOrganizationId,
+    c.req.method === 'GET' || c.req.method === 'HEAD' ? 'resource-servers:read' : 'resource-servers:write',
+  )
   return resource
+}
+
+async function filterOrganizationSelection(c: Parameters<typeof getPrincipal>[0], requestedOrganizationId?: string) {
+  const allowed = await authorizedOrganizationIds(c, 'resource-servers:read')
+  if (!allowed) return requestedOrganizationId ? [requestedOrganizationId] : undefined
+  if (!requestedOrganizationId) return allowed
+  return allowed.includes(requestedOrganizationId) ? [requestedOrganizationId] : []
 }
 
 function resourceMutationActor(c: Parameters<typeof getPrincipal>[0]) {

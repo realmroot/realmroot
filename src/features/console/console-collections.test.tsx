@@ -13,6 +13,7 @@ import { RolesPage } from '@/features/console/extracted/roles'
 import { MfaPage } from '@/features/console/extracted/security-settings'
 import { SignInSettingsPage } from '@/features/console/extracted/sign-in-settings'
 import { UsersPage } from '@/features/console/extracted/users/users-list'
+import { ConsoleScopeProvider } from '@/lib/console-context'
 import { queryClient } from '@/router'
 
 globalThis.ResizeObserver ??= class ResizeObserver {
@@ -50,6 +51,12 @@ import {
 } from './console.test-utils'
 
 describe('console collections', () => {
+  const organizationRolesPage = (
+    <ConsoleScopeProvider value={{ organizationId: 'org-1', realmOperator: true }}>
+      <RolesPage />
+    </ConsoleScopeProvider>
+  )
+
   it('renders page-specific resource actions and list toolbars', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
@@ -65,7 +72,7 @@ describe('console collections', () => {
       if (url === '/api/organizations') {
         return Promise.resolve(jsonResponse({ organizations: [organization], pagination }))
       }
-      if (url === '/api/access/roles') return Promise.resolve(jsonResponse({ roles: [role], pagination }))
+      if (url === '/api/organizations/org-1/roles') return Promise.resolve(jsonResponse({ roles: [role], pagination }))
       if (url === '/api/resource-servers') {
         return Promise.resolve(jsonResponse({ items: [{ ...apiResource, authorization: null }], pagination }))
       }
@@ -87,7 +94,7 @@ describe('console collections', () => {
         heading: 'Organizations',
         searchLabel: 'Search organizations',
       },
-      { action: 'New role', component: <RolesPage />, heading: 'Roles', searchLabel: 'Search roles' },
+      { action: 'New role', component: organizationRolesPage, heading: 'Roles', searchLabel: null },
       {
         action: 'New resource server',
         component: <ApiResourcesPage />,
@@ -148,21 +155,17 @@ describe('console collections', () => {
     }
     const billingManagerRole = {
       ...role,
-      id: 'role-2',
       key: 'billing-manager',
-      name: 'Billing manager',
+      displayName: 'Billing manager',
       description: 'Controls invoices',
-      system: false,
-      organizationId: 'org-1',
+      predefined: false,
     }
     const ordersReaderRole = {
       ...role,
-      id: 'role-3',
       key: 'orders-reader',
-      name: 'Orders reader',
+      displayName: 'Orders reader',
       description: 'Reads orders',
-      system: false,
-      resourceId: 'resource-1',
+      predefined: false,
     }
     const billingResource = {
       ...apiResource,
@@ -182,7 +185,7 @@ describe('console collections', () => {
       if (url === '/api/organizations') {
         return Promise.resolve(jsonResponse({ organizations: [organization, northwindOrganization], pagination }))
       }
-      if (url === '/api/access/roles') {
+      if (url === '/api/organizations/org-1/roles') {
         return Promise.resolve(jsonResponse({ roles: [role, billingManagerRole, ordersReaderRole], pagination }))
       }
       if (url === '/api/resource-servers') {
@@ -222,28 +225,11 @@ describe('console collections', () => {
 
     cleanup()
     queryClient.clear()
-    renderWithQuery(<RolesPage />)
+    renderWithQuery(organizationRolesPage)
 
     expect(await screen.findByText('Admin')).toBeTruthy()
     expect(screen.getByText('Billing manager')).toBeTruthy()
     expect(screen.getByText('Orders reader')).toBeTruthy()
-    fireEvent.change(screen.getByLabelText('Search roles'), { target: { value: 'billing' } })
-    await waitFor(() => {
-      expect(screen.getByText('Billing manager')).toBeTruthy()
-      expect(screen.queryByText('Admin')).toBeNull()
-      expect(screen.queryByText('Orders reader')).toBeNull()
-    })
-    fireEvent.change(screen.getByLabelText('Search roles'), { target: { value: '' } })
-    fireEvent.change(screen.getByLabelText('Filter role type'), { target: { value: 'system' } })
-    await waitFor(() => {
-      expect(screen.getByText('Admin')).toBeTruthy()
-      expect(screen.queryByText('Billing manager')).toBeNull()
-      expect(screen.queryByText('Orders reader')).toBeNull()
-    })
-    fireEvent.change(screen.getByLabelText('Search roles'), { target: { value: 'missing' } })
-    expect(await screen.findByText('No roles found')).toBeTruthy()
-    expect(screen.getByText('No roles match the current filters.')).toBeTruthy()
-
     cleanup()
     queryClient.clear()
     renderWithQuery(<ApiResourcesPage />)
@@ -341,8 +327,8 @@ describe('console collections', () => {
         text: 'Acme Inc.',
       },
       {
-        component: <RolesPage />,
-        matches: (url: string) => url === '/api/access/roles',
+        component: organizationRolesPage,
+        matches: (url: string) => url === '/api/organizations/org-1/roles',
         success: { roles: [role], pagination },
         text: 'Admin',
       },

@@ -22,8 +22,8 @@ export function CustomizeJwtPage() {
         <TokenCustomizationCard
           title={tt('Machine-to-machine token')}
           rows={[
-            ['Application roles', 'Application role assignments are supported.'],
-            ['Claims', 'Uses the fixed roles, groups, and scope authorization claims.'],
+            ['Application scopes', 'Applications receive tenant-bound scopes directly from OAuth grants.'],
+            ['Claims', 'Uses tenant and scope claims without assigning human Organization Roles.'],
           ]}
         />
         <TokenCustomizationCard

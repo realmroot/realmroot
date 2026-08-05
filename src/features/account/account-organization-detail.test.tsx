@@ -1,5 +1,4 @@
 import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
-import { HttpResponse } from 'msw'
 import type { ReactNode } from 'react'
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import {
@@ -100,45 +99,6 @@ describe('Account Organization detail', () => {
           pagination: { limit: 50, offset: 0, total: 1, hasMore: false, nextOffset: null },
         }),
       ),
-      http.get(`${base}/api/access/assignments`, ({ request }) => {
-        const realm = new URL(request.url).searchParams.get('context') === 'realm'
-        return json({
-          assignments: realm
-            ? []
-            : [
-                {
-                  id: 'assignment-viewer',
-                  roleId: 'role-viewer',
-                  subjectType: 'user',
-                  subjectId: store.profile.id,
-                  organizationId: 'org-family',
-                  assignedByUserId: 'admin-1',
-                  expiresAt: null,
-                  revokedAt: null,
-                  createdAt: '2026-08-01T00:00:00.000Z',
-                  updatedAt: '2026-08-01T00:00:00.000Z',
-                },
-              ],
-          pagination: { limit: 100, offset: 0, total: realm ? 0 : 1, hasMore: false, nextOffset: null },
-        })
-      }),
-      http.get(`${base}/api/access/roles/role-viewer`, () =>
-        json({
-          id: 'role-viewer',
-          key: 'household.viewer',
-          name: 'Household viewer',
-          description: 'View shared household data.',
-          system: false,
-          createdAt: '2026-08-01T00:00:00.000Z',
-          updatedAt: '2026-08-01T00:00:00.000Z',
-        }),
-      ),
-      http.get(`${base}/api/access/roles/role-viewer/scopes`, () =>
-        HttpResponse.json(
-          { scopes: [{ resourceId: 'household-api', scope: 'household:read' }] },
-          { headers: { ETag: '"role-viewer"' } },
-        ),
-      ),
       http.get(`${base}/api/access/authorizations`, () =>
         json({
           items: [
@@ -171,9 +131,9 @@ describe('Account Organization detail', () => {
     fireEvent.mouseDown(screen.getByRole('tab', { name: 'Agents' }), { button: 0, ctrlKey: false })
     expect(await screen.findByText('Family assistant')).toBeTruthy()
 
-    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Role assignments' }), { button: 0, ctrlKey: false })
-    expect(await screen.findByText('Household viewer')).toBeTruthy()
-    expect(screen.getByText('household-api · household:read')).toBeTruthy()
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Roles & grants' }), { button: 0, ctrlKey: false })
+    expect(await screen.findByText('Your Organization Roles')).toBeTruthy()
+    expect(screen.getByText('Assigned Roles')).toBeTruthy()
     expect(screen.getByText('household:read')).toBeTruthy()
   })
 })

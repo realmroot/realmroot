@@ -224,7 +224,7 @@ describe('app.test 2', () => {
 
     const organizations = await app.request('/api/organizations')
     const resources = await app.request('/api/resource-servers')
-    const roles = await app.request('/api/access/roles')
+    const roles = await app.request('/api/organizations/org-1/roles')
 
     expect(organizations.status).toBe(401)
     expect(resources.status).toBe(401)

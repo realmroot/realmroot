@@ -7,6 +7,7 @@ import { OrganizationsPage } from '@/features/console/extracted/organizations'
 import { RolesPage } from '@/features/console/extracted/roles'
 import { UsersPage } from '@/features/console/extracted/users/users-list'
 import { ConsoleDashboardPage } from '@/features/console/pages/dashboard-page'
+import { ConsoleScopeProvider } from '@/lib/console-context'
 import { queryClient } from '@/router'
 import {
   apiResource,
@@ -19,7 +20,6 @@ import {
   organization,
   pagination,
   renderWithQuery,
-  role,
   securityPolicy,
   signInSettings,
   user,
@@ -55,7 +55,6 @@ describe('console authorization dashboard', () => {
       if (url === '/api/organizations') {
         return Promise.resolve(jsonResponse({ organizations: [organization], pagination }))
       }
-      if (url === '/api/access/roles') return Promise.resolve(jsonResponse({ roles: [role], pagination }))
       if (url === '/api/resource-servers') {
         return Promise.resolve(jsonResponse({ items: [apiResource], pagination }))
       }
@@ -106,7 +105,9 @@ describe('console authorization dashboard', () => {
       if (url === '/api/organizations') {
         return Promise.resolve(jsonResponse({ organizations: [], pagination: emptyPagination }))
       }
-      if (url === '/api/access/roles') return Promise.resolve(jsonResponse({ roles: [], pagination: emptyPagination }))
+      if (url === '/api/organizations/org-1/roles') {
+        return Promise.resolve(jsonResponse({ roles: [], pagination: emptyPagination }))
+      }
       if (url === '/api/resource-servers') {
         return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
       }
@@ -135,8 +136,12 @@ describe('console authorization dashboard', () => {
     expect(screen.getByRole('button', { name: 'Provision organization' })).toBeTruthy()
 
     cleanup()
-    renderWithQuery(<RolesPage />)
-    expect(await screen.findByText('No roles yet')).toBeTruthy()
+    renderWithQuery(
+      <ConsoleScopeProvider value={{ organizationId: 'org-1', realmOperator: true }}>
+        <RolesPage />
+      </ConsoleScopeProvider>,
+    )
+    expect(await screen.findByText('No Roles')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'New role' })).toBeTruthy()
 
     cleanup()
