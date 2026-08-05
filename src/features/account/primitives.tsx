@@ -1,6 +1,7 @@
 import { type ReactNode, useState } from 'react'
 import { DestructiveConfirmation as DestructiveConfirmationSurface } from '@/components/destructive-confirmation'
 import { tt } from '@/lib/i18n'
+import { cn } from '@/lib/utils'
 import type { DestructiveConfirmation, ListItem } from './types'
 
 export function PanelTitle({
@@ -82,19 +83,28 @@ export function SubsectionTitle({ title, description }: { title: string; descrip
 }
 
 export function ItemList({
+  compactEmpty = false,
   empty,
   emptyDescription = tt('Nothing needs attention here.'),
+  emptyIcon,
   items,
 }: {
+  compactEmpty?: boolean
   empty: string
   emptyDescription?: string
+  emptyIcon?: ReactNode
   items: ListItem[]
 }) {
   return (
     <div className="accountRows itemList">
       {items.length === 0 ? (
-        <article className="accountRow itemRow itemRowEmpty">
+        <article className={cn('accountRow itemRow itemRowEmpty', compactEmpty && 'is-compact')}>
           <div className="accountRowLabel">
+            {emptyIcon ? (
+              <span className="accountEmptyIcon" aria-hidden="true">
+                {emptyIcon}
+              </span>
+            ) : null}
             <strong>{empty}</strong>
             <span>{emptyDescription}</span>
           </div>
@@ -102,10 +112,17 @@ export function ItemList({
       ) : (
         items.map((item) => (
           <article className="accountRow itemRow" key={item.id}>
-            <div className="accountRowLabel">
-              <strong>{item.title}</strong>
-              <span>{item.meta}</span>
-              {item.children}
+            <div className={cn('accountRowLabel itemRowMain', !item.icon && 'withoutIcon')}>
+              {item.icon ? (
+                <span className="itemRowIcon" aria-hidden="true">
+                  {item.icon}
+                </span>
+              ) : null}
+              <div className="itemRowCopy">
+                <strong>{item.title}</strong>
+                <span>{item.meta}</span>
+                {item.children}
+              </div>
             </div>
             <div className="accountRowValue">{item.status}</div>
             <div className="accountRowAction">{item.action}</div>

@@ -17,7 +17,9 @@ describe('account security passkey routes', () => {
 
   it('serves account security state and delegates MFA enrollment APIs to Better Auth [spec: account-center/totp-flow]', async () => {
     const auth = createAuthMock()
-    const security = createSecurityRepositoryMock(securityPolicy({ mfa: { mode: 'required' } }))
+    const security = createSecurityRepositoryMock(securityPolicy({ mfa: { mode: 'required' } }), {
+      mfaEnabled: false,
+    })
     const app = createApp(auth, createTestDeps({ users: createUserRepositoryMock(), security }), {
       securityPolicy: securityPolicy(),
     })
@@ -39,7 +41,7 @@ describe('account security passkey routes', () => {
       security: {
         userId: 'user-1',
         mfa: {
-          enabled: true,
+          enabled: false,
         },
         passkeys: {
           enabled: true,
@@ -150,6 +152,26 @@ describe('account security passkey routes', () => {
     expect(response.status).toBe(400)
     await expect(response.json()).resolves.toMatchObject({
       error: { message: 'Authenticator app MFA is disabled for this deployment.' },
+    })
+    expect(auth.api.enableTwoFactor).not.toHaveBeenCalled()
+  })
+
+  it('rejects a second authenticator app enrollment while MFA is enabled [spec: account-center/totp-flow]', async () => {
+    const auth = createAuthMock()
+    const security = createSecurityRepositoryMock()
+    const app = createApp(auth, createTestDeps({ users: createUserRepositoryMock(), security }), {
+      securityPolicy: securityPolicy(),
+    })
+
+    const response = await app.request('/api/account/security/mfa/totp-enrollment', {
+      method: 'POST',
+      headers: userHeaders(),
+      body: JSON.stringify({ password: 'password-1' }),
+    })
+
+    expect(response.status).toBe(409)
+    await expect(response.json()).resolves.toMatchObject({
+      error: { message: 'This account already has an authenticator app enrolled.' },
     })
     expect(auth.api.enableTwoFactor).not.toHaveBeenCalled()
   })

@@ -81,6 +81,7 @@ describe('AccountPageShell', () => {
   it('includes a Console entry in the avatar menu for admins [spec: account-center/account-admin-console-entry]', async () => {
     renderShell(profile({ role: 'admin' }))
 
+    expect(screen.queryByRole('link', { name: 'Open Realm Console' })).toBeNull()
     openAccountMenu()
 
     const consoleLink = await screen.findByRole('link', { name: 'Console' })
@@ -145,6 +146,13 @@ describe('AccountPageShell', () => {
     expect(screen.queryByRole('button', { name: 'Account menu' })).toBeNull()
   })
 
+  it('does not show placeholder realm details in the sidebar [spec: account-center/account-center]', () => {
+    renderShell(profile())
+
+    expect(screen.queryByText('Default realm')).toBeNull()
+    expect(screen.queryByText('identity.acme.dev')).toBeNull()
+  })
+
   it('returns focus to the Account Center navigation trigger after Escape', async () => {
     renderShell(profile())
     const trigger = screen.getByRole('button', { name: 'Open Account Center navigation' })
@@ -160,15 +168,15 @@ describe('AccountPageShell', () => {
   it('switches language and theme from the avatar submenus', async () => {
     renderShell(profile())
     openAccountMenu()
-    await openPreferenceSubmenu(/^Theme$/)
+    await openPreferenceSubmenu(/^Theme/)
     fireEvent.click(await screen.findByRole('menuitemradio', { name: 'Dark' }))
 
     openAccountMenu()
-    await openPreferenceSubmenu(/^Theme$/)
+    await openPreferenceSubmenu(/^Theme/)
     fireEvent.click(await screen.findByRole('menuitemradio', { name: 'Light' }))
 
     openAccountMenu()
-    await openPreferenceSubmenu(/^Language$/)
+    await openPreferenceSubmenu(/^Language/)
     fireEvent.click(await screen.findByRole('menuitemradio', { name: '简体中文' }))
     await waitFor(() => expect(i18n.language).toBe('zh'))
 

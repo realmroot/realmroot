@@ -1,10 +1,10 @@
-import { createFileRoute, redirect } from '@tanstack/react-router'
-import { loadAccountProfile } from '@/lib/route-auth'
+import { createFileRoute } from '@tanstack/react-router'
+import { AccountOverviewPage } from '@/features/account/account-center'
+import { requireAccountProfile } from '@/lib/route-auth'
 
 export const Route = createFileRoute('/')({
-  beforeLoad: async () => {
-    const profile = await loadAccountProfile()
-    if (!profile) throw redirect({ to: '/auth/sign-in' })
-    throw redirect({ to: '/profile' })
+  beforeLoad: async ({ location }) => {
+    await requireAccountProfile(location.href)
   },
+  component: AccountOverviewPage,
 })

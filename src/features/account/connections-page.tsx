@@ -258,6 +258,7 @@ function ConnectionsPanel({
         confirm={confirm}
         mutate={mutate}
         providers={providers}
+        showHeading={false}
         walletProvider={walletProvider}
       />
     </section>
@@ -266,15 +267,19 @@ function ConnectionsPanel({
 
 export function ConnectionsSection({
   accounts,
+  compactEmpty = false,
   confirm,
   mutate,
   providers,
+  showHeading = true,
   walletProvider,
 }: {
   accounts: LinkedAccount[]
+  compactEmpty?: boolean
   confirm: ConfirmDestructiveHandler
   mutate: MutationHandler
   providers: IdentityProvider[]
+  showHeading?: boolean
   walletProvider?: Web3WalletProvider
 }) {
   const externalAccounts = accounts.filter((account) => account.providerId !== 'credential')
@@ -298,24 +303,28 @@ export function ConnectionsSection({
       invalidate: [accountQueryKeys.linkedAccounts],
     })
   }
+  const list = (
+    <ItemList
+      compactEmpty={compactEmpty}
+      empty={tt('No additional sign-in methods')}
+      emptyDescription={tt('Your organization has not enabled social or OAuth sign-in for this account.')}
+      emptyIcon={<Link2 size={18} />}
+      items={[
+        ...providers.map((provider) =>
+          linkedProviderItem(provider, accountByProvider.get(provider.providerId), confirm, mutate, connectProvider),
+        ),
+        ...(walletEnabled ? [walletProviderItem(walletAccounts, walletProvider, confirm, mutate, connectWallet)] : []),
+      ]}
+    />
+  )
+  if (!showHeading) return <div className="settingsPanel">{list}</div>
   return (
-    <section className="settingsPanel">
+    <section aria-label={tt('Linked accounts')} className="settingsPanel">
       <SubsectionTitle
         title={tt('Linked accounts')}
         description={tt('External sign-in identities connected to this account.')}
       />
-      <ItemList
-        empty={tt('No sign-in connectors are available.')}
-        emptyDescription={tt('Enable a social or OAuth connector before users can link one here.')}
-        items={[
-          ...providers.map((provider) =>
-            linkedProviderItem(provider, accountByProvider.get(provider.providerId), confirm, mutate, connectProvider),
-          ),
-          ...(walletEnabled
-            ? [walletProviderItem(walletAccounts, walletProvider, confirm, mutate, connectWallet)]
-            : []),
-        ]}
-      />
+      {list}
     </section>
   )
 }
@@ -332,7 +341,7 @@ function linkedProviderItem(
     icon: <ProviderIcon className="providerIcon providerIconLarge" provider={provider} />,
     title: provider.displayName,
     meta: account ? tt('Linked {{date}}', { date: formatDate(account.createdAt) }) : tt('Not linked to this account.'),
-    status: account ? tt('Linked') : tt('Available'),
+    status: account ? tt('Linked') : undefined,
     action: account ? (
       <Button
         onClick={() =>
@@ -354,7 +363,7 @@ function linkedProviderItem(
         {tt('Unlink')}
       </Button>
     ) : (
-      <Button onClick={() => void connectProvider(provider)} type="button" variant="secondary">
+      <Button onClick={() => void connectProvider(provider)} size="sm" type="button" variant="outline">
         {tt('Connect')}
       </Button>
     ),
@@ -375,7 +384,7 @@ function walletProviderItem(
     meta: walletAccounts.length
       ? tt('{{count}} wallet linked.', { count: walletAccounts.length })
       : tt('Link a wallet after signing in with an email-based account.'),
-    status: walletAccounts.length ? tt('Linked') : tt('Available'),
+    status: walletAccounts.length ? tt('Linked') : undefined,
     action: walletAccounts.length ? (
       <Button
         onClick={() =>
@@ -398,8 +407,9 @@ function walletProviderItem(
       <Button
         disabled={!walletProvider?.enabled}
         onClick={() => void connectWallet()}
+        size="sm"
         type="button"
-        variant="secondary"
+        variant="outline"
       >
         {tt('Connect')}
       </Button>

@@ -89,11 +89,15 @@ afterEach(() => {
 })
 
 describe('ConsoleShell', () => {
-  it('preserves the current route when changing Console context', () => {
+  it('preserves the current route when switching organizations', async () => {
     pathname = '/console/role-assignments'
     render(<TestConsoleShell>Role assignments</TestConsoleShell>)
 
-    fireEvent.change(screen.getByRole('combobox', { name: 'Console context' }), { target: { value: 'org-1' } })
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Switch organization' }), {
+      button: 0,
+      ctrlKey: false,
+    })
+    fireEvent.click(await screen.findByRole('menuitemradio', { name: /Payments Team/ }))
 
     expect(navigate).toHaveBeenCalledWith({
       replace: true,
@@ -106,7 +110,8 @@ describe('ConsoleShell', () => {
     render(<TestConsoleShell>Dashboard content</TestConsoleShell>)
 
     expect(screen.getAllByText('Console').length).toBeGreaterThan(0)
-    expect(screen.getByRole('combobox', { name: 'Console context' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Switch organization' })).toBeTruthy()
+    expect(screen.getByText('All organizations')).toBeTruthy()
     expect(screen.getAllByRole('button', { name: 'Account menu' }).length).toBeGreaterThan(0)
     expect(screen.queryByRole('link', { name: /Account center/i })).toBeNull()
     expect(screen.getByText('Dashboard content')).toBeTruthy()
@@ -267,6 +272,7 @@ describe('ConsoleShell', () => {
 
     const dialog = screen.getByRole('dialog')
     expect(within(dialog).getByRole('navigation', { name: 'Console' })).toBeTruthy()
+    expect(within(dialog).getByRole('button', { name: 'Switch organization' })).toBeTruthy()
     expect(screen.getAllByRole('link', { name: /Sign-in & registration/ }).length).toBeGreaterThan(0)
     expect(screen.queryByRole('link', { name: /Onboarding/ })).toBeNull()
     expect(screen.queryByRole('link', { name: /Audit logs/ })).toBeNull()

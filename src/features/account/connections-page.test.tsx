@@ -260,7 +260,7 @@ describe('AccountConnectionsPage', () => {
     }
     server.use(http.get(`${base}/api/configz`, () => HttpResponse.json(noProviders)))
     renderWithClient(<AccountConnectionsPage />)
-    expect(await screen.findByText('No sign-in connectors are available.')).toBeTruthy()
+    expect(await screen.findByText('No additional sign-in methods')).toBeTruthy()
   })
 
   it('unlinks a linked wallet', async () => {

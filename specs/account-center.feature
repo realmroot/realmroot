@@ -11,18 +11,20 @@ Feature: Account Center
   Scenario: Account Center loads account navigation
     When I open /profile
     Then I see the account navigation and the single Profile settings card
+    And the sidebar does not show placeholder Realm identity details
 
   @entrypoint:product-ui @journey:account-section-routes
   Scenario: Account Center groups related sections into route-backed pages
-    When I open /profile, /security, or /connections
+    When I open /, /profile, /security, /applications, /agents, or /organizations
     Then I see only the grouped account page in the account content area
-    And I can navigate between Profile, Security, and Connections as sibling routes
+    And every Account Center section is a root-level sibling route
 
   @entrypoint:product-ui @journey:account-admin-console-entry
   Scenario: Admin users can reach Console from Account Center
     Given my signed-in user has the admin role
     When I open /profile
     Then the account avatar menu includes a Console entry
+    And the Account Center topbar does not repeat the Console entry
 
   @entrypoint:product-ui @journey:sign-out
   Scenario: Account Center signs out
@@ -77,6 +79,7 @@ Feature: Account Center
     When I submit the current authenticator code
     Then TOTP is enrolled for my account
     And backup codes are shown before I finish setup
+    And a second TOTP enrollment is rejected while that factor remains enabled
 
   @entrypoint:product-ui @journey:mfa-policy-enforcement
   Scenario: MFA policy controls enrollment and API access
@@ -125,7 +128,7 @@ Feature: Account Center
   @entrypoint:product-ui @journey:resource-account-connections
   Scenario: Connected API resource accounts appear with authorized applications
     Given I connected an external API resource account for Agent access
-    When I open /account/applications and choose the Resource accounts tab
+    When I open /applications and choose the Resource accounts tab
     Then I see the API resource and connected external account
     And I can disconnect it separately from OAuth application grants
 

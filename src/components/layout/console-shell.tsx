@@ -6,33 +6,28 @@ import {
   Bot,
   Building2,
   Cable,
-  Check,
+  ChevronsUpDown,
   Code2,
   Fingerprint,
   Gauge,
+  Globe2,
   HelpCircle,
-  Languages,
   Link2,
-  LogOut,
   Menu,
-  Moon,
   Palette,
   Search,
   Server,
   Settings,
   Shield,
   ShieldCheck,
-  Sun,
   UserRound,
   UsersRound,
   Webhook,
   X,
 } from 'lucide-react'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
-import { useTranslation } from 'react-i18next'
-import { SelectInput } from '@/components/product-form'
+import { ProductAccountMenu } from '@/components/product-account-menu'
 import { RealmrootWordmark } from '@/components/realmroot-brand'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import {
   Command,
@@ -46,21 +41,17 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet'
 import type { UserProfile } from '@/features/account/types'
 import { signOut } from '@/lib/auth-client'
 import { ConsoleScopeProvider } from '@/lib/console-context'
-import { normalizeLanguage, tt } from '@/lib/i18n'
-import { useTheme } from '@/lib/theme'
+import { tt } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
 type ConsoleContext = 'realm' | 'organization'
@@ -196,6 +187,17 @@ export function ConsoleShell({
     setScope(access.realmOperator ? 'realm' : (organizations[0]?.id ?? 'realm'))
   }, [access.realmOperator, organizations, requestedContext])
 
+  useEffect(() => {
+    function openSearch(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault()
+        setSearchOpen(true)
+      }
+    }
+    window.addEventListener('keydown', openSearch)
+    return () => window.removeEventListener('keydown', openSearch)
+  }, [])
+
   function changeScope(value: string) {
     setScope(value)
     void navigate({ replace: true, search: value === 'realm' ? {} : { context: value }, to: pathname })
@@ -204,6 +206,11 @@ export function ConsoleShell({
   function changeMobileNavigation(open: boolean) {
     setMobileNavOpen(open)
     if (!open) window.setTimeout(() => mobileNavTriggerRef.current?.focus(), 0)
+  }
+
+  async function signOutFromConsole() {
+    await signOut()
+    window.location.href = '/auth/sign-in'
   }
 
   return (
@@ -215,7 +222,7 @@ export function ConsoleShell({
           {tt('Skip to content')}
         </a>
         <header className="consoleTopbar">
-          <div className="flex h-16 items-center justify-between gap-4 px-4 lg:px-6">
+          <div className="consoleTopbarBrand">
             <div className="flex min-w-0 items-center gap-2">
               <Button
                 aria-expanded={mobileNavOpen}
@@ -237,29 +244,25 @@ export function ConsoleShell({
                 <RealmrootWordmark context={tt('Console')} />
               </Link>
             </div>
-            <div className="flex shrink-0 items-center gap-2">
-              <Button aria-label={tt('Search Console')} onClick={() => setSearchOpen(true)} size="icon" variant="ghost">
+          </div>
+          <div className="consoleTopbarActions">
+            <Button
+              aria-label={tt('Search Console')}
+              className="consoleSearchTrigger"
+              onClick={() => setSearchOpen(true)}
+              variant="outline"
+            >
+              <span className="flex min-w-0 items-center gap-2">
                 <Search />
-              </Button>
-              <label className="consoleContextSwitcher hidden sm:grid" htmlFor="console-context">
-                <span>{tt('Context')}</span>
-                <SelectInput
-                  aria-label={tt('Console context')}
-                  id="console-context"
-                  name="console-context"
-                  onChange={(event) => changeScope(event.target.value)}
-                  value={scope}
-                >
-                  {access.realmOperator ? <option value="realm">{tt('Realm')}</option> : null}
-                  {organizations.map((organization) => (
-                    <option key={organization.id} value={organization.id}>
-                      {organization.displayName ?? organization.name}
-                    </option>
-                  ))}
-                </SelectInput>
-              </label>
-              <ConsoleAccountMenu profile={profile} />
-            </div>
+                <span className="truncate">{tt('Search Console')}</span>
+              </span>
+              <kbd>⌘K</kbd>
+            </Button>
+            <ProductAccountMenu
+              onSignOut={() => void signOutFromConsole()}
+              primaryAction={{ icon: UserRound, label: 'Account Center', to: '/profile' }}
+              profile={profile}
+            />
           </div>
         </header>
         <Sheet onOpenChange={changeMobileNavigation} open={mobileNavOpen}>
@@ -277,6 +280,12 @@ export function ConsoleShell({
               <RealmrootWordmark context={tt('Console')} />
             </div>
             <aside className="flex min-h-0 flex-1 flex-col">
+              <ConsoleOrganizationSwitcher
+                access={access}
+                onScopeChange={changeScope}
+                organizations={organizations}
+                scope={scope}
+              />
               <ConsoleNavigation
                 groups={groups}
                 onNavigate={() => setMobileNavOpen(false)}
@@ -288,6 +297,12 @@ export function ConsoleShell({
         </Sheet>
         <div className="consoleBody lg:flex">
           <aside className="consoleRail hidden lg:flex">
+            <ConsoleOrganizationSwitcher
+              access={access}
+              onScopeChange={changeScope}
+              organizations={organizations}
+              scope={scope}
+            />
             <ConsoleNavigation groups={groups} pathname={pathname} scope={scope} />
           </aside>
           <main className="consoleMain" id="console-content" tabIndex={-1}>
@@ -300,6 +315,64 @@ export function ConsoleShell({
         {searchOpen ? <ConsoleSearch groups={groups} onOpenChange={setSearchOpen} open scope={scope} /> : null}
       </div>
     </ConsoleScopeProvider>
+  )
+}
+
+function ConsoleOrganizationSwitcher({
+  access,
+  onScopeChange,
+  organizations,
+  scope,
+}: {
+  access: DeveloperConsoleAccessResponse
+  onScopeChange: (scope: string) => void
+  organizations: OrganizationResponse[]
+  scope: string
+}) {
+  const organization = organizations.find((candidate) => candidate.id === scope)
+  const currentName = organization?.displayName ?? organization?.name ?? tt('All organizations')
+
+  return (
+    <div className="consoleOrganizationSwitcher">
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button aria-label={tt('Switch organization')} className="consoleOrganizationTrigger" variant="ghost">
+            <span className="consoleOrganizationIcon" aria-hidden="true">
+              {scope === 'realm' ? <Globe2 /> : <Building2 />}
+            </span>
+            <span className="min-w-0 flex-1 text-left">
+              <span className="consoleOrganizationLabel">{tt('Organization')}</span>
+              <span className="consoleOrganizationName">{currentName}</span>
+            </span>
+            <ChevronsUpDown aria-hidden="true" className="consoleOrganizationChevron" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="w-64" sideOffset={6}>
+          <DropdownMenuLabel>{tt('Switch organization')}</DropdownMenuLabel>
+          <DropdownMenuRadioGroup onValueChange={onScopeChange} value={scope}>
+            {access.realmOperator ? (
+              <DropdownMenuRadioItem className="consoleOrganizationOption" value="realm">
+                <Globe2 />
+                <span>
+                  <strong>{tt('All organizations')}</strong>
+                  <small>{tt('Realm-wide administration')}</small>
+                </span>
+              </DropdownMenuRadioItem>
+            ) : null}
+            {access.realmOperator && organizations.length > 0 ? <DropdownMenuSeparator /> : null}
+            {organizations.map((item) => (
+              <DropdownMenuRadioItem className="consoleOrganizationOption" key={item.id} value={item.id}>
+                <Building2 />
+                <span>
+                  <strong>{item.displayName ?? item.name}</strong>
+                  <small>{item.slug}</small>
+                </span>
+              </DropdownMenuRadioItem>
+            ))}
+          </DropdownMenuRadioGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
   )
 }
 
@@ -534,106 +607,6 @@ function ConsoleSearch({
   )
 }
 
-function ConsoleAccountMenu({ profile }: { profile: UserProfile }) {
-  async function onSignOut() {
-    await signOut()
-    window.location.href = '/auth/sign-in'
-  }
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button aria-label={tt('Account menu')} className="rounded-full" size="icon" variant="ghost">
-          <Avatar>
-            {profile.image ? <AvatarImage alt="" src={profile.image} /> : null}
-            <AvatarFallback className="bg-primary/10 font-semibold text-primary">
-              {profileInitials(profile.displayName)}
-            </AvatarFallback>
-          </Avatar>
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-64">
-        <DropdownMenuLabel>
-          <span className="block text-sm font-semibold">{profile.displayName}</span>
-          <span className="block text-xs font-normal text-muted-foreground">{profile.email}</span>
-        </DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        <DropdownMenuGroup>
-          <DropdownMenuItem asChild>
-            <Link to="/profile">
-              <UserRound />
-              {tt('Account Center')}
-            </Link>
-          </DropdownMenuItem>
-          <ConsolePreferenceMenu />
-        </DropdownMenuGroup>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => void onSignOut()} variant="destructive">
-          <LogOut />
-          {tt('Sign out')}
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  )
-}
-
-function ConsolePreferenceMenu() {
-  const { i18n } = useTranslation()
-  const { setTheme, theme } = useTheme()
-  const language = normalizeLanguage(i18n.language)
-  return (
-    <>
-      <ConsolePreferenceSubmenu
-        icon={<Languages />}
-        label={tt('Language')}
-        options={[
-          { active: language === 'en', label: 'English', onSelect: () => void i18n.changeLanguage('en') },
-          { active: language === 'zh', label: '简体中文', onSelect: () => void i18n.changeLanguage('zh') },
-        ]}
-      />
-      <ConsolePreferenceSubmenu
-        icon={theme === 'dark' ? <Moon /> : <Sun />}
-        label={tt('Theme')}
-        options={[
-          { active: theme === 'light', label: tt('Light'), onSelect: () => setTheme('light') },
-          { active: theme === 'dark', label: tt('Dark'), onSelect: () => setTheme('dark') },
-        ]}
-      />
-    </>
-  )
-}
-
-function ConsolePreferenceSubmenu({
-  icon,
-  label,
-  options,
-}: {
-  icon: ReactNode
-  label: string
-  options: Array<{ active: boolean; label: string; onSelect: () => void }>
-}) {
-  return (
-    <DropdownMenuSub>
-      <DropdownMenuSubTrigger>
-        {icon}
-        <span>{label}</span>
-      </DropdownMenuSubTrigger>
-      <DropdownMenuSubContent>
-        {options.map((option) => (
-          <DropdownMenuItem
-            aria-checked={option.active}
-            key={option.label}
-            onClick={option.onSelect}
-            role="menuitemradio"
-          >
-            <Check className={cn(!option.active && 'invisible')} />
-            {option.label}
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuSubContent>
-    </DropdownMenuSub>
-  )
-}
-
 function visibleGroups(context: ConsoleContext) {
   return consoleNavGroups
     .filter((group) => !group.contexts || group.contexts.includes(context))
@@ -647,14 +620,4 @@ function visibleGroups(context: ConsoleContext) {
 function isActive(pathname: string, item: ConsoleNavItem) {
   const activePaths = item.activePaths ?? [item.href]
   return activePaths.some((path) => pathname === path || (path !== '/console' && pathname.startsWith(`${path}/`)))
-}
-
-function profileInitials(displayName: string) {
-  return displayName
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0])
-    .join('')
-    .toUpperCase()
 }

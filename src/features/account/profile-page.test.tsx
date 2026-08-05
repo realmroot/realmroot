@@ -133,10 +133,10 @@ describe('AccountProfilePage', () => {
   it('shows a loading state then renders profile sections', async () => {
     renderWithClient(<AccountProfilePage />)
     expect(await screen.findByRole('heading', { name: 'Profile' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: /Change avatar/ })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Edit avatar/ })).toBeTruthy()
     expect(screen.getByRole('button', { name: /Edit display name/ })).toBeTruthy()
     expect(screen.getByRole('button', { name: /Edit username/ })).toBeTruthy()
-    expect(screen.getByRole('button', { name: /Change email/ })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Edit email/ })).toBeTruthy()
   })
 
   it('renders an error state when the profile request fails', async () => {
@@ -207,7 +207,7 @@ describe('AccountProfilePage', () => {
       ),
     )
     renderWithClient(<AccountProfilePage />)
-    fireEvent.click(await screen.findByRole('button', { name: /Change avatar/ }))
+    fireEvent.click(await screen.findByRole('button', { name: /Edit avatar/ }))
     const fileInput = await screen.findByLabelText('Avatar image')
     fireEvent.change(fileInput, { target: { files: [new File(['x'], 'a.png', { type: 'image/png' })] } })
     await waitFor(() => expect(success).toHaveBeenCalledWith('Avatar uploaded.'))
@@ -219,7 +219,7 @@ describe('AccountProfilePage', () => {
       http.post(`${base}/api/account/email/confirm`, () => HttpResponse.json({ ok: true })),
     )
     renderWithClient(<AccountProfilePage />)
-    fireEvent.click(await screen.findByRole('button', { name: /Change email/ }))
+    fireEvent.click(await screen.findByRole('button', { name: /Edit email/ }))
     const emailInput = await screen.findByLabelText('Email')
     fireEvent.change(emailInput, { target: { value: 'new@example.com' } })
     fireEvent.click(screen.getByRole('button', { name: /Send code/ }))
@@ -234,7 +234,7 @@ describe('AccountProfilePage', () => {
   it('navigates back from the email confirm step', async () => {
     server.use(http.post(`${base}/api/account/email/change`, () => HttpResponse.json({ ok: true })))
     renderWithClient(<AccountProfilePage />)
-    fireEvent.click(await screen.findByRole('button', { name: /Change email/ }))
+    fireEvent.click(await screen.findByRole('button', { name: /Edit email/ }))
     fireEvent.change(await screen.findByLabelText('Email'), { target: { value: 'new@example.com' } })
     fireEvent.click(screen.getByRole('button', { name: /Send code/ }))
     await screen.findByLabelText('Verification code')
@@ -267,7 +267,7 @@ describe('AccountProfilePage', () => {
 
   it('ignores avatar upload when no file is selected', async () => {
     renderWithClient(<AccountProfilePage />)
-    fireEvent.click(await screen.findByRole('button', { name: /Change avatar/ }))
+    fireEvent.click(await screen.findByRole('button', { name: /Edit avatar/ }))
     const fileInput = await screen.findByLabelText('Avatar image')
     fireEvent.change(fileInput, { target: { files: [] } })
     await waitFor(() => expect(screen.getByLabelText('Avatar image')).toBeTruthy())
@@ -277,7 +277,7 @@ describe('AccountProfilePage', () => {
   it('clears optional avatar and username profile fields', async () => {
     renderWithClient(<AccountProfilePage />)
 
-    fireEvent.click(await screen.findByRole('button', { name: /Change avatar/ }))
+    fireEvent.click(await screen.findByRole('button', { name: /Edit avatar/ }))
     fireEvent.click(await screen.findByRole('button', { name: 'Save avatar' }))
     await waitFor(() => expect(success).toHaveBeenCalledWith('Profile updated.'))
     expect(store.profile.avatarAssetId).toBeNull()
@@ -302,10 +302,10 @@ describe('AccountProfilePage', () => {
     server.use(http.get(`${base}/api/configz`, () => HttpResponse.json(limited)))
     renderWithClient(<AccountProfilePage />)
     expect(await screen.findByRole('heading', { name: 'Profile' })).toBeTruthy()
-    expect(screen.queryByRole('button', { name: /Change avatar/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Edit avatar/ })).toBeNull()
     expect(screen.queryByRole('button', { name: /Edit display name/ })).toBeNull()
     expect(screen.queryByRole('button', { name: /Edit username/ })).toBeNull()
-    expect(screen.queryByRole('button', { name: /Change email/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Edit email/ })).toBeNull()
   })
 
   it('shows the unverified email status and no username placeholder', async () => {
@@ -340,7 +340,7 @@ describe('AccountProfilePage', () => {
 
   it('triggers the hidden file input from the upload button', async () => {
     renderWithClient(<AccountProfilePage />)
-    fireEvent.click(await screen.findByRole('button', { name: /Change avatar/ }))
+    fireEvent.click(await screen.findByRole('button', { name: /Edit avatar/ }))
     const fileInput = (await screen.findByLabelText('Avatar image')) as HTMLInputElement
     const clickSpy = vi.spyOn(fileInput, 'click')
     fireEvent.click(screen.getByRole('button', { name: /Upload image/ }))
@@ -354,7 +354,7 @@ describe('AccountProfilePage', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }))
     await waitFor(() => expect(screen.queryByLabelText('Username')).toBeNull())
 
-    fireEvent.click(screen.getByRole('button', { name: /Change email/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Edit email/ }))
     fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }))
     await waitFor(() => expect(screen.queryByLabelText('Email')).toBeNull())
 

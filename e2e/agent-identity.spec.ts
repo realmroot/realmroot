@@ -36,7 +36,7 @@ test.describe('new Agent stable identity enrollment', () => {
         subject: result.agent.subject,
       })
 
-      await page.goto('/account/agents')
+      await page.goto('/agents')
       await expect(page.getByRole('heading', { name: 'Agents' })).toBeVisible()
       await expect(page.getByText('E2E Build Agent', { exact: true })).toBeVisible()
       await expect(page.getByText(new RegExp(result.agent.subject))).toBeVisible()

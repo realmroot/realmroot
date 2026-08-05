@@ -42,6 +42,7 @@ import {
 import { toLocalDateTimeValue } from '@/lib/date-time'
 import { tt } from '@/lib/i18n'
 import {
+  AccountEmptyState,
   AccountObjectSection,
   AccountPageHeader,
   AccountRow,
@@ -120,7 +121,7 @@ export function AccountOverviewPage() {
             />
           </div>
           <div className="accountOverviewFlow">
-            <AccountObjectSection description={tt('')} title={tt('Needs your attention')}>
+            <AccountObjectSection surface title={tt('Needs your attention')}>
               <AccountRows>
                 {requests.map((item) => (
                   <AccountRow
@@ -145,7 +146,7 @@ export function AccountOverviewPage() {
                   <AccountRow
                     action={
                       <Button asChild variant="outline">
-                        <Link to="/account/organizations">{tt('Review invitation')}</Link>
+                        <Link to="/organizations">{tt('Review invitation')}</Link>
                       </Button>
                     }
                     description={tt('Organization invitation expires {{date}}', {
@@ -161,15 +162,14 @@ export function AccountOverviewPage() {
                   />
                 ))}
                 {!requestsQuery.isLoading && !invitationsQuery.isLoading && !requests.length && !invitations.length ? (
-                  <AccountRow
+                  <AccountEmptyState
                     description={tt('There are no pending Agent access decisions or Organization invitations.')}
-                    label={tt("You're all caught up")}
-                    value={tt('No action needed')}
+                    title={tt("You're all caught up")}
                   />
                 ) : null}
               </AccountRows>
             </AccountObjectSection>
-            <AccountObjectSection description={tt('')} title={tt('Recent sessions')}>
+            <AccountObjectSection surface title={tt('Recent sessions')}>
               <AccountRows>
                 {sessions.slice(0, 3).map((session) => (
                   <AccountRow
@@ -182,7 +182,10 @@ export function AccountOverviewPage() {
                   />
                 ))}
                 {!sessionsQuery.isLoading && !sessions.length ? (
-                  <AccountRow label={tt('No active sessions')} value="—" />
+                  <AccountEmptyState
+                    description={tt('New sign-ins will appear here.')}
+                    title={tt('No active sessions')}
+                  />
                 ) : null}
               </AccountRows>
             </AccountObjectSection>
@@ -253,7 +256,7 @@ export function AccountApplicationsPage() {
             ]}
             value={tab}
           >
-            <AccountTabContent value="authorized">
+            <AccountTabContent surface value="authorized">
               {applicationsQuery.isLoading ? (
                 <p className="text-sm text-muted-foreground">{tt('Loading authorized applications…')}</p>
               ) : null}
@@ -280,12 +283,15 @@ export function AccountApplicationsPage() {
                     />
                   ))}
                   {!applications.length ? (
-                    <p className="accountEmptyState">{tt('No applications are authorized for this account.')}</p>
+                    <AccountEmptyState
+                      description={tt('Applications you approve will appear here.')}
+                      title={tt('No authorized applications')}
+                    />
                   ) : null}
                 </AccountRows>
               ) : null}
             </AccountTabContent>
-            <AccountTabContent value="resources">
+            <AccountTabContent surface value="resources">
               <ResourceAccountConnections
                 connections={connectionsQuery.data?.items ?? []}
                 error={connectionsQuery.error ?? resourcesQuery.error}
@@ -379,7 +385,10 @@ function ResourceAccountConnections({
             )
           })}
           {!activeConnections.length ? (
-            <p className="accountEmptyState">{tt('No connected resource accounts.')}</p>
+            <AccountEmptyState
+              description={tt('Resource accounts connected for Agent access will appear here.')}
+              title={tt('No connected resource accounts')}
+            />
           ) : null}
         </AccountRows>
       ) : null}
@@ -458,34 +467,35 @@ export function AccountAgentsPage() {
             ]}
             value={tab}
           >
-            <AccountTabContent value="identities">
-              <div className="accountEntityList">
+            <AccountTabContent surface value="identities">
+              <AccountRows>
                 {agents.map((agent) => (
-                  <AccountObjectSection description={agent.subject} key={agent.id} title={agent.name}>
-                    <AccountRows>
-                      <AccountRow
-                        action={
-                          <Button onClick={() => setSelected(agent)} variant="outline">
-                            {tt('Manage')}
-                          </Button>
-                        }
-                        description={tt('Created {{date}}', { date: formatDate(agent.createdAt) })}
-                        label={tt('Lifecycle')}
-                        value={
-                          <Badge variant={agent.status === 'active' ? 'secondary' : 'outline'}>
-                            {tt(agent.status)}
-                          </Badge>
-                        }
-                      />
-                    </AccountRows>
-                  </AccountObjectSection>
+                  <AccountRow
+                    action={
+                      <Button onClick={() => setSelected(agent)} variant="outline">
+                        {tt('Manage')}
+                      </Button>
+                    }
+                    description={tt('{{subject}} · Created {{date}}', {
+                      subject: agent.subject,
+                      date: formatDate(agent.createdAt),
+                    })}
+                    key={agent.id}
+                    label={agent.name}
+                    value={
+                      <Badge variant={agent.status === 'active' ? 'secondary' : 'outline'}>{tt(agent.status)}</Badge>
+                    }
+                  />
                 ))}
                 {!agentsQuery.isLoading && !agents.length ? (
-                  <p className="accountEmptyState">{tt('No Agent identities belong to your account.')}</p>
+                  <AccountEmptyState
+                    description={tt('Agent identities you control will appear here.')}
+                    title={tt('No Agent identities')}
+                  />
                 ) : null}
-              </div>
+              </AccountRows>
             </AccountTabContent>
-            <AccountTabContent value="requests">
+            <AccountTabContent surface value="requests">
               <AccountRows>
                 {requests.map((item) => (
                   <AccountRow
@@ -504,12 +514,18 @@ export function AccountAgentsPage() {
                   />
                 ))}
                 {!requestsQuery.isLoading && !requests.length ? (
-                  <p className="accountEmptyState">{tt('No Agent access requests need your review.')}</p>
+                  <AccountEmptyState
+                    description={tt('New resource access requests will appear here.')}
+                    title={tt('No pending requests')}
+                  />
                 ) : null}
               </AccountRows>
             </AccountTabContent>
-            <AccountTabContent value="activity">
-              <p className="accountEmptyState">{tt('No Agent activity is available for this account.')}</p>
+            <AccountTabContent surface value="activity">
+              <AccountEmptyState
+                description={tt('Agent activity will appear here when events are available.')}
+                title={tt('No Agent activity')}
+              />
             </AccountTabContent>
           </AccountTabs>
           <AgentDialog
@@ -729,7 +745,7 @@ export function AccountOrganizationsPage() {
           <AccountPageHeader
             action={
               access.canCreateOrganization ? (
-                <Button onClick={() => setCreateOpen(true)}>
+                <Button onClick={() => setCreateOpen(true)} size="sm">
                   <Plus />
                   {tt('New organization')}
                 </Button>
@@ -739,7 +755,7 @@ export function AccountOrganizationsPage() {
             title={tt('Organizations')}
           />
           {invitations.length ? (
-            <AccountObjectSection title={tt('Invitations')}>
+            <AccountObjectSection surface title={tt('Invitations')}>
               <AccountRows>
                 {invitations.map((invitation) => (
                   <AccountRow
@@ -781,7 +797,7 @@ export function AccountOrganizationsPage() {
           {organizations.length ? (
             <div className="accountEntityList">
               {organizations.map((organization) => (
-                <section className="accountObjectSection accountOrganizationCard" key={organization.id}>
+                <section className="accountObjectSection accountOrganizationCard is-surface" key={organization.id}>
                   <header>
                     <OrganizationName
                       active={activeOrganizationId === organization.id}
@@ -808,7 +824,10 @@ export function AccountOrganizationsPage() {
             </div>
           ) : null}
           {!organizationsQuery.isLoading && !organizations.length ? (
-            <p className="accountEmptyState">{tt('You do not belong to an Organization yet.')}</p>
+            <AccountEmptyState
+              description={tt('Create an organization or accept an invitation to get started.')}
+              title={tt('No organizations yet')}
+            />
           ) : null}
           {access.canCreateOrganization ? (
             <NewOrganizationDialog
@@ -871,7 +890,7 @@ function OrganizationActions({
         </Button>
       ) : null}
       <Button asChild className={className ? 'flex-1' : undefined} variant="outline">
-        <Link params={{ organizationId: id }} to="/account/organizations/$organizationId">
+        <Link params={{ organizationId: id }} to="/organizations/$organizationId">
           {tt('Manage')}
         </Link>
       </Button>
@@ -1001,7 +1020,7 @@ export function AccountOrganizationDetailPage({ organizationId }: { organization
         const pendingInvitations = organization.invitations.filter((invitation) => invitation.status === 'pending')
         return (
           <>
-            <Link className="accountBackLink" to="/account/organizations">
+            <Link className="accountBackLink" to="/organizations">
               ← {tt('Organizations')}
             </Link>
             <AccountPageHeader
@@ -1026,7 +1045,7 @@ export function AccountOrganizationDetailPage({ organizationId }: { organization
               ]}
               value={tab}
             >
-              <AccountTabContent value="overview">
+              <AccountTabContent surface value="overview">
                 <AccountRows>
                   <AccountRow
                     description={tt('Controls Organization administration, not business API authority.')}
@@ -1041,11 +1060,11 @@ export function AccountOrganizationDetailPage({ organizationId }: { organization
                   <AccountRow label={tt('Created')} value={formatDate(organization.createdAt)} />
                 </AccountRows>
               </AccountTabContent>
-              <AccountTabContent value="members">
-                <div className="grid gap-4">
+              <AccountTabContent surface value="members">
+                <div className="accountTabBody">
                   {canManageOrganization ? (
-                    <div className="flex justify-end">
-                      <Button onClick={() => setInviteOpen(true)}>
+                    <div className="accountTabToolbar">
+                      <Button onClick={() => setInviteOpen(true)} size="sm">
                         <Plus />
                         {tt('Invite member')}
                       </Button>
@@ -1061,7 +1080,7 @@ export function AccountOrganizationDetailPage({ organizationId }: { organization
                   />
                 </div>
               </AccountTabContent>
-              <AccountTabContent value="agents">
+              <AccountTabContent surface value="agents">
                 <AccountRows>
                   {agents.map((agent) => (
                     <AccountRow
@@ -1091,7 +1110,7 @@ export function AccountOrganizationDetailPage({ organizationId }: { organization
                   </p>
                 ) : null}
               </AccountTabContent>
-              <AccountTabContent value="authority">
+              <AccountTabContent surface value="authority">
                 {roleAssignmentsQuery.isLoading || agentAccessGrantsQuery.isLoading ? (
                   <p className="text-sm text-muted-foreground">{tt('Loading Organization authority…')}</p>
                 ) : null}
@@ -1105,7 +1124,7 @@ export function AccountOrganizationDetailPage({ organizationId }: { organization
                   </p>
                 ) : null}
                 {!roleAssignmentsQuery.isLoading && !agentAccessGrantsQuery.isLoading ? (
-                  <div className="grid gap-8">
+                  <div className="accountSectionStack">
                     <AccountObjectSection
                       description={tt(
                         'Realm-wide and Organization-context Roles currently effective for your account.',
@@ -1166,7 +1185,7 @@ export function AccountOrganizationDetailPage({ organizationId }: { organization
                   </div>
                 ) : null}
               </AccountTabContent>
-              <AccountTabContent value="settings">
+              <AccountTabContent surface value="settings">
                 <AccountRows>
                   <AccountRow
                     action={
@@ -1338,7 +1357,7 @@ export function AccountOrganizationDetailPage({ organizationId }: { organization
                     },
                   },
                 )
-                if (!failed) await navigate({ to: '/account/organizations' })
+                if (!failed) await navigate({ to: '/organizations' })
               }}
               open={confirmation !== null}
               title={

@@ -199,9 +199,9 @@ describe('planned Account Center journeys', () => {
     overview.unmount()
 
     renderWithClient(<AccountAgentsPage />)
-    expect(await screen.findByText('No Agent identities belong to your account.')).toBeTruthy()
+    expect(await screen.findByText('No Agent identities')).toBeTruthy()
     openTab('Requests · 0')
-    expect(await screen.findByText('No Agent access requests need your review.')).toBeTruthy()
+    expect(await screen.findByText('No pending requests')).toBeTruthy()
   })
 
   it('reviews and revokes authorized applications', async () => {
@@ -357,7 +357,7 @@ describe('planned Account Center journeys', () => {
 
   it('shows an empty authorized application collection', async () => {
     renderWithClient(<AccountApplicationsPage />)
-    expect(await screen.findByText('No applications are authorized for this account.')).toBeTruthy()
+    expect(await screen.findByText('No authorized applications')).toBeTruthy()
   })
 
   it('keeps application and Agent decisions open when their mutations fail', async () => {
@@ -522,7 +522,7 @@ describe('planned Account Center journeys', () => {
   it('hides Organization creation and renders an empty collection when policy disallows it', async () => {
     store.access.canCreateOrganization = false
     renderWithClient(<AccountOrganizationsPage />)
-    expect(await screen.findByText('You do not belong to an Organization yet.')).toBeTruthy()
+    expect(await screen.findByText('No organizations yet')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'New organization' })).toBeNull()
   })
 
@@ -587,7 +587,7 @@ describe('planned Account Center journeys', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
     fireEvent.click(screen.getByRole('button', { name: 'Delete organization' }))
     await waitFor(() => expect(actions.some((action) => action.path.endsWith('/delete'))).toBe(true))
-    expect(navigate).toHaveBeenCalledWith({ to: '/account/organizations' })
+    expect(navigate).toHaveBeenCalledWith({ to: '/organizations' })
   })
 
   it('lets a non-owner leave and shows empty Organization authority surfaces', async () => {

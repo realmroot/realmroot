@@ -304,10 +304,10 @@ textarea {
 }
 
 .accountAvatarMenuTrigger {
-  width: 40px;
-  min-width: 40px;
-  height: 40px;
-  min-height: 40px;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  min-height: 44px;
   padding: 0;
   border: 1px solid transparent;
   border-radius: 999px;
@@ -358,17 +358,18 @@ textarea {
 }
 
 .accountUserMenu {
-  --account-menu-bg: color-mix(in srgb, var(--brand-background) 8%, var(--soft));
+  --account-menu-bg: color-mix(in srgb, var(--brand-primary) 2%, var(--popover));
   display: grid;
-  gap: 8px;
-  min-width: 276px;
+  gap: 4px;
+  width: 288px;
   padding: 10px;
-  border-radius: 8px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
   background: var(--account-menu-bg);
   color: var(--foreground);
   box-shadow:
-    0 18px 42px rgb(24 24 27 / 14%),
-    0 0 0 1px rgb(24 24 27 / 3%);
+    0 18px 48px rgb(24 24 27 / 14%),
+    0 3px 10px rgb(24 24 27 / 6%);
 }
 
 .accountUserMenuHeader {
@@ -376,7 +377,7 @@ textarea {
   align-items: center;
   gap: 10px;
   min-width: 0;
-  padding: 8px 8px 12px;
+  padding: 6px 6px 12px;
   border-bottom: 1px solid var(--border);
 }
 
@@ -404,12 +405,12 @@ textarea {
 .accountMenuItem {
   display: flex;
   align-items: center;
-  gap: 8px;
-  min-height: 34px;
-  padding: 0 9px;
+  gap: 10px;
+  min-height: 44px;
+  padding: 0 10px;
   color: var(--foreground);
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 580;
 }
 
 .accountMenuItem {
@@ -417,14 +418,29 @@ textarea {
   border: 0;
   border-radius: 8px;
   background: transparent;
+  cursor: pointer;
   text-align: left;
   transition:
     background-color 150ms ease,
     color 150ms ease;
 }
 
-.accountMenuItem:hover {
+.accountMenuItem:hover,
+.accountMenuItem:focus,
+.accountSubmenuTrigger[data-state='open'] {
   background: var(--muted-color);
+}
+
+.accountMenuItem > svg,
+.accountSubmenuTriggerLabel > svg {
+  width: 17px;
+  height: 17px;
+  flex: 0 0 auto;
+  color: var(--muted-foreground);
+}
+
+.accountMenuSeparator {
+  margin: 2px 0;
 }
 
 .accountSubmenuTrigger {
@@ -446,14 +462,29 @@ textarea {
 }
 
 .accountSubmenuTrigger > svg:last-child {
+  width: 14px;
+  height: 14px;
   flex: 0 0 auto;
+  margin-left: 0;
   color: var(--muted-foreground);
 }
 
+.accountSubmenuValue {
+  max-width: 88px;
+  overflow: hidden;
+  margin-left: auto;
+  color: var(--muted-foreground);
+  font-size: 11px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .accountSubmenuContent {
-  min-width: 132px;
-  border-color: var(--border);
-  background: var(--account-menu-bg, color-mix(in srgb, var(--brand-background) 8%, #f5f6f8));
+  min-width: 152px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  background: var(--popover);
   color: var(--foreground);
 }
 
@@ -483,7 +514,6 @@ textarea {
 .dark .authPanel,
 .dark .hostedAuthPanel,
 .dark .accountHero,
-.dark .accountNav,
 .dark .accountPanelGroup,
 .dark .settingsAction,
 .dark .panelTitleIcon,
@@ -545,12 +575,62 @@ textarea {
   position: sticky;
   top: 0;
   z-index: 30;
+  display: grid;
+  grid-template-columns: 250px minmax(0, 1fr);
   width: 100%;
   min-width: 0;
   height: 64px;
   border-bottom: 1px solid var(--border);
   background: color-mix(in srgb, var(--background) 96%, transparent);
   backdrop-filter: blur(12px);
+}
+
+.consoleTopbarBrand {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  padding: 0 20px;
+  border-right: 1px solid var(--border);
+  background: var(--navigation);
+}
+
+.consoleTopbarActions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 0 22px;
+}
+
+.consoleSearchTrigger {
+  width: min(280px, 32vw);
+  justify-content: space-between;
+  border-color: color-mix(in srgb, var(--border) 82%, transparent);
+  background: color-mix(in srgb, var(--background) 70%, var(--navigation));
+  color: var(--muted-foreground);
+  font-weight: 520;
+}
+
+.consoleSearchTrigger:hover {
+  background: var(--accent);
+  color: var(--foreground);
+}
+
+.consoleSearchTrigger svg {
+  width: 15px;
+  height: 15px;
+}
+
+.consoleSearchTrigger kbd {
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--background);
+  color: var(--muted-foreground);
+  font-family: inherit;
+  font-size: 10px;
+  line-height: 1.2;
 }
 
 .consoleBody {
@@ -566,6 +646,106 @@ textarea {
   flex-direction: column;
   border-right: 1px solid var(--border);
   background: var(--navigation);
+}
+
+.consoleOrganizationSwitcher {
+  flex: 0 0 auto;
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.consoleOrganizationTrigger {
+  width: 100%;
+  height: 52px;
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 6px 8px;
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  background: color-mix(in srgb, var(--background) 62%, var(--navigation));
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--foreground) 4%, transparent);
+}
+
+.consoleOrganizationTrigger:hover,
+.consoleOrganizationTrigger[data-state='open'] {
+  border-color: color-mix(in srgb, var(--primary) 30%, var(--border));
+  background: color-mix(in srgb, var(--primary) 5%, var(--background));
+}
+
+.consoleOrganizationIcon {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--primary) 11%, transparent);
+  color: var(--primary);
+}
+
+.consoleOrganizationIcon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.consoleOrganizationLabel,
+.consoleOrganizationName {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.consoleOrganizationLabel {
+  margin-bottom: 1px;
+  color: var(--muted-foreground);
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.consoleOrganizationName {
+  color: var(--foreground);
+  font-size: 13px;
+  font-weight: 680;
+  line-height: 1.35;
+}
+
+.consoleOrganizationChevron {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  color: var(--muted-foreground);
+}
+
+.consoleOrganizationOption {
+  min-height: 46px;
+  gap: 9px;
+  padding: 6px 26px 6px 8px;
+}
+
+.consoleOrganizationOption > span:not([data-slot]) {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.consoleOrganizationOption strong,
+.consoleOrganizationOption small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.consoleOrganizationOption strong {
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.consoleOrganizationOption small {
+  color: var(--muted-foreground);
+  font-size: 10px;
 }
 
 .consoleNavScroll {
@@ -665,24 +845,6 @@ textarea {
 
 .consolePageHeader p {
   font-size: 12px;
-}
-
-.consoleContextSwitcher {
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  gap: 8px;
-}
-
-.consoleContextSwitcher > span {
-  color: var(--muted-foreground);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.consoleContextSwitcher [data-slot='select-trigger'] {
-  width: 156px;
 }
 
 .consoleNavGroupLabel {
@@ -2065,12 +2227,16 @@ textarea {
 
 .accountContent {
   min-width: 0;
-  width: min(100%, 990px);
-  padding: 54px clamp(36px, 6vw, 76px) 80px;
+  width: min(100%, 1080px);
+  padding: 38px clamp(28px, 4vw, 52px) 64px;
   border: 0;
   border-radius: 0;
   background: transparent;
   box-shadow: none;
+}
+
+.accountContent.is-settings {
+  width: min(100%, 960px);
 }
 
 .accountStandaloneState {
@@ -2128,7 +2294,7 @@ textarea {
   display: grid;
   height: calc(100dvh - 64px);
   min-width: 0;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr);
   align-content: stretch;
   padding: 28px 18px 22px;
   border-right: 1px solid var(--border);
@@ -2151,9 +2317,7 @@ textarea {
 }
 
 .accountSidebarIdentity strong,
-.accountSidebarIdentity span,
-.accountSidebarRealm strong,
-.accountSidebarRealm span {
+.accountSidebarIdentity span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2167,23 +2331,6 @@ textarea {
 .accountSidebarIdentity span {
   color: var(--muted-foreground);
   font-size: 11px;
-}
-
-.accountSidebarRealm {
-  display: grid;
-  gap: 4px;
-  padding: 18px 10px 0;
-  border-top: 1px solid var(--border);
-}
-
-.accountSidebarRealm span {
-  color: var(--muted-foreground);
-  font-size: 10px;
-}
-
-.accountSidebarRealm strong {
-  font-size: 11px;
-  font-weight: 650;
 }
 
 .accountHero {
@@ -2248,7 +2395,7 @@ textarea {
 
 .accountSectionStackFlat {
   display: grid;
-  gap: 16px;
+  gap: 12px;
   min-width: 0;
 }
 
@@ -2353,16 +2500,16 @@ textarea {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 24px;
-  margin-bottom: 42px;
+  gap: 20px;
+  margin-bottom: 26px;
 }
 
 .accountPageHeader h1 {
-  margin: 0 0 8px;
+  margin: 0 0 6px;
   color: var(--ink);
-  font-size: 32px;
-  font-weight: 670;
-  letter-spacing: -0.045em;
+  font-size: 28px;
+  font-weight: 680;
+  letter-spacing: -0.04em;
   line-height: 1.15;
 }
 
@@ -2371,7 +2518,7 @@ textarea {
   margin: 0;
   color: var(--muted-foreground);
   font-size: 14px;
-  line-height: 1.6;
+  line-height: 1.5;
 }
 
 .accountRows {
@@ -2380,24 +2527,73 @@ textarea {
 
 .accountEmptyState {
   display: grid;
-  min-height: 112px;
-  place-items: center;
+  width: 100%;
+  min-height: 74px;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
   margin: 0;
-  padding: 24px;
-  border: 1px dashed var(--border);
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--muted-color) 45%, transparent);
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  background: var(--panel);
+  box-shadow: 0 4px 14px rgb(24 24 27 / 3%);
+}
+
+.accountEmptyStateIcon {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--muted-color);
   color: var(--muted-foreground);
+}
+
+.accountEmptyStateIcon svg {
+  width: 17px;
+  height: 17px;
+}
+
+.accountEmptyState > div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.accountEmptyState strong {
+  color: var(--ink);
   font-size: 13px;
-  line-height: 1.55;
-  text-align: center;
+  line-height: 1.4;
+}
+
+.accountEmptyState span:not(.accountEmptyStateIcon) {
+  color: var(--muted-foreground);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.accountRows > .accountEmptyState {
+  padding: 18px 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.accountTabPanel > .accountEmptyState {
+  width: auto;
+  margin-inline: 18px;
+  padding: 18px 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .accountRow {
   display: grid;
   min-height: 72px;
-  grid-template-columns: minmax(150px, 1fr) minmax(130px, 0.75fr) clamp(120px, 12vw, 164px);
-  gap: 24px;
+  grid-template-columns: minmax(150px, 1fr) minmax(130px, 0.75fr) minmax(88px, auto);
+  gap: 20px;
   align-items: center;
   padding: 17px 0;
   border-top: 1px solid var(--border);
@@ -2420,7 +2616,7 @@ textarea {
 
 .accountRowLabel span {
   color: var(--muted-foreground);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.5;
 }
 
@@ -2433,7 +2629,7 @@ textarea {
 }
 
 .accountRowValue code {
-  font-size: 11px;
+  font-size: 12px;
   white-space: normal;
 }
 
@@ -2465,6 +2661,10 @@ textarea {
   line-height: 1.3;
 }
 
+.accountObjectSection > header h2:last-child {
+  margin-bottom: 0;
+}
+
 .accountObjectSection > header p {
   margin: 0;
   color: var(--muted-foreground);
@@ -2472,16 +2672,47 @@ textarea {
   line-height: 1.55;
 }
 
+.accountObjectSection.is-surface {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
+  background: var(--panel);
+  box-shadow: 0 4px 14px rgb(24 24 27 / 3%);
+}
+
+.accountObjectSection.is-surface > header,
+.accountTabPanel > .accountObjectSection > header {
+  margin: 0;
+  padding: 15px 18px 13px;
+  border-bottom: 1px solid var(--line);
+}
+
+.accountObjectSection.is-surface > header h2,
+.accountTabPanel > .accountObjectSection > header h2 {
+  font-size: 14px;
+}
+
+.accountObjectSection.is-surface > .accountRows,
+.accountTabPanel > .accountObjectSection > .accountRows {
+  padding: 0 18px 10px;
+}
+
+.accountObjectSection.is-surface > .text-sm,
+.accountTabPanel > .accountObjectSection > .text-sm {
+  margin: 0;
+  padding: 18px;
+}
+
 .accountMetricGrid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
-  margin-bottom: 38px;
+  margin-bottom: 12px;
 }
 
 .accountMetric {
-  min-height: 128px;
-  padding: 18px;
+  min-height: 112px;
+  padding: 16px;
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--background);
@@ -2496,28 +2727,30 @@ textarea {
 
 .accountMetric strong {
   display: block;
-  margin: 14px 0 10px;
-  font-size: 26px;
+  margin: 10px 0 8px;
+  font-size: 24px;
   letter-spacing: -0.04em;
 }
 
 .accountOverviewFlow {
   display: grid;
-  gap: 34px;
+  gap: 12px;
 }
 
 .accountEntityList {
   display: grid;
-  gap: 0;
+  gap: 12px;
+}
+
+.accountObjectSection + .accountEntityList {
+  margin-top: 12px;
 }
 
 .accountOverviewFlow .accountObjectSection + .accountObjectSection,
 .accountEntityList .accountObjectSection + .accountObjectSection {
   margin-top: 0;
-}
-
-.accountEntityList .accountObjectSection + .accountObjectSection {
-  padding-top: 28px;
+  padding-top: 0;
+  border-top: 0;
 }
 
 .accountBackLink {
@@ -2529,7 +2762,7 @@ textarea {
 }
 
 .accountRows.itemList {
-  padding: 0;
+  padding: 0 18px 10px;
 }
 
 .settingsPanel + .settingsPanel .accountRow:first-child {
@@ -2581,7 +2814,7 @@ textarea {
 }
 
 .accountPanelHeader {
-  padding: 18px 20px 16px;
+  padding: 16px 18px 14px;
   border-bottom: 1px solid var(--line);
   background: var(--soft);
 }
@@ -2617,6 +2850,71 @@ textarea {
   justify-content: flex-end;
   gap: 8px;
   max-width: min(100%, 520px);
+}
+
+.accountTabPanel {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
+  background: var(--panel);
+  box-shadow: 0 4px 14px rgb(24 24 27 / 3%);
+}
+
+.accountSignInStack {
+  display: grid;
+  gap: 12px;
+}
+
+.accountTabPanel > .accountRows {
+  padding-inline: 18px;
+}
+
+.accountTabPanel > .text-sm {
+  margin: 0;
+  padding: 18px;
+}
+
+.accountTabBody {
+  display: grid;
+  gap: 14px;
+  padding: 16px 18px 18px;
+}
+
+.accountTabToolbar {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.accountSectionStack {
+  display: grid;
+}
+
+.accountSectionStack .accountObjectSection {
+  padding: 16px 18px 18px;
+}
+
+.accountSectionStack .accountObjectSection + .accountObjectSection {
+  margin: 0;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+.accountContent .accountRowAction .uiButton {
+  min-height: 34px;
+  padding-inline: 10px;
+  font-size: 13px;
+}
+
+.accountTabPanel > .settingsPanel .settingsAction {
+  padding-inline: 18px;
+}
+
+.accountTabPanel > .settingsPanel + .settingsPanel {
+  border-top: 1px solid var(--line);
+}
+
+.accountTabPanel > .settingsPanel .subsectionTitle:first-child {
+  border-top: 0;
 }
 
 .panelTitle {
@@ -2672,7 +2970,7 @@ textarea {
 
 .accountContent .itemRow {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 12px;
   align-items: center;
   padding: 13px 0;
@@ -2690,11 +2988,60 @@ textarea {
 
 .accountContent .itemRowEmpty {
   grid-template-columns: 1fr;
+  min-height: 116px;
+  place-items: center;
+  padding-block: 22px;
+  text-align: center;
 }
 
-.accountContent .itemRowEmpty h3 {
-  color: var(--muted);
+.accountContent .itemRowEmpty .accountRowLabel {
+  max-width: 440px;
+  justify-items: center;
+  gap: 6px;
+}
+
+.accountContent .itemRowEmpty.is-compact {
+  min-height: 0;
+  place-items: stretch;
+  padding-block: 14px 18px;
+  text-align: left;
+}
+
+.accountContent .itemRowEmpty.is-compact .accountRowLabel {
+  max-width: none;
+  grid-template-columns: 36px minmax(0, 1fr);
+  justify-items: stretch;
+  gap: 2px 12px;
+}
+
+.accountContent .itemRowEmpty.is-compact .accountEmptyIcon {
+  grid-row: 1 / 3;
+  margin: 0;
+}
+
+.accountContent .itemRowEmpty.is-compact .accountRowLabel > :not(.accountEmptyIcon) {
+  grid-column: 2;
+}
+
+.accountContent .itemRowEmpty .accountRowLabel strong {
+  color: var(--ink);
   font-weight: 650;
+}
+
+.accountEmptyIcon {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  margin-bottom: 2px;
+  border-radius: 999px;
+  background: var(--muted-color);
+  color: var(--muted-foreground);
+}
+
+.accountEmptyIcon svg {
+  width: 17px;
+  height: 17px;
 }
 
 .itemRowMain {
@@ -2703,6 +3050,16 @@ textarea {
   gap: 10px;
   align-items: center;
   min-width: 0;
+}
+
+.itemRowMain.withoutIcon {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.itemRowCopy {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
 }
 
 .itemRowIcon {
@@ -2745,25 +3102,24 @@ textarea {
 
 .subsectionTitle {
   display: grid;
-  gap: 3px;
-  padding: 14px 20px 10px;
+  gap: 4px;
+  padding: 16px 20px 9px;
   border-top: 1px solid var(--line);
-  background: var(--soft);
+  background: transparent;
 }
 
 .subsectionTitle h3 {
   margin: 0;
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 800;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 680;
   line-height: 1.3;
-  text-transform: uppercase;
 }
 
 .subsectionTitle p {
   margin: 0;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1.45;
 }
 
@@ -3696,6 +4052,20 @@ textarea {
     width: 100%;
   }
 
+  .consoleTopbar {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .consoleTopbarBrand {
+    padding-inline: 16px;
+    border-right: 0;
+    background: transparent;
+  }
+
+  .consoleTopbarActions {
+    padding-inline: 16px;
+  }
+
   .consoleContent {
     min-width: 0;
     gap: 16px;
@@ -3801,10 +4171,6 @@ textarea {
     grid-template-columns: 1fr;
   }
 
-  .accountMobileNavSheet .accountSidebarRealm {
-    align-self: end;
-  }
-
   .accountContent {
     width: 100%;
     padding: 38px 24px 64px;
@@ -3841,9 +4207,29 @@ textarea {
     width: 100%;
   }
 
-  .consoleTopbar > div {
+  .consoleTopbarBrand,
+  .consoleTopbarActions {
     gap: 8px;
     padding-inline: 8px;
+  }
+
+  .consoleTopbarBrand [data-slot='button'],
+  .consoleTopbarActions > [data-slot='button'] {
+    width: 44px;
+    height: 44px;
+  }
+
+  .consoleSearchTrigger {
+    padding-inline: 0;
+  }
+
+  .consoleSearchTrigger > span {
+    margin-inline: auto;
+  }
+
+  .consoleSearchTrigger > span > span,
+  .consoleSearchTrigger kbd {
+    display: none;
   }
 
   .consoleBrand {
@@ -3993,7 +4379,7 @@ textarea {
     padding: 0;
   }
 
-  .itemList {
+  .accountRows.itemList {
     padding: 0 16px 12px;
   }
 
@@ -4033,11 +4419,11 @@ textarea {
   .accountPageHeader {
     align-items: stretch;
     flex-direction: column;
-    margin-bottom: 34px;
+    margin-bottom: 24px;
   }
 
   .accountPageHeader h1 {
-    font-size: 28px;
+    font-size: 26px;
   }
 
   .accountPageHeader p {
@@ -4060,8 +4446,64 @@ textarea {
     justify-content: flex-end;
   }
 
+  .accountContent .itemRow:not(.itemRowEmpty) {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .accountContent .itemRow:not(.itemRowEmpty) .accountRowLabel {
+    grid-column: 1;
+    grid-row: 1 / 3;
+  }
+
+  .accountContent .itemRow:not(.itemRowEmpty) .accountRowValue {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .accountContent .itemRow:not(.itemRowEmpty) .accountRowAction {
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  .accountTabPanel > .accountRows,
+  .accountObjectSection.is-surface > .accountRows,
+  .accountTabPanel > .accountObjectSection > .accountRows {
+    padding-inline: 16px;
+  }
+
+  .accountObjectSection.is-surface > header,
+  .accountTabPanel > .accountObjectSection > header {
+    padding-inline: 16px;
+  }
+
+  .accountTabBody,
+  .accountSectionStack .accountObjectSection {
+    padding-inline: 16px;
+  }
+
+  .accountTabToolbar .uiButton {
+    width: 100%;
+  }
+
+  .accountEmptyState {
+    padding: 16px;
+  }
+
+  .accountRows > .accountEmptyState {
+    padding: 16px 0;
+  }
+
+  .accountTabPanel > .accountEmptyState {
+    margin-inline: 16px;
+    padding: 16px 0;
+  }
+
   .accountContent {
-    padding: 36px 18px 54px;
+    padding: 28px 18px 48px;
+  }
+
+  .accountContent .uiButton {
+    min-height: 44px;
   }
 
   .consentStack .buttonRow .uiButton-secondary {

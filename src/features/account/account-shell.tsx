@@ -4,42 +4,25 @@ import {
   AppWindow,
   Bot,
   Building2,
-  Check,
   Gauge,
   HelpCircle,
-  Languages,
   LayoutDashboard,
   LoaderCircle,
-  LogOut,
   Menu,
-  Moon,
   Shield,
-  Sun,
   UserRound,
 } from 'lucide-react'
 import { type ReactNode, useRef, useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { brandingStyle } from '@/components/layout/auth-layout'
+import { ProductAccountMenu } from '@/components/product-account-menu'
 import { RealmrootWordmark } from '@/components/realmroot-brand'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Status } from '@/components/ui/status'
 import { signOut } from '@/lib/auth-client'
-import { normalizeLanguage, tt } from '@/lib/i18n'
-import { useTheme } from '@/lib/theme'
+import { tt } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 import type { AccountCenterSection, defaultAccountCenterSettings } from './settings'
 import type { UserProfile } from './types'
@@ -50,7 +33,7 @@ const accountNavGroups = [
   {
     label: 'Your account',
     items: [
-      { section: 'overview' as const, href: '/account', label: 'Overview', icon: Gauge },
+      { section: 'overview' as const, href: '/', label: 'Overview', icon: Gauge },
       { section: 'profile' as const, href: '/profile', label: 'Profile', icon: UserRound },
       { section: 'security' as const, href: '/security', label: 'Sign-in & security', icon: Shield },
     ],
@@ -58,9 +41,9 @@ const accountNavGroups = [
   {
     label: 'Access & authority',
     items: [
-      { section: 'applications' as const, href: '/account/applications', label: 'Applications', icon: AppWindow },
-      { section: 'agents' as const, href: '/account/agents', label: 'Agents', icon: Bot },
-      { section: 'organizations' as const, href: '/account/organizations', label: 'Organizations', icon: Building2 },
+      { section: 'applications' as const, href: '/applications', label: 'Applications', icon: AppWindow },
+      { section: 'agents' as const, href: '/agents', label: 'Agents', icon: Bot },
+      { section: 'organizations' as const, href: '/organizations', label: 'Organizations', icon: Building2 },
     ],
   },
 ]
@@ -117,16 +100,11 @@ export function AccountPageShell({
           >
             <Menu />
           </Button>
-          <Link aria-label={tt('Account Center home')} to="/account">
+          <Link aria-label={tt('Account Center home')} to="/">
             <RealmrootWordmark context={tt('Account Center')} />
           </Link>
         </div>
         <div className="flex items-center gap-2">
-          {access.realmOperator || access.consoleOrganizations.length ? (
-            <Button asChild className="hidden sm:inline-flex" variant="outline">
-              <Link to="/console">{tt('Open Realm Console')}</Link>
-            </Button>
-          ) : null}
           <Button
             asChild
             aria-label={tt('Help & documentation')}
@@ -139,13 +117,25 @@ export function AccountPageShell({
             </a>
           </Button>
           {profile ? (
-            <AccountUserMenu access={access} profile={profile} onSignOut={() => void signOutFromAccount()} />
+            <ProductAccountMenu
+              onSignOut={() => void signOutFromAccount()}
+              primaryAction={
+                access.realmOperator || access.consoleOrganizations.length
+                  ? { icon: LayoutDashboard, label: 'Console', to: '/console' }
+                  : undefined
+              }
+              profile={profile}
+            />
           ) : null}
         </div>
       </header>
       <div className="accountShellLayout">
         <AccountSidebar access={access} profile={profile} section={section} />
-        <section className="accountContent" id="account-content" tabIndex={-1}>
+        <section
+          className={cn('accountContent', (section === 'profile' || section === 'security') && 'is-settings')}
+          id="account-content"
+          tabIndex={-1}
+        >
           {children}
         </section>
       </div>
@@ -257,108 +247,6 @@ function AccountSidebar({
           </div>
         ))}
       </nav>
-      <div className="accountSidebarRealm">
-        <span>{tt('Default realm')}</span>
-        <strong>identity.acme.dev</strong>
-      </div>
     </aside>
-  )
-}
-
-function AccountUserMenu({
-  access,
-  profile,
-  onSignOut,
-}: {
-  access: DeveloperConsoleAccessResponse
-  profile: UserProfile
-  onSignOut: () => void
-}) {
-  const { i18n } = useTranslation()
-  const { setTheme, theme } = useTheme()
-  const language = normalizeLanguage(i18n.language)
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button aria-label={tt('Account menu')} className="rounded-full" size="icon" variant="ghost">
-          <Avatar>
-            {profile.image ? <AvatarImage alt="" src={profile.image} /> : null}
-            <AvatarFallback className="bg-primary/10 font-semibold text-primary">
-              {profile.displayName.slice(0, 2).toUpperCase()}
-            </AvatarFallback>
-          </Avatar>
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-64">
-        <DropdownMenuLabel>
-          <span className="block truncate text-sm font-semibold">{profile.displayName}</span>
-          <span className="block truncate text-xs font-normal text-muted-foreground">{profile.email}</span>
-        </DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        {access.realmOperator || access.consoleOrganizations.length ? (
-          <DropdownMenuItem asChild>
-            <Link to="/console">
-              <LayoutDashboard />
-              <span>{tt('Console')}</span>
-            </Link>
-          </DropdownMenuItem>
-        ) : null}
-        <DropdownMenuSub>
-          <DropdownMenuSubTrigger>
-            <Languages />
-            <span>{tt('Language')}</span>
-          </DropdownMenuSubTrigger>
-          <DropdownMenuSubContent>
-            <AccountPreferenceSubmenu
-              options={[
-                { label: 'English', active: language === 'en', onSelect: () => void i18n.changeLanguage('en') },
-                { label: '简体中文', active: language === 'zh', onSelect: () => void i18n.changeLanguage('zh') },
-              ]}
-            />
-          </DropdownMenuSubContent>
-        </DropdownMenuSub>
-        <DropdownMenuSub>
-          <DropdownMenuSubTrigger>
-            {theme === 'dark' ? <Moon /> : <Sun />}
-            <span>{tt('Theme')}</span>
-          </DropdownMenuSubTrigger>
-          <DropdownMenuSubContent>
-            <AccountPreferenceSubmenu
-              options={[
-                { label: tt('Light'), active: theme === 'light', onSelect: () => setTheme('light') },
-                { label: tt('Dark'), active: theme === 'dark', onSelect: () => setTheme('dark') },
-              ]}
-            />
-          </DropdownMenuSubContent>
-        </DropdownMenuSub>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={onSignOut} variant="destructive">
-          <LogOut />
-          <span>{tt('Sign out')}</span>
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  )
-}
-
-function AccountPreferenceSubmenu({
-  options,
-}: {
-  options: Array<{ label: string; active: boolean; onSelect: () => void }>
-}) {
-  return (
-    <>
-      {options.map((option) => (
-        <DropdownMenuItem
-          aria-checked={option.active}
-          key={option.label}
-          onClick={option.onSelect}
-          role="menuitemradio"
-        >
-          <Check className={cn(!option.active && 'invisible')} />
-          <span>{option.label}</span>
-        </DropdownMenuItem>
-      ))}
-    </>
   )
 }

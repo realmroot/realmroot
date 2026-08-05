@@ -40,20 +40,20 @@ describe('native auth client', () => {
       return Promise.resolve(jsonResponse({ url: 'https://github.com/oauth' }))
     })
 
-    await expect(signInWithSocial({ provider: 'github', callbackURL: '/account' })).resolves.toEqual({
+    await expect(signInWithSocial({ provider: 'github', callbackURL: '/' })).resolves.toEqual({
       url: 'https://github.com/oauth',
     })
 
     expect(requests).toHaveLength(1)
     expect(requests[0]?.url).toBe('/api/auth/sign-in/social')
     expect(requests[0]?.init?.method).toBe('POST')
-    expect(requests[0]?.init?.body).toBe(JSON.stringify({ provider: 'github', callbackURL: '/account' }))
+    expect(requests[0]?.init?.body).toBe(JSON.stringify({ provider: 'github', callbackURL: '/' }))
   })
 
   it('uses native GET requests for token email verification', async () => {
     vi.spyOn(window, 'fetch').mockResolvedValue(jsonResponse({ status: true }))
 
-    await verifyEmail({ token: 'token-1', callbackURL: '/account' })
+    await verifyEmail({ token: 'token-1', callbackURL: '/' })
 
     expect(window.fetch).toHaveBeenCalledWith('/api/auth/verify-email?token=token-1&callbackURL=%2Faccount', {
       method: 'GET',
@@ -111,7 +111,7 @@ describe('native auth client', () => {
     await signUp({ email: 'jane@example.com', name: 'Jane', password: 'password-1', username: 'jane' })
     await requestPasswordReset({ email: 'jane@example.com', redirectTo: '/auth/forgot-password' })
     await resetPassword({ token: 'token-1', newPassword: 'new-password' })
-    await requestEmailVerification({ email: 'jane@example.com', callbackURL: '/account' })
+    await requestEmailVerification({ email: 'jane@example.com', callbackURL: '/' })
     await requestEmailOtp({ email: 'jane@example.com', type: 'sign-in' })
     await signInWithEmailOtp({ email: 'jane@example.com', otp: '123456' })
     await requestPhoneOtp({ phoneNumber: '+15555550123' })

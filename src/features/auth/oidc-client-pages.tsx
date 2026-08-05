@@ -66,7 +66,7 @@ export function OidcCallbackRoute() {
       {valid ? (
         <>
           <Status tone="success">{tt('Authorization code received securely.')}</Status>
-          <LinkButton href="/account">{tt('Open Account Center')}</LinkButton>
+          <LinkButton href="/">{tt('Open Account Center')}</LinkButton>
         </>
       ) : (
         <Status tone="error">{callbackError}</Status>

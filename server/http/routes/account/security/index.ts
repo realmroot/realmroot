@@ -1,4 +1,4 @@
-import { badRequest, forbidden } from '@server/domain/errors'
+import { badRequest, conflict, forbidden } from '@server/domain/errors'
 import type { ConfigzAccountCenter } from '@server/usecases/ports'
 import { paginationMetadata, paginationQuerySchema } from '@shared/api/pagination'
 import {
@@ -33,7 +33,7 @@ export function accountSecurityRoutes(authApi: ManagementAuthApi, accountCenterS
 
   app.post('/mfa/totp-enrollment', async (c) => {
     const body = await readJson(c, securityTotpEnrollmentSchema)
-    await assertAuthenticatorAppEnabled(c)
+    await assertAuthenticatorAppEnrollmentAvailable(c)
 
     try {
       return c.json(await authApi.enableTwoFactor({ body, headers: c.req.raw.headers }), 201)
@@ -160,6 +160,18 @@ async function assertAuthenticatorAppEnabled(c: Context) {
 
   if (!state.policy.mfa.authenticatorAppEnabled) {
     throw badRequest('Authenticator app MFA is disabled for this deployment.')
+  }
+}
+
+async function assertAuthenticatorAppEnrollmentAvailable(c: Context) {
+  const state = await getDeps(c).security.getSecurityState(currentUserId(c))
+
+  if (!state.policy.mfa.authenticatorAppEnabled) {
+    throw badRequest('Authenticator app MFA is disabled for this deployment.')
+  }
+
+  if (state.mfa.enabled) {
+    throw conflict('This account already has an authenticator app enrolled.')
   }
 }
 

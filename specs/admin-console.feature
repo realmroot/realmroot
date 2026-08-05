@@ -42,6 +42,7 @@ Feature: Admin Console
   Scenario: Console navigation exposes persistent route-backed pages
     When I use Console navigation
     Then each visible product page has a canonical route
+    And the Organization switcher sits above the scoped navigation and identifies Realm-wide access as all organizations
     And breadcrumbs link to the current Console context and parent collection without repeating navigation groups
     And breadcrumb labels match the actual route-backed page or selected tab
     And the current page is identified without a redundant link

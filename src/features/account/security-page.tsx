@@ -128,19 +128,28 @@ function SecuritySections({
         value={tab}
       >
         <AccountTabContent value="sign-in">
-          {passwordEnabled ? <ProfilePasswordPanel profile={profile} /> : null}
-          <ConnectionsSection
-            accounts={linkedAccounts}
-            confirm={confirm}
-            mutate={mutate}
-            providers={providers}
-            walletProvider={walletProvider}
-          />
+          <div className="accountSignInStack">
+            {passwordEnabled ? (
+              <div className="accountTabPanel">
+                <ProfilePasswordPanel profile={profile} />
+              </div>
+            ) : null}
+            <div className="accountTabPanel">
+              <ConnectionsSection
+                accounts={linkedAccounts}
+                compactEmpty
+                confirm={confirm}
+                mutate={mutate}
+                providers={providers}
+                walletProvider={walletProvider}
+              />
+            </div>
+          </div>
         </AccountTabContent>
-        <AccountTabContent value="mfa">
+        <AccountTabContent surface value="mfa">
           <MfaPanel mfaEnabled={mfaEnabled} mfaRequired={mfaRequired} security={security} setDialog={setDialog} />
         </AccountTabContent>
-        <AccountTabContent value="passkeys">
+        <AccountTabContent surface value="passkeys">
           <PasskeysPanel
             confirm={confirm}
             mutate={mutate}
@@ -149,7 +158,7 @@ function SecuritySections({
             setDialog={setDialog}
           />
         </AccountTabContent>
-        <AccountTabContent value="sessions">
+        <AccountTabContent surface value="sessions">
           {sessionsEnabled ? <SessionsPanel confirm={confirm} mutate={mutate} sessions={sessions} /> : null}
         </AccountTabContent>
       </AccountTabs>
@@ -196,28 +205,47 @@ function MfaPanel({
           <div className="settingsActionButtons">
             {mfaEnabled ? (
               <>
-                <Button onClick={() => setDialog('mfa-verify')} type="button" variant="secondary">
-                  {tt('Verify code')}
+                <Button
+                  aria-label={tt('Verify code')}
+                  onClick={() => setDialog('mfa-verify')}
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                >
+                  {tt('Verify')}
                 </Button>
                 <Button
+                  aria-label={tt('Disable MFA')}
                   disabled={mfaRequired}
                   onClick={() => setDialog('mfa-disable')}
+                  size="sm"
                   type="button"
                   variant="destructive"
                 >
-                  {tt('Disable MFA')}
+                  {tt('Disable')}
                 </Button>
               </>
             ) : (
-              <Button onClick={() => setDialog('mfa-enroll')} type="button" variant="secondary">
-                {tt('Enroll authenticator app')}
+              <Button
+                aria-label={tt('Set up authenticator app')}
+                onClick={() => setDialog('mfa-enroll')}
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                {tt('Set up')}
               </Button>
             )}
           </div>
         }
         icon={<ShieldCheck size={18} />}
-        meta={security?.mfa.enabled ? tt('Authenticator app is enabled.') : tt('No authenticator factor enrolled.')}
+        meta={
+          security?.mfa.enabled
+            ? tt('Authenticator app is enabled.')
+            : tt('Protect your account with an authenticator app.')
+        }
         title={tt('Multi-factor authentication')}
+        value={mfaEnabled ? tt('Enabled') : tt('Not set up')}
       />
     </section>
   )
@@ -243,22 +271,27 @@ function PasskeysPanel({
           <Button
             disabled={!security?.policy.passkeys.enabled}
             onClick={() => setDialog('passkey')}
+            size="sm"
             type="button"
-            variant="secondary"
+            variant="outline"
           >
             <Fingerprint size={18} /> {tt('Add passkey')}
           </Button>
         }
         icon={<Fingerprint size={18} />}
         meta={
-          passkeys.length === 1
-            ? tt('1 passkey added for passwordless sign-in.')
-            : tt('{{count}} passkeys added for passwordless sign-in.', { count: passkeys.length })
+          passkeys.length === 0
+            ? tt('Use a passkey for fast, passwordless sign-in.')
+            : passkeys.length === 1
+              ? tt('1 passkey added for passwordless sign-in.')
+              : tt('{{count}} passkeys added for passwordless sign-in.', { count: passkeys.length })
         }
         title={tt('Passkeys')}
       />
       <ItemList
+        emptyDescription={tt('Add a passkey to sign in without a password.')}
         empty={tt('No passkeys have been added yet.')}
+        emptyIcon={<Fingerprint size={18} />}
         items={passkeys.map((passkey) => ({
           id: passkey.id,
           icon: <Fingerprint size={16} />,
@@ -301,7 +334,9 @@ function SessionsPanel({
   return (
     <section className="settingsPanel" aria-label={tt('Session management')}>
       <ItemList
-        empty={tt('No active sessions.')}
+        empty={tt('No other active sessions.')}
+        emptyDescription={tt('This browser is your only active session.')}
+        emptyIcon={<Laptop size={18} />}
         items={sessions.map((session) => ({
           id: session.id,
           icon: <Laptop size={16} />,
@@ -332,6 +367,7 @@ function SessionsPanel({
       <SettingsAction
         action={
           <Button
+            aria-label={tt('Sign out others')}
             onClick={() =>
               confirm({
                 title: tt('Revoke other sessions'),
@@ -341,10 +377,11 @@ function SessionsPanel({
                   mutate('Other sessions revoked.', revokeOtherSessions, { invalidate: [accountQueryKeys.sessions] }),
               })
             }
+            size="sm"
             type="button"
             variant="destructive"
           >
-            {tt('Revoke other sessions')}
+            {tt('Sign out others')}
           </Button>
         }
         icon={<Laptop />}

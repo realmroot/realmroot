@@ -1,3 +1,4 @@
+import { Inbox } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
@@ -47,9 +48,17 @@ export function AccountTabs({
   )
 }
 
-export function AccountTabContent({ children, value }: { children: ReactNode; value: string }) {
+export function AccountTabContent({
+  children,
+  surface = false,
+  value,
+}: {
+  children: ReactNode
+  surface?: boolean
+  value: string
+}) {
   return (
-    <TabsContent className="mt-5" value={value}>
+    <TabsContent className={cn('mt-3', surface && 'accountTabPanel')} value={value}>
       {children}
     </TabsContent>
   )
@@ -85,19 +94,43 @@ export function AccountRow({
 export function AccountObjectSection({
   children,
   description,
+  surface = false,
   title,
 }: {
   children: ReactNode
   description?: string
+  surface?: boolean
   title: string
 }) {
   return (
-    <section className="accountObjectSection">
+    <section className={cn('accountObjectSection', surface && 'is-surface')}>
       <header>
         <h2>{title}</h2>
         {description ? <p>{description}</p> : null}
       </header>
       {children}
     </section>
+  )
+}
+
+export function AccountEmptyState({
+  description,
+  icon = <Inbox />,
+  title,
+}: {
+  description?: string
+  icon?: ReactNode
+  title: string
+}) {
+  return (
+    <div className="accountEmptyState">
+      <span className="accountEmptyStateIcon" aria-hidden="true">
+        {icon}
+      </span>
+      <div>
+        <strong>{title}</strong>
+        {description ? <span>{description}</span> : null}
+      </div>
+    </div>
   )
 }

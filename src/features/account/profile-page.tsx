@@ -1,4 +1,4 @@
-import { ChevronsUpDown, Download, KeyRound, LockKeyhole, Mail, Pencil, UserRound } from 'lucide-react'
+import { ChevronsUpDown, Download, LockKeyhole, Mail, UserRound } from 'lucide-react'
 import { type FormEvent, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Field, SelectInput } from '@/components/product-form'
@@ -75,18 +75,18 @@ export function AccountProfilePage() {
         ]}
         value={tab}
       >
-        <AccountTabContent value="details">
+        <AccountTabContent surface value="details">
           {profile && accountCenter.profileEditingEnabled ? (
             <ProfileSections accountCenter={accountCenter} profile={profile} mutate={mutate} />
           ) : (
             <UnavailableSection message={tt('Profile editing is disabled for this account center.')} />
           )}
         </AccountTabContent>
-        <AccountTabContent value="preferences">
+        <AccountTabContent surface value="preferences">
           <AccountRows>
             <AccountRow
               action={
-                <Button onClick={() => setAction('language')} variant="outline">
+                <Button onClick={() => setAction('language')} size="sm" variant="outline">
                   {tt('Change')}
                 </Button>
               }
@@ -95,7 +95,7 @@ export function AccountProfilePage() {
             />
             <AccountRow
               action={
-                <Button onClick={() => setAction('timezone')} variant="outline">
+                <Button onClick={() => setAction('timezone')} size="sm" variant="outline">
                   {tt('Change')}
                 </Button>
               }
@@ -104,7 +104,7 @@ export function AccountProfilePage() {
             />
           </AccountRows>
         </AccountTabContent>
-        <AccountTabContent value="account">
+        <AccountTabContent surface value="account">
           <AccountRows>
             <AccountRow
               action={
@@ -119,6 +119,7 @@ export function AccountProfilePage() {
                       }),
                     )
                   }}
+                  size="sm"
                   variant="outline"
                 >
                   <Download />
@@ -420,8 +421,14 @@ function ProfileSections({
         <section className="settingsPanel">
           <SettingsAction
             action={
-              <Button onClick={() => setDialog('password')} type="button" variant="secondary">
-                <KeyRound size={18} /> {tt('Change password')}
+              <Button
+                aria-label={tt('Change password')}
+                onClick={() => setDialog('password')}
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                {tt('Change')}
               </Button>
             }
             icon={<LockKeyhole size={18} />}
@@ -476,8 +483,14 @@ function ProfileIdentityRows({
       {accountCenter.avatarEditable ? (
         <SettingsAction
           action={
-            <Button onClick={() => setDialog('avatar')} type="button" variant="secondary">
-              <Pencil size={16} /> {tt('Change avatar')}
+            <Button
+              aria-label={tt('Edit avatar')}
+              onClick={() => setDialog('avatar')}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              {tt('Edit')}
             </Button>
           }
           icon={
@@ -495,8 +508,14 @@ function ProfileIdentityRows({
       {accountCenter.displayNameEditable ? (
         <SettingsAction
           action={
-            <Button onClick={() => setDialog('displayName')} type="button" variant="secondary">
-              <Pencil size={16} /> {tt('Edit display name')}
+            <Button
+              aria-label={tt('Edit display name')}
+              onClick={() => setDialog('displayName')}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              {tt('Edit')}
             </Button>
           }
           icon={<UserRound size={18} />}
@@ -524,8 +543,14 @@ function ProfileIdentifierRows({
       {accountCenter.usernameEditable ? (
         <SettingsAction
           action={
-            <Button onClick={() => setDialog('username')} type="button" variant="secondary">
-              {tt('Edit username')}
+            <Button
+              aria-label={tt('Edit username')}
+              onClick={() => setDialog('username')}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              {tt('Edit')}
             </Button>
           }
           icon={<UserRound size={18} />}
@@ -537,8 +562,14 @@ function ProfileIdentifierRows({
       {accountCenter.emailChangeEnabled ? (
         <SettingsAction
           action={
-            <Button onClick={() => setDialog('email')} type="button" variant="secondary">
-              <Mail size={18} /> {tt('Change email')}
+            <Button
+              aria-label={tt('Edit email')}
+              onClick={() => setDialog('email')}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              {tt('Edit')}
             </Button>
           }
           icon={<Mail size={18} />}

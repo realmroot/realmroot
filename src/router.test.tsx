@@ -47,13 +47,13 @@ afterEach(() => {
 })
 
 describe('root route', () => {
-  it('redirects signed-in root visits to the profile entry point', async () => {
+  it('renders the Account Center overview at the root', async () => {
     const fetchSpy = vi.spyOn(window, 'fetch').mockImplementation(accountRouteResponse)
 
     render(<AppRouter />)
 
-    expect(await screen.findByRole('heading', { name: 'Profile route' })).toBeTruthy()
-    await waitFor(() => expect(window.location.pathname).toBe('/profile'))
+    expect(await screen.findByRole('heading', { name: 'Account overview route' })).toBeTruthy()
+    expect(window.location.pathname).toBe('/')
     expect(fetchSpy).toHaveBeenCalledWith('/api/account/profile', {
       body: undefined,
       headers: expect.any(Headers),
