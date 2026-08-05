@@ -46,8 +46,24 @@ For new or changed product behavior:
 5. Run `pnpm run spec:check` (governance lint: every scenario tagged, every
    `@e2e` scenario traced to a breadcrumb).
 
-Commands: `pnpm test`, `pnpm run test:coverage`, `pnpm run spec:check`,
-`pnpm run e2e`.
+Choose the test command by the changed runtime:
+
+- Backend-only (`server/**`, backend-owned `shared/**`): `pnpm run test:backend`.
+  This runs Node unit tests and real workerd/D1 integration tests; it does not
+  start jsdom or run React tests.
+- Frontend-only (`src/**`): `pnpm run test:web`. It does not run backend or D1
+  integration tests.
+- Cross-runtime or shared HTTP contract changes: `pnpm test`.
+- Backend coverage: `pnpm run test:coverage:backend`.
+- Frontend coverage: `pnpm run test:coverage:web`.
+- Combined unit + Web coverage: `pnpm run test:coverage`.
+- E2E remains separate: `pnpm run e2e`.
+
+During implementation, prefer a focused project invocation such as
+`pnpm exec vitest run --project unit path/to/test.ts` or
+`pnpm exec vitest run --project integration path/to/test.ts`. Do not run the
+Web/jsdom project for a backend-only change, or backend integration for a
+frontend-only change, unless the affected behavior crosses that boundary.
 
 If implementation reveals a new user-facing behavior, update the spec before
 continuing.
@@ -75,7 +91,9 @@ Use the narrowest meaningful command for the change:
 
 - Typecheck: `pnpm run typecheck`
 - Spec coverage: `pnpm run spec:check`
-- Tests: `pnpm test`
+- Backend tests: `pnpm run test:backend`
+- Frontend tests: `pnpm run test:web`
+- Full cross-runtime tests: `pnpm test`
 - Lint: `pnpm run lint`
 - Format/fix: `pnpm run lint:fix`
 - Build: `pnpm run build`
