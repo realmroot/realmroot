@@ -11,7 +11,6 @@ import {
   updateApplicationRequestSchema,
 } from '@shared/api/applications'
 import {
-  type assignRoleRequestSchema,
   createApiResourceRequestSchema,
   createOrganizationRequestSchema,
   createRoleRequestSchema,
@@ -144,7 +143,7 @@ type DetailTab = {
 type ApplicationDetailSection = 'overview' | 'oauth' | 'authorizations' | 'settings'
 type UserDetailSection = 'overview' | 'authentication' | 'sessions' | 'agents' | 'authorized-apps' | 'settings'
 type OrganizationDetailSection = 'overview' | 'members' | 'agents' | 'activity' | 'settings'
-type RoleDetailSection = 'overview' | 'permissions' | 'assignments' | 'settings'
+type RoleDetailSection = 'overview' | 'permissions' | 'settings'
 type ApiResourceDetailSection = 'overview' | 'resources' | 'authority' | 'settings'
 type WebhooksSection = 'endpoints' | 'requests'
 type SignInMode = 'password' | 'otp'
@@ -226,7 +225,6 @@ export type {
   ApplicationDetailSection,
   ApplicationOidcClaims,
   ApplicationResponse,
-  assignRoleRequestSchema,
   ConnectorResponse,
   ConnectorTemplate,
   CSSProperties,

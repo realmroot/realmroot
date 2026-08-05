@@ -542,7 +542,24 @@ describe('planned Account Center journeys', () => {
   it('manages Organization members, invitations, profile, and deletion', async () => {
     const actions: Array<{ path: string; body: unknown }> = []
     store.access.realmOperator = true
-    server.use(...organizationDetailHandlers('owner'), organizationMutationHandler(actions))
+    server.use(
+      ...organizationDetailHandlers('owner'),
+      http.put(`${base}/api/organizations/org-family/members/:memberId/roles`, async ({ request }) => {
+        actions.push({ path: '/api/auth/organization/update-member-role', body: await request.json() })
+        return json({ roles: ['admin'] })
+      }),
+      http.get(`${base}/api/organizations/org-family/roles`, () =>
+        json({
+          roles: ['owner', 'admin', 'developer', 'member'].map((key) => ({ key, displayName: key, predefined: true })),
+          pagination: pagination(4),
+        }),
+      ),
+      http.post(`${base}/api/organizations/org-family/invitations`, async ({ request }) => {
+        actions.push({ path: '/api/organizations/org-family/invitations', body: await request.json() })
+        return json({ id: 'inv-new' }, { status: 201 })
+      }),
+      organizationMutationHandler(actions),
+    )
 
     renderWithClient(<AccountOrganizationDetailPage organizationId="org-family" />)
     expect(await screen.findByRole('heading', { name: 'Family' })).toBeTruthy()
@@ -553,9 +570,15 @@ describe('planned Account Center journeys', () => {
     closeDialogWithEscape()
     fireEvent.click(await screen.findByRole('button', { name: 'Invite member' }))
     fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'new@example.com' } })
-    fireEvent.change(screen.getByLabelText('Access level'), { target: { value: 'developer' } })
+    fireEvent.click(screen.getByLabelText('member'))
+    fireEvent.click(screen.getByLabelText('developer'))
     fireEvent.click(screen.getByRole('button', { name: 'Send invitation' }))
-    await waitFor(() => expect(actions.some((action) => action.path.endsWith('/invite-member'))).toBe(true))
+    await waitFor(() =>
+      expect(actions).toContainEqual({
+        path: '/api/organizations/org-family/invitations',
+        body: { email: 'new@example.com', roles: ['developer'] },
+      }),
+    )
 
     fireEvent.click(screen.getByRole('button', { name: 'Manage' }))
     closeDialogWithEscape()
@@ -599,8 +622,8 @@ describe('planned Account Center journeys', () => {
     expect(await screen.findByText('Member')).toBeTruthy()
     openTab('Agents')
     expect(await screen.findByText('No Organization Agents')).toBeTruthy()
-    openTab('Role assignments')
-    expect(await screen.findByText('No effective Role assignments')).toBeTruthy()
+    openTab('Roles & grants')
+    expect(await screen.findByText('Your Organization Roles')).toBeTruthy()
     expect(screen.getByText('No active Agent access grants')).toBeTruthy()
     openTab('Settings')
     fireEvent.click(screen.getByRole('button', { name: 'Leave' }))
@@ -644,16 +667,10 @@ describe('planned Account Center journeys', () => {
     await waitFor(() => expect(screen.getByRole('alertdialog')).toBeTruthy())
   })
 
-  it('surfaces Organization Agent and authority query failures', async () => {
+  it('surfaces Organization Agent query failures', async () => {
     server.use(
       http.get(`${base}/api/account/organizations/org-family/agents`, () =>
         json({ message: 'Agents unavailable.' }, { status: 500 }),
-      ),
-      http.get(`${base}/api/access/assignments`, () =>
-        json({ message: 'Role assignments unavailable.' }, { status: 500 }),
-      ),
-      http.get(`${base}/api/access/authorizations`, () =>
-        json({ message: 'Agent grants unavailable.' }, { status: 500 }),
       ),
       ...organizationDetailHandlers('member'),
     )
@@ -662,8 +679,6 @@ describe('planned Account Center journeys', () => {
 
     openTab('Agents')
     expect((await screen.findByRole('alert')).textContent).toContain('Agents unavailable.')
-    openTab('Role assignments')
-    expect((await screen.findByRole('alert')).textContent).toContain('Role assignments unavailable.')
   })
 
   it('renders Organization load failures', async () => {
@@ -674,7 +689,6 @@ describe('planned Account Center journeys', () => {
       http.get(`${base}/api/account/organizations/org-family/agents`, () =>
         json({ items: [], pagination: pagination(0) }),
       ),
-      http.get(`${base}/api/access/assignments`, () => json({ assignments: [], pagination: pagination(0) })),
       http.get(`${base}/api/access/authorizations`, () => json({ items: [], pagination: pagination(0) })),
     )
     renderWithClient(<AccountOrganizationDetailPage organizationId="org-family" />)
@@ -821,40 +835,6 @@ function organizationDetailHandlers(role: string, options: { empty?: boolean } =
     http.get(`${base}/api/account/organizations/org-family/agents`, () =>
       json({ items: agents, pagination: pagination(agents.length) }),
     ),
-    http.get(`${base}/api/access/assignments`, ({ request }) => {
-      if (options.empty || new URL(request.url).searchParams.get('context') === 'realm') {
-        return json({ assignments: [], pagination: pagination(0) })
-      }
-      return json({
-        assignments: [
-          {
-            id: 'assignment-1',
-            roleId: 'role-1',
-            subjectType: 'user',
-            subjectId: store.profile.id,
-            organizationId: 'org-family',
-            assignedByUserId: 'admin-1',
-            expiresAt: null,
-            revokedAt: null,
-            createdAt: '2026-08-01T00:00:00.000Z',
-            updatedAt: '2026-08-01T00:00:00.000Z',
-          },
-        ],
-        pagination: pagination(1),
-      })
-    }),
-    http.get(`${base}/api/access/roles/role-1`, () =>
-      json({
-        id: 'role-1',
-        key: 'family.viewer',
-        name: 'Family viewer',
-        description: null,
-        system: false,
-        createdAt: '2026-08-01T00:00:00.000Z',
-        updatedAt: '2026-08-01T00:00:00.000Z',
-      }),
-    ),
-    http.get(`${base}/api/access/roles/role-1/scopes`, () => json({ scopes: [] })),
     http.get(`${base}/api/access/authorizations`, () =>
       json({
         items: options.empty

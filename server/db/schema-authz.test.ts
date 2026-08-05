@@ -33,14 +33,10 @@ import {
   organizationInvitationRelations,
   organizationMemberRelations,
   organizationRelations,
+  organizationRole,
+  organizationRoleRelations,
   passkey,
   passkeyRelations,
-  role,
-  roleAssignment,
-  roleAssignmentRelations,
-  rolePermission,
-  rolePermissionRelations,
-  roleRelations,
   session,
   sessionRelations,
   signInExperience,
@@ -248,14 +244,8 @@ describe('schema.test 2', () => {
         'audienceUsers',
       ]),
     )
-    expect(relationKeys(apiResourceRelations)).toEqual([
-      'ownerOrganization',
-      'eligibleOrganizations',
-      'rolePermissions',
-    ])
-    expect(relationKeys(roleRelations)).toEqual(expect.arrayContaining(['permissions', 'assignments']))
-    expect(relationKeys(rolePermissionRelations)).toEqual(['role', 'resource'])
-    expect(relationKeys(roleAssignmentRelations)).toEqual(['role', 'organization', 'assignedBy'])
+    expect(relationKeys(apiResourceRelations)).toEqual(['ownerOrganization', 'eligibleOrganizations'])
+    expect(relationKeys(organizationRoleRelations)).toEqual(['organization'])
   })
 
   it('keeps timestamp update hooks executable for mutable records', () => {
@@ -264,7 +254,7 @@ describe('schema.test 2', () => {
       .filter((column) => column.onUpdateFn)
       .map((column) => column.onUpdateFn?.())
 
-    expect(updateValues).toHaveLength(22)
+    expect(updateValues).toHaveLength(21)
     for (const value of updateValues) {
       expect(value).toBeInstanceOf(Date)
     }
@@ -292,9 +282,7 @@ const schemaTables = [
   member,
   invitation,
   apiResource,
-  rolePermission,
-  roleAssignment,
-  role,
+  organizationRole,
   application,
   applicationClientSecret,
   applicationClientMetadata,

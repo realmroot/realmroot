@@ -32,12 +32,10 @@ import {
   oauthConsent,
   oauthRefreshToken,
   organization,
+  organizationRole,
   passkey,
   resourceAccountConnection,
   resourceConnectionIntent,
-  role,
-  roleAssignment,
-  rolePermission,
   session,
   signInExperience,
   twoFactor,
@@ -113,18 +111,15 @@ describe('schema.test 1', () => {
     )
   })
 
-  it('models Realm roles with resource-qualified permissions and contextual assignments', () => {
-    expect(indexNames(rolePermission)).toEqual(
-      expect.arrayContaining(['rolePermission_roleId_resourceId_scope_unique', 'rolePermission_resourceId_idx']),
+  it('models Better Auth dynamic Roles inside one Organization', () => {
+    expect(indexNames(organizationRole)).toEqual(
+      expect.arrayContaining(['organizationRole_organizationId_role_unique', 'organizationRole_organizationId_idx']),
     )
-    expect(indexNames(roleAssignment)).toEqual(
-      expect.arrayContaining(['roleAssignment_realm_unique', 'roleAssignment_organization_unique']),
-    )
-    expect(foreignKeyReferences(rolePermission)).toContainEqual({
-      columns: ['resource_id'],
+    expect(foreignKeyReferences(organizationRole)).toContainEqual({
+      columns: ['organization_id'],
       foreignColumns: ['id'],
-      foreignTable: 'api_resource',
-      onDelete: 'restrict',
+      foreignTable: 'organization',
+      onDelete: 'cascade',
     })
   })
 
@@ -490,9 +485,7 @@ const _schemaTables = [
   member,
   invitation,
   apiResource,
-  rolePermission,
-  roleAssignment,
-  role,
+  organizationRole,
   application,
   applicationClientSecret,
   applicationClientMetadata,

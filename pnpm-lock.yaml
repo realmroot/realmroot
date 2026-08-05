@@ -50,7 +50,7 @@ importers:
         specifier: ^1.93.0
         version: 1.170.4(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       better-auth:
-        specifier: ^1.6.25
+        specifier: 1.6.25
         version: 1.6.25(patch_hash=a8dc531e90d8c722b9448088a7c57206114dcff903a785014c4144cd24bcd8ce)(@cloudflare/workers-types@4.20260510.1)(drizzle-kit@0.31.10)(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260510.1)(kysely@0.29.4))(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(vitest@4.1.5)
       class-variance-authority:
         specifier: ^0.7.1

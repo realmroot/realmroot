@@ -1,4 +1,3 @@
-import type { RoleAssignmentRecord } from '@server/usecases/ports'
 import type { ApplicationOidcClaims } from '@shared/api/applications'
 import type { ApiResourceResponse, OrganizationResponse } from '@shared/api/authorization'
 
@@ -14,14 +13,13 @@ export interface AuthorizationTokenClaimInput {
 
 export function toTokenClaims(
   input: AuthorizationTokenClaimInput,
-  assignments: RoleAssignmentRecord[],
+  roleAuthorization: { roles: string[]; scopes: string[] } | null,
   resource: ApiResourceResponse | null,
   organization: OrganizationResponse | null = null,
 ) {
-  const roles = dedupe(assignments.map((assignment) => assignment.role.key))
-  const assignedScopes = new Set(assignments.flatMap((assignment) => assignment.scopes))
-  const scopes =
-    resource && assignments.length > 0 ? input.scopes.filter((scope) => assignedScopes.has(scope)) : input.scopes
+  const roles = dedupe(roleAuthorization?.roles ?? [])
+  const assignedScopes = new Set(roleAuthorization?.scopes ?? [])
+  const scopes = roleAuthorization ? input.scopes.filter((scope) => assignedScopes.has(scope)) : input.scopes
   const groups = input.organizationId ? [input.organizationId] : []
   const authorization = {
     scopes,

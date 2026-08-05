@@ -34,11 +34,7 @@ export interface PrincipalContext {
     protocolAgentId: string
     hostId: string
     scopes: string[]
-    authority:
-      | { kind: 'realm' }
-      | { kind: 'organization'; organizationId: string }
-      | { kind: 'account'; userId: string }
-      | null
+    authority: { kind: 'organization'; organizationId: string } | { kind: 'user'; userId: string } | null
   } | null
 }
 
@@ -192,9 +188,8 @@ function authorityClaim(value: unknown): NonNullable<PrincipalContext['agent']>[
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
   const detail = value as Record<string, unknown>
   if (detail.type !== 'realmroot_authority' || typeof detail.id !== 'string') return null
-  if (detail.authority === 'realm' && detail.id === 'realm') return { kind: 'realm' }
   if (detail.authority === 'organization') return { kind: 'organization', organizationId: detail.id }
-  if (detail.authority === 'account') return { kind: 'account', userId: detail.id }
+  if (detail.authority === 'user') return { kind: 'user', userId: detail.id }
   return null
 }
 

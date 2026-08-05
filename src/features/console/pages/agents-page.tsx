@@ -80,7 +80,6 @@ export function AgentsPage() {
         <TableHeader>
           <TableRow>
             <TableHead>{tt('Agent')}</TableHead>
-            <TableHead>{tt('Roles')}</TableHead>
             <TableHead>{tt('Access grants')}</TableHead>
             <TableHead>{tt('Status')}</TableHead>
             <TableHead>{tt('Owner')}</TableHead>
@@ -93,7 +92,7 @@ export function AgentsPage() {
             agents.map((agent) => <AgentRow agent={agent} context={context} key={agent.id} />)
           ) : (
             <TableEmptyRow
-              colSpan={7}
+              colSpan={6}
               description={tt('Agents appear after enrollment approval.')}
               title={tt('No Agents found')}
             />
@@ -120,7 +119,6 @@ function AgentRow({ agent, context }: { agent: ManagementAgent; context?: string
           </span>
         </Link>
       </TableCell>
-      <TableCell>{agent.roleCount.toLocaleString()}</TableCell>
       <TableCell>{agent.activeGrantCount.toLocaleString()}</TableCell>
       <TableCell>
         <Badge variant={agent.status === 'active' ? 'secondary' : 'outline'}>{agent.status}</Badge>

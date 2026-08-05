@@ -266,6 +266,7 @@ function createRouteApp(overrides: { signJWT?: () => Promise<{ token: string }> 
             'access-requests:read',
             'access-requests:write',
             'access-authorizations:read',
+            'access-authorizations:issue',
           ],
           authority: null,
         },

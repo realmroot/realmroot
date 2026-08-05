@@ -22,16 +22,14 @@ import type {
   ApiResourceResponse,
   CreateInvitationRequest,
   CreateOrganizationRequest,
-  CreateRoleAssignmentRequest,
   CreateRoleRequest,
   InvitationResponse,
   ListInvitationsResponse,
   ListMembersResponse,
-  ListRoleAssignmentsQuery,
-  ListRoleAssignmentsResponse,
   MemberResponse,
+  MemberRolesResponse,
   OrganizationResponse,
-  RolePermissionsResponse,
+  ReplaceMemberRolesRequest,
   RoleResponse,
   UpdateMemberRequest,
   UpdateOrganizationRequest,
@@ -98,7 +96,6 @@ export type AdminDashboard = {
   users: ListManagementUsersResponse
   connectors: ListManagementConnectorsResponse
   organizations: ListOrganizationsResponse
-  roles: ListRolesResponse
   apiResources: ListApiResourcesResponse
   signIn: ManagementSignInSettingsResponse
   security: { policy: SecurityPolicyResponse }
@@ -110,7 +107,7 @@ export type OrganizationDashboard = {
   users: ListManagementUsersResponse
   apiResources: Awaited<ReturnType<typeof listApiResources>>
   agents: Awaited<ReturnType<typeof getAgentInventory>>
-  assignments: ListRoleAssignmentsResponse
+  roles: ListRolesResponse
 }
 
 type ListOrganizationsResponse = {
@@ -134,16 +131,14 @@ export function getAdminDashboard(): Promise<AdminDashboard> {
     listUsers(),
     listConnectors(),
     listOrganizations(),
-    listRoles(),
     listApiResources(),
     getSignInSettings(),
     getSecurityPolicy(),
-  ]).then(([applications, users, connectors, organizations, roles, apiResources, signIn, security]) => ({
+  ]).then(([applications, users, connectors, organizations, apiResources, signIn, security]) => ({
     applications,
     users,
     connectors,
     organizations,
-    roles,
     apiResources: { resources: apiResources.items, pagination: apiResources.pagination },
     signIn,
     security,
@@ -157,14 +152,14 @@ export function getOrganizationDashboard(organizationId: string): Promise<Organi
     listUsers({ organizationId, limit: 100 }),
     listApiResources({ ownerOrganizationId: organizationId }),
     getAgentInventory({ organizationId, limit: 100 }),
-    listRoleAssignments({ organizationId, limit: 100 }),
-  ]).then(([organization, applications, users, apiResources, agents, assignments]) => ({
+    listRoles(organizationId),
+  ]).then(([organization, applications, users, apiResources, agents, roles]) => ({
     organization,
     applications,
     users,
     apiResources,
     agents,
-    assignments,
+    roles,
   }))
 }
 
@@ -538,15 +533,10 @@ export function listAgentInstallations(agentId: string, query: Partial<Paginatio
   )
 }
 
-export async function listAgentRoles(agentId: string, query: Partial<PaginationQuery> = {}) {
-  const [assignments, roles] = await Promise.all([
-    listRoleAssignments({ ...query, subjectType: 'agent', subjectId: agentId, status: 'active' }),
-    listRoles(),
-  ])
-  const assignedRoleIds = new Set(assignments.assignments.map((assignment) => assignment.roleId))
+export async function listAgentRoles(_agentId: string, query: Partial<PaginationQuery> = {}) {
   return {
-    items: roles.roles.filter((role) => assignedRoleIds.has(role.id)),
-    pagination: assignments.pagination,
+    items: [] as RoleResponse[],
+    pagination: { limit: query.limit ?? 50, offset: query.offset ?? 0, total: 0, hasMore: false, nextOffset: null },
   }
 }
 
@@ -748,65 +738,56 @@ export async function uploadBrandingFavicon(file: File): Promise<UploadedAssetRe
   return uploaded
 }
 
-export function listRoles() {
-  return readRpcResponse(apiClient.api.access.roles.$get())
+export function listRoles(organizationId: string) {
+  return readRpcResponse(apiClient.api.organizations[':organizationId'].roles.$get({ param: { organizationId } }))
 }
 
-export function getRole(id: string): Promise<RoleResponse> {
-  return readRpcResponse(apiClient.api.access.roles[':id'].$get({ param: { id } }))
-}
-
-export function createRole(input: CreateRoleRequest) {
-  return readRpcResponse(apiClient.api.access.roles.$post({ json: input }))
-}
-
-export function updateRole(id: string, input: UpdateRoleRequest) {
-  return readRpcResponse(apiClient.api.access.roles[':id'].$patch({ param: { id }, json: input }))
-}
-
-export function deleteRole(id: string) {
-  return readRpcResponse(apiClient.api.access.roles[':id'].$delete({ param: { id } }))
-}
-
-export async function listRolePermissions(id: string): Promise<RolePermissionsResponse & { etag: string }> {
-  const response = await fetch(`/api/access/roles/${encodeURIComponent(id)}/scopes`, { credentials: 'same-origin' })
-  const result = await readJsonResponse<{ scopes: RolePermissionsResponse['permissions'] }>(response)
-  const etag = response.headers.get('etag')
-  if (!etag) throw new Error('Role permissions response did not include an ETag.')
-  return { permissions: result.scopes, etag }
-}
-
-export function replaceRolePermissions(
-  id: string,
-  permissions: Array<{ resourceId: string; scope: string }>,
-  etag: string,
-) {
-  return fetch(`/api/access/roles/${encodeURIComponent(id)}/scopes`, {
-    method: 'PUT',
-    credentials: 'same-origin',
-    headers: { 'content-type': 'application/json', 'if-match': etag },
-    body: JSON.stringify({ scopes: permissions }),
-  })
-    .then((response) => readJsonResponse<{ scopes: RolePermissionsResponse['permissions'] }>(response))
-    .then(({ scopes }) => ({ permissions: scopes }))
-}
-
-export function listRoleAssignments(
-  query: Partial<ListRoleAssignmentsQuery> = {},
-): Promise<ListRoleAssignmentsResponse> {
+export function getRole(organizationId: string, roleKey: string): Promise<RoleResponse> {
   return readRpcResponse(
-    apiClient.api.access.assignments.$get({
-      query: stringifyQuery(query) as Partial<Record<keyof ListRoleAssignmentsQuery, string>>,
+    apiClient.api.organizations[':organizationId'].roles[':roleKey'].$get({ param: { organizationId, roleKey } }),
+  )
+}
+
+export function createRole(organizationId: string, input: CreateRoleRequest) {
+  return readRpcResponse(
+    apiClient.api.organizations[':organizationId'].roles.$post({ param: { organizationId }, json: input }),
+  )
+}
+
+export function updateRole(organizationId: string, roleKey: string, input: UpdateRoleRequest) {
+  return readRpcResponse(
+    apiClient.api.organizations[':organizationId'].roles[':roleKey'].$patch({
+      param: { organizationId, roleKey },
+      json: input,
     }),
   )
 }
 
-export function createRoleAssignment(input: CreateRoleAssignmentRequest) {
-  return readRpcResponse(apiClient.api.access.assignments.$post({ json: input }))
+export function deleteRole(organizationId: string, roleKey: string) {
+  return readRpcResponse(
+    apiClient.api.organizations[':organizationId'].roles[':roleKey'].$delete({ param: { organizationId, roleKey } }),
+  )
 }
 
-export function revokeRoleAssignment(id: string) {
-  return readRpcResponse(apiClient.api.access.assignments[':id'].revocation.$put({ param: { id } }))
+export function getOrganizationMemberRoles(organizationId: string, memberId: string): Promise<MemberRolesResponse> {
+  return readRpcResponse(
+    apiClient.api.organizations[':organizationId'].members[':memberId'].roles.$get({
+      param: { organizationId, memberId },
+    }),
+  )
+}
+
+export function replaceOrganizationMemberRoles(
+  organizationId: string,
+  memberId: string,
+  input: ReplaceMemberRolesRequest,
+) {
+  return readRpcResponse(
+    apiClient.api.organizations[':organizationId'].members[':memberId'].roles.$put({
+      param: { organizationId, memberId },
+      json: input,
+    }),
+  )
 }
 
 export function getApiResourceContract(id: string): Promise<ApiResourceContractResponse> {

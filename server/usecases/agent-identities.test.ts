@@ -247,7 +247,7 @@ describe('Agent identity lifecycle', () => {
     await expect(getProtocolAgentEnrollment(deps, 'intent-1', 'another-agent')).rejects.toMatchObject({ status: 403 })
   })
 
-  it('maps management summaries, installations, access requests, and access grants', async () => {
+  it('maps management summaries, installations, access requests, and access grants [spec: admin-console/admin-agent-governance-detail]', async () => {
     const deps = managementDeps()
     const stored = aggregate()
     vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(stored)
@@ -495,8 +495,9 @@ describe('Agent identity lifecycle', () => {
     vi.mocked(deps.externalResources.summarizeAgentAccess).mockResolvedValue(
       new Map([['identity-1', { pendingRequestCount: 0, activeGrantCount: 0 }]]),
     )
-    vi.mocked(deps.authorization.countEffectiveAgentRoles).mockResolvedValue(new Map())
-    await expect(listAllAgents(deps, { limit: 20, offset: 0 })).rejects.toThrow('Role summary was not resolved')
+    await expect(listAllAgents(deps, { limit: 20, offset: 0 })).resolves.toMatchObject({
+      items: [{ roleCount: 0 }],
+    })
   })
 
   it('gets only active protocol-bound identities', async () => {
@@ -769,11 +770,6 @@ function identityDeps() {
   return createTestDeps({
     authorization: {
       findMemberByOrganizationUser: vi.fn().mockResolvedValue(null),
-      countEffectiveAgentRoles: vi
-        .fn()
-        .mockImplementation((agents: Array<{ agentIdentityId: string }>) =>
-          Promise.resolve(new Map(agents.map((agent) => [agent.agentIdentityId, 0]))),
-        ),
     },
     externalResources: {
       summarizeAgentAccess: vi
@@ -789,9 +785,6 @@ function identityDeps() {
 
 function managementDeps() {
   const deps = createTestDeps()
-  vi.mocked(deps.authorization.countEffectiveAgentRoles).mockImplementation((agents) =>
-    Promise.resolve(new Map(agents.map((agent) => [agent.agentIdentityId, 0]))),
-  )
   vi.mocked(deps.externalResources.summarizeAgentAccess).mockImplementation((agentIds) =>
     Promise.resolve(new Map(agentIds.map((agentId) => [agentId, { pendingRequestCount: 0, activeGrantCount: 0 }]))),
   )
@@ -803,7 +796,7 @@ function member(role: string) {
     id: 'member-1',
     organizationId: 'org-1',
     userId: 'user-1',
-    role,
+    roles: [role],
     title: null,
     createdAt: '2026-08-01T00:00:00.000Z',
     updatedAt: '2026-08-01T00:00:00.000Z',

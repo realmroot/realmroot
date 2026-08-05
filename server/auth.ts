@@ -424,6 +424,7 @@ export function createAuth(
         },
         ac: organizationAccessControl,
         roles: organizationRoles,
+        dynamicAccessControl: { enabled: true },
         sendInvitationEmail: async ({ email, id, inviter }) => {
           await emailSender.send({
             to: email,

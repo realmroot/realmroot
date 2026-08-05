@@ -1,6 +1,6 @@
 import type { AuthorizationDetail } from '@shared/api/authorization-details'
 import { sql } from 'drizzle-orm'
-import { check, index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
+import { index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import { uploadedAsset } from './agent-tables'
 import { oauthClient, user } from './auth-tables'
 import { identityProviderConnector } from './connector-tables'
@@ -283,59 +283,17 @@ export const apiResourceEligibleOrganization = sqliteTable(
   ],
 )
 
-export const role = sqliteTable(
-  'role',
+export const organizationRole = sqliteTable(
+  'organization_role',
   {
     id: text('id').primaryKey(),
-    key: text('key').notNull(),
-    name: text('name').notNull(),
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    role: text('role').notNull(),
+    permission: text('permission', { mode: 'json' }).$type<Record<string, string[]>>().notNull(),
+    displayName: text('display_name').notNull(),
     description: text('description'),
-    system: integer('system', { mode: 'boolean' }).default(false).notNull(),
-    createdAt: integer('created_at', { mode: 'timestamp_ms' })
-      .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
-      .notNull(),
-    updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
-      .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
-      .$onUpdate(() => new Date())
-      .notNull(),
-  },
-  (table) => [uniqueIndex('role_key_unique').on(table.key)],
-)
-
-export const rolePermission = sqliteTable(
-  'role_permission',
-  {
-    roleId: text('role_id')
-      .notNull()
-      .references(() => role.id, { onDelete: 'cascade' }),
-    resourceId: text('resource_id')
-      .notNull()
-      .references(() => apiResource.id, { onDelete: 'restrict' }),
-    scope: text('scope').notNull(),
-    createdAt: integer('created_at', { mode: 'timestamp_ms' })
-      .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
-      .notNull(),
-  },
-  (table) => [
-    uniqueIndex('rolePermission_roleId_resourceId_scope_unique').on(table.roleId, table.resourceId, table.scope),
-    index('rolePermission_roleId_idx').on(table.roleId),
-    index('rolePermission_resourceId_idx').on(table.resourceId),
-  ],
-)
-
-export const roleAssignment = sqliteTable(
-  'role_assignment',
-  {
-    id: text('id').primaryKey(),
-    roleId: text('role_id')
-      .notNull()
-      .references(() => role.id, { onDelete: 'cascade' }),
-    subjectType: text('subject_type').notNull(),
-    subjectId: text('subject_id').notNull(),
-    organizationId: text('organization_id').references(() => organization.id, { onDelete: 'cascade' }),
-    assignedByUserId: text('assigned_by_user_id').references(() => user.id, { onDelete: 'set null' }),
-    expiresAt: integer('expires_at', { mode: 'timestamp_ms' }),
-    revokedAt: integer('revoked_at', { mode: 'timestamp_ms' }),
     createdAt: integer('created_at', { mode: 'timestamp_ms' })
       .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
       .notNull(),
@@ -345,16 +303,8 @@ export const roleAssignment = sqliteTable(
       .notNull(),
   },
   (table) => [
-    check('roleAssignment_subjectType_check', sql`${table.subjectType} in ('user', 'agent', 'workload')`),
-    uniqueIndex('roleAssignment_realm_unique')
-      .on(table.roleId, table.subjectType, table.subjectId)
-      .where(sql`${table.organizationId} is null and ${table.revokedAt} is null`),
-    uniqueIndex('roleAssignment_organization_unique')
-      .on(table.roleId, table.subjectType, table.subjectId, table.organizationId)
-      .where(sql`${table.organizationId} is not null and ${table.revokedAt} is null`),
-    index('roleAssignment_roleId_idx').on(table.roleId),
-    index('roleAssignment_subject_idx').on(table.subjectType, table.subjectId),
-    index('roleAssignment_organizationId_idx').on(table.organizationId),
+    uniqueIndex('organizationRole_organizationId_role_unique').on(table.organizationId, table.role),
+    index('organizationRole_organizationId_idx').on(table.organizationId),
   ],
 )
 

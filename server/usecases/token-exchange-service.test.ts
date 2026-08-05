@@ -39,6 +39,26 @@ afterEach(() => {
 })
 
 describe('token exchange service', () => {
+  it('rejects an audience outside the Application Organization tenant', async () => {
+    const repository = new InMemoryTokenExchangeRepository()
+    const deps = credentialDeps(repository)
+    deps.authorization.findResource = async () =>
+      ({
+        ...eligibleAudienceResource(),
+        ownerOrganizationId: 'org_2',
+      }) as never
+
+    await expect(
+      createFederatedCredential(deps, applicationId, {
+        name: 'Cross tenant',
+        issuer: 'https://platform.example.com',
+        subject: 'org_1:*',
+        audienceResourceId,
+        publicKeys: [{ kty: 'EC', crv: 'P-256', x: 'x', y: 'y' }],
+      }),
+    ).rejects.toMatchObject({ status: 400 })
+  })
+
   it('matches an exact federated credential subject', async () => {
     const { deps, repository, clientSecret } = await tokenExchangeFixture({ seedCredential: false })
     await repository.seedCredential({
@@ -124,6 +144,7 @@ describe('token exchange service', () => {
       client_id: applicationClientId,
       scope: 'runner:connect',
       'urn:realmroot:params:oauth:token-exchange:subject-claims': {
+        'urn:realmroot:params:oauth:tenant': { type: 'organization', id: 'org_1' },
         ama_project_id: 'project_1',
         ama_environment_id: 'env_1',
         ama_runner_id: 'runner_1',
@@ -227,6 +248,7 @@ describe('token exchange service', () => {
       client_id: applicationClientId,
       scope: 'runner:connect',
       'urn:realmroot:params:oauth:token-exchange:subject-claims': {
+        'urn:realmroot:params:oauth:tenant': { type: 'organization', id: 'org_1' },
         ama_project_id: 'project_1',
         ama_environment_id: 'env_1',
       },
@@ -1119,6 +1141,7 @@ class InMemoryTokenExchangeRepository implements TokenExchangeRepository {
       id,
       applicationId: applicationIdValue,
       applicationClientId,
+      ownerOrganizationId: 'org_1',
       name: input.name,
       issuer: input.issuer,
       subject: input.subject,
@@ -1172,6 +1195,7 @@ class InMemoryTokenExchangeRepository implements TokenExchangeRepository {
       id,
       applicationId,
       applicationClientId,
+      ownerOrganizationId: 'org_1',
       name: 'External Platform',
       issuer: input.issuer,
       subject: input.subject ?? 'org_1:*',
@@ -1274,13 +1298,26 @@ function credentialDeps(repository: InMemoryTokenExchangeRepository): Deps {
     tokenExchange: repository,
     jwks: createJwksGateway(),
     applications: {
-      findById: async (id: string) => (id === applicationId ? { id: applicationId } : null),
+      findById: async (id: string) =>
+        id === applicationId ? { id: applicationId, ownerOrganizationId: 'org_1' } : null,
     },
     authorization: {
-      findResource: async (id: string) =>
-        id === audienceResourceId ? { id: audienceResourceId, audience: defaultAudience, enabled: true } : null,
+      findResource: async (id: string) => (id === audienceResourceId ? eligibleAudienceResource() : null),
+      findResourceByResourceUrl: async (resourceUrl: string) =>
+        resourceUrl === defaultAudience ? eligibleAudienceResource() : null,
     },
   } as unknown as Deps
+}
+
+function eligibleAudienceResource() {
+  return {
+    id: audienceResourceId,
+    resourceUrl: defaultAudience,
+    enabled: true,
+    archivedAt: null,
+    ownerOrganizationId: 'org_1',
+    accessEligibility: { mode: 'owner_organization' as const, organizationIds: [] },
+  }
 }
 
 async function tokenExchangeFixture(

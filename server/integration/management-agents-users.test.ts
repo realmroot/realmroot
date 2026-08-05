@@ -102,7 +102,7 @@ describe('user management over real D1', () => {
     expect((await harness.request('/api/users')).status).toBe(401)
   })
 
-  it('rejects a signed-in non-admin with 403', async () => {
+  it('returns an empty tenant-filtered collection to a user without Organization access', async () => {
     const adminCookie = await signInAdmin(harness)
     await createUser(harness, adminCookie, {
       email: 'plain@example.com',
@@ -111,7 +111,9 @@ describe('user management over real D1', () => {
       password: 'plain-password-2026',
     })
     const memberCookie = await signIn(harness, 'plain@example.com', 'plain-password-2026')
-    expect((await harness.request('/api/users', { headers: { cookie: memberCookie } })).status).toBe(403)
+    const response = await harness.request('/api/users', { headers: { cookie: memberCookie } })
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toMatchObject({ users: [], pagination: { total: 0 } })
   })
 
   it('runs admin user CRUD through the user repository (real SQL)', async () => {

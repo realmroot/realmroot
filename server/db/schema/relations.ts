@@ -22,9 +22,7 @@ import {
   invitation,
   member,
   organization,
-  role,
-  roleAssignment,
-  rolePermission,
+  organizationRole,
 } from './authorization-tables'
 
 export const userRelations = relations(user, ({ many }) => ({
@@ -135,6 +133,7 @@ export const organizationRelations = relations(organization, ({ many, one }) => 
   members: many(member),
   invitations: many(invitation),
   applications: many(application),
+  roles: many(organizationRole),
 }))
 
 export const organizationMemberRelations = relations(member, ({ one }) => ({
@@ -206,7 +205,6 @@ export const apiResourceRelations = relations(apiResource, ({ many, one }) => ({
     references: [organization.id],
   }),
   eligibleOrganizations: many(apiResourceEligibleOrganization),
-  rolePermissions: many(rolePermission),
 }))
 
 export const apiResourceEligibleOrganizationRelations = relations(apiResourceEligibleOrganization, ({ one }) => ({
@@ -220,33 +218,9 @@ export const apiResourceEligibleOrganizationRelations = relations(apiResourceEli
   }),
 }))
 
-export const roleRelations = relations(role, ({ many }) => ({
-  permissions: many(rolePermission),
-  assignments: many(roleAssignment),
-}))
-
-export const rolePermissionRelations = relations(rolePermission, ({ one }) => ({
-  role: one(role, {
-    fields: [rolePermission.roleId],
-    references: [role.id],
-  }),
-  resource: one(apiResource, {
-    fields: [rolePermission.resourceId],
-    references: [apiResource.id],
-  }),
-}))
-
-export const roleAssignmentRelations = relations(roleAssignment, ({ one }) => ({
-  role: one(role, {
-    fields: [roleAssignment.roleId],
-    references: [role.id],
-  }),
+export const organizationRoleRelations = relations(organizationRole, ({ one }) => ({
   organization: one(organization, {
-    fields: [roleAssignment.organizationId],
+    fields: [organizationRole.organizationId],
     references: [organization.id],
-  }),
-  assignedBy: one(user, {
-    fields: [roleAssignment.assignedByUserId],
-    references: [user.id],
   }),
 }))

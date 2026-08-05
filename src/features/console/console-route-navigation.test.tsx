@@ -184,17 +184,19 @@ describe('console route navigation', () => {
       if (url.startsWith('/api/users/user-1/passkeys')) {
         return Promise.resolve(jsonResponse({ passkeys: [consolePasskey], pagination }))
       }
-      if (url === '/api/access/roles/role-1') {
-        return Promise.resolve(jsonResponse({ ...role, resourceId: 'resource-1' }))
-      }
-      if (url === '/api/access/roles/role-1/scopes') {
+      if (url === '/api/organizations/org-1/roles/role-1') {
         return Promise.resolve(
-          new Response(JSON.stringify({ scopes: [{ resourceId: 'resource-1', scope: 'orders.read' }] }), {
-            headers: { 'content-type': 'application/json', etag: '"permissions-v1"' },
+          jsonResponse({
+            ...role,
+            key: 'role-1',
+            predefined: false,
+            scopes: [{ resourceId: 'resource-1', scope: 'orders.read' }],
           }),
         )
       }
-      if (url.startsWith('/api/access/roles')) return Promise.resolve(jsonResponse({ roles: [role], pagination }))
+      if (url === '/api/organizations/org-1/roles') {
+        return Promise.resolve(jsonResponse({ roles: [role], pagination }))
+      }
       if (url === '/api/resource-servers') {
         return Promise.resolve(jsonResponse({ items: [{ ...apiResource, authorization: null }], pagination }))
       }
@@ -237,12 +239,6 @@ describe('console route navigation', () => {
         url.startsWith('/api/access/authorizations?agentId=agent-1')
       ) {
         return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
-      }
-      if (url.startsWith('/api/access/assignments?') && url.includes('subjectId=agent-1')) {
-        return Promise.resolve(jsonResponse({ assignments: [], pagination: emptyPagination }))
-      }
-      if (url === '/api/access/roles') {
-        return Promise.resolve(jsonResponse({ roles: [], pagination: emptyPagination }))
       }
       if (url.startsWith('/api/realm/audit-events?')) {
         return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))

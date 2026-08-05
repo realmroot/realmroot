@@ -35,10 +35,11 @@ import {
   listOrganizationInvitations,
   listOrganizationMembers,
   listOrganizations,
+  listRoles,
   listUsers,
   removeOrganizationMember,
+  replaceOrganizationMemberRoles,
   updateOrganization,
-  updateOrganizationMember,
 } from '@/lib/api/management'
 import { tt } from '@/lib/i18n'
 import type { OrganizationDetailSection } from '../console-shared'
@@ -226,6 +227,10 @@ export function OrganizationDetailPage({
     queryKey: [...consoleQueryKeys.organizations, organizationId, 'invitations'],
     queryFn: () => listOrganizationInvitations(organizationId),
   })
+  const rolesQuery = useQuery({
+    queryKey: [...consoleQueryKeys.organizations, organizationId, 'roles'],
+    queryFn: () => listRoles(organizationId),
+  })
   const usersQuery = useQuery({
     queryKey: [...consoleQueryKeys.users, 'organization-detail'],
     queryFn: () => listUsers({ limit: 100, offset: 0 }),
@@ -309,7 +314,7 @@ export function OrganizationDetailPage({
     const matchesSearch = [user?.displayName, user?.name, user?.email, member.userId].some((value) =>
       value?.toLowerCase().includes(memberSearch.trim().toLowerCase()),
     )
-    return matchesSearch && (!memberLevel || member.role === memberLevel)
+    return matchesSearch && (!memberLevel || member.roles.includes(memberLevel))
   })
   const pendingInvitations = (invitationsQuery.data?.invitations ?? []).filter(
     (invitation) => invitation.status === 'pending',
@@ -322,6 +327,7 @@ export function OrganizationDetailPage({
     query.isLoading ||
     membersQuery.isLoading ||
     invitationsQuery.isLoading ||
+    rolesQuery.isLoading ||
     usersQuery.isLoading ||
     agentsQuery.isLoading ||
     activityQuery.isLoading
@@ -329,6 +335,7 @@ export function OrganizationDetailPage({
     query.error ??
     membersQuery.error ??
     invitationsQuery.error ??
+    rolesQuery.error ??
     usersQuery.error ??
     agentsQuery.error ??
     activityQuery.error
@@ -342,6 +349,7 @@ export function OrganizationDetailPage({
             query.refetch(),
             membersQuery.refetch(),
             invitationsQuery.refetch(),
+            rolesQuery.refetch(),
             usersQuery.refetch(),
             agentsQuery.refetch(),
             activityQuery.refetch(),
@@ -420,8 +428,8 @@ export function OrganizationDetailPage({
                 label: user?.displayName ?? user?.name ?? user?.email ?? member?.userId ?? memberId,
               })
             }}
-            onUpdate={(memberId, role) =>
-              updateOrganizationMember(organizationId, memberId, { role }).then(() =>
+            onUpdate={(memberId, roles) =>
+              replaceOrganizationMemberRoles(organizationId, memberId, { roles }).then(() =>
                 queryClient.invalidateQueries({
                   queryKey: [...consoleQueryKeys.organizations, organizationId, 'members'],
                 }),
@@ -463,12 +471,13 @@ export function OrganizationDetailPage({
           inviteMutation.mutate(
             parseForm(createInvitationRequestSchema, {
               email: String(form.get('email') ?? ''),
-              role: String(form.get('role') ?? 'member'),
+              roles: form.getAll('roles').map(String).sort(),
             }),
           )
         }
         open={inviteOpen}
         pending={inviteMutation.isPending}
+        roles={rolesQuery.data?.roles ?? []}
       />
       <LifecycleDialog
         confirmLabel={organization?.disabled ? tt('Resume organization') : tt('Suspend organization')}
@@ -600,7 +609,7 @@ function OrganizationMembers({
   onChangeSearch: (value: string) => void
   onInvite: () => void
   onRemove: (id: string) => void
-  onUpdate: (id: string, role: string) => void
+  onUpdate: (id: string, roles: string[]) => void
   userById: Map<string, Awaited<ReturnType<typeof listUsers>>['users'][number]>
 }) {
   return (
@@ -652,13 +661,13 @@ function OrganizationMembers({
                     <span className="block font-mono text-xs text-muted-foreground">{member.userId}</span>
                   </TableCell>
                   <TableCell>{user?.email ?? '—'}</TableCell>
-                  <TableCell>{accessLevelLabel(member.role)}</TableCell>
+                  <TableCell>{member.roles.map(accessLevelLabel).join(', ')}</TableCell>
                   <TableCell>{formatDate(member.createdAt)}</TableCell>
                   <TableCell>
                     <Badge variant="secondary">{tt('Active')}</Badge>
                   </TableCell>
                   <TableCell className="text-right">
-                    {member.role !== 'owner' ? (
+                    {!member.roles.includes('owner') ? (
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button
@@ -672,10 +681,8 @@ function OrganizationMembers({
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            onSelect={() => onUpdate(member.id, member.role === 'admin' ? 'member' : 'admin')}
-                          >
-                            {member.role === 'admin' ? tt('Change to Member') : tt('Change to Administrator')}
+                          <DropdownMenuItem onSelect={() => onUpdate(member.id, toggleAdministratorRole(member.roles))}>
+                            {member.roles.includes('admin') ? tt('Remove Administrator') : tt('Add Administrator')}
                           </DropdownMenuItem>
                           <DropdownMenuItem variant="destructive" onSelect={() => onRemove(member.id)}>
                             {tt('Remove member')}
@@ -694,7 +701,7 @@ function OrganizationMembers({
                   <span className="block font-mono text-xs text-muted-foreground">{invitation.id}</span>
                 </TableCell>
                 <TableCell>{invitation.email}</TableCell>
-                <TableCell>{accessLevelLabel(invitation.role)}</TableCell>
+                <TableCell>{invitation.roles.map(accessLevelLabel).join(', ')}</TableCell>
                 <TableCell>{formatDate(invitation.createdAt)}</TableCell>
                 <TableCell>
                   <Badge variant="outline">{tt('Invited')}</Badge>
@@ -929,12 +936,14 @@ function OrganizationInviteDialog({
   onSubmit,
   open,
   pending,
+  roles,
 }: {
   error?: string | null
   onOpenChange: (open: boolean) => void
   onSubmit: (form: FormData) => void
   open: boolean
   pending: boolean
+  roles: { key: string; displayName: string }[]
 }) {
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
@@ -956,13 +965,15 @@ function OrganizationInviteDialog({
           <Field label={tt('Email')}>
             <TextInput name="email" required type="email" />
           </Field>
-          <Field label={tt('Access level')}>
-            <SelectInput defaultValue="member" name="role">
-              <option value="owner">{tt('Owner')}</option>
-              <option value="admin">{tt('Administrator')}</option>
-              <option value="developer">{tt('Developer')}</option>
-              <option value="member">{tt('Member')}</option>
-            </SelectInput>
+          <Field label={tt('Roles')}>
+            <div className="grid gap-2 rounded-md border p-3">
+              {roles.map((role) => (
+                <label className="flex items-center gap-2 text-sm" key={role.key}>
+                  <input defaultChecked={role.key === 'member'} name="roles" type="checkbox" value={role.key} />
+                  {role.displayName}
+                </label>
+              ))}
+            </div>
           </Field>
           {error ? (
             <p className="text-sm text-destructive" role="alert">
@@ -1057,4 +1068,10 @@ function accessLevelLabel(role: string) {
       >
     )[role] ?? role
   )
+}
+
+function toggleAdministratorRole(roles: string[]) {
+  if (!roles.includes('admin')) return [...roles.filter((role) => role !== 'member'), 'admin'].sort()
+  const remaining = roles.filter((role) => role !== 'admin')
+  return remaining.length > 0 ? remaining : ['member']
 }

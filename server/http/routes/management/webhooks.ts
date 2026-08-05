@@ -26,9 +26,10 @@ import {
   webhookEndpointSecretResponseSchema,
   webhookRequestSchema,
 } from '@shared/api/webhooks'
+import type { Context } from 'hono'
 import { Hono } from 'hono'
 import { getActorUserId } from '../../middleware/authn'
-import { getConsoleOrganizationScope, requireConsoleOwnedOrganization } from '../../middleware/authz'
+import { authorizedOrganizationIds, authorizeOrganization, requirePlatformAccess } from '../../middleware/authz'
 import { getDeps } from '../../middleware/deps'
 import { readJson, readQuery } from '../validation'
 
@@ -41,7 +42,7 @@ export function createManagementWebhookRoutes() {
         await listWebhookEndpoints(
           getDeps(c),
           readQuery(c, listWebhookEndpointsQuerySchema),
-          getConsoleOrganizationScope(c) ?? undefined,
+          await authorizedOrganizationIds(c, 'webhooks:read'),
         ),
       ),
     ),
@@ -49,7 +50,8 @@ export function createManagementWebhookRoutes() {
 
   app.post('/', async (c) => {
     const input = await readJson(c, createWebhookEndpointRequestSchema)
-    requireConsoleOwnedOrganization(c, input.organizationId)
+    if (input.organizationId) await authorizeOrganization(c, input.organizationId, 'webhooks:write')
+    else requirePlatformAccess(c, 'webhooks:write')
     const endpoint = await createWebhookEndpoint(getDeps(c), input, getActorUserId(c))
     c.header('Location', `/api/webhooks/${encodeURIComponent(endpoint.endpoint.id)}`)
     return c.json(webhookEndpointSecretResponseSchema.parse(endpoint), 201)
@@ -60,7 +62,10 @@ export function createManagementWebhookRoutes() {
   app.patch('/:webhookId', async (c) => {
     await requireEndpointAccess(c)
     const input = await readJson(c, updateWebhookEndpointRequestSchema)
-    if (input.organizationId !== undefined) requireConsoleOwnedOrganization(c, input.organizationId)
+    if (input.organizationId !== undefined) {
+      if (input.organizationId) await authorizeOrganization(c, input.organizationId, 'webhooks:write')
+      else requirePlatformAccess(c, 'webhooks:write')
+    }
     return c.json(webhookEndpointSchema.parse(await updateWebhookEndpoint(getDeps(c), c.req.param('webhookId'), input)))
   })
 
@@ -84,7 +89,7 @@ export function createManagementWebhookRoutes() {
         await listWebhookRequests(
           getDeps(c),
           { ...query, endpointId: c.req.param('webhookId') },
-          getConsoleOrganizationScope(c) ?? undefined,
+          await authorizedOrganizationIds(c, 'webhooks:read'),
         ),
       ),
     )
@@ -136,15 +141,19 @@ export function createManagementWebhookRoutes() {
   return app
 }
 
-async function requireEndpointAccess(c: Parameters<typeof getConsoleOrganizationScope>[0]) {
+async function requireEndpointAccess(c: Context) {
   const endpoint = await getWebhookEndpoint(getDeps(c), c.req.param('webhookId')!)
-  requireConsoleOwnedOrganization(c, endpoint.organizationId)
+  const scope = c.req.method === 'GET' || c.req.method === 'HEAD' ? 'webhooks:read' : 'webhooks:write'
+  if (endpoint.organizationId) await authorizeOrganization(c, endpoint.organizationId, scope)
+  else requirePlatformAccess(c, scope)
   return endpoint
 }
 
-async function requireRequestAccess(c: Parameters<typeof getConsoleOrganizationScope>[0]) {
+async function requireRequestAccess(c: Context) {
   const request = await getWebhookRequest(getDeps(c), c.req.param('deliveryId')!)
   if (request.endpointId !== c.req.param('webhookId')) throw notFound('Webhook delivery was not found.')
-  requireConsoleOwnedOrganization(c, request.organizationId)
+  const scope = c.req.method === 'GET' || c.req.method === 'HEAD' ? 'webhooks:read' : 'webhooks:write'
+  if (request.organizationId) await authorizeOrganization(c, request.organizationId, scope)
+  else requirePlatformAccess(c, scope)
   return request
 }

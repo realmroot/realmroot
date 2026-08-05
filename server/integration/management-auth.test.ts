@@ -60,7 +60,7 @@ describe('resource access over real D1 and real Better Auth sessions', () => {
     expect(response.status).toBe(401)
   })
 
-  it('rejects a signed-in non-admin user with 403', async () => {
+  it('filters collections for a signed-in user without Organization access', async () => {
     await bootstrapAdmin(harness)
     const adminCookie = await signIn(harness)
 
@@ -89,10 +89,11 @@ describe('resource access over real D1 and real Better Auth sessions', () => {
       .filter((pair) => pair.includes('='))
       .join('; ')
 
-    const forbidden = await harness.request('/api/applications', {
+    const filtered = await harness.request('/api/applications', {
       headers: { cookie: memberCookie },
     })
-    expect(forbidden.status).toBe(403)
+    expect(filtered.status).toBe(200)
+    await expect(filtered.json()).resolves.toMatchObject({ applications: [], pagination: { total: 0 } })
   })
 
   it('lists applications for a signed-in admin and reflects a real D1 write', async () => {

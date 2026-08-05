@@ -17,6 +17,7 @@ const defaultExpiresInSeconds = 60 * 60
 const defaultRefreshExpiresInSeconds = 30 * 24 * 60 * 60
 const refreshTokenPrefix = 'fatr_'
 const subjectClaimsMember = 'urn:realmroot:params:oauth:token-exchange:subject-claims'
+const tenantClaim = 'urn:realmroot:params:oauth:tenant'
 
 export interface TokenExchangeRequest {
   grantType: string
@@ -92,6 +93,7 @@ export async function exchangeToken(
   if (credential.audience !== input.audience) {
     throw oauthError('invalid_target', 'Requested audience does not match the federated credential.')
   }
+  await requireEligibleAudience(deps, credential.audience, credential.ownerOrganizationId)
 
   await verifySubjectToken(input.subjectToken, assertion, credential, deps.jwks)
 
@@ -101,7 +103,10 @@ export async function exchangeToken(
   )
   const expiresIn = Math.max(0, Math.floor((expiresAt.getTime() - now.getTime()) / 1000))
   const accessToken = `fatx_${base64Url(randomBytes(32))}`
-  const claims = tokenClaims(assertion.payload)
+  const claims = {
+    ...tokenClaims(assertion.payload),
+    [tenantClaim]: { type: 'organization', id: credential.ownerOrganizationId },
+  }
   await deps.tokenExchange.storeAccessToken({
     id: createId('tex'),
     tokenHash: await hashProviderSecret(accessToken),
@@ -170,6 +175,19 @@ export async function refreshToken(
   const credential = await deps.tokenExchange.findFederatedCredentialForClient(row.credentialId, oauthClient.clientId)
   if (!credential?.enabled) {
     throw oauthError('invalid_grant', 'The federated credential is no longer active.')
+  }
+  const tenant = row.claims[tenantClaim]
+  const tenantId =
+    tenant && typeof tenant === 'object' && (tenant as Record<string, unknown>).type === 'organization'
+      ? (tenant as Record<string, unknown>).id
+      : null
+  if (
+    credential.audience !== row.audience ||
+    tenantId !== credential.ownerOrganizationId ||
+    !(await isEligibleAudience(deps, credential.audience, credential.ownerOrganizationId))
+  ) {
+    await deps.tokenExchange.revokeRefreshTokenFamily(row.familyId, now)
+    throw oauthError('invalid_grant', 'The refresh token tenant or audience is no longer eligible.')
   }
   const requestedScopes = input.scope ? normalizeScopes(input.scope, row.scopes) : row.scopes
   if (!(await deps.tokenExchange.consumeRefreshToken(row.id, now))) {
@@ -260,7 +278,7 @@ export async function createFederatedCredential(
   }
   if (input.jwksUrl) validateJwksUrl(input.jwksUrl)
   if (input.publicKeys) validatePublicKeys(input.publicKeys)
-  await ensureAudienceResource(deps, input.audienceResourceId)
+  await ensureAudienceResource(deps, applicationId, input.audienceResourceId)
   return deps.tokenExchange.createFederatedCredential(applicationId, input)
 }
 
@@ -272,7 +290,7 @@ export async function updateFederatedCredential(
 ) {
   const current = await deps.tokenExchange.getFederatedCredential(applicationId, id)
   if (!current) throw notFound('Federated credential not found.')
-  if (input.audienceResourceId) await ensureAudienceResource(deps, input.audienceResourceId)
+  if (input.audienceResourceId) await ensureAudienceResource(deps, applicationId, input.audienceResourceId)
   const jwksUrl = input.jwksUrl === undefined ? current.jwksUrl : input.jwksUrl
   const publicKeys = input.publicKeys === undefined ? current.publicKeys : input.publicKeys
   if (!jwksUrl && !(publicKeys && publicKeys.length > 0)) {
@@ -295,11 +313,36 @@ async function ensureApplication(deps: Deps, applicationId: string) {
   if (!application) throw notFound('Application not found.')
 }
 
-async function ensureAudienceResource(deps: Deps, id: string) {
+async function ensureAudienceResource(deps: Deps, applicationId: string, id: string) {
+  const application = await deps.applications.findById(applicationId)
+  if (!application) throw notFound('Application not found.')
   const resource = await deps.authorization.findResource(id)
-  if (!resource?.enabled) {
-    throw badRequest('audienceResourceId must reference an enabled API resource.')
+  if (!resource || !resourceEligibleForOrganization(resource, application.ownerOrganizationId)) {
+    throw badRequest('audienceResourceId must reference an API resource eligible for the Application tenant.')
   }
+}
+
+async function requireEligibleAudience(deps: Deps, audience: string, organizationId: string) {
+  if (!(await isEligibleAudience(deps, audience, organizationId))) {
+    throw oauthError('invalid_target', 'Requested audience is not eligible for the Application tenant.')
+  }
+}
+
+async function isEligibleAudience(deps: Deps, audience: string, organizationId: string) {
+  const resource = await deps.authorization.findResourceByResourceUrl(audience)
+  return Boolean(resource && resourceEligibleForOrganization(resource, organizationId))
+}
+
+function resourceEligibleForOrganization(
+  resource: Awaited<ReturnType<Deps['authorization']['findResource']>> & {},
+  organizationId: string,
+) {
+  if (!resource.enabled || resource.archivedAt) return false
+  if (resource.accessEligibility.mode === 'realm') return true
+  if (resource.accessEligibility.mode === 'owner_organization') {
+    return resource.ownerOrganizationId === organizationId
+  }
+  return resource.accessEligibility.organizationIds.includes(organizationId)
 }
 
 async function authenticateClient(deps: Deps, clientId: string, clientSecret: string | null) {

@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { AppWindow, ArrowRight, KeyRound, Server, ShieldCheck, UsersRound } from 'lucide-react'
+import { AppWindow, ArrowRight, KeyRound, Server, UsersRound } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { LinkButton } from '@/components/link-button'
 import { Badge } from '@/components/ui/badge'
@@ -71,13 +71,6 @@ function OrganizationDashboardView({ context, dashboard }: { context: string; da
       icon: <Server />,
       label: tt('Register a resource server'),
       meta: tt('This Organization has no protected API yet.'),
-    })
-  if (dashboard.assignments.pagination.total === 0)
-    nextSteps.push({
-      href: '/console/role-assignments',
-      icon: <ShieldCheck />,
-      label: tt('Assign a role'),
-      meta: tt('No actor has contextual authority in this Organization.'),
     })
   return (
     <>
@@ -229,15 +222,6 @@ function ConfigurationGaps({ dashboard }: { dashboard: AdminDashboard }) {
       meta: tt('No protected API is represented in authorization.'),
     })
   }
-  if (dashboard.roles.pagination.total === 0) {
-    items.push({
-      href: '/console/roles',
-      icon: <ShieldCheck />,
-      label: tt('Define a role'),
-      meta: tt('No reusable permission set is available for assignment.'),
-    })
-  }
-
   return (
     <Card className="border shadow-none ring-0">
       <CardHeader>

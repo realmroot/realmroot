@@ -3,7 +3,6 @@ import type {
   AccountEmailChangeInput,
   AccountOrganizationAgentAccessGrantsResponse,
   AccountOrganizationAgentsResponse,
-  AccountOrganizationRoleAssignmentsResponse,
   AccountPasswordChangeInput,
   AccountProfileUpdateInput,
   AccountWalletAddressLinkInput,
@@ -20,15 +19,15 @@ import type {
   DecideAccessRequest,
   ResourceConnectionApproval,
 } from '@shared/api/agent-api'
+import type { CreateInvitationRequest, InvitationResponse, ListRolesResponse } from '@shared/api/authorization'
 import type {
   SecurityPasskeyRegistrationOptionsInput,
   SecurityTotpDisableInput,
   SecurityTotpEnrollmentInput,
   SecurityTotpVerificationInput,
 } from '@shared/api/security'
-import type { OrganizationAccessLevel } from '@shared/organization-access'
 import { ApiRequestError, apiClient, readJsonResponse, readRpcResponse, uploadApiFile } from '@/lib/api'
-import { getRole, listAgentAccessGrants, listRoleAssignments, listRolePermissions } from '@/lib/api/management'
+import { listAgentAccessGrants } from '@/lib/api/management'
 import { authClient, nativeAuth } from '@/lib/auth-client'
 
 export function getAccountProfile() {
@@ -75,11 +74,20 @@ export async function leaveAccountOrganization(organizationId: string) {
   return readAuthClientResult(await authClient.organization.leave({ organizationId }))
 }
 
-export async function inviteAccountOrganizationMember(
-  organizationId: string,
-  input: { email: string; role: OrganizationAccessLevel },
-) {
-  return readAuthClientResult(await authClient.organization.inviteMember({ organizationId, ...input }))
+export async function inviteAccountOrganizationMember(organizationId: string, input: CreateInvitationRequest) {
+  return readJsonResponse<InvitationResponse>(
+    await fetch(`/api/organizations/${encodeURIComponent(organizationId)}/invitations`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(input),
+    }),
+  )
+}
+
+export async function listAccountOrganizationRoles(organizationId: string) {
+  return readJsonResponse<ListRolesResponse>(
+    await fetch(`/api/organizations/${encodeURIComponent(organizationId)}/roles?limit=100&offset=0`),
+  )
 }
 
 export async function cancelAccountOrganizationInvitation(invitationId: string) {
@@ -98,12 +106,17 @@ export async function removeAccountOrganizationMember(organizationId: string, me
   return readAuthClientResult(await authClient.organization.removeMember({ organizationId, memberIdOrEmail }))
 }
 
-export async function updateAccountOrganizationMemberRole(
-  organizationId: string,
-  memberId: string,
-  role: OrganizationAccessLevel,
-) {
-  return readAuthClientResult(await authClient.organization.updateMemberRole({ organizationId, memberId, role }))
+export async function updateAccountOrganizationMemberRole(organizationId: string, memberId: string, roles: string[]) {
+  return readJsonResponse<{ roles: string[] }>(
+    await fetch(
+      `/api/organizations/${encodeURIComponent(organizationId)}/members/${encodeURIComponent(memberId)}/roles`,
+      {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ roles }),
+      },
+    ),
+  )
 }
 
 export function updateAccountProfile(input: AccountProfileUpdateInput) {
@@ -194,47 +207,6 @@ export function listAccountOrganizationAgents(organizationId: string): Promise<A
   return readRpcResponse(
     apiClient.api.account.organizations[':organizationId'].agents.$get({ param: { organizationId }, query: {} }),
   )
-}
-
-export async function listAccountOrganizationRoleAssignments(
-  organizationId: string,
-): Promise<AccountOrganizationRoleAssignmentsResponse> {
-  const profile = await getAccountProfile()
-  const [organizationAssignments, realmAssignments] = await Promise.all([
-    listRoleAssignments({
-      organizationId,
-      subjectType: 'user',
-      subjectId: profile.user.id,
-      status: 'active',
-      limit: 100,
-    }),
-    listRoleAssignments({
-      context: 'realm',
-      subjectType: 'user',
-      subjectId: profile.user.id,
-      status: 'active',
-      limit: 100,
-    }),
-  ])
-  const assignments = [...organizationAssignments.assignments, ...realmAssignments.assignments]
-  return {
-    assignments: await Promise.all(
-      assignments.map(async (assignment) => {
-        const [role, permissions] = await Promise.all([
-          getRole(assignment.roleId),
-          listRolePermissions(assignment.roleId),
-        ])
-        return { assignment, role, permissions: permissions.permissions }
-      }),
-    ),
-    pagination: {
-      limit: 100,
-      offset: 0,
-      total: organizationAssignments.pagination.total + realmAssignments.pagination.total,
-      hasMore: organizationAssignments.pagination.hasMore || realmAssignments.pagination.hasMore,
-      nextOffset: null,
-    },
-  }
 }
 
 export async function listAccountOrganizationAgentAccessGrants(

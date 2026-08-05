@@ -224,14 +224,11 @@ export const uploadedAsset = {
 }
 
 export const role = {
-  id: 'role-1',
   key: 'admin',
-  name: 'Admin',
+  displayName: 'Admin',
   description: 'Tenant administrator',
-  system: true,
-  applicationId: null,
-  organizationId: null,
-  resourceId: null,
+  predefined: true,
+  scopes: [],
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
 }

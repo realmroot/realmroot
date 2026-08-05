@@ -1,6 +1,6 @@
 import { conflict } from '@server/domain/errors'
-import type { AuthorizationRepository, RoleAssignmentScope } from '@server/usecases/ports'
-import { and, count, desc, eq, gt, inArray, isNotNull, isNull, lte, notExists, or, sql } from 'drizzle-orm'
+import type { AuthorizationRepository } from '@server/usecases/ports'
+import { and, count, desc, eq, gt, inArray, isNotNull, isNull, notExists, sql } from 'drizzle-orm'
 import type { BatchItem } from 'drizzle-orm/batch'
 import type { Database } from '../../db/client'
 import {
@@ -14,19 +14,18 @@ import {
   invitation,
   member,
   organization,
+  organizationRole,
   resourceAccountConnection,
   resourceConnectionIntent,
-  role,
-  roleAssignment,
-  rolePermission,
 } from '../../db/schema'
 import {
+  serializeRoles,
   toInvitation,
   toMember,
   toOrganization,
+  toOrganizationRole,
   toPagination,
   toResource,
-  toRole,
   withoutUndefined,
 } from './authorization-mappers'
 
@@ -73,7 +72,10 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
 
     async addMember(organizationId, input) {
       const now = new Date()
-      await db.insert(member).values({ ...input, organizationId, createdAt: now, updatedAt: now })
+      const { roles, ...record } = input
+      await db
+        .insert(member)
+        .values({ ...record, role: serializeRoles(roles), organizationId, createdAt: now, updatedAt: now })
       return { ...input, organizationId, createdAt: now.toISOString(), updatedAt: now.toISOString() }
     },
 
@@ -125,7 +127,9 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
       const [result] = await db
         .select({ value: count() })
         .from(member)
-        .where(and(eq(member.organizationId, organizationId), eq(member.role, roleName)))
+        .where(
+          and(eq(member.organizationId, organizationId), sql`(',' || ${member.role} || ',') like ${`%,${roleName},%`}`),
+        )
       return result?.value ?? 0
     },
 
@@ -145,14 +149,69 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
         .where(eq(member.id, id))
     },
 
-    async removeMember(id) {
-      await db.delete(member).where(eq(member.id, id))
+    async replaceMemberRoles(organizationId, memberId, roles, expectedUpdatedAt, audit) {
+      const expected = new Date(expectedUpdatedAt)
+      const now = audit.occurredAt
+      const lastOwnerGuard = roles.includes('owner')
+        ? undefined
+        : sql`(
+            (',' || ${member.role} || ',') not like '%,owner,%'
+            or exists (
+              select 1 from ${member} as other
+              where other.organization_id = ${organizationId}
+                and other.id <> ${memberId}
+                and (',' || other.role || ',') like '%,owner,%'
+            )
+          )`
+      const condition = and(
+        eq(member.id, memberId),
+        eq(member.organizationId, organizationId),
+        eq(member.updatedAt, expected),
+        lastOwnerGuard,
+      )
+      const [, updated] = await db.batch([
+        db
+          .insert(agentAuditEvent)
+          .select(db.select(auditSelect(audit, { organizationId, memberId, roles })).from(member).where(condition)),
+        db
+          .update(member)
+          .set({ role: serializeRoles(roles), updatedAt: now })
+          .where(condition)
+          .returning({ id: member.id }),
+      ])
+      return updated.length > 0
+    },
+
+    async removeMember(organizationId, memberId, expectedUpdatedAt, audit) {
+      const expected = new Date(expectedUpdatedAt)
+      const condition = and(
+        eq(member.id, memberId),
+        eq(member.organizationId, organizationId),
+        eq(member.updatedAt, expected),
+        sql`(
+          (',' || ${member.role} || ',') not like '%,owner,%'
+          or exists (
+            select 1 from ${member} as other
+            where other.organization_id = ${organizationId}
+              and other.id <> ${memberId}
+              and (',' || other.role || ',') like '%,owner,%'
+          )
+        )`,
+      )
+      const [, removed] = await db.batch([
+        db
+          .insert(agentAuditEvent)
+          .select(db.select(auditSelect(audit, { organizationId, memberId })).from(member).where(condition)),
+        db.delete(member).where(condition).returning({ id: member.id }),
+      ])
+      return removed.length > 0
     },
 
     async createInvitation(input) {
       const now = new Date()
       const expiresAt = new Date(input.expiresAt)
-      await db.insert(invitation).values({ ...input, expiresAt, createdAt: now })
+      const { roles, ...record } = input
+      await db.insert(invitation).values({ ...record, role: serializeRoles(roles), expiresAt, createdAt: now })
       return {
         ...input,
         expiresAt: expiresAt.toISOString(),
@@ -462,176 +521,126 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
       return references
     },
 
-    async createRole(input) {
-      const now = new Date()
-      try {
-        await db.insert(role).values({ ...input, createdAt: now, updatedAt: now })
-      } catch (error) {
-        if (isUniqueConstraint(error)) throw conflict(`Role key "${input.key}" is already in use.`)
-        throw error
-      }
-      return { ...input, createdAt: now.toISOString(), updatedAt: now.toISOString() }
-    },
-
-    async listRoles(pagination) {
-      const rows = await db
-        .select()
-        .from(role)
-        .orderBy(desc(role.createdAt), desc(role.id))
-        .limit(pagination.limit)
-        .offset(pagination.offset)
-      const total = await totalRows(db, role)
-      return { items: rows.map(toRole), pagination: toPagination(pagination, total) }
-    },
-
-    async findRole(id) {
-      const rows = await db.select().from(role).where(eq(role.id, id)).limit(1)
-      return rows[0] ? toRole(rows[0]) : null
-    },
-
-    async updateRole(id, patch) {
-      await db
-        .update(role)
-        .set({ ...withoutUndefined(patch), updatedAt: new Date() })
-        .where(eq(role.id, id))
-    },
-
-    async deleteRole(id) {
-      await db.delete(role).where(eq(role.id, id))
-    },
-
-    async listRolePermissions(roleId) {
-      return db
-        .select({ resourceId: rolePermission.resourceId, scope: rolePermission.scope })
-        .from(rolePermission)
-        .where(eq(rolePermission.roleId, roleId))
-        .orderBy(rolePermission.resourceId, rolePermission.scope)
-    },
-
-    async replaceRolePermissions(roleId, permissions) {
-      const statements: [BatchItem<'sqlite'>, ...BatchItem<'sqlite'>[]] = [
-        db.delete(rolePermission).where(eq(rolePermission.roleId, roleId)),
-      ]
-      if (permissions.length > 0) {
-        statements.push(db.insert(rolePermission).values(permissions.map((permission) => ({ roleId, ...permission }))))
-      }
-      await db.batch(statements)
-    },
-
-    async listRoleAssignments(query) {
-      const now = new Date()
-      const conditions = [
-        query.roleId ? eq(roleAssignment.roleId, query.roleId) : undefined,
-        query.subjectType ? eq(roleAssignment.subjectType, query.subjectType) : undefined,
-        query.subjectId ? eq(roleAssignment.subjectId, query.subjectId) : undefined,
-        query.organizationId ? eq(roleAssignment.organizationId, query.organizationId) : undefined,
-        query.organizationIds
-          ? query.includeRealmAssignments
-            ? or(isNull(roleAssignment.organizationId), inArray(roleAssignment.organizationId, query.organizationIds))
-            : inArray(roleAssignment.organizationId, query.organizationIds)
-          : undefined,
-        query.contextualOrganizationId
-          ? or(isNull(roleAssignment.organizationId), eq(roleAssignment.organizationId, query.contextualOrganizationId))
-          : undefined,
-        query.context === 'realm' ? isNull(roleAssignment.organizationId) : undefined,
-        query.context === 'organization' ? isNotNull(roleAssignment.organizationId) : undefined,
-        query.status === 'revoked' ? isNotNull(roleAssignment.revokedAt) : undefined,
-        query.status === 'expired'
-          ? and(isNull(roleAssignment.revokedAt), lte(roleAssignment.expiresAt, now))
-          : undefined,
-        query.status === 'active'
-          ? and(
-              isNull(roleAssignment.revokedAt),
-              or(isNull(roleAssignment.expiresAt), gt(roleAssignment.expiresAt, now)),
-            )
-          : undefined,
-      ].filter((condition) => condition !== undefined)
-      const where = conditions.length ? and(...conditions) : undefined
-      const rows = await db
-        .select()
-        .from(roleAssignment)
-        .where(where)
-        .orderBy(desc(roleAssignment.createdAt), desc(roleAssignment.id))
-        .limit(query.limit)
-        .offset(query.offset)
-      const total = await totalRows(db, roleAssignment, where)
-      return { items: rows.map(toRoleAssignment), pagination: toPagination(query, total) }
-    },
-
-    async countEffectiveAgentRoles(agents) {
-      if (agents.length === 0) return new Map()
-      const now = new Date()
-      const rows = await db
-        .select({
-          agentIdentityId: roleAssignment.subjectId,
-          organizationId: roleAssignment.organizationId,
-          roleId: roleAssignment.roleId,
-        })
-        .from(roleAssignment)
-        .where(
-          and(
-            eq(roleAssignment.subjectType, 'agent'),
-            inArray(
-              roleAssignment.subjectId,
-              agents.map((agent) => agent.agentIdentityId),
-            ),
-            isNull(roleAssignment.revokedAt),
-            or(isNull(roleAssignment.expiresAt), gt(roleAssignment.expiresAt, now)),
-          ),
-        )
-      const organizationByAgent = new Map(agents.map((agent) => [agent.agentIdentityId, agent.organizationId]))
-      const rolesByAgent = new Map(agents.map((agent) => [agent.agentIdentityId, new Set<string>()]))
-      for (const row of rows) {
-        const organizationId = organizationByAgent.get(row.agentIdentityId)
-        if (row.organizationId === null || row.organizationId === organizationId) {
-          rolesByAgent.get(row.agentIdentityId)!.add(row.roleId)
-        }
-      }
-      return new Map([...rolesByAgent].map(([agentIdentityId, roles]) => [agentIdentityId, roles.size]))
-    },
-
-    async findRoleAssignment(id) {
-      const rows = await db.select().from(roleAssignment).where(eq(roleAssignment.id, id)).limit(1)
-      return rows[0] ? toRoleAssignment(rows[0]) : null
-    },
-
-    async createRoleAssignment(input) {
-      const now = new Date()
+    async createOrganizationRole(organizationId, input, permission, audit) {
+      const now = audit.occurredAt
       const row = {
-        ...input,
-        expiresAt: input.expiresAt ? new Date(input.expiresAt) : null,
-        revokedAt: null,
+        id: `org-role_${crypto.randomUUID()}`,
+        organizationId,
+        role: input.key,
+        permission,
+        displayName: input.displayName,
+        description: input.description,
         createdAt: now,
         updatedAt: now,
       }
       try {
-        await db.insert(roleAssignment).values(row)
+        await db.batch([db.insert(organizationRole).values(row), db.insert(agentAuditEvent).values(audit)])
       } catch (error) {
-        if (isUniqueConstraint(error)) throw conflict('An active Role assignment already exists for this context.')
+        if (isUniqueConstraint(error)) throw conflict(`Role key "${input.key}" is already in use.`)
         throw error
       }
-      return toRoleAssignment(row)
+      return { ...input, predefined: false, createdAt: now.toISOString(), updatedAt: now.toISOString() }
     },
 
-    async revokeRoleAssignment(id, revokedAt) {
+    async listOrganizationRoles(organizationId) {
+      const rows = await db
+        .select()
+        .from(organizationRole)
+        .where(eq(organizationRole.organizationId, organizationId))
+        .orderBy(organizationRole.role)
+      return rows.map(toOrganizationRole)
+    },
+
+    async findOrganizationRole(organizationId, roleKey) {
       const [row] = await db
-        .update(roleAssignment)
-        .set({ revokedAt, updatedAt: revokedAt })
-        .where(and(eq(roleAssignment.id, id), isNull(roleAssignment.revokedAt)))
-        .returning({ id: roleAssignment.id })
-      return Boolean(row)
+        .select()
+        .from(organizationRole)
+        .where(and(eq(organizationRole.organizationId, organizationId), eq(organizationRole.role, roleKey)))
+        .limit(1)
+      return row ? toOrganizationRole(row) : null
     },
 
-    listUserRoleAssignments(userId, scope) {
-      return listContextualAssignments(db, 'user', userId, scope)
+    async listOrganizationRoleScopes(organizationId) {
+      const rows = await db
+        .select({ role: organizationRole.role, permission: organizationRole.permission })
+        .from(organizationRole)
+        .where(eq(organizationRole.organizationId, organizationId))
+      return new Map(rows.map((row) => [row.role, decodePermissionScopes(row.permission)]))
     },
 
-    listApplicationRoleAssignments(applicationId, scope) {
-      return listContextualAssignments(db, 'workload', applicationId, scope)
+    async updateOrganizationRole(organizationId, roleKey, patch, permission, expectedUpdatedAt, audit) {
+      const condition = and(
+        eq(organizationRole.organizationId, organizationId),
+        eq(organizationRole.role, roleKey),
+        eq(organizationRole.updatedAt, new Date(expectedUpdatedAt)),
+      )
+      const [, updated] = await db.batch([
+        db
+          .insert(agentAuditEvent)
+          .select(db.select(auditSelect(audit, { organizationId, roleKey })).from(organizationRole).where(condition)),
+        db
+          .update(organizationRole)
+          .set({
+            ...withoutUndefined({
+              displayName: patch.displayName,
+              description: patch.description,
+              permission,
+            }),
+            updatedAt: audit.occurredAt,
+          })
+          .where(condition)
+          .returning({ id: organizationRole.id }),
+      ])
+      return updated.length > 0
     },
 
-    listAgentRoleAssignments(agentIdentityId, scope) {
-      return listContextualAssignments(db, 'agent', agentIdentityId, scope)
+    async deleteOrganizationRole(organizationId, roleKey, expectedUpdatedAt, audit) {
+      const assignedMember = sql`(',' || ${member.role} || ',') like ${`%,${roleKey},%`}`
+      const assignedInvitation = sql`(',' || ${invitation.role} || ',') like ${`%,${roleKey},%`}`
+      const condition = and(
+        eq(organizationRole.organizationId, organizationId),
+        eq(organizationRole.role, roleKey),
+        eq(organizationRole.updatedAt, new Date(expectedUpdatedAt)),
+        notExists(
+          db
+            .select({ id: member.id })
+            .from(member)
+            .where(and(eq(member.organizationId, organizationId), assignedMember)),
+        ),
+        notExists(
+          db
+            .select({ id: invitation.id })
+            .from(invitation)
+            .where(
+              and(eq(invitation.organizationId, organizationId), eq(invitation.status, 'pending'), assignedInvitation),
+            ),
+        ),
+      )
+      const [, deleted] = await db.batch([
+        db
+          .insert(agentAuditEvent)
+          .select(db.select(auditSelect(audit, { organizationId, roleKey })).from(organizationRole).where(condition)),
+        db.delete(organizationRole).where(condition).returning({ id: organizationRole.id }),
+      ])
+      if (deleted.length > 0) return 'deleted'
+      const [existing] = await db
+        .select({ id: organizationRole.id })
+        .from(organizationRole)
+        .where(and(eq(organizationRole.organizationId, organizationId), eq(organizationRole.role, roleKey)))
+        .limit(1)
+      if (!existing) return 'not_found'
+      const [assignment] = await db
+        .select({ id: member.id })
+        .from(member)
+        .where(and(eq(member.organizationId, organizationId), assignedMember))
+        .limit(1)
+      if (assignment) return 'assigned'
+      const [pendingInvitation] = await db
+        .select({ id: invitation.id })
+        .from(invitation)
+        .where(and(eq(invitation.organizationId, organizationId), eq(invitation.status, 'pending'), assignedInvitation))
+        .limit(1)
+      return pendingInvitation ? 'assigned' : 'not_found'
     },
   }
 }
@@ -660,41 +669,41 @@ async function loadResourceEligibility(db: Database, resourceIds: string[]) {
   return eligibility
 }
 
-async function listContextualAssignments(
-  db: Database,
-  subjectType: 'user' | 'agent' | 'workload',
-  subjectId: string,
-  scope: RoleAssignmentScope,
-) {
-  const now = new Date()
-  const rows = await db
-    .select({ role })
-    .from(roleAssignment)
-    .innerJoin(role, eq(roleAssignment.roleId, role.id))
-    .where(
-      and(
-        eq(roleAssignment.subjectType, subjectType),
-        eq(roleAssignment.subjectId, subjectId),
-        isNull(roleAssignment.revokedAt),
-        or(isNull(roleAssignment.expiresAt), gt(roleAssignment.expiresAt, now)),
-        scope.organizationId
-          ? or(eq(roleAssignment.organizationId, scope.organizationId), isNull(roleAssignment.organizationId))
-          : isNull(roleAssignment.organizationId),
-      ),
-    )
+function decodePermissionScopes(permission: Record<string, string[]>) {
+  return (permission.scope ?? []).flatMap((value) => {
+    const separator = value.indexOf('/')
+    if (separator < 1 || separator === value.length - 1) return []
+    try {
+      return [
+        {
+          resourceId: decodeURIComponent(value.slice(0, separator)),
+          scope: decodeURIComponent(value.slice(separator + 1)),
+        },
+      ]
+    } catch {
+      return []
+    }
+  })
+}
 
-  const assignments = new Map(rows.map((row) => [row.role.id, { role: toRole(row.role), scopes: [] as string[] }]))
-  if (!scope.resourceId || assignments.size === 0) return [...assignments.values()]
-  const permissions = await db
-    .select({ roleId: rolePermission.roleId, scope: rolePermission.scope })
-    .from(rolePermission)
-    .where(
-      and(inArray(rolePermission.roleId, [...assignments.keys()]), eq(rolePermission.resourceId, scope.resourceId)),
-    )
-  for (const permission of permissions) {
-    assignments.get(permission.roleId)?.scopes.push(permission.scope)
+function auditSelect(audit: import('@server/usecases/ports').AgentAuditEventRecord, metadata: Record<string, unknown>) {
+  return {
+    id: sql<string>`${audit.id}`.as('id'),
+    action: sql<string>`${audit.action}`.as('action'),
+    result: sql<string>`${audit.result}`.as('result'),
+    controllerUserId: sql<string | null>`${audit.controllerUserId}`.as('controller_user_id'),
+    subjectIssuer: sql<string | null>`${audit.subjectIssuer}`.as('subject_issuer'),
+    subject: sql<string | null>`${audit.subject}`.as('subject'),
+    agentIdentityId: sql<string | null>`${audit.agentIdentityId}`.as('agent_identity_id'),
+    hostId: sql<string | null>`${audit.hostId}`.as('host_id'),
+    resourceId: sql<string | null>`${audit.resourceId}`.as('resource_id'),
+    resourceConnectionId: sql<string | null>`${audit.resourceConnectionId}`.as('resource_connection_id'),
+    accessGrantId: sql<string | null>`${audit.accessGrantId}`.as('access_grant_id'),
+    scopes: sql<string[] | null>`${audit.scopes === null ? null : JSON.stringify(audit.scopes)}`.as('scopes'),
+    reasonCode: sql<string | null>`${audit.reasonCode}`.as('reason_code'),
+    metadata: sql<Record<string, unknown>>`${JSON.stringify({ ...audit.metadata, ...metadata })}`.as('metadata'),
+    occurredAt: sql<Date>`${audit.occurredAt.getTime()}`.as('occurred_at'),
   }
-  return [...assignments.values()].filter((assignment) => assignment.scopes.length > 0)
 }
 
 async function totalRows(
@@ -705,19 +714,4 @@ async function totalRows(
   const query = db.select({ total: count() }).from(table)
   const rows = where ? await query.where(where) : await query
   return rows[0]?.total ?? 0
-}
-
-function toRoleAssignment(row: typeof roleAssignment.$inferSelect) {
-  return {
-    id: row.id,
-    roleId: row.roleId,
-    subjectType: row.subjectType as 'user' | 'agent' | 'workload',
-    subjectId: row.subjectId,
-    organizationId: row.organizationId,
-    assignedByUserId: row.assignedByUserId,
-    expiresAt: row.expiresAt?.toISOString() ?? null,
-    revokedAt: row.revokedAt?.toISOString() ?? null,
-    createdAt: row.createdAt.toISOString(),
-    updatedAt: row.updatedAt.toISOString(),
-  }
 }

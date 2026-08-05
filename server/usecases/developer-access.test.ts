@@ -101,7 +101,7 @@ function membership(organizationId: string, role: string) {
     id: `${organizationId}-${role}`,
     organizationId,
     userId: 'user-1',
-    role,
+    roles: [role],
     title: null,
     createdAt: '2026-08-02T00:00:00.000Z',
     updatedAt: '2026-08-02T00:00:00.000Z',

@@ -16,14 +16,13 @@ import {
   listAgentAccessGrants,
   listAgentAccessRequests,
   listAgentInstallations,
-  listAgentRoles,
 } from '@/lib/api/management'
 import { useConsoleScope } from '@/lib/console-context'
 import { tt } from '@/lib/i18n'
 import { ErrorState, LoadingState, MutationError } from '../helpers/helpers-dialogs'
 import { navigateConsoleTab } from '../helpers/helpers-resource'
 
-export type AgentDetailSection = 'overview' | 'hosts' | 'roles' | 'requests' | 'grants' | 'activity' | 'settings'
+export type AgentDetailSection = 'overview' | 'hosts' | 'requests' | 'grants' | 'activity' | 'settings'
 
 export function AgentDetailPage({ agentId, section = 'overview' }: { agentId: string; section?: AgentDetailSection }) {
   const { organizationId: context } = useConsoleScope()
@@ -35,10 +34,6 @@ export function AgentDetailPage({ agentId, section = 'overview' }: { agentId: st
   const hosts = useQuery({
     queryKey: [...consoleQueryKeys.agents, agentId, 'hosts'],
     queryFn: () => listAgentInstallations(agentId, { limit: 100 }),
-  })
-  const roles = useQuery({
-    queryKey: [...consoleQueryKeys.agents, agentId, 'roles'],
-    queryFn: () => listAgentRoles(agentId, { limit: 100 }),
   })
   const requests = useQuery({
     queryKey: [...consoleQueryKeys.agents, agentId, 'requests'],
@@ -70,7 +65,7 @@ export function AgentDetailPage({ agentId, section = 'overview' }: { agentId: st
     setTab(section)
   }, [agentId, context, navigate, section])
 
-  const detailQueries = [agentQuery, hosts, roles, requests, grants, audit]
+  const detailQueries = [agentQuery, hosts, requests, grants, audit]
   if (detailQueries.some((query) => query.isLoading)) return <LoadingState label={tt('Loading Agent')} />
   const loadError = detailQueries.find((query) => query.error)?.error
   if (loadError)
@@ -84,7 +79,6 @@ export function AgentDetailPage({ agentId, section = 'overview' }: { agentId: st
   const tabs: AgentDetailSection[] = [
     'overview',
     'hosts',
-    'roles',
     'requests',
     'grants',
     'activity',
@@ -133,7 +127,6 @@ export function AgentDetailPage({ agentId, section = 'overview' }: { agentId: st
                 ['Stable subject', agent.subject],
                 ['Issuer', agent.issuer],
                 ['Installations', agent.installationCount.toLocaleString()],
-                ['Effective Roles', agent.roleCount.toLocaleString()],
                 ['Pending access requests', agent.pendingRequestCount.toLocaleString()],
                 ['Active access grants', agent.activeGrantCount.toLocaleString()],
                 ['Created', new Date(agent.createdAt).toLocaleString()],
@@ -143,9 +136,6 @@ export function AgentDetailPage({ agentId, section = 'overview' }: { agentId: st
           </TabsContent>
           <TabsContent className="mt-5" value="hosts">
             <AgentInstallationsTable items={hosts.data?.items ?? []} />
-          </TabsContent>
-          <TabsContent className="mt-5" value="roles">
-            <AgentRolesTable items={roles.data?.items ?? []} />
           </TabsContent>
           <TabsContent className="mt-5" value="requests">
             <AgentRequestsTable items={requests.data?.items ?? []} />
@@ -201,7 +191,6 @@ function agentTabLabel(value: AgentDetailSection) {
   return {
     overview: 'Overview',
     hosts: 'Installations',
-    roles: 'Roles',
     requests: 'Access requests',
     grants: 'Access grants',
     activity: 'Activity',
@@ -245,26 +234,6 @@ function AgentInstallationsTable({ items }: { items: Awaited<ReturnType<typeof l
       }))}
       emptyDescription="No installations have been authorized for this Agent yet."
       emptyTitle="No installations"
-    />
-  )
-}
-
-function AgentRolesTable({ items }: { items: Awaited<ReturnType<typeof listAgentRoles>>['items'] }) {
-  return (
-    <DetailTable
-      headers={['Role', 'Description']}
-      rows={items.map((role) => ({
-        id: role.id,
-        cells: [
-          <div key="role">
-            <strong>{role.name}</strong>
-            <span className="block font-mono text-xs text-muted-foreground">{role.key}</span>
-          </div>,
-          role.description ?? tt('No description'),
-        ],
-      }))}
-      emptyDescription="This Agent has no effective Role assignments."
-      emptyTitle="No effective Roles"
     />
   )
 }

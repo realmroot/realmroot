@@ -121,10 +121,11 @@ export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> =
     },
     assetStorage: { put: vi.fn(), get: vi.fn().mockResolvedValue(null) },
     authorization: {
-      countEffectiveAgentRoles: vi.fn().mockResolvedValue(new Map()),
-      listAgentRoleAssignments: vi.fn().mockResolvedValue([]),
       listEnabledResources: vi.fn().mockResolvedValue([]),
       listUserMemberships: vi.fn().mockResolvedValue([]),
+      listMemberUserIds: vi.fn().mockResolvedValue([]),
+      listOrganizationRoles: vi.fn().mockResolvedValue([]),
+      listOrganizationRoleScopes: vi.fn().mockResolvedValue(new Map()),
       findMemberByOrganizationUser: vi.fn().mockResolvedValue(null),
       findOrganization: vi.fn().mockResolvedValue(null),
       findResource: vi.fn().mockResolvedValue(null),

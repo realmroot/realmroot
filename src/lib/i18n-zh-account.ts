@@ -112,7 +112,6 @@ export const zhAccountTranslations: Record<string, string> = {
   'No active sessions': '暂无活跃会话',
   'No applications are authorized for this account.': '此账户尚未授权任何应用。',
   'No connected resource accounts.': '暂无已连接的资源账户。',
-  'No effective Role assignments': '暂无生效的角色分配',
   'No matching time zones.': '没有匹配的时区。',
   'No permissions': '无权限',
   'One use': '单次使用',
@@ -158,7 +157,6 @@ export const zhAccountTranslations: Record<string, string> = {
   'Review your identity, security, and delegated authority in this realm.':
     '查看你在此 Realm 中的身份、安全状态和委托权限。',
   'Revoke access to {{application}}?': '撤销 {{application}} 的访问权限？',
-  'Role assignments': '角色分配',
   'Save access level': '保存访问级别',
   'Save avatar': '保存头像',
   'Save display name': '保存显示名称',

@@ -91,7 +91,7 @@ afterEach(() => {
 describe('ConsoleShell', () => {
   it('preserves the current route when switching organizations', async () => {
     pathname = '/console/role-assignments'
-    render(<TestConsoleShell>Role assignments</TestConsoleShell>)
+    render(<TestConsoleShell>Organization roles</TestConsoleShell>)
 
     fireEvent.pointerDown(screen.getByRole('button', { name: 'Switch organization' }), {
       button: 0,

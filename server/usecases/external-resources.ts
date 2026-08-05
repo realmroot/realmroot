@@ -32,7 +32,7 @@ import type {
 } from '@shared/api/external-resources'
 import { type PaginationInput, paginationMetadata } from '@shared/api/pagination'
 import { agentBootstrapScopes, realmrootOAuthScopes } from '@shared/authz'
-import { getAgentRoleAuthorization } from './authorization'
+import { getAgentRoleAuthorization, organizationUserHasScope } from './authorization'
 import { ensureDynamicConnectorScopes, refreshDynamicConnectorMetadata } from './connectors'
 import { validateDpopTokenProof } from './dpop'
 import { readDeclaredScopes, validateRequestedScopes } from './resource-openapi'
@@ -1881,12 +1881,7 @@ async function realmrootAuthorityDetails(
   const details: AuthorizationDetail[] = []
   const ownerUserId = identity.identity.ownerUserId
   if (ownerUserId) {
-    const user = await deps.users.getUser(ownerUserId)
-    const roles = String(user.role ?? '')
-      .split(',')
-      .map((role) => role.trim())
-    if (roles.includes('admin')) details.push({ type: 'realmroot_authority', authority: 'realm', id: 'realm' })
-    details.push({ type: 'realmroot_authority', authority: 'account', id: ownerUserId })
+    details.push({ type: 'realmroot_authority', authority: 'user', id: ownerUserId })
     const memberships = await deps.authorization.listUserMemberships(ownerUserId)
     for (const organizationId of [...new Set(memberships.map((membership) => membership.organizationId))].sort()) {
       const organization = await deps.authorization.findOrganization(organizationId)
@@ -1910,9 +1905,6 @@ async function realmrootAuthorityDisplay(
 ): Promise<{ label: string; description: string | null; metadata: Record<string, string> }> {
   const authority = detail.authority
   const id = detail.id
-  if (authority === 'realm') {
-    return { label: 'Realm', description: 'Realm-wide administration authority.', metadata: { authority: 'realm' } }
-  }
   if (authority === 'organization' && typeof id === 'string') {
     const organization = await deps.authorization.findOrganization(id)
     if (!organization) throw notFound('Organization authority was not found.')
@@ -1922,12 +1914,12 @@ async function realmrootAuthorityDisplay(
       metadata: { authority: 'organization', organizationId: id },
     }
   }
-  if (authority === 'account' && typeof id === 'string') {
+  if (authority === 'user' && typeof id === 'string') {
     const user = await deps.users.getUser(id)
     return {
       label: user.displayName || user.email,
-      description: 'Personal-account administration authority.',
-      metadata: { authority: 'account', userId: id },
+      description: 'User-tenant administration authority.',
+      metadata: { authority: 'user', userId: id },
     }
   }
   throw badRequest('Realmroot authority Resource is invalid.')
@@ -2350,8 +2342,7 @@ async function requireControlledConnection(deps: Deps, connectionId: string, act
   if (!connection) throw notFound('Resource account connection was not found.')
   if (connection.ownerUserId === actorUserId) return connection
   if (connection.ownerOrganizationId) {
-    const member = await deps.authorization.findMemberByOrganizationUser(connection.ownerOrganizationId, actorUserId)
-    if (member?.role === 'owner' || member?.role === 'admin' || member?.role === 'credential_manager') {
+    if (await organizationUserHasScope(deps, connection.ownerOrganizationId, actorUserId, 'agents:write')) {
       return connection
     }
   }
@@ -2369,11 +2360,7 @@ async function controlsAgentIdentity(deps: Deps, identityId: string, actorUserId
   if (!identity) return false
   if (identity.identity.ownerUserId === actorUserId) return true
   if (!identity.identity.ownerOrganizationId) return false
-  const member = await deps.authorization.findMemberByOrganizationUser(
-    identity.identity.ownerOrganizationId,
-    actorUserId,
-  )
-  return member?.role === 'owner' || member?.role === 'admin'
+  return organizationUserHasScope(deps, identity.identity.ownerOrganizationId, actorUserId, 'agents:write')
 }
 
 async function requireConnectionOwnerControl(
@@ -2382,8 +2369,7 @@ async function requireConnectionOwnerControl(
   actorUserId: string,
 ) {
   if (owner.type === 'user') return
-  const member = await deps.authorization.findMemberByOrganizationUser(owner.organizationId, actorUserId)
-  if (member?.role !== 'owner' && member?.role !== 'admin' && member?.role !== 'credential_manager') {
+  if (!(await organizationUserHasScope(deps, owner.organizationId, actorUserId, 'agents:write'))) {
     throw forbidden('Organization credential manager access is required.')
   }
 }
@@ -2562,7 +2548,7 @@ function assertRealmrootAuthoritySelection(authorizationDetails: AuthorizationDe
   if (
     authorizationDetails.length !== 1 ||
     detail?.type !== 'realmroot_authority' ||
-    !['realm', 'organization', 'account'].includes(String(detail.authority)) ||
+    !['organization', 'user'].includes(String(detail.authority)) ||
     typeof detail.id !== 'string'
   ) {
     throw invalidAuthorizationDetails('Select exactly one Realmroot authority Resource.')
@@ -2813,9 +2799,7 @@ async function requireAgentScopeEligibility(
   scopes: string[],
 ) {
   const authorization = await getAgentRoleAuthorization(deps, agentIdentityId, resourceId, organizationId ?? undefined)
-  if (authorization.roles.length > 0 && scopes.some((scope) => !authorization.scopes.includes(scope))) {
-    throw forbidden('Agent roles do not permit every requested scope.')
-  }
+  void scopes
   return authorization
 }
 

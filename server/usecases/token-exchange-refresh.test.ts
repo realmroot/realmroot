@@ -196,6 +196,54 @@ describe('token exchange refresh and assertion boundaries', () => {
     })
   })
 
+  it('revokes refresh when audience eligibility or Application tenant changes', async () => {
+    const issue = async () => {
+      const fixtureValue = await fixture({
+        grantTypes: [tokenExchangeGrantType, refreshTokenGrantType],
+        scopes: ['runner:connect', 'offline_access'],
+      })
+      const exchanged = await exchangeToken(
+        fixtureValue.deps,
+        {
+          grantType: tokenExchangeGrantType,
+          subjectToken: await signEs256TestJwt(validClaims(), 'external-platform-secret'),
+          subjectTokenType: jwtTokenType,
+          audience: defaultAudience,
+          scope: 'runner:connect offline_access',
+        },
+        { clientId: applicationClientId, clientSecret: fixtureValue.clientSecret },
+      )
+      return { ...fixtureValue, refreshToken: exchanged.refresh_token! }
+    }
+
+    const ineligible = await issue()
+    ineligible.deps.authorization.findResourceByResourceUrl = async () => null
+    await expect(
+      refreshToken(ineligible.deps, {
+        grantType: refreshTokenGrantType,
+        refreshToken: ineligible.refreshToken,
+      }),
+    ).rejects.toMatchObject({ status: 400, error: 'invalid_grant' })
+    expect(ineligible.repository.storedTokens()).toBe(1)
+
+    const transferred = await issue()
+    transferred.repository.transferCredential('org_2')
+    transferred.deps.authorization.findResourceByResourceUrl = async () =>
+      ({
+        enabled: true,
+        archivedAt: null,
+        ownerOrganizationId: 'org_2',
+        accessEligibility: { mode: 'owner_organization', organizationIds: [] },
+      }) as never
+    await expect(
+      refreshToken(transferred.deps, {
+        grantType: refreshTokenGrantType,
+        refreshToken: transferred.refreshToken,
+      }),
+    ).rejects.toMatchObject({ status: 400, error: 'invalid_grant' })
+    expect(transferred.repository.storedTokens()).toBe(1)
+  })
+
   it('rejects refresh requests with the wrong grant type', async () => {
     const { deps } = await fixture()
     await expect(
@@ -495,7 +543,21 @@ function validClaims() {
 
 async function fixture(options: { grantTypes?: string[]; scopes?: string[] } = {}) {
   const repository = new InMemoryRepository()
-  const deps = { tokenExchange: repository, jwks: createJwksGateway() } as unknown as Deps
+  const deps = {
+    tokenExchange: repository,
+    jwks: createJwksGateway(),
+    authorization: {
+      findResourceByResourceUrl: async (resourceUrl: string) =>
+        resourceUrl === defaultAudience
+          ? {
+              enabled: true,
+              archivedAt: null,
+              ownerOrganizationId: 'org_1',
+              accessEligibility: { mode: 'owner_organization', organizationIds: [] },
+            }
+          : null,
+    },
+  } as unknown as Deps
   const clientSecret = 'runner-client-secret'
   repository.client = {
     clientId: applicationClientId,
@@ -555,6 +617,7 @@ class InMemoryRepository implements TokenExchangeRepository {
       id: `fcr_${this.nextId++}`,
       applicationId: 'app_1',
       applicationClientId,
+      ownerOrganizationId: 'org_1',
       name: 'External Platform',
       issuer,
       subject: 'org_1:*',
@@ -567,6 +630,10 @@ class InMemoryRepository implements TokenExchangeRepository {
 
   disableCredentials() {
     this.credentials = this.credentials.map((item) => ({ ...item, enabled: false }))
+  }
+
+  transferCredential(ownerOrganizationId: string) {
+    this.credentials = this.credentials.map((item) => ({ ...item, ownerOrganizationId }))
   }
 
   revokeFamilyDuringNextRotation() {

@@ -1,5 +1,6 @@
 import { badRequest, conflict, forbidden, notFound } from '@server/domain/errors'
 import { appendAgentGovernanceAudit } from '@server/usecases/agent-audit'
+import { organizationUserHasScope } from '@server/usecases/authorization'
 import type { Deps } from '@server/usecases/deps'
 import { revokeAgentResourceAccess, revokeAgentResourceLeasesForBinding } from '@server/usecases/external-resources'
 import type {
@@ -511,8 +512,7 @@ async function assertController(deps: Deps, homeSpace: AgentHomeSpace, actorUser
     if (homeSpace.userId !== actorUserId) throw forbidden('Agent identity controller access is required.')
     return
   }
-  const member = await deps.authorization.findMemberByOrganizationUser(homeSpace.organizationId, actorUserId)
-  if (!member || (member.role !== 'owner' && member.role !== 'admin')) {
+  if (!(await organizationUserHasScope(deps, homeSpace.organizationId, actorUserId, 'agents:write'))) {
     throw forbidden('Organization Agent controller access is required.')
   }
 }
@@ -555,20 +555,14 @@ async function appendIdentityAudit(
 
 async function loadManagementSummaries(deps: Deps, agents: AgentIdentityAggregate[]) {
   const identities = agents.map((aggregate) => aggregate.identity)
-  const [access, roleCounts, owners] = await Promise.all([
+  const [access, owners] = await Promise.all([
     deps.externalResources.summarizeAgentAccess(
       identities.map((identity) => identity.id),
       new Date(),
     ),
-    deps.authorization.countEffectiveAgentRoles(
-      identities.map((identity) => ({
-        agentIdentityId: identity.id,
-        organizationId: identity.ownerOrganizationId,
-      })),
-    ),
     loadManagementOwners(deps, identities),
   ])
-  return { access, owners, roleCounts }
+  return { access, owners }
 }
 
 async function loadManagementOwners(deps: Deps, identities: AgentIdentityRecord[]) {
@@ -609,15 +603,13 @@ function toManagementAgent(
 ) {
   const access = summaries.access.get(aggregate.identity.id)
   if (!access) throw new Error(`Agent access summary was not resolved for ${aggregate.identity.id}.`)
-  const roleCount = summaries.roleCounts.get(aggregate.identity.id)
-  if (roleCount === undefined) throw new Error(`Agent Role summary was not resolved for ${aggregate.identity.id}.`)
   const owner = summaries.owners.get(ownerKey(homeSpaceOf(aggregate.identity)))
   if (!owner) throw new Error(`Agent owner was not resolved for ${aggregate.identity.id}.`)
   return {
     ...toAgent(aggregate),
     owner,
     installationCount: aggregate.bindings.filter((binding) => binding.status === 'active').length,
-    roleCount,
+    roleCount: 0,
     pendingRequestCount: access.pendingRequestCount,
     activeGrantCount: access.activeGrantCount,
   }

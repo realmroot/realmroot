@@ -33,11 +33,9 @@ describe('OAuth token claim building over real D1', () => {
     harness.deps.externalHttp.fetch = resourceOpenApiFetch
   })
 
-  // Exercises the authorization repo read paths that only fire during token-claim
-  // assembly — findResourceByResourceUrl plus contextual user and workload
-  // assignment reads — through real SQL (the usecase tests cover the
-  // branching logic with fake ports; this proves the real queries).
-  it('resolves audience + user/application/member role assignments [spec: admin-console/oidc-claim-emission]', async () => {
+  // Exercises the authorization repo reads used by token-claim assembly through
+  // real SQL: resource lookup, Organization membership, and dynamic BA Roles.
+  it('resolves audience and Organization member Roles without assigning Roles to workloads [spec: admin-console/oidc-claim-emission]', async () => {
     harness.deps.externalHttp.fetch = async (request) => {
       if (new URL(request.url).pathname.endsWith('/openapi.json')) {
         return Response.json({
@@ -69,14 +67,6 @@ describe('OAuth token claim building over real D1', () => {
       password: 'claims-user-password-2026',
     })
 
-    const audience = 'https://api.example.com/contacts'
-    const resource = (await (
-      await postJson(harness, cookie, '/api/resource-servers', {
-        identifier: 'contacts-api',
-        name: 'Contacts API',
-        resourceUrl: audience,
-      })
-    ).json()) as { id: string }
     const application = (await (
       await postJson(harness, cookie, '/api/applications', {
         name: 'Claims App',
@@ -88,53 +78,40 @@ describe('OAuth token claim building over real D1', () => {
     const organization = (await (
       await postJson(harness, cookie, '/api/organizations', { slug: 'claims-org', name: 'Claims Org' })
     ).json()) as { id: string }
-    expect(
-      (
-        await postJson(harness, cookie, `/api/organizations/${organization.id}/members`, {
-          userId,
-          role: 'member',
-        })
-      ).status,
-    ).toBe(201)
-
-    // Distinct roles per subject so each assignment read is independently proven.
-    const roleId = async (key: string, name: string) =>
-      (
-        (await (await postJson(harness, cookie, '/api/access/roles', { key, name })).json()) as {
-          id: string
-        }
-      ).id
-    const userRole = await roleId('contacts-user-role', 'Contacts User')
-    const appRole = await roleId('contacts-app-role', 'Contacts App')
-    const memberRole = await roleId('contacts-member-role', 'Contacts Member')
-
-    for (const roleId of [userRole, appRole, memberRole]) {
-      const current = await harness.request(`/api/access/roles/${roleId}/scopes`, { headers: { cookie } })
-      const etag = current.headers.get('etag')
-      expect(etag).toBeTruthy()
-      const replaced = await harness.request(`/api/access/roles/${roleId}/scopes`, {
-        method: 'PUT',
-        headers: { 'content-type': 'application/json', cookie, 'if-match': etag! },
-        body: JSON.stringify({ scopes: [{ resourceId: resource.id, scope: 'contacts:read' }] }),
+    const audience = 'https://api.example.com/contacts'
+    const resource = (await (
+      await postJson(harness, cookie, '/api/resource-servers', {
+        identifier: 'contacts-api',
+        name: 'Contacts API',
+        resourceUrl: audience,
+        ownerOrganizationId: organization.id,
       })
-      expect(replaced.status, await replaced.clone().text()).toBe(200)
-    }
-    await postJson(harness, cookie, '/api/access/assignments', {
-      roleId: userRole,
-      subjectType: 'user',
-      subjectId: userId,
-    })
-    await postJson(harness, cookie, '/api/access/assignments', {
-      roleId: appRole,
-      subjectType: 'workload',
-      subjectId: application.id,
-    })
-    await postJson(harness, cookie, '/api/access/assignments', {
-      roleId: memberRole,
-      subjectType: 'user',
-      subjectId: userId,
-      organizationId: organization.id,
-    })
+    ).json()) as { id: string }
+    const member = (await (
+      await postJson(harness, cookie, `/api/organizations/${organization.id}/members`, {
+        userId,
+        roles: ['member'],
+      })
+    ).json()) as { id: string }
+    await postJson(
+      harness,
+      cookie,
+      `/api/organizations/${organization.id}/roles`,
+      {
+        key: 'contacts-reader',
+        displayName: 'Contacts reader',
+        scopes: [{ resourceId: resource.id, scope: 'contacts:read' }],
+      },
+      201,
+    )
+    await postJson(
+      harness,
+      cookie,
+      `/api/organizations/${organization.id}/members/${member.id}/roles`,
+      { roles: ['contacts-reader', 'member'] },
+      200,
+      'PUT',
+    )
 
     const claims = (await buildTokenClaims(harness.deps, {
       userId,
@@ -151,10 +128,10 @@ describe('OAuth token claim building over real D1', () => {
     expect(claims.authorization.audience).toBe(audience)
     expect(claims.authorization.resource).toBe('contacts-api')
     expect(claims.authorization.organization_id).toBe(organization.id)
-    // Each role surfaced through its own real-SQL assignment read.
-    expect(claims.authorization.roles).toEqual(
-      expect.arrayContaining(['contacts-user-role', 'contacts-app-role', 'contacts-member-role']),
-    )
+    // Roles belong only to the Organization user. The Application contributes
+    // its requested/granted scopes directly and never receives a Role.
+    expect(application.id).toBeTruthy()
+    expect(claims.authorization.roles).toEqual(['contacts-reader', 'member'])
     expect(claims.authorization.scopes).toEqual(['contacts:read'])
   })
 

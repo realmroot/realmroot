@@ -35,11 +35,19 @@ import type { Context } from 'hono'
 import { Hono } from 'hono'
 import { configzOptions } from '../../app-config'
 import { representationWithEtag, requireMatchingIfMatch } from '../../conditional'
+import { requirePlatformAccess } from '../../middleware/authz'
 import { getDeps } from '../../middleware/deps'
 import { readJson } from '../validation'
 
 export function createManagementSettingsRoutes(securityPolicy?: SecurityPolicy) {
   const app = new Hono()
+
+  const requireRealmAccess = async (c: Context, next: () => Promise<void>) => {
+    requirePlatformAccess(c, c.req.method === 'GET' ? 'realm:read' : 'realm:write')
+    await next()
+  }
+  app.use('/realm', requireRealmAccess)
+  app.use('/realm/*', requireRealmAccess)
 
   app.get('/realm/sign-in-policy', async (c) => {
     const response = await getManagementSignInSettings(getDeps(c), configzOptions(c, securityPolicy))

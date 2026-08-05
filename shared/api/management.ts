@@ -510,8 +510,6 @@ export const protectedResourceCollectionRoutes = [
   '/access/consents',
   '/users',
   '/organizations',
-  '/access/roles',
-  '/access/assignments',
   '/resource-servers',
   '/connectors',
   '/agents',

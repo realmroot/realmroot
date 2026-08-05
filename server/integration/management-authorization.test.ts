@@ -9,10 +9,10 @@ import {
   agentIdentityBinding,
   apiResource,
   externalTokenLease,
+  organizationRole,
   resourceAccountConnection,
   resourceConnectionIntent,
   user,
-  webhookDeliveryRequest,
 } from '@server/db/schema'
 import { createResource } from '@server/usecases/authorization'
 import { discoverAgentResources } from '@server/usecases/external-resources'
@@ -58,384 +58,200 @@ describe('authorization management over real D1', () => {
     })
     const memberCookie = await signIn(harness, 'member@example.com', 'member-password-2026')
 
-    const response = await harness.request('/api/access/roles', { headers: { cookie: memberCookie } })
+    const response = await harness.request('/api/organizations/org-missing/roles', {
+      headers: { cookie: memberCookie },
+    })
     expect(response.status).toBe(403)
   })
 
-  it('constrains Organization Console inventory and exposes governed Agent detail [spec: admin-console/organization-console-resource-boundary] [spec: admin-console/admin-agent-governance-detail] [spec: management-api/management-canonical-authority-inventory] [spec: agent-identity/agent-public-resource-model]', async () => {
-    const adminCookie = await signInAdmin(harness)
-    const developerId = await createUser(harness, adminCookie, {
-      email: 'developer@example.com',
-      username: 'developer',
-      displayName: 'Developer',
-      password: 'developer-password-2026',
-    })
-    const ownedOrganization = (await (
-      await postJson(harness, adminCookie, '/api/organizations', { slug: 'owned-team', name: 'Owned Team' })
-    ).json()) as { id: string }
-    const otherOrganization = (await (
-      await postJson(harness, adminCookie, '/api/organizations', { slug: 'other-team', name: 'Other Team' })
-    ).json()) as { id: string }
-    await postJson(harness, adminCookie, `/api/organizations/${ownedOrganization.id}/members`, {
-      userId: developerId,
-      role: 'developer',
-    })
-    const currentConsolePolicy = await harness.request('/api/realm/developer-console-access-policy', {
-      headers: { cookie: adminCookie },
-    })
-    await harness.request('/api/realm/developer-console-access-policy', {
-      method: 'PUT',
-      headers: {
-        'content-type': 'application/json',
-        cookie: adminCookie,
-        'If-Match': currentConsolePolicy.headers.get('ETag')!,
-      },
-      body: JSON.stringify({
-        mode: 'all_organizations',
-        eligibleAccessLevels: ['owner', 'admin', 'developer'],
-        selectedOrganizationIds: [],
-      }),
-    })
-    const ownedWebhook = (await (
-      await postJson(harness, adminCookie, '/api/webhooks', {
-        url: 'https://owned.example.com/webhooks',
-        events: ['session.revoked'],
-        enabled: true,
-        organizationId: ownedOrganization.id,
+  it('blocks direct Better Auth Role mutations outside the audited facade', async () => {
+    const cookie = await signInAdmin(harness)
+    for (const path of [
+      '/api/auth/organization/create-role',
+      '/api/auth/organization/update-role',
+      '/api/auth/organization/delete-role',
+      '/api/auth/organization/update-member-role',
+    ]) {
+      const response = await harness.request(path, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', cookie },
+        body: '{}',
       })
-    ).json()) as { endpoint: { id: string } }
-    const otherWebhook = (await (
-      await postJson(harness, adminCookie, '/api/webhooks', {
-        url: 'https://other.example.com/webhooks',
-        events: ['session.revoked'],
-        enabled: true,
-        organizationId: otherOrganization.id,
-      })
-    ).json()) as { endpoint: { id: string } }
+      expect(response.status, path).toBe(404)
+    }
+  })
 
-    const ownedApplication = (await (
-      await postJson(harness, adminCookie, '/api/applications', {
-        name: 'Owned Portal',
-        clientType: 'public_spa',
-        redirectUris: ['https://owned.example.com/callback'],
-        ownerOrganizationId: ownedOrganization.id,
-      })
+  it('does not delete a dynamic Role referenced by a pending invitation', async () => {
+    const cookie = await signInAdmin(harness)
+    const organization = (await (
+      await postJson(harness, cookie, '/api/organizations', { slug: 'invited-role', name: 'Invited Role' })
     ).json()) as { id: string }
-    const otherApplication = (await (
-      await postJson(harness, adminCookie, '/api/applications', {
-        name: 'Other Portal',
-        clientType: 'public_spa',
-        redirectUris: ['https://other.example.com/callback'],
-        ownerOrganizationId: otherOrganization.id,
-      })
-    ).json()) as { id: string }
-    const ownedResource = (await (
-      await postJson(harness, adminCookie, '/api/resource-servers', {
-        identifier: 'owned-api',
-        name: 'Owned API',
-        resourceUrl: 'https://owned.example.com/api',
-        enabled: false,
-        ownerOrganizationId: ownedOrganization.id,
-      })
-    ).json()) as { id: string }
-    const otherResource = (await (
-      await postJson(harness, adminCookie, '/api/resource-servers', {
-        identifier: 'other-api',
-        name: 'Other API',
-        resourceUrl: 'https://other.example.com/api',
-        enabled: false,
-        ownerOrganizationId: otherOrganization.id,
-      })
-    ).json()) as { id: string }
-    const now = new Date()
-    await harness.db.insert(webhookDeliveryRequest).values([
-      {
-        id: 'owned-webhook-request',
-        endpointId: ownedWebhook.endpoint.id,
-        event: 'session.revoked',
-        status: 'failed',
-        attemptCount: 1,
-        httpStatus: 503,
-        error: 'Unavailable',
-        requestBody: '{"id":"evt_owned","type":"session.revoked","createdAt":"2026-01-01T00:00:00.000Z","data":{}}',
-        createdAt: now,
-        updatedAt: now,
-      },
-      {
-        id: 'other-webhook-request',
-        endpointId: otherWebhook.endpoint.id,
-        event: 'session.revoked',
-        status: 'failed',
-        attemptCount: 1,
-        httpStatus: 503,
-        error: 'Unavailable',
-        requestBody: '{"id":"evt_other","type":"session.revoked","createdAt":"2026-01-01T00:00:00.000Z","data":{}}',
-        createdAt: now,
-        updatedAt: now,
-      },
-    ])
-    await harness.db.insert(agentIdentity).values([
-      {
-        id: 'owned-agent',
-        issuer: 'http://localhost/api/auth',
-        subject: 'owned-agent-subject',
-        name: 'Owned Agent',
-        ownerOrganizationId: ownedOrganization.id,
-        status: 'active',
-        createdAt: now,
-        updatedAt: now,
-      },
-      {
-        id: 'other-agent',
-        issuer: 'http://localhost/api/auth',
-        subject: 'other-agent-subject',
-        name: 'Other Agent',
-        ownerOrganizationId: otherOrganization.id,
-        status: 'active',
-        createdAt: now,
-        updatedAt: now,
-      },
-    ])
-    await harness.db.insert(agentHost).values({
-      id: 'owned-host',
-      name: 'Developer laptop',
-      userId: developerId,
-      publicKey: 'public-key-material',
-      status: 'active',
-      createdAt: now,
-      updatedAt: now,
+    await postJson(harness, cookie, `/api/organizations/${organization.id}/roles`, {
+      key: 'reviewer',
+      displayName: 'Reviewer',
+      scopes: [],
     })
-    await harness.db.insert(agent).values({
-      id: 'owned-protocol-agent',
-      name: 'Protocol registration',
-      userId: developerId,
-      hostId: 'owned-host',
-      status: 'active',
-      mode: 'delegated',
-      publicKey: 'protocol-public-key-material',
-      createdAt: now,
-      updatedAt: now,
+    await postJson(harness, cookie, `/api/organizations/${organization.id}/invitations`, {
+      email: 'reviewer@example.com',
+      roles: ['reviewer'],
     })
-    await harness.db.insert(agentIdentityBinding).values({
-      id: 'owned-agent-binding',
-      agentIdentityId: 'owned-agent',
-      protocolAgentId: 'owned-protocol-agent',
-      status: 'active',
-      boundAt: now,
-      createdAt: now,
-      updatedAt: now,
-    })
-    await harness.db.insert(agentAccessRequest).values({
-      id: 'owned-access-request',
-      resourceId: ownedResource.id,
-      agentIdentityId: 'owned-agent',
-      bindingId: 'owned-agent-binding',
-      scopes: ['orders:read'],
-      reason: 'Prepare a report',
-      status: 'pending',
-      approvalTokenHash: 'owned-approval-token-hash',
-      encryptedApprovalToken: 'owned-encrypted-approval-token',
-      expiresAt: new Date(now.getTime() + 60_000),
-      createdAt: now,
-      updatedAt: now,
-    })
-    await harness.db.insert(agentAccessGrant).values({
-      id: 'owned-access-grant',
-      resourceId: ownedResource.id,
-      agentIdentityId: 'owned-agent',
-      scopes: ['orders:read'],
-      mode: 'persistent',
-      status: 'active',
-      grantedByUserId: developerId,
-      createdAt: now,
-      updatedAt: now,
-    })
-    const agentRole = (await (
-      await postJson(harness, adminCookie, '/api/access/roles', {
-        key: 'report.reader',
-        name: 'Report reader',
-      })
-    ).json()) as { id: string }
-    await postJson(harness, adminCookie, '/api/access/assignments', {
-      roleId: agentRole.id,
-      subjectType: 'agent',
-      subjectId: 'owned-agent',
-      organizationId: ownedOrganization.id,
-    })
-    await harness.db.insert(agentAuditEvent).values([
-      {
-        id: 'owned-agent-event',
-        action: 'agent.access.requested',
-        result: 'pending',
-        agentIdentityId: 'owned-agent',
-        occurredAt: now,
-      },
-      {
-        id: 'other-agent-event',
-        action: 'agent.access.requested',
-        result: 'pending',
-        agentIdentityId: 'other-agent',
-        occurredAt: now,
-      },
-    ])
-    const developerCookie = await signIn(harness, 'developer@example.com', 'developer-password-2026')
 
-    const webhookInventory = await harness.request('/api/webhooks', {
-      headers: { cookie: developerCookie },
+    const response = await harness.request(`/api/organizations/${organization.id}/roles/reviewer`, {
+      method: 'DELETE',
+      headers: { cookie },
     })
-    expect(webhookInventory.status).toBe(200)
-    await expect(webhookInventory.json()).resolves.toMatchObject({
-      endpoints: [{ id: ownedWebhook.endpoint.id, organizationId: ownedOrganization.id }],
-      pagination: { total: 1 },
-    })
-    const webhookRequests = await harness.request(`/api/webhooks/${ownedWebhook.endpoint.id}/deliveries`, {
-      headers: { cookie: developerCookie },
-    })
-    await expect(webhookRequests.json()).resolves.toMatchObject({
-      requests: [{ id: 'owned-webhook-request', organizationId: ownedOrganization.id }],
-      pagination: { total: 1 },
-    })
-    expect(
-      (
-        await harness.request(`/api/webhooks/${otherWebhook.endpoint.id}`, {
-          headers: { cookie: developerCookie },
-        })
-      ).status,
-    ).toBe(403)
-    expect(
-      (
-        await harness.request('/api/webhooks', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json', cookie: developerCookie },
-          body: JSON.stringify({
-            url: 'https://forbidden.example.com/webhooks',
-            events: ['session.revoked'],
-            enabled: true,
-            organizationId: otherOrganization.id,
-          }),
-        })
-      ).status,
-    ).toBe(403)
+    expect(response.status).toBe(409)
+    await expect(harness.deps.authorization.findOrganizationRole(organization.id, 'reviewer')).resolves.not.toBeNull()
+  })
 
-    const applicationsResponse = await harness.request('/api/applications', { headers: { cookie: developerCookie } })
-    expect(applicationsResponse.status).toBe(200)
-    await expect(applicationsResponse.json()).resolves.toMatchObject({
-      applications: [{ id: ownedApplication.id, ownerOrganizationId: ownedOrganization.id }],
-      pagination: { total: 1 },
+  it('rolls back a Role write when its audit insert fails', async () => {
+    const organization = await harness.deps.authorization.createOrganization({
+      id: 'org-audit',
+      slug: 'org-audit',
+      name: 'Audit Organization',
+      displayName: null,
+      logo: null,
+      disabled: false,
+      disabledReason: null,
     })
-    const resourcesResponse = await harness.request('/api/resource-servers', { headers: { cookie: developerCookie } })
-    expect(resourcesResponse.status).toBe(200)
-    await expect(resourcesResponse.json()).resolves.toMatchObject({
-      items: [{ id: ownedResource.id, ownerOrganizationId: ownedOrganization.id }],
-      pagination: { total: 1 },
+    const occurredAt = new Date()
+    await harness.db.insert(agentAuditEvent).values({
+      id: 'duplicate-audit',
+      action: 'seed',
+      result: 'allowed',
+      occurredAt,
     })
-    const agentsResponse = await harness.request('/api/agents', { headers: { cookie: developerCookie } })
-    expect(agentsResponse.status).toBe(200)
-    await expect(agentsResponse.json()).resolves.toMatchObject({
-      items: [
+
+    await expect(
+      harness.deps.authorization.createOrganizationRole(
+        organization.id,
+        { key: 'operator', displayName: 'Operator', description: null, scopes: [] },
+        { scope: [] },
         {
-          id: 'owned-agent',
-          homeSpace: { type: 'organization', organizationId: ownedOrganization.id },
-          installationCount: 1,
-          roleCount: 1,
-          pendingRequestCount: 1,
-          activeGrantCount: 1,
+          id: 'duplicate-audit',
+          action: 'organization.role.created',
+          result: 'allowed',
+          controllerUserId: null,
+          subjectIssuer: null,
+          subject: null,
+          agentIdentityId: null,
+          hostId: null,
+          resourceId: null,
+          resourceConnectionId: null,
+          accessGrantId: null,
+          scopes: null,
+          reasonCode: null,
+          metadata: null,
+          occurredAt,
         },
-      ],
-      pagination: { total: 1 },
-    })
-    const agentDetail = await harness.request('/api/agents/owned-agent', { headers: { cookie: developerCookie } })
-    expect(agentDetail.status).toBe(200)
-    await expect(agentDetail.json()).resolves.toMatchObject({
-      agent: { id: 'owned-agent', installationCount: 1, roleCount: 1, pendingRequestCount: 1, activeGrantCount: 1 },
-    })
-    const hostsResponse = await harness.request('/api/agents/owned-agent/installations', {
-      headers: { cookie: developerCookie },
-    })
-    expect(hostsResponse.status).toBe(200)
-    const hostInventory = (await hostsResponse.json()) as { items: Array<Record<string, unknown>> }
-    expect(hostInventory.items).toEqual([
-      expect.objectContaining({
-        id: 'owned-agent-binding',
-        name: 'Developer laptop',
-        credentialType: 'public_key',
-      }),
-    ])
-    expect(hostInventory.items[0]).not.toHaveProperty('hostId')
-    expect(hostInventory.items[0]).not.toHaveProperty('hostStatus')
-    expect(hostInventory.items[0]).not.toHaveProperty('publicKey')
-    await expect(
-      (
-        await harness.request('/api/access/assignments?subjectType=agent&subjectId=owned-agent&status=active', {
-          headers: { cookie: developerCookie },
-        })
-      ).json(),
-    ).resolves.toMatchObject({ assignments: [{ roleId: agentRole.id, subjectId: 'owned-agent' }] })
-    const accessRequestsResponse = await harness.request('/api/access/requests?agentId=owned-agent', {
-      headers: { cookie: developerCookie },
-    })
-    const accessRequests = (await accessRequestsResponse.json()) as { items: Array<Record<string, unknown>> }
-    expect(accessRequests.items).toEqual([
-      expect.objectContaining({ id: 'owned-access-request', scopes: ['orders:read'], status: 'pending' }),
-    ])
-    await expect(
-      (await harness.request('/api/access/requests', { headers: { cookie: developerCookie } })).json(),
-    ).resolves.toMatchObject({ items: [{ id: 'owned-access-request' }], pagination: { total: 1 } })
-    expect(accessRequests.items[0]).not.toHaveProperty('approvalTokenHash')
-    await expect(
-      (
-        await harness.request('/api/access/authorizations?agentId=owned-agent', {
-          headers: { cookie: developerCookie },
-        })
-      ).json(),
-    ).resolves.toMatchObject({ items: [{ id: 'owned-access-grant', scopes: ['orders:read'], status: 'active' }] })
-    await expect(
-      (await harness.request('/api/access/authorizations', { headers: { cookie: developerCookie } })).json(),
-    ).resolves.toMatchObject({ items: [{ id: 'owned-access-grant' }], pagination: { total: 1 } })
-    const auditResponse = await harness.request('/api/realm/audit-events', { headers: { cookie: developerCookie } })
-    expect(auditResponse.status).toBe(200)
-    await expect(auditResponse.json()).resolves.toMatchObject({
-      items: [{ id: 'owned-agent-event', agentIdentityId: 'owned-agent' }],
-      pagination: { total: 1 },
-    })
+      ),
+    ).rejects.toThrow()
     expect(
-      (await harness.request('/api/realm/audit-events?agentId=other-agent', { headers: { cookie: developerCookie } }))
-        .status,
-    ).toBe(403)
-    expect((await harness.request(`/api/users/${developerId}`, { headers: { cookie: developerCookie } })).status).toBe(
-      200,
+      await harness.db.select().from(organizationRole).where(eq(organizationRole.organizationId, organization.id)),
+    ).toEqual([])
+  })
+
+  it('allows only one concurrent last-Owner demotion', async () => {
+    const cookie = await signInAdmin(harness)
+    const organization = (await (
+      await postJson(harness, cookie, '/api/organizations', { slug: 'owner-race', name: 'Owner Race' })
+    ).json()) as { id: string }
+    const userIds = await Promise.all(
+      ['one', 'two'].map((name) =>
+        createUser(harness, cookie, {
+          email: `${name}@example.com`,
+          username: `owner-${name}`,
+          displayName: `Owner ${name}`,
+          password: `owner-${name}-password-2026`,
+        }),
+      ),
     )
-    expect(
-      (await harness.request(`/api/users/${developerId}/passkeys`, { headers: { cookie: developerCookie } })).status,
-    ).toBe(403)
+    const members = await Promise.all(
+      userIds.map(
+        async (userId) =>
+          (await (
+            await postJson(harness, cookie, `/api/organizations/${organization.id}/members`, {
+              userId,
+              roles: ['owner'],
+            })
+          ).json()) as { id: string },
+      ),
+    )
 
-    expect(
-      (await harness.request(`/api/applications/${otherApplication.id}`, { headers: { cookie: developerCookie } }))
-        .status,
-    ).toBe(403)
-    expect(
-      (
-        await harness.request(`/api/resource-servers/${otherResource.id}`, {
-          method: 'PATCH',
-          headers: { 'content-type': 'application/json', cookie: developerCookie },
-          body: JSON.stringify({ name: 'Forbidden rename' }),
-        })
-      ).status,
-    ).toBe(403)
-    expect(
-      (
-        await harness.request(`/api/applications/${ownedApplication.id}`, {
-          method: 'PATCH',
-          headers: { 'content-type': 'application/json', cookie: developerCookie },
-          body: JSON.stringify({ name: 'Owned Portal 2' }),
-        })
-      ).status,
-    ).toBe(200)
+    const responses = await Promise.all(
+      members.map((member) =>
+        harness.request(`/api/organizations/${organization.id}/members/${member.id}/roles`, {
+          method: 'PUT',
+          headers: { 'content-type': 'application/json', cookie },
+          body: JSON.stringify({ roles: ['member'] }),
+        }),
+      ),
+    )
+    expect(responses.map((response) => response.status).sort()).toEqual([200, 412])
+    const remaining = await harness.deps.authorization.listMembers(organization.id, { limit: 10, offset: 0 })
+    expect(remaining.items.filter((member) => member.roles.includes('owner'))).toHaveLength(1)
+  })
 
-    const realmInventory = await harness.request('/api/applications', { headers: { cookie: adminCookie } })
-    await expect(realmInventory.json()).resolves.toMatchObject({ pagination: { total: 2 } })
-    const realmAudit = await harness.request('/api/realm/audit-events', { headers: { cookie: adminCookie } })
-    await expect(realmAudit.json()).resolves.toMatchObject({ pagination: { total: 2 } })
+  it('allows only one concurrent last-Owner removal', async () => {
+    const cookie = await signInAdmin(harness)
+    const organization = (await (
+      await postJson(harness, cookie, '/api/organizations', { slug: 'owner-delete-race', name: 'Owner Delete Race' })
+    ).json()) as { id: string }
+    const members = await Promise.all(
+      ['delete-one', 'delete-two'].map(async (name) => {
+        const userId = await createUser(harness, cookie, {
+          email: `${name}@example.com`,
+          username: name,
+          displayName: name,
+          password: `${name}-password-2026`,
+        })
+        return (await (
+          await postJson(harness, cookie, `/api/organizations/${organization.id}/members`, {
+            userId,
+            roles: ['owner'],
+          })
+        ).json()) as { id: string }
+      }),
+    )
+
+    const responses = await Promise.all(
+      members.map((member) =>
+        harness.request(`/api/organizations/${organization.id}/members/${member.id}`, {
+          method: 'DELETE',
+          headers: { cookie },
+        }),
+      ),
+    )
+    expect(responses.map((response) => response.status).sort()).toEqual([204, 412])
+    const remaining = await harness.deps.authorization.listMembers(organization.id, { limit: 10, offset: 0 })
+    expect(remaining.items.filter((member) => member.roles.includes('owner'))).toHaveLength(1)
+  })
+
+  it('prevents an Organization admin from granting itself Owner', async () => {
+    const ownerCookie = await signInAdmin(harness)
+    const organization = (await (
+      await postJson(harness, ownerCookie, '/api/organizations', { slug: 'no-self-promotion', name: 'No Promotion' })
+    ).json()) as { id: string }
+    const userId = await createUser(harness, ownerCookie, {
+      email: 'organization-admin@example.com',
+      username: 'organization-admin',
+      displayName: 'Organization Admin',
+      password: 'organization-admin-password-2026',
+    })
+    const member = (await (
+      await postJson(harness, ownerCookie, `/api/organizations/${organization.id}/members`, {
+        userId,
+        roles: ['admin'],
+      })
+    ).json()) as { id: string }
+    const adminCookie = await signIn(harness, 'organization-admin@example.com', 'organization-admin-password-2026')
+
+    const response = await harness.request(`/api/organizations/${organization.id}/members/${member.id}/roles`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json', cookie: adminCookie },
+      body: JSON.stringify({ roles: ['owner'] }),
+    })
+    expect(response.status).toBe(403)
   })
 
   it('rejects an invalid api-resource payload with 400', async () => {
@@ -1030,98 +846,6 @@ describe('authorization management over real D1', () => {
     expect(audits.map((event) => event.action)).toEqual(['api_resource.archived', 'api_resource.restored'])
   })
 
-  it('manages role scope references and a user role assignment through real SQL [spec: management-api/management-restish-role-crud]', async () => {
-    const cookie = await signInAdmin(harness)
-    const userId = await createUser(harness, cookie, {
-      email: 'assignee@example.com',
-      username: 'assignee',
-      displayName: 'Assignee',
-      password: 'assignee-password-2026',
-    })
-
-    expect(
-      (
-        await postJson(harness, cookie, '/api/resource-servers', {
-          identifier: 'https://roles.example.com',
-          name: 'Roles API',
-          resourceUrl: 'https://roles.example.com',
-        })
-      ).status,
-    ).toBe(201)
-    const role = (await (
-      await postJson(harness, cookie, '/api/access/roles', {
-        key: 'editor',
-        name: 'Editor',
-      })
-    ).json()) as { id: string }
-
-    const duplicateRole = await harness.request('/api/access/roles', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', cookie },
-      body: JSON.stringify({ key: 'editor', name: 'Duplicate editor' }),
-    })
-    expect(duplicateRole.status).toBe(409)
-    await expect(duplicateRole.json()).resolves.toMatchObject({
-      error: {
-        code: 'conflict',
-        message: 'Role key "editor" is already in use.',
-      },
-    })
-
-    const changedKey = await harness.request(`/api/access/roles/${role.id}`, {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json', cookie },
-      body: JSON.stringify({ key: 'renamed-editor' }),
-    })
-    expect(changedKey.status).toBe(400)
-
-    const roles = await harness.request('/api/access/roles', { headers: { cookie } })
-    expect(((await roles.json()) as { roles: unknown[] }).roles.length).toBeGreaterThanOrEqual(1)
-
-    expect((await harness.request(`/api/access/roles/${role.id}`, { headers: { cookie } })).status).toBe(200)
-
-    const patched = await harness.request(`/api/access/roles/${role.id}`, {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json', cookie },
-      body: JSON.stringify({ name: 'Lead Editor' }),
-    })
-    expect(((await patched.json()) as { name: string }).name).toBe('Lead Editor')
-
-    const currentPermissions = await harness.request(`/api/access/roles/${role.id}/scopes`, {
-      headers: { cookie },
-    })
-    const etag = currentPermissions.headers.get('etag')
-    expect(etag).toBeTruthy()
-    const replacePermissions = await harness.request(`/api/access/roles/${role.id}/scopes`, {
-      method: 'PUT',
-      headers: { 'content-type': 'application/json', cookie, 'if-match': etag! },
-      body: JSON.stringify({ scopes: [] }),
-    })
-    expect(replacePermissions.status).toBe(200)
-    expect(replacePermissions.headers.get('etag')).toBeTruthy()
-
-    const rolePermissions = await harness.request(`/api/access/roles/${role.id}/scopes`, {
-      headers: { cookie },
-    })
-    expect(((await rolePermissions.json()) as { scopes: unknown[] }).scopes).toEqual([])
-
-    const assignment = (await (
-      await postJson(harness, cookie, '/api/access/assignments', {
-        roleId: role.id,
-        subjectType: 'user',
-        subjectId: userId,
-      })
-    ).json()) as { id: string }
-    const assignments = await harness.request(`/api/access/assignments?roleId=${role.id}`, { headers: { cookie } })
-    expect(((await assignments.json()) as { assignments: Array<{ id: string }> }).assignments).toContainEqual(
-      expect.objectContaining({ id: assignment.id }),
-    )
-
-    expect(
-      (await harness.request(`/api/access/roles/${role.id}`, { method: 'DELETE', headers: { cookie } })).status,
-    ).toBe(204)
-  })
-
   it('runs the organization / member / invitation lifecycle through real SQL [spec: management-api/management-restish-organization-crud]', async () => {
     const cookie = await signInAdmin(harness)
     const memberUserId = await createUser(harness, cookie, {
@@ -1152,7 +876,7 @@ describe('authorization management over real D1', () => {
     const member = (await (
       await postJson(harness, cookie, `/api/organizations/${organization.id}/members`, {
         userId: memberUserId,
-        role: 'member',
+        roles: ['member'],
       })
     ).json()) as { id: string }
     const members = await harness.request(`/api/organizations/${organization.id}/members`, {
@@ -1160,27 +884,25 @@ describe('authorization management over real D1', () => {
     })
     expect(((await members.json()) as { members: unknown[] }).members.length).toBe(1)
 
-    const patchedMember = await harness.request(`/api/organizations/${organization.id}/members/${member.id}`, {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json', cookie },
-      body: JSON.stringify({ role: 'admin' }),
+    const role = await postJson(harness, cookie, `/api/organizations/${organization.id}/roles`, {
+      key: 'org-lead',
+      displayName: 'Org Lead',
+      description: null,
+      scopes: [],
     })
-    expect(((await patchedMember.json()) as { role: string }).role).toBe('admin')
+    expect(role.status).toBe(201)
 
-    const role = (await (
-      await postJson(harness, cookie, '/api/access/roles', { key: 'org-lead', name: 'Org Lead' })
-    ).json()) as { id: string }
-    await postJson(harness, cookie, '/api/access/assignments', {
-      roleId: role.id,
-      subjectType: 'user',
-      subjectId: memberUserId,
-      organizationId: organization.id,
+    const patchedMember = await harness.request(`/api/organizations/${organization.id}/members/${member.id}/roles`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ roles: ['member', 'org-lead'] }),
     })
+    expect(((await patchedMember.json()) as { roles: string[] }).roles).toEqual(['member', 'org-lead'])
 
     const invitation = (await (
       await postJson(harness, cookie, `/api/organizations/${organization.id}/invitations`, {
         email: 'invitee@example.com',
-        role: 'member',
+        roles: ['member'],
       })
     ).json()) as { id: string }
     const invitations = await harness.request(`/api/organizations/${organization.id}/invitations`, {
@@ -1212,29 +934,5 @@ describe('authorization management over real D1', () => {
         })
       ).status,
     ).toBe(204)
-  })
-
-  it('assigns an application role through real SQL', async () => {
-    const cookie = await signInAdmin(harness)
-
-    const application = (await (
-      await postJson(harness, cookie, '/api/applications', {
-        name: 'Role Client',
-        slug: 'role-client',
-        clientType: 'confidential_web',
-        redirectUris: ['http://localhost/callback'],
-      })
-    ).json()) as { id: string }
-    const role = (await (
-      await postJson(harness, cookie, '/api/access/roles', { key: 'svc', name: 'Service' })
-    ).json()) as {
-      id: string
-    }
-
-    await postJson(harness, cookie, '/api/access/assignments', {
-      roleId: role.id,
-      subjectType: 'workload',
-      subjectId: application.id,
-    })
   })
 })

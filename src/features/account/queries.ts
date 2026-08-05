@@ -12,7 +12,7 @@ import {
   listAccountOrganizationAgentAccessGrants,
   listAccountOrganizationAgents,
   listAccountOrganizationInvitations,
-  listAccountOrganizationRoleAssignments,
+  listAccountOrganizationRoles,
   listAccountOrganizations,
   listAccountSessions,
   listAgentResourceRequests,
@@ -38,8 +38,7 @@ export const accountQueryKeys = {
   organizations: ['account', 'organizations'] as const,
   organizationInvitations: ['account', 'organization-invitations'] as const,
   organizationAgents: (organizationId: string) => ['account', 'organizations', organizationId, 'agents'] as const,
-  organizationRoleAssignments: (organizationId: string) =>
-    ['account', 'organizations', organizationId, 'role-assignments'] as const,
+  organizationRoles: (organizationId: string) => ['account', 'organizations', organizationId, 'roles'] as const,
   organizationAgentAccessGrants: (organizationId: string) =>
     ['account', 'organizations', organizationId, 'agent-access-grants'] as const,
   security: ['account', 'security'] as const,
@@ -105,18 +104,18 @@ export function useAccountOrganization(organizationId: string) {
   })
 }
 
-export function useAccountOrganizationAgents(organizationId: string) {
+export function useAccountOrganizationRoles(organizationId: string) {
   return useQuery({
-    queryKey: accountQueryKeys.organizationAgents(organizationId),
-    queryFn: () => listAccountOrganizationAgents(organizationId),
+    queryKey: accountQueryKeys.organizationRoles(organizationId),
+    queryFn: () => listAccountOrganizationRoles(organizationId),
     ...accountQueryOptions,
   })
 }
 
-export function useAccountOrganizationRoleAssignments(organizationId: string) {
+export function useAccountOrganizationAgents(organizationId: string) {
   return useQuery({
-    queryKey: accountQueryKeys.organizationRoleAssignments(organizationId),
-    queryFn: () => listAccountOrganizationRoleAssignments(organizationId),
+    queryKey: accountQueryKeys.organizationAgents(organizationId),
+    queryFn: () => listAccountOrganizationAgents(organizationId),
     ...accountQueryOptions,
   })
 }

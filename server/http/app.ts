@@ -28,8 +28,8 @@ import { configzOptions } from './app-config'
 import type { RpcSchema } from './app-rpc-schema'
 import type { AgentConfiguration, AppConfig } from './app-types'
 import { accessLog } from './middleware/access-log'
-import { authn, type SessionReader } from './middleware/authn'
-import { authz, authzForProtectedPath } from './middleware/authz'
+import { authn, getPrincipal, type SessionReader } from './middleware/authn'
+import { authz, requirePlatformAccess } from './middleware/authz'
 import { trustedOriginCors } from './middleware/cors'
 import { depsMiddleware } from './middleware/deps'
 import { requestContext } from './middleware/request-context'
@@ -136,6 +136,7 @@ export function createApp(auth: AuthHandler, deps: Deps, config: AppConfig = {})
     createAgentInfoRoutes((requestUrl) => oauthIssuer(config, requestUrl)),
   )
   app.on(['GET', 'POST'], '/api/auth/*', async (c) => {
+    if (isBetterAuthRoleMutationPath(c.req.path)) throw notFound()
     await requireOnboardingComplete(c.get('deps'))
     await requireHostedAuthMethodEnabled(c, configzOptions(c, config.securityPolicy))
     await requireLinkedSiweWallet(c, c.get('deps').wallets)
@@ -160,6 +161,15 @@ export function createApp(auth: AuthHandler, deps: Deps, config: AppConfig = {})
 
 function isLegacyAgentCapabilityPath(path: string) {
   return path.startsWith('/api/auth/capability/') || path === '/api/auth/agent/request-capability'
+}
+
+function isBetterAuthRoleMutationPath(path: string) {
+  return new Set([
+    '/api/auth/organization/create-role',
+    '/api/auth/organization/update-role',
+    '/api/auth/organization/delete-role',
+    '/api/auth/organization/update-member-role',
+  ]).has(path)
 }
 
 async function publishJwks(c: Context, auth: AuthHandler) {
@@ -224,8 +234,6 @@ export function protectResourceRoutes(app: Hono, auth: SessionReader, config: Ap
   for (const prefix of Object.keys(resourceByRoutePrefix)) {
     app.use(`/api/${prefix}`, authn(auth, { allowAgent: true, required: true, oauth: agentOAuth(config) }))
     app.use(`/api/${prefix}/*`, authn(auth, { allowAgent: true, required: true, oauth: agentOAuth(config) }))
-    app.use(`/api/${prefix}`, authzForProtectedPath())
-    app.use(`/api/${prefix}/*`, authzForProtectedPath())
   }
   const protectAssetCreation = async (c: Context, next: () => Promise<void>) => {
     if ((c.req.method === 'GET' || c.req.method === 'HEAD') && /^\/api\/assets\/[^/]+$/.test(c.req.path)) {
@@ -233,6 +241,11 @@ export function protectResourceRoutes(app: Hono, auth: SessionReader, config: Ap
       return
     }
     await authn(auth, { allowAgent: true, required: true, oauth: agentOAuth(config) })(c, async () => {
+      if (getPrincipal(c).user) {
+        requirePlatformAccess(c, 'applications:write')
+        await next()
+        return
+      }
       await authz('applications')(c, next)
     })
   }
