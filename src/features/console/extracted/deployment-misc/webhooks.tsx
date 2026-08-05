@@ -145,8 +145,16 @@ export function WebhooksPage({ section = 'endpoints' }: { section?: WebhooksSect
           active={section}
           ariaLabel="Webhook sections"
           tabs={[
-            ['endpoints', 'Endpoints', '/console/webhooks/endpoints'],
-            ['requests', 'Requests', '/console/webhooks/requests'],
+            [
+              'endpoints',
+              'Endpoints',
+              organizationId ? `/organizations/${organizationId}/webhooks/endpoints` : '/console/webhooks/endpoints',
+            ],
+            [
+              'requests',
+              'Requests',
+              organizationId ? `/organizations/${organizationId}/webhooks/requests` : '/console/webhooks/requests',
+            ],
           ]}
         />
       }

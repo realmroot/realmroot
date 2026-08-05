@@ -113,10 +113,11 @@ export function useAccountOrganizationRoles(organizationId: string, enabled = tr
   })
 }
 
-export function useAccountOrganizationAgents(organizationId: string) {
+export function useAccountOrganizationAgents(organizationId: string, enabled = true) {
   return useQuery({
     queryKey: accountQueryKeys.organizationAgents(organizationId),
     queryFn: () => listAccountOrganizationAgents(organizationId),
+    enabled,
     ...accountQueryOptions,
   })
 }

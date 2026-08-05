@@ -93,6 +93,40 @@ function _rolePermissionsResponse(permissions: Array<{ resourceId: string; scope
 }
 
 describe('console API resources and roles', () => {
+  it('binds Organization Workspace Resource servers to their owner [spec: admin-console/organization-console-resource-boundary]', async () => {
+    const requests: string[] = []
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const request = input instanceof Request ? input : null
+      const url = request ? new URL(request.url) : new URL(String(input), window.location.origin)
+      requests.push(`${url.pathname}${url.search}`)
+      if (url.pathname === '/api/resource-servers') {
+        return Promise.resolve(jsonResponse({ items: [apiResource], pagination }))
+      }
+      if (url.pathname === '/api/connectors') {
+        return Promise.resolve(jsonResponse({ connectors: [genericConnector], pagination }))
+      }
+      if (url.pathname === '/api/organizations') {
+        return Promise.resolve(jsonResponse({ organizations: [organization], pagination }))
+      }
+      throw new Error(`Unexpected request: ${url.pathname}${url.search}`)
+    })
+
+    renderWithQuery(
+      <ConsoleScopeProvider value={{ organizationId: organization.id, realmOperator: false }}>
+        <ApiResourcesPage />
+      </ConsoleScopeProvider>,
+    )
+
+    const resourceLink = await screen.findByRole('link', { name: apiResource.name })
+    expect(resourceLink.getAttribute('href')).toBe(
+      `/organizations/${organization.id}/resource-servers/${apiResource.id}`,
+    )
+    expect(screen.queryByLabelText('Filter owner')).toBeNull()
+    expect(requests).toContain(`/api/resource-servers?ownerOrganizationId=${organization.id}`)
+    fireEvent.click(screen.getByRole('button', { name: 'New resource server' }))
+    expect(screen.queryByLabelText('Owner Organization')).toBeNull()
+  })
+
   it('renders and filters the unified Resource server inventory', async () => {
     const external = {
       ...apiResource,

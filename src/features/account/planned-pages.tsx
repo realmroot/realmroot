@@ -8,7 +8,7 @@ import type {
 import type { OrganizationAccessLevel } from '@shared/organization-access'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { Plus } from 'lucide-react'
-import { type FormEvent, useEffect, useState } from 'react'
+import { type FormEvent, type ReactNode, useEffect, useState } from 'react'
 import { DestructiveConfirmation } from '@/components/destructive-confirmation'
 import { Field, SelectInput, TextInput } from '@/components/product-form'
 import { Badge } from '@/components/ui/badge'
@@ -978,18 +978,35 @@ function organizationSlug(name: string) {
 }
 
 export function AccountOrganizationDetailPage({
+  content,
   organizationId,
   section = 'overview',
 }: {
+  content?: ReactNode
   organizationId: string
-  section?: 'overview' | 'members' | 'agents' | 'roles' | 'settings'
+  section?:
+    | 'overview'
+    | 'members'
+    | 'roles'
+    | 'applications'
+    | 'resource-servers'
+    | 'agents'
+    | 'webhooks'
+    | 'activity'
+    | 'settings'
 }) {
   const navigate = useNavigate()
   const [activeSection, setActiveSection] = useState(section)
   const organizationQuery = useAccountOrganization(organizationId)
   const organizationRolesQuery = useAccountOrganizationRoles(organizationId, activeSection === 'members')
-  const agentsQuery = useAccountOrganizationAgents(organizationId)
-  const agentAccessGrantsQuery = useAccountOrganizationAgentAccessGrants(organizationId, activeSection === 'roles')
+  const agentsQuery = useAccountOrganizationAgents(
+    organizationId,
+    activeSection === 'overview' || (activeSection === 'agents' && !content),
+  )
+  const agentAccessGrantsQuery = useAccountOrganizationAgentAccessGrants(
+    organizationId,
+    activeSection === 'roles' && !content,
+  )
   const mutate = useAccountMutation()
   const [editOpen, setEditOpen] = useState(false)
   const [inviteOpen, setInviteOpen] = useState(false)
@@ -1038,8 +1055,12 @@ export function AccountOrganizationDetailPage({
                 const routes = {
                   overview: '/organizations/$organizationId/overview',
                   members: '/organizations/$organizationId/members',
-                  agents: '/organizations/$organizationId/agents',
                   roles: '/organizations/$organizationId/roles',
+                  applications: '/organizations/$organizationId/applications',
+                  'resource-servers': '/organizations/$organizationId/resource-servers',
+                  agents: '/organizations/$organizationId/agents',
+                  webhooks: '/organizations/$organizationId/webhooks/endpoints',
+                  activity: '/organizations/$organizationId/activity',
                   settings: '/organizations/$organizationId/settings',
                 } as const
                 const route = routes[next as keyof typeof routes]
@@ -1051,8 +1072,12 @@ export function AccountOrganizationDetailPage({
               tabs={[
                 { value: 'overview', label: tt('Overview') },
                 { value: 'members', label: tt('Members') },
+                { value: 'roles', label: tt('Roles') },
+                { value: 'applications', label: tt('Applications') },
+                { value: 'resource-servers', label: tt('Resource Servers') },
                 { value: 'agents', label: tt('Agents') },
-                { value: 'roles', label: tt('Roles & grants') },
+                { value: 'webhooks', label: tt('Webhooks') },
+                { value: 'activity', label: tt('Activity') },
                 { value: 'settings', label: tt('Settings') },
               ]}
               value={activeSection}
@@ -1092,7 +1117,7 @@ export function AccountOrganizationDetailPage({
                   />
                 </div>
               </AccountTabContent>
-              <AccountTabContent surface value="agents">
+              <AccountTabContent surface value={content && section === 'agents' ? '__legacy-agents' : 'agents'}>
                 <AccountRows>
                   {agents.map((agent) => (
                     <AccountRow
@@ -1122,7 +1147,7 @@ export function AccountOrganizationDetailPage({
                   </p>
                 ) : null}
               </AccountTabContent>
-              <AccountTabContent surface value="roles">
+              <AccountTabContent surface value={content && section === 'roles' ? '__legacy-roles' : 'roles'}>
                 {agentAccessGrantsQuery.isLoading ? (
                   <p className="text-sm text-muted-foreground">{tt('Loading Organization authority…')}</p>
                 ) : null}
@@ -1214,6 +1239,11 @@ export function AccountOrganizationDetailPage({
                   ) : null}
                 </AccountRows>
               </AccountTabContent>
+              {content ? (
+                <AccountTabContent surface value={section}>
+                  {content}
+                </AccountTabContent>
+              ) : null}
             </AccountTabs>
             <EditOrganizationDialog
               onClose={() => setEditOpen(false)}

@@ -53,17 +53,20 @@ export function AgentDetailPage({ agentId, section = 'overview' }: { agentId: st
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: consoleQueryKeys.agents })
       setRetireOpen(false)
-      await navigate({ search: {}, to: '/console/agents' })
+      if (context) {
+        await navigate({
+          params: { organizationId: context },
+          search: {},
+          to: '/organizations/$organizationId/agents',
+        })
+      } else {
+        await navigate({ search: {}, to: '/console/agents' })
+      }
     },
   })
   useEffect(() => {
-    if (context && section === 'settings') {
-      setTab('overview')
-      navigateConsoleTab(navigate, `/console/agents/${agentId}/overview`, context)
-      return
-    }
     setTab(section)
-  }, [agentId, context, navigate, section])
+  }, [section])
 
   const detailQueries = [agentQuery, hosts, requests, grants, audit]
   if (detailQueries.some((query) => query.isLoading)) return <LoadingState label={tt('Loading Agent')} />
@@ -76,22 +79,26 @@ export function AgentDetailPage({ agentId, section = 'overview' }: { agentId: st
     [...(requests.data?.items ?? []), ...(grants.data?.items ?? [])].map((item) => [item.resource.id, item.resource]),
   )
   const owner = `${agent.owner.displayName} · ${agent.owner.id}`
-  const tabs: AgentDetailSection[] = [
-    'overview',
-    'hosts',
-    'requests',
-    'grants',
-    'activity',
-    ...(!context ? (['settings'] as const) : []),
-  ]
+  const tabs: AgentDetailSection[] = ['overview', 'hosts', 'requests', 'grants', 'activity', 'settings']
 
   return (
     <>
       <div className="consoleDetailStack">
-        <Link className="consoleBackLink" search={context ? { context } : {}} to="/console/agents">
-          <ArrowLeft />
-          {tt('Agents')}
-        </Link>
+        {context ? (
+          <Link
+            className="consoleBackLink"
+            params={{ organizationId: context }}
+            to="/organizations/$organizationId/agents"
+          >
+            <ArrowLeft />
+            {tt('Agents')}
+          </Link>
+        ) : (
+          <Link className="consoleBackLink" to="/console/agents">
+            <ArrowLeft />
+            {tt('Agents')}
+          </Link>
+        )}
         <header className="consoleDetailHeader">
           <div>
             <div className="flex flex-wrap items-center gap-2">
@@ -108,7 +115,11 @@ export function AgentDetailPage({ agentId, section = 'overview' }: { agentId: st
           onValueChange={(value) => {
             const next = value as AgentDetailSection
             setTab(next)
-            navigateConsoleTab(navigate, `/console/agents/${agentId}/${next}`, context)
+            navigateConsoleTab(
+              navigate,
+              context ? `/organizations/${context}/agents/${agentId}/${next}` : `/console/agents/${agentId}/${next}`,
+              context,
+            )
           }}
           value={tab}
         >
@@ -146,29 +157,21 @@ export function AgentDetailPage({ agentId, section = 'overview' }: { agentId: st
           <TabsContent className="mt-5" value="activity">
             <AgentActivityTable events={events} resources={resources} />
           </TabsContent>
-          {!context ? (
-            <TabsContent className="mt-5" value="settings">
-              <div className="detailFlatRows">
-                <div className="detailFlatRow">
-                  <div>
-                    <strong>{tt('Retire Agent')}</strong>
-                    <span>
-                      {tt('Permanently ends active installations and grants while preserving audit history.')}
-                    </span>
-                  </div>
-                  <span>{agent.status === 'retired' ? tt('Already retired') : tt('Active')}</span>
-                  <Button
-                    disabled={agent.status === 'retired'}
-                    onClick={() => setRetireOpen(true)}
-                    variant="destructive"
-                  >
-                    <Trash2 />
-                    {tt('Retire')}
-                  </Button>
+          <TabsContent className="mt-5" value="settings">
+            <div className="detailFlatRows">
+              <div className="detailFlatRow">
+                <div>
+                  <strong>{tt('Retire Agent')}</strong>
+                  <span>{tt('Permanently ends active installations and grants while preserving audit history.')}</span>
                 </div>
+                <span>{agent.status === 'retired' ? tt('Already retired') : tt('Active')}</span>
+                <Button disabled={agent.status === 'retired'} onClick={() => setRetireOpen(true)} variant="destructive">
+                  <Trash2 />
+                  {tt('Retire')}
+                </Button>
               </div>
-            </TabsContent>
-          ) : null}
+            </div>
+          </TabsContent>
         </Tabs>
       </div>
       <DestructiveConfirmation

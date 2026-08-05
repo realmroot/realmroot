@@ -128,7 +128,7 @@ describe('Account Organization detail', () => {
 
     expect(await screen.findByRole('heading', { name: 'Family' })).toBeTruthy()
     expect(screen.queryByRole('link', { name: 'Open Console' })).toBeNull()
-    expect(screen.queryByRole('tab', { name: 'Activity' })).toBeNull()
+    expect(screen.getByRole('tab', { name: 'Activity' })).toBeTruthy()
 
     fireEvent.mouseDown(screen.getByRole('tab', { name: 'Members' }), { button: 0, ctrlKey: false })
     expect((await screen.findAllByText(store.profile.email)).length).toBeGreaterThan(1)
@@ -137,7 +137,7 @@ describe('Account Organization detail', () => {
     fireEvent.mouseDown(screen.getByRole('tab', { name: 'Agents' }), { button: 0, ctrlKey: false })
     expect(await screen.findByText('Family assistant')).toBeTruthy()
 
-    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Roles & grants' }), { button: 0, ctrlKey: false })
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Roles' }), { button: 0, ctrlKey: false })
     expect(await screen.findByText('Your Organization Roles')).toBeTruthy()
     expect(screen.getByText('Assigned Roles')).toBeTruthy()
     expect(screen.getByText('household:read')).toBeTruthy()

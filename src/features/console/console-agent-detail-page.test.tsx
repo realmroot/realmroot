@@ -69,7 +69,7 @@ describe('console Agent detail', () => {
     await waitFor(() => expect(requests).toContainEqual({ method: 'PUT', path: '/api/agents/agent-1/retirement' }))
   })
 
-  it('shows empty collections and protects Realm settings in Organization context', async () => {
+  it('shows empty collections and Organization-owned Agent settings in Organization context', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const request = requestDetails(input, init)
       return Promise.resolve(
@@ -92,8 +92,8 @@ describe('console Agent detail', () => {
     )
 
     expect(await screen.findByRole('heading', { name: 'Build Agent' })).toBeTruthy()
-    expect(screen.getByText('User')).toBeTruthy()
-    expect(screen.queryByRole('tab', { name: 'Settings' })).toBeNull()
+    expect(screen.getByRole('tab', { name: 'Settings' })).toBeTruthy()
+    expect(screen.getByText('Already retired')).toBeTruthy()
 
     const emptyTabs: Array<[string, string]> = [
       ['Installations', 'No installations'],

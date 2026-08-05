@@ -156,7 +156,7 @@ describe('Organization Role lifecycle', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
     fireEvent.click(screen.getByRole('button', { name: 'Delete Role' }))
     await waitFor(() => expect(requests.at(-1)).toEqual({ method: 'DELETE', body: null }))
-    await waitFor(() => expect(router.state.location.pathname).toBe('/console/roles'))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/organizations/org-1/roles'))
   })
 
   it('renders dynamic Role empty fields, empty scopes, and missing Organization context', async () => {

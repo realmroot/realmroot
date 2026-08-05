@@ -83,8 +83,8 @@ export function ApplicationDetailPage({
   })
   const organizationsQuery = useQuery({ queryKey: consoleQueryKeys.organizations, queryFn: listOrganizations })
   const usersQuery = useQuery({
-    queryKey: [...consoleQueryKeys.users, { limit: 100, purpose: 'application-audience' }],
-    queryFn: () => listUsers({ limit: 100 }),
+    queryKey: [...consoleQueryKeys.users, { limit: 100, organizationId: context, purpose: 'application-audience' }],
+    queryFn: () => listUsers({ limit: 100, organizationId: context }),
   })
   const application = query.data
   const secretsQuery = useQuery({
@@ -120,7 +120,11 @@ export function ApplicationDetailPage({
         exact: true,
         refetchType: 'none',
       })
-      await navigate({ search: context ? { context } : {}, to: '/console/applications' })
+      if (context) {
+        await navigate({ params: { organizationId: context }, to: '/organizations/$organizationId/applications' })
+      } else {
+        await navigate({ to: '/console/applications' })
+      }
       queryClient.removeQueries({ queryKey: detailKey })
     },
   })
@@ -142,10 +146,21 @@ export function ApplicationDetailPage({
   return (
     <>
       <div className="consoleDetailStack">
-        <Link className="consoleBackLink" search={context ? { context } : {}} to="/console/applications">
-          <ArrowLeft />
-          {tt('Applications')}
-        </Link>
+        {context ? (
+          <Link
+            className="consoleBackLink"
+            params={{ organizationId: context }}
+            to="/organizations/$organizationId/applications"
+          >
+            <ArrowLeft />
+            {tt('Applications')}
+          </Link>
+        ) : (
+          <Link className="consoleBackLink" to="/console/applications">
+            <ArrowLeft />
+            {tt('Applications')}
+          </Link>
+        )}
         <header className="consoleDetailHeader">
           <div>
             <div className="flex flex-wrap items-center gap-2">
@@ -164,7 +179,13 @@ export function ApplicationDetailPage({
           onValueChange={(value) => {
             const next = value as ApplicationDetailSection
             setSelectedTab(next)
-            navigateConsoleTab(navigate, `/console/applications/${applicationId}/${next}`, context)
+            navigateConsoleTab(
+              navigate,
+              context
+                ? `/organizations/${context}/applications/${applicationId}/${next}`
+                : `/console/applications/${applicationId}/${next}`,
+              context,
+            )
           }}
           value={selectedTab}
         >
@@ -216,6 +237,7 @@ export function ApplicationDetailPage({
         application={application}
         editor={editor}
         error={updateMutation.errorMessage}
+        fixedOwnerOrganizationId={context}
         onClose={() => setEditor(null)}
         onSave={(input) => updateMutation.mutate(input)}
         organizations={organizations}
@@ -630,6 +652,7 @@ function ApplicationEditor({
   application,
   editor,
   error,
+  fixedOwnerOrganizationId,
   onClose,
   onSave,
   organizations,
@@ -639,6 +662,7 @@ function ApplicationEditor({
   application: ApplicationResponse
   editor: Editor
   error?: string | null
+  fixedOwnerOrganizationId?: string
   onClose: () => void
   onSave: (input: Parameters<typeof updateApplication>[1]) => void
   organizations: OrganizationResponse[]
@@ -721,7 +745,13 @@ function ApplicationEditor({
           {editor === 'authorization' ? <AuthorizationEditor application={application} onSave={onSave} /> : null}
           {editor === 'claims' ? <ClaimsEditor claims={claims} onChange={setClaims} /> : null}
           {editor === 'audience' ? (
-            <AudienceEditor application={application} onSave={onSave} organizations={organizations} users={users} />
+            <AudienceEditor
+              application={application}
+              fixedOwnerOrganizationId={fixedOwnerOrganizationId}
+              onSave={onSave}
+              organizations={organizations}
+              users={users}
+            />
           ) : null}
           {editor === 'consent' ? <ConsentEditor application={application} onSave={onSave} /> : null}
           {error ? (
@@ -845,11 +875,13 @@ function ClaimsEditor({
 
 function AudienceEditor({
   application,
+  fixedOwnerOrganizationId,
   onSave,
   organizations,
   users,
 }: {
   application: ApplicationResponse
+  fixedOwnerOrganizationId?: string
   onSave: (input: Parameters<typeof updateApplication>[1]) => void
   organizations: OrganizationResponse[]
   users: Parameters<typeof userOptions>[0]
@@ -867,11 +899,13 @@ function AudienceEditor({
         onSave({ ownerOrganizationId, audience: { mode, organizationIds, userIds } })
       }}
     >
-      <OrganizationOwnerField
-        onChange={setOwnerOrganizationId}
-        organizations={organizations}
-        value={ownerOrganizationId}
-      />
+      {fixedOwnerOrganizationId ? null : (
+        <OrganizationOwnerField
+          onChange={setOwnerOrganizationId}
+          organizations={organizations}
+          value={ownerOrganizationId}
+        />
+      )}
       <Field
         help={tt('Audience gates who may authorize the client; requested scopes still constrain access.')}
         label={tt('Who can sign in')}

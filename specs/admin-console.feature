@@ -291,6 +291,8 @@ Feature: Admin Console
     Given a developer administers one Organization without Realm platform authority
     When the developer browses or manages resources in that Organization Workspace
     Then applications and API resource servers are limited to that Organization's owned inventory
+    And Webhooks and audit activity are limited to that Organization
+    And Organization Roles can be defined and assigned without entering Console
     And Agent identities and activity are limited to authorized Organizations
     And member inventory exposes identity details without Realm-wide authentication state
     And direct detail or mutation requests for another Organization's resources are rejected

@@ -178,14 +178,23 @@ export function ApplicationsTableContent({
           applications.map((application) => (
             <TableRow key={application.id}>
               <TableCell className="min-w-0">
-                <Link
-                  className="block truncate font-medium hover:underline"
-                  params={{ applicationId: application.id }}
-                  search={context ? { context } : {}}
-                  to="/console/applications/$applicationId"
-                >
-                  {application.name}
-                </Link>
+                {context ? (
+                  <Link
+                    className="block truncate font-medium hover:underline"
+                    params={{ applicationId: application.id, organizationId: context }}
+                    to="/organizations/$organizationId/applications/$applicationId"
+                  >
+                    {application.name}
+                  </Link>
+                ) : (
+                  <Link
+                    className="block truncate font-medium hover:underline"
+                    params={{ applicationId: application.id }}
+                    to="/console/applications/$applicationId"
+                  >
+                    {application.name}
+                  </Link>
+                )}
                 <div className="truncate font-mono text-xs text-muted-foreground" title={application.clientId}>
                   {application.clientId}
                 </div>

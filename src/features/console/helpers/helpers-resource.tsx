@@ -151,7 +151,7 @@ export function DetailTabs({
   )
 }
 export function navigateConsoleTab(navigate: ReturnType<typeof useNavigate>, href: string, _context?: string) {
-  if (window.location.pathname.startsWith('/console/'))
+  if (window.location.pathname.startsWith('/console/') || window.location.pathname.startsWith('/organizations/'))
     void navigate({
       to: href,
     })

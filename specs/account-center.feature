@@ -136,7 +136,7 @@ Feature: Account Center
   Scenario: Organization members manage their shared context
     When I create an Organization from Account Center
     Then I become its Owner
-    And I can open its route-backed Organization Workspace with members, Roles, Agents, technical resources, activity, and settings
+    And I can open its route-backed Organization Workspace with members, Roles, Applications, Resource Servers, Agents, Webhooks, activity, and settings
     And its Agent identities, my Better Auth membership Roles, and active Agent access grants come from canonical resource collections
     And I can switch the active Organization without changing Developer Console eligibility
     When I update its profile or invite a member with one or more Roles

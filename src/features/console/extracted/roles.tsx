@@ -22,7 +22,7 @@ import { useConsoleScope } from '@/lib/console-context'
 import { tt } from '@/lib/i18n'
 import type { RoleDetailSection } from '../console-shared'
 import { ErrorState, LoadingState, MutationError } from '../helpers/helpers-dialogs'
-import { ResourcePage } from '../helpers/helpers-resource'
+import { DetailTabs, navigateConsoleTab, ResourcePage } from '../helpers/helpers-resource'
 
 function rolesKey(organizationId: string) {
   return ['console', 'organizations', organizationId, 'roles'] as const
@@ -47,9 +47,9 @@ export function RolesPage() {
   if (!organizationId) {
     return (
       <ResourcePage
-        description={tt('Roles exist only inside an Organization. Select an Organization context to continue.')}
+        description={tt('Roles exist only inside an Organization. Open a Role from its Organization Workspace.')}
         empty
-        emptyDescription={tt('Choose an Organization from the Console context switcher.')}
+        emptyDescription={tt('Choose an Organization from the Organizations page.')}
         emptyTitle={tt('Organization context required')}
         title={tt('Roles')}
       >
@@ -98,8 +98,8 @@ export function RolesPage() {
               <TableCell>
                 <Link
                   className="font-medium hover:underline"
-                  params={{ roleId: role.key }}
-                  to="/console/roles/$roleId/overview"
+                  params={{ organizationId, roleId: role.key }}
+                  to="/organizations/$organizationId/roles/$roleId/overview"
                 >
                   {role.displayName}
                 </Link>
@@ -149,7 +149,7 @@ export function RoleDetailPage({ roleId, section = 'overview' }: { roleId: strin
     mutationFn: () => deleteRole(organizationId!, roleId),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: rolesKey(organizationId!) })
-      await navigate({ to: '/console/roles' })
+      await navigate({ params: { organizationId: organizationId! }, to: '/organizations/$organizationId/roles' })
     },
   })
   if (!organizationId) return <ErrorState error={new Error('Organization context is required.')} />
@@ -198,10 +198,22 @@ export function RoleDetailPage({ roleId, section = 'overview' }: { roleId: strin
     >
       <Link
         className="mb-4 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
-        to="/console/roles"
+        params={{ organizationId }}
+        to="/organizations/$organizationId/roles"
       >
         <ArrowLeft /> {tt('Roles')}
       </Link>
+      <DetailTabs
+        label={tt('Role detail sections')}
+        onChange={(next) =>
+          navigateConsoleTab(navigate, `/organizations/${organizationId}/roles/${roleId}/${next}`, organizationId)
+        }
+        tabs={[
+          { label: tt('Overview'), value: 'overview' },
+          { label: tt('Permissions'), value: 'permissions' },
+        ]}
+        value={section === 'settings' ? 'overview' : section}
+      />
       {section === 'overview' ? <RoleOverview role={role} /> : <RoleScopes role={role} />}
     </ResourcePage>
   )

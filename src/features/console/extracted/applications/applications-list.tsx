@@ -37,8 +37,8 @@ export function ApplicationsPage() {
     queryFn: listOrganizations,
   })
   const usersQuery = useQuery({
-    queryKey: [...consoleQueryKeys.users, { limit: 100, purpose: 'application-audience' }],
-    queryFn: () => listUsers({ limit: 100 }),
+    queryKey: [...consoleQueryKeys.users, { limit: 100, organizationId: context, purpose: 'application-audience' }],
+    queryFn: () => listUsers({ limit: 100, organizationId: context }),
   })
   const queryClient = useQueryClient()
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -83,7 +83,11 @@ export function ApplicationsPage() {
   return (
     <ResourcePage
       title={tt('Applications')}
-      description={tt('Manage OIDC clients, redirect URIs, grant types, and client security posture.')}
+      description={tt(
+        context
+          ? 'Manage this Organization’s OIDC clients, redirect URIs, grant types, and client security posture.'
+          : 'Manage OIDC clients, redirect URIs, grant types, and client security posture across this Realm.',
+      )}
       action={
         <Button onClick={() => setDialogOpen(true)}>
           <Plus data-icon="inline-start" /> {tt('New application')}{' '}
@@ -92,6 +96,7 @@ export function ApplicationsPage() {
       auxiliary={
         <CreateApplicationDialog
           defaultOwnerOrganizationId={context}
+          fixedOwnerOrganizationId={context}
           key={context ?? 'realm'}
           organizations={organizations}
           users={users}
@@ -120,14 +125,20 @@ export function ApplicationsPage() {
             placeholder={tt('Search applications')}
             value={search}
           />
-          <SelectInput aria-label={tt('Filter owner')} onChange={(event) => setOwner(event.target.value)} value={owner}>
-            <option value="">{tt('Any owner')}</option>
-            {owners.map((organization) => (
-              <option key={organization.id} value={organization.id}>
-                {organization.label}
-              </option>
-            ))}
-          </SelectInput>
+          {context ? null : (
+            <SelectInput
+              aria-label={tt('Filter owner')}
+              onChange={(event) => setOwner(event.target.value)}
+              value={owner}
+            >
+              <option value="">{tt('Any owner')}</option>
+              {owners.map((organization) => (
+                <option key={organization.id} value={organization.id}>
+                  {organization.label}
+                </option>
+              ))}
+            </SelectInput>
+          )}
           <SelectInput aria-label={tt('Filter type')} onChange={(event) => setType(event.target.value)} value={type}>
             <option value="">{tt('Any type')}</option>
             <option value="confidential_web">{tt('Web application')}</option>

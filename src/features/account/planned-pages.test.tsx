@@ -625,7 +625,7 @@ describe('planned Account Center journeys', () => {
     expect(await screen.findByText('Member')).toBeTruthy()
     openTab('Agents')
     expect(await screen.findByText('No Organization Agents')).toBeTruthy()
-    openTab('Roles & grants')
+    openTab('Roles')
     expect(await screen.findByText('Your Organization Roles')).toBeTruthy()
     expect(screen.getByText('No active Agent access grants')).toBeTruthy()
     openTab('Settings')

@@ -51,6 +51,7 @@ export function createApplicationGrantTypes(clientType: string, deviceLoginEnabl
 export function CreateApplicationDialog({
   createdApplication,
   defaultOwnerOrganizationId,
+  fixedOwnerOrganizationId,
   error,
   onClose,
   onSubmit,
@@ -65,6 +66,7 @@ export function CreateApplicationDialog({
       })
     | null
   defaultOwnerOrganizationId?: string
+  fixedOwnerOrganizationId?: string
   error: string | null
   onClose: () => void
   onSubmit: (input: z.infer<typeof createApplicationRequestSchema>) => void
@@ -86,12 +88,13 @@ export function CreateApplicationDialog({
   useEffect(() => {
     if (!open || ownerOrganizationId) return
     setOwnerOrganizationId(
-      defaultOwnerOrganizationId ??
+      fixedOwnerOrganizationId ??
+        defaultOwnerOrganizationId ??
         organizations.find((organization) => organization.id === 'org_platform')?.id ??
         organizations[0]?.id ??
         '',
     )
-  }, [defaultOwnerOrganizationId, open, organizations, ownerOrganizationId])
+  }, [defaultOwnerOrganizationId, fixedOwnerOrganizationId, open, organizations, ownerOrganizationId])
   return (
     <Dialog
       onOpenChange={(next) => {
@@ -140,7 +143,11 @@ export function CreateApplicationDialog({
           </div>
           <DialogFooter className="m-0">
             <LinkButton
-              href={`/console/applications/${createdApplication.id}/settings${defaultOwnerOrganizationId ? `?context=${encodeURIComponent(defaultOwnerOrganizationId)}` : ''}`}
+              href={
+                fixedOwnerOrganizationId
+                  ? `/organizations/${fixedOwnerOrganizationId}/applications/${createdApplication.id}/settings`
+                  : `/console/applications/${createdApplication.id}/settings`
+              }
               variant="secondary"
             >
               {' '}
@@ -193,11 +200,13 @@ export function CreateApplicationDialog({
               placeholder="customer-portal"
             />
           </Field>
-          <OrganizationOwnerField
-            onChange={setOwnerOrganizationId}
-            organizations={organizations}
-            value={ownerOrganizationId}
-          />
+          {fixedOwnerOrganizationId ? null : (
+            <OrganizationOwnerField
+              onChange={setOwnerOrganizationId}
+              organizations={organizations}
+              value={ownerOrganizationId}
+            />
+          )}
           <ApplicationTypeCards
             onChange={(clientType) => {
               setValue(setForm, 'clientType', clientType)

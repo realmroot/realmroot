@@ -32,7 +32,11 @@ export function AgentsPage() {
   })
   return (
     <ResourcePage
-      description={tt('Review stable Agent identities belonging to people and Organizations across this Realm.')}
+      description={tt(
+        context
+          ? 'Review stable Agent identities belonging to this Organization.'
+          : 'Review stable Agent identities belonging to people and Organizations across this Realm.',
+      )}
       empty={agents.length === 0}
       emptyDescription={
         search ? tt('No Agents match the current filters.') : tt('Agents appear here after an enrollment is approved.')
@@ -55,15 +59,17 @@ export function AgentsPage() {
               value={search}
             />
           </InputGroup>
-          <SelectInput
-            aria-label={tt('Filter owner type')}
-            onChange={(event) => setOwnerType(event.target.value)}
-            value={ownerType}
-          >
-            <option value="any">{tt('Any owner type')}</option>
-            <option value="user">{tt('User')}</option>
-            <option value="organization">{tt('Organization')}</option>
-          </SelectInput>
+          {context ? null : (
+            <SelectInput
+              aria-label={tt('Filter owner type')}
+              onChange={(event) => setOwnerType(event.target.value)}
+              value={ownerType}
+            >
+              <option value="any">{tt('Any owner type')}</option>
+              <option value="user">{tt('User')}</option>
+              <option value="organization">{tt('Organization')}</option>
+            </SelectInput>
+          )}
           <SelectInput
             aria-label={tt('Filter Agent status')}
             onChange={(event) => setStatus(event.target.value)}
@@ -107,17 +113,25 @@ function AgentRow({ agent, context }: { agent: ManagementAgent; context?: string
   return (
     <TableRow className="cursor-pointer">
       <TableCell>
-        <Link
-          className="block"
-          params={{ agentId: agent.id }}
-          search={context ? { context } : {}}
-          to="/console/agents/$agentId"
-        >
-          <strong>{agent.name}</strong>
-          <span className="block max-w-60 truncate font-mono text-xs text-muted-foreground">
-            {agent.issuer} · {agent.subject}
-          </span>
-        </Link>
+        {context ? (
+          <Link
+            className="block"
+            params={{ agentId: agent.id, organizationId: context }}
+            to="/organizations/$organizationId/agents/$agentId"
+          >
+            <strong>{agent.name}</strong>
+            <span className="block max-w-60 truncate font-mono text-xs text-muted-foreground">
+              {agent.issuer} · {agent.subject}
+            </span>
+          </Link>
+        ) : (
+          <Link className="block" params={{ agentId: agent.id }} to="/console/agents/$agentId">
+            <strong>{agent.name}</strong>
+            <span className="block max-w-60 truncate font-mono text-xs text-muted-foreground">
+              {agent.issuer} · {agent.subject}
+            </span>
+          </Link>
+        )}
       </TableCell>
       <TableCell>{agent.activeGrantCount.toLocaleString()}</TableCell>
       <TableCell>
@@ -131,14 +145,23 @@ function AgentRow({ agent, context }: { agent: ManagementAgent; context?: string
       </TableCell>
       <TableCell className="whitespace-nowrap">{new Date(agent.updatedAt).toLocaleDateString()}</TableCell>
       <TableCell className="text-right">
-        <Link
-          aria-label={tt('Open {{name}}', { name: agent.name })}
-          params={{ agentId: agent.id }}
-          search={context ? { context } : {}}
-          to="/console/agents/$agentId"
-        >
-          <ChevronRight className="ml-auto size-4 text-muted-foreground" />
-        </Link>
+        {context ? (
+          <Link
+            aria-label={tt('Open {{name}}', { name: agent.name })}
+            params={{ agentId: agent.id, organizationId: context }}
+            to="/organizations/$organizationId/agents/$agentId"
+          >
+            <ChevronRight className="ml-auto size-4 text-muted-foreground" />
+          </Link>
+        ) : (
+          <Link
+            aria-label={tt('Open {{name}}', { name: agent.name })}
+            params={{ agentId: agent.id }}
+            to="/console/agents/$agentId"
+          >
+            <ChevronRight className="ml-auto size-4 text-muted-foreground" />
+          </Link>
+        )}
       </TableCell>
     </TableRow>
   )

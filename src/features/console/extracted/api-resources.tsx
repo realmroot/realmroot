@@ -95,7 +95,11 @@ export function ApiResourcesPage() {
   return (
     <ResourcePage
       title={tt('Resource servers')}
-      description={tt('Review protected APIs, their authorization model, ownership, and lifecycle across this Realm.')}
+      description={tt(
+        context
+          ? 'Manage protected APIs owned by this Organization and their authorization lifecycle.'
+          : 'Review protected APIs, their authorization model, ownership, and lifecycle across this Realm.',
+      )}
       action={
         <Button onClick={() => setDialogOpen(true)}>
           <Plus />
@@ -106,6 +110,7 @@ export function ApiResourcesPage() {
         <ApiResourceCreateDialog
           connectors={connectors}
           defaultOwnerOrganizationId={context}
+          fixedOwnerOrganizationId={context}
           error={createMutation.errorMessage}
           key={context ?? 'realm'}
           onClose={() => setDialogOpen(false)}
@@ -148,14 +153,20 @@ export function ApiResourcesPage() {
             <option value="disabled">{tt('Disabled')}</option>
             <option value="archived">{tt('Archived')}</option>
           </SelectInput>
-          <SelectInput aria-label={tt('Filter owner')} onChange={(event) => setOwner(event.target.value)} value={owner}>
-            <option value="">{tt('Any owner')}</option>
-            {organizationOptions(organizations).map((organization) => (
-              <option key={organization.id} value={organization.id}>
-                {organization.label}
-              </option>
-            ))}
-          </SelectInput>
+          {context ? null : (
+            <SelectInput
+              aria-label={tt('Filter owner')}
+              onChange={(event) => setOwner(event.target.value)}
+              value={owner}
+            >
+              <option value="">{tt('Any owner')}</option>
+              {organizationOptions(organizations).map((organization) => (
+                <option key={organization.id} value={organization.id}>
+                  {organization.label}
+                </option>
+              ))}
+            </SelectInput>
+          )}
         </ListToolbar>
       }
     >
@@ -176,14 +187,23 @@ export function ApiResourcesPage() {
             visibleResources.map((resource) => (
               <TableRow key={resource.id}>
                 <TableCell className="min-w-0">
-                  <Link
-                    className="block truncate font-medium hover:underline"
-                    params={{ resourceId: resource.id }}
-                    search={context ? { context } : {}}
-                    to="/console/api-resources/$resourceId"
-                  >
-                    {resource.name}
-                  </Link>
+                  {context ? (
+                    <Link
+                      className="block truncate font-medium hover:underline"
+                      params={{ organizationId: context, resourceId: resource.id }}
+                      to="/organizations/$organizationId/resource-servers/$resourceId"
+                    >
+                      {resource.name}
+                    </Link>
+                  ) : (
+                    <Link
+                      className="block truncate font-medium hover:underline"
+                      params={{ resourceId: resource.id }}
+                      to="/console/api-resources/$resourceId"
+                    >
+                      {resource.name}
+                    </Link>
+                  )}
                   <span className="block truncate font-mono text-xs text-muted-foreground" title={resource.id}>
                     {resource.id}
                   </span>
@@ -207,13 +227,18 @@ export function ApiResourcesPage() {
                 <TableCell>{formatDate(resource.updatedAt)}</TableCell>
                 <TableCell className="text-right">
                   <Button asChild size="sm" variant="ghost">
-                    <Link
-                      params={{ resourceId: resource.id }}
-                      search={context ? { context } : {}}
-                      to="/console/api-resources/$resourceId"
-                    >
-                      {tt('Open')}
-                    </Link>
+                    {context ? (
+                      <Link
+                        params={{ organizationId: context, resourceId: resource.id }}
+                        to="/organizations/$organizationId/resource-servers/$resourceId"
+                      >
+                        {tt('Open')}
+                      </Link>
+                    ) : (
+                      <Link params={{ resourceId: resource.id }} to="/console/api-resources/$resourceId">
+                        {tt('Open')}
+                      </Link>
+                    )}
                   </Button>
                 </TableCell>
               </TableRow>
@@ -242,6 +267,7 @@ export function ApiResourcesPage() {
 function ApiResourceCreateDialog({
   connectors,
   defaultOwnerOrganizationId,
+  fixedOwnerOrganizationId,
   error,
   onClose,
   onSubmit,
@@ -251,6 +277,7 @@ function ApiResourceCreateDialog({
 }: {
   connectors: Array<{ id: string; displayName: string; issuer: string | null }>
   defaultOwnerOrganizationId?: string
+  fixedOwnerOrganizationId?: string
   error: string | null
   onClose: () => void
   onSubmit: (input: Parameters<typeof createApiResource>[0]) => void
@@ -268,12 +295,13 @@ function ApiResourceCreateDialog({
   useEffect(() => {
     if (!open || ownerOrganizationId) return
     setOwnerOrganizationId(
-      defaultOwnerOrganizationId ??
+      fixedOwnerOrganizationId ??
+        defaultOwnerOrganizationId ??
         organizations.find((organization) => organization.id === 'org_platform')?.id ??
         organizations[0]?.id ??
         '',
     )
-  }, [defaultOwnerOrganizationId, open, organizations, ownerOrganizationId])
+  }, [defaultOwnerOrganizationId, fixedOwnerOrganizationId, open, organizations, ownerOrganizationId])
   return (
     <Dialog open={open}>
       <FormDialog
@@ -318,11 +346,13 @@ function ApiResourceCreateDialog({
             type="url"
           />
         </Field>
-        <OrganizationOwnerField
-          onChange={setOwnerOrganizationId}
-          organizations={organizations}
-          value={ownerOrganizationId}
-        />
+        {fixedOwnerOrganizationId ? null : (
+          <OrganizationOwnerField
+            onChange={setOwnerOrganizationId}
+            organizations={organizations}
+            value={ownerOrganizationId}
+          />
+        )}
         <Field
           help={tt(
             'Native uses Realmroot authorization. Selecting a connector delegates authorization to that provider. This cannot be changed after creation.',
@@ -468,10 +498,21 @@ export function ApiResourceDetailPage({
   return (
     <>
       <div className="consoleDetailStack">
-        <Link className="consoleBackLink" search={context ? { context } : {}} to="/console/api-resources">
-          <ArrowLeft />
-          {tt('Resource servers')}
-        </Link>
+        {context ? (
+          <Link
+            className="consoleBackLink"
+            params={{ organizationId: context }}
+            to="/organizations/$organizationId/resource-servers"
+          >
+            <ArrowLeft />
+            {tt('Resource servers')}
+          </Link>
+        ) : (
+          <Link className="consoleBackLink" to="/console/api-resources">
+            <ArrowLeft />
+            {tt('Resource servers')}
+          </Link>
+        )}
         <header className="consoleDetailHeader">
           <div>
             <div className="flex flex-wrap items-center gap-2">
@@ -490,7 +531,13 @@ export function ApiResourceDetailPage({
           onValueChange={(value) => {
             const next = value as ApiResourceDetailSection
             setSelectedTab(next)
-            navigateConsoleTab(navigate, `/console/api-resources/${resourceId}/${next}`, context)
+            navigateConsoleTab(
+              navigate,
+              context
+                ? `/organizations/${context}/resource-servers/${resourceId}/${next}`
+                : `/console/api-resources/${resourceId}/${next}`,
+              context,
+            )
           }}
           value={selectedTab}
         >
@@ -536,6 +583,7 @@ export function ApiResourceDetailPage({
         )}
         editor={editor}
         error={updateMutation.errorMessage}
+        fixedOwnerOrganizationId={context}
         onClose={() => setEditor(null)}
         onSave={(input) => updateMutation.mutate(input)}
         organizations={organizations}
@@ -743,14 +791,17 @@ function ResourceAuthority({
             rows.map(({ permissions, role }) => (
               <TableRow key={role.key}>
                 <TableCell>
-                  <Link
-                    className="font-medium hover:underline"
-                    params={{ roleId: role.key }}
-                    search={context ? { context } : {}}
-                    to="/console/roles/$roleId"
-                  >
-                    {role.displayName}
-                  </Link>
+                  {context ? (
+                    <Link
+                      className="font-medium hover:underline"
+                      params={{ organizationId: context, roleId: role.key }}
+                      to="/organizations/$organizationId/roles/$roleId"
+                    >
+                      {role.displayName}
+                    </Link>
+                  ) : (
+                    <span className="font-medium">{role.displayName}</span>
+                  )}
                   <code className="mt-0.5 block text-xs text-muted-foreground">{role.key}</code>
                 </TableCell>
                 <TableCell>
@@ -928,6 +979,7 @@ function ResourceEditorSheet({
   connectors,
   editor,
   error,
+  fixedOwnerOrganizationId,
   onClose,
   onSave,
   organizations,
@@ -937,6 +989,7 @@ function ResourceEditorSheet({
   connectors: Array<{ id: string; displayName: string; issuer: string | null; enabled: boolean }>
   editor: ResourceEditor
   error?: string | null
+  fixedOwnerOrganizationId?: string
   onClose: () => void
   onSave: (input: Parameters<typeof updateApiResource>[1]) => void
   organizations: OrganizationResponse[]
@@ -1075,11 +1128,13 @@ function ResourceEditorSheet({
               })
             }}
           >
-            <OrganizationOwnerField
-              onChange={setOwnerOrganizationId}
-              organizations={organizations}
-              value={ownerOrganizationId}
-            />
+            {fixedOwnerOrganizationId ? null : (
+              <OrganizationOwnerField
+                onChange={setOwnerOrganizationId}
+                organizations={organizations}
+                value={ownerOrganizationId}
+              />
+            )}
             <Field
               help={tt('Roles and grants still determine the scopes an eligible actor receives.')}
               label={tt('Eligible actors')}
