@@ -5,6 +5,7 @@ src/routeTree.gen.js
 .wrangler
 wrangler.deployment.toml
 .playwright-cli
+.tanstack/
 .dev.vars
 *.local
 coverage
