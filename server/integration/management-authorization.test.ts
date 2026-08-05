@@ -885,7 +885,11 @@ describe('authorization management over real D1', () => {
           body: JSON.stringify({ name: 'Owned Portal 2' }),
         })
       ).status,
-    ).toBe(200)
+    ).toBe(403)
+    const unchangedApplication = await harness.request(`/api/applications/${ownedApplication.id}`, {
+      headers: { cookie: developerCookie },
+    })
+    await expect(unchangedApplication.json()).resolves.toMatchObject({ name: 'Owned Portal' })
 
     const realmInventory = await harness.request('/api/applications', { headers: { cookie: adminCookie } })
     await expect(realmInventory.json()).resolves.toMatchObject({ pagination: { total: 2 } })

@@ -2,7 +2,7 @@ import { createApp } from '@server/http/app'
 import { unifiedOpenApi } from '@server/http/openapi/management'
 import { protectedResourceCollectionRoutes } from '@shared/api/management'
 import { realmrootOAuthScopes } from '@shared/authz'
-import { managementOperationPolicy } from '@shared/management-authorization'
+import { managementOperationPolicy, managementPolicyOperationKeys } from '@shared/management-authorization'
 import { calculateJwkThumbprint, exportJWK, generateKeyPair, SignJWT } from 'jose'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -42,6 +42,14 @@ describe('management routes 1', () => {
     )
 
     expect(openApiOperations()).toEqual(mountedManagementOperations(app))
+
+    const documentedPolicyOperations = openApiOperationObjects()
+      .filter((operation) =>
+        managementOperationPolicy(operation.method, operation.key.slice(operation.method.length + 1)),
+      )
+      .map((operation) => operation.key)
+      .sort()
+    expect(managementPolicyOperationKeys()).toEqual(documentedPolicyOperations)
 
     const operationIds = openApiOperationObjects().map((operation) => operation.operationId)
     expect(operationIds).not.toContain(undefined)

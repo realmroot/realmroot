@@ -3,12 +3,12 @@ import { type ProtectedResourceScope, protectedResourceScopes, type RealmrootAut
 export interface ManagementOperationPolicy {
   scope: ProtectedResourceScope
   authorities: readonly RealmrootAuthorityKind[]
-  sessionAuthorities: readonly RealmrootAuthorityKind[]
   actor: 'principal' | 'human-controller'
 }
 
 interface ManagementPolicyRule extends ManagementOperationPolicy {
   method: string
+  pathTemplate: string
   path: RegExp
 }
 
@@ -25,10 +25,10 @@ const everyAuthority = ['realm', 'organization', 'account'] as const
  * are denied instead of inheriting policy from a broad path prefix.
  */
 const managementPolicyRules: readonly ManagementPolicyRule[] = [
-  ...rules(['POST'], ['assets'], 'applications:write', realmOrOrganization, realmOrOrganization, 'human-controller'),
+  ...rules(['POST'], ['assets'], 'applications:write', realmOrOrganization, 'human-controller'),
 
-  ...rules(['GET'], ['organizations'], 'organizations:read', realmOrOrganization, realmOrOrganization),
-  ...rules(['POST'], ['organizations'], 'organizations:write', realm, realm, 'human-controller'),
+  ...rules(['GET'], ['organizations'], 'organizations:read', realmOrOrganization),
+  ...rules(['POST'], ['organizations'], 'organizations:write', realm, 'human-controller'),
   ...rules(
     ['GET'],
     [
@@ -40,29 +40,36 @@ const managementPolicyRules: readonly ManagementPolicyRule[] = [
     ],
     'organizations:read',
     realmOrOrganization,
-    realmOrOrganization,
   ),
   ...rules(
     ['PATCH', 'DELETE'],
     ['organizations/{organizationId}'],
     'organizations:write',
     realmOrOrganization,
-    realm,
     'human-controller',
   ),
   ...rules(
-    ['POST', 'PATCH', 'DELETE'],
-    [
-      'organizations/{organizationId}/members',
-      'organizations/{organizationId}/members/{memberId}',
-      'organizations/{organizationId}/invitations/{invitationId}',
-    ],
+    ['POST'],
+    ['organizations/{organizationId}/members'],
     'organizations:write',
     realmOrOrganization,
-    realm,
     'human-controller',
   ),
-  ...rules(['POST'], ['organizations/{organizationId}/invitations'], 'organizations:write', realmOrOrganization, realm),
+  ...rules(
+    ['PATCH', 'DELETE'],
+    ['organizations/{organizationId}/members/{memberId}'],
+    'organizations:write',
+    realmOrOrganization,
+    'human-controller',
+  ),
+  ...rules(
+    ['DELETE'],
+    ['organizations/{organizationId}/invitations/{invitationId}'],
+    'organizations:write',
+    realmOrOrganization,
+    'human-controller',
+  ),
+  ...rules(['POST'], ['organizations/{organizationId}/invitations'], 'organizations:write', realmOrOrganization),
 
   ...rules(
     ['GET'],
@@ -78,53 +85,33 @@ const managementPolicyRules: readonly ManagementPolicyRule[] = [
     ],
     'users:read',
     realm,
-    realmOrOrganization,
   ),
+  ...rules(['POST'], ['users', 'users/{userId}/password-reset-requests'], 'users:write', realm, 'human-controller'),
+  ...rules(['PATCH', 'DELETE'], ['users/{userId}'], 'users:write', realm, 'human-controller'),
+  ...rules(['PUT', 'DELETE'], ['users/{userId}/suspension'], 'users:write', realm, 'human-controller'),
   ...rules(
-    ['POST', 'PATCH', 'PUT', 'DELETE'],
-    [
-      'users',
-      'users/{userId}',
-      'users/{userId}/suspension',
-      'users/{userId}/password-reset-requests',
-      'users/{userId}/sessions',
-      'users/{userId}/sessions/{sessionId}',
-      'users/{userId}/passkeys/{passkeyId}',
-    ],
+    ['DELETE'],
+    ['users/{userId}/sessions', 'users/{userId}/sessions/{sessionId}', 'users/{userId}/passkeys/{passkeyId}'],
     'users:write',
-    realm,
     realm,
     'human-controller',
   ),
 
-  ...rules(
-    ['GET'],
-    ['access/roles', 'access/roles/{roleId}', 'access/roles/{roleId}/scopes'],
-    'roles:read',
-    realm,
-    realmOrOrganization,
-  ),
-  ...rules(
-    ['POST', 'PATCH', 'PUT', 'DELETE'],
-    ['access/roles', 'access/roles/{roleId}', 'access/roles/{roleId}/scopes'],
-    'roles:write',
-    realm,
-    realm,
-    'human-controller',
-  ),
+  ...rules(['GET'], ['access/roles', 'access/roles/{roleId}', 'access/roles/{roleId}/scopes'], 'roles:read', realm),
+  ...rules(['POST'], ['access/roles'], 'roles:write', realm, 'human-controller'),
+  ...rules(['PATCH', 'DELETE'], ['access/roles/{roleId}'], 'roles:write', realm, 'human-controller'),
+  ...rules(['PUT'], ['access/roles/{roleId}/scopes'], 'roles:write', realm, 'human-controller'),
   ...rules(
     ['GET'],
     ['access/assignments', 'access/assignments/{assignmentId}', 'access/assignments/{assignmentId}/revocation'],
     'roles:read',
     realmOrOrganization,
-    realmOrOrganization,
   ),
-  ...rules(['POST'], ['access/assignments'], 'roles:write', realmOrOrganization, realmOrOrganization),
+  ...rules(['POST'], ['access/assignments'], 'roles:write', realmOrOrganization),
   ...rules(
     ['PUT'],
     ['access/assignments/{assignmentId}/revocation'],
     'roles:write',
-    realmOrOrganization,
     realmOrOrganization,
     'human-controller',
   ),
@@ -144,27 +131,34 @@ const managementPolicyRules: readonly ManagementPolicyRule[] = [
     ],
     'applications:read',
     realmOrOrganization,
-    realmOrOrganization,
   ),
-  ...rules(['POST'], ['applications'], 'applications:write', realmOrOrganization, realmOrOrganization),
+  ...rules(['POST'], ['applications'], 'applications:write', realmOrOrganization),
+  ...rules(['POST'], ['applications/{applicationId}/client-secrets'], 'applications:write', realmOrOrganization),
+  ...rules(
+    ['PATCH', 'DELETE'],
+    ['applications/{applicationId}'],
+    'applications:write',
+    realmOrOrganization,
+    'human-controller',
+  ),
+  ...rules(
+    ['PUT'],
+    ['applications/{applicationId}/redirect-uris', 'access/consents/{consentId}/revocation'],
+    'applications:write',
+    realmOrOrganization,
+    'human-controller',
+  ),
   ...rules(
     ['POST'],
-    ['applications/{applicationId}/client-secrets'],
+    ['applications/{applicationId}/federated-credentials'],
     'applications:write',
     realmOrOrganization,
-    realmOrOrganization,
+    'human-controller',
   ),
   ...rules(
-    ['PATCH', 'PUT', 'DELETE', 'POST'],
-    [
-      'applications/{applicationId}',
-      'applications/{applicationId}/redirect-uris',
-      'applications/{applicationId}/federated-credentials',
-      'applications/{applicationId}/federated-credentials/{credentialId}',
-      'access/consents/{consentId}/revocation',
-    ],
+    ['PATCH', 'DELETE'],
+    ['applications/{applicationId}/federated-credentials/{credentialId}'],
     'applications:write',
-    realmOrOrganization,
     realmOrOrganization,
     'human-controller',
   ),
@@ -179,21 +173,18 @@ const managementPolicyRules: readonly ManagementPolicyRule[] = [
     ],
     'resource-servers:read',
     realmOrOrganization,
-    realmOrOrganization,
   ),
-  ...rules(['POST'], ['resource-servers'], 'resource-servers:write', realmOrOrganization, realmOrOrganization),
+  ...rules(['POST'], ['resource-servers'], 'resource-servers:write', realmOrOrganization),
   ...rules(
     ['PUT', 'DELETE'],
     ['resource-servers/{resourceServerId}/archival'],
     'resource-servers:write',
-    realmOrOrganization,
     realmOrOrganization,
   ),
   ...rules(
     ['PATCH', 'DELETE'],
     ['resource-servers/{resourceServerId}'],
     'resource-servers:write',
-    realmOrOrganization,
     realmOrOrganization,
     'human-controller',
   ),
@@ -214,42 +205,26 @@ const managementPolicyRules: readonly ManagementPolicyRule[] = [
     ],
     'agents:read',
     everyAuthority,
-    everyAuthority,
   ),
-  ...rules(
-    ['PUT', 'DELETE'],
-    ['agents/{agentId}/retirement'],
-    'agents:write',
-    everyAuthority,
-    everyAuthority,
-    'human-controller',
-  ),
+  ...rules(['PUT', 'DELETE'], ['agents/{agentId}/retirement'], 'agents:write', everyAuthority, 'human-controller'),
   ...rules(
     ['PUT'],
     ['access/requests/{requestId}/decision', 'access/authorizations/{authorizationId}/revocation'],
     'agents:write',
     everyAuthority,
-    everyAuthority,
     'human-controller',
   ),
 
-  ...rules(['GET'], ['realm/audit-events'], 'audit-events:read', everyAuthority, everyAuthority),
+  ...rules(['GET'], ['realm/audit-events'], 'audit-events:read', everyAuthority),
 
   ...rules(
     ['GET'],
     ['connectors', 'connectors/templates', 'connectors/{connectorId}', 'connectors/{connectorId}/readiness'],
     'connectors:read',
     realm,
-    realm,
   ),
-  ...rules(
-    ['POST', 'PATCH', 'DELETE'],
-    ['connectors', 'connectors/{connectorId}'],
-    'connectors:write',
-    realm,
-    realm,
-    'human-controller',
-  ),
+  ...rules(['POST'], ['connectors'], 'connectors:write', realm, 'human-controller'),
+  ...rules(['PATCH', 'DELETE'], ['connectors/{connectorId}'], 'connectors:write', realm, 'human-controller'),
 
   ...rules(
     ['GET'],
@@ -263,27 +238,20 @@ const managementPolicyRules: readonly ManagementPolicyRule[] = [
     ],
     'webhooks:read',
     realmOrOrganization,
-    realmOrOrganization,
   ),
+  ...rules(['POST'], ['webhooks', 'webhooks/{webhookId}/secrets'], 'webhooks:write', realmOrOrganization),
+  ...rules(['PATCH', 'DELETE'], ['webhooks/{webhookId}'], 'webhooks:write', realmOrOrganization, 'human-controller'),
   ...rules(
     ['POST'],
-    ['webhooks', 'webhooks/{webhookId}/secrets'],
+    ['webhooks/{webhookId}/deliveries/{deliveryId}/attempts'],
     'webhooks:write',
-    realmOrOrganization,
-    realmOrOrganization,
-  ),
-  ...rules(
-    ['PATCH', 'DELETE', 'POST'],
-    ['webhooks/{webhookId}', 'webhooks/{webhookId}/deliveries/{deliveryId}/attempts'],
-    'webhooks:write',
-    realmOrOrganization,
     realmOrOrganization,
     'human-controller',
   ),
 
-  ...rules(['GET'], ['realm/security-policy'], 'security:read', realm, realm),
-  ...rules(['PATCH'], ['realm/security-policy'], 'security:write', realm, realm, 'human-controller'),
-  ...rules(['GET'], ['realm/configuration-status'], 'readiness:read', realm, realm),
+  ...rules(['GET'], ['realm/security-policy'], 'security:read', realm),
+  ...rules(['PATCH'], ['realm/security-policy'], 'security:write', realm, 'human-controller'),
+  ...rules(['GET'], ['realm/configuration-status'], 'readiness:read', realm),
   ...rules(
     ['GET'],
     [
@@ -297,21 +265,22 @@ const managementPolicyRules: readonly ManagementPolicyRule[] = [
     ],
     'settings:read',
     realm,
-    realm,
   ),
   ...rules(
-    ['PATCH', 'PUT'],
+    ['PATCH'],
+    ['realm', 'realm/sign-in-policy', 'realm/branding', 'realm/account-management-policy'],
+    'settings:write',
+    realm,
+    'human-controller',
+  ),
+  ...rules(
+    ['PUT'],
     [
-      'realm',
-      'realm/sign-in-policy',
-      'realm/branding',
-      'realm/account-management-policy',
       'realm/organization-creation-policy',
       'realm/developer-console-access-policy',
       'realm/email-delivery-configuration',
     ],
     'settings:write',
-    realm,
     realm,
     'human-controller',
   ),
@@ -329,7 +298,6 @@ export function managementOperationPolicy(method: string, path: string): Managem
   return {
     scope: policy.scope,
     authorities: policy.authorities,
-    sessionAuthorities: policy.sessionAuthorities,
     actor: policy.actor,
   }
 }
@@ -343,22 +311,31 @@ export function managementScopesForAuthority(authority: RealmrootAuthorityKind):
   return protectedResourceScopes.filter((scope) => allowed.has(scope))
 }
 
+export function managementPolicyOperationKeys(): string[] {
+  return managementPolicyRules
+    .filter((policy) => policy.method !== 'HEAD')
+    .map((policy) => `${policy.method} /${policy.pathTemplate.replace(/\{[^}]+}/g, '{param}')}`)
+    .sort()
+}
+
 function rules(
   methods: readonly string[],
   paths: readonly string[],
   scope: ProtectedResourceScope,
   authorities: readonly RealmrootAuthorityKind[],
-  sessionAuthorities: readonly RealmrootAuthorityKind[],
   actor: Actor = 'principal',
 ): ManagementPolicyRule[] {
+  if (methods.length > 1 && paths.length > 1) {
+    throw new Error('Management authorization rules must enumerate exact method and route combinations.')
+  }
   return methods.flatMap((method) =>
     (method === 'GET' ? ['GET', 'HEAD'] : [method]).flatMap((resolvedMethod) =>
       paths.map((path) => ({
         method: resolvedMethod,
+        pathTemplate: path,
         path: exactPath(path),
         scope,
         authorities,
-        sessionAuthorities,
         actor,
       })),
     ),

@@ -18,6 +18,7 @@ import {
   createAccessRequestCredential,
   listAgentResourceServers,
 } from '@server/usecases/external-resources'
+import type { AgentAuditEventRecord } from '@server/usecases/ports'
 import { eq } from 'drizzle-orm'
 import { decodeProtectedHeader, exportJWK, generateKeyPair, importJWK, type JWK, jwtVerify, SignJWT } from 'jose'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -368,6 +369,108 @@ describe('Agent identity enrollment over real D1', () => {
     expect(persistedRequest).toMatchObject({ status: 'approved', grantId: persistedGrants[0]?.id })
     expect(persistedGrants).toHaveLength(1)
     expect(approvalAudits).toHaveLength(1)
+
+    const seedPendingRequest = async (id: string, reason: string) => {
+      const now = new Date()
+      await harness.db.insert(agentAccessRequest).values({
+        ...persistedRequest!,
+        id,
+        reason,
+        status: 'pending',
+        approvalTokenHash: `hash-${id}`,
+        encryptedApprovalToken: `encrypted-${id}`,
+        grantId: null,
+        expiresAt: new Date(now.getTime() + 5 * 60 * 1000),
+        decidedAt: null,
+        createdAt: now,
+        updatedAt: now,
+      })
+      return { id }
+    }
+
+    const denialRequest = await seedPendingRequest('access-request-concurrent-denial', 'Verify concurrent denial')
+    const denials = await Promise.all(
+      [0, 1].map(() =>
+        harness.request(`/api/account/access-requests/${denialRequest.id}/decision`, {
+          method: 'PUT',
+          headers: jsonHeaders(ownerCookie),
+          body: JSON.stringify({ decision: 'deny' }),
+        }),
+      ),
+    )
+    expect(denials.map((response) => response.status).sort()).toEqual([200, 400])
+    const [persistedDenial] = await harness.db
+      .select()
+      .from(agentAccessRequest)
+      .where(eq(agentAccessRequest.id, denialRequest.id))
+    expect(persistedDenial).toMatchObject({ status: 'denied', grantId: null })
+    expect(
+      await harness.db.select().from(agentAuditEvent).where(eq(agentAuditEvent.action, 'api_resource.access_decided')),
+    ).toHaveLength(2)
+
+    const racedRequest = await seedPendingRequest('access-request-approval-denial-race', 'Verify decision race')
+    const racedDecisions = await Promise.all([
+      harness.request(`/api/account/access-requests/${racedRequest.id}/decision`, {
+        method: 'PUT',
+        headers: jsonHeaders(ownerCookie),
+        body: JSON.stringify({ decision: 'approve', mode: 'persistent' }),
+      }),
+      harness.request(`/api/account/access-requests/${racedRequest.id}/decision`, {
+        method: 'PUT',
+        headers: jsonHeaders(ownerCookie),
+        body: JSON.stringify({ decision: 'deny' }),
+      }),
+    ])
+    expect(racedDecisions.map((response) => response.status).sort()).toEqual([200, 400])
+    const [persistedRace] = await harness.db
+      .select()
+      .from(agentAccessRequest)
+      .where(eq(agentAccessRequest.id, racedRequest.id))
+    expect(['approved', 'denied']).toContain(persistedRace?.status)
+    if (persistedRace?.status === 'approved') {
+      expect(persistedRace.grantId).not.toBeNull()
+      expect(
+        await harness.db.select().from(agentAccessGrant).where(eq(agentAccessGrant.id, persistedRace.grantId!)),
+      ).toHaveLength(1)
+    } else {
+      expect(persistedRace?.grantId).toBeNull()
+    }
+    expect(
+      await harness.db.select().from(agentAuditEvent).where(eq(agentAuditEvent.action, 'api_resource.access_decided')),
+    ).toHaveLength(3)
+
+    const rollbackRequest = await seedPendingRequest('access-request-audit-rollback', 'Verify audit rollback')
+    const rollbackGrantId = 'access-grant-audit-rollback'
+    const rollbackAt = new Date()
+    await expect(
+      harness.deps.externalResources.approveAccessRequest({
+        requestId: rollbackRequest.id,
+        grant: {
+          id: rollbackGrantId,
+          resourceId: resource.id,
+          connectionId: null,
+          agentIdentityId: approved.agent.id,
+          scopes: ['repo:read'],
+          authorizationDetails: [],
+          mode: 'persistent',
+          status: 'active',
+          grantedByUserId: userId,
+          expiresAt: null,
+          revokedAt: null,
+          createdAt: rollbackAt,
+          updatedAt: rollbackAt,
+        },
+        audit: invalidDualOwnerAudit('audit-rollback'),
+      }),
+    ).rejects.toThrow()
+    const [rolledBackRequest] = await harness.db
+      .select()
+      .from(agentAccessRequest)
+      .where(eq(agentAccessRequest.id, rollbackRequest.id))
+    expect(rolledBackRequest).toMatchObject({ status: 'pending', grantId: null })
+    expect(await harness.db.select().from(agentAccessGrant).where(eq(agentAccessGrant.id, rollbackGrantId))).toEqual([])
+    expect(await harness.db.select().from(agentAuditEvent).where(eq(agentAuditEvent.id, 'audit-rollback'))).toEqual([])
+
     const tokenUrl = `http://localhost/api/access-requests/${accessRequest.id}/credentials`
     const proof = await createDpopProof('POST', tokenUrl, 'native-token-proof')
     const issued = await createAccessRequestCredential(
@@ -541,4 +644,26 @@ async function sha256(value: string) {
     .replaceAll('+', '-')
     .replaceAll('/', '_')
     .replace(/=+$/, '')
+}
+
+function invalidDualOwnerAudit(id: string): AgentAuditEventRecord {
+  return {
+    id,
+    action: 'api_resource.access_decided',
+    result: 'allowed',
+    controllerUserId: null,
+    subjectIssuer: null,
+    subject: null,
+    agentIdentityId: null,
+    hostId: null,
+    ownerUserId: 'user-invalid',
+    ownerOrganizationId: 'org-invalid',
+    resourceId: null,
+    resourceConnectionId: null,
+    accessGrantId: null,
+    scopes: null,
+    reasonCode: null,
+    metadata: null,
+    occurredAt: new Date(),
+  }
 }

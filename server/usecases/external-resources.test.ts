@@ -788,7 +788,6 @@ describe('external API resource authorization', () => {
     expect(deps.externalResources.createConnectionIntent).toHaveBeenCalledWith(
       expect.objectContaining({ returnTo: 'connection-approval' }),
     )
-    expect(deps.externalResources.createGrant).not.toHaveBeenCalled()
     await expect(
       createAgentAccessRequest(
         deps,
@@ -3010,7 +3009,6 @@ describe('external API resource authorization', () => {
         'user-1',
       ),
     ).rejects.toThrow('no longer eligible for this Realmroot authority')
-    expect(deps.externalResources.createGrant).not.toHaveBeenCalled()
   })
 
   it('scopes Realmroot access decision audits to the selected target authority', async () => {

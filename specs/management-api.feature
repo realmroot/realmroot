@@ -78,7 +78,7 @@ Feature: Unified Realmroot resource API
 
   @entrypoint:restish @journey:management-restish-user-crud
   Scenario: User mutations require a human controller
-    Given the Agent has Realm authority with approved users:read and users:write scopes
+    Given the Agent has Realm authority with an approved users:read scope
     When I list or inspect users with Restish
     Then the unified API applies the Realm owner boundary
     And user creation, update, suspension, session revocation, and deletion require a human controller session

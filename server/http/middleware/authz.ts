@@ -105,19 +105,18 @@ async function sessionManagementBoundary(
   policy: NonNullable<ReturnType<typeof managementOperationPolicy>>,
 ): Promise<ManagementBoundary> {
   if (hasRole(role, 'admin')) {
-    if (!policy.sessionAuthorities.includes('realm')) throw forbidden()
+    if (!policy.authorities.includes('realm')) throw forbidden()
     return { kind: 'realm' }
   }
 
+  const accountUserId = policy.authorities.includes('account') ? userId : null
   const deps = getDeps(c)
-  const access = await resolveDeveloperAccess(deps, await deps.users.getUser(userId))
-  const organizationIds = policy.sessionAuthorities.includes('organization')
-    ? access.consoleOrganizations.map((item) => item.organizationId)
+  const organizationIds = policy.authorities.includes('organization')
+    ? (await resolveDeveloperAccess(deps, await deps.users.getUser(userId))).consoleOrganizations
+        .filter((item) => sessionAccessLevelAllowsScope(item.accessLevel, policy.scope))
+        .map((item) => item.organizationId)
     : []
-  const accountUserId = policy.sessionAuthorities.includes('account') ? userId : null
-  if (organizationIds.length || accountUserId) {
-    return { kind: 'restricted', accountUserId, organizationIds }
-  }
+  if (accountUserId || organizationIds.length) return { kind: 'restricted', accountUserId, organizationIds }
   throw forbidden()
 }
 
@@ -187,4 +186,8 @@ function hasRole(value: string | null | undefined, required: string) {
     .split(',')
     .map((role) => role.trim())
     .includes(required)
+}
+
+function sessionAccessLevelAllowsScope(accessLevel: 'owner' | 'admin' | 'developer', scope: string) {
+  return !scope.endsWith(':write') || accessLevel === 'owner' || accessLevel === 'admin'
 }

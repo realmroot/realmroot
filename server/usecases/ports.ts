@@ -647,16 +647,6 @@ export interface ExternalResourceRepository {
   ): Promise<PaginatedResult<AgentAccessRequestRecord>>
   listPendingAccessRequestsByAgent(agentIdentityId: string, now: Date): Promise<AgentAccessRequestRecord[]>
   listPendingAccessRequests(): Promise<AgentAccessRequestRecord[]>
-  decideAccessRequest(
-    id: string,
-    input: {
-      status: 'approved' | 'denied'
-      grantId: string | null
-      connectionId?: string | null
-      decidedAt: Date
-      updatedAt: Date
-    },
-  ): Promise<AgentAccessRequestRecord | null>
   approveAccessRequest(input: {
     requestId: string
     grant: AgentAccessGrantRecord
@@ -669,7 +659,6 @@ export interface ExternalResourceRepository {
   }): Promise<AgentAccessRequestRecord | null>
   consumeAccessRequest(id: string, now: Date): Promise<boolean>
   listPendingAccessRequestsByConnections(connectionIds: string[]): Promise<AgentAccessRequestRecord[]>
-  createGrant(input: AgentAccessGrantRecord): Promise<AgentAccessGrantRecord | null>
   findGrant(id: string): Promise<AgentAccessGrantRecord | null>
   listActiveGrantsByAgent(agentIdentityId: string): Promise<AgentAccessGrantRecord[]>
   listGrants(

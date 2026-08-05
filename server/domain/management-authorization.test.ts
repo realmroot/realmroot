@@ -125,7 +125,6 @@ describe('canonical management authorization', () => {
     expect(managementOperationPolicy('POST', '/api/organizations')).toMatchObject({ authorities: ['realm'] })
     expect(managementOperationPolicy('PATCH', '/api/organizations/org-1')).toMatchObject({
       authorities: ['realm', 'organization'],
-      sessionAuthorities: ['realm'],
       actor: 'human-controller',
     })
     expect(managementOperationPolicy('GET', '/api/access/roles/role-1')).toMatchObject({ authorities: ['realm'] })
@@ -141,6 +140,10 @@ describe('canonical management authorization', () => {
     })
     expect(managementOperationPolicy('GET', '/api/organizations/org-1/unregistered-child')).toBeNull()
     expect(managementOperationPolicy('POST', '/api/applications/app-1/unregistered-action')).toBeNull()
+    expect(managementOperationPolicy('PATCH', '/api/organizations/org-1/members')).toBeNull()
+    expect(managementOperationPolicy('DELETE', '/api/applications/app-1/redirect-uris')).toBeNull()
+    expect(managementOperationPolicy('POST', '/api/access/roles/role-1/scopes')).toBeNull()
+    expect(managementOperationPolicy('DELETE', '/api/users')).toBeNull()
   })
 
   it('publishes only scopes meaningful to each authority', () => {
