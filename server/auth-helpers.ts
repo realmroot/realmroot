@@ -1,6 +1,11 @@
 import type { TransactionalEmailSender } from '@server/adapters/gateways/email/sender'
 import { type AuthorizationTokenClaimInput, buildTokenClaims } from '@server/usecases/authorization'
 import type { Deps } from '@server/usecases/deps'
+import {
+  filterCurrentResourceScopes,
+  resolveOrganizationMembershipScopes,
+} from '@server/usecases/organization-membership-scopes'
+import { userConfigurableApplicationScopes } from '@shared/api/applications'
 import { type ApplicationOidcClaims, defaultApplicationOidcClaims } from '../shared/api/applications'
 import type { ManagementSignInSettingsResponse } from '../shared/api/management'
 
@@ -145,16 +150,64 @@ export async function buildOAuthAccessTokenClaims(
   },
 ): Promise<Record<string, unknown>> {
   const oidcClaims = readOidcClaims(input.metadata)
+  const scopes = [...input.scopes]
+  const identityScopes = new Set<string>(userConfigurableApplicationScopes)
+  const applicationId = readString(input.metadata, 'applicationId')
+  const application = !input.user && applicationId ? await deps.applications.findById(applicationId) : null
   const claims = await buildTokenClaims(deps, {
     userId: input.user?.id,
-    applicationId: readString(input.metadata, 'applicationId'),
-    organizationId: input.referenceId,
+    applicationId,
+    organizationId: input.referenceId ?? application?.ownerOrganizationId,
     resource: input.resource,
-    scopes: [...input.scopes],
+    scopes,
+    authorizedScopes: scopes.filter((scope) => !identityScopes.has(scope)),
     destination: 'access_token',
     claimSelection: oidcClaims.accessToken,
   } satisfies AuthorizationTokenClaimInput)
   return claims
+}
+
+export async function filterOAuthAccessTokenScopes(
+  deps: Deps,
+  input: {
+    user?: ({ id?: string } & Record<string, unknown>) | null
+    scopes: Iterable<string>
+    resource?: string
+    referenceId?: string
+    metadata?: Record<string, unknown>
+  },
+) {
+  const requestedScopes = [...input.scopes]
+  if (!input.user) {
+    const applicationId = readString(input.metadata, 'applicationId')
+    if (!applicationId || !input.resource) return []
+    const [application, resource] = await Promise.all([
+      deps.applications.findById(applicationId),
+      deps.authorization.findResourceByResourceUrl(input.resource),
+    ])
+    if (!application || !resource) return []
+    const allowedScopes = new Set(application.allowedScopes)
+    return filterCurrentResourceScopes(
+      deps,
+      resource,
+      application.ownerOrganizationId,
+      requestedScopes.filter((scope) => allowedScopes.has(scope)),
+    )
+  }
+
+  const identityScopes = new Set<string>(userConfigurableApplicationScopes)
+  if (!input.user.id || !input.referenceId || !input.resource) {
+    return requestedScopes.filter((scope) => identityScopes.has(scope))
+  }
+
+  const resource = await deps.authorization.findResourceByResourceUrl(input.resource)
+  const membership = await deps.authorization.findMemberByOrganizationUser(input.referenceId, input.user.id)
+  if (!resource || !membership) return requestedScopes.filter((scope) => identityScopes.has(scope))
+
+  const authorizedScopes = new Set(
+    await resolveOrganizationMembershipScopes(deps, input.referenceId, membership.roles, resource.id),
+  )
+  return requestedScopes.filter((scope) => identityScopes.has(scope) || authorizedScopes.has(scope))
 }
 
 export async function buildOAuthIdTokenClaims(

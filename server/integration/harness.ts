@@ -78,7 +78,7 @@ export interface Harness {
 /**
  * Build the production app over real D1.
  */
-export async function createHarness(): Promise<Harness> {
+export async function createHarness(options: { validAudiences?: string[] } = {}): Promise<Harness> {
   const config = integrationConfig()
   const deps = createDeps(integrationEnv(), config)
   const db = createDb(env.DB)
@@ -92,6 +92,8 @@ export async function createHarness(): Promise<Harness> {
     config.securityPolicy,
     undefined,
     {
+      validAudiences: options.validAudiences,
+      externalHttp: deps.externalHttp,
       publishWebhookEvent: async (event, data) => {
         await publishWebhookEvent(deps, event, data)
       },

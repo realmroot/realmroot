@@ -1,8 +1,8 @@
 import { badRequest, conflict, forbidden, notFound } from '@server/domain/errors'
 import { appendAgentGovernanceAudit } from '@server/usecases/agent-audit'
-import { organizationUserHasScope } from '@server/usecases/authorization'
 import type { Deps } from '@server/usecases/deps'
 import { revokeAgentResourceAccess, revokeAgentResourceLeasesForBinding } from '@server/usecases/external-resources'
+import { organizationUserHasScope } from '@server/usecases/organization-membership-scopes'
 import type {
   AgentAuthorityInventoryScope,
   AgentEnrollmentIntentRecord,
@@ -76,10 +76,8 @@ export async function listAllAgentIdentities(deps: Deps, page: { limit: number; 
   return { items: result.items.map(toIdentity), total: result.total, ...page }
 }
 
-export async function listAllAgents(deps: Deps, page: PaginationInput, ownerOrganizationIds?: string[]) {
-  const result = ownerOrganizationIds
-    ? await deps.agentIdentities.listOwnedByOrganizations(ownerOrganizationIds, page)
-    : await deps.agentIdentities.listAll(page)
+export async function listAllAgents(deps: Deps, page: PaginationInput, scope?: AgentAuthorityInventoryScope) {
+  const result = scope ? await deps.agentIdentities.listOwned(scope, page) : await deps.agentIdentities.listAll(page)
   const summaries = await loadManagementSummaries(deps, result.items)
   return {
     items: result.items.map((aggregate) => toManagementAgent(aggregate, summaries)),

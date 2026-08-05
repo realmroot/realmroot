@@ -7,7 +7,9 @@ import {
 } from '@server/domain/realmroot-resource-server'
 import { type AuthorizationTokenClaimInput, createId, toTokenClaims } from '@server/usecases/authorization-utils'
 import type { Deps } from '@server/usecases/deps'
+import { resolveOrganizationMembershipScopes } from '@server/usecases/organization-membership-scopes'
 import { validateExternalResourceConnector } from '@server/usecases/resource-connectors'
+import { activeResourceEligibleForOrganization } from '@server/usecases/resource-eligibility'
 import {
   readResourceContract,
   validateRequestedScopes,
@@ -50,33 +52,7 @@ import {
   predefinedOrganizationRoleKeys,
   predefinedOrganizationRoleScopes,
 } from '@shared/organization-access'
-import { type RealmrootOrganizationScope, realmrootScopeRegistry } from '@shared/scope-registry'
-
-export async function organizationUserHasScope(
-  deps: Deps,
-  organizationId: string,
-  userId: string,
-  requiredScope: RealmrootOrganizationScope,
-) {
-  const member = await deps.authorization.findMemberByOrganizationUser(organizationId, userId)
-  if (!member) return false
-  for (const role of member.roles) {
-    if (
-      role in predefinedOrganizationRoleScopes &&
-      (
-        predefinedOrganizationRoleScopes[role as keyof typeof predefinedOrganizationRoleScopes] as readonly string[]
-      ).includes(requiredScope)
-    ) {
-      return true
-    }
-  }
-  const dynamicRoles = await deps.authorization.listOrganizationRoleScopes(organizationId)
-  return member.roles.some((role) =>
-    (dynamicRoles.get(role) ?? []).some(
-      (scope) => scope.resourceId === internalResourceServer.id && scope.scope === requiredScope,
-    ),
-  )
-}
+import { realmrootScopeRegistry } from '@shared/scope-registry'
 
 export function createOrganization(deps: Deps, input: CreateOrganizationRequest) {
   return deps.authorization.createOrganization({
@@ -507,7 +483,7 @@ async function validateRoleScopes(deps: Deps, organizationId: string, scopes: Ro
   for (const item of scopes) byResource.set(item.resourceId, [...(byResource.get(item.resourceId) ?? []), item.scope])
   for (const [resourceId, requestedScopes] of byResource) {
     const resource = await getResource(deps, resourceId)
-    if (!resource.enabled || resource.archivedAt || !resourceEligibleForOrganization(resource, organizationId)) {
+    if (!activeResourceEligibleForOrganization(resource, organizationId)) {
       throw badRequest('Resource Server is not eligible for this Organization.')
     }
     if (resourceId === internalResourceServer.id) {
@@ -531,7 +507,7 @@ export async function getAgentRoleAuthorization(
   organizationId?: string,
 ): Promise<{ roles: string[]; scopes: string[] }> {
   const resource = await getResource(deps, resourceId)
-  if (!resource.availableToAgents || !resourceEligibleForOrganization(resource, organizationId)) {
+  if (!resource.availableToAgents || !activeResourceEligibleForOrganization(resource, organizationId)) {
     throw forbidden('Resource Server is not eligible for this Agent tenant.')
   }
   void agentIdentityId
@@ -553,44 +529,16 @@ export async function buildTokenClaims(deps: Deps, input: AuthorizationTokenClai
     if (!membership) throw forbidden('User is not a member of the active Organization context.')
     roleAuthorization = {
       roles: membership.roles,
-      scopes: await resolveMemberScopes(deps, input.organizationId, membership.roles, resource?.id),
+      scopes: resource
+        ? (input.authorizedScopes ??
+          (await resolveOrganizationMembershipScopes(deps, input.organizationId, membership.roles, resource.id)))
+        : [],
     }
   }
-  if (
-    resource &&
-    (resource.archivedAt || !resource.enabled || !resourceEligibleForOrganization(resource, input.organizationId))
-  ) {
+  if (resource && !activeResourceEligibleForOrganization(resource, input.organizationId)) {
     return toTokenClaims({ ...input, scopes: [] }, roleAuthorization, resource, organization)
   }
   return toTokenClaims(input, roleAuthorization, resource, organization)
-}
-
-async function resolveMemberScopes(deps: Deps, organizationId: string, roles: string[], resourceId?: string) {
-  if (!resourceId) return []
-  const scopes = new Set<string>()
-  if (resourceId === internalResourceServer.id) {
-    for (const role of roles) {
-      if (role in predefinedOrganizationRoleScopes) {
-        for (const scope of predefinedOrganizationRoleScopes[role as keyof typeof predefinedOrganizationRoleScopes]) {
-          scopes.add(scope)
-        }
-      }
-    }
-  }
-  const dynamic = await deps.authorization.listOrganizationRoleScopes(organizationId)
-  for (const role of roles) {
-    for (const item of dynamic.get(role) ?? []) if (item.resourceId === resourceId) scopes.add(item.scope)
-  }
-  return [...scopes].sort()
-}
-
-function resourceEligibleForOrganization(resource: ApiResourceResponse, organizationId?: string) {
-  if (resource.accessEligibility.mode === 'realm') return true
-  if (!organizationId) return false
-  if (resource.accessEligibility.mode === 'owner_organization') {
-    return resource.ownerOrganizationId === organizationId
-  }
-  return resource.accessEligibility.organizationIds.includes(organizationId)
 }
 
 async function requireMember(deps: Deps, id: string) {

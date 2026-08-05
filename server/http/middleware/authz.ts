@@ -1,6 +1,7 @@
 import { type AuthorizationContext, type AuthorizationTenant, authorize } from '@server/domain/authorization-context'
 import { forbidden, unauthorized } from '@server/domain/errors'
 import { realmrootResourceServer } from '@server/domain/realmroot-resource-server'
+import { resolveOrganizationMembershipScopes } from '@server/usecases/organization-membership-scopes'
 import { type ProtectedResource, requiredResourceScope } from '@shared/authz'
 import { predefinedOrganizationRoleScopes } from '@shared/organization-access'
 import type { RealmrootOrganizationScope } from '@shared/scope-registry'
@@ -42,24 +43,38 @@ export async function authorizedOrganizationIds(
   c: Context,
   requiredScope: RealmrootOrganizationScope,
 ): Promise<string[] | undefined> {
+  const tenants = await authorizedTenantInventory(c, requiredScope)
+  if (!tenants) return undefined
+  return [...new Set(tenants.filter((tenant) => tenant.type === 'organization').map((tenant) => tenant.id))].sort()
+}
+
+export async function authorizedTenantInventory(
+  c: Context,
+  requiredScope: RealmrootOrganizationScope,
+): Promise<AuthorizationTenant[] | undefined> {
   const principal = getPrincipal(c)
   if (principal.user && hasRealmAdminRole(principal.user.role)) return undefined
   if (principal.user) {
     const memberships = await getDeps(c).authorization.listUserMemberships(principal.user.id)
-    const allowed: string[] = []
+    const userTenant = { type: 'user' as const, id: principal.user.id }
+    const userContext = await resolveAuthorizationContext(c, userTenant)
+    const tenants: AuthorizationTenant[] = userContext.scopes.has(requiredScope) ? [userTenant] : []
     for (const membership of memberships) {
       const target = { type: 'organization' as const, id: membership.organizationId }
       const context = await resolveAuthorizationContext(c, target)
-      if (context.scopes.has(requiredScope)) allowed.push(membership.organizationId)
+      if (context.scopes.has(requiredScope)) tenants.push(target)
     }
-    return [...new Set(allowed)].sort()
+    return tenants
   }
-  const authority = principal.agent?.authority
-  if (!principal.agent?.scopes.includes(requiredScope)) {
+  const agent = principal.agent
+  if (!agent?.scopes.includes(requiredScope)) {
     throw forbidden(`OAuth scope "${requiredScope}" is required.`)
   }
-  if (authority?.kind !== 'organization') return []
-  return [authority.organizationId]
+  if (agent.authority?.kind === 'organization') {
+    return [{ type: 'organization', id: agent.authority.organizationId }]
+  }
+  if (agent.authority?.kind === 'user') return [{ type: 'user', id: agent.authority.userId }]
+  return []
 }
 
 export function requirePlatformAccess(c: Context, requiredScope: string) {
@@ -106,7 +121,16 @@ export async function resolveAuthorizationContext(
     return {
       subject: { type: 'user', id: principal.user.id },
       tenant: targetTenant,
-      scopes: new Set(membership ? await resolveMembershipScopes(c, targetTenant.id, membership.roles) : []),
+      scopes: new Set(
+        membership
+          ? await resolveOrganizationMembershipScopes(
+              getDeps(c),
+              targetTenant.id,
+              membership.roles,
+              realmrootResourceServer.id,
+            )
+          : [],
+      ),
     }
   }
   const agent = principal.agent
@@ -123,24 +147,6 @@ export async function resolveAuthorizationContext(
     tenant,
     scopes: new Set(agent.scopes),
   }
-}
-
-async function resolveMembershipScopes(c: Context, organizationId: string, roles: string[]) {
-  const scopes = new Set<string>()
-  for (const role of roles) {
-    if (role in predefinedOrganizationRoleScopes) {
-      for (const scope of predefinedOrganizationRoleScopes[role as keyof typeof predefinedOrganizationRoleScopes]) {
-        scopes.add(scope)
-      }
-    }
-  }
-  const dynamic = await getDeps(c).authorization.listOrganizationRoleScopes(organizationId)
-  for (const role of roles) {
-    for (const encoded of dynamic.get(role) ?? []) {
-      if (encoded.resourceId === realmrootResourceServer.id) scopes.add(encoded.scope)
-    }
-  }
-  return [...scopes]
 }
 
 export function authenticatedUser(): MiddlewareHandler {

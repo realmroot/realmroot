@@ -7,6 +7,7 @@ export interface AuthorizationTokenClaimInput {
   organizationId?: string
   resource?: string
   scopes: string[]
+  authorizedScopes?: string[]
   destination?: 'access_token' | 'id_token' | 'userinfo'
   claimSelection?: ApplicationOidcClaims['accessToken']
 }

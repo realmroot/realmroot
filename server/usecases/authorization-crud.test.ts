@@ -19,7 +19,6 @@ import {
   listMembers,
   listOrganizations,
   listResources,
-  organizationUserHasScope,
   removeMember,
   replaceMemberRoles,
   restoreResource,
@@ -29,6 +28,7 @@ import {
   updateRole,
 } from '@server/usecases/authorization'
 import type { Deps } from '@server/usecases/deps'
+import { organizationUserHasScope } from '@server/usecases/organization-membership-scopes'
 import type {
   ApiResourceResponse,
   InvitationResponse,

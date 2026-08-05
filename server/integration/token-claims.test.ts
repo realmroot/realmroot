@@ -1,7 +1,7 @@
 import { applyD1Migrations, env, reset } from 'cloudflare:test'
 import { buildTokenClaims } from '@server/usecases/authorization'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { createHarness, createUser, type Harness, resourceOpenApiFetch, signInAdmin } from './harness'
+import { baseURL, createHarness, createUser, type Harness, resourceOpenApiFetch, signIn, signInAdmin } from './harness'
 
 afterEach(async () => {
   await reset()
@@ -70,10 +70,12 @@ describe('OAuth token claim building over real D1', () => {
     const application = (await (
       await postJson(harness, cookie, '/api/applications', {
         name: 'Claims App',
-        clientType: 'public_spa',
+        clientType: 'confidential_web',
         redirectUris: ['https://app.example.com/callback'],
+        firstParty: true,
+        trusted: true,
       })
-    ).json()) as { id: string }
+    ).json()) as { id: string; clientId: string; clientSecret: string }
 
     const organization = (await (
       await postJson(harness, cookie, '/api/organizations', { slug: 'claims-org', name: 'Claims Org' })
@@ -133,6 +135,91 @@ describe('OAuth token claim building over real D1', () => {
     expect(application.id).toBeTruthy()
     expect(claims.authorization.roles).toEqual(['contacts-reader', 'member'])
     expect(claims.authorization.scopes).toEqual(['contacts:read'])
+
+    harness.deps.externalHttp.fetch = async (request) => {
+      if (new URL(request.url).pathname.endsWith('/openapi.json')) {
+        return Response.json({
+          openapi: '3.1.0',
+          components: { securitySchemes: {} },
+          paths: {},
+        })
+      }
+      return new Response(null, { headers: { link: '</openapi.json>; rel="service-desc"' } })
+    }
+
+    const claimsAfterScopeRemoval = (await buildTokenClaims(harness.deps, {
+      userId,
+      applicationId: application.id,
+      organizationId: organization.id,
+      resource: audience,
+      scopes: ['openid', 'contacts:read'],
+      destination: 'access_token',
+    })) as { authorization: { scopes: string[] } }
+    expect(claimsAfterScopeRemoval.authorization.scopes).toEqual([])
+
+    await env.DB.prepare('UPDATE oauth_client SET scopes = ? WHERE client_id = ?')
+      .bind(JSON.stringify(['openid', 'contacts:read']), application.clientId)
+      .run()
+
+    harness = await createHarness({ validAudiences: [baseURL, audience] })
+    harness.deps.externalHttp.fetch = removedScopeOpenApiFetch
+    let memberCookie = await signIn(harness, 'claims-user@example.com', 'claims-user-password-2026')
+    const activeOrganization = await harness.request('/api/auth/organization/set-active', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie: memberCookie, origin: baseURL },
+      body: JSON.stringify({ organizationId: organization.id }),
+    })
+    expect(activeOrganization.status, await activeOrganization.clone().text()).toBe(200)
+    memberCookie = mergeResponseCookies(memberCookie, activeOrganization)
+
+    const verifier = 'scope-removal-pkce-verifier-0123456789abcdefghijklmnop'
+    const authorize = await harness.request(
+      `/api/auth/oauth2/authorize?${new URLSearchParams({
+        response_type: 'code',
+        client_id: application.clientId,
+        redirect_uri: 'https://app.example.com/callback',
+        scope: 'openid contacts:read',
+        resource: audience,
+        code_challenge: await pkceChallenge(verifier),
+        code_challenge_method: 'S256',
+      })}`,
+      { headers: { cookie: memberCookie }, redirect: 'manual' },
+    )
+    expect(authorize.status, await authorize.clone().text()).toBe(302)
+    const code = new URL(authorize.headers.get('location') ?? '').searchParams.get('code')
+    expect(code).toBeTruthy()
+
+    const token = await harness.request('/api/auth/oauth2/token', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        client_id: application.clientId,
+        client_secret: application.clientSecret,
+        redirect_uri: 'https://app.example.com/callback',
+        code: code ?? '',
+        code_verifier: verifier,
+      }),
+    })
+    expect(token.status, await token.clone().text()).toBe(200)
+    const tokenBody = (await token.json()) as { access_token: string; scope: string }
+    expect(tokenBody.scope).toBe('openid')
+    expect(decodeJwtPayload(tokenBody.access_token)).toMatchObject({
+      scope: 'openid',
+      authorization: { scopes: [] },
+    })
+
+    const introspection = await harness.request('/api/auth/oauth2/introspect', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        token: tokenBody.access_token,
+        client_id: application.clientId,
+        client_secret: application.clientSecret,
+      }),
+    })
+    expect(introspection.status, await introspection.clone().text()).toBe(200)
+    expect(await introspection.json()).toMatchObject({ active: true, scope: 'openid' })
   })
 
   it('returns audience-free claims when the resource is unregistered [spec: admin-console/admin-application-oidc-claims]', async () => {
@@ -146,4 +233,126 @@ describe('OAuth token claim building over real D1', () => {
     // findResourceByResourceUrl ran (real SQL) and found nothing → no audience claim.
     expect(claims.authorization?.audience).toBeUndefined()
   })
+
+  it('attenuates client credentials scopes at the Application owner Organization boundary [spec: admin-console/oidc-claim-emission]', async () => {
+    const cookie = await signInAdmin(harness)
+    const ownerOrganization = (await (
+      await postJson(harness, cookie, '/api/organizations', { slug: 'workload-owner', name: 'Workload Owner' })
+    ).json()) as { id: string }
+    const foreignOrganization = (await (
+      await postJson(harness, cookie, '/api/organizations', { slug: 'foreign-resource', name: 'Foreign Resource' })
+    ).json()) as { id: string }
+    const audience = 'https://api.example.com/foreign-contacts'
+    const ownerAudience = 'https://api.example.com/owner-contacts'
+    await postJson(harness, cookie, '/api/resource-servers', {
+      identifier: 'foreign-contacts-api',
+      name: 'Foreign Contacts API',
+      resourceUrl: audience,
+      ownerOrganizationId: foreignOrganization.id,
+      accessEligibility: { mode: 'owner_organization' },
+    })
+    await postJson(harness, cookie, '/api/resource-servers', {
+      identifier: 'owner-contacts-api',
+      name: 'Owner Contacts API',
+      resourceUrl: ownerAudience,
+      ownerOrganizationId: ownerOrganization.id,
+      accessEligibility: { mode: 'owner_organization' },
+    })
+    const application = (await (
+      await postJson(harness, cookie, '/api/applications', {
+        name: 'Workload Client',
+        clientType: 'confidential_web',
+        redirectUris: ['https://workload.example.com/callback'],
+        ownerOrganizationId: ownerOrganization.id,
+        allowedGrantTypes: ['client_credentials'],
+        allowedScopes: ['contacts:read'],
+      })
+    ).json()) as { clientId: string; clientSecret: string }
+
+    harness = await createHarness({ validAudiences: [baseURL, audience, ownerAudience] })
+    harness.deps.externalHttp.fetch = contactsScopeOpenApiFetch
+    const ownerToken = await issueClientCredentials(harness, application, ownerAudience)
+    expect(ownerToken.scope).toBe('contacts:read')
+    expect(decodeJwtPayload(ownerToken.access_token)).toMatchObject({
+      scope: 'contacts:read',
+      authorization: { organization_id: ownerOrganization.id, scopes: ['contacts:read'] },
+    })
+
+    const token = await issueClientCredentials(harness, application, audience)
+    expect(token.scope).toBe('')
+    expect(decodeJwtPayload(token.access_token)).toMatchObject({
+      scope: '',
+      authorization: { organization_id: ownerOrganization.id, scopes: [] },
+    })
+  })
 })
+
+async function removedScopeOpenApiFetch(request: Request) {
+  if (new URL(request.url).pathname.endsWith('/openapi.json')) {
+    return Response.json({ openapi: '3.1.0', components: { securitySchemes: {} }, paths: {} })
+  }
+  return new Response(null, { headers: { link: '</openapi.json>; rel="service-desc"' } })
+}
+
+async function contactsScopeOpenApiFetch(request: Request) {
+  if (new URL(request.url).pathname.endsWith('/openapi.json')) {
+    return Response.json({
+      openapi: '3.1.0',
+      components: {
+        securitySchemes: {
+          oauth: {
+            type: 'oauth2',
+            flows: {
+              clientCredentials: { tokenUrl: '/token', scopes: { 'contacts:read': 'Read contacts' } },
+            },
+          },
+        },
+      },
+      paths: { '/contacts': { get: { security: [{ oauth: ['contacts:read'] }] } } },
+    })
+  }
+  return new Response(null, { headers: { link: '</openapi.json>; rel="service-desc"' } })
+}
+
+async function issueClientCredentials(
+  harness: Harness,
+  application: { clientId: string; clientSecret: string },
+  resource: string,
+) {
+  const response = await harness.request('/api/auth/oauth2/token', {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'client_credentials',
+      client_id: application.clientId,
+      client_secret: application.clientSecret,
+      scope: 'contacts:read',
+      resource,
+    }),
+  })
+  expect(response.status, await response.clone().text()).toBe(200)
+  return (await response.json()) as { access_token: string; scope: string }
+}
+
+function mergeResponseCookies(currentCookie: string, response: Response) {
+  const values = new Map(currentCookie.split('; ').map((pair) => pair.split('=', 2) as [string, string]))
+  for (const part of (response.headers.get('set-cookie') ?? '').split(',')) {
+    const pair = part.trim().split(';')[0]
+    const separator = pair.indexOf('=')
+    if (separator > 0) values.set(pair.slice(0, separator), pair.slice(separator + 1))
+  }
+  return [...values].map(([name, value]) => `${name}=${value}`).join('; ')
+}
+
+async function pkceChallenge(verifier: string) {
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)))
+  let value = ''
+  for (const byte of digest) value += String.fromCharCode(byte)
+  return btoa(value).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '')
+}
+
+function decodeJwtPayload(token: string): Record<string, unknown> {
+  const payload = token.split('.')[1] ?? ''
+  const padded = payload.padEnd(Math.ceil(payload.length / 4) * 4, '=')
+  return JSON.parse(atob(padded.replaceAll('-', '+').replaceAll('_', '/'))) as Record<string, unknown>
+}

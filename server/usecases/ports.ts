@@ -821,8 +821,8 @@ export interface AgentIdentityAggregate {
 export interface AgentIdentityRepository {
   listPersonal(userId: string): Promise<AgentIdentityAggregate[]>
   listOrganization(organizationId: string): Promise<AgentIdentityAggregate[]>
-  listOwnedByOrganizations(
-    organizationIds: string[],
+  listOwned(
+    scope: AgentAuthorityInventoryScope,
     page: PaginationInput,
   ): Promise<PaginatedResult<AgentIdentityAggregate>>
   listAll(page: PaginationInput): Promise<PaginatedResult<AgentIdentityAggregate>>

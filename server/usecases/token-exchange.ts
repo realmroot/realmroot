@@ -7,6 +7,7 @@ import type {
   ResolvedFederatedCredential,
   UpdateFederatedCredentialInput,
 } from '@server/usecases/ports'
+import { activeResourceEligibleForOrganization } from '@server/usecases/resource-eligibility'
 
 export const tokenExchangeGrantType = 'urn:ietf:params:oauth:grant-type:token-exchange'
 export const refreshTokenGrantType = 'refresh_token'
@@ -317,7 +318,7 @@ async function ensureAudienceResource(deps: Deps, applicationId: string, id: str
   const application = await deps.applications.findById(applicationId)
   if (!application) throw notFound('Application not found.')
   const resource = await deps.authorization.findResource(id)
-  if (!resource || !resourceEligibleForOrganization(resource, application.ownerOrganizationId)) {
+  if (!resource || !activeResourceEligibleForOrganization(resource, application.ownerOrganizationId)) {
     throw badRequest('audienceResourceId must reference an API resource eligible for the Application tenant.')
   }
 }
@@ -330,19 +331,7 @@ async function requireEligibleAudience(deps: Deps, audience: string, organizatio
 
 async function isEligibleAudience(deps: Deps, audience: string, organizationId: string) {
   const resource = await deps.authorization.findResourceByResourceUrl(audience)
-  return Boolean(resource && resourceEligibleForOrganization(resource, organizationId))
-}
-
-function resourceEligibleForOrganization(
-  resource: Awaited<ReturnType<Deps['authorization']['findResource']>> & {},
-  organizationId: string,
-) {
-  if (!resource.enabled || resource.archivedAt) return false
-  if (resource.accessEligibility.mode === 'realm') return true
-  if (resource.accessEligibility.mode === 'owner_organization') {
-    return resource.ownerOrganizationId === organizationId
-  }
-  return resource.accessEligibility.organizationIds.includes(organizationId)
+  return Boolean(resource && activeResourceEligibleForOrganization(resource, organizationId))
 }
 
 async function authenticateClient(deps: Deps, clientId: string, clientSecret: string | null) {

@@ -54,6 +54,13 @@ export type TwoFactorPluginOptions = {
 
 export type OAuthProviderPluginOptions = {
   clientRegistrationAllowedScopes: readonly string[]
+  filterAccessTokenScopes: (input: {
+    user?: ({ id?: string } & Record<string, unknown>) | null
+    scopes: string[]
+    resource?: string
+    referenceId?: string
+    metadata?: Record<string, unknown>
+  }) => Promise<string[]>
   customUserInfoClaims: (input: {
     user: unknown
     scopes: string[]

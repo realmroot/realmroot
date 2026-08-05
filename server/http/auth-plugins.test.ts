@@ -114,6 +114,7 @@ describe('auth.test 2', () => {
       organizationId: 'org-1',
       resource: 'https://api.example.com/contacts',
       scopes: ['openid', 'contacts:read'],
+      authorizedScopes: ['contacts:read'],
       destination: 'access_token',
       claimSelection: {
         authorization: true,

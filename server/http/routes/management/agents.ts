@@ -40,6 +40,7 @@ import { Hono } from 'hono'
 import { getActorUserId, getPrincipal } from '../../middleware/authn'
 import {
   authorizedOrganizationIds,
+  authorizedTenantInventory,
   authorizeOrganization,
   authorizeUser,
   requireAgentScope,
@@ -54,7 +55,7 @@ managementAgentsRoute.get('/agents', async (c) => {
   const query = readQuery(c, listAgentsQuerySchema)
   return c.json(
     managementAgentsResponseSchema.parse(
-      await listAllAgents(getDeps(c), query, await organizationSelection(c, query.organizationId, 'agents:read')),
+      await listAllAgents(getDeps(c), query, await agentInventoryScope(c, query.organizationId)),
     ),
   )
 })
@@ -218,10 +219,21 @@ async function requireAgentByIdAccess(c: Parameters<typeof getDeps>[0], agentId:
 }
 
 async function authorityInventoryScope(c: Parameters<typeof getDeps>[0], requestedOrganizationId?: string) {
-  const organizationIds = await organizationSelection(c, requestedOrganizationId, 'agents:read')
-  if (!organizationIds) return requestedOrganizationId ? { ownerOrganizationIds: [requestedOrganizationId] } : undefined
+  return agentInventoryScope(c, requestedOrganizationId)
+}
+
+async function agentInventoryScope(c: Parameters<typeof getDeps>[0], requestedOrganizationId?: string) {
+  const tenants = await authorizedTenantInventory(c, 'agents:read')
+  if (!tenants) return requestedOrganizationId ? { ownerOrganizationIds: [requestedOrganizationId] } : undefined
+  const ownerOrganizationIds = tenants.filter((tenant) => tenant.type === 'organization').map((tenant) => tenant.id)
+  if (requestedOrganizationId) {
+    return {
+      ownerOrganizationIds: ownerOrganizationIds.includes(requestedOrganizationId) ? [requestedOrganizationId] : [],
+    }
+  }
   return {
-    ownerOrganizationIds: organizationIds,
+    ownerUserId: tenants.find((tenant) => tenant.type === 'user')?.id,
+    ownerOrganizationIds,
   }
 }
 
