@@ -14,9 +14,10 @@ reviewed.
 - Primary pages browse and operate existing content. Create and edit forms live
   in a Dialog, Sheet, or dedicated secondary route. Destructive actions use an
   AlertDialog.
-- Tables use one inventory model across Realm and Organization Console contexts.
-  Context changes navigation visibility and visible default filters, not column
-  names or data ownership semantics.
+- Capability-owned tables use one inventory model where Realm inventory and
+  Organization inventory share the same representation. Route composition
+  supplies an explicit owner boundary; browser context state never defines
+  data ownership.
 - Detail headings contain identity once. Tabs divide distinct tasks; flat
   divided sections replace card grids. A one-section tab omits the repeated
   section heading.
@@ -37,20 +38,20 @@ reviewed.
 | Agents | `/console/agents` | Real | Stable Agent inventory; no create action |
 | Agent detail | `/console/agents/:id/*` | Partial | Overview, Requests & grants, Hosts, Activity, Settings |
 | Organizations | `/console/organizations` | Real | Shared membership and authorization-context inventory |
-| Organization detail | `/console/organizations/:id/*` | Partial | Overview, Members, Agents, Activity, Settings; no duplicated technical resources |
+| Organization detail | `/console/organizations/:id/*` | Partial | Platform inventory drill-down redirects to the canonical Organization Workspace |
 | Applications | `/console/applications` | Real, old classification | Unified owner-filtered inventory |
 | Application detail | `/console/applications/:id/*` | Real, old tabs | Overview, OAuth, Authorizations, Settings, including consent policy |
 | Resource servers | `/console/api-resources` | Real, old product name | Unified native/external inventory with authorization second and owner last |
 | Native resource detail | `/console/api-resources/:id/*` | Partial | Overview, Resources, Authority, Settings |
 | External resource detail | `/console/api-resources/:id/*` | Partial | Overview, Resources, Authority, Settings |
 | Webhooks | `/console/webhooks/*` | Real | Endpoints and Requests tabs |
-| Organization Roles | Organization-scoped Console route | Implemented | Better Auth Role definitions and member Role replacement |
+| Organization Roles | legacy Console routes | Implemented | Removed from Console; managed in the canonical Organization Workspace |
 | Identity providers | `/console/connectors` | Real | Built-in connectors, Social login, OIDC connectors |
 | Sign-in & registration | `/console/sign-in-experience/*` | Real, old split | Methods, Profile collection, Legal & support with navigable preview |
 | Security policies | `/console/security/*` | Real, old split | Authentication protection, Human verification, Other restrictions |
 | Experience | canonicalized from branding/content routes | Real, old split | Brand assets, Color scheme, Legal & support with live preview |
 | Realm settings | `/console/tenant-settings/*` | Partial | Realm access, Developer access, Deployment |
-| Organization settings | shared settings route in Organization context | Missing | Organization profile and lifecycle only |
+| Organization settings | Organization Workspace route | Missing | Organization profile and lifecycle only |
 
 ## Account Center
 
@@ -62,7 +63,7 @@ reviewed.
 | Applications | canonical sibling route | Real but grouped elsewhere | Authorized apps and revocation |
 | Agents | canonical sibling route | Partial | Personal Agent inventory, grants, and retirement |
 | Organizations | canonical sibling route | Missing | Memberships, invitations, and conditional creation |
-| Organization detail | canonical Account Center route family | Missing | Overview, Members, Agents, Roles, Settings and conditional Open Console |
+| Organization detail | `/organizations/:organizationId/*` | Partial | Canonical Organization Workspace with Overview, Members, Roles, Agents, Applications, Resource Servers, Webhooks, Activity, and Settings |
 
 ## Hosted Auth
 
