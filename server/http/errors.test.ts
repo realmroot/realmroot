@@ -16,7 +16,11 @@ describe('API error boundary helpers', () => {
   it('creates typed API errors and serializes request IDs', async () => {
     expect(badRequest('Bad input')).toMatchObject({ status: 400, code: 'bad_request', message: 'Bad input' })
     expect(unauthorized()).toMatchObject({ status: 401, code: 'unauthorized', message: 'Authentication is required.' })
-    expect(forbidden()).toMatchObject({ status: 403, code: 'forbidden', message: 'Admin access is required.' })
+    expect(forbidden()).toMatchObject({
+      status: 403,
+      code: 'forbidden',
+      message: 'Access to this resource is forbidden.',
+    })
     expect(notFound()).toMatchObject({ status: 404, code: 'not_found', message: 'Resource not found.' })
     expect(resourceInUse('In use.', { agentAccessGrants: 1 })).toMatchObject({
       status: 409,

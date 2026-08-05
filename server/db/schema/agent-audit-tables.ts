@@ -12,6 +12,8 @@ export const agentAuditEvent = sqliteTable(
     subject: text('subject'),
     agentIdentityId: text('agent_identity_id'),
     hostId: text('host_id'),
+    ownerUserId: text('owner_user_id'),
+    ownerOrganizationId: text('owner_organization_id'),
     resourceId: text('resource_id'),
     resourceConnectionId: text('resource_connection_id'),
     accessGrantId: text('access_grant_id'),
@@ -25,6 +27,8 @@ export const agentAuditEvent = sqliteTable(
   (table) => [
     index('agentAuditEvent_occurredAt_idx').on(table.occurredAt),
     index('agentAuditEvent_agentIdentityId_idx').on(table.agentIdentityId),
+    index('agentAuditEvent_ownerUserId_idx').on(table.ownerUserId),
+    index('agentAuditEvent_ownerOrganizationId_idx').on(table.ownerOrganizationId),
     index('agentAuditEvent_resourceId_idx').on(table.resourceId),
     index('agentAuditEvent_result_idx').on(table.result),
   ],

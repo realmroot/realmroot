@@ -43,12 +43,12 @@ describe('management resource routes', () => {
     expect(applicationService.list).toHaveBeenCalledWith({ limit: 10, offset: 0 })
     expect(applicationService.create).toHaveBeenCalledWith(
       { name: 'Portal', clientType: 'public_spa', redirectUris: ['https://app.example.com/callback'] },
-      'admin-1',
+      { kind: 'user', userId: 'admin-1' },
     )
     expect(applicationService.replaceRedirectUris).toHaveBeenCalledWith('app-1', {
       redirectUris: ['https://next.example.com/callback'],
     })
-    expect(applicationService.rotateSecret).toHaveBeenCalledWith('app-1', 'admin-1')
+    expect(applicationService.rotateSecret).toHaveBeenCalledWith('app-1', { kind: 'user', userId: 'admin-1' })
     expect(applicationService.listAuthorizations).toHaveBeenCalledWith({ applicationId: 'app-1', limit: 10, offset: 0 })
     expect(applicationService.revokeAuthorization).toHaveBeenCalledWith('authorization-1')
   })
@@ -87,7 +87,7 @@ describe('management resource routes', () => {
     expect(authorizationService.createInvitation).toHaveBeenCalledWith(
       'org-1',
       { email: 'new@example.com', role: 'member' },
-      'admin-1',
+      { kind: 'user', userId: 'admin-1' },
     )
     expect(authorizationService.removeMember).toHaveBeenCalledWith('org-1', 'member-1')
   })
@@ -151,7 +151,7 @@ describe('management resource routes', () => {
     ])
     expect(authorizationService.createRoleAssignment).toHaveBeenCalledWith(
       { roleId: 'role-1', subjectType: 'user', subjectId: 'user-1' },
-      'admin-1',
+      { kind: 'user', userId: 'admin-1' },
     )
     expect(authorizationService.putRoleAssignmentRevocation).toHaveBeenCalledWith('assignment-1')
   })
@@ -317,6 +317,8 @@ function withAdminContext() {
       session: { session: { id: 'session-1' }, user },
       user,
     })
+    c.set('managementBoundary', { kind: 'realm' })
+    c.set('managementActor', { kind: 'user', userId: user.id })
     c.set('deps', deps)
     await next()
   })

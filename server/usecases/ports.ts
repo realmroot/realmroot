@@ -160,8 +160,13 @@ export interface WebhookRepository {
   ): Promise<{ items: WebhookEndpointRecord[]; total: number }>
   listSubscribedEndpoints(event: WebhookEvent, organizationIds: string[]): Promise<WebhookEndpointRecord[]>
   findEndpoint(id: string): Promise<WebhookEndpointRecord | null>
-  createEndpoint(input: WebhookEndpointInsert): Promise<WebhookEndpointRecord>
+  createEndpoint(input: WebhookEndpointInsert, audit: AgentAuditEventRecord): Promise<WebhookEndpointRecord>
   updateEndpoint(id: string, input: Partial<WebhookEndpointInsert>): Promise<WebhookEndpointRecord | null>
+  updateEndpointWithAudit(
+    id: string,
+    input: Partial<WebhookEndpointInsert>,
+    audit: AgentAuditEventRecord,
+  ): Promise<WebhookEndpointRecord | null>
   deleteEndpoint(id: string): Promise<void>
   listRequests(
     query: ListWebhookRequestsQuery,
@@ -435,6 +440,8 @@ export interface AgentAuditEventRecord {
   subject: string | null
   agentIdentityId: string | null
   hostId: string | null
+  ownerUserId: string | null
+  ownerOrganizationId: string | null
   resourceId: string | null
   resourceConnectionId: string | null
   accessGrantId: string | null
@@ -448,7 +455,7 @@ export interface AgentAuditRepository {
   append(input: AgentAuditEventRecord): Promise<void>
   list(
     page: PaginationInput,
-    filter?: { agentIdentityId?: string; ownerOrganizationIds?: string[] },
+    filter?: { agentIdentityId?: string; ownerOrganizationIds?: string[]; ownerUserId?: string },
   ): Promise<PaginatedResult<AgentAuditEventRecord>>
 }
 
@@ -823,8 +830,8 @@ export interface AgentIdentityAggregate {
 export interface AgentIdentityRepository {
   listPersonal(userId: string): Promise<AgentIdentityAggregate[]>
   listOrganization(organizationId: string): Promise<AgentIdentityAggregate[]>
-  listOwnedByOrganizations(
-    organizationIds: string[],
+  listOwned(
+    scope: AgentAuthorityInventoryScope,
     page: PaginationInput,
   ): Promise<PaginatedResult<AgentIdentityAggregate>>
   listAll(page: PaginationInput): Promise<PaginatedResult<AgentIdentityAggregate>>
@@ -1008,10 +1015,13 @@ export interface ApplicationPaginatedResult<T> {
 }
 
 export interface ApplicationRepository {
-  create(input: {
-    application: Omit<ApplicationAggregate, 'createdAt' | 'updatedAt'>
-    clientSecret: Omit<ClientSecretRecord, 'createdAt' | 'expiresAt' | 'revokedAt'> | null
-  }): Promise<ApplicationAggregate>
+  create(
+    input: {
+      application: Omit<ApplicationAggregate, 'createdAt' | 'updatedAt'>
+      clientSecret: Omit<ClientSecretRecord, 'createdAt' | 'expiresAt' | 'revokedAt'> | null
+    },
+    audit: AgentAuditEventRecord,
+  ): Promise<ApplicationAggregate>
   list(
     pagination: PaginationQuery,
     ownerOrganizationIds?: string[],
@@ -1027,10 +1037,13 @@ export interface ApplicationRepository {
     applicationId: string,
     pagination: PaginationQuery,
   ): Promise<ApplicationPaginatedResult<ClientSecretRecord>>
-  rotateSecret(input: {
-    applicationId: string
-    secret: Omit<ClientSecretRecord, 'createdAt' | 'expiresAt' | 'revokedAt'>
-  }): Promise<ClientSecretRecord>
+  rotateSecret(
+    input: {
+      applicationId: string
+      secret: Omit<ClientSecretRecord, 'createdAt' | 'expiresAt' | 'revokedAt'>
+    },
+    audit: AgentAuditEventRecord,
+  ): Promise<ClientSecretRecord>
   listAuthorizations(
     query: PaginationQuery & { applicationId?: string; status?: 'active' | 'expired' | 'revoked' },
     ownerOrganizationIds?: string[],
@@ -1102,7 +1115,7 @@ export interface AuthorizationRepository {
   hasPendingInvitation(email: string, now: Date): Promise<boolean>
   updateMember(id: string, patch: UpdateMemberRequest): Promise<void>
   removeMember(id: string): Promise<void>
-  createInvitation(input: InvitationRecordInput): Promise<InvitationResponse>
+  createInvitation(input: InvitationRecordInput, audit: AgentAuditEventRecord): Promise<InvitationResponse>
   listInvitations(
     organizationId: string,
     pagination: PaginationQuery,
@@ -1139,7 +1152,10 @@ export interface AuthorizationRepository {
     agents: Array<{ agentIdentityId: string; organizationId: string | null }>,
   ): Promise<Map<string, number>>
   findRoleAssignment(id: string): Promise<RoleAssignmentResponse | null>
-  createRoleAssignment(input: ContextualRoleAssignmentInput): Promise<RoleAssignmentResponse>
+  createRoleAssignment(
+    input: ContextualRoleAssignmentInput,
+    audit: AgentAuditEventRecord,
+  ): Promise<RoleAssignmentResponse>
   revokeRoleAssignment(id: string, revokedAt: Date): Promise<boolean>
   listUserRoleAssignments(userId: string, scope: RoleAssignmentScope): Promise<RoleAssignmentRecord[]>
   listApplicationRoleAssignments(applicationId: string, scope: RoleAssignmentScope): Promise<RoleAssignmentRecord[]>

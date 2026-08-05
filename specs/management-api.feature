@@ -77,22 +77,23 @@ Feature: Unified Realmroot resource API
 
   @entrypoint:restish @journey:management-restish-user-crud
   Scenario: An authorized Agent manages users through the unified API
-    Given the Agent has approved users:read and users:write scopes
+    Given the Agent has Realm authority with approved users:read and users:write scopes
     When I create, update, list, and delete a user with Restish
     Then the unified API applies each user change
 
 
   @entrypoint:restish @journey:management-restish-organization-crud
   Scenario: An authorized Agent manages organizations through the unified API
-    Given the Agent has approved organizations:read and organizations:write scopes
+    Given the Agent has Realm authority with approved organizations:read and organizations:write scopes
     When I create, update, list, and delete an organization with Restish
     Then the unified API applies each organization change
     And Organization, member, and invitation creation return their canonical locations
+    And an Organization authority can manage only its existing Organization and cannot create another Organization
 
 
   @entrypoint:restish @journey:management-restish-role-crud
   Scenario: An authorized Agent manages roles and their scope eligibility through the unified API
-    Given the Agent has approved roles:read and roles:write scopes
+    Given the Agent has Realm authority with approved roles:read and roles:write scopes
     When I create, update, list, and delete a role and replace its OpenAPI scope references with Restish
     Then the unified API applies each role change
     And each role scope must exist in its business resource server OpenAPI contract
@@ -100,6 +101,8 @@ Feature: Unified Realmroot resource API
     And Role creation returns its canonical location
     And Role assignment creation returns its canonical location and duplicate active assignments conflict
     And Role assignment revocation is an idempotent child resource
+    And an Organization authority can manage assignments only inside its Organization
+    And an Account authority can read only its own Realm assignments
 
 
   @entrypoint:restish @journey:management-restish-api-resource-crud
@@ -154,9 +157,26 @@ Feature: Unified Realmroot resource API
     And Account Center does not publish duplicate Organization authority collection paths
 
 
+  @entrypoint:restish @journey:management-single-authorization-boundary
+  Scenario: Every management operation uses one canonical authority boundary
+    Given Realm, Organization, Account, and cross-owner resources exist
+    When a browser session or DPoP Agent invokes a management collection, item, or mutation
+    Then authentication produces exactly one management actor and one authority boundary
+    And Realm authority can operate across the Realm
+    And Organization authority can operate only on resources owned by that Organization
+    And Account authority can operate only on resources owned by that exact user
+    And Organization membership never expands an Account authority into Organization management
+    And collection filters apply before pagination and totals
+    And item and mutation authorization use the same owner rule as collection authorization
+    And controller decisions that require a human session are not advertised as DPoP operations
+    And the OpenAPI authority metadata, requestable scope catalog, and runtime policy come from the same declaration
+    And no legacy Console Organization scope or credential-type authorization branch remains
+
+
   @entrypoint:restish @journey:management-restish-settings-update
   Scenario: An authorized Agent manages tenant settings
-    Given the Agent has approved settings:read, settings:write, security:read, and security:write scopes
+    Given the Agent has Realm authority with approved settings:read and settings:write scopes
     When I update branding, Account Center, sign-in, Realm, Organization creation policy, Developer Console access policy, Email delivery configuration, and security resources with Restish
     Then the unified API persists each tenant setting change
+    And security policy mutations require an authenticated human controller session
     And replacing Realm, Organization creation, Developer Console access, or Email delivery state requires the current strong entity tag

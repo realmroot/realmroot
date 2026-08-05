@@ -649,10 +649,10 @@ describe('planned Account Center journeys', () => {
       http.get(`${base}/api/account/organizations/org-family/agents`, () =>
         json({ message: 'Agents unavailable.' }, { status: 500 }),
       ),
-      http.get(`${base}/api/access/assignments`, () =>
+      http.get(`${base}/api/account/organizations/org-family/role-assignments`, () =>
         json({ message: 'Role assignments unavailable.' }, { status: 500 }),
       ),
-      http.get(`${base}/api/access/authorizations`, () =>
+      http.get(`${base}/api/account/organizations/org-family/agent-authorizations`, () =>
         json({ message: 'Agent grants unavailable.' }, { status: 500 }),
       ),
       ...organizationDetailHandlers('member'),
@@ -674,8 +674,12 @@ describe('planned Account Center journeys', () => {
       http.get(`${base}/api/account/organizations/org-family/agents`, () =>
         json({ items: [], pagination: pagination(0) }),
       ),
-      http.get(`${base}/api/access/assignments`, () => json({ assignments: [], pagination: pagination(0) })),
-      http.get(`${base}/api/access/authorizations`, () => json({ items: [], pagination: pagination(0) })),
+      http.get(`${base}/api/account/organizations/org-family/role-assignments`, () =>
+        json({ assignments: [], pagination: pagination(0) }),
+      ),
+      http.get(`${base}/api/account/organizations/org-family/agent-authorizations`, () =>
+        json({ grants: [], pagination: pagination(0) }),
+      ),
     )
     renderWithClient(<AccountOrganizationDetailPage organizationId="org-family" />)
     expect((await screen.findByRole('alert')).textContent).toContain('Organization unavailable')
@@ -734,7 +738,7 @@ function accessRequest(): AccessRequestApproval {
       url: 'https://identity.example.com/approve',
       expiresAt: '2099-01-01T00:00:00.000Z',
     },
-    links: { self: '/api/access-requests/request-1', credentials: null },
+    links: { self: '/api/agent/access-requests/request-1', credentials: null },
     credentialOffer: null,
     expiresAt: '2099-01-01T00:00:00.000Z',
     decidedAt: null,
@@ -821,23 +825,35 @@ function organizationDetailHandlers(role: string, options: { empty?: boolean } =
     http.get(`${base}/api/account/organizations/org-family/agents`, () =>
       json({ items: agents, pagination: pagination(agents.length) }),
     ),
-    http.get(`${base}/api/access/assignments`, ({ request }) => {
-      if (options.empty || new URL(request.url).searchParams.get('context') === 'realm') {
+    http.get(`${base}/api/account/organizations/org-family/role-assignments`, () => {
+      if (options.empty) {
         return json({ assignments: [], pagination: pagination(0) })
       }
       return json({
         assignments: [
           {
-            id: 'assignment-1',
-            roleId: 'role-1',
-            subjectType: 'user',
-            subjectId: store.profile.id,
-            organizationId: 'org-family',
-            assignedByUserId: 'admin-1',
-            expiresAt: null,
-            revokedAt: null,
-            createdAt: '2026-08-01T00:00:00.000Z',
-            updatedAt: '2026-08-01T00:00:00.000Z',
+            assignment: {
+              id: 'assignment-1',
+              roleId: 'role-1',
+              subjectType: 'user',
+              subjectId: store.profile.id,
+              organizationId: 'org-family',
+              assignedByUserId: 'admin-1',
+              expiresAt: null,
+              revokedAt: null,
+              createdAt: '2026-08-01T00:00:00.000Z',
+              updatedAt: '2026-08-01T00:00:00.000Z',
+            },
+            role: {
+              id: 'role-1',
+              key: 'family.viewer',
+              name: 'Family viewer',
+              description: null,
+              system: false,
+              createdAt: '2026-08-01T00:00:00.000Z',
+              updatedAt: '2026-08-01T00:00:00.000Z',
+            },
+            permissions: [],
           },
         ],
         pagination: pagination(1),
@@ -855,18 +871,18 @@ function organizationDetailHandlers(role: string, options: { empty?: boolean } =
       }),
     ),
     http.get(`${base}/api/access/roles/role-1/scopes`, () => json({ scopes: [] })),
-    http.get(`${base}/api/access/authorizations`, () =>
+    http.get(`${base}/api/account/organizations/org-family/agent-authorizations`, () =>
       json({
-        items: options.empty
+        grants: options.empty
           ? []
           : [
               {
                 id: 'grant-1',
                 agentId: 'agent-family',
-                resource: { id: 'resource-1', identifier: 'projects', name: 'Projects API' },
+                agentName: 'Family assistant',
+                resourceId: 'resource-1',
                 scopes: ['projects:read'],
                 mode: 'persistent',
-                status: 'active',
                 expiresAt: null,
                 createdAt: '2026-08-01T00:00:00.000Z',
               },

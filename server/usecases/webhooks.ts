@@ -1,4 +1,6 @@
 import { badRequest, conflict, notFound } from '@server/domain/errors'
+import type { ManagementActor } from '@server/domain/management-authorization'
+import { managementActorAuditRecord, managementActorUserId } from '@server/usecases/agent-audit'
 import type { Deps } from '@server/usecases/deps'
 import type { WebhookDeliveryAttemptRecord, WebhookEndpointRecord, WebhookRequestRecord } from '@server/usecases/ports'
 import { type PaginationInput, paginationMetadata } from '@shared/api/pagination'
@@ -34,24 +36,32 @@ export async function getWebhookEndpoint(deps: Deps, id: string) {
 export async function createWebhookEndpoint(
   deps: Deps,
   input: CreateWebhookEndpointRequest,
-  actorUserId: string | null,
+  actor: ManagementActor,
 ): Promise<WebhookEndpointSecretResponse> {
   assertEvents(input.events)
   const signingSecret = createSigningSecret()
   const id = `wh_${crypto.randomUUID().replaceAll('-', '')}`
   const now = new Date()
-  const endpoint = await deps.webhooks.createEndpoint({
-    id,
-    url: input.url,
-    events: input.events,
-    enabled: input.enabled,
-    organizationId: input.organizationId,
-    signingSecret: await deps.secrets.seal(signingSecret, webhookSecretContext(id)),
-    secretPrefix: secretPrefix(signingSecret),
-    createdByUserId: actorUserId,
-    createdAt: now,
-    updatedAt: now,
-  })
+  const endpoint = await deps.webhooks.createEndpoint(
+    {
+      id,
+      url: input.url,
+      events: input.events,
+      enabled: input.enabled,
+      organizationId: input.organizationId,
+      signingSecret: await deps.secrets.seal(signingSecret, webhookSecretContext(id)),
+      secretPrefix: secretPrefix(signingSecret),
+      createdByUserId: managementActorUserId(actor),
+      createdAt: now,
+      updatedAt: now,
+    },
+    managementActorAuditRecord({
+      action: 'management.webhook.created',
+      actor,
+      owner: input.organizationId ? { kind: 'organization', organizationId: input.organizationId } : { kind: 'realm' },
+      metadata: { webhookId: id },
+    }),
+  )
 
   return { endpoint: toEndpointResponse(endpoint), signingSecret }
 }
@@ -71,15 +81,30 @@ export async function deleteWebhookEndpoint(deps: Deps, id: string) {
   await deps.webhooks.deleteEndpoint(id)
 }
 
-export async function rotateWebhookSecret(deps: Deps, id: string): Promise<WebhookEndpointSecretResponse> {
+export async function rotateWebhookSecret(
+  deps: Deps,
+  id: string,
+  actor: ManagementActor,
+): Promise<WebhookEndpointSecretResponse> {
   const current = await deps.webhooks.findEndpoint(id)
   if (!current) throw notFound('Webhook endpoint not found.')
   const signingSecret = createSigningSecret()
-  const endpoint = await deps.webhooks.updateEndpoint(id, {
-    signingSecret: await deps.secrets.seal(signingSecret, webhookSecretContext(id)),
-    secretPrefix: secretPrefix(signingSecret),
-    updatedAt: new Date(),
-  })
+  const endpoint = await deps.webhooks.updateEndpointWithAudit(
+    id,
+    {
+      signingSecret: await deps.secrets.seal(signingSecret, webhookSecretContext(id)),
+      secretPrefix: secretPrefix(signingSecret),
+      updatedAt: new Date(),
+    },
+    managementActorAuditRecord({
+      action: 'management.webhook-secret.rotated',
+      actor,
+      owner: current.organizationId
+        ? { kind: 'organization', organizationId: current.organizationId }
+        : { kind: 'realm' },
+      metadata: { webhookId: current.id },
+    }),
+  )
   if (!endpoint) throw notFound('Webhook endpoint not found.')
   return { endpoint: toEndpointResponse(endpoint), signingSecret }
 }

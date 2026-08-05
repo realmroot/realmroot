@@ -3,7 +3,7 @@ import type {
   AgentIdentityAggregate,
   AgentIdentityRepository,
 } from '@server/usecases/ports'
-import { and, count, desc, eq, inArray } from 'drizzle-orm'
+import { and, count, desc, eq, inArray, or, sql } from 'drizzle-orm'
 import type { BatchItem } from 'drizzle-orm/batch'
 import type { Database } from '../../db/client'
 import {
@@ -35,9 +35,14 @@ export function createDrizzleAgentIdentityRepository(db: Database): AgentIdentit
       return aggregates(db, identities)
     },
 
-    async listOwnedByOrganizations(organizationIds, page) {
-      if (organizationIds.length === 0) return { items: [], total: 0, ...page }
-      const ownerCondition = inArray(agentIdentity.ownerOrganizationId, organizationIds)
+    async listOwned(scope, page) {
+      const owners = [
+        scope.ownerUserId ? eq(agentIdentity.ownerUserId, scope.ownerUserId) : undefined,
+        scope.ownerOrganizationIds?.length
+          ? inArray(agentIdentity.ownerOrganizationId, scope.ownerOrganizationIds)
+          : undefined,
+      ].filter((condition) => condition !== undefined)
+      const ownerCondition = owners.length > 0 ? or(...owners) : sql`0`
       const [identities, totals] = await Promise.all([
         db
           .select()

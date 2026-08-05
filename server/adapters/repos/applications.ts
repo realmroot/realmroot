@@ -3,6 +3,7 @@ import { and, count, desc, eq, gt, inArray, isNotNull, isNull, lte, or } from 'd
 import type { BatchItem } from 'drizzle-orm/batch'
 import type { Database } from '../../db/client'
 import {
+  agentAuditEvent,
   application,
   applicationAudienceOrganization,
   applicationAudienceUser,
@@ -34,7 +35,7 @@ const _oidcClaimsMetadataKey = 'oidcClaims'
 
 export function createDrizzleApplicationRepository(db: Database): ApplicationRepository {
   return {
-    async create(input) {
+    async create(input, audit) {
       const now = new Date()
       const statements: [BatchItem<'sqlite'>, ...BatchItem<'sqlite'>[]] = [
         db
@@ -73,6 +74,7 @@ export function createDrizzleApplicationRepository(db: Database): ApplicationRep
             ),
         )
       }
+      statements.push(db.insert(agentAuditEvent).values(audit))
       await db.batch(statements)
       return {
         ...input.application,
@@ -238,7 +240,7 @@ export function createDrizzleApplicationRepository(db: Database): ApplicationRep
       }
     },
 
-    async rotateSecret(input) {
+    async rotateSecret(input, audit) {
       const now = new Date()
       const versions = await db
         .select({ version: applicationClientSecret.version })
@@ -271,6 +273,7 @@ export function createDrizzleApplicationRepository(db: Database): ApplicationRep
             .update(oauthClient)
             .set({ clientSecret: input.secret.secretHash, updatedAt: now })
             .where(eq(oauthClient.clientId, app.oauthClientId)),
+          db.insert(agentAuditEvent).values(audit),
         ])
       }
 

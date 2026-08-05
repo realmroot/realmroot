@@ -89,7 +89,7 @@ describe('account self-service over real D1', () => {
     expect(((await updated.json()) as { user: { displayName: string } }).user.displayName).toBe('Renamed Account')
   })
 
-  it('creates and manages a consumer Organization without Console access [spec: account-center/account-organization-management] [spec: account-center/consumer-organization-boundary]', async () => {
+  it('creates and manages a consumer Organization without Console access [spec: account-center/account-organization-management] [spec: account-center/consumer-organization-boundary] [spec: account-center/account-role-relationships]', async () => {
     const { adminCookie, cookie: initialCookie, userId } = await signedInUser(harness)
     let cookie = initialCookie
     const currentPolicyResponse = await harness.request('/api/realm/organization-creation-policy', {
@@ -236,23 +236,25 @@ describe('account self-service over real D1', () => {
     })
     expect(agents.status, await agents.clone().text()).toBe(200)
     await expect(agents.json()).resolves.toMatchObject({ items: [{ id: 'household-agent' }] })
-    const roleAssignments = await harness.request(
-      `/api/access/assignments?organizationId=${organizationId}&status=active`,
-      { headers: { cookie } },
-    )
+    const roleAssignments = await harness.request(`/api/account/organizations/${organizationId}/role-assignments`, {
+      headers: { cookie },
+    })
     expect(roleAssignments.status, await roleAssignments.clone().text()).toBe(200)
     await expect(roleAssignments.json()).resolves.toMatchObject({
-      assignments: [{ roleId, subjectId: userId, organizationId }],
+      assignments: [{ assignment: { roleId, subjectId: userId, organizationId } }],
     })
+    const realmRoleAssignments = await harness.request('/api/account/role-assignments', {
+      headers: { cookie },
+    })
+    expect(realmRoleAssignments.status, await realmRoleAssignments.clone().text()).toBe(200)
+    await expect(realmRoleAssignments.json()).resolves.toMatchObject({ assignments: [] })
     const agentAccessGrants = await harness.request(
-      `/api/access/authorizations?organizationId=${organizationId}&status=active`,
-      {
-        headers: { cookie },
-      },
+      `/api/account/organizations/${organizationId}/agent-authorizations`,
+      { headers: { cookie } },
     )
     expect(agentAccessGrants.status, await agentAccessGrants.clone().text()).toBe(200)
     await expect(agentAccessGrants.json()).resolves.toMatchObject({
-      items: [{ id: 'household-agent-grant', agentId: 'household-agent', scopes: ['household:read'] }],
+      grants: [{ id: 'household-agent-grant', agentId: 'household-agent', scopes: ['household:read'] }],
     })
     const profile = await harness.request('/api/account/profile', { headers: { cookie } })
     await expect(profile.json()).resolves.toMatchObject({ user: { id: userId } })

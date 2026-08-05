@@ -27,7 +27,7 @@ const request = {
   reason: 'Read project status',
   status: 'pending' as const,
   interaction: { type: 'user-approval' as const, status: 'pending' as const, url: null, expiresAt: null },
-  links: { self: '/api/access-requests/request-1', credentials: null },
+  links: { self: '/api/agent/access-requests/request-1', credentials: null },
   credentialOffer: null,
   expiresAt: '2026-08-01T01:00:00.000Z',
   decidedAt: null,

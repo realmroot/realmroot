@@ -1,91 +1,22 @@
 import { forbidden, unauthorized } from '@server/domain/errors'
-import { resolveDeveloperAccess } from '@server/usecases/developer-access'
 import {
-  isProtectedResourceScope,
-  type ProtectedResource,
-  protectedResourceForPath,
-  requiredAgentSelfServiceScope,
-  requiredResourceScope,
-} from '@shared/authz'
+  type ManagementActor,
+  type ManagementBoundary,
+  type ManagementOwner,
+  requireManagementOwner,
+  resolveManagementOwnerFilter,
+} from '@server/domain/management-authorization'
+import { resolveDeveloperAccess } from '@server/usecases/developer-access'
+import { protectedResourceForPath, requiredAgentSelfServiceScope } from '@shared/authz'
+import { managementOperationPolicy } from '@shared/management-authorization'
 import type { MiddlewareHandler } from 'hono'
 import { getPrincipal } from './authn'
 import { getDeps } from './deps'
 
 declare module 'hono' {
   interface ContextVariableMap {
-    consoleOrganizationIds: string[] | null
-    managementAccessScope:
-      | { kind: 'realm' }
-      | { kind: 'organizations'; organizationIds: string[] }
-      | { kind: 'account'; userId: string; organizationIds: string[] }
-  }
-}
-
-export function authz(resource: ProtectedResource): MiddlewareHandler {
-  return async (c, next) => {
-    const { user, agent } = getPrincipal(c)
-    if (!user && !agent) throw unauthorized()
-
-    if (user) {
-      if (hasRole(user.role, 'admin')) {
-        c.set('consoleOrganizationIds', null)
-        c.set('managementAccessScope', { kind: 'realm' })
-        await next()
-        return
-      }
-      const deps = getDeps(c)
-      const access = await resolveDeveloperAccess(deps, await deps.users.getUser(user.id))
-      const organizationIds = access.consoleOrganizations.map((item) => item.organizationId)
-      if (organizationIds.length && developerResourceAllowed(c.req.method, c.req.path, resource)) {
-        c.set('consoleOrganizationIds', organizationIds)
-        c.set('managementAccessScope', { kind: 'organizations', organizationIds })
-        await next()
-        return
-      }
-      if (!accountAuthorityReadAllowed(c.req.method, c.req.path)) throw forbidden()
-      const memberships = await deps.authorization.listUserMemberships(user.id)
-      const activeOrganizations = await Promise.all(
-        memberships.map((membership) => deps.authorization.findOrganization(membership.organizationId)),
-      )
-      const accountOrganizationIds = activeOrganizations.flatMap((organization) =>
-        organization && !organization.disabled ? [organization.id] : [],
-      )
-      c.set('consoleOrganizationIds', [])
-      c.set('managementAccessScope', { kind: 'account', userId: user.id, organizationIds: accountOrganizationIds })
-      await next()
-      return
-    }
-
-    const selfServiceScope = requiredAgentSelfServiceScope(c.req.method, c.req.path)
-    const required = selfServiceScope ?? requiredResourceScope(c.req.method, resource)
-    if (!required || !agent!.scopes.includes(required)) {
-      throw forbidden(required ? `OAuth scope "${required}" is required.` : 'This resource is read-only.')
-    }
-    if (selfServiceScope || !isProtectedResourceScope(required)) {
-      c.set('consoleOrganizationIds', [])
-      c.set('managementAccessScope', { kind: 'account', userId: '', organizationIds: [] })
-      await next()
-      return
-    }
-    if (!agent!.authority) throw forbidden('A Realmroot authority Resource is required for management scopes.')
-    if (agent!.authority.kind === 'realm') {
-      c.set('consoleOrganizationIds', null)
-      c.set('managementAccessScope', { kind: 'realm' })
-    } else if (agent!.authority.kind === 'organization') {
-      const organizationIds = [agent!.authority.organizationId]
-      c.set('consoleOrganizationIds', organizationIds)
-      c.set('managementAccessScope', { kind: 'organizations', organizationIds })
-    } else {
-      const memberships = await getDeps(c).authorization.listUserMemberships(agent!.authority.userId)
-      const organizationIds = memberships.map((membership) => membership.organizationId)
-      c.set('consoleOrganizationIds', [])
-      c.set('managementAccessScope', {
-        kind: 'account',
-        userId: agent!.authority.userId,
-        organizationIds,
-      })
-    }
-    await next()
+    managementBoundary: ManagementBoundary
+    managementActor: ManagementActor
   }
 }
 
@@ -95,85 +26,153 @@ export function authzForProtectedPath(): MiddlewareHandler {
       await next()
       return
     }
-    const resource = protectedResourceForPath(c.req.path.replace(/^\/api\/?/, ''))
-    if (!resource) {
+    const selfServiceScope = requiredAgentSelfServiceScope(c.req.method, c.req.path)
+    if (selfServiceScope) {
+      const principal = getPrincipal(c).agent
+      if (!principal) throw forbidden('An OAuth-authenticated Agent is required.')
+      if (!principal.scopes.includes(selfServiceScope)) {
+        throw forbidden(`OAuth scope "${selfServiceScope}" is required.`)
+      }
       await next()
       return
     }
-    return authz(resource)(c, next)
+    const normalizedPath = c.req.path.replace(/^\/api\/?/, '')
+    const policy = managementOperationPolicy(c.req.method, normalizedPath)
+    if (policy) return authorizeManagement(c, policy, next)
+    if (!protectedResourceForPath(normalizedPath)) {
+      await next()
+      return
+    }
+    throw new Error(`Protected operation ${c.req.method.toUpperCase()} ${c.req.path} has no authorization policy.`)
   }
 }
 
-export function getManagementAccessScope(c: Parameters<typeof getPrincipal>[0]) {
-  return c.get('managementAccessScope')
+export function getManagementBoundary(c: Parameters<typeof getPrincipal>[0]): ManagementBoundary {
+  const boundary = c.get('managementBoundary')
+  if (!boundary) throw new Error('Management authorization boundary was not established before route execution.')
+  return boundary
 }
 
-export function getConsoleOrganizationScope(c: Parameters<typeof getPrincipal>[0]) {
-  return c.get('consoleOrganizationIds')
+export function getManagementActor(c: Parameters<typeof getPrincipal>[0]): ManagementActor {
+  const actor = c.get('managementActor')
+  if (!actor) throw new Error('Management actor was not established before route execution.')
+  return actor
 }
 
-export function requireConsoleOrganizationAccess(c: Parameters<typeof getPrincipal>[0], organizationId: string) {
-  const organizationIds = getConsoleOrganizationScope(c)
-  if (organizationIds && !organizationIds.includes(organizationId)) throw forbidden()
+export function requireHumanManagementActor(c: Parameters<typeof getPrincipal>[0]): string {
+  const actor = getManagementActor(c)
+  if (actor.kind !== 'user') throw forbidden('This operation requires an authenticated human controller.')
+  return actor.userId
 }
 
-export function requireConsoleOwnedOrganization(
+export function accountManagementBoundary(userId: string): ManagementBoundary {
+  return { kind: 'restricted', accountUserId: userId, organizationIds: [] }
+}
+
+export function requireManagementOrganization(c: Parameters<typeof getPrincipal>[0], organizationId: string) {
+  requireManagementOwner(getManagementBoundary(c), { kind: 'organization', organizationId })
+}
+
+export function requireManagementOwnedOrganization(
   c: Parameters<typeof getPrincipal>[0],
   organizationId: string | null | undefined,
 ) {
-  const organizationIds = getConsoleOrganizationScope(c)
-  if (!organizationIds) return
-  if (!organizationId || !organizationIds.includes(organizationId)) throw forbidden()
+  requireManagementOwner(
+    getManagementBoundary(c),
+    organizationId ? { kind: 'organization', organizationId } : { kind: 'realm' },
+  )
 }
 
-export async function requireConsoleUserAccess(c: Parameters<typeof getPrincipal>[0], userId: string) {
-  const organizationIds = getConsoleOrganizationScope(c)
-  if (!organizationIds) return
-  const allowedUserIds = await getDeps(c).authorization.listMemberUserIds(organizationIds)
-  if (!allowedUserIds.includes(userId)) throw forbidden()
+export function requireRealmManagement(c: Parameters<typeof getPrincipal>[0]) {
+  requireManagementOwner(getManagementBoundary(c), { kind: 'realm' })
 }
 
-export function requireRealmConsoleAccess(c: Parameters<typeof getPrincipal>[0]) {
-  if (getConsoleOrganizationScope(c)) throw forbidden()
-}
-
-export function resolveOrganizationInventoryScope(
+export function resolveManagementOrganizationIds(
   c: Parameters<typeof getPrincipal>[0],
   requestedOrganizationId?: string,
-) {
-  const organizationIds = getConsoleOrganizationScope(c)
-  if (!organizationIds) return requestedOrganizationId ? [requestedOrganizationId] : undefined
-  if (!requestedOrganizationId) return organizationIds
-  return organizationIds.includes(requestedOrganizationId) ? [requestedOrganizationId] : []
+): string[] | undefined {
+  return resolveManagementOwnerFilter(
+    getManagementBoundary(c),
+    { realm: true, organization: true },
+    requestedOrganizationId,
+  ).ownerOrganizationIds
 }
 
-function developerResourceAllowed(method: string, path: string, resource: ProtectedResource) {
-  if (method === 'GET' || method === 'HEAD') {
-    return [
-      'applications',
-      'users',
-      'organizations',
-      'roles',
-      'apiResources',
-      'agents',
-      'auditEvents',
-      'connectors',
-      'webhooks',
-    ].includes(resource)
+async function sessionManagementBoundary(
+  c: Parameters<typeof getPrincipal>[0],
+  userId: string,
+  role: string | null | undefined,
+  policy: NonNullable<ReturnType<typeof managementOperationPolicy>>,
+): Promise<ManagementBoundary> {
+  if (hasRole(role, 'admin')) {
+    if (!policy.authorities.includes('realm')) throw forbidden()
+    return { kind: 'realm' }
   }
-  if (resource === 'applications' || resource === 'apiResources' || resource === 'webhooks') return true
-  return resource === 'roles' && path.startsWith('/api/access/assignments')
+
+  const deps = getDeps(c)
+  const access = await resolveDeveloperAccess(deps, await deps.users.getUser(userId))
+  const organizationIds = policy.authorities.includes('organization')
+    ? access.consoleOrganizations.map((item) => item.organizationId)
+    : []
+  const accountUserId = policy.authorities.includes('account') ? userId : null
+  if (organizationIds.length || accountUserId) {
+    return { kind: 'restricted', accountUserId, organizationIds }
+  }
+  throw forbidden()
 }
 
-function accountAuthorityReadAllowed(method: string, path: string) {
-  if (method !== 'GET' && method !== 'HEAD') return false
-  return (
-    path === '/api/access/assignments' ||
-    /^\/api\/access\/assignments\/[^/]+$/.test(path) ||
-    /^\/api\/access\/roles\/[^/]+(?:\/scopes)?$/.test(path) ||
-    path === '/api/access/authorizations' ||
-    /^\/api\/access\/authorizations\/[^/]+$/.test(path)
-  )
+async function authorizeManagement(
+  c: Parameters<typeof getPrincipal>[0],
+  policy: NonNullable<ReturnType<typeof managementOperationPolicy>>,
+  next: () => Promise<void>,
+) {
+  const { user, agent } = getPrincipal(c)
+  if (!user && !agent) throw unauthorized()
+
+  if (user) {
+    const boundary = await sessionManagementBoundary(c, user.id, user.role, policy)
+    c.set('managementBoundary', boundary)
+    c.set('managementActor', { kind: 'user', userId: user.id })
+    await next()
+    return
+  }
+
+  if (!agent!.scopes.includes(policy.scope)) throw forbidden(`OAuth scope "${policy.scope}" is required.`)
+  if (!agent!.authority) throw forbidden('A Realmroot authority Resource is required for management scopes.')
+  if (!policy.authorities.includes(agent!.authority.kind)) throw forbidden()
+  if (policy.actor === 'human-controller') {
+    throw forbidden('This operation requires an authenticated human controller.')
+  }
+
+  c.set('managementBoundary', boundaryFromAgentAuthority(agent!.authority))
+  c.set('managementActor', {
+    kind: 'agent',
+    issuer: agent!.issuer,
+    subject: agent!.subject,
+    identityId: agent!.identityId,
+    protocolAgentId: agent!.protocolAgentId,
+    hostId: agent!.hostId,
+    authority: ownerFromAgentAuthority(agent!.authority),
+  })
+  await next()
+}
+
+function boundaryFromAgentAuthority(
+  authority: NonNullable<NonNullable<ReturnType<typeof getPrincipal>['agent']>['authority']>,
+): ManagementBoundary {
+  if (authority.kind === 'realm') return { kind: 'realm' }
+  if (authority.kind === 'organization') {
+    return { kind: 'restricted', accountUserId: null, organizationIds: [authority.organizationId] }
+  }
+  return { kind: 'restricted', accountUserId: authority.userId, organizationIds: [] }
+}
+
+function ownerFromAgentAuthority(
+  authority: NonNullable<NonNullable<ReturnType<typeof getPrincipal>['agent']>['authority']>,
+): ManagementOwner {
+  if (authority.kind === 'realm') return { kind: 'realm' }
+  if (authority.kind === 'organization') return { kind: 'organization', organizationId: authority.organizationId }
+  return { kind: 'account', userId: authority.userId }
 }
 
 export function authenticatedUser(): MiddlewareHandler {

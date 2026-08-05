@@ -1,15 +1,23 @@
 import { createRoute, OpenAPIHono } from '@hono/zod-openapi'
 import {
+  accessGrantSchema,
+  accessGrantsResponseSchema,
   accessRequestSchema,
+  accessRequestsResponseSchema,
   agentStatusSchema,
   createAccessRequestSchema,
   createResourceConnectionRequestSchema,
   resourceConnectionRequestSchema,
   resourceServerResourceSchema,
   resourceServerResourcesResponseSchema,
+  resourceServerSchema,
+  resourceServersResponseSchema,
+  targetCredentialProofSchema,
+  targetTokenSchema,
 } from '@shared/api/agent-api'
 import { paginationQuerySchema } from '@shared/api/pagination'
-import { realmrootOAuthScopes, requiredProtectedScope } from '@shared/authz'
+import { realmrootOAuthScopes } from '@shared/authz'
+import { managementOperationPolicy } from '@shared/management-authorization'
 import { z } from 'zod'
 import { agentGovernanceRoutes } from './management-routes/agent-governance'
 import { applicationAuthorizationRoutes } from './management-routes/applications-authorization'
@@ -104,7 +112,26 @@ const managementRoutes: ManagementRouteConfig[] = [
   },
   {
     method: 'get',
-    path: '/resource-servers/{resourceServerId}/resources',
+    path: '/agent/resource-servers',
+    operationId: 'listAgentResourceServers',
+    summary: 'List Resource Servers visible to the current Agent',
+    security: [{ dpop: ['resource-servers:read'] }],
+    request: { query: paginationQuerySchema },
+    response: resourceServersResponseSchema,
+  },
+  {
+    method: 'get',
+    path: '/agent/resource-servers/{resourceServerId}',
+    operationId: 'getAgentResourceServer',
+    summary: 'Read a Resource Server visible to the current Agent',
+    security: [{ dpop: ['resource-servers:read'] }],
+    request: { params: z.object({ resourceServerId: z.string() }) },
+    response: resourceServerSchema,
+    errors: { 404: 'The Resource Server was not found.' },
+  },
+  {
+    method: 'get',
+    path: '/agent/resource-servers/{resourceServerId}/resources',
     operationId: 'listResourceServerResources',
     summary: 'List provider-owned Resources available through a Resource Server',
     security: [{ dpop: ['resources:read'] }],
@@ -116,7 +143,7 @@ const managementRoutes: ManagementRouteConfig[] = [
   },
   {
     method: 'get',
-    path: '/resource-servers/{resourceServerId}/resources/{resourceId}',
+    path: '/agent/resource-servers/{resourceServerId}/resources/{resourceId}',
     operationId: 'getResourceServerResource',
     summary: 'Read a provider-owned Resource',
     security: [{ dpop: ['resources:read'] }],
@@ -128,7 +155,7 @@ const managementRoutes: ManagementRouteConfig[] = [
   },
   {
     method: 'post',
-    path: '/resource-servers/{resourceServerId}/connection-requests',
+    path: '/agent/resource-servers/{resourceServerId}/connection-requests',
     operationId: 'createConnectionRequest',
     summary: 'Request a controller-managed Resource Server connection',
     cli: { name: 'connect' },
@@ -143,7 +170,7 @@ const managementRoutes: ManagementRouteConfig[] = [
   },
   {
     method: 'get',
-    path: '/resource-servers/{resourceServerId}/connection-requests/{requestId}',
+    path: '/agent/resource-servers/{resourceServerId}/connection-requests/{requestId}',
     operationId: 'getConnectionRequest',
     summary: 'Read a Resource Server connection request',
     security: [{ dpop: ['connection-requests:read'] }],
@@ -152,8 +179,17 @@ const managementRoutes: ManagementRouteConfig[] = [
     responseHeaders: interactiveResourceResponseHeaders,
   },
   {
+    method: 'get',
+    path: '/agent/access-requests',
+    operationId: 'listCurrentAgentAuthorizationRequests',
+    summary: 'List authorization requests created by the current Agent',
+    security: [{ dpop: ['access-requests:read'] }],
+    request: { query: paginationQuerySchema },
+    response: accessRequestsResponseSchema,
+  },
+  {
     method: 'post',
-    path: '/access/requests',
+    path: '/agent/access-requests',
     operationId: 'createAgentAuthorizationRequest',
     summary: 'Create an Agent authorization request',
     cli: { name: 'access' },
@@ -162,6 +198,48 @@ const managementRoutes: ManagementRouteConfig[] = [
     response: accessRequestSchema,
     status: 201,
     responseHeaders: { ...locationResponseHeader, ...interactiveResourceResponseHeaders },
+  },
+  {
+    method: 'get',
+    path: '/agent/access-requests/{requestId}',
+    operationId: 'getCurrentAgentAuthorizationRequest',
+    summary: 'Read an authorization request created by the current Agent',
+    security: [{ dpop: ['access-requests:read'] }],
+    request: { params: z.object({ requestId: z.string() }) },
+    response: accessRequestSchema,
+    responseHeaders: interactiveResourceResponseHeaders,
+    errors: { 404: 'The Agent authorization request was not found.' },
+  },
+  {
+    method: 'get',
+    path: '/agent/access-authorizations',
+    operationId: 'listCurrentAgentAuthorizations',
+    summary: 'List authorizations granted to the current Agent',
+    security: [{ dpop: ['access-authorizations:read'] }],
+    request: { query: paginationQuerySchema },
+    response: accessGrantsResponseSchema,
+  },
+  {
+    method: 'get',
+    path: '/agent/access-authorizations/{authorizationId}',
+    operationId: 'getCurrentAgentAuthorization',
+    summary: 'Read an authorization granted to the current Agent',
+    security: [{ dpop: ['access-authorizations:read'] }],
+    request: { params: z.object({ authorizationId: z.string() }) },
+    response: accessGrantSchema,
+    errors: { 404: 'The Agent authorization was not found.' },
+  },
+  {
+    method: 'post',
+    path: '/agent/access-authorizations/{authorizationId}/credentials',
+    operationId: 'createCurrentAgentAuthorizationCredential',
+    summary: 'Create a temporary credential for an authorization granted to the current Agent',
+    security: [{ dpop: ['access-authorizations:issue'] }],
+    request: {
+      params: z.object({ authorizationId: z.string() }),
+      body: jsonBody(targetCredentialProofSchema),
+    },
+    response: targetTokenSchema,
   },
   ...agentGovernanceRoutes,
   ...applicationAuthorizationRoutes,
@@ -232,10 +310,16 @@ function restishAgentProfile(): RestishAgentProfile {
 }
 
 function createManagementRoute(routeConfig: ManagementRouteConfig) {
-  const requiredScope =
+  const managementPolicy =
     routeConfig.security === undefined
-      ? requiredProtectedScope(routeConfig.method.toUpperCase(), routeConfig.path)
+      ? managementOperationPolicy(routeConfig.method.toUpperCase(), routeConfig.path)
       : null
+  if (routeConfig.security === undefined && !managementPolicy) {
+    throw new Error(
+      `OpenAPI management operation ${routeConfig.method.toUpperCase()} ${routeConfig.path} has no authorization policy.`,
+    )
+  }
+  const requiredScope = managementPolicy?.scope ?? null
   return createRoute({
     method: routeConfig.method,
     path: routeConfig.path,
@@ -247,9 +331,14 @@ function createManagementRoute(routeConfig: ManagementRouteConfig) {
           'x-cli-name': routeConfig.cli.name,
         }
       : { 'x-cli-hidden': true }),
+    ...(managementPolicy ? { 'x-realmroot-authorities': managementPolicy.authorities } : {}),
     security:
       routeConfig.security ??
-      (requiredScope ? [{ dpop: [requiredScope] }, { sessionCookie: [requiredScope] }] : [{ sessionCookie: [] }]),
+      (requiredScope
+        ? managementPolicy?.actor === 'human-controller'
+          ? [{ sessionCookie: [] }]
+          : [{ dpop: [requiredScope] }, { sessionCookie: [] }]
+        : [{ sessionCookie: [] }]),
     request: routeConfig.request as never,
     responses: routeResponses(routeConfig) as never,
   })
@@ -271,6 +360,6 @@ function routeResponses(routeConfig: ManagementRouteConfig) {
       Object.entries(routeConfig.errors ?? {}).map(([status, description]) => [status, errorResponse(description)]),
     ),
     401: errorResponse('Authentication is required.'),
-    403: errorResponse('Administrator access is required.'),
+    403: errorResponse('The authenticated principal is not authorized for this resource boundary.'),
   }
 }

@@ -66,7 +66,7 @@ export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> =
     agentIdentities: {
       listPersonal: vi.fn().mockResolvedValue([]),
       listOrganization: vi.fn().mockResolvedValue([]),
-      listOwnedByOrganizations: vi.fn().mockResolvedValue(emptyPage()),
+      listOwned: vi.fn().mockResolvedValue(emptyPage()),
       listAll: vi.fn().mockResolvedValue({ items: [], total: 0 }),
       findIdentity: vi.fn().mockResolvedValue(null),
       findByIssuerSubject: vi.fn().mockResolvedValue(null),
@@ -123,6 +123,12 @@ export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> =
     authorization: {
       countEffectiveAgentRoles: vi.fn().mockResolvedValue(new Map()),
       listAgentRoleAssignments: vi.fn().mockResolvedValue([]),
+      listRoleAssignments: vi.fn().mockResolvedValue({
+        items: [],
+        pagination: { limit: 20, offset: 0, total: 0, hasMore: false, nextOffset: null },
+      }),
+      findRole: vi.fn().mockResolvedValue(null),
+      listRolePermissions: vi.fn().mockResolvedValue([]),
       listEnabledResources: vi.fn().mockResolvedValue([]),
       listUserMemberships: vi.fn().mockResolvedValue([]),
       findMemberByOrganizationUser: vi.fn().mockResolvedValue(null),

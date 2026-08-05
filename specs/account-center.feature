@@ -134,10 +134,16 @@ Feature: Account Center
     When I create an Organization from Account Center
     Then I become its Owner
     And I can open the Organization detail with its members and pending invitations
-    And its Agent identities, my contextual Role assignments, and active Agent access grants come from canonical resource collections shared with Console
+    And its Agent identities, my contextual Role assignments, and active Agent access grants come from Account-scoped Organization relationship resources
     And I can switch the active Organization without changing Developer Console eligibility
     When I update its profile or invite a member with an access level
     Then the Organization detail reflects the change
+
+  @entrypoint:product-ui @journey:account-role-relationships
+  Scenario: A signed-in user reads personal Role relationships outside management APIs
+    When I request my Role assignments from Account Center
+    Then I see only assignments whose subject is my user account
+    And account authority does not grant access to the management Role assignment collection
 
   @entrypoint:product-ui @journey:consumer-organization-boundary
   Scenario: A consumer Organization does not imply Developer Console access

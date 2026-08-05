@@ -110,6 +110,43 @@ enforcement responsibility is the same:
 Realmroot-provided claims are inputs to this decision. They are not a remote
 allow/deny call and do not replace resource-server policy.
 
+## Realmroot Management Authorization
+
+Realmroot's own control plane uses one authorization model for browser sessions
+and delegated Agents. Authentication produces two values:
+
+- an actor, which records the human user or stable Agent that performed the
+  operation; and
+- one owner boundary: the Realm, an exact set of Organizations, or one personal
+  Account.
+
+Every management operation has one canonical declaration containing its OAuth
+scope, accepted authority kinds, and whether it requires a human controller.
+Runtime checks, OpenAPI security, and authority-specific scope discovery all
+consume that declaration. Collection queries apply the same owner boundary
+before pagination that item routes apply before reads or mutations.
+
+Account authority is exact. It covers resources owned by that Account and does
+not inherit the user's Organization memberships. Organization authority covers
+only the named Organization. Realm authority covers all management owners.
+Browser-only consumer Organization relationships live below
+`/api/account/organizations/{organizationId}` and verify membership directly;
+they do not grant Developer Console or delegated management authority.
+
+Agent self-service is a separate current-Agent resource tree below `/api/agent`.
+It never changes representation based on credential type. For example,
+`/api/agent/resource-servers` is Agent discovery while `/api/resource-servers`
+is management inventory. This keeps bootstrap Agent scopes and management
+authority scopes from sharing an ambiguous route.
+
+Audit visibility follows the owner of the target Resource or selected
+Realmroot authority, never the Agent that happened to perform the action. The
+ownership migration recovers Account and Organization authority from durable
+grants. Legacy Realmroot events that predate a recoverable grant do not contain
+enough information to infer an owner safely; they remain Realm-only, are marked
+`ownerResolution=legacy-authority-unresolved`, and are intentionally excluded
+from Account and Organization audit feeds.
+
 ## Scope
 
 A scope is a resource-owned protocol label for an approved class of actions. It

@@ -1,5 +1,7 @@
 import { badRequest, forbidden, notFound } from '@server/domain/errors'
+import type { ManagementActor } from '@server/domain/management-authorization'
 import { platformOrganization } from '@server/domain/platform-organization'
+import { managementActorAuditRecord, managementActorUserId } from '@server/usecases/agent-audit'
 import {
   buildDeniedAuthorizationUrl,
   createClientSecret,
@@ -39,7 +41,7 @@ export async function createApplication(
   deps: Deps,
   issuer: string,
   input: CreateApplicationRequest,
-  actorUserId: string | null,
+  actor: ManagementActor,
 ): Promise<CreateApplicationResponse> {
   const settings = normalizeClientSettings(
     input.clientType,
@@ -57,44 +59,53 @@ export async function createApplication(
   const audience = input.audience ?? { mode: 'realm' as const, organizationIds: [], userIds: [] }
   await validateApplicationAudience(deps, audience)
 
-  const application = await deps.applications.create({
-    application: {
-      id: createId('app'),
-      slug: input.slug ?? slugify(input.name),
-      name: input.name,
-      description: input.description ?? null,
-      homepageUrl: input.homepageUrl ?? null,
-      iconUrl: input.iconUrl ?? null,
-      clientId: createId('client'),
-      clientType: input.clientType,
-      public: input.clientType !== 'confidential_web',
-      firstParty: input.firstParty ?? false,
-      trusted: input.trusted ?? false,
-      disabled: false,
-      disabledReason: null,
-      ownerOrganizationId,
-      audience,
-      redirectUris: settings.redirectUris,
-      postLogoutRedirectUris,
-      corsOrigins,
-      customData: {},
-      allowedGrantTypes: settings.allowedGrantTypes,
-      allowedScopes: settings.allowedScopes,
-      requirePkce: input.clientType !== 'confidential_web',
-      tokenEndpointAuthMethod: input.clientType === 'confidential_web' ? 'client_secret_basic' : 'none',
-      oidcClaims: input.oidcClaims ?? defaultApplicationOidcClaims,
+  const applicationId = createId('app')
+  const application = await deps.applications.create(
+    {
+      application: {
+        id: applicationId,
+        slug: input.slug ?? slugify(input.name),
+        name: input.name,
+        description: input.description ?? null,
+        homepageUrl: input.homepageUrl ?? null,
+        iconUrl: input.iconUrl ?? null,
+        clientId: createId('client'),
+        clientType: input.clientType,
+        public: input.clientType !== 'confidential_web',
+        firstParty: input.firstParty ?? false,
+        trusted: input.trusted ?? false,
+        disabled: false,
+        disabledReason: null,
+        ownerOrganizationId,
+        audience,
+        redirectUris: settings.redirectUris,
+        postLogoutRedirectUris,
+        corsOrigins,
+        customData: {},
+        allowedGrantTypes: settings.allowedGrantTypes,
+        allowedScopes: settings.allowedScopes,
+        requirePkce: input.clientType !== 'confidential_web',
+        tokenEndpointAuthMethod: input.clientType === 'confidential_web' ? 'client_secret_basic' : 'none',
+        oidcClaims: input.oidcClaims ?? defaultApplicationOidcClaims,
+      },
+      clientSecret: secretHash
+        ? {
+            id: createId('secret'),
+            version: 1,
+            secretHash,
+            secretPrefix,
+            status: 'active',
+            createdByUserId: managementActorUserId(actor),
+          }
+        : null,
     },
-    clientSecret: secretHash
-      ? {
-          id: createId('secret'),
-          version: 1,
-          secretHash,
-          secretPrefix,
-          status: 'active',
-          createdByUserId: actorUserId,
-        }
-      : null,
-  })
+    managementActorAuditRecord({
+      action: 'management.application.created',
+      actor,
+      owner: { kind: 'organization', organizationId: ownerOrganizationId },
+      metadata: { applicationId },
+    }),
+  )
 
   return {
     ...toResponse(
@@ -273,7 +284,7 @@ function toApplicationAuthorization(authorization: ApplicationAuthorizationRecor
 export async function rotateApplicationSecret(
   deps: Deps,
   id: string,
-  actorUserId: string | null,
+  actor: ManagementActor,
 ): Promise<RotateClientSecretResponse> {
   const application = await requireApplication(deps, id)
   if (application.public) {
@@ -281,17 +292,26 @@ export async function rotateApplicationSecret(
   }
 
   const clientSecret = createClientSecret()
-  const secret = await deps.applications.rotateSecret({
-    applicationId: id,
-    secret: {
-      id: createId('secret'),
-      version: 0,
-      secretHash: await hashProviderSecret(clientSecret),
-      secretPrefix: clientSecret.slice(0, 12),
-      status: 'active',
-      createdByUserId: actorUserId,
+  const secretId = createId('secret')
+  const secret = await deps.applications.rotateSecret(
+    {
+      applicationId: id,
+      secret: {
+        id: secretId,
+        version: 0,
+        secretHash: await hashProviderSecret(clientSecret),
+        secretPrefix: clientSecret.slice(0, 12),
+        status: 'active',
+        createdByUserId: managementActorUserId(actor),
+      },
     },
-  })
+    managementActorAuditRecord({
+      action: 'management.application-secret.rotated',
+      actor,
+      owner: { kind: 'organization', organizationId: application.ownerOrganizationId },
+      metadata: { applicationId: application.id, secretId },
+    }),
+  )
 
   return {
     clientSecret,

@@ -33,7 +33,7 @@ API aliases do not create additional identities.
 
 ## 2. Discover Resource Servers
 
-`GET /api/resource-servers` is the top-level Agent inventory. Each item reports:
+`GET /api/agent/resource-servers` is the top-level Agent inventory. Each item reports:
 
 - the target `serviceUrl` and resource indicator;
 - current OpenAPI-derived scope descriptions;
@@ -66,7 +66,7 @@ Native Resource Servers report `not_required` and skip this step.
 
 ## 4. Select A Provider-Owned Resource
 
-`GET /api/resource-servers/{resourceServerId}/resources` returns the Resources
+`GET /api/agent/resource-servers/{resourceServerId}/resources` returns the Resources
 the connected account makes visible. A Resource exposes display metadata and
 two independent authority states:
 
@@ -82,7 +82,7 @@ normally exposes a single `service` Resource.
 ## 5. Request Exact Access
 
 The Agent sends one Resource href, the union of scopes required by its current
-task, and an optional reason to `POST /api/access-requests`. Least privilege is
+task, and an optional reason to `POST /api/agent/access-requests`. Least privilege is
 task-level: exclude unrelated scopes, but do not split a known multi-operation
 task into one access request per HTTP operation. Realmroot resolves the Resource
 Server, provider authorization detail, account connection, and any reusable

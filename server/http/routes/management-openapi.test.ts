@@ -352,10 +352,13 @@ describe('management routes 4', () => {
     expect(webhooks.createEndpoint).toHaveBeenCalledWith(
       expect.anything(),
       { url: 'https://events.example.com/realmroot', events: ['user.created'], enabled: true, organizationId: null },
-      'admin-1',
+      { kind: 'user', userId: 'admin-1' },
     )
     expect(webhooks.updateEndpoint).toHaveBeenCalledWith(expect.anything(), 'wh_1', { enabled: false })
-    expect(webhooks.rotateSecret).toHaveBeenCalledWith(expect.anything(), 'wh_1')
+    expect(webhooks.rotateSecret).toHaveBeenCalledWith(expect.anything(), 'wh_1', {
+      kind: 'user',
+      userId: 'admin-1',
+    })
     expect(webhooks.listRequests).toHaveBeenCalledWith(
       expect.anything(),
       { endpointId: 'wh_1', limit: 2, offset: 4, status: 'failed' },

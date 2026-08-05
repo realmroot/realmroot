@@ -1,3 +1,4 @@
+import { userManagementActor } from '@server/domain/management-authorization'
 import {
   assignAgentRole,
   buildTokenClaims,
@@ -67,6 +68,7 @@ describe('authorization policy', () => {
           }),
     )
     const deps = {
+      agentAudit: { append: async () => undefined },
       authorization: {
         findRole: vi.fn().mockResolvedValue(role),
         findResource: vi.fn().mockResolvedValue(resource),
@@ -88,6 +90,7 @@ describe('authorization policy', () => {
   it('[spec: agent-identity/agent-role-scope-eligibility] assigns resource roles to an Agent without inheriting controller roles', async () => {
     const assign = vi.fn()
     const deps = {
+      agentAudit: { append: async () => undefined },
       authorization: {
         findRole: vi.fn().mockResolvedValue(role),
         findResource: vi.fn().mockResolvedValue(resource),
@@ -102,7 +105,7 @@ describe('authorization policy', () => {
       },
     } as unknown as Deps
 
-    await assignAgentRole(deps, { roleId: role.id, subjectId: 'agent-1' }, 'controller-1')
+    await assignAgentRole(deps, { roleId: role.id, subjectId: 'agent-1' }, userManagementActor('controller-1'))
 
     expect(assign).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -111,6 +114,12 @@ describe('authorization policy', () => {
         subjectId: 'agent-1',
         organizationId: null,
         assignedByUserId: 'controller-1',
+      }),
+      expect.objectContaining({
+        action: 'management.role-assignment.created',
+        controllerUserId: 'controller-1',
+        ownerUserId: null,
+        ownerOrganizationId: null,
       }),
     )
     await expect(getAgentRoleAuthorization(deps, 'agent-1', resource.id, 'org-home')).resolves.toEqual({
@@ -121,6 +130,7 @@ describe('authorization policy', () => {
 
   it('[spec: agent-identity/native-token-authorization-claims] emits fixed groups and roles claims', async () => {
     const deps = {
+      agentAudit: { append: async () => undefined },
       authorization: {
         findResourceByResourceUrl: vi.fn().mockResolvedValue(resource),
         listUserRoleAssignments: vi.fn().mockResolvedValue([{ role, scopes: ['documents.read'] }]),
@@ -153,6 +163,7 @@ describe('authorization policy', () => {
   it('[spec: admin-console/admin-developer-access-policy] keeps Organization access levels out of business scopes', async () => {
     const membership = vi.fn().mockResolvedValue({ id: 'member-1', role: 'developer' })
     const deps = {
+      agentAudit: { append: async () => undefined },
       authorization: {
         findResourceByResourceUrl: vi.fn().mockResolvedValue(resource),
         listUserRoleAssignments: vi.fn().mockResolvedValue([{ role, scopes: ['documents.read'] }]),
@@ -178,6 +189,7 @@ describe('authorization policy', () => {
 
   it('removes requested scopes when the active Organization is not eligible for the target resource', async () => {
     const deps = {
+      agentAudit: { append: async () => undefined },
       authorization: {
         findResourceByResourceUrl: vi.fn().mockResolvedValue({
           ...resource,
@@ -199,6 +211,7 @@ describe('authorization policy', () => {
 
   it('updates Realm role metadata without an ownership scope', async () => {
     const deps = {
+      agentAudit: { append: async () => undefined },
       authorization: {
         findRole: vi.fn().mockResolvedValue(role),
         updateRole: vi.fn(),

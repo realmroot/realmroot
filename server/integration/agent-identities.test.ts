@@ -7,6 +7,7 @@ import {
   agentIdentityBinding,
   approvalRequest,
 } from '@server/db/schema'
+import { userManagementActor } from '@server/domain/management-authorization'
 import { createAdditionalAgentEnrollmentIntent, createAgentEnrollmentIntent } from '@server/usecases/agent-identities'
 import { assignAgentRole, createResource, createRole, replaceRolePermissions } from '@server/usecases/authorization'
 import {
@@ -264,7 +265,11 @@ describe('Agent identity enrollment over real D1', () => {
       name: 'Native API reader',
     })
     await replaceRolePermissions(harness.deps, resourceRole.id, [{ resourceId: resource.id, scope: 'repo:read' }])
-    await assignAgentRole(harness.deps, { roleId: resourceRole.id, subjectId: approved.agent.id }, userId)
+    await assignAgentRole(
+      harness.deps,
+      { roleId: resourceRole.id, subjectId: approved.agent.id },
+      userManagementActor(userId),
+    )
     const principal = {
       issuer: approved.agent.issuer,
       subject: approved.agent.subject,
@@ -312,7 +317,7 @@ describe('Agent identity enrollment over real D1', () => {
     const accessRequest = await createAccessRequest(
       harness.deps,
       {
-        resource: { href: `/api/resource-servers/${resource.id}/resources/service` },
+        resource: { href: `/api/agent/resource-servers/${resource.id}/resources/service` },
         scopes: ['repo:read'],
         reason: 'Read repositories',
       },
@@ -321,7 +326,7 @@ describe('Agent identity enrollment over real D1', () => {
     )
     expect(accessRequest.target).toEqual({
       type: 'resource',
-      resource: { href: `http://localhost/api/resource-servers/${resource.id}/resources/service` },
+      resource: { href: `http://localhost/api/agent/resource-servers/${resource.id}/resources/service` },
     })
     expect(accessRequest).not.toHaveProperty('grantId')
 

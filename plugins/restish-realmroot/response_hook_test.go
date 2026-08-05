@@ -40,7 +40,7 @@ func TestProfiledResponseOpensAndPollsAnyInteractiveResource(t *testing.T) {
 			}
 			return jsonResponse(200, completedInteraction()), nil
 		})
-		input := profiledInput("https://auth.example.com/api/resource-servers/zpan/connection-requests", pendingInteraction("https://auth.example.com"))
+		input := profiledInput("https://auth.example.com/api/agent/resource-servers/zpan/connection-requests", pendingInteraction("https://auth.example.com"))
 
 		output, err := handleProfiledResponse(input, browser, states, client)
 		if err != nil {

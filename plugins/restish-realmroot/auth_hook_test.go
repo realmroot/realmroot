@@ -220,7 +220,7 @@ func testCredential(t *testing.T, accessToken string, expiresAt time.Time) dpopC
 		t.Fatal(err)
 	}
 	return dpopCredential{
-		ResourceHref:       "https://auth.example.com/api/resource-servers/zpan/resources/workspace-1",
+		ResourceHref:       "https://auth.example.com/api/agent/resource-servers/zpan/resources/workspace-1",
 		ResourceIndicator:  "https://api.example.com/v1",
 		CredentialEndpoint: "https://auth.example.com/api/access-requests/request-1/credentials",
 		ProofTarget:        "https://api.example.com/oauth/token",

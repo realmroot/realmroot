@@ -1,5 +1,4 @@
 import {
-  accessRequestSchema,
   auditEventsResponseSchema,
   decideAccessRequestSchema,
   listAgentAuditEventsQuerySchema,
@@ -13,11 +12,9 @@ import {
   managementAgentInstallationsResponseSchema,
   managementAgentResponseSchema,
   managementAgentsResponseSchema,
-  targetCredentialProofSchema,
-  targetTokenSchema,
 } from '@shared/api/agent-api'
 import { paginationQuerySchema } from '@shared/api/pagination'
-import { jsonBody, type ManagementRouteConfig, z } from './helpers'
+import { type ManagementRouteConfig, z } from './helpers'
 
 export const agentGovernanceRoutes: ManagementRouteConfig[] = [
   {
@@ -79,7 +76,7 @@ export const agentGovernanceRoutes: ManagementRouteConfig[] = [
     operationId: 'getManagedAgentAuthorizationRequest',
     summary: 'Get an Agent authorization request',
     request: { params: z.object({ requestId: z.string() }) },
-    response: z.union([managementAgentAccessRequestSchema, accessRequestSchema]),
+    response: managementAgentAccessRequestSchema,
     errors: { 404: 'The Agent access request was not found.' },
   },
   {
@@ -115,18 +112,6 @@ export const agentGovernanceRoutes: ManagementRouteConfig[] = [
     summary: 'Create or replace an Agent authorization revocation',
     request: { params: z.object({ authorizationId: z.string() }) },
     response: z.object({ authorizationId: z.string(), status: z.literal('revoked') }),
-  },
-  {
-    method: 'post',
-    path: '/access/authorizations/{authorizationId}/credentials',
-    operationId: 'createAgentAuthorizationCredential',
-    summary: 'Create a temporary credential for an Agent authorization',
-    security: [{ dpop: ['access-authorizations:issue'] }],
-    request: {
-      params: z.object({ authorizationId: z.string() }),
-      body: jsonBody(targetCredentialProofSchema),
-    },
-    response: targetTokenSchema,
   },
   {
     method: 'get',

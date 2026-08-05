@@ -14,6 +14,7 @@ import {
   listAccountOrganizationInvitations,
   listAccountOrganizationRoleAssignments,
   listAccountOrganizations,
+  listAccountRoleAssignments,
   listAccountSessions,
   listAgentResourceRequests,
   listConsentedApplications,
@@ -33,6 +34,7 @@ export const accountQueryKeys = {
   accessRequests: ['account', 'access-requests'] as const,
   passkeys: ['account', 'passkeys'] as const,
   profile: ['account', 'profile'] as const,
+  roleAssignments: ['account', 'role-assignments'] as const,
   developerConsoleAccess: ['account', 'developer-console-access'] as const,
   organizationContext: ['account', 'organization-context'] as const,
   organizations: ['account', 'organizations'] as const,
@@ -117,6 +119,14 @@ export function useAccountOrganizationRoleAssignments(organizationId: string) {
   return useQuery({
     queryKey: accountQueryKeys.organizationRoleAssignments(organizationId),
     queryFn: () => listAccountOrganizationRoleAssignments(organizationId),
+    ...accountQueryOptions,
+  })
+}
+
+export function useAccountRoleAssignments() {
+  return useQuery({
+    queryKey: accountQueryKeys.roleAssignments,
+    queryFn: listAccountRoleAssignments,
     ...accountQueryOptions,
   })
 }

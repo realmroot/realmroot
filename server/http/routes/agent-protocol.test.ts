@@ -9,7 +9,7 @@ import { createTestDeps } from '../test-deps'
 
 const now = new Date('2026-08-01T00:00:00.000Z')
 const expiresAt = '2026-08-01T00:10:00.000Z'
-const resourceHref = 'https://auth.example.com/api/resource-servers/resource-1/resources/service'
+const resourceHref = 'https://auth.example.com/api/agent/resource-servers/resource-1/resources/service'
 
 describe('Agent protocol routes', () => {
   afterEach(() => vi.restoreAllMocks())
@@ -78,9 +78,9 @@ describe('Agent protocol routes', () => {
           scopes: [{ value: 'objects:read', description: 'Read objects' }],
           connection: { status: 'connected', displayName: 'Account', authorizedScopes: ['objects:read'] },
           links: {
-            self: 'https://auth.example.com/api/resource-servers/resource-1',
-            resources: 'https://auth.example.com/api/resource-servers/resource-1/resources',
-            connectionRequests: 'https://auth.example.com/api/resource-servers/resource-1/connection-requests',
+            self: 'https://auth.example.com/api/agent/resource-servers/resource-1',
+            resources: 'https://auth.example.com/api/agent/resource-servers/resource-1/resources',
+            connectionRequests: 'https://auth.example.com/api/agent/resource-servers/resource-1/connection-requests',
           },
         },
       ],
@@ -96,13 +96,13 @@ describe('Agent protocol routes', () => {
           metadata: {},
           accountAuthorization: { status: 'not_required' },
           agentAuthorization: { authorizedScopes: [], requestableScopes: ['objects:read'] },
-          links: { self: resourceHref, accessRequests: 'https://auth.example.com/api/access-requests' },
+          links: { self: resourceHref, accessRequests: 'https://auth.example.com/api/agent/access-requests' },
         },
       ],
       pagination: page(1),
     })
     const app = createRouteApp()
-    const resources = await app.request('/api/resource-servers/resource-1/resources')
+    const resources = await app.request('/api/agent/resource-servers/resource-1/resources')
     expect(resources.status).toBe(200)
     expect(JSON.stringify(await resources.json())).not.toContain('authorizationDetail')
   })
@@ -111,7 +111,7 @@ describe('Agent protocol routes', () => {
     vi.spyOn(agentIdentities, 'getAgentIdentityByProtocolAgent').mockResolvedValue(activeIdentity())
     const request = connectionRequest()
     vi.spyOn(externalResources, 'createAgentConnectionRequest').mockResolvedValue(request)
-    const response = await createRouteApp().request('/api/resource-servers/resource-1/connection-requests', {
+    const response = await createRouteApp().request('/api/agent/resource-servers/resource-1/connection-requests', {
       method: 'POST',
       headers: jsonHeaders(),
       body: JSON.stringify({ resources: [{ href: resourceHref }], scopes: ['objects:read'], reason: 'Use ZPan' }),
@@ -135,9 +135,9 @@ describe('Agent protocol routes', () => {
       scopes: [{ value: 'objects:read', description: 'Read objects' }],
       connection: { status: 'connected', displayName: 'Account', authorizedScopes: ['objects:read'] },
       links: {
-        self: 'https://auth.example.com/api/resource-servers/resource-1',
-        resources: 'https://auth.example.com/api/resource-servers/resource-1/resources',
-        connectionRequests: 'https://auth.example.com/api/resource-servers/resource-1/connection-requests',
+        self: 'https://auth.example.com/api/agent/resource-servers/resource-1',
+        resources: 'https://auth.example.com/api/agent/resource-servers/resource-1/resources',
+        connectionRequests: 'https://auth.example.com/api/agent/resource-servers/resource-1/connection-requests',
       },
     })
     vi.spyOn(externalResources, 'getAgentResourceServerResource').mockResolvedValue({
@@ -148,11 +148,11 @@ describe('Agent protocol routes', () => {
       metadata: {},
       accountAuthorization: { status: 'not_required' },
       agentAuthorization: { authorizedScopes: [], requestableScopes: ['objects:read'] },
-      links: { self: resourceHref, accessRequests: 'https://auth.example.com/api/access-requests' },
+      links: { self: resourceHref, accessRequests: 'https://auth.example.com/api/agent/access-requests' },
     })
     const app = createRouteApp()
 
-    expect((await app.request('/api/resource-servers/resource-1/resources/service')).status).toBe(200)
+    expect((await app.request('/api/agent/resource-servers/resource-1/resources/service')).status).toBe(200)
   })
 
   it('creates Resource access and exchanges its credential offer without exposing a grant', async () => {
@@ -172,14 +172,14 @@ describe('Agent protocol routes', () => {
     }
     vi.spyOn(externalResources, 'createAccessRequestCredential').mockResolvedValue(credential)
     const app = createRouteApp({ signJWT: vi.fn().mockResolvedValue({ token: 'signed' }) })
-    const created = await app.request('/api/access/requests', {
+    const created = await app.request('/api/agent/access-requests', {
       method: 'POST',
       headers: jsonHeaders(),
       body: JSON.stringify({ resource: { href: resourceHref }, scopes: ['objects:read'] }),
     })
     expect(created.status).toBe(201)
     expect(await created.clone().json()).not.toHaveProperty('grantId')
-    const issued = await app.request('/api/access/authorizations/grant-1/credentials', {
+    const issued = await app.request('/api/agent/access-authorizations/grant-1/credentials', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ proof: { type: 'dpop+jwt', value: 'proof' } }),
@@ -315,7 +315,9 @@ function connectionRequest() {
       url: 'https://auth.example.com/agent/resource-connection/approve#token=opaque',
       expiresAt,
     },
-    links: { self: 'https://auth.example.com/api/connection-requests/connection-request-1' },
+    links: {
+      self: 'https://auth.example.com/api/agent/resource-servers/resource-1/connection-requests/connection-request-1',
+    },
     createdAt: now.toISOString(),
     expiresAt,
   }
@@ -331,18 +333,18 @@ function accessRequest() {
     status: 'approved' as const,
     interaction: { type: 'user-approval' as const, status: 'completed' as const, url: null, expiresAt: null },
     links: {
-      self: 'https://auth.example.com/api/access/requests/request-1',
-      credentials: 'https://auth.example.com/api/access/authorizations/grant-1/credentials',
+      self: 'https://auth.example.com/api/agent/access-requests/request-1',
+      credentials: 'https://auth.example.com/api/agent/access-authorizations/grant-1/credentials',
     },
     credentialOffer: {
       type: 'dpop' as const,
       resource: { href: resourceHref },
       resourceIndicator: 'https://drive.example.com/api',
-      endpoint: 'https://auth.example.com/api/access/authorizations/grant-1/credentials',
+      endpoint: 'https://auth.example.com/api/agent/access-authorizations/grant-1/credentials',
       proof: {
         algorithm: 'ES256' as const,
         method: 'POST' as const,
-        uri: 'https://auth.example.com/api/access/authorizations/grant-1/credentials',
+        uri: 'https://auth.example.com/api/agent/access-authorizations/grant-1/credentials',
       },
     },
     expiresAt,

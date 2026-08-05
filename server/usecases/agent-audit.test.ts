@@ -1,5 +1,5 @@
 import { createTestDeps } from '@server/http/test-deps'
-import { appendAgentGovernanceAudit } from '@server/usecases/agent-audit'
+import { appendAgentGovernanceAudit, managementActorAuditRecord } from '@server/usecases/agent-audit'
 import { describe, expect, it } from 'vitest'
 
 describe('Agent governance audit', () => {
@@ -10,11 +10,13 @@ describe('Agent governance audit', () => {
       action: 'agent.requested',
       result: 'pending',
       controllerUserId: null,
+      owner: { kind: 'realm' },
     })
     await appendAgentGovernanceAudit(deps, {
       action: 'agent.approved',
       result: 'allowed',
       controllerUserId: 'user-1',
+      owner: { kind: 'account', userId: 'user-1' },
       issuer: 'https://auth.example.com',
       subject: 'agt_1',
       agentIdentityId: 'agent-1',
@@ -48,6 +50,48 @@ describe('Agent governance audit', () => {
         scopes: ['applications:read'],
         reasonCode: 'approved',
         metadata: { source: 'console' },
+      }),
+    )
+  })
+
+  it('preserves a management Agent identity and target owner without collapsing it to a system actor', async () => {
+    const deps = createTestDeps()
+
+    await deps.agentAudit.append(
+      managementActorAuditRecord({
+        action: 'management.application.created',
+        actor: {
+          kind: 'agent',
+          issuer: 'https://id.realmroot.dev',
+          subject: 'agt_protocol',
+          identityId: 'agent-1',
+          protocolAgentId: 'protocol-agent-1',
+          hostId: 'host-1',
+          authority: { kind: 'realm' },
+        },
+        owner: { kind: 'organization', organizationId: 'org-target' },
+        metadata: { applicationId: 'app-1' },
+      }),
+    )
+
+    expect(deps.agentAudit.append).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'management.application.created',
+        controllerUserId: null,
+        subjectIssuer: 'https://id.realmroot.dev',
+        subject: 'agt_protocol',
+        agentIdentityId: 'agent-1',
+        hostId: 'host-1',
+        ownerUserId: null,
+        ownerOrganizationId: 'org-target',
+        metadata: {
+          applicationId: 'app-1',
+          actor: {
+            kind: 'agent',
+            protocolAgentId: 'protocol-agent-1',
+            authority: { kind: 'realm' },
+          },
+        },
       }),
     )
   })

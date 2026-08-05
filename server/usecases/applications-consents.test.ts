@@ -1,3 +1,4 @@
+import { userManagementActor } from '@server/domain/management-authorization'
 import {
   createApplication,
   createConsent,
@@ -21,7 +22,7 @@ import { describe, expect, it } from 'vitest'
 describe('service.test 3', () => {
   it('revokes consent for the owning user and rejects missing consent', async () => {
     const repository = new InMemoryApplicationRepository()
-    const deps = { applications: repository } as unknown as Deps
+    const deps = { agentAudit: { append: async () => undefined }, applications: repository } as unknown as Deps
     const issuer = 'https://auth.example.com'
     const created = await createApplication(
       deps,
@@ -31,7 +32,7 @@ describe('service.test 3', () => {
         clientType: 'public_spa',
         redirectUris: ['https://spa.example.com/callback'],
       },
-      'admin-1',
+      userManagementActor('admin-1'),
     )
     const consent = await createConsent(deps, { clientId: created.clientId, scopes: ['openid'] }, 'user-1')
 
@@ -44,7 +45,7 @@ describe('service.test 3', () => {
 
   it('lists and revokes active consent from application management [spec: admin-console/admin-application-detail]', async () => {
     const repository = new InMemoryApplicationRepository()
-    const deps = { applications: repository } as unknown as Deps
+    const deps = { agentAudit: { append: async () => undefined }, applications: repository } as unknown as Deps
     const created = await createApplication(
       deps,
       'https://auth.example.com',
@@ -53,7 +54,7 @@ describe('service.test 3', () => {
         clientType: 'public_spa',
         redirectUris: ['https://spa.example.com/callback'],
       },
-      'admin-1',
+      userManagementActor('admin-1'),
     )
     const consent = await createConsent(deps, { clientId: created.clientId, scopes: ['openid'] }, 'user-1')
 
@@ -84,6 +85,7 @@ describe('service.test 3', () => {
   it('rejects a public audience when external registration is disabled', async () => {
     const repository = new InMemoryApplicationRepository()
     const deps = {
+      agentAudit: { append: async () => undefined },
       applications: repository,
       configz: { getSettings: async () => ({ signupEnabled: false }) },
     } as unknown as Deps
@@ -96,7 +98,7 @@ describe('service.test 3', () => {
         clientType: 'public_spa',
         redirectUris: ['https://spa.example.com/callback'],
       },
-      'admin-1',
+      userManagementActor('admin-1'),
     )
 
     await expect(
@@ -150,7 +152,7 @@ describe('service.test 3', () => {
 
   it('handles OAuth consent defaults and rejects disabled or missing clients', async () => {
     const repository = new InMemoryApplicationRepository()
-    const deps = { applications: repository } as unknown as Deps
+    const deps = { agentAudit: { append: async () => undefined }, applications: repository } as unknown as Deps
     const issuer = 'https://auth.example.com'
     const created = await createApplication(
       deps,
@@ -160,7 +162,7 @@ describe('service.test 3', () => {
         clientType: 'public_spa',
         redirectUris: ['https://spa.example.com/callback'],
       },
-      'admin-1',
+      userManagementActor('admin-1'),
     )
 
     await expect(
@@ -212,6 +214,7 @@ describe('service.test 3', () => {
     const repository = new InMemoryApplicationRepository()
     const members = new Set(['org-allowed:user-member'])
     const deps = {
+      agentAudit: { append: async () => undefined },
       applications: repository,
       users: { getUser: async (id: string) => ({ id }) },
       authorization: {
@@ -230,7 +233,7 @@ describe('service.test 3', () => {
         clientType: 'public_spa',
         redirectUris: ['https://spa.example.com/callback'],
       },
-      'admin-1',
+      userManagementActor('admin-1'),
     )
     const request = {
       clientId: created.clientId,

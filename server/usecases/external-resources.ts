@@ -1,4 +1,5 @@
 import { ApiError, badGateway, badRequest, forbidden, notFound, oauthError, unauthorized } from '@server/domain/errors'
+import { managementOwnerColumns, ownerFromColumns } from '@server/domain/management-authorization'
 import { isRealmrootResourceServer } from '@server/domain/realmroot-resource-server'
 import type { Deps } from '@server/usecases/deps'
 import type {
@@ -32,8 +33,10 @@ import type {
 } from '@shared/api/external-resources'
 import { type PaginationInput, paginationMetadata } from '@shared/api/pagination'
 import { agentBootstrapScopes, realmrootOAuthScopes } from '@shared/authz'
+import { managementScopesForAuthority } from '@shared/management-authorization'
 import { getAgentRoleAuthorization } from './authorization'
 import { ensureDynamicConnectorScopes, refreshDynamicConnectorMetadata } from './connectors'
+import { hasRole, resolveDeveloperAccess } from './developer-access'
 import { validateDpopTokenProof } from './dpop'
 import { readDeclaredScopes, validateRequestedScopes } from './resource-openapi'
 
@@ -828,6 +831,10 @@ export async function createAgentAccessRequest(
   await validateResourceRequestedScopes(deps, resource, input.scopes)
   const authorizationDetails = input.authorizationDetails ?? []
   assertAccessRequestAuthorizationDetails(resource, connection, authorizationDetails)
+  assertRealmrootAuthorityScopes(resource, authorizationDetails, input.scopes)
+  if (isRealmrootResourceServer(resource.id)) {
+    await requireEligibleRealmrootAuthority(deps, identity, authorizationDetails)
+  }
   await requireAgentScopeEligibility(
     deps,
     principal.identityId,
@@ -965,6 +972,24 @@ export async function getAccessRequest(
   apiOrigin: string,
 ): Promise<AccessRequest> {
   return agentAccessRequestRepresentation(deps, await getAgentAccessRequest(deps, requestId, principal), apiOrigin)
+}
+
+export async function listAgentAccessRequests(
+  deps: Deps,
+  principal: AgentResourcePrincipal,
+  pagination: PaginationInput,
+  apiOrigin: string,
+) {
+  await requireActiveIdentityAndBinding(deps, principal)
+  const result = await deps.externalResources.listAccessRequests({ ...pagination, agentId: principal.identityId })
+  return {
+    items: await Promise.all(
+      result.items.map((request) =>
+        agentAccessRequestRepresentation(deps, toAgentAccessRequest(request, principal.hostId, null), apiOrigin),
+      ),
+    ),
+    pagination: paginationMetadata(result),
+  }
 }
 
 export async function listControllerAccessRequests(deps: Deps, actorUserId: string) {
@@ -1155,8 +1180,12 @@ export async function decideAgentAccessRequest(
     throw invalidAuthorizationDetails('Approved authorization details do not match the pending access request.')
   }
   await validateResourceRequestedScopes(deps, resource, request.scopes)
+  assertRealmrootAuthorityScopes(resource, authorizationDetails, request.scopes)
   const requestIdentity = await deps.agentIdentities.findIdentity(request.agentIdentityId)
   if (!requestIdentity) throw notFound('Active Agent identity was not found.')
+  if (isRealmrootResourceServer(resource.id)) {
+    await requireCurrentRealmrootAuthority(deps, requestIdentity, authorizationDetails, actorUserId)
+  }
   await requireAgentScopeEligibility(
     deps,
     request.agentIdentityId,
@@ -1269,6 +1298,10 @@ export async function issueTargetAccessToken(
   }
   assertScopeSubset(request.scopes, grant.scopes, 'Agent access grant')
   await validateResourceRequestedScopes(deps, resource, request.scopes)
+  assertRealmrootAuthorityScopes(resource, request.authorizationDetails, request.scopes)
+  if (isRealmrootResourceServer(resource.id)) {
+    await requireCurrentRealmrootAuthority(deps, identity, request.authorizationDetails, grant.grantedByUserId)
+  }
   const roleAuthorization = await requireAgentScopeEligibility(
     deps,
     principal.identityId,
@@ -1854,7 +1887,6 @@ async function realmrootAuthorityResources(
   resource: NonNullable<Awaited<ReturnType<Deps['authorization']['findResource']>>>,
   apiOrigin: string,
 ) {
-  const requestableScopes = (await discoverAgentResourceScopes(deps, resource))?.map((scope) => scope.value) ?? []
   const details = await realmrootAuthorityDetails(deps, identity)
   return Promise.all(
     details.map(async (detail) => {
@@ -1866,7 +1898,7 @@ async function realmrootAuthorityResources(
           ...display,
           connectionStatus: 'not_required',
           authorizedScopes: await activeResourceScopes(deps, agentIdentityId, resource.id, [detail]),
-          requestableScopes,
+          requestableScopes: managementScopesForAuthority(detail.authority as 'realm' | 'organization' | 'account'),
         },
         apiOrigin,
       )
@@ -1882,26 +1914,60 @@ async function realmrootAuthorityDetails(
   const ownerUserId = identity.identity.ownerUserId
   if (ownerUserId) {
     const user = await deps.users.getUser(ownerUserId)
-    const roles = String(user.role ?? '')
-      .split(',')
-      .map((role) => role.trim())
-    if (roles.includes('admin')) details.push({ type: 'realmroot_authority', authority: 'realm', id: 'realm' })
+    const realmOperator = hasRole(user.role, 'admin')
+    if (realmOperator) details.push({ type: 'realmroot_authority', authority: 'realm', id: 'realm' })
     details.push({ type: 'realmroot_authority', authority: 'account', id: ownerUserId })
-    const memberships = await deps.authorization.listUserMemberships(ownerUserId)
-    for (const organizationId of [...new Set(memberships.map((membership) => membership.organizationId))].sort()) {
+    const organizationIds = realmOperator
+      ? (await deps.authorization.listUserMemberships(ownerUserId)).map((membership) => membership.organizationId)
+      : (await resolveDeveloperAccess(deps, user)).consoleOrganizations.map((item) => item.organizationId)
+    for (const organizationId of [...new Set(organizationIds)].sort()) {
       const organization = await deps.authorization.findOrganization(organizationId)
       if (organization && !organization.disabled) {
         details.push({ type: 'realmroot_authority', authority: 'organization', id: organizationId })
       }
     }
   } else if (identity.identity.ownerOrganizationId) {
-    details.push({
-      type: 'realmroot_authority',
-      authority: 'organization',
-      id: identity.identity.ownerOrganizationId,
-    })
+    const organization = await deps.authorization.findOrganization(identity.identity.ownerOrganizationId)
+    if (organization && !organization.disabled) {
+      details.push({
+        type: 'realmroot_authority',
+        authority: 'organization',
+        id: identity.identity.ownerOrganizationId,
+      })
+    }
   }
   return details
+}
+
+async function requireCurrentRealmrootAuthority(
+  deps: Deps,
+  identity: Awaited<ReturnType<typeof requireActiveIdentityAndBinding>>,
+  authorizationDetails: AuthorizationDetail[],
+  controllerUserId: string,
+) {
+  const authority = await requireEligibleRealmrootAuthority(deps, identity, authorizationDetails)
+  const controller = await deps.users.getUser(controllerUserId)
+  if (hasRole(controller.role, 'admin')) return
+  if (authority.authority === 'account' && authority.id === controllerUserId) return
+  if (authority.authority === 'organization' && typeof authority.id === 'string') {
+    const access = await resolveDeveloperAccess(deps, controller)
+    if (access.consoleOrganizations.some((item) => item.organizationId === authority.id)) return
+  }
+  throw forbidden('The approving controller no longer holds the selected Realmroot authority.')
+}
+
+async function requireEligibleRealmrootAuthority(
+  deps: Deps,
+  identity: Awaited<ReturnType<typeof requireActiveIdentityAndBinding>>,
+  authorizationDetails: AuthorizationDetail[],
+) {
+  assertRealmrootAuthoritySelection(authorizationDetails)
+  const authority = authorizationDetails[0]!
+  const current = await realmrootAuthorityDetails(deps, identity)
+  if (!current.some((candidate) => resourceIdentifier(candidate) === resourceIdentifier(authority))) {
+    throw forbidden('The Agent is no longer eligible for this Realmroot authority.')
+  }
+  return authority
 }
 
 async function realmrootAuthorityDisplay(
@@ -1960,7 +2026,7 @@ async function toResourceServerResource(
     },
     links: {
       self: resourceHref(apiOrigin, resourceServerId, id),
-      accessRequests: `${apiOrigin.replace(/\/$/, '')}/api/access/requests`,
+      accessRequests: `${apiOrigin.replace(/\/$/, '')}/api/agent/access-requests`,
     },
   }
 }
@@ -1969,7 +2035,7 @@ function toResourceServer(
   resource: Awaited<ReturnType<typeof discoverAgentResources>>['resources'][number],
   origin: string,
 ) {
-  const self = `${origin}/api/resource-servers/${encodeURIComponent(resource.id)}`
+  const self = `${origin}/api/agent/resource-servers/${encodeURIComponent(resource.id)}`
   return {
     id: resource.id,
     identifier: resource.identifier,
@@ -2056,7 +2122,7 @@ function parseResourceHref(href: string, resourceServerId: string, apiOrigin: st
   }
   if (apiOrigin && parsed.origin !== new URL(apiOrigin).origin)
     throw badRequest('Resource href belongs to another Realmroot issuer.')
-  const prefix = `/api/resource-servers/${encodeURIComponent(resourceServerId)}/resources/`
+  const prefix = `/api/agent/resource-servers/${encodeURIComponent(resourceServerId)}/resources/`
   if (!parsed.pathname.startsWith(prefix))
     throw badRequest('Resource href does not belong to the selected Resource Server.')
   const id = decodeURIComponent(parsed.pathname.slice(prefix.length))
@@ -2073,14 +2139,14 @@ function parseAnyResourceHref(href: string, apiOrigin: string) {
   }
   if (parsed.origin !== new URL(apiOrigin).origin)
     throw badRequest('Resource href belongs to another Realmroot issuer.')
-  const match = /^\/api\/resource-servers\/([^/]+)\/resources\/([^/]+)$/.exec(parsed.pathname)
+  const match = /^\/api\/agent\/resource-servers\/([^/]+)\/resources\/([^/]+)$/.exec(parsed.pathname)
   if (!match) throw badRequest('Resource href is invalid.')
   return { resourceServerId: decodeURIComponent(match[1]!), resourceId: decodeURIComponent(match[2]!) }
 }
 
 function resourceHref(apiOrigin: string, resourceServerId: string, resourceId: string) {
   const origin = apiOrigin.replace(/\/$/, '')
-  return `${origin}/api/resource-servers/${encodeURIComponent(resourceServerId)}/resources/${encodeURIComponent(resourceId)}`
+  return `${origin}/api/agent/resource-servers/${encodeURIComponent(resourceServerId)}/resources/${encodeURIComponent(resourceId)}`
 }
 
 function resourceIdentifier(detail: AuthorizationDetail) {
@@ -2424,6 +2490,7 @@ async function appendResourceAudit(
     type: detail.type,
     ...(typeof detail.identifier === 'string' ? { identifier: detail.identifier } : {}),
   }))
+  const agentIdentityId = input.principal?.identityId ?? input.request?.agentIdentityId ?? null
   await deps.agentAudit.append({
     id: createId('agaudit'),
     action: input.action,
@@ -2431,8 +2498,9 @@ async function appendResourceAudit(
     controllerUserId: input.controllerUserId ?? null,
     subjectIssuer: input.principal?.issuer ?? null,
     subject: input.principal?.subject ?? null,
-    agentIdentityId: input.principal?.identityId ?? input.request?.agentIdentityId ?? null,
+    agentIdentityId,
     hostId: input.principal?.hostId ?? null,
+    ...(await resourceAuditOwnerColumns(deps, authorizationDetails, input.connection, input.resourceId)),
     resourceId: input.resourceId,
     resourceConnectionId: input.connection?.id ?? null,
     accessGrantId: input.grantId,
@@ -2442,6 +2510,32 @@ async function appendResourceAudit(
       authorizationDetailProjections.length > 0 ? { authorizationDetails: authorizationDetailProjections } : null,
     occurredAt: new Date(),
   })
+}
+
+async function resourceAuditOwnerColumns(
+  deps: Deps,
+  authorizationDetails: AuthorizationDetail[],
+  connection: ResourceAccountConnectionRecord | null,
+  resourceId: string,
+) {
+  const realmrootAuthority = authorizationDetails.find((detail) => detail.type === 'realmroot_authority')
+  if (realmrootAuthority) {
+    assertRealmrootAuthoritySelection([realmrootAuthority])
+    if (realmrootAuthority.authority === 'realm') return managementOwnerColumns({ kind: 'realm' })
+    if (realmrootAuthority.authority === 'organization' && typeof realmrootAuthority.id === 'string') {
+      return managementOwnerColumns({ kind: 'organization', organizationId: realmrootAuthority.id })
+    }
+    if (realmrootAuthority.authority === 'account' && typeof realmrootAuthority.id === 'string') {
+      return managementOwnerColumns({ kind: 'account', userId: realmrootAuthority.id })
+    }
+    throw new Error('Realmroot authority referenced by an audit event is invalid.')
+  }
+  if (connection) {
+    return managementOwnerColumns(ownerFromColumns(connection.ownerUserId, connection.ownerOrganizationId))
+  }
+  const resource = await deps.authorization.findResource(resourceId)
+  if (!resource) throw new Error(`API resource ${resourceId} referenced by an audit event was not found.`)
+  return managementOwnerColumns({ kind: 'organization', organizationId: resource.ownerOrganizationId })
 }
 
 async function revokeUncoveredGrants(
@@ -2566,6 +2660,20 @@ function assertRealmrootAuthoritySelection(authorizationDetails: AuthorizationDe
     typeof detail.id !== 'string'
   ) {
     throw invalidAuthorizationDetails('Select exactly one Realmroot authority Resource.')
+  }
+}
+
+function assertRealmrootAuthorityScopes(
+  resource: NonNullable<Awaited<ReturnType<Deps['authorization']['findResource']>>>,
+  authorizationDetails: AuthorizationDetail[],
+  scopes: string[],
+) {
+  if (!isRealmrootResourceServer(resource.id)) return
+  assertRealmrootAuthoritySelection(authorizationDetails)
+  const authority = authorizationDetails[0]!.authority as 'realm' | 'organization' | 'account'
+  const requestable = new Set(managementScopesForAuthority(authority))
+  if (scopes.some((scope) => !requestable.has(scope as never))) {
+    throw badRequest(`Requested scope is not available to ${authority} authority.`)
   }
 }
 
@@ -2937,7 +3045,7 @@ function toResourceConnectionRequest(
       expiresAt: status === 'pending' ? request.expiresAt.toISOString() : null,
     },
     links: {
-      self: `${origin}/api/resource-servers/${encodeURIComponent(request.resourceId)}/connection-requests/${encodeURIComponent(request.id)}`,
+      self: `${origin}/api/agent/resource-servers/${encodeURIComponent(request.resourceId)}/connection-requests/${encodeURIComponent(request.id)}`,
     },
     createdAt: request.createdAt.toISOString(),
     expiresAt: request.expiresAt.toISOString(),
@@ -2980,7 +3088,7 @@ function toAccessRequest(
         : request.status === 'expired'
           ? 'expired'
           : 'completed'
-  const self = `${origin}/api/access/requests/${encodeURIComponent(request.id)}`
+  const self = `${origin}/api/agent/access-requests/${encodeURIComponent(request.id)}`
   return {
     id: request.id,
     agentId: request.agentIdentityId,
@@ -3000,7 +3108,7 @@ function toAccessRequest(
     links: {
       self,
       credentials: request.grantId
-        ? `${origin}/api/access/authorizations/${encodeURIComponent(request.grantId)}/credentials`
+        ? `${origin}/api/agent/access-authorizations/${encodeURIComponent(request.grantId)}/credentials`
         : null,
     },
     credentialOffer: null,

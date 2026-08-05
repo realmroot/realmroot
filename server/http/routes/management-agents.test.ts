@@ -73,6 +73,8 @@ function withAdminContext() {
       session: { session: { id: 'session-1' }, user },
       user,
     })
+    c.set('managementBoundary', { kind: 'realm' })
+    c.set('managementActor', { kind: 'user', userId: user.id })
     c.set('deps', {} as never)
     await next()
   })

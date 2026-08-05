@@ -138,6 +138,7 @@ Feature: Agent identity and delegated API authorization
       Given Realmroot has registered native and external Resource Servers
       When the Agent lists Resource Servers
       Then each item identifies one protected API service, its service URL, OAuth resource indicator, availability, and account connection status
+      And Agent self-service uses the current-Agent resource tree and never changes a management representation by credential type
       And the Agent-facing contract does not call a Resource Server an API Resource
       When the Agent lists one Resource Server's Resources
       Then each item identifies one provider-owned authorization target with safe display metadata

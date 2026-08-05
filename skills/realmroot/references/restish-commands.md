@@ -17,7 +17,7 @@ credentials.
 List all pages:
 
 ```bash
-restish get "$AUTH_ORIGIN/api/resource-servers?limit=100&offset=0" -o json
+restish get "$AUTH_ORIGIN/api/agent/resource-servers?limit=100&offset=0" -o json
 ```
 
 Follow `pagination.nextOffset` while `pagination.hasMore` is true. Match the
@@ -183,7 +183,7 @@ stores it with the Resource href, and returns a safe receipt:
 ```json
 {
   "status": "ready",
-  "resource": {"href": "https://id.realmroot.dev/api/resource-servers/service-id/resources/resource-id"},
+  "resource": {"href": "https://id.realmroot.dev/api/agent/resource-servers/service-id/resources/resource-id"},
   "resourceIndicator": "https://api.example.com",
   "scopes": ["<required-scope>"],
   "tokenExpiresAt": "2026-08-03T16:30:00Z"

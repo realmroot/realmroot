@@ -1,4 +1,10 @@
 import { badRequest, conflict, forbidden, notFound } from '@server/domain/errors'
+import {
+  type ManagementActor,
+  type ManagementBoundary,
+  ownerFromAgentHomeSpace,
+  requireManagementOwner,
+} from '@server/domain/management-authorization'
 import { appendAgentGovernanceAudit } from '@server/usecases/agent-audit'
 import type { Deps } from '@server/usecases/deps'
 import { revokeAgentResourceAccess, revokeAgentResourceLeasesForBinding } from '@server/usecases/external-resources'
@@ -40,10 +46,6 @@ export async function listPersonalAgents(deps: Deps, userId: string, page: Pagin
   }
 }
 
-export async function getPersonalAgent(deps: Deps, agentId: string, actorUserId: string): Promise<Agent> {
-  return toAgent(await requireControlledIdentity(deps, agentId, actorUserId))
-}
-
 export async function getAgent(deps: Deps, agentId: string): Promise<Agent> {
   return toAgent(await requireIdentity(deps, agentId))
 }
@@ -75,10 +77,8 @@ export async function listAllAgentIdentities(deps: Deps, page: { limit: number; 
   return { items: result.items.map(toIdentity), total: result.total, ...page }
 }
 
-export async function listAllAgents(deps: Deps, page: PaginationInput, ownerOrganizationIds?: string[]) {
-  const result = ownerOrganizationIds
-    ? await deps.agentIdentities.listOwnedByOrganizations(ownerOrganizationIds, page)
-    : await deps.agentIdentities.listAll(page)
+export async function listAllAgents(deps: Deps, page: PaginationInput, scope?: AgentAuthorityInventoryScope) {
+  const result = scope ? await deps.agentIdentities.listOwned(scope, page) : await deps.agentIdentities.listAll(page)
   const summaries = await loadManagementSummaries(deps, result.items)
   return {
     items: result.items.map((aggregate) => toManagementAgent(aggregate, summaries)),
@@ -295,13 +295,13 @@ export async function getProtocolAgentEnrollment(
   return toAgentEnrollment(enrollmentIntent, await enrollmentAgentName(deps, enrollmentIntent))
 }
 
-export async function emergencyRetireAgentIdentity(deps: Deps, identityId: string, actorUserId: string | null) {
+export async function emergencyRetireAgentIdentity(deps: Deps, identityId: string, actor: ManagementActor) {
   const identity = await requireIdentity(deps, identityId)
   if (!(await deps.agentIdentities.retireIdentity(identityId, new Date()))) {
     throw badRequest('Agent identity is already retired.')
   }
   await revokeAgentResourceAccess(deps, identityId)
-  await appendIdentityAudit(deps, 'agent.identity_retired', identity, actorUserId, { emergency: true })
+  await appendIdentityAudit(deps, 'agent.identity_retired', identity, actor, { emergency: true })
 }
 
 export async function createAgentEnrollmentIntent(
@@ -460,22 +460,22 @@ export async function revokeAgentIdentityHost(
   })
 }
 
-export async function recoverAgentIdentity(deps: Deps, identityId: string, actorUserId: string) {
-  const identity = await requireControlledIdentity(deps, identityId, actorUserId)
+export async function recoverAgentIdentity(deps: Deps, identityId: string, actor: ManagementActor) {
+  const identity = await requireIdentity(deps, identityId)
   if (!(await deps.agentIdentities.recoverIdentity(identityId, new Date()))) {
     throw badRequest('Only an active Agent identity can be recovered.')
   }
   await revokeAgentResourceAccess(deps, identityId)
-  await appendIdentityAudit(deps, 'agent.identity_recovered', identity, actorUserId)
+  await appendIdentityAudit(deps, 'agent.identity_recovered', identity, actor)
 }
 
-export async function retireAgentIdentity(deps: Deps, identityId: string, actorUserId: string) {
-  const identity = await requireControlledIdentity(deps, identityId, actorUserId)
+export async function retireAgentIdentity(deps: Deps, identityId: string, actor: ManagementActor) {
+  const identity = await requireIdentity(deps, identityId)
   if (!(await deps.agentIdentities.retireIdentity(identityId, new Date()))) {
     throw badRequest('Agent identity is already retired.')
   }
   await revokeAgentResourceAccess(deps, identityId)
-  await appendIdentityAudit(deps, 'agent.identity_retired', identity, actorUserId)
+  await appendIdentityAudit(deps, 'agent.identity_retired', identity, actor)
 }
 
 export async function requireActiveAgentIdentity(deps: Deps, protocolAgentId: string) {
@@ -507,14 +507,17 @@ async function requireIdentity(deps: Deps, identityId: string) {
 }
 
 async function assertController(deps: Deps, homeSpace: AgentHomeSpace, actorUserId: string) {
+  let boundary: ManagementBoundary
   if (homeSpace.type === 'personal') {
-    if (homeSpace.userId !== actorUserId) throw forbidden('Agent identity controller access is required.')
-    return
+    boundary = { kind: 'restricted', accountUserId: actorUserId, organizationIds: [] }
+  } else {
+    const member = await deps.authorization.findMemberByOrganizationUser(homeSpace.organizationId, actorUserId)
+    boundary =
+      member && (member.role === 'owner' || member.role === 'admin')
+        ? { kind: 'restricted', accountUserId: null, organizationIds: [homeSpace.organizationId] }
+        : { kind: 'restricted', accountUserId: null, organizationIds: [] }
   }
-  const member = await deps.authorization.findMemberByOrganizationUser(homeSpace.organizationId, actorUserId)
-  if (!member || (member.role !== 'owner' && member.role !== 'admin')) {
-    throw forbidden('Organization Agent controller access is required.')
-  }
+  requireManagementOwner(boundary, ownerFromAgentHomeSpace(homeSpace))
 }
 
 function assertSameHomeSpace(left: AgentHomeSpace, right: AgentHomeSpace) {
@@ -537,19 +540,33 @@ async function appendIdentityAudit(
   deps: Deps,
   action: string,
   aggregate: AgentIdentityAggregate,
-  controllerUserId: string | null,
+  actor: string | ManagementActor | null,
   metadata?: Record<string, unknown>,
 ) {
   const binding = aggregate.bindings.at(-1)
+  const controllerUserId = typeof actor === 'string' ? actor : actor?.kind === 'user' ? actor.userId : null
+  const actorMetadata =
+    typeof actor === 'object' && actor?.kind === 'agent'
+      ? {
+          actor: {
+            type: 'agent',
+            identityId: actor.identityId,
+            protocolAgentId: actor.protocolAgentId,
+            hostId: actor.hostId,
+            authority: actor.authority,
+          },
+        }
+      : {}
   await appendAgentGovernanceAudit(deps, {
     action,
     result: 'allowed',
     controllerUserId,
+    owner: ownerFromAgentHomeSpace(homeSpaceOf(aggregate.identity)),
     issuer: aggregate.identity.issuer,
     subject: aggregate.identity.subject,
     agentIdentityId: aggregate.identity.id,
     hostId: binding?.hostId ?? null,
-    metadata: metadata ?? null,
+    metadata: Object.keys({ ...actorMetadata, ...metadata }).length ? { ...actorMetadata, ...metadata } : null,
   })
 }
 

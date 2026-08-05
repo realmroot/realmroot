@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 const rolePermissionMigration = migration('20260801120140_natural_exodus.sql')
 const roleCleanupMigration = migration('20260801121526_worthless_ultragirl.sql')
 const ownershipMigration = migration('20260801123349_next_tattoo.sql')
+const auditOwnershipMigration = migration('20260805014332_mute_patriot.sql')
 
 describe('D1 migration upgrades', () => {
   it('preserves populated Application and Resource server dependents [spec: platform-onboarding/existing-d1-upgrade]', () => {
@@ -58,7 +59,138 @@ describe('D1 migration upgrades', () => {
       database.close()
     }
   })
+
+  it('backfills recoverable audit owners and quarantines ambiguous Realmroot history', () => {
+    const database = new DatabaseSync(':memory:')
+
+    try {
+      database.exec(auditLegacySchema)
+      database.exec(auditLegacyData)
+      applyMigration(database, auditOwnershipMigration)
+
+      expect(
+        database
+          .prepare(
+            "SELECT id, owner_user_id, owner_organization_id, json_extract(metadata, '$.ownerResolution') AS owner_resolution FROM agent_audit_event ORDER BY id",
+          )
+          .all(),
+      ).toEqual([
+        {
+          id: 'account-authority',
+          owner_user_id: 'user-account',
+          owner_organization_id: null,
+          owner_resolution: null,
+        },
+        {
+          id: 'connection-owner',
+          owner_user_id: 'user-account',
+          owner_organization_id: null,
+          owner_resolution: null,
+        },
+        {
+          id: 'external-resource-owner',
+          owner_user_id: null,
+          owner_organization_id: 'org-resource',
+          owner_resolution: null,
+        },
+        {
+          id: 'identity-owner',
+          owner_user_id: null,
+          owner_organization_id: 'org-agent',
+          owner_resolution: null,
+        },
+        {
+          id: 'organization-authority',
+          owner_user_id: null,
+          owner_organization_id: 'org-authority',
+          owner_resolution: null,
+        },
+        {
+          id: 'realm-authority',
+          owner_user_id: null,
+          owner_organization_id: null,
+          owner_resolution: null,
+        },
+        {
+          id: 'unresolved-authority',
+          owner_user_id: null,
+          owner_organization_id: null,
+          owner_resolution: 'legacy-authority-unresolved',
+        },
+      ])
+      expect(() =>
+        database
+          .prepare(
+            "INSERT INTO agent_audit_event (id, action, owner_user_id, owner_organization_id) VALUES ('invalid-insert', 'test', 'user-1', 'org-1')",
+          )
+          .run(),
+      ).toThrow('agent_audit_event has multiple management owners')
+      expect(() =>
+        database
+          .prepare(
+            "UPDATE agent_audit_event SET owner_user_id = 'user-1', owner_organization_id = 'org-1' WHERE id = 'realm-authority'",
+          )
+          .run(),
+      ).toThrow('agent_audit_event has multiple management owners')
+      expect(() =>
+        database.prepare("INSERT INTO agent_audit_event (id, action) VALUES ('realm-owned', 'test')").run(),
+      ).not.toThrow()
+    } finally {
+      database.close()
+    }
+  })
 })
+
+const auditLegacySchema = `
+  CREATE TABLE agent_identity (
+    id TEXT PRIMARY KEY NOT NULL,
+    owner_user_id TEXT,
+    owner_organization_id TEXT
+  );
+  CREATE TABLE api_resource (
+    id TEXT PRIMARY KEY NOT NULL,
+    owner_organization_id TEXT NOT NULL
+  );
+  CREATE TABLE resource_account_connection (
+    id TEXT PRIMARY KEY NOT NULL,
+    owner_user_id TEXT,
+    owner_organization_id TEXT
+  );
+  CREATE TABLE agent_access_grant (
+    id TEXT PRIMARY KEY NOT NULL,
+    authorization_details TEXT DEFAULT '[]' NOT NULL
+  );
+  CREATE TABLE agent_audit_event (
+    id TEXT PRIMARY KEY NOT NULL,
+    action TEXT NOT NULL,
+    agent_identity_id TEXT,
+    resource_id TEXT,
+    resource_connection_id TEXT,
+    access_grant_id TEXT,
+    metadata TEXT
+  );
+`
+
+const auditLegacyData = `
+  INSERT INTO agent_identity (id, owner_organization_id) VALUES ('agent-org', 'org-agent');
+  INSERT INTO api_resource (id, owner_organization_id) VALUES ('resource-external', 'org-resource');
+  INSERT INTO api_resource (id, owner_organization_id) VALUES ('res_realmroot', 'org-platform');
+  INSERT INTO resource_account_connection (id, owner_user_id) VALUES ('connection-account', 'user-account');
+  INSERT INTO agent_access_grant (id, authorization_details) VALUES
+    ('grant-account', '[{"type":"realmroot_authority","authority":"account","id":"user-account"}]'),
+    ('grant-organization', '[{"type":"realmroot_authority","authority":"organization","id":"org-authority"}]'),
+    ('grant-realm', '[{"type":"realmroot_authority","authority":"realm","id":"realm"}]');
+  INSERT INTO agent_audit_event (
+    id, action, agent_identity_id, resource_id, resource_connection_id, access_grant_id, metadata
+  ) VALUES
+    ('identity-owner', 'agent.retired', 'agent-org', NULL, NULL, NULL, NULL),
+    ('connection-owner', 'api_resource.connection_updated', NULL, 'resource-external', 'connection-account', NULL, NULL),
+    ('external-resource-owner', 'api_resource.access_requested', NULL, 'resource-external', NULL, NULL, NULL),
+    ('account-authority', 'api_resource.token_issued', NULL, 'res_realmroot', NULL, 'grant-account', NULL),
+    ('organization-authority', 'api_resource.token_issued', NULL, 'res_realmroot', NULL, 'grant-organization', NULL),
+    ('realm-authority', 'api_resource.token_issued', NULL, 'res_realmroot', NULL, 'grant-realm', NULL),
+    ('unresolved-authority', 'api_resource.access_requested', NULL, 'res_realmroot', NULL, NULL, '{"existing":true}');
+`
 
 const legacySchema = `
   PRAGMA foreign_keys = ON;

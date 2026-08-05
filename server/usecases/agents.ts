@@ -1,3 +1,4 @@
+import { ownerFromColumns } from '@server/domain/management-authorization'
 import { appendAgentGovernanceAudit } from '@server/usecases/agent-audit'
 import type { Deps } from '@server/usecases/deps'
 import type { AgentRepository } from '@server/usecases/ports'
@@ -97,6 +98,9 @@ export async function decideAgentApproval(
     action: 'agent.capability_decided',
     result: status === 'approved' ? 'allowed' : 'denied',
     controllerUserId: userId,
+    owner: identity
+      ? ownerFromColumns(identity.identity.ownerUserId, identity.identity.ownerOrganizationId)
+      : { kind: 'account', userId },
     issuer: identity?.identity.issuer,
     subject: identity?.identity.subject,
     agentIdentityId: identity?.identity.id,

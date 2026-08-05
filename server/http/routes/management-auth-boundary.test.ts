@@ -1,7 +1,8 @@
 import { createApp } from '@server/http/app'
 import { unifiedOpenApi } from '@server/http/openapi/management'
 import { protectedResourceCollectionRoutes } from '@shared/api/management'
-import { realmrootOAuthScopes, requiredProtectedScope } from '@shared/authz'
+import { realmrootOAuthScopes } from '@shared/authz'
+import { managementOperationPolicy } from '@shared/management-authorization'
 import { calculateJwkThumbprint, exportJWK, generateKeyPair, SignJWT } from 'jose'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -83,12 +84,14 @@ describe('management routes 1', () => {
         expect(operation.responses, operation.key).toHaveProperty('403')
       }
       expect(operation.declaredPathParameters, operation.key).toEqual(operation.pathParameters)
-      const requiredScope = requiredProtectedScope(operation.method, operation.key.slice(operation.method.length + 1))
-      if (requiredScope && JSON.stringify(operation.security).includes('sessionCookie')) {
-        expect(operation.security, operation.key).toEqual([
-          { dpop: [requiredScope] },
-          { sessionCookie: [requiredScope] },
-        ])
+      const policy = managementOperationPolicy(operation.method, operation.key.slice(operation.method.length + 1))
+      if (policy) expect(operation.authorities, operation.key).toEqual(policy.authorities)
+      if (policy && JSON.stringify(operation.security).includes('sessionCookie')) {
+        expect(operation.security, operation.key).toEqual(
+          policy?.actor === 'human-controller'
+            ? [{ sessionCookie: [] }]
+            : [{ dpop: [policy.scope] }, { sessionCookie: [] }],
+        )
       }
 
       if (methodsWithJsonRequestBody.has(operation.method) && !operationsWithoutRequestBody.has(operation.key)) {
@@ -131,7 +134,7 @@ describe('management routes 1', () => {
     expect(contract.headers.get('link')).toBeNull()
     await expect(contract.json()).resolves.toEqual(unifiedOpenApi)
 
-    const accessRequest = openApiOperationObjects().find((operation) => operation.key === 'POST /access/requests')
+    const accessRequest = openApiOperationObjects().find((operation) => operation.key === 'POST /agent/access-requests')
     const standaloneRequestSchema = requestBodyContent(accessRequest?.requestBody).schema
     expect(JSON.stringify(standaloneRequestSchema)).not.toContain('#/components/')
 
@@ -221,7 +224,7 @@ describe('management routes 1', () => {
     await expect(response.json()).resolves.toMatchObject({
       error: {
         code: 'forbidden',
-        message: 'Admin access is required.',
+        message: 'Access to this resource is forbidden.',
       },
     })
   })
@@ -230,6 +233,7 @@ describe('management routes 1', () => {
     const auth = createAuthMock()
     const dpop = await createTestDpopKey()
     let scopes = ['agent:read']
+    let authority: { type: 'realmroot_authority'; authority: 'realm'; id: 'realm' } | undefined
     Object.assign(auth.api, {
       verifyJWT: vi.fn().mockImplementation(async () => ({
         payload: {
@@ -239,7 +243,7 @@ describe('management routes 1', () => {
           host_id: 'host-1',
           scope: scopes.join(' '),
           cnf: { jkt: dpop.thumbprint },
-          realmroot_authority: { type: 'realmroot_authority', authority: 'realm', id: 'realm' },
+          realmroot_authority: authority,
         },
       })),
     })
@@ -279,7 +283,7 @@ describe('management routes 1', () => {
         findIdentity: vi.fn().mockResolvedValue(identity),
       },
     })
-    const app = createApp(auth, deps)
+    const app = createApp(auth, deps, { baseURL: 'http://localhost' })
     const headers = (method: string, path: string) => dpop.headers(method, `http://localhost${path}`)
 
     const agent = await app.request('/api/agent/status', { headers: await headers('GET', '/api/agent/status') })
@@ -289,11 +293,12 @@ describe('management routes 1', () => {
     })
 
     scopes = ['resource-servers:read']
-    const discovery = await app.request('/api/resource-servers', {
-      headers: await headers('GET', '/api/resource-servers'),
+    const discovery = await app.request('/api/agent/resource-servers', {
+      headers: await headers('GET', '/api/agent/resource-servers'),
     })
     expect(discovery.status, await discovery.clone().text()).toBe(200)
 
+    authority = { type: 'realmroot_authority', authority: 'realm', id: 'realm' }
     const denied = await app.request('/api/users', { headers: await headers('GET', '/api/users') })
     expect(denied.status, await denied.clone().text()).toBe(403)
     await expect(denied.json()).resolves.toMatchObject({

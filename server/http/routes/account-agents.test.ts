@@ -57,8 +57,19 @@ describe('account agent routes', () => {
     vi.spyOn(agentIdentitiesUsecase, 'listPersonalAgents').mockImplementation((_d, userId, page) =>
       stableAgents.list(userId, page),
     )
-    vi.spyOn(agentIdentitiesUsecase, 'retireAgentIdentity').mockImplementation((_d, agentId, userId) =>
-      stableAgents.retire(agentId, userId),
+    vi.spyOn(agentIdentitiesUsecase, 'getAgent').mockResolvedValue({
+      id: 'agent-1',
+      issuer: 'https://auth.example.com/api/auth',
+      subject: 'agt_1',
+      name: 'Desktop Agent',
+      homeSpace: { type: 'personal', userId: 'user-1' },
+      status: 'active',
+      retiredAt: null,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    })
+    vi.spyOn(agentIdentitiesUsecase, 'retireAgentIdentity').mockImplementation((_d, agentId, actor) =>
+      stableAgents.retire(agentId, actor),
     )
 
     const app = withAccountContext()
@@ -74,7 +85,7 @@ describe('account agent routes', () => {
     })
     expect(agentResponse.status).toBe(204)
     expect(stableAgents.list).toHaveBeenCalledWith('user-1', { limit: 10, offset: 20 })
-    expect(stableAgents.retire).toHaveBeenCalledWith('agent-1', 'user-1')
+    expect(stableAgents.retire).toHaveBeenCalledWith('agent-1', { kind: 'user', userId: 'user-1' })
   })
 })
 

@@ -1,7 +1,8 @@
 import { z } from 'zod'
 import type { Agent } from './agent-api'
-import type { RoleAssignmentResponse, RolePermission, RoleResponse } from './authorization'
+import { roleAssignmentResponseSchema, rolePermissionSchema, roleResponseSchema } from './authorization'
 import type { PaginationMetadata } from './pagination'
+import { paginationMetadataSchema } from './pagination'
 import { usernameSchema } from './users'
 
 export const accountProfileUpdateSchema = z.object({
@@ -75,28 +76,43 @@ export type AccountOrganizationAgentsResponse = {
   pagination: PaginationMetadata
 }
 
-export type AccountOrganizationRoleAssignmentsResponse = {
-  assignments: Array<{
-    assignment: RoleAssignmentResponse
-    role: RoleResponse
-    permissions: RolePermission[]
-  }>
-  pagination: PaginationMetadata
-}
+export const accountOrganizationRoleAssignmentsResponseSchema = z.object({
+  assignments: z.array(
+    z.object({
+      assignment: roleAssignmentResponseSchema,
+      role: roleResponseSchema,
+      permissions: z.array(rolePermissionSchema),
+    }),
+  ),
+  pagination: paginationMetadataSchema,
+})
 
-export type AccountOrganizationAgentAccessGrantsResponse = {
-  grants: Array<{
-    id: string
-    agentId: string
-    agentName: string
-    resourceId: string
-    scopes: string[]
-    mode: string
-    expiresAt: string | null
-    createdAt: string
-  }>
-  pagination: PaginationMetadata
-}
+export type AccountOrganizationRoleAssignmentsResponse = z.infer<
+  typeof accountOrganizationRoleAssignmentsResponseSchema
+>
+
+export const accountRoleAssignmentsResponseSchema = accountOrganizationRoleAssignmentsResponseSchema
+export type AccountRoleAssignmentsResponse = AccountOrganizationRoleAssignmentsResponse
+
+export const accountOrganizationAgentAccessGrantsResponseSchema = z.object({
+  grants: z.array(
+    z.object({
+      id: z.string(),
+      agentId: z.string(),
+      agentName: z.string(),
+      resourceId: z.string(),
+      scopes: z.array(z.string()),
+      mode: z.string(),
+      expiresAt: z.iso.datetime().nullable(),
+      createdAt: z.iso.datetime(),
+    }),
+  ),
+  pagination: paginationMetadataSchema,
+})
+
+export type AccountOrganizationAgentAccessGrantsResponse = z.infer<
+  typeof accountOrganizationAgentAccessGrantsResponseSchema
+>
 
 export type LinkedAccountsResponse = {
   accounts: Array<{

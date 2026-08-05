@@ -1,3 +1,4 @@
+import { userManagementActor } from '@server/domain/management-authorization'
 import {
   createApplication,
   deleteApplication,
@@ -22,7 +23,11 @@ describe('service.test 1', () => {
   it('requires an explicitly selected owner Organization to be active', async () => {
     const repository = new InMemoryApplicationRepository()
     const findOrganization = vi.fn().mockResolvedValue(null)
-    const deps = { applications: repository, authorization: { findOrganization } } as unknown as Deps
+    const deps = {
+      agentAudit: { append: async () => undefined },
+      applications: repository,
+      authorization: { findOrganization },
+    } as unknown as Deps
     const input = {
       name: 'Organization App',
       clientType: 'public_spa' as const,
@@ -30,22 +35,26 @@ describe('service.test 1', () => {
       ownerOrganizationId: 'org-1',
     }
 
-    await expect(createApplication(deps, 'https://auth.example.com', input, 'admin-1')).rejects.toMatchObject({
+    await expect(
+      createApplication(deps, 'https://auth.example.com', input, userManagementActor('admin-1')),
+    ).rejects.toMatchObject({
       status: 404,
     })
     findOrganization.mockResolvedValue({ id: 'org-1', disabled: true })
-    await expect(createApplication(deps, 'https://auth.example.com', input, 'admin-1')).rejects.toMatchObject({
+    await expect(
+      createApplication(deps, 'https://auth.example.com', input, userManagementActor('admin-1')),
+    ).rejects.toMatchObject({
       status: 400,
     })
     findOrganization.mockResolvedValue({ id: 'org-1', disabled: false })
-    const created = await createApplication(deps, 'https://auth.example.com', input, 'admin-1')
+    const created = await createApplication(deps, 'https://auth.example.com', input, userManagementActor('admin-1'))
     await expect(
       updateApplication(deps, 'https://auth.example.com', created.id, { ownerOrganizationId: 'org-1' }),
     ).resolves.toMatchObject({ ownerOrganizationId: 'org-1' })
   })
   it('creates, lists, updates, inspects, and deletes confidential clients with one-time secrets', async () => {
     const repository = new InMemoryApplicationRepository()
-    const deps = { applications: repository } as unknown as Deps
+    const deps = { agentAudit: { append: async () => undefined }, applications: repository } as unknown as Deps
     const issuer = 'https://auth.example.com'
 
     const created = await createApplication(
@@ -61,7 +70,7 @@ describe('service.test 1', () => {
         allowedScopes: ['openid', 'profile'],
         trusted: true,
       },
-      'admin-1',
+      userManagementActor('admin-1'),
     )
 
     expect(created.clientSecret).toMatch(/^fas_/)
@@ -119,7 +128,7 @@ describe('service.test 1', () => {
 
   it('does not issue or rotate secrets for public clients', async () => {
     const repository = new InMemoryApplicationRepository()
-    const deps = { applications: repository } as unknown as Deps
+    const deps = { agentAudit: { append: async () => undefined }, applications: repository } as unknown as Deps
     const issuer = 'https://auth.example.com'
 
     const created = await createApplication(
@@ -130,7 +139,7 @@ describe('service.test 1', () => {
         clientType: 'public_spa',
         redirectUris: ['https://spa.example.com/callback'],
       },
-      'admin-1',
+      userManagementActor('admin-1'),
     )
 
     expect(created).not.toHaveProperty('clientSecret')
@@ -140,7 +149,7 @@ describe('service.test 1', () => {
       requirePkce: true,
     })
     expect(created.secretMetadata).toEqual([])
-    await expect(rotateApplicationSecret(deps, created.id, 'admin-1')).rejects.toMatchObject({
+    await expect(rotateApplicationSecret(deps, created.id, userManagementActor('admin-1'))).rejects.toMatchObject({
       status: 400,
       message: 'Public clients do not have client secrets.',
     })
@@ -148,7 +157,7 @@ describe('service.test 1', () => {
 
   it('allows the device-code grant only for public native clients', async () => {
     const repository = new InMemoryApplicationRepository()
-    const deps = { applications: repository } as unknown as Deps
+    const deps = { agentAudit: { append: async () => undefined }, applications: repository } as unknown as Deps
     const issuer = 'https://auth.example.com'
 
     await expect(
@@ -161,7 +170,7 @@ describe('service.test 1', () => {
           redirectUris: ['com.example.cli:/callback'],
           allowedGrantTypes: ['authorization_code', deviceCodeGrantType],
         },
-        'admin-1',
+        userManagementActor('admin-1'),
       ),
     ).resolves.toMatchObject({
       clientType: 'public_native',
@@ -182,7 +191,7 @@ describe('service.test 1', () => {
           redirectUris: ['https://spa.example.com/callback'],
           allowedGrantTypes: [deviceCodeGrantType],
         },
-        'admin-1',
+        userManagementActor('admin-1'),
       ),
     ).rejects.toMatchObject({
       status: 400,
@@ -199,7 +208,7 @@ describe('service.test 1', () => {
           redirectUris: ['https://server.example.com/callback'],
           allowedGrantTypes: [deviceCodeGrantType],
         },
-        'admin-1',
+        userManagementActor('admin-1'),
       ),
     ).rejects.toMatchObject({
       status: 400,
@@ -209,7 +218,7 @@ describe('service.test 1', () => {
 
   it('rotates confidential client secrets and revokes previous secret metadata', async () => {
     const repository = new InMemoryApplicationRepository()
-    const deps = { applications: repository } as unknown as Deps
+    const deps = { agentAudit: { append: async () => undefined }, applications: repository } as unknown as Deps
     const issuer = 'https://auth.example.com'
     const created = await createApplication(
       deps,
@@ -219,10 +228,10 @@ describe('service.test 1', () => {
         clientType: 'confidential_web',
         redirectUris: ['https://server.example.com/callback'],
       },
-      'admin-1',
+      userManagementActor('admin-1'),
     )
 
-    const rotated = await rotateApplicationSecret(deps, created.id, 'admin-2')
+    const rotated = await rotateApplicationSecret(deps, created.id, userManagementActor('admin-2'))
 
     expect(rotated.clientSecret).toMatch(/^fas_/)
     expect(rotated.secret.version).toBe(2)
@@ -250,7 +259,7 @@ describe('service.test 1', () => {
 
   it('updates metadata without changing OAuth client settings', async () => {
     const repository = new InMemoryApplicationRepository()
-    const deps = { applications: repository } as unknown as Deps
+    const deps = { agentAudit: { append: async () => undefined }, applications: repository } as unknown as Deps
     const issuer = 'https://auth.example.com/'
     const created = await createApplication(
       deps,
@@ -260,7 +269,7 @@ describe('service.test 1', () => {
         clientType: 'public_spa',
         redirectUris: ['https://spa.example.com/callback'],
       },
-      'admin-1',
+      userManagementActor('admin-1'),
     )
 
     await expect(updateApplication(deps, issuer, created.id, { name: 'Renamed App' })).resolves.toMatchObject({
@@ -274,7 +283,7 @@ describe('service.test 1', () => {
 
   it('round-trips OIDC claim configuration on create and update', async () => {
     const repository = new InMemoryApplicationRepository()
-    const deps = { applications: repository } as unknown as Deps
+    const deps = { agentAudit: { append: async () => undefined }, applications: repository } as unknown as Deps
     const issuer = 'https://auth.example.com'
     const created = await createApplication(
       deps,
@@ -289,7 +298,7 @@ describe('service.test 1', () => {
           userInfo: { roles: true, groups: true },
         },
       },
-      'admin-1',
+      userManagementActor('admin-1'),
     )
 
     expect(created.oidcClaims).toEqual({
@@ -317,7 +326,7 @@ describe('service.test 1', () => {
 
   it('normalizes partial OAuth client setting updates against existing values', async () => {
     const repository = new InMemoryApplicationRepository()
-    const deps = { applications: repository } as unknown as Deps
+    const deps = { agentAudit: { append: async () => undefined }, applications: repository } as unknown as Deps
     const issuer = 'https://auth.example.com'
     const created = await createApplication(
       deps,
@@ -328,7 +337,7 @@ describe('service.test 1', () => {
         redirectUris: ['https://spa.example.com/callback'],
         allowedScopes: ['openid', 'profile'],
       },
-      'admin-1',
+      userManagementActor('admin-1'),
     )
 
     await expect(

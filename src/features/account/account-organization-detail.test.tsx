@@ -100,26 +100,35 @@ describe('Account Organization detail', () => {
           pagination: { limit: 50, offset: 0, total: 1, hasMore: false, nextOffset: null },
         }),
       ),
-      http.get(`${base}/api/access/assignments`, ({ request }) => {
-        const realm = new URL(request.url).searchParams.get('context') === 'realm'
+      http.get(`${base}/api/account/organizations/org-family/role-assignments`, () => {
         return json({
-          assignments: realm
-            ? []
-            : [
-                {
-                  id: 'assignment-viewer',
-                  roleId: 'role-viewer',
-                  subjectType: 'user',
-                  subjectId: store.profile.id,
-                  organizationId: 'org-family',
-                  assignedByUserId: 'admin-1',
-                  expiresAt: null,
-                  revokedAt: null,
-                  createdAt: '2026-08-01T00:00:00.000Z',
-                  updatedAt: '2026-08-01T00:00:00.000Z',
-                },
-              ],
-          pagination: { limit: 100, offset: 0, total: realm ? 0 : 1, hasMore: false, nextOffset: null },
+          assignments: [
+            {
+              assignment: {
+                id: 'assignment-viewer',
+                roleId: 'role-viewer',
+                subjectType: 'user',
+                subjectId: store.profile.id,
+                organizationId: 'org-family',
+                assignedByUserId: 'admin-1',
+                expiresAt: null,
+                revokedAt: null,
+                createdAt: '2026-08-01T00:00:00.000Z',
+                updatedAt: '2026-08-01T00:00:00.000Z',
+              },
+              role: {
+                id: 'role-viewer',
+                key: 'household.viewer',
+                name: 'Household viewer',
+                description: 'View shared household data.',
+                system: false,
+                createdAt: '2026-08-01T00:00:00.000Z',
+                updatedAt: '2026-08-01T00:00:00.000Z',
+              },
+              permissions: [{ resourceId: 'household-api', scope: 'household:read' }],
+            },
+          ],
+          pagination: { limit: 100, offset: 0, total: 1, hasMore: false, nextOffset: null },
         })
       }),
       http.get(`${base}/api/access/roles/role-viewer`, () =>
@@ -139,16 +148,16 @@ describe('Account Organization detail', () => {
           { headers: { ETag: '"role-viewer"' } },
         ),
       ),
-      http.get(`${base}/api/access/authorizations`, () =>
+      http.get(`${base}/api/account/organizations/org-family/agent-authorizations`, () =>
         json({
-          items: [
+          grants: [
             {
               id: 'grant-family',
               agentId: 'agent-family',
-              resource: { id: 'household-api', identifier: 'household', name: 'Household API' },
+              agentName: 'Family assistant',
+              resourceId: 'household-api',
               scopes: ['household:read'],
               mode: 'persistent',
-              status: 'active',
               expiresAt: null,
               createdAt: '2026-08-01T00:00:00.000Z',
             },

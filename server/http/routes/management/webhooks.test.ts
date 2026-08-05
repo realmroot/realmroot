@@ -33,6 +33,8 @@ describe('createManagementWebhookRoutes', () => {
     app.use('*', async (c, next) => {
       const user = { id: 'admin-1', role: 'admin' }
       c.set('principal', { session: { session: { id: 'session-1' }, user }, user })
+      c.set('managementBoundary', { kind: 'realm' })
+      c.set('managementActor', { kind: 'user', userId: user.id })
       c.set('deps', {} as never)
       await next()
     })

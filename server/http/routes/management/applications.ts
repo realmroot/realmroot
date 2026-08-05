@@ -40,12 +40,11 @@ import {
 } from '@shared/api/management'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
-import { getActorUserId } from '../../middleware/authn'
 import {
-  getConsoleOrganizationScope,
-  requireConsoleOrganizationAccess,
-  requireConsoleOwnedOrganization,
-  resolveOrganizationInventoryScope,
+  getManagementActor,
+  requireManagementOrganization,
+  requireManagementOwnedOrganization,
+  resolveManagementOrganizationIds,
 } from '../../middleware/authz'
 import { getDeps } from '../../middleware/deps'
 import { readJson, readQuery } from '../validation'
@@ -57,7 +56,7 @@ managementApplicationAuthorizationsRoute.get('/', async (c) => {
   const query = readQuery(c, listApplicationAuthorizationsQuerySchema)
   return c.json(
     listApplicationAuthorizationsResponseSchema.parse(
-      await listApplicationAuthorizations(getDeps(c), query, getConsoleOrganizationScope(c) ?? undefined),
+      await listApplicationAuthorizations(getDeps(c), query, resolveManagementOrganizationIds(c)),
     ),
   )
 })
@@ -94,15 +93,15 @@ managementApplicationsRoute.get('/', async (c) => {
       getDeps(c),
       issuerFor(c),
       query,
-      resolveOrganizationInventoryScope(c, query.ownerOrganizationId),
+      resolveManagementOrganizationIds(c, query.ownerOrganizationId),
     ),
   )
 })
 
 managementApplicationsRoute.post('/', async (c) => {
   const body = await readJson(c, createApplicationRequestSchema)
-  requireConsoleOwnedOrganization(c, body.ownerOrganizationId)
-  const application = await createApplication(getDeps(c), issuerFor(c), body, getActorUserId(c))
+  requireManagementOwnedOrganization(c, body.ownerOrganizationId)
+  const application = await createApplication(getDeps(c), issuerFor(c), body, getManagementActor(c))
   await publishWebhookEvent(getDeps(c), 'application.created', { application: applicationWebhookData(application) })
   c.header('Location', `/api/applications/${encodeURIComponent(application.id)}`)
   return c.json(application, 201)
@@ -116,7 +115,7 @@ managementApplicationsRoute.get('/:applicationId', async (c) => {
 managementApplicationsRoute.patch('/:applicationId', async (c) => {
   await requireApplicationAccess(c)
   const body = await readJson(c, updateApplicationRequestSchema)
-  if (body.ownerOrganizationId !== undefined) requireConsoleOwnedOrganization(c, body.ownerOrganizationId)
+  if (body.ownerOrganizationId !== undefined) requireManagementOwnedOrganization(c, body.ownerOrganizationId)
   const application = await updateApplication(getDeps(c), issuerFor(c), c.req.param('applicationId'), body)
   await publishWebhookEvent(getDeps(c), 'application.updated', { application: applicationWebhookData(application) })
   return c.json(application)
@@ -184,7 +183,7 @@ managementApplicationsRoute.get('/:applicationId/client-secrets', async (c) => {
 
 managementApplicationsRoute.post('/:applicationId/client-secrets', async (c) => {
   await requireApplicationAccess(c)
-  const secret = await rotateApplicationSecret(getDeps(c), c.req.param('applicationId'), getActorUserId(c))
+  const secret = await rotateApplicationSecret(getDeps(c), c.req.param('applicationId'), getManagementActor(c))
   return c.json(secret, 201)
 })
 
@@ -261,6 +260,6 @@ function issuerFor(c: Context) {
 
 async function requireApplicationAccess(c: Context, applicationId = c.req.param('applicationId')!) {
   const application = await getApplication(getDeps(c), issuerFor(c), applicationId)
-  requireConsoleOrganizationAccess(c, application.ownerOrganizationId)
+  requireManagementOrganization(c, application.ownerOrganizationId)
   return application
 }

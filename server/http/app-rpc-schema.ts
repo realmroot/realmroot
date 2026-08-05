@@ -1,11 +1,14 @@
 import type {
   AccountEmailChangeConfirmInput,
   AccountEmailChangeInput,
+  AccountOrganizationAgentAccessGrantsResponse,
   AccountOrganizationAgentsResponse,
   AccountOrganizationContextResponse,
+  AccountOrganizationRoleAssignmentsResponse,
   AccountPasswordChangeInput,
   AccountProfileResponse,
   AccountProfileUpdateInput,
+  AccountRoleAssignmentsResponse,
   AccountSecurityResponse,
   AccountSessionsResponse,
   AccountWalletAddressLinkInput,
@@ -222,10 +225,25 @@ export type RpcSchema = {
     $get: RpcEndpoint<{ param: { agentId: string } }, { agent: Agent }>
     $delete: RpcEndpoint<{ param: { agentId: string } }, EmptyResponse, 204>
   }
+  '/api/account/role-assignments': {
+    $get: RpcEndpoint<{ query?: Partial<Record<keyof PaginationQuery, string>> }, AccountRoleAssignmentsResponse>
+  }
   '/api/account/organizations/:organizationId/agents': {
     $get: RpcEndpoint<
       { param: { organizationId: string }; query?: Partial<Record<keyof PaginationQuery, string>> },
       AccountOrganizationAgentsResponse
+    >
+  }
+  '/api/account/organizations/:organizationId/role-assignments': {
+    $get: RpcEndpoint<
+      { param: { organizationId: string }; query?: Partial<Record<keyof PaginationQuery, string>> },
+      AccountOrganizationRoleAssignmentsResponse
+    >
+  }
+  '/api/account/organizations/:organizationId/agent-authorizations': {
+    $get: RpcEndpoint<
+      { param: { organizationId: string }; query?: Partial<Record<keyof PaginationQuery, string>> },
+      AccountOrganizationAgentAccessGrantsResponse
     >
   }
   '/api/account/security': {

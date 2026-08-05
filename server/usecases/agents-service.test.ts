@@ -155,9 +155,11 @@ describe('AgentService', () => {
       { agentId: 'agent-2', capability: 'users:write', status: 'pending' },
     ])
     const agentAudit = { append: vi.fn() }
+    const agentIdentities = createAgentIdentityRepositoryMock()
+    agentIdentities.findActiveByProtocolAgent.mockResolvedValue(null)
     const deps = {
       agents: repository,
-      agentIdentities: createAgentIdentityRepositoryMock(),
+      agentIdentities,
       agentAudit,
     } as unknown as Deps
 
@@ -182,7 +184,12 @@ describe('AgentService', () => {
       now: expect.any(Date),
     })
     expect(agentAudit.append).toHaveBeenCalledWith(
-      expect.objectContaining({ action: 'agent.capability_decided', result: 'denied', scopes: ['users:write'] }),
+      expect.objectContaining({
+        action: 'agent.capability_decided',
+        result: 'denied',
+        ownerUserId: 'user-2',
+        scopes: ['users:write'],
+      }),
     )
   })
 })

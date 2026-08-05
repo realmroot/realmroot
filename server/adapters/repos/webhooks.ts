@@ -6,7 +6,7 @@ import type {
   WebhookRequestStatus,
 } from '../../../shared/api/webhooks'
 import type { Database } from '../../db/client'
-import { webhookDeliveryAttempt, webhookDeliveryRequest, webhookEndpoint } from '../../db/schema'
+import { agentAuditEvent, webhookDeliveryAttempt, webhookDeliveryRequest, webhookEndpoint } from '../../db/schema'
 
 export type WebhookEndpointRow = typeof webhookEndpoint.$inferSelect
 export type WebhookEndpointInsert = typeof webhookEndpoint.$inferInsert
@@ -53,14 +53,26 @@ export function createWebhookRepository(db: Database): WebhookRepository {
         .orderBy(webhookEndpoint.id)
     },
 
-    async createEndpoint(input) {
-      const [row] = await db.insert(webhookEndpoint).values(input).returning()
+    async createEndpoint(input, audit) {
+      const [rows] = await db.batch([
+        db.insert(webhookEndpoint).values(input).returning(),
+        db.insert(agentAuditEvent).values(audit),
+      ])
+      const [row] = rows
       return row
     },
 
     async updateEndpoint(id, input) {
       const [row] = await db.update(webhookEndpoint).set(input).where(eq(webhookEndpoint.id, id)).returning()
       return row ?? null
+    },
+
+    async updateEndpointWithAudit(id, input, audit) {
+      const [rows] = await db.batch([
+        db.update(webhookEndpoint).set(input).where(eq(webhookEndpoint.id, id)).returning(),
+        db.insert(agentAuditEvent).values(audit),
+      ])
+      return rows[0] ?? null
     },
 
     async deleteEndpoint(id) {

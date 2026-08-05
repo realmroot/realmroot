@@ -18,12 +18,7 @@ import type { Context } from 'hono'
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { getPrincipal, isAutomationPrincipal } from '../../middleware/authn'
-import {
-  getConsoleOrganizationScope,
-  requireConsoleUserAccess,
-  requireRealmConsoleAccess,
-  resolveOrganizationInventoryScope,
-} from '../../middleware/authz'
+import { requireRealmManagement } from '../../middleware/authz'
 import { getDeps } from '../../middleware/deps'
 import type { ManagementAuthApi } from '../auth-api'
 import { toBoundaryError } from '../auth-api'
@@ -36,14 +31,16 @@ interface ManagementUserRoutesOptions {
 export function managementUserRoutes(authApi: ManagementAuthApi, options: ManagementUserRoutesOptions = {}) {
   const app = new Hono()
 
+  app.use('*', async (c, next) => {
+    requireRealmManagement(c)
+    await next()
+  })
+
   app.get('/', async (c) => {
     const users = getDeps(c).users
     const query = readQuery(c, adminUserListQuerySchema)
-    const organizationIds = resolveOrganizationInventoryScope(c, query.organizationId)
-
-    if (isAutomationPrincipal(c) || organizationIds) {
-      const userIds = organizationIds ? await getDeps(c).authorization.listMemberUserIds(organizationIds) : undefined
-      const page = await users.listManagedUsers(query, userIds)
+    if (isAutomationPrincipal(c)) {
+      const page = await users.listManagedUsers(query)
       return c.json(
         listManagementUsersResponseSchema.parse({
           users: page.items,
@@ -119,10 +116,8 @@ export function managementUserRoutes(authApi: ManagementAuthApi, options: Manage
   })
 
   app.get('/:id', async (c) => {
-    await requireConsoleUserAccess(c, c.req.param('id'))
     const deps = getDeps(c)
     const user = await deps.users.getUser(c.req.param('id'))
-    if (getConsoleOrganizationScope(c)) return c.json(managementUserDetailResponseSchema.parse({ user }))
     return c.json(
       managementUserDetailResponseSchema.parse({ user, security: await deps.security.getSecurityState(user.id) }),
     )
@@ -160,14 +155,12 @@ export function managementUserRoutes(authApi: ManagementAuthApi, options: Manage
   })
 
   app.get('/:id/password-reset-requests/:requestId', async (c) => {
-    await requireConsoleUserAccess(c, c.req.param('id'))
     const request = await getDeps(c).users.findPasswordResetRequest!(c.req.param('id'), c.req.param('requestId'))
     if (!request) throw notFound('Password reset request was not found.')
     return c.json(passwordResetRequestResponseSchema.parse({ ...request, createdAt: request.createdAt.toISOString() }))
   })
 
   app.get('/:id/suspension', async (c) => {
-    await requireConsoleUserAccess(c, c.req.param('id'))
     const user = await getDeps(c).users.getUser(c.req.param('id'))
     return c.json({
       userId: user.id,
@@ -178,13 +171,11 @@ export function managementUserRoutes(authApi: ManagementAuthApi, options: Manage
   })
 
   app.get('/:id/linked-accounts', async (c) => {
-    requireRealmConsoleAccess(c)
     const page = await getDeps(c).users.listLinkedAccounts(c.req.param('id'), readQuery(c, paginationQuerySchema))
     return c.json({ accounts: page.items, pagination: paginationMetadata(page) })
   })
 
   app.get('/:id/passkeys', async (c) => {
-    requireRealmConsoleAccess(c)
     const page = await getDeps(c).security.listPasskeys(c.req.param('id'), readQuery(c, paginationQuerySchema))
     return c.json({ passkeys: page.items, pagination: paginationMetadata(page) })
   })
@@ -279,7 +270,6 @@ export function managementUserRoutes(authApi: ManagementAuthApi, options: Manage
   })
 
   app.get('/:id/sessions', async (c) => {
-    requireRealmConsoleAccess(c)
     const page = await getDeps(c).users.listSessions(c.req.param('id'), readQuery(c, paginationQuerySchema))
     return c.json({ sessions: page.items, pagination: paginationMetadata(page) })
   })
@@ -295,7 +285,6 @@ export function managementUserRoutes(authApi: ManagementAuthApi, options: Manage
   })
 
   app.get('/:id/sessions/:sessionId', async (c) => {
-    requireRealmConsoleAccess(c)
     const page = await getDeps(c).users.listSessions(c.req.param('id'), { limit: 100, offset: 0 })
     const session = page.items.find(({ id }) => id === c.req.param('sessionId'))
     if (!session) throw notFound('User session was not found.')

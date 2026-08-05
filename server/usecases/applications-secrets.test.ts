@@ -1,3 +1,4 @@
+import { userManagementActor } from '@server/domain/management-authorization'
 import {
   createApplication,
   createConsent,
@@ -18,7 +19,7 @@ import { describe, expect, it } from 'vitest'
 describe('service.test 2', () => {
   it('paginates application collection responses', async () => {
     const repository = new InMemoryApplicationRepository()
-    const deps = { applications: repository } as unknown as Deps
+    const deps = { agentAudit: { append: async () => undefined }, applications: repository } as unknown as Deps
     const issuer = 'https://auth.example.com'
 
     const first = await createApplication(
@@ -29,7 +30,7 @@ describe('service.test 2', () => {
         clientType: 'public_spa',
         redirectUris: ['https://first.example.com/callback'],
       },
-      'admin-1',
+      userManagementActor('admin-1'),
     )
     const second = await createApplication(
       deps,
@@ -39,7 +40,7 @@ describe('service.test 2', () => {
         clientType: 'public_spa',
         redirectUris: ['https://second.example.com/callback'],
       },
-      'admin-1',
+      userManagementActor('admin-1'),
     )
 
     await expect(listApplications(deps, issuer, { limit: 1, offset: 0 })).resolves.toMatchObject({
@@ -63,7 +64,10 @@ describe('service.test 2', () => {
   })
 
   it('validates redirect URIs and client grant settings at the API boundary', async () => {
-    const deps = { applications: new InMemoryApplicationRepository() } as unknown as Deps
+    const deps = {
+      agentAudit: { append: async () => undefined },
+      applications: new InMemoryApplicationRepository(),
+    } as unknown as Deps
     const issuer = 'https://auth.example.com'
 
     await expect(
@@ -75,7 +79,7 @@ describe('service.test 2', () => {
           clientType: 'public_spa',
           redirectUris: ['https://spa.example.com/callback#token'],
         },
-        'admin-1',
+        userManagementActor('admin-1'),
       ),
     ).rejects.toMatchObject({ status: 400, message: 'Redirect URIs must not include fragments.' })
 
@@ -89,7 +93,7 @@ describe('service.test 2', () => {
           redirectUris: ['com.example.app:/oauth/callback'],
           allowedGrantTypes: ['client_credentials'],
         },
-        'admin-1',
+        userManagementActor('admin-1'),
       ),
     ).rejects.toMatchObject({ status: 400, message: 'Public clients cannot use the client_credentials grant.' })
 
@@ -102,7 +106,7 @@ describe('service.test 2', () => {
           clientType: 'public_native',
           redirectUris: ['javascript:alert(1)'],
         },
-        'admin-1',
+        userManagementActor('admin-1'),
       ),
     ).rejects.toMatchObject({
       status: 400,
@@ -118,7 +122,7 @@ describe('service.test 2', () => {
           clientType: 'public_native',
           redirectUris: ['com.example.app:/oauth/callback'],
         },
-        'admin-1',
+        userManagementActor('admin-1'),
       ),
     ).resolves.toMatchObject({
       redirectUris: ['com.example.app:/oauth/callback'],
@@ -132,7 +136,7 @@ describe('service.test 2', () => {
           clientType: 'public_spa',
           redirectUris: ['/callback'],
         },
-        'admin-1',
+        userManagementActor('admin-1'),
       ),
     ).rejects.toMatchObject({ status: 400, message: 'Redirect URIs must be absolute URLs.' })
     await expect(
@@ -144,7 +148,7 @@ describe('service.test 2', () => {
           clientType: 'public_spa',
           redirectUris: ['http://app.example.com/callback'],
         },
-        'admin-1',
+        userManagementActor('admin-1'),
       ),
     ).rejects.toMatchObject({
       status: 400,
@@ -159,7 +163,7 @@ describe('service.test 2', () => {
           clientType: 'public_native',
           redirectUris: ['mobile:/callback'],
         },
-        'admin-1',
+        userManagementActor('admin-1'),
       ),
     ).rejects.toMatchObject({
       status: 400,
@@ -175,7 +179,7 @@ describe('service.test 2', () => {
           redirectUris: ['http://localhost:5173/callback'],
           allowedScopes: ['openid', 'bad-scope' as 'openid'],
         },
-        'admin-1',
+        userManagementActor('admin-1'),
       ),
     ).rejects.toMatchObject({ status: 400, message: 'Unsupported scope: bad-scope' })
     await expect(
@@ -188,7 +192,7 @@ describe('service.test 2', () => {
           redirectUris: ['http://localhost:5173/callback'],
           allowedScopes: ['openid', 'applications:read' as 'openid'],
         },
-        'admin-1',
+        userManagementActor('admin-1'),
       ),
     ).rejects.toMatchObject({
       status: 400,
@@ -204,14 +208,14 @@ describe('service.test 2', () => {
           redirectUris: ['https://app.example.com/callback'],
           allowedGrantTypes: ['authorization_code', 'bad-grant' as 'authorization_code'],
         },
-        'admin-1',
+        userManagementActor('admin-1'),
       ),
     ).rejects.toMatchObject({ status: 400, message: 'Unsupported grant type: bad-grant' })
   })
 
   it('validates application post sign-out redirects and CORS origins at the API boundary', async () => {
     const repository = new InMemoryApplicationRepository()
-    const deps = { applications: repository } as unknown as Deps
+    const deps = { agentAudit: { append: async () => undefined }, applications: repository } as unknown as Deps
     const issuer = 'https://auth.example.com'
     const created = await createApplication(
       deps,
@@ -221,7 +225,7 @@ describe('service.test 2', () => {
         clientType: 'public_spa',
         redirectUris: ['https://spa.example.com/callback'],
       },
-      'admin-1',
+      userManagementActor('admin-1'),
     )
 
     await expect(
@@ -239,7 +243,7 @@ describe('service.test 2', () => {
           redirectUris: ['https://spa.example.com/callback'],
           postLogoutRedirectUris: ['https://spa.example.com/signed-out#fragment'],
         },
-        'admin-1',
+        userManagementActor('admin-1'),
       ),
     ).rejects.toMatchObject({ status: 400, message: 'Post sign-out redirect URIs must not include fragments.' })
     await expect(
@@ -257,7 +261,7 @@ describe('service.test 2', () => {
           redirectUris: ['https://spa.example.com/callback'],
           corsOrigins: ['not an origin'],
         },
-        'admin-1',
+        userManagementActor('admin-1'),
       ),
     ).rejects.toMatchObject({ status: 400, message: 'CORS origins must be absolute origins.' })
     await expect(
@@ -280,7 +284,7 @@ describe('service.test 2', () => {
 
   it('loads consent data for an authorization request and records consent', async () => {
     const repository = new InMemoryApplicationRepository()
-    const deps = { applications: repository } as unknown as Deps
+    const deps = { agentAudit: { append: async () => undefined }, applications: repository } as unknown as Deps
     const issuer = 'https://auth.example.com'
     const created = await createApplication(
       deps,
@@ -291,7 +295,7 @@ describe('service.test 2', () => {
         redirectUris: ['https://spa.example.com/callback'],
         allowedScopes: ['openid', 'profile'],
       },
-      'admin-1',
+      userManagementActor('admin-1'),
     )
 
     await createConsent(deps, { clientId: created.clientId, scopes: ['openid'] }, 'user-1')

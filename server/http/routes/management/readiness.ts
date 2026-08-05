@@ -9,6 +9,7 @@ import type { SecurityPolicy } from '@shared/api/security'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
 import { configzOptions } from '../../app-config'
+import { requireRealmManagement } from '../../middleware/authz'
 import { getDeps } from '../../middleware/deps'
 
 interface ReadinessBindings {
@@ -17,6 +18,11 @@ interface ReadinessBindings {
 
 export function createManagementReadinessRoute({ securityPolicy }: { securityPolicy?: SecurityPolicy }) {
   const app = new Hono<{ Bindings: ReadinessBindings }>()
+
+  app.use('/realm/configuration-status', async (c, next) => {
+    requireRealmManagement(c)
+    await next()
+  })
 
   app.get('/realm/configuration-status', async (c) => {
     const deps = getDeps(c)

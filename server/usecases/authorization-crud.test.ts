@@ -1,3 +1,4 @@
+import { userManagementActor } from '@server/domain/management-authorization'
 import {
   addMember,
   archiveResource,
@@ -47,7 +48,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 const timestamp = '2026-07-30T00:00:00.000Z'
 const pagination = { limit: 20, offset: 0, total: 1, hasMore: false, nextOffset: null }
-const actor = { controllerUserId: 'user-1', agent: null }
+const actor = { kind: 'user', userId: 'user-1' } as const
 const organization: OrganizationResponse = {
   id: 'org-1',
   slug: 'acme',
@@ -115,7 +116,7 @@ describe('authorization CRUD and assignment policy', () => {
       createdAt: timestamp,
       updatedAt: timestamp,
     }))
-    const deps = { authorization } as unknown as Deps
+    const deps = { agentAudit: { append: async () => undefined }, authorization } as unknown as Deps
 
     const created = await ensureRealmrootResourceServer(deps, 'https://auth.example.com')
     expect(created).toMatchObject({
@@ -157,7 +158,7 @@ describe('authorization CRUD and assignment policy', () => {
     authorization.createInvitation.mockResolvedValue(invitation)
     authorization.listInvitations.mockResolvedValue({ items: [invitation], pagination })
     authorization.findInvitation.mockResolvedValue(invitation)
-    const deps = { authorization } as unknown as Deps
+    const deps = { agentAudit: { append: async () => undefined }, authorization } as unknown as Deps
 
     await expect(createOrganization(deps, { slug: 'acme', name: 'Acme' })).resolves.toBe(organization)
     expect(authorization.createOrganization).toHaveBeenCalledWith(
@@ -189,7 +190,12 @@ describe('authorization CRUD and assignment policy', () => {
     await expect(removeMember(deps, organization.id, member.id)).resolves.toBeUndefined()
 
     await expect(
-      createInvitation(deps, organization.id, { email: invitation.email, role: 'member' }, 'admin-1'),
+      createInvitation(
+        deps,
+        organization.id,
+        { email: invitation.email, role: 'member' },
+        userManagementActor('admin-1'),
+      ),
     ).resolves.toBe(invitation)
     expect(authorization.createInvitation).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -198,15 +204,20 @@ describe('authorization CRUD and assignment policy', () => {
         inviterId: 'admin-1',
         expiresAt: expect.any(String),
       }),
+      expect.objectContaining({
+        action: 'management.organization-invitation.created',
+        ownerOrganizationId: organization.id,
+      }),
     )
     await createInvitation(
       deps,
       organization.id,
       { email: invitation.email, role: 'member', expiresAt: timestamp },
-      null,
+      userManagementActor('admin-2'),
     )
     expect(authorization.createInvitation).toHaveBeenLastCalledWith(
-      expect.objectContaining({ expiresAt: timestamp, inviterId: null }),
+      expect.objectContaining({ expiresAt: timestamp, inviterId: 'admin-2' }),
+      expect.objectContaining({ action: 'management.organization-invitation.created' }),
     )
     await expect(listInvitations(deps, organization.id, { limit: 20, offset: 0 })).resolves.toEqual({
       invitations: [invitation],
@@ -220,7 +231,7 @@ describe('authorization CRUD and assignment policy', () => {
 
   it('surfaces missing and cross-organization records', async () => {
     const authorization = repository()
-    const deps = { authorization } as unknown as Deps
+    const deps = { agentAudit: { append: async () => undefined }, authorization } as unknown as Deps
 
     await expect(getOrganization(deps, 'missing')).rejects.toMatchObject({ status: 404 })
     authorization.findOrganization.mockResolvedValue(organization)
@@ -235,7 +246,7 @@ describe('authorization CRUD and assignment policy', () => {
 
   it('rejects demoting or removing the last Organization Owner', async () => {
     const authorization = repository()
-    const deps = { authorization } as unknown as Deps
+    const deps = { agentAudit: { append: async () => undefined }, authorization } as unknown as Deps
     authorization.findMember.mockResolvedValue({ ...member, role: 'owner' })
     authorization.countMembersByRole.mockResolvedValue(1)
 
@@ -284,6 +295,7 @@ describe('authorization CRUD and assignment policy', () => {
     const connectors = { findById: vi.fn().mockResolvedValue(connector) }
     const openApiFetch = resourceOpenApiFetch(resource.resourceUrl)
     const deps = {
+      agentAudit: { append: async () => undefined },
       authorization,
       connectors,
       externalHttp: {
@@ -387,6 +399,7 @@ describe('authorization CRUD and assignment policy', () => {
       expect.objectContaining({
         action: 'api_resource.archived',
         controllerUserId: 'user-1',
+        ownerOrganizationId: resource.ownerOrganizationId,
         resourceId: resource.id,
       }),
     )
@@ -400,6 +413,7 @@ describe('authorization CRUD and assignment policy', () => {
       expect.objectContaining({
         action: 'api_resource.restored',
         controllerUserId: 'user-1',
+        ownerOrganizationId: resource.ownerOrganizationId,
         resourceId: resource.id,
       }),
     )
@@ -407,13 +421,13 @@ describe('authorization CRUD and assignment policy', () => {
     authorization.archiveResource.mockClear()
     authorization.findResource.mockResolvedValue(resource)
     await archiveResource(deps, resource.id, {
-      controllerUserId: null,
-      agent: {
-        issuer: 'https://auth.example.com',
-        subject: 'agent-subject',
-        identityId: 'identity-1',
-        hostId: 'host-1',
-      },
+      kind: 'agent',
+      issuer: 'https://auth.example.com',
+      subject: 'agent-subject',
+      identityId: 'identity-1',
+      protocolAgentId: 'protocol-agent-1',
+      hostId: 'host-1',
+      authority: { kind: 'organization', organizationId: resource.ownerOrganizationId },
     })
     expect(authorization.archiveResource).toHaveBeenCalledWith(
       resource.id,
@@ -424,6 +438,10 @@ describe('authorization CRUD and assignment policy', () => {
         subject: 'agent-subject',
         agentIdentityId: 'identity-1',
         hostId: 'host-1',
+        ownerOrganizationId: resource.ownerOrganizationId,
+        metadata: expect.objectContaining({
+          authority: { kind: 'organization', organizationId: resource.ownerOrganizationId },
+        }),
       }),
     )
 
@@ -493,6 +511,7 @@ describe('authorization CRUD and assignment policy', () => {
     authorization.findResource.mockResolvedValue(resource)
     authorization.findOrganization.mockResolvedValue({ ...organization, disabled: true })
     const deps = {
+      agentAudit: { append: async () => undefined },
       authorization,
       externalHttp: { fetch: vi.fn(resourceOpenApiFetch(resource.resourceUrl)) },
     } as unknown as Deps
@@ -520,6 +539,7 @@ describe('authorization CRUD and assignment policy', () => {
     authorization.findResource.mockResolvedValue(resource)
     const externalHttp = { fetch: vi.fn().mockResolvedValue(new Response('<html></html>')) }
     const deps = {
+      agentAudit: { append: async () => undefined },
       authorization,
       externalResources: { findAuthorization: vi.fn() },
       externalHttp,
@@ -552,7 +572,7 @@ describe('authorization CRUD and assignment policy', () => {
     authorization.listRoles.mockResolvedValue({ items: [role], pagination })
     authorization.findRole.mockResolvedValue(role)
     authorization.listRolePermissions.mockResolvedValue([{ resourceId: resource.id, scope: 'projects:read' }])
-    const deps = { authorization } as unknown as Deps
+    const deps = { agentAudit: { append: async () => undefined }, authorization } as unknown as Deps
 
     await createRole(deps, { key: role.key, name: role.name })
     expect(authorization.createRole).toHaveBeenCalledWith(
@@ -605,7 +625,7 @@ describe('authorization CRUD and assignment policy', () => {
         })
       }),
     }
-    const deps = { authorization, externalHttp } as unknown as Deps
+    const deps = { agentAudit: { append: async () => undefined }, authorization, externalHttp } as unknown as Deps
     const permissions = [
       { resourceId: resource.id, scope: 'projects:read' },
       { resourceId: secondResource.id, scope: 'projects:read' },
@@ -621,24 +641,29 @@ describe('authorization CRUD and assignment policy', () => {
   it('validates Agent role assignments and deduplicates eligibility', async () => {
     const authorization = repository()
     const agentIdentities = { findIdentity: vi.fn() }
-    const deps = { authorization, agentIdentities } as unknown as Deps
+    const deps = { agentAudit: { append: async () => undefined }, authorization, agentIdentities } as unknown as Deps
 
     authorization.findRole.mockResolvedValue(role)
     agentIdentities.findIdentity.mockResolvedValue(null)
-    await expect(assignAgentRole(deps, { roleId: role.id, subjectId: 'agent-1' }, null)).rejects.toMatchObject({
+    await expect(
+      assignAgentRole(deps, { roleId: role.id, subjectId: 'agent-1' }, userManagementActor('admin-1')),
+    ).rejects.toMatchObject({
       status: 404,
     })
     agentIdentities.findIdentity.mockResolvedValue({ identity: { status: 'retired' }, bindings: [] })
-    await expect(assignAgentRole(deps, { roleId: role.id, subjectId: 'agent-1' }, null)).rejects.toMatchObject({
+    await expect(
+      assignAgentRole(deps, { roleId: role.id, subjectId: 'agent-1' }, userManagementActor('admin-1')),
+    ).rejects.toMatchObject({
       status: 404,
     })
     agentIdentities.findIdentity.mockResolvedValue({
       identity: { status: 'active', ownerOrganizationId: null, ownerUserId: 'user-1' },
       bindings: [],
     })
-    await assignAgentRole(deps, { roleId: role.id, subjectId: 'agent-1' }, null)
+    await assignAgentRole(deps, { roleId: role.id, subjectId: 'agent-1' }, userManagementActor('admin-1'))
     expect(authorization.createRoleAssignment).toHaveBeenCalledWith(
       expect.objectContaining({ subjectType: 'agent', subjectId: 'agent-1', organizationId: null }),
+      expect.objectContaining({ action: 'management.role-assignment.created' }),
     )
 
     authorization.listAgentRoleAssignments.mockResolvedValue([
@@ -678,7 +703,13 @@ describe('authorization CRUD and assignment policy', () => {
     const users = { getUser: vi.fn().mockResolvedValue({ id: 'user-1' }) }
     const applications = { findById: vi.fn() }
     const agentIdentities = { findIdentity: vi.fn() }
-    const deps = { authorization, users, applications, agentIdentities } as unknown as Deps
+    const deps = {
+      agentAudit: { append: async () => undefined },
+      authorization,
+      users,
+      applications,
+      agentIdentities,
+    } as unknown as Deps
 
     await expect(
       listRoleAssignments(
@@ -712,38 +743,46 @@ describe('authorization CRUD and assignment policy', () => {
     authorization.revokeRoleAssignment.mockResolvedValue(false)
     await expect(putRoleAssignmentRevocation(deps, assignment.id)).rejects.toMatchObject({ status: 404 })
 
-    await createRoleAssignment(deps, { roleId: role.id, subjectType: 'user', subjectId: 'user-1' }, 'admin-1')
+    await createRoleAssignment(
+      deps,
+      { roleId: role.id, subjectType: 'user', subjectId: 'user-1' },
+      userManagementActor('admin-1'),
+    )
     await createRoleAssignment(
       deps,
       { roleId: role.id, subjectType: 'user', subjectId: 'user-1', organizationId: organization.id },
-      'admin-1',
+      userManagementActor('admin-1'),
     )
     authorization.findMemberByOrganizationUser.mockResolvedValue(null)
     await expect(
       createRoleAssignment(
         deps,
         { roleId: role.id, subjectType: 'user', subjectId: 'user-1', organizationId: organization.id },
-        'admin-1',
+        userManagementActor('admin-1'),
       ),
     ).rejects.toMatchObject({ status: 400 })
 
     applications.findById.mockResolvedValue(null)
     await expect(
-      createRoleAssignment(deps, { roleId: role.id, subjectType: 'workload', subjectId: 'app-1' }, 'admin-1'),
+      createRoleAssignment(
+        deps,
+        { roleId: role.id, subjectType: 'workload', subjectId: 'app-1' },
+        userManagementActor('admin-1'),
+      ),
     ).rejects.toMatchObject({ status: 404 })
     applications.findById.mockResolvedValue({ id: 'app-1', ownerOrganizationId: 'org-other' })
     await expect(
       createRoleAssignment(
         deps,
         { roleId: role.id, subjectType: 'workload', subjectId: 'app-1', organizationId: organization.id },
-        'admin-1',
+        userManagementActor('admin-1'),
       ),
     ).rejects.toMatchObject({ status: 400 })
     applications.findById.mockResolvedValue({ id: 'app-1', ownerOrganizationId: organization.id })
     await createRoleAssignment(
       deps,
       { roleId: role.id, subjectType: 'workload', subjectId: 'app-1', organizationId: organization.id },
-      'admin-1',
+      userManagementActor('admin-1'),
     )
 
     agentIdentities.findIdentity.mockResolvedValue({
@@ -754,7 +793,7 @@ describe('authorization CRUD and assignment policy', () => {
       createRoleAssignment(
         deps,
         { roleId: role.id, subjectType: 'agent', subjectId: 'agent-1', organizationId: organization.id },
-        'admin-1',
+        userManagementActor('admin-1'),
       ),
     ).rejects.toMatchObject({ status: 400 })
   })
@@ -767,7 +806,7 @@ describe('authorization CRUD and assignment policy', () => {
     authorization.findMemberByOrganizationUser.mockResolvedValue({ id: 'member-1' })
     authorization.listUserRoleAssignments.mockResolvedValue([assignment])
     authorization.listApplicationRoleAssignments.mockResolvedValue([assignment])
-    const deps = { authorization } as unknown as Deps
+    const deps = { agentAudit: { append: async () => undefined }, authorization } as unknown as Deps
 
     await expect(
       buildTokenClaims(deps, {

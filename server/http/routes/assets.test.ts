@@ -201,7 +201,7 @@ describe('asset routes', () => {
         undefined,
         purpose,
       )
-      expect(response.status).toBe(201)
+      expect(response.status, await response.clone().text()).toBe(201)
     }
 
     expect(assets.upload).toHaveBeenCalledTimes(4)

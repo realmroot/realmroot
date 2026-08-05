@@ -1,7 +1,7 @@
 import type { AgentAuditRepository } from '@server/usecases/ports'
-import { and, count, desc, eq, inArray } from 'drizzle-orm'
+import { and, count, desc, eq, inArray, or, sql } from 'drizzle-orm'
 import type { Database } from '../../db/client'
-import { agentAuditEvent, agentIdentity } from '../../db/schema'
+import { agentAuditEvent } from '../../db/schema'
 
 export function createAgentAuditRepository(db: Database): AgentAuditRepository {
   return {
@@ -10,18 +10,21 @@ export function createAgentAuditRepository(db: Database): AgentAuditRepository {
     },
 
     async list(page, filter) {
-      if (filter?.ownerOrganizationIds?.length === 0) return { items: [], total: 0, ...page }
+      const ownerFilters = [
+        filter?.ownerUserId ? eq(agentAuditEvent.ownerUserId, filter.ownerUserId) : undefined,
+        filter?.ownerOrganizationIds?.length
+          ? inArray(agentAuditEvent.ownerOrganizationId, filter.ownerOrganizationIds)
+          : undefined,
+      ].filter((condition) => condition !== undefined)
+      const ownerCondition =
+        filter && (filter.ownerUserId !== undefined || filter.ownerOrganizationIds !== undefined)
+          ? ownerFilters.length
+            ? or(...ownerFilters)
+            : sql`0`
+          : undefined
       const condition = and(
         filter?.agentIdentityId ? eq(agentAuditEvent.agentIdentityId, filter.agentIdentityId) : undefined,
-        filter?.ownerOrganizationIds
-          ? inArray(
-              agentAuditEvent.agentIdentityId,
-              db
-                .select({ id: agentIdentity.id })
-                .from(agentIdentity)
-                .where(inArray(agentIdentity.ownerOrganizationId, filter.ownerOrganizationIds)),
-            )
-          : undefined,
+        ownerCondition,
       )
       const [items, totals] = await Promise.all([
         db

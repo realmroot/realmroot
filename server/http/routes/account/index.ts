@@ -1,9 +1,15 @@
 import { badRequest, forbidden } from '@server/domain/errors'
+import { ownerFromAgentHomeSpace, requireManagementOwner } from '@server/domain/management-authorization'
 import { validateEmailPolicy, validatePasswordPolicy } from '@server/domain/security/policy'
-import { listAccountOrganizationAgents } from '@server/usecases/account-organizations'
+import {
+  listAccountOrganizationAgentAuthorizations,
+  listAccountOrganizationAgents,
+  listAccountOrganizationRoleAssignments,
+  listAccountRoleAssignments,
+} from '@server/usecases/account-organizations'
 import {
   approveAgentEnrollment,
-  getPersonalAgent,
+  getAgent,
   getPublicAgentEnrollment,
   listPersonalAgents,
   recoverAgentIdentity,
@@ -33,8 +39,11 @@ import type { ConfigzAccountCenter } from '@server/usecases/ports'
 import {
   accountEmailChangeConfirmSchema,
   accountEmailChangeSchema,
+  accountOrganizationAgentAccessGrantsResponseSchema,
+  accountOrganizationRoleAssignmentsResponseSchema,
   accountPasswordChangeSchema,
   accountProfileUpdateSchema,
+  accountRoleAssignmentsResponseSchema,
   accountWalletAddressLinkSchema,
 } from '@shared/api/account'
 import {
@@ -63,7 +72,7 @@ import { parseSiweMessage, validateSiweMessage } from 'viem/siwe'
 import { z } from 'zod'
 import { configzOptions } from '../../app-config'
 import { getPrincipal } from '../../middleware/authn'
-import { authenticatedUser } from '../../middleware/authz'
+import { accountManagementBoundary, authenticatedUser } from '../../middleware/authz'
 import { getDeps } from '../../middleware/deps'
 import type { ManagementAuthApi } from '../auth-api'
 import { toBoundaryError } from '../auth-api'
@@ -377,20 +386,29 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
   })
 
   app.get('/agents/:agentId', async (c) => {
+    const userId = getPrincipal(c).user!.id
+    const agent = await getAgent(getDeps(c), c.req.param('agentId'))
+    requireManagementOwner(accountManagementBoundary(userId), ownerFromAgentHomeSpace(agent.homeSpace))
     return c.json(
       agentResponseSchema.parse({
-        agent: await getPersonalAgent(getDeps(c), c.req.param('agentId'), getPrincipal(c).user!.id),
+        agent,
       }),
     )
   })
 
   app.delete('/agents/:agentId', async (c) => {
-    await retireAgentIdentity(getDeps(c), c.req.param('agentId'), getPrincipal(c).user!.id)
+    const userId = getPrincipal(c).user!.id
+    const agent = await getAgent(getDeps(c), c.req.param('agentId'))
+    requireManagementOwner(accountManagementBoundary(userId), ownerFromAgentHomeSpace(agent.homeSpace))
+    await retireAgentIdentity(getDeps(c), agent.id, { kind: 'user', userId })
     return c.body(null, 204)
   })
 
   app.post('/agents/:agentId/recovery', async (c) => {
-    await recoverAgentIdentity(getDeps(c), c.req.param('agentId'), getPrincipal(c).user!.id)
+    const userId = getPrincipal(c).user!.id
+    const agent = await getAgent(getDeps(c), c.req.param('agentId'))
+    requireManagementOwner(accountManagementBoundary(userId), ownerFromAgentHomeSpace(agent.homeSpace))
+    await recoverAgentIdentity(getDeps(c), agent.id, { kind: 'user', userId })
     return c.body(null, 202)
   })
 
@@ -401,6 +419,40 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
         c.req.param('organizationId'),
         getPrincipal(c).user!.id,
         readQuery(c, paginationQuerySchema),
+      ),
+    )
+  })
+
+  app.get('/role-assignments', async (c) => {
+    return c.json(
+      accountRoleAssignmentsResponseSchema.parse(
+        await listAccountRoleAssignments(getDeps(c), getPrincipal(c).user!.id, readQuery(c, paginationQuerySchema)),
+      ),
+    )
+  })
+
+  app.get('/organizations/:organizationId/role-assignments', async (c) => {
+    return c.json(
+      accountOrganizationRoleAssignmentsResponseSchema.parse(
+        await listAccountOrganizationRoleAssignments(
+          getDeps(c),
+          c.req.param('organizationId'),
+          getPrincipal(c).user!.id,
+          readQuery(c, paginationQuerySchema),
+        ),
+      ),
+    )
+  })
+
+  app.get('/organizations/:organizationId/agent-authorizations', async (c) => {
+    return c.json(
+      accountOrganizationAgentAccessGrantsResponseSchema.parse(
+        await listAccountOrganizationAgentAuthorizations(
+          getDeps(c),
+          c.req.param('organizationId'),
+          getPrincipal(c).user!.id,
+          readQuery(c, paginationQuerySchema),
+        ),
       ),
     )
   })

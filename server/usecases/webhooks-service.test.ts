@@ -1,5 +1,6 @@
 import { createSecretCipher } from '@server/adapters/gateways/secrets'
 import type { WebhookEndpointInsert, WebhookEndpointRow, WebhookRequestRow } from '@server/adapters/repos/webhooks'
+import { userManagementActor } from '@server/domain/management-authorization'
 import type { Deps } from '@server/usecases/deps'
 import type {
   WebhookDeliveryAttemptInsert,
@@ -30,6 +31,7 @@ function depsWith(
   fetch: (request: Request) => Promise<Response> = async () => new Response(null, { status: 204 }),
 ): Deps {
   return {
+    agentAudit: { append: async () => undefined },
     webhooks: repository,
     authorization: { listUserMemberships: async () => [] },
     secrets: createSecretCipher('test-webhook-secret-key-at-least-32-characters'),
@@ -45,7 +47,7 @@ describe('WebhookService', () => {
     const created = await createWebhookEndpoint(
       deps,
       { url: 'https://app.example.com/webhooks/auth', events: ['user.created'], enabled: true, organizationId: null },
-      'admin-1',
+      userManagementActor('admin-1'),
     )
 
     expect(created.signingSecret).toMatch(/^whsec_/)
@@ -68,9 +70,23 @@ describe('WebhookService', () => {
       pagination: { total: 0 },
     })
 
-    const rotated = await rotateWebhookSecret(deps, created.endpoint.id)
+    const rotated = await rotateWebhookSecret(deps, created.endpoint.id, userManagementActor('admin-1'))
     expect(rotated.signingSecret).toMatch(/^whsec_/)
     expect(rotated.signingSecret).not.toBe(created.signingSecret)
+
+    const organizationEndpoint = await createWebhookEndpoint(
+      deps,
+      {
+        url: 'https://organization.example.com/webhooks/auth',
+        events: ['user.created'],
+        enabled: true,
+        organizationId: 'org-1',
+      },
+      userManagementActor('admin-1'),
+    )
+    await expect(
+      rotateWebhookSecret(deps, organizationEndpoint.endpoint.id, userManagementActor('admin-1')),
+    ).resolves.toMatchObject({ endpoint: { organizationId: 'org-1' } })
 
     const request = await repository.createRequest({
       id: 'whr_1',
@@ -121,7 +137,7 @@ describe('WebhookService', () => {
     const created = await createWebhookEndpoint(
       deps,
       { url: 'https://app.example.com/webhooks/auth', events: ['user.created'], enabled: true, organizationId: null },
-      'admin-1',
+      userManagementActor('admin-1'),
     )
     const request = await repository.createRequest({
       id: 'whr_1',
@@ -147,7 +163,7 @@ describe('WebhookService', () => {
           enabled: true,
           organizationId: null,
         },
-        'admin-1',
+        userManagementActor('admin-1'),
       ),
     ).rejects.toMatchObject({ status: 400 })
     await expect(createWebhookDeliveryAttempt(deps, request.id, 'retry-delivered')).rejects.toMatchObject({
@@ -161,7 +177,9 @@ describe('WebhookService', () => {
 
     await expect(updateWebhookEndpoint(deps, 'missing', { enabled: false })).rejects.toMatchObject({ status: 404 })
     await expect(deleteWebhookEndpoint(deps, 'missing')).rejects.toMatchObject({ status: 404 })
-    await expect(rotateWebhookSecret(deps, 'missing')).rejects.toMatchObject({ status: 404 })
+    await expect(rotateWebhookSecret(deps, 'missing', userManagementActor('admin-1'))).rejects.toMatchObject({
+      status: 404,
+    })
     await expect(getWebhookRequest(deps, 'missing')).rejects.toMatchObject({ status: 404 })
     await expect(createWebhookDeliveryAttempt(deps, 'missing', 'retry-missing')).rejects.toMatchObject({ status: 404 })
     await expect(getWebhookDeliveryAttempt(deps, 'missing', 'attempt-1')).rejects.toMatchObject({ status: 404 })
@@ -169,7 +187,7 @@ describe('WebhookService', () => {
     const created = await createWebhookEndpoint(
       deps,
       { url: 'https://app.example.com/webhooks/auth', events: ['user.created'], enabled: true, organizationId: null },
-      'admin-1',
+      userManagementActor('admin-1'),
     )
     repository.missingEndpointUpdateIds.add(created.endpoint.id)
     await expect(
@@ -177,7 +195,9 @@ describe('WebhookService', () => {
     ).rejects.toMatchObject({
       status: 404,
     })
-    await expect(rotateWebhookSecret(deps, created.endpoint.id)).rejects.toMatchObject({ status: 404 })
+    await expect(rotateWebhookSecret(deps, created.endpoint.id, userManagementActor('admin-1'))).rejects.toMatchObject({
+      status: 404,
+    })
 
     const request = await repository.createRequest({
       id: 'whr_1',
@@ -212,7 +232,7 @@ describe('WebhookService', () => {
     const created = await createWebhookEndpoint(
       deps,
       { url: 'https://app.example.com/webhooks/auth', events: ['user.created'], enabled: true, organizationId: null },
-      'admin-1',
+      userManagementActor('admin-1'),
     )
 
     const [failed] = await publishWebhookEvent(deps, 'user.created', { user: { id: 'user-1' } })
@@ -262,7 +282,7 @@ describe('WebhookService', () => {
           enabled: true,
           organizationId,
         },
-        'admin-1',
+        userManagementActor('admin-1'),
       )
     }
 
@@ -277,14 +297,26 @@ describe('WebhookService', () => {
   it('handles durable delivery replay, legacy secrets, bounded responses, and delivery failures', async () => {
     const repository = new InMemoryWebhookRepository()
     const outbound: Request[] = []
+    let chunkResponseAtBoundary = false
     const deps = depsWith(repository, async (request) => {
       outbound.push(request)
-      return new Response('x'.repeat(9_000), { status: 500 })
+      if (!chunkResponseAtBoundary) return new Response('x'.repeat(9_000), { status: 500 })
+      const encoder = new TextEncoder()
+      return new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(encoder.encode('x'.repeat(8 * 1024)))
+            controller.enqueue(encoder.encode('overflow'))
+            controller.close()
+          },
+        }),
+        { status: 500 },
+      )
     })
     const created = await createWebhookEndpoint(
       deps,
       { url: 'https://app.example.com/webhooks/auth', events: ['user.created'], enabled: true, organizationId: null },
-      'admin-1',
+      userManagementActor('admin-1'),
     )
     repository.rawEndpoint(created.endpoint.id)!.signingSecret = 'legacy-plaintext-secret'
     const requestInput: WebhookRequestInsert = {
@@ -312,6 +344,17 @@ describe('WebhookService', () => {
     expect(repository.rawEndpoint(created.endpoint.id)!.signingSecret).toMatch(/^v1\./)
     await expect(deliverWebhookRequest(deps, request.id, 'edge-attempt')).resolves.toMatchObject({ id: request.id })
     expect(outbound).toHaveLength(1)
+
+    chunkResponseAtBoundary = true
+    const boundaryRequest = await repository.createRequest({
+      ...requestInput,
+      id: 'whr_boundary_response',
+      requestBody: '{"id":"evt_boundary_response"}',
+    })
+    await expect(deliverWebhookRequest(deps, boundaryRequest.id, 'boundary-response')).resolves.toMatchObject({
+      status: 'failed',
+      responseBody: expect.stringContaining('[response truncated]'),
+    })
 
     const noPayload = await repository.createRequest({ ...requestInput, id: 'whr_no_payload' })
     noPayload.requestBody = null
@@ -354,7 +397,7 @@ describe('WebhookService', () => {
     const created = await createWebhookEndpoint(
       deps,
       { url: 'https://app.example.com/webhooks', events: ['user.created'], enabled: true, organizationId: null },
-      'admin-1',
+      userManagementActor('admin-1'),
     )
     const input: WebhookRequestInsert = {
       id: 'whr_missing_endpoint',
@@ -378,7 +421,7 @@ describe('WebhookService', () => {
     const recreated = await createWebhookEndpoint(
       deps,
       { url: 'https://app.example.com/webhooks', events: ['user.created'], enabled: true, organizationId: null },
-      'admin-1',
+      userManagementActor('admin-1'),
     )
     const missingUpdate = await repository.createRequest({
       ...input,
@@ -416,7 +459,7 @@ describe('WebhookService', () => {
         enabled: true,
         organizationId: 'org-acme',
       },
-      'admin-1',
+      userManagementActor('admin-1'),
     )
     deps.authorization.listUserMemberships = async () =>
       [{ organizationId: 'org-other' }, { organizationId: 'org-acme' }, { organizationId: 'org-acme' }] as never
@@ -477,6 +520,10 @@ class InMemoryWebhookRepository implements WebhookRepository {
     if (!current) return null
     Object.assign(current, input)
     return current
+  }
+
+  async updateEndpointWithAudit(id: string, input: Partial<WebhookEndpointInsert>) {
+    return this.updateEndpoint(id, input)
   }
 
   async deleteEndpoint(id: string) {

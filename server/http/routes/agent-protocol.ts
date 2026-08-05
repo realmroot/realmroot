@@ -15,12 +15,20 @@ import {
   createAccessRequestCredential,
   createAgentConnectionRequest,
   getAccessRequest,
+  getAgentAccessGrant,
   getAgentConnectionRequest,
+  getAgentResourceServer,
   getAgentResourceServerResource,
+  listAgentAccessGrants,
+  listAgentAccessRequests,
   listAgentResourceServerResources,
+  listAgentResourceServers,
 } from '@server/usecases/external-resources'
 import {
+  accessGrantSchema,
+  accessGrantsResponseSchema,
   accessRequestSchema,
+  accessRequestsResponseSchema,
   agentEnrollmentSchema,
   agentInstallationEnrollmentResponseSchema,
   agentInstallationEnrollmentSchema,
@@ -33,6 +41,8 @@ import {
   resourceConnectionRequestSchema,
   resourceServerResourceSchema,
   resourceServerResourcesResponseSchema,
+  resourceServerSchema,
+  resourceServersResponseSchema,
   targetCredentialProofSchema,
   targetTokenSchema,
 } from '@shared/api/agent-api'
@@ -129,7 +139,35 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
     )
   })
 
-  app.get('/resource-servers/:resourceServerId/resources', async (c) => {
+  app.get('/agent/resource-servers', async (c) => {
+    const principal = await resourcePrincipal(authApi, getDeps(c), c)
+    return c.json(
+      resourceServersResponseSchema.parse(
+        await listAgentResourceServers(
+          getDeps(c),
+          principal,
+          readQuery(c, paginationQuerySchema),
+          new URL(requireOidcIssuer()).origin,
+        ),
+      ),
+    )
+  })
+
+  app.get('/agent/resource-servers/:resourceServerId', async (c) => {
+    const principal = await resourcePrincipal(authApi, getDeps(c), c)
+    return c.json(
+      resourceServerSchema.parse(
+        await getAgentResourceServer(
+          getDeps(c),
+          c.req.param('resourceServerId'),
+          principal,
+          new URL(requireOidcIssuer()).origin,
+        ),
+      ),
+    )
+  })
+
+  app.get('/agent/resource-servers/:resourceServerId/resources', async (c) => {
     const principal = await resourcePrincipal(authApi, getDeps(c), c)
     return c.json(
       resourceServerResourcesResponseSchema.parse(
@@ -144,7 +182,7 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
     )
   })
 
-  app.get('/resource-servers/:resourceServerId/resources/:resourceId', async (c) => {
+  app.get('/agent/resource-servers/:resourceServerId/resources/:resourceId', async (c) => {
     const principal = await resourcePrincipal(authApi, getDeps(c), c)
     return c.json(
       resourceServerResourceSchema.parse(
@@ -159,7 +197,7 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
     )
   })
 
-  app.post('/resource-servers/:resourceServerId/connection-requests', async (c) => {
+  app.post('/agent/resource-servers/:resourceServerId/connection-requests', async (c) => {
     const principal = await resourcePrincipal(authApi, getDeps(c), c)
     const result = await createAgentConnectionRequest(
       getDeps(c),
@@ -173,7 +211,7 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
     return c.json(resourceConnectionRequestSchema.parse(result), 201)
   })
 
-  app.get('/resource-servers/:resourceServerId/connection-requests/:requestId', async (c) => {
+  app.get('/agent/resource-servers/:resourceServerId/connection-requests/:requestId', async (c) => {
     const principal = await resourcePrincipal(authApi, getDeps(c), c)
     const result = await getAgentConnectionRequest(
       getDeps(c),
@@ -188,7 +226,21 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
     return c.json(resourceConnectionRequestSchema.parse(result))
   })
 
-  app.post('/access/requests', async (c) => {
+  app.get('/agent/access-requests', async (c) => {
+    const principal = await resourcePrincipal(authApi, getDeps(c), c)
+    return c.json(
+      accessRequestsResponseSchema.parse(
+        await listAgentAccessRequests(
+          getDeps(c),
+          principal,
+          readQuery(c, paginationQuerySchema),
+          new URL(requireOidcIssuer()).origin,
+        ),
+      ),
+    )
+  })
+
+  app.post('/agent/access-requests', async (c) => {
     const principal = await resourcePrincipal(authApi, getDeps(c), c)
     const result = await createAccessRequest(
       getDeps(c),
@@ -201,7 +253,7 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
     return c.json(accessRequestSchema.parse(result), 201)
   })
 
-  app.get('/access/requests/:requestId', async (c) => {
+  app.get('/agent/access-requests/:requestId', async (c) => {
     const principal = await resourcePrincipal(authApi, getDeps(c), c)
     const result = await getAccessRequest(
       getDeps(c),
@@ -213,7 +265,23 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
     return c.json(accessRequestSchema.parse(result))
   })
 
-  app.post('/access/authorizations/:authorizationId/credentials', async (c) => {
+  app.get('/agent/access-authorizations', async (c) => {
+    const principal = await resourcePrincipal(authApi, getDeps(c), c)
+    return c.json(
+      accessGrantsResponseSchema.parse(
+        await listAgentAccessGrants(getDeps(c), principal, readQuery(c, paginationQuerySchema)),
+      ),
+    )
+  })
+
+  app.get('/agent/access-authorizations/:authorizationId', async (c) => {
+    const principal = await resourcePrincipal(authApi, getDeps(c), c)
+    return c.json(
+      accessGrantSchema.parse(await getAgentAccessGrant(getDeps(c), c.req.param('authorizationId'), principal)),
+    )
+  })
+
+  app.post('/agent/access-authorizations/:authorizationId/credentials', async (c) => {
     if (!authApi.signJWT) throw unauthorized('Agent assertion signing is unavailable.')
     const principal = await resourcePrincipal(authApi, getDeps(c), c)
     const { proof } = await readJson(c, targetCredentialProofSchema)
@@ -224,7 +292,7 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
     }
     const request = await getDeps(c).externalResources.findAccessRequestByGrant(grant.id)
     if (!request) throw forbidden('Agent authorization has no approved request.')
-    const credentialUrl = `${new URL(requireOidcIssuer()).origin}/api/access/authorizations/${encodeURIComponent(grant.id)}/credentials`
+    const credentialUrl = `${new URL(requireOidcIssuer()).origin}/api/agent/access-authorizations/${encodeURIComponent(grant.id)}/credentials`
     const result = await createAccessRequestCredential(getDeps(c), request.id, dpopProof, credentialUrl, principal, {
       issuer: requireOidcIssuer(),
       sign: (payload, type) =>

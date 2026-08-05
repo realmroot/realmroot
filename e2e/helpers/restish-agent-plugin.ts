@@ -173,9 +173,11 @@ export function createRestishAgentPlugin(origin: string): RestishAgentPlugin {
   return {
     firstWhoami: (name) => invokePending<PluginIdentityResult>(['whoami'], undefined, { REALMROOT_AGENT_NAME: name }),
     whoami: () => invoke<PluginIdentityResult>(['whoami']),
-    listResourceServers: <T>() => get<T>(`${origin}/api/resource-servers?limit=100&offset=0`),
+    listResourceServers: <T>() => get<T>(`${origin}/api/agent/resource-servers?limit=100&offset=0`),
     listResources: <T>(resourceServerId: string) =>
-      get<T>(`${origin}/api/resource-servers/${encodeURIComponent(resourceServerId)}/resources?limit=100&offset=0`),
+      get<T>(
+        `${origin}/api/agent/resource-servers/${encodeURIComponent(resourceServerId)}/resources?limit=100&offset=0`,
+      ),
     connectResource: <T>(resourceId: string, input: unknown) => invokePending<T>(['connect', resourceId], input),
     requestResourceAccess: <T>(input: unknown) => invokePending<T>(['access'], input),
     connectTarget: (targetAPIName, resourceUrl) => {

@@ -149,10 +149,13 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
       await db.delete(member).where(eq(member.id, id))
     },
 
-    async createInvitation(input) {
+    async createInvitation(input, audit) {
       const now = new Date()
       const expiresAt = new Date(input.expiresAt)
-      await db.insert(invitation).values({ ...input, expiresAt, createdAt: now })
+      await db.batch([
+        db.insert(invitation).values({ ...input, expiresAt, createdAt: now }),
+        db.insert(agentAuditEvent).values(audit),
+      ])
       return {
         ...input,
         expiresAt: expiresAt.toISOString(),
@@ -309,6 +312,8 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
               subject: sql<string | null>`${audit.subject}`.as('subject'),
               agentIdentityId: sql<string | null>`${audit.agentIdentityId}`.as('agent_identity_id'),
               hostId: sql<string | null>`${audit.hostId}`.as('host_id'),
+              ownerUserId: sql<string | null>`${audit.ownerUserId}`.as('owner_user_id'),
+              ownerOrganizationId: sql<string | null>`${audit.ownerOrganizationId}`.as('owner_organization_id'),
               resourceId: apiResource.id,
               resourceConnectionId: sql<string | null>`${audit.resourceConnectionId}`.as('resource_connection_id'),
               accessGrantId: sql<string | null>`${audit.accessGrantId}`.as('access_grant_id'),
@@ -373,6 +378,8 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
               subject: sql<string | null>`${audit.subject}`.as('subject'),
               agentIdentityId: sql<string | null>`${audit.agentIdentityId}`.as('agent_identity_id'),
               hostId: sql<string | null>`${audit.hostId}`.as('host_id'),
+              ownerUserId: sql<string | null>`${audit.ownerUserId}`.as('owner_user_id'),
+              ownerOrganizationId: sql<string | null>`${audit.ownerOrganizationId}`.as('owner_organization_id'),
               resourceId: apiResource.id,
               resourceConnectionId: sql<string | null>`${audit.resourceConnectionId}`.as('resource_connection_id'),
               accessGrantId: sql<string | null>`${audit.accessGrantId}`.as('access_grant_id'),
@@ -595,7 +602,7 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
       return rows[0] ? toRoleAssignment(rows[0]) : null
     },
 
-    async createRoleAssignment(input) {
+    async createRoleAssignment(input, audit) {
       const now = new Date()
       const row = {
         ...input,
@@ -605,7 +612,7 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
         updatedAt: now,
       }
       try {
-        await db.insert(roleAssignment).values(row)
+        await db.batch([db.insert(roleAssignment).values(row), db.insert(agentAuditEvent).values(audit)])
       } catch (error) {
         if (isUniqueConstraint(error)) throw conflict('An active Role assignment already exists for this context.')
         throw error
@@ -639,7 +646,7 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
 function isUniqueConstraint(error: unknown) {
   let current = error
   while (current instanceof Error) {
-    if (/unique constraint|SQLITE_CONSTRAINT/i.test(current.message)) return true
+    if (/unique constraint/i.test(current.message)) return true
     current = current.cause
   }
   return false

@@ -37,7 +37,7 @@ export class OAuthError extends Error {
 
 export const badRequest = (message: string) => new ApiError(400, 'bad_request', message)
 export const unauthorized = (message = 'Authentication is required.') => new ApiError(401, 'unauthorized', message)
-export const forbidden = (message = 'Admin access is required.') => new ApiError(403, 'forbidden', message)
+export const forbidden = (message = 'Access to this resource is forbidden.') => new ApiError(403, 'forbidden', message)
 export const notFound = (message = 'Resource not found.') => new ApiError(404, 'not_found', message)
 export const conflict = (message: string) => new ApiError(409, 'conflict', message)
 export const resourceInUse = (message: string, details: Record<string, unknown>) =>

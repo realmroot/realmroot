@@ -29,7 +29,7 @@ import type { RpcSchema } from './app-rpc-schema'
 import type { AgentConfiguration, AppConfig } from './app-types'
 import { accessLog } from './middleware/access-log'
 import { authn, type SessionReader } from './middleware/authn'
-import { authz, authzForProtectedPath } from './middleware/authz'
+import { authzForProtectedPath } from './middleware/authz'
 import { trustedOriginCors } from './middleware/cors'
 import { depsMiddleware } from './middleware/deps'
 import { requestContext } from './middleware/request-context'
@@ -203,6 +203,17 @@ function mountApiRoutes(app: Hono, auth: AuthHandler, config: AppConfig) {
     .use('/api/*', unifiedOpenApiDiscoveryHeader())
   protectResourceRoutes(api, auth, config)
   api.use('/api/agent/status', authn(auth, { allowAgent: true, required: true, oauth: agentOAuth(config) }))
+  for (const path of [
+    '/api/agent/resource-servers',
+    '/api/agent/resource-servers/*',
+    '/api/agent/access-requests',
+    '/api/agent/access-requests/*',
+    '/api/agent/access-authorizations',
+    '/api/agent/access-authorizations/*',
+  ]) {
+    api.use(path, authn(auth, { allowAgent: true, required: true, oauth: agentOAuth(config) }))
+    api.use(path, authzForProtectedPath())
+  }
   return api
     .route('/api', createProtectedResourceAssetRoutes())
     .route(
@@ -233,7 +244,7 @@ export function protectResourceRoutes(app: Hono, auth: SessionReader, config: Ap
       return
     }
     await authn(auth, { allowAgent: true, required: true, oauth: agentOAuth(config) })(c, async () => {
-      await authz('applications')(c, next)
+      await authzForProtectedPath()(c, next)
     })
   }
   app.use('/api/assets', protectAssetCreation)

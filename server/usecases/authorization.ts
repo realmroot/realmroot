@@ -1,10 +1,12 @@
 import { badRequest, forbidden, notFound, resourceInUse } from '@server/domain/errors'
+import { type ManagementActor, managementOwnerColumns } from '@server/domain/management-authorization'
 import { platformOrganization } from '@server/domain/platform-organization'
 import {
   isRealmrootResourceServer,
   realmrootResourceServer,
   realmrootResourceUrl,
 } from '@server/domain/realmroot-resource-server'
+import { managementActorAuditRecord, managementActorUserId } from '@server/usecases/agent-audit'
 import { type AuthorizationTokenClaimInput, createId, toTokenClaims } from '@server/usecases/authorization-utils'
 import type { Deps } from '@server/usecases/deps'
 import { validateExternalResourceConnector } from '@server/usecases/resource-connectors'
@@ -17,15 +19,7 @@ import {
 
 export type { AuthorizationTokenClaimInput } from '@server/usecases/authorization-utils'
 
-export interface ResourceMutationActor {
-  controllerUserId: string | null
-  agent: {
-    issuer: string
-    subject: string
-    identityId: string
-    hostId: string
-  } | null
-}
+export type ResourceMutationActor = ManagementActor
 
 import type {
   AddMemberRequest,
@@ -116,18 +110,27 @@ export async function createInvitation(
   deps: Deps,
   organizationId: string,
   input: CreateInvitationRequest,
-  inviterId: string | null,
+  actor: ManagementActor,
 ) {
   await getOrganization(deps, organizationId)
-  return deps.authorization.createInvitation({
-    id: createId('inv'),
-    organizationId,
-    email: input.email,
-    role: input.role,
-    inviterId,
-    status: 'pending',
-    expiresAt: input.expiresAt ?? new Date(Date.now() + 1000 * 60 * 60 * 48).toISOString(),
-  })
+  const invitationId = createId('inv')
+  return deps.authorization.createInvitation(
+    {
+      id: invitationId,
+      organizationId,
+      email: input.email,
+      role: input.role,
+      inviterId: managementActorUserId(actor),
+      status: 'pending',
+      expiresAt: input.expiresAt ?? new Date(Date.now() + 1000 * 60 * 60 * 48).toISOString(),
+    },
+    managementActorAuditRecord({
+      action: 'management.organization-invitation.created',
+      actor,
+      owner: { kind: 'organization', organizationId },
+      metadata: { invitationId },
+    }),
+  )
 }
 
 export async function listInvitations(deps: Deps, organizationId: string, pagination: PaginationQuery) {
@@ -271,7 +274,11 @@ export async function archiveResource(deps: Deps, id: string, actor: ResourceMut
   if (isRealmrootResourceServer(id)) throw badRequest('The Realmroot Resource Server is system-managed.')
   if (!resource.archivedAt) {
     const now = new Date()
-    await deps.authorization.archiveResource(id, now, resourceMutationAudit('api_resource.archived', id, now, actor))
+    await deps.authorization.archiveResource(
+      id,
+      now,
+      resourceMutationAudit('api_resource.archived', resource, now, actor),
+    )
   }
   return getResource(deps, id)
 }
@@ -281,14 +288,18 @@ export async function restoreResource(deps: Deps, id: string, actor: ResourceMut
   if (isRealmrootResourceServer(id)) throw badRequest('The Realmroot Resource Server is system-managed.')
   if (resource.archivedAt) {
     const now = new Date()
-    await deps.authorization.restoreResource(id, now, resourceMutationAudit('api_resource.restored', id, now, actor))
+    await deps.authorization.restoreResource(
+      id,
+      now,
+      resourceMutationAudit('api_resource.restored', resource, now, actor),
+    )
   }
   return getResource(deps, id)
 }
 
 function resourceMutationAudit(
   action: 'api_resource.archived' | 'api_resource.restored',
-  resourceId: string,
+  resource: ApiResourceResponse,
   occurredAt: Date,
   actor: ResourceMutationActor,
 ) {
@@ -296,17 +307,26 @@ function resourceMutationAudit(
     id: createId('agaudit'),
     action,
     result: 'allowed',
-    controllerUserId: actor.controllerUserId,
-    subjectIssuer: actor.agent?.issuer ?? null,
-    subject: actor.agent?.subject ?? null,
-    agentIdentityId: actor.agent?.identityId ?? null,
-    hostId: actor.agent?.hostId ?? null,
-    resourceId,
+    controllerUserId: actor.kind === 'user' ? actor.userId : null,
+    subjectIssuer: actor.kind === 'agent' ? actor.issuer : null,
+    subject: actor.kind === 'agent' ? actor.subject : null,
+    agentIdentityId: actor.kind === 'agent' ? actor.identityId : null,
+    hostId: actor.kind === 'agent' ? actor.hostId : null,
+    ...managementOwnerColumns({ kind: 'organization', organizationId: resource.ownerOrganizationId }),
+    resourceId: resource.id,
     resourceConnectionId: null,
     accessGrantId: null,
     scopes: null,
     reasonCode: null,
-    metadata: action === 'api_resource.archived' ? { authorizationRecordsRevoked: true } : null,
+    metadata:
+      action === 'api_resource.archived'
+        ? {
+            authorizationRecordsRevoked: true,
+            ...(actor.kind === 'agent' ? { authority: actor.authority } : {}),
+          }
+        : actor.kind === 'agent'
+          ? { authority: actor.authority }
+          : null,
     occurredAt,
   }
 }
@@ -394,20 +414,29 @@ export async function getRoleAssignment(deps: Deps, id: string) {
   return assignment
 }
 
-export async function createRoleAssignment(deps: Deps, input: CreateRoleAssignmentRequest, actorUserId: string | null) {
+export async function createRoleAssignment(deps: Deps, input: CreateRoleAssignmentRequest, actor: ManagementActor) {
   await getRole(deps, input.roleId)
   const organizationId = input.organizationId ?? null
   if (organizationId) await getOrganization(deps, organizationId)
   await validateRoleAssignmentSubject(deps, input.subjectType, input.subjectId, organizationId)
-  return deps.authorization.createRoleAssignment({
-    id: createId('assignment'),
-    roleId: input.roleId,
-    subjectType: input.subjectType,
-    subjectId: input.subjectId,
-    organizationId,
-    assignedByUserId: actorUserId,
-    expiresAt: input.expiresAt ?? null,
-  })
+  const roleAssignmentId = createId('assignment')
+  return deps.authorization.createRoleAssignment(
+    {
+      id: roleAssignmentId,
+      roleId: input.roleId,
+      subjectType: input.subjectType,
+      subjectId: input.subjectId,
+      organizationId,
+      assignedByUserId: managementActorUserId(actor),
+      expiresAt: input.expiresAt ?? null,
+    },
+    managementActorAuditRecord({
+      action: 'management.role-assignment.created',
+      actor,
+      owner: organizationId ? { kind: 'organization', organizationId } : { kind: 'realm' },
+      metadata: { roleAssignmentId },
+    }),
+  )
 }
 
 export async function putRoleAssignmentRevocation(deps: Deps, id: string) {
@@ -450,8 +479,8 @@ async function validateRoleAssignmentSubject(
   }
 }
 
-export async function assignAgentRole(deps: Deps, input: AssignRoleRequest, actorUserId: string | null) {
-  await createRoleAssignment(deps, { ...input, subjectType: 'agent', organizationId: null }, actorUserId)
+export async function assignAgentRole(deps: Deps, input: AssignRoleRequest, actor: ManagementActor) {
+  await createRoleAssignment(deps, { ...input, subjectType: 'agent', organizationId: null }, actor)
 }
 
 export async function getAgentRoleAuthorization(

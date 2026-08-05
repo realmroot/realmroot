@@ -135,6 +135,7 @@ export function openApiOperationObjects() {
           requestBody: resolvedOperation.requestBody,
           responses: resolvedOperation.responses,
           security: resolvedOperation.security,
+          authorities: resolvedOperation['x-realmroot-authorities'],
           jsonResponseSchemas: Object.values(resolvedOperation.responses)
             .map((response) => openApiJsonResponseSchema(response))
             .filter((schema) => schema !== null),
@@ -354,6 +355,7 @@ export interface OpenApiOperation {
   tags?: string[]
   'x-cli-hidden'?: boolean
   'x-cli-name'?: string
+  'x-realmroot-authorities'?: string[]
 }
 
 export interface OpenApiParameter {

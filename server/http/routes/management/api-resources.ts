@@ -7,12 +7,7 @@ import {
   restoreResource,
   updateResource,
 } from '@server/usecases/authorization'
-import {
-  getAgentResourceServer,
-  getApiResource,
-  listAgentResourceServers,
-  listApiResources,
-} from '@server/usecases/external-resources'
+import { getApiResource, listApiResources } from '@server/usecases/external-resources'
 import {
   apiResourceSchema,
   apiResourcesResponseSchema,
@@ -21,11 +16,11 @@ import {
 } from '@shared/api/agent-api'
 import { apiResourceContractResponseSchema, listApiResourcesQuerySchema } from '@shared/api/authorization'
 import { Hono } from 'hono'
-import { getPrincipal } from '../../middleware/authn'
 import {
-  requireConsoleOrganizationAccess,
-  requireConsoleOwnedOrganization,
-  resolveOrganizationInventoryScope,
+  getManagementActor,
+  requireManagementOrganization,
+  requireManagementOwnedOrganization,
+  resolveManagementOrganizationIds,
 } from '../../middleware/authz'
 import { getDeps } from '../../middleware/deps'
 import { readJson, readQuery } from '../validation'
@@ -41,40 +36,23 @@ export function createManagementApiResourcesRoute(canonicalOrigin?: string) {
   }
 
   app.get('/', async (c) => {
-    const principal = getPrincipal(c).agent
-    if (principal) {
-      return c.json(
-        await listAgentResourceServers(
-          getDeps(c),
-          principal,
-          readQuery(c, listApiResourcesQuerySchema.pick({ limit: true, offset: true })),
-          new URL(c.req.url).origin,
-        ),
-      )
-    }
     const query = readQuery(c, listApiResourcesQuerySchema)
     return c.json(
       apiResourcesResponseSchema.parse(
-        await listApiResources(getDeps(c), query, resolveOrganizationInventoryScope(c, query.ownerOrganizationId)),
+        await listApiResources(getDeps(c), query, resolveManagementOrganizationIds(c, query.ownerOrganizationId)),
       ),
     )
   })
 
   app.post('/', async (c) => {
     const input = await readJson(c, createApiResourceSchema)
-    requireConsoleOwnedOrganization(c, input.ownerOrganizationId)
+    requireManagementOwnedOrganization(c, input.ownerOrganizationId)
     const resource = await createResource(getDeps(c), input)
     c.header('Location', `/api/resource-servers/${encodeURIComponent(resource.id)}`)
     return c.json(apiResourceSchema.parse(await getApiResource(getDeps(c), resource.id)), 201)
   })
 
   app.get('/:resourceId', async (c) => {
-    const principal = getPrincipal(c).agent
-    if (principal) {
-      return c.json(
-        await getAgentResourceServer(getDeps(c), c.req.param('resourceId'), principal, new URL(c.req.url).origin),
-      )
-    }
     return c.json(apiResourceSchema.parse(await requireResourceAccess(c)))
   })
 
@@ -88,7 +66,7 @@ export function createManagementApiResourcesRoute(canonicalOrigin?: string) {
   app.patch('/:resourceId', async (c) => {
     await requireResourceAccess(c)
     const input = await readJson(c, updateApiResourceSchema)
-    if (input.ownerOrganizationId !== undefined) requireConsoleOwnedOrganization(c, input.ownerOrganizationId)
+    if (input.ownerOrganizationId !== undefined) requireManagementOwnedOrganization(c, input.ownerOrganizationId)
     await updateResource(getDeps(c), c.req.param('resourceId'), input)
     return c.json(apiResourceSchema.parse(await getApiResource(getDeps(c), c.req.param('resourceId'))))
   })
@@ -116,23 +94,12 @@ export function createManagementApiResourcesRoute(canonicalOrigin?: string) {
     })
 }
 
-async function requireResourceAccess(c: Parameters<typeof getPrincipal>[0]) {
+async function requireResourceAccess(c: Parameters<typeof getManagementActor>[0]) {
   const resource = await getApiResource(getDeps(c), c.req.param('resourceId')!)
-  requireConsoleOrganizationAccess(c, resource.ownerOrganizationId)
+  requireManagementOrganization(c, resource.ownerOrganizationId)
   return resource
 }
 
-function resourceMutationActor(c: Parameters<typeof getPrincipal>[0]) {
-  const principal = getPrincipal(c)
-  return {
-    controllerUserId: principal.user?.id ?? null,
-    agent: principal.agent
-      ? {
-          issuer: principal.agent.issuer,
-          subject: principal.agent.subject,
-          identityId: principal.agent.identityId,
-          hostId: principal.agent.hostId,
-        }
-      : null,
-  }
+function resourceMutationActor(c: Parameters<typeof getManagementActor>[0]) {
+  return getManagementActor(c)
 }
