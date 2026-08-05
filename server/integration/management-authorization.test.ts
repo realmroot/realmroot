@@ -726,14 +726,11 @@ describe('authorization management over real D1', () => {
       body: JSON.stringify({ displayName: 'Escalated organization name' }),
     })
     expect(organizationMutation.status).toBe(403)
-    const memberMutation = await harness.request(
-      `/api/organizations/${ownedOrganization.id}/members/${developerId}`,
-      {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json', cookie: developerCookie },
-        body: JSON.stringify({ role: 'owner' }),
-      },
-    )
+    const memberMutation = await harness.request(`/api/organizations/${ownedOrganization.id}/members/${developerId}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', cookie: developerCookie },
+      body: JSON.stringify({ role: 'owner' }),
+    })
     expect(memberMutation.status).toBe(403)
 
     const webhookInventory = await harness.request('/api/webhooks', {
@@ -1402,12 +1399,7 @@ describe('authorization management over real D1', () => {
     const [archiveAudit] = await harness.db
       .select()
       .from(agentAuditEvent)
-      .where(
-        and(
-          eq(agentAuditEvent.resourceId, resource.id),
-          eq(agentAuditEvent.action, 'api_resource.archived'),
-        ),
-      )
+      .where(and(eq(agentAuditEvent.resourceId, resource.id), eq(agentAuditEvent.action, 'api_resource.archived')))
     expect(archiveAudit).toMatchObject({
       action: 'api_resource.archived',
       controllerUserId: admin.id,

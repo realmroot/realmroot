@@ -62,13 +62,7 @@ const managementPolicyRules: readonly ManagementPolicyRule[] = [
     realm,
     'human-controller',
   ),
-  ...rules(
-    ['POST'],
-    ['organizations/{organizationId}/invitations'],
-    'organizations:write',
-    realmOrOrganization,
-    realm,
-  ),
+  ...rules(['POST'], ['organizations/{organizationId}/invitations'], 'organizations:write', realmOrOrganization, realm),
 
   ...rules(
     ['GET'],
