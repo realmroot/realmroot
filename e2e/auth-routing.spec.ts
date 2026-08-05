@@ -39,14 +39,14 @@ test.describe('password sign-in, session, and routing', () => {
     expect(new URL(page.url()).searchParams.get('return_to')).toBe('/profile')
   })
 
-  test('[spec: platform-onboarding/root-signed-in-redirect] root redirects signed-in users to Account Center', async ({
+  test('[spec: platform-onboarding/root-signed-in-redirect] root opens Account Center for signed-in users', async ({
     page,
   }) => {
     await signIn(page)
     await page.goto('/')
-    await expect(page).toHaveURL(/\/profile$/)
-    await expect(page.getByRole('heading', { name: 'Profile' })).toBeVisible()
-    await expect(page.getByLabel('Identity details').getByText(admin.name, { exact: true })).toBeVisible()
+    await expect(page).toHaveURL(/\/$/)
+    await expect(page.getByRole('navigation', { name: 'Account center' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: /Good (morning|afternoon|evening), Realmroot\./ })).toBeVisible()
   })
 
   test('[spec: account-center/account-center] Account Center loads account navigation', async ({ page }) => {

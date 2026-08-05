@@ -55,7 +55,7 @@ describe('native auth client', () => {
 
     await verifyEmail({ token: 'token-1', callbackURL: '/' })
 
-    expect(window.fetch).toHaveBeenCalledWith('/api/auth/verify-email?token=token-1&callbackURL=%2Faccount', {
+    expect(window.fetch).toHaveBeenCalledWith('/api/auth/verify-email?token=token-1&callbackURL=%2F', {
       method: 'GET',
       headers: undefined,
       body: undefined,

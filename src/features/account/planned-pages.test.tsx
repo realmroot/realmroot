@@ -167,7 +167,10 @@ describe('planned Account Center journeys', () => {
     server.use(
       http.get(`${base}/api/account/security`, () => delayedJson({ security: store.security })),
       http.get(`${base}/api/account/agents`, () => delayedJson({ items: [], pagination: pagination(0) })),
-      http.get(`${base}/api/account/applications`, () => delayedJson({ applications: [] })),
+      http.get(`${base}/api/auth/organization/list`, async () => {
+        await delay(100)
+        return json([])
+      }),
       http.get(`${base}/api/account/access-requests`, () => json({ items: [], pagination: pagination(0) })),
     )
 

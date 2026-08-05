@@ -476,6 +476,6 @@ describe('AccountSecurityPage', () => {
     await openSecurityTab('Passkeys')
     expect(screen.getByText('No passkeys have been added yet.')).toBeTruthy()
     await openSecurityTab('Sessions')
-    expect(screen.getByText('No active sessions.')).toBeTruthy()
+    expect(screen.getByText('No other active sessions.')).toBeTruthy()
   })
 })
