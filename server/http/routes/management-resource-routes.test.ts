@@ -317,6 +317,11 @@ function withAdminContext() {
       session: { session: { id: 'session-1' }, user },
       user,
     })
+    c.set('managementAuthorization', {
+      actor: { kind: 'session', userId: user.id, capabilities: ['test'] },
+      boundary: { kind: 'realm' },
+      policy: { capability: 'test', ownerKinds: ['realm', 'organization', 'account'] },
+    })
     c.set('deps', deps)
     await next()
   })

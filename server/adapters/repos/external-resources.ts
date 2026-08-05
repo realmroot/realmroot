@@ -1,9 +1,16 @@
-import type { AgentAuthorityInventoryScope, ExternalResourceRepository } from '@server/usecases/ports'
+import type {
+  AgentAccessGrantRecord,
+  AgentAuditEventRecord,
+  AgentAuthorityInventoryScope,
+  ExternalResourceRepository,
+} from '@server/usecases/ports'
 import { and, count, desc, eq, exists, gt, inArray, isNull, lte, or, sql } from 'drizzle-orm'
+import type { BatchItem } from 'drizzle-orm/batch'
 import type { Database } from '../../db/client'
 import {
   agentAccessGrant,
   agentAccessRequest,
+  agentAuditEvent,
   agentConnectionRequest,
   agentIdentity,
   apiResource,
@@ -342,6 +349,37 @@ export function createExternalResourceRepository(db: Database): ExternalResource
       return row ?? null
     },
 
+    async decideAccessRequestWithAudit(id, input, grant, audit) {
+      const decision = db
+        .update(agentAccessRequest)
+        .set(input)
+        .where(
+          and(
+            eq(agentAccessRequest.id, id),
+            eq(agentAccessRequest.status, 'pending'),
+            grant
+              ? exists(
+                  db
+                    .select({ id: agentAccessGrant.id })
+                    .from(agentAccessGrant)
+                    .where(eq(agentAccessGrant.id, grant.id)),
+                )
+              : undefined,
+          ),
+        )
+      const statements = grant ? [conditionalGrantInsert(db, id, grant), decision] : [decision]
+      statements.push(auditInsertAfterDecision(db, id, input.status, input.grantId, audit) as never)
+      await db.batch(statements as unknown as [BatchItem<'sqlite'>, ...BatchItem<'sqlite'>[]])
+      const [row, recordedAudit] = await Promise.all([
+        db.select().from(agentAccessRequest).where(eq(agentAccessRequest.id, id)).limit(1),
+        db.select({ id: agentAuditEvent.id }).from(agentAuditEvent).where(eq(agentAuditEvent.id, audit.id)).limit(1),
+      ])
+      const decided = row[0]
+      if (!recordedAudit[0] || decided?.status !== input.status) return null
+      if (grant && decided.grantId !== grant.id) return null
+      return decided
+    },
+
     async consumeAccessRequest(id, now) {
       const [row] = await db
         .update(agentAccessRequest)
@@ -376,7 +414,7 @@ export function createExternalResourceRepository(db: Database): ExternalResource
               >`${JSON.stringify(input.authorizationDetails)}`.as('authorization_details'),
               mode: sql<string>`${input.mode}`.as('mode'),
               status: sql<string>`${input.status}`.as('status'),
-              grantedByUserId: sql<string>`${input.grantedByUserId}`.as('granted_by_user_id'),
+              grantedByUserId: sql<string | null>`${input.grantedByUserId}`.as('granted_by_user_id'),
               expiresAt: sql<Date | null>`${input.expiresAt?.getTime() ?? null}`.as('expires_at'),
               revokedAt: sql<Date | null>`${input.revokedAt?.getTime() ?? null}`.as('revoked_at'),
               createdAt: sql<Date>`${input.createdAt.getTime()}`.as('created_at'),
@@ -496,6 +534,27 @@ export function createExternalResourceRepository(db: Database): ExternalResource
       return Boolean(row)
     },
 
+    async revokeGrantWithAudit(id, now, audit) {
+      const results = await db.batch([
+        db
+          .update(externalTokenLease)
+          .set({ revokedAt: now })
+          .where(
+            and(
+              eq(externalTokenLease.grantId, id),
+              isNull(externalTokenLease.revokedAt),
+              gt(externalTokenLease.expiresAt, now),
+            ),
+          ),
+        db
+          .update(agentAccessGrant)
+          .set({ status: 'revoked', revokedAt: now, updatedAt: now })
+          .where(and(eq(agentAccessGrant.id, id), eq(agentAccessGrant.status, 'active'))),
+        db.insert(agentAuditEvent).values(audit),
+      ])
+      return Number(results[1].meta.changes) > 0
+    },
+
     async consumeGrant(id, now) {
       const [row] = await db
         .update(agentAccessGrant)
@@ -541,6 +600,27 @@ export function createExternalResourceRepository(db: Database): ExternalResource
       return row ?? null
     },
 
+    async issueTokenLeaseWithAudit(input, grantMode, now, audit) {
+      const consumeGrant = db
+        .update(agentAccessGrant)
+        .set({ status: 'consumed', updatedAt: now })
+        .where(and(eq(agentAccessGrant.id, input.grantId), eq(agentAccessGrant.status, 'active')))
+      const lease = tokenLeaseInsert(db, input, grantMode === 'once')
+      const recordAudit = auditInsertAfterLease(db, input.id, audit)
+      const consumeRequest = db
+        .update(agentAccessRequest)
+        .set({ status: 'consumed', updatedAt: now })
+        .where(and(eq(agentAccessRequest.id, input.requestId), eq(agentAccessRequest.status, 'approved')))
+      const statements =
+        grantMode === 'once' ? [consumeGrant, lease, recordAudit, consumeRequest] : [lease, recordAudit, consumeRequest]
+      await db.batch(statements as unknown as [BatchItem<'sqlite'>, ...BatchItem<'sqlite'>[]])
+      const [rows, audits] = await Promise.all([
+        db.select().from(externalTokenLease).where(eq(externalTokenLease.id, input.id)).limit(1),
+        db.select({ id: agentAuditEvent.id }).from(agentAuditEvent).where(eq(agentAuditEvent.id, audit.id)).limit(1),
+      ])
+      return audits[0] ? (rows[0] ?? null) : null
+    },
+
     async listActiveTokenLeasesByGrant(grantId, now) {
       return db
         .select()
@@ -580,6 +660,155 @@ export function createExternalResourceRepository(db: Database): ExternalResource
   function activeResource(resourceId: string) {
     return and(eq(apiResource.id, resourceId), eq(apiResource.enabled, true), isNull(apiResource.archivedAt))
   }
+}
+
+function conditionalGrantInsert(db: Database, requestId: string, input: AgentAccessGrantRecord) {
+  return db.insert(agentAccessGrant).select(
+    db
+      .select({
+        id: sql<string>`${input.id}`.as('id'),
+        resourceId: apiResource.id,
+        connectionId: sql<string | null>`${input.connectionId}`.as('connection_id'),
+        agentIdentityId: sql<string>`${input.agentIdentityId}`.as('agent_identity_id'),
+        scopes: sql<string[]>`${JSON.stringify(input.scopes)}`.as('scopes'),
+        authorizationDetails: sql<typeof input.authorizationDetails>`${JSON.stringify(input.authorizationDetails)}`.as(
+          'authorization_details',
+        ),
+        mode: sql<string>`${input.mode}`.as('mode'),
+        status: sql<string>`${input.status}`.as('status'),
+        grantedByUserId: sql<string | null>`${input.grantedByUserId}`.as('granted_by_user_id'),
+        expiresAt: sql<Date | null>`${input.expiresAt?.getTime() ?? null}`.as('expires_at'),
+        revokedAt: sql<Date | null>`${input.revokedAt?.getTime() ?? null}`.as('revoked_at'),
+        createdAt: sql<Date>`${input.createdAt.getTime()}`.as('created_at'),
+        updatedAt: sql<Date>`${input.updatedAt.getTime()}`.as('updated_at'),
+      })
+      .from(apiResource)
+      .where(
+        and(
+          activeResourceCondition(input.resourceId),
+          exists(
+            db
+              .select({ id: agentAccessRequest.id })
+              .from(agentAccessRequest)
+              .where(and(eq(agentAccessRequest.id, requestId), eq(agentAccessRequest.status, 'pending'))),
+          ),
+        ),
+      ),
+  )
+}
+
+function auditInsertAfterDecision(
+  db: Database,
+  requestId: string,
+  status: 'approved' | 'denied',
+  grantId: string | null,
+  audit: AgentAuditEventRecord,
+) {
+  return db.insert(agentAuditEvent).select(
+    db
+      .select({
+        id: sql<string>`${audit.id}`.as('id'),
+        action: sql<string>`${audit.action}`.as('action'),
+        result: sql<string>`${audit.result}`.as('result'),
+        controllerUserId: sql<string | null>`${audit.controllerUserId}`.as('controller_user_id'),
+        subjectIssuer: sql<string | null>`${audit.subjectIssuer}`.as('subject_issuer'),
+        subject: sql<string | null>`${audit.subject}`.as('subject'),
+        agentIdentityId: sql<string | null>`${audit.agentIdentityId}`.as('agent_identity_id'),
+        hostId: sql<string | null>`${audit.hostId}`.as('host_id'),
+        ownerKind: sql<AgentAuditEventRecord['ownerKind']>`${audit.ownerKind}`.as('owner_kind'),
+        ownerId: sql<string | null>`${audit.ownerId}`.as('owner_id'),
+        quarantineReason: sql<string | null>`${audit.quarantineReason}`.as('quarantine_reason'),
+        resourceId: sql<string | null>`${audit.resourceId}`.as('resource_id'),
+        resourceConnectionId: sql<string | null>`${audit.resourceConnectionId}`.as('resource_connection_id'),
+        accessGrantId: sql<string | null>`${audit.accessGrantId}`.as('access_grant_id'),
+        scopes: sql<string[] | null>`${audit.scopes ? JSON.stringify(audit.scopes) : null}`.as('scopes'),
+        reasonCode: sql<string | null>`${audit.reasonCode}`.as('reason_code'),
+        metadata: sql<Record<string, unknown> | null>`${audit.metadata ? JSON.stringify(audit.metadata) : null}`.as(
+          'metadata',
+        ),
+        occurredAt: sql<Date>`${audit.occurredAt.getTime()}`.as('occurred_at'),
+      })
+      .from(agentAccessRequest)
+      .where(
+        and(
+          eq(agentAccessRequest.id, requestId),
+          eq(agentAccessRequest.status, status),
+          grantId ? eq(agentAccessRequest.grantId, grantId) : isNull(agentAccessRequest.grantId),
+          sql`changes() = 1`,
+        ),
+      ),
+  )
+}
+
+function activeResourceCondition(resourceId: string) {
+  return and(eq(apiResource.id, resourceId), eq(apiResource.enabled, true), isNull(apiResource.archivedAt))
+}
+
+function tokenLeaseInsert(
+  db: Database,
+  input: Parameters<ExternalResourceRepository['createTokenLease']>[0],
+  once: boolean,
+) {
+  return db.insert(externalTokenLease).select(
+    db
+      .select({
+        id: sql<string>`${input.id}`.as('id'),
+        grantId: agentAccessGrant.id,
+        requestId: sql<string>`${input.requestId}`.as('request_id'),
+        bindingId: sql<string>`${input.bindingId}`.as('binding_id'),
+        encryptedAccessToken: sql<string>`${input.encryptedAccessToken}`.as('encrypted_access_token'),
+        tokenHash: sql<string>`${input.tokenHash}`.as('token_hash'),
+        confirmationJkt: sql<string>`${input.confirmationJkt}`.as('confirmation_jkt'),
+        scopes: sql<string[]>`${JSON.stringify(input.scopes)}`.as('scopes'),
+        authorizationDetails: sql<typeof input.authorizationDetails>`${JSON.stringify(input.authorizationDetails)}`.as(
+          'authorization_details',
+        ),
+        expiresAt: sql<Date>`${input.expiresAt.getTime()}`.as('expires_at'),
+        revokedAt: sql<Date | null>`${input.revokedAt?.getTime() ?? null}`.as('revoked_at'),
+        createdAt: sql<Date>`${input.createdAt.getTime()}`.as('created_at'),
+      })
+      .from(agentAccessGrant)
+      .innerJoin(apiResource, eq(apiResource.id, agentAccessGrant.resourceId))
+      .where(
+        and(
+          eq(agentAccessGrant.id, input.grantId),
+          eq(agentAccessGrant.status, once ? 'consumed' : 'active'),
+          eq(apiResource.enabled, true),
+          isNull(apiResource.archivedAt),
+          once ? sql`changes() = 1` : undefined,
+        ),
+      ),
+  )
+}
+
+function auditInsertAfterLease(db: Database, leaseId: string, audit: AgentAuditEventRecord) {
+  return db.insert(agentAuditEvent).select(
+    db
+      .select({
+        id: sql<string>`${audit.id}`.as('id'),
+        action: sql<string>`${audit.action}`.as('action'),
+        result: sql<string>`${audit.result}`.as('result'),
+        controllerUserId: sql<string | null>`${audit.controllerUserId}`.as('controller_user_id'),
+        subjectIssuer: sql<string | null>`${audit.subjectIssuer}`.as('subject_issuer'),
+        subject: sql<string | null>`${audit.subject}`.as('subject'),
+        agentIdentityId: sql<string | null>`${audit.agentIdentityId}`.as('agent_identity_id'),
+        hostId: sql<string | null>`${audit.hostId}`.as('host_id'),
+        ownerKind: sql<AgentAuditEventRecord['ownerKind']>`${audit.ownerKind}`.as('owner_kind'),
+        ownerId: sql<string | null>`${audit.ownerId}`.as('owner_id'),
+        quarantineReason: sql<string | null>`${audit.quarantineReason}`.as('quarantine_reason'),
+        resourceId: sql<string | null>`${audit.resourceId}`.as('resource_id'),
+        resourceConnectionId: sql<string | null>`${audit.resourceConnectionId}`.as('resource_connection_id'),
+        accessGrantId: sql<string | null>`${audit.accessGrantId}`.as('access_grant_id'),
+        scopes: sql<string[] | null>`${audit.scopes ? JSON.stringify(audit.scopes) : null}`.as('scopes'),
+        reasonCode: sql<string | null>`${audit.reasonCode}`.as('reason_code'),
+        metadata: sql<Record<string, unknown> | null>`${audit.metadata ? JSON.stringify(audit.metadata) : null}`.as(
+          'metadata',
+        ),
+        occurredAt: sql<Date>`${audit.occurredAt.getTime()}`.as('occurred_at'),
+      })
+      .from(externalTokenLease)
+      .where(and(eq(externalTokenLease.id, leaseId), sql`changes() = 1`)),
+  )
 }
 
 function authorityOwnerCondition(scope?: AgentAuthorityInventoryScope) {

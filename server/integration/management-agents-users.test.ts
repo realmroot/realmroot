@@ -55,7 +55,7 @@ describe('agent protocol management over real D1', () => {
     ).toBe(204)
   })
 
-  it('lists and revokes an account agent through real SQL', async () => {
+  it('uses the same Account owner boundary for canonical Agent collection, detail, and account revocation [spec: management-api/management-canonical-authority-inventory]', async () => {
     const adminCookie = await signInAdmin(harness)
     await createUser(harness, adminCookie, {
       email: 'self-agent@example.com',
@@ -73,6 +73,31 @@ describe('agent protocol management over real D1', () => {
       { protocolAgentId: seeded.agentId, name: 'Self Agent' },
       'http://localhost/api/auth',
       userId,
+    )
+    const otherUserId = await createUser(harness, adminCookie, {
+      email: 'other-agent@example.com',
+      username: 'otheragent',
+      displayName: 'Other Agent Owner',
+      password: 'other-agent-password-2026',
+    })
+    const otherSeeded = await seedAgent(harness, otherUserId, 'other')
+    const otherAgent = await createAgentLoginIdentity(
+      harness.deps,
+      { protocolAgentId: otherSeeded.agentId, name: 'Other Agent' },
+      'http://localhost/api/auth',
+      otherUserId,
+    )
+
+    const canonicalList = await harness.request('/api/agents', { headers: { cookie: ownerCookie } })
+    expect(canonicalList.status).toBe(200)
+    expect(((await canonicalList.json()) as { items: Array<{ id: string }> }).items.map(({ id }) => id)).toEqual([
+      stableAgent.id,
+    ])
+    expect((await harness.request(`/api/agents/${stableAgent.id}`, { headers: { cookie: ownerCookie } })).status).toBe(
+      200,
+    )
+    expect((await harness.request(`/api/agents/${otherAgent.id}`, { headers: { cookie: ownerCookie } })).status).toBe(
+      403,
     )
 
     const list = await harness.request('/api/account/agents', { headers: { cookie: ownerCookie } })

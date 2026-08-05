@@ -1,5 +1,5 @@
 import { badRequest, conflict, forbidden, notFound } from '@server/domain/errors'
-import { appendAgentGovernanceAudit } from '@server/usecases/agent-audit'
+import { createAgentGovernanceAuditEvent } from '@server/usecases/agent-audit'
 import type { Deps } from '@server/usecases/deps'
 import { revokeAgentResourceAccess, revokeAgentResourceLeasesForBinding } from '@server/usecases/external-resources'
 import type {
@@ -75,10 +75,8 @@ export async function listAllAgentIdentities(deps: Deps, page: { limit: number; 
   return { items: result.items.map(toIdentity), total: result.total, ...page }
 }
 
-export async function listAllAgents(deps: Deps, page: PaginationInput, ownerOrganizationIds?: string[]) {
-  const result = ownerOrganizationIds
-    ? await deps.agentIdentities.listOwnedByOrganizations(ownerOrganizationIds, page)
-    : await deps.agentIdentities.listAll(page)
+export async function listAllAgents(deps: Deps, page: PaginationInput, owner?: AgentAuthorityInventoryScope) {
+  const result = owner ? await deps.agentIdentities.listOwned(owner, page) : await deps.agentIdentities.listAll(page)
   const summaries = await loadManagementSummaries(deps, result.items)
   return {
     items: result.items.map((aggregate) => toManagementAgent(aggregate, summaries)),
@@ -297,11 +295,20 @@ export async function getProtocolAgentEnrollment(
 
 export async function emergencyRetireAgentIdentity(deps: Deps, identityId: string, actorUserId: string | null) {
   const identity = await requireIdentity(deps, identityId)
-  if (!(await deps.agentIdentities.retireIdentity(identityId, new Date()))) {
+  const audit = identityAuditEvent('agent.identity_retired', identity, actorUserId, { emergency: true })
+  if (!(await deps.agentIdentities.retireIdentity(identityId, new Date(), audit))) {
     throw badRequest('Agent identity is already retired.')
   }
   await revokeAgentResourceAccess(deps, identityId)
-  await appendIdentityAudit(deps, 'agent.identity_retired', identity, actorUserId, { emergency: true })
+}
+
+export async function emergencyRecoverAgentIdentity(deps: Deps, identityId: string, actorUserId: string | null) {
+  const identity = await requireIdentity(deps, identityId)
+  const audit = identityAuditEvent('agent.identity_recovered', identity, actorUserId, { emergency: true })
+  if (!(await deps.agentIdentities.recoverIdentity(identityId, new Date(), audit))) {
+    throw badRequest('Only an active Agent identity can be recovered.')
+  }
+  await revokeAgentResourceAccess(deps, identityId)
 }
 
 export async function createAgentEnrollmentIntent(
@@ -462,20 +469,20 @@ export async function revokeAgentIdentityHost(
 
 export async function recoverAgentIdentity(deps: Deps, identityId: string, actorUserId: string) {
   const identity = await requireControlledIdentity(deps, identityId, actorUserId)
-  if (!(await deps.agentIdentities.recoverIdentity(identityId, new Date()))) {
+  const audit = identityAuditEvent('agent.identity_recovered', identity, actorUserId)
+  if (!(await deps.agentIdentities.recoverIdentity(identityId, new Date(), audit))) {
     throw badRequest('Only an active Agent identity can be recovered.')
   }
   await revokeAgentResourceAccess(deps, identityId)
-  await appendIdentityAudit(deps, 'agent.identity_recovered', identity, actorUserId)
 }
 
 export async function retireAgentIdentity(deps: Deps, identityId: string, actorUserId: string) {
   const identity = await requireControlledIdentity(deps, identityId, actorUserId)
-  if (!(await deps.agentIdentities.retireIdentity(identityId, new Date()))) {
+  const audit = identityAuditEvent('agent.identity_retired', identity, actorUserId)
+  if (!(await deps.agentIdentities.retireIdentity(identityId, new Date(), audit))) {
     throw badRequest('Agent identity is already retired.')
   }
   await revokeAgentResourceAccess(deps, identityId)
-  await appendIdentityAudit(deps, 'agent.identity_retired', identity, actorUserId)
 }
 
 export async function requireActiveAgentIdentity(deps: Deps, protocolAgentId: string) {
@@ -540,8 +547,17 @@ async function appendIdentityAudit(
   controllerUserId: string | null,
   metadata?: Record<string, unknown>,
 ) {
+  await deps.agentAudit.append(identityAuditEvent(action, aggregate, controllerUserId, metadata))
+}
+
+function identityAuditEvent(
+  action: string,
+  aggregate: AgentIdentityAggregate,
+  controllerUserId: string | null,
+  metadata?: Record<string, unknown>,
+) {
   const binding = aggregate.bindings.at(-1)
-  await appendAgentGovernanceAudit(deps, {
+  return createAgentGovernanceAuditEvent({
     action,
     result: 'allowed',
     controllerUserId,
@@ -549,6 +565,9 @@ async function appendIdentityAudit(
     subject: aggregate.identity.subject,
     agentIdentityId: aggregate.identity.id,
     hostId: binding?.hostId ?? null,
+    owner: aggregate.identity.ownerUserId
+      ? { kind: 'account', id: aggregate.identity.ownerUserId }
+      : { kind: 'organization', id: aggregate.identity.ownerOrganizationId! },
     metadata: metadata ?? null,
   })
 }

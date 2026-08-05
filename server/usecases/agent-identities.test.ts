@@ -4,6 +4,7 @@ import {
   createAdditionalAgentEnrollmentIntent,
   createAgentEnrollmentIntent,
   createAgentLoginIdentity,
+  emergencyRecoverAgentIdentity,
   emergencyRetireAgentIdentity,
   getAgent,
   getAgentEnrollmentIntent,
@@ -463,7 +464,7 @@ describe('Agent identity lifecycle', () => {
   it('maps Organization-owned management Agents and validates summary invariants', async () => {
     const deps = managementDeps()
     const organizationOwned = aggregate({ ownerUserId: null, ownerOrganizationId: 'org-1' })
-    vi.mocked(deps.agentIdentities.listOwnedByOrganizations).mockResolvedValue({
+    vi.mocked(deps.agentIdentities.listOwned).mockResolvedValue({
       items: [organizationOwned],
       total: 1,
       limit: 20,
@@ -475,12 +476,14 @@ describe('Agent identity lifecycle', () => {
       displayName: null,
     } as never)
 
-    await expect(listAllAgents(deps, { limit: 20, offset: 0 }, ['org-1'])).resolves.toMatchObject({
+    await expect(
+      listAllAgents(deps, { limit: 20, offset: 0 }, { ownerOrganizationIds: ['org-1'] }),
+    ).resolves.toMatchObject({
       items: [{ owner: { id: 'org-1', type: 'organization', displayName: 'acme' } }],
     })
 
     vi.mocked(deps.authorization.findOrganization).mockResolvedValue(null)
-    await expect(listAllAgents(deps, { limit: 20, offset: 0 }, ['org-1'])).rejects.toThrow(
+    await expect(listAllAgents(deps, { limit: 20, offset: 0 }, { ownerOrganizationIds: ['org-1'] })).rejects.toThrow(
       'owner Organization org-1 was not found',
     )
 
@@ -692,6 +695,7 @@ describe('Agent identity lifecycle', () => {
     await expect(revokeAgentIdentityHost(deps, 'identity-1', 'protocol-agent-1', 'user-1')).resolves.toBeUndefined()
     await expect(recoverAgentIdentity(deps, 'identity-1', 'user-1')).resolves.toBeUndefined()
     await expect(retireAgentIdentity(deps, 'identity-1', 'user-1')).resolves.toBeUndefined()
+    await expect(emergencyRecoverAgentIdentity(deps, 'identity-1', null)).resolves.toBeUndefined()
     await expect(emergencyRetireAgentIdentity(deps, 'identity-1', 'admin-1')).resolves.toBeUndefined()
 
     vi.mocked(deps.agentIdentities.revokeBinding).mockResolvedValue(false)
@@ -700,6 +704,7 @@ describe('Agent identity lifecycle', () => {
     })
     vi.mocked(deps.agentIdentities.recoverIdentity).mockResolvedValue(false)
     await expect(recoverAgentIdentity(deps, 'identity-1', 'user-1')).rejects.toMatchObject({ status: 400 })
+    await expect(emergencyRecoverAgentIdentity(deps, 'identity-1', null)).rejects.toMatchObject({ status: 400 })
     vi.mocked(deps.agentIdentities.retireIdentity).mockResolvedValue(false)
     await expect(retireAgentIdentity(deps, 'identity-1', 'user-1')).rejects.toMatchObject({ status: 400 })
     await expect(emergencyRetireAgentIdentity(deps, 'identity-1', 'admin-1')).rejects.toMatchObject({ status: 400 })

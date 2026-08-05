@@ -244,6 +244,7 @@ describe('account self-service over real D1', () => {
     await expect(roleAssignments.json()).resolves.toMatchObject({
       assignments: [{ roleId, subjectId: userId, organizationId }],
     })
+    expect(await harness.deps.authorization.findMemberByOrganizationUser(organizationId, userId)).not.toBeNull()
     const agentAccessGrants = await harness.request(
       `/api/access/authorizations?organizationId=${organizationId}&status=active`,
       {

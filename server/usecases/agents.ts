@@ -101,6 +101,11 @@ export async function decideAgentApproval(
     subject: identity?.identity.subject,
     agentIdentityId: identity?.identity.id,
     hostId: protocolAgent?.hostId,
+    owner: identity?.identity.ownerUserId
+      ? { kind: 'account', id: identity.identity.ownerUserId }
+      : identity?.identity.ownerOrganizationId
+        ? { kind: 'organization', id: identity.identity.ownerOrganizationId }
+        : { kind: 'account', id: userId },
     capabilities,
   })
   return {

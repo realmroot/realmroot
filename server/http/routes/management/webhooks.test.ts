@@ -33,6 +33,11 @@ describe('createManagementWebhookRoutes', () => {
     app.use('*', async (c, next) => {
       const user = { id: 'admin-1', role: 'admin' }
       c.set('principal', { session: { session: { id: 'session-1' }, user }, user })
+      c.set('managementAuthorization', {
+        actor: { kind: 'session', userId: user.id, capabilities: ['webhooks:read'] },
+        boundary: { kind: 'realm' },
+        policy: { capability: 'webhooks:read', ownerKinds: ['realm', 'organization', 'account'] },
+      })
       c.set('deps', {} as never)
       await next()
     })

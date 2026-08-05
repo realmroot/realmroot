@@ -271,7 +271,11 @@ export async function archiveResource(deps: Deps, id: string, actor: ResourceMut
   if (isRealmrootResourceServer(id)) throw badRequest('The Realmroot Resource Server is system-managed.')
   if (!resource.archivedAt) {
     const now = new Date()
-    await deps.authorization.archiveResource(id, now, resourceMutationAudit('api_resource.archived', id, now, actor))
+    await deps.authorization.archiveResource(
+      id,
+      now,
+      resourceMutationAudit('api_resource.archived', resource, now, actor),
+    )
   }
   return getResource(deps, id)
 }
@@ -281,14 +285,18 @@ export async function restoreResource(deps: Deps, id: string, actor: ResourceMut
   if (isRealmrootResourceServer(id)) throw badRequest('The Realmroot Resource Server is system-managed.')
   if (resource.archivedAt) {
     const now = new Date()
-    await deps.authorization.restoreResource(id, now, resourceMutationAudit('api_resource.restored', id, now, actor))
+    await deps.authorization.restoreResource(
+      id,
+      now,
+      resourceMutationAudit('api_resource.restored', resource, now, actor),
+    )
   }
   return getResource(deps, id)
 }
 
 function resourceMutationAudit(
   action: 'api_resource.archived' | 'api_resource.restored',
-  resourceId: string,
+  resource: ApiResourceResponse,
   occurredAt: Date,
   actor: ResourceMutationActor,
 ) {
@@ -301,7 +309,10 @@ function resourceMutationAudit(
     subject: actor.agent?.subject ?? null,
     agentIdentityId: actor.agent?.identityId ?? null,
     hostId: actor.agent?.hostId ?? null,
-    resourceId,
+    ownerKind: 'organization' as const,
+    ownerId: resource.ownerOrganizationId,
+    quarantineReason: null,
+    resourceId: resource.id,
     resourceConnectionId: null,
     accessGrantId: null,
     scopes: null,

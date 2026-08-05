@@ -218,6 +218,20 @@
       "when": 1785804468837,
       "tag": "20260804004748_password-reset-requests",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "6",
+      "when": 1785913008390,
+      "tag": "20260805065648_management_audit_owners",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "6",
+      "when": 1785914596282,
+      "tag": "20260805072316_heavy_ricochet",
+      "breakpoints": true
     }
   ]
 }

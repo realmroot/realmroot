@@ -19,10 +19,10 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 import { getPrincipal, isAutomationPrincipal } from '../../middleware/authn'
 import {
-  getConsoleOrganizationScope,
-  requireConsoleUserAccess,
-  requireRealmConsoleAccess,
-  resolveOrganizationInventoryScope,
+  getManagementAuthorization,
+  managementOrganizationIds,
+  requireManagementRealm,
+  requireManagementUser,
 } from '../../middleware/authz'
 import { getDeps } from '../../middleware/deps'
 import type { ManagementAuthApi } from '../auth-api'
@@ -39,10 +39,16 @@ export function managementUserRoutes(authApi: ManagementAuthApi, options: Manage
   app.get('/', async (c) => {
     const users = getDeps(c).users
     const query = readQuery(c, adminUserListQuerySchema)
-    const organizationIds = resolveOrganizationInventoryScope(c, query.organizationId)
+    const { boundary } = getManagementAuthorization(c)
+    const organizationIds = managementOrganizationIds(c, query.organizationId)
 
-    if (isAutomationPrincipal(c) || organizationIds) {
-      const userIds = organizationIds ? await getDeps(c).authorization.listMemberUserIds(organizationIds) : undefined
+    if (isAutomationPrincipal(c) || boundary.kind !== 'realm') {
+      const userIds =
+        boundary.kind === 'account'
+          ? [boundary.accountId]
+          : organizationIds
+            ? await getDeps(c).authorization.listMemberUserIds([...organizationIds])
+            : undefined
       const page = await users.listManagedUsers(query, userIds)
       return c.json(
         listManagementUsersResponseSchema.parse({
@@ -77,6 +83,7 @@ export function managementUserRoutes(authApi: ManagementAuthApi, options: Manage
   })
 
   app.post('/', async (c) => {
+    requireManagementRealm(c)
     const users = getDeps(c).users
     const body = await readJson(c, adminCreateUserSchema)
     await users.assertAdminAvatarReference(body.avatarAssetId)
@@ -119,16 +126,19 @@ export function managementUserRoutes(authApi: ManagementAuthApi, options: Manage
   })
 
   app.get('/:id', async (c) => {
-    await requireConsoleUserAccess(c, c.req.param('id'))
+    await requireManagementUser(c, c.req.param('id'))
     const deps = getDeps(c)
     const user = await deps.users.getUser(c.req.param('id'))
-    if (getConsoleOrganizationScope(c)) return c.json(managementUserDetailResponseSchema.parse({ user }))
+    if (getManagementAuthorization(c).boundary.kind === 'organization') {
+      return c.json(managementUserDetailResponseSchema.parse({ user }))
+    }
     return c.json(
       managementUserDetailResponseSchema.parse({ user, security: await deps.security.getSecurityState(user.id) }),
     )
   })
 
   app.post('/:id/password-reset-requests', async (c) => {
+    requireManagementRealm(c)
     const body = await readJson(c, adminPasswordResetSchema.pick({ redirectTo: true }))
     const user = await getDeps(c).users.getUser(c.req.param('id'))
 
@@ -160,14 +170,14 @@ export function managementUserRoutes(authApi: ManagementAuthApi, options: Manage
   })
 
   app.get('/:id/password-reset-requests/:requestId', async (c) => {
-    await requireConsoleUserAccess(c, c.req.param('id'))
+    await requireManagementUser(c, c.req.param('id'))
     const request = await getDeps(c).users.findPasswordResetRequest!(c.req.param('id'), c.req.param('requestId'))
     if (!request) throw notFound('Password reset request was not found.')
     return c.json(passwordResetRequestResponseSchema.parse({ ...request, createdAt: request.createdAt.toISOString() }))
   })
 
   app.get('/:id/suspension', async (c) => {
-    await requireConsoleUserAccess(c, c.req.param('id'))
+    await requireManagementUser(c, c.req.param('id'))
     const user = await getDeps(c).users.getUser(c.req.param('id'))
     return c.json({
       userId: user.id,
@@ -178,23 +188,25 @@ export function managementUserRoutes(authApi: ManagementAuthApi, options: Manage
   })
 
   app.get('/:id/linked-accounts', async (c) => {
-    requireRealmConsoleAccess(c)
+    requireManagementRealm(c)
     const page = await getDeps(c).users.listLinkedAccounts(c.req.param('id'), readQuery(c, paginationQuerySchema))
     return c.json({ accounts: page.items, pagination: paginationMetadata(page) })
   })
 
   app.get('/:id/passkeys', async (c) => {
-    requireRealmConsoleAccess(c)
+    requireManagementRealm(c)
     const page = await getDeps(c).security.listPasskeys(c.req.param('id'), readQuery(c, paginationQuerySchema))
     return c.json({ passkeys: page.items, pagination: paginationMetadata(page) })
   })
 
   app.delete('/:id/passkeys/:passkeyId', async (c) => {
+    requireManagementRealm(c)
     await getDeps(c).security.deletePasskey(c.req.param('id'), c.req.param('passkeyId'))
     return c.body(null, 204)
   })
 
   app.patch('/:id', async (c) => {
+    requireManagementRealm(c)
     const users = getDeps(c).users
     const body = await readJson(c, adminUpdateUserSchema)
     await users.assertAdminAvatarReference(body.avatarAssetId)
@@ -228,6 +240,7 @@ export function managementUserRoutes(authApi: ManagementAuthApi, options: Manage
   })
 
   const banUser = async (c: Context) => {
+    requireManagementRealm(c)
     const body = await readJson(c, adminBanUserSchema)
 
     try {
@@ -249,6 +262,7 @@ export function managementUserRoutes(authApi: ManagementAuthApi, options: Manage
   app.put('/:id/suspension', banUser)
 
   const unbanUser = async (c: Context) => {
+    requireManagementRealm(c)
     try {
       return c.json(await authApi.unbanUser({ body: { userId: userIdParam(c) }, headers: c.req.raw.headers }))
     } catch (error) {
@@ -260,6 +274,7 @@ export function managementUserRoutes(authApi: ManagementAuthApi, options: Manage
 
   app.delete('/:id', async (c) => {
     const userId = c.req.param('id')
+    requireManagementRealm(c)
     if (isAutomationPrincipal(c)) {
       const actor = getPrincipal(c).user
       if (actor?.id === userId) {
@@ -279,12 +294,13 @@ export function managementUserRoutes(authApi: ManagementAuthApi, options: Manage
   })
 
   app.get('/:id/sessions', async (c) => {
-    requireRealmConsoleAccess(c)
+    requireManagementRealm(c)
     const page = await getDeps(c).users.listSessions(c.req.param('id'), readQuery(c, paginationQuerySchema))
     return c.json({ sessions: page.items, pagination: paginationMetadata(page) })
   })
 
   app.delete('/:id/sessions', async (c) => {
+    requireManagementRealm(c)
     try {
       return c.json(
         await authApi.revokeUserSessions({ body: { userId: c.req.param('id') }, headers: c.req.raw.headers }),
@@ -295,7 +311,7 @@ export function managementUserRoutes(authApi: ManagementAuthApi, options: Manage
   })
 
   app.get('/:id/sessions/:sessionId', async (c) => {
-    requireRealmConsoleAccess(c)
+    requireManagementRealm(c)
     const page = await getDeps(c).users.listSessions(c.req.param('id'), { limit: 100, offset: 0 })
     const session = page.items.find(({ id }) => id === c.req.param('sessionId'))
     if (!session) throw notFound('User session was not found.')
@@ -303,6 +319,7 @@ export function managementUserRoutes(authApi: ManagementAuthApi, options: Manage
   })
 
   app.delete('/:id/sessions/:sessionId', async (c) => {
+    requireManagementRealm(c)
     const token = await getDeps(c).users.getSessionToken(c.req.param('id'), c.req.param('sessionId'))
 
     try {

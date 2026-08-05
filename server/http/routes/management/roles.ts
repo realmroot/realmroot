@@ -18,7 +18,7 @@ import {
 } from '@shared/api/authorization'
 import { Hono } from 'hono'
 import { representationWithEtag, requireMatchingIfMatch } from '../../conditional'
-import { getManagementAccessScope } from '../../middleware/authz'
+import { getManagementAuthorization, requireManagementRealm } from '../../middleware/authz'
 import { getDeps } from '../../middleware/deps'
 import { readJson, readQuery } from '../validation'
 
@@ -27,6 +27,7 @@ export const managementRolesRoute = new Hono()
 managementRolesRoute.get('/', async (c) => c.json(await listRoles(getDeps(c), readQuery(c, paginationQuerySchema))))
 
 managementRolesRoute.post('/', async (c) => {
+  requireManagementRealm(c)
   const role = roleResponseSchema.parse(await createRole(getDeps(c), await readJson(c, createRoleRequestSchema)))
   c.header('Location', `/api/access/roles/${encodeURIComponent(role.id)}`)
   return c.json(role, 201)
@@ -37,11 +38,13 @@ managementRolesRoute.get('/:roleId', async (c) => {
   return c.json(await getRole(getDeps(c), c.req.param('roleId')))
 })
 
-managementRolesRoute.patch('/:roleId', async (c) =>
-  c.json(await updateRole(getDeps(c), c.req.param('roleId'), await readJson(c, updateRoleRequestSchema))),
-)
+managementRolesRoute.patch('/:roleId', async (c) => {
+  requireManagementRealm(c)
+  return c.json(await updateRole(getDeps(c), c.req.param('roleId'), await readJson(c, updateRoleRequestSchema)))
+})
 
 managementRolesRoute.delete('/:roleId', async (c) => {
+  requireManagementRealm(c)
   await deleteRole(getDeps(c), c.req.param('roleId'))
   return c.body(null, 204)
 })
@@ -53,23 +56,24 @@ managementRolesRoute.get('/:roleId/scopes', async (c) => {
   return c.json(roleScopesResponseSchema.parse({ scopes: current.representation.permissions }))
 })
 
-async function requireRoleReadAccess(c: Parameters<typeof getManagementAccessScope>[0], roleId: string) {
-  const access = getManagementAccessScope(c)
-  if (access?.kind !== 'account') return
+async function requireRoleReadAccess(c: Parameters<typeof getManagementAuthorization>[0], roleId: string) {
+  const { boundary } = getManagementAuthorization(c)
+  if (boundary.kind !== 'account') return
   const page = await getDeps(c).authorization.listRoleAssignments({
     roleId,
     subjectType: 'user',
-    subjectId: access.userId,
+    subjectId: boundary.accountId,
     status: 'active',
     limit: 1,
     offset: 0,
-    organizationIds: access.organizationIds,
+    organizationIds: undefined,
     includeRealmAssignments: true,
   })
   if (page.items.length === 0) throw forbidden()
 }
 
 managementRolesRoute.put('/:roleId/scopes', async (c) => {
+  requireManagementRealm(c)
   const expected = c.req.header('If-Match')
   const current = await rolePermissions(getDeps(c), c.req.param('roleId'))
   requireMatchingIfMatch(expected, current.etag, 'Role permissions')

@@ -230,6 +230,7 @@ describe('management routes 1', () => {
     const auth = createAuthMock()
     const dpop = await createTestDpopKey()
     let scopes = ['agent:read']
+    let authority = { type: 'realmroot_authority', authority: 'realm', id: 'realm' }
     Object.assign(auth.api, {
       verifyJWT: vi.fn().mockImplementation(async () => ({
         payload: {
@@ -239,7 +240,7 @@ describe('management routes 1', () => {
           host_id: 'host-1',
           scope: scopes.join(' '),
           cnf: { jkt: dpop.thumbprint },
-          realmroot_authority: { type: 'realmroot_authority', authority: 'realm', id: 'realm' },
+          realmroot_authority: authority,
         },
       })),
     })
@@ -272,11 +273,15 @@ describe('management routes 1', () => {
       ],
     }
     const users = createUserRepositoryMock()
+    const listOwned = vi.fn().mockResolvedValue({ items: [], total: 0, limit: 20, offset: 0 })
+    const listAll = vi.fn().mockResolvedValue({ items: [], total: 0, limit: 20, offset: 0 })
     const deps = createTestDeps({
       users,
       agentIdentities: {
         findActiveByProtocolAgent: vi.fn().mockResolvedValue(identity),
         findIdentity: vi.fn().mockResolvedValue(identity),
+        listOwned,
+        listAll,
       },
     })
     const app = createApp(auth, deps)
@@ -331,6 +336,34 @@ describe('management routes 1', () => {
     expect(users.createManagedUser).toHaveBeenCalledOnce()
     expect(users.updateManagedUser).toHaveBeenCalledOnce()
     expect(users.deleteManagedUser).toHaveBeenCalledOnce()
+
+    authority = { type: 'realmroot_authority', authority: 'organization', id: 'organization-1' }
+    const organizationUserWrite = await app.request('/api/users/user-1', {
+      method: 'PATCH',
+      headers: { ...(await headers('PATCH', '/api/users/user-1')), 'content-type': 'application/json' },
+      body: JSON.stringify({ displayName: 'Outside Boundary' }),
+    })
+    expect(organizationUserWrite.status).toBe(403)
+    expect(users.updateManagedUser).toHaveBeenCalledOnce()
+
+    scopes = ['agents:read']
+    authority = { type: 'realmroot_authority', authority: 'account', id: 'controller-1' }
+    expect((await app.request('/api/agents', { headers: await headers('GET', '/api/agents') })).status).toBe(200)
+    expect(listOwned).toHaveBeenLastCalledWith(
+      { ownerUserId: 'controller-1', ownerOrganizationIds: [] },
+      expect.objectContaining({ limit: 50, offset: 0 }),
+    )
+
+    authority = { type: 'realmroot_authority', authority: 'organization', id: 'organization-1' }
+    expect((await app.request('/api/agents', { headers: await headers('GET', '/api/agents') })).status).toBe(200)
+    expect(listOwned).toHaveBeenLastCalledWith(
+      { ownerOrganizationIds: ['organization-1'] },
+      expect.objectContaining({ limit: 50, offset: 0 }),
+    )
+
+    authority = { type: 'realmroot_authority', authority: 'realm', id: 'realm' }
+    expect((await app.request('/api/agents', { headers: await headers('GET', '/api/agents') })).status).toBe(200)
+    expect(listAll).toHaveBeenCalledWith(expect.objectContaining({ limit: 50, offset: 0 }))
   })
 
   it('does not expose the removed capability request resource', async () => {

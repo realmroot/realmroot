@@ -3,11 +3,12 @@ import type {
   AgentIdentityAggregate,
   AgentIdentityRepository,
 } from '@server/usecases/ports'
-import { and, count, desc, eq, inArray } from 'drizzle-orm'
+import { and, count, desc, eq, inArray, or } from 'drizzle-orm'
 import type { BatchItem } from 'drizzle-orm/batch'
 import type { Database } from '../../db/client'
 import {
   agent,
+  agentAuditEvent,
   agentCapabilityGrant,
   agentEnrollmentIntent,
   agentIdentity,
@@ -35,9 +36,15 @@ export function createDrizzleAgentIdentityRepository(db: Database): AgentIdentit
       return aggregates(db, identities)
     },
 
-    async listOwnedByOrganizations(organizationIds, page) {
-      if (organizationIds.length === 0) return { items: [], total: 0, ...page }
-      const ownerCondition = inArray(agentIdentity.ownerOrganizationId, organizationIds)
+    async listOwned(owner, page) {
+      const ownerConditions = [
+        owner.ownerUserId ? eq(agentIdentity.ownerUserId, owner.ownerUserId) : undefined,
+        owner.ownerOrganizationIds?.length
+          ? inArray(agentIdentity.ownerOrganizationId, owner.ownerOrganizationIds)
+          : undefined,
+      ].filter((condition) => condition !== undefined)
+      if (ownerConditions.length === 0) return { items: [], total: 0, ...page }
+      const ownerCondition = or(...ownerConditions)!
       const [identities, totals] = await Promise.all([
         db
           .select()
@@ -198,7 +205,7 @@ export function createDrizzleAgentIdentityRepository(db: Database): AgentIdentit
       return true
     },
 
-    async recoverIdentity(identityId, now) {
+    async recoverIdentity(identityId, now, audit) {
       const [identity] = await db
         .select({ id: agentIdentity.id })
         .from(agentIdentity)
@@ -208,13 +215,17 @@ export function createDrizzleAgentIdentityRepository(db: Database): AgentIdentit
       const protocolAgentIds = await activeProtocolAgentIds(db, identityId)
       const statements = revokeProtocolAgentStatements(db, identityId, protocolAgentIds, now)
       statements.unshift(
-        db.update(agentIdentity).set({ status: 'recovering', updatedAt: now }).where(eq(agentIdentity.id, identityId)),
+        db
+          .update(agentIdentity)
+          .set({ status: 'recovering', updatedAt: now })
+          .where(and(eq(agentIdentity.id, identityId), eq(agentIdentity.status, 'active'))),
       )
+      statements.push(db.insert(agentAuditEvent).values(audit))
       await db.batch(statements as [BatchItem<'sqlite'>, ...BatchItem<'sqlite'>[]])
       return true
     },
 
-    async retireIdentity(identityId, now) {
+    async retireIdentity(identityId, now, audit) {
       const [identity] = await db
         .select({ id: agentIdentity.id })
         .from(agentIdentity)
@@ -227,8 +238,9 @@ export function createDrizzleAgentIdentityRepository(db: Database): AgentIdentit
         db
           .update(agentIdentity)
           .set({ status: 'retired', retiredAt: now, updatedAt: now })
-          .where(eq(agentIdentity.id, identityId)),
+          .where(and(eq(agentIdentity.id, identityId), inArray(agentIdentity.status, ['active', 'recovering']))),
       )
+      statements.push(db.insert(agentAuditEvent).values(audit))
       await db.batch(statements as [BatchItem<'sqlite'>, ...BatchItem<'sqlite'>[]])
       return true
     },

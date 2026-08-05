@@ -267,6 +267,7 @@ function createRouteApp(overrides: { signJWT?: () => Promise<{ token: string }> 
             'access-requests:write',
             'access-authorizations:read',
           ],
+          owner: { kind: 'account', accountId: 'user-1' },
           authority: null,
         },
       })

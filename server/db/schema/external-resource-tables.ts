@@ -185,9 +185,7 @@ export const agentAccessGrant = sqliteTable(
       .default(sql`'[]'`),
     mode: text('mode').notNull(),
     status: text('status').notNull().default('active'),
-    grantedByUserId: text('granted_by_user_id')
-      .notNull()
-      .references(() => user.id, { onDelete: 'restrict' }),
+    grantedByUserId: text('granted_by_user_id').references(() => user.id, { onDelete: 'restrict' }),
     expiresAt: integer('expires_at', { mode: 'timestamp_ms' }),
     revokedAt: integer('revoked_at', { mode: 'timestamp_ms' }),
     createdAt: integer('created_at', { mode: 'timestamp_ms' })

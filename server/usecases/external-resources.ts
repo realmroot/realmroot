@@ -1,5 +1,6 @@
 import { ApiError, badGateway, badRequest, forbidden, notFound, oauthError, unauthorized } from '@server/domain/errors'
 import { isRealmrootResourceServer } from '@server/domain/realmroot-resource-server'
+import { resolveAgentAuditOwner } from '@server/usecases/agent-audit'
 import type { Deps } from '@server/usecases/deps'
 import type {
   AgentAccessGrantRecord,
@@ -828,12 +829,16 @@ export async function createAgentAccessRequest(
   await validateResourceRequestedScopes(deps, resource, input.scopes)
   const authorizationDetails = input.authorizationDetails ?? []
   assertAccessRequestAuthorizationDetails(resource, connection, authorizationDetails)
+  if (isRealmrootResourceServer(resource.id)) {
+    await assertRealmrootAuthorityAllowed(deps, identity, authorizationDetails)
+  }
   await requireAgentScopeEligibility(
     deps,
     principal.identityId,
     resource.id,
-    identity.identity.ownerOrganizationId,
+    realmrootAuthorityOrganizationId(resource.id, authorizationDetails) ?? identity.identity.ownerOrganizationId,
     input.scopes,
+    isRealmrootResourceServer(resource.id),
   )
   const scopes = [...new Set(input.scopes)].sort()
   const reusableGrants = (await deps.externalResources.listActiveGrantsByAgent(principal.identityId)).filter(
@@ -1120,32 +1125,52 @@ export async function decideAgentAccessRequest(
   input: DecideAgentAccessRequest,
   actorUserId: string,
 ) {
+  return decideAgentAccessRequestInternal(deps, requestId, input, { controllerUserId: actorUserId })
+}
+
+async function decideAgentAccessRequestInternal(
+  deps: Deps,
+  requestId: string,
+  input: DecideAgentAccessRequest,
+  actor: { controllerUserId: string | null; principal?: AgentResourcePrincipal; authorizationAlreadyChecked?: boolean },
+) {
   const request = await deps.externalResources.findAccessRequest(requestId)
   if (!request || request.status !== 'pending' || request.expiresAt.getTime() <= Date.now()) {
     throw notFound('Pending Agent access request was not found.')
   }
-  const controlledConnection = await requireControlledRequestTarget(deps, request, actorUserId)
+  const controlledConnection = actor.authorizationAlreadyChecked
+    ? request.connectionId
+      ? await deps.externalResources.findConnection(request.connectionId)
+      : null
+    : await requireControlledRequestTarget(deps, request, actor.controllerUserId!)
+  if (request.connectionId && !controlledConnection) throw notFound('Resource account connection was not found.')
   const now = new Date()
   if (input.decision === 'deny') {
-    const decided = await deps.externalResources.decideAccessRequest(request.id, {
+    const decision = {
       status: 'denied',
       grantId: null,
       decidedAt: now,
       updatedAt: now,
-    })
-    if (!decided) throw badRequest('Agent access request was already decided.')
-    await appendResourceAudit(deps, {
+    } as const
+    const auditInput: ResourceAuditInput = {
       action: 'api_resource.access_decided',
       result: 'denied',
       resourceId: request.resourceId,
       connection: controlledConnection,
       request,
       grantId: null,
-      controllerUserId: actorUserId,
+      ...(actor.principal ? { principal: actor.principal } : { controllerUserId: actor.controllerUserId! }),
       scopes: request.scopes,
       authorizationDetails: request.authorizationDetails,
       reasonCode: 'controller_denied',
-    })
+    }
+    const decided = await deps.externalResources.decideAccessRequestWithAudit(
+      request.id,
+      decision,
+      null,
+      await resourceAuditEvent(deps, auditInput),
+    )
+    if (!decided) throw badRequest('Agent access request was already decided.')
     return toAgentAccessRequest(decided, await requestHostId(deps, request), null)
   }
 
@@ -1161,14 +1186,19 @@ export async function decideAgentAccessRequest(
     deps,
     request.agentIdentityId,
     resource.id,
-    requestIdentity.identity.ownerOrganizationId,
+    realmrootAuthorityOrganizationId(resource.id, request.authorizationDetails) ??
+      requestIdentity.identity.ownerOrganizationId,
     request.scopes,
+    isRealmrootResourceServer(resource.id),
   )
   const connectionId = request.connectionId
   let connection: ResourceAccountConnectionRecord | null = null
   if (resource.connectorId !== null) {
     if (!connectionId) throw badRequest('An account connection is required to approve external API access.')
-    connection = await requireControlledConnection(deps, connectionId, actorUserId)
+    connection = actor.authorizationAlreadyChecked
+      ? await deps.externalResources.findConnection(connectionId)
+      : await requireControlledConnection(deps, connectionId, actor.controllerUserId!)
+    if (!connection) throw notFound('Resource account connection was not found.')
     if (connection.resourceId !== resource.id || connection.status !== 'active') {
       throw badRequest('The selected account connection does not belong to this API resource.')
     }
@@ -1187,7 +1217,7 @@ export async function decideAgentAccessRequest(
   }
   const expiresAt = input.mode === 'until' ? new Date(input.expiresAt!) : null
   if (expiresAt && expiresAt.getTime() <= now.getTime()) throw badRequest('Grant expiry must be in the future.')
-  const grant = await deps.externalResources.createGrant({
+  const grantInput = {
     id: createId('accessgrant'),
     resourceId: request.resourceId,
     connectionId,
@@ -1196,34 +1226,58 @@ export async function decideAgentAccessRequest(
     authorizationDetails,
     mode: input.mode!,
     status: 'active',
-    grantedByUserId: actorUserId,
+    grantedByUserId: actor.controllerUserId,
     expiresAt,
     revokedAt: null,
     createdAt: now,
     updatedAt: now,
-  })
-  if (!grant) throw badRequest('The API resource was archived before access could be approved.')
-  const decided = await deps.externalResources.decideAccessRequest(request.id, {
+  }
+  const decision = {
     status: 'approved',
-    grantId: grant.id,
+    grantId: grantInput.id,
     connectionId,
     decidedAt: now,
     updatedAt: now,
-  })
-  if (!decided) throw badRequest('Agent access request was already decided.')
-  await appendResourceAudit(deps, {
+  } as const
+  const auditInput: ResourceAuditInput = {
     action: 'api_resource.access_decided',
     result: 'allowed',
     resourceId: request.resourceId,
     connection,
     request,
-    grantId: grant.id,
-    controllerUserId: actorUserId,
+    grantId: grantInput.id,
+    ...(actor.principal ? { principal: actor.principal } : { controllerUserId: actor.controllerUserId! }),
     scopes: request.scopes,
     authorizationDetails,
     reasonCode: null,
-  })
+  }
+  const decided = await deps.externalResources.decideAccessRequestWithAudit(
+    request.id,
+    decision,
+    grantInput,
+    await resourceAuditEvent(deps, auditInput),
+  )
+  if (!decided) {
+    const latest = await deps.externalResources.findAccessRequest(request.id)
+    if (latest?.status !== 'pending') throw badRequest('Agent access request was already decided.')
+    throw badRequest('The API resource was archived before access could be approved.')
+  }
   return toAgentAccessRequest(decided, await requestHostId(deps, request), null)
+}
+
+export async function decideManagementAccessRequest(
+  deps: Deps,
+  requestId: string,
+  input: DecideAgentAccessRequest,
+  actor: { userId: string } | { principal: AgentResourcePrincipal },
+): Promise<AccessRequest> {
+  return toAccessRequest(
+    await decideAgentAccessRequestInternal(deps, requestId, input, {
+      controllerUserId: 'userId' in actor ? actor.userId : null,
+      ...('principal' in actor ? { principal: actor.principal } : {}),
+      authorizationAlreadyChecked: true,
+    }),
+  )
 }
 
 export async function decideAccessRequest(
@@ -1273,8 +1327,9 @@ export async function issueTargetAccessToken(
     deps,
     principal.identityId,
     resource.id,
-    identity.identity.ownerOrganizationId,
+    realmrootAuthorityOrganizationId(resource.id, grant.authorizationDetails) ?? identity.identity.ownerOrganizationId,
     request.scopes,
+    isRealmrootResourceServer(resource.id),
   )
   if (!authorizationDetailsMatchRequest(grant.authorizationDetails, request.authorizationDetails)) {
     throw forbidden('Agent access grant authorization details do not match the approved request.')
@@ -1381,7 +1436,7 @@ export async function issueTargetAccessToken(
   }
   const now = new Date()
   const leaseId = createId('tokenlease')
-  const lease = await deps.externalResources.createTokenLease({
+  const leaseInput = {
     id: leaseId,
     grantId: grant.id,
     requestId: request.id,
@@ -1396,11 +1451,8 @@ export async function issueTargetAccessToken(
     expiresAt: new Date(now.getTime() + expiresIn * 1000),
     revokedAt: null,
     createdAt: now,
-  })
-  if (!lease) throw forbidden('Active Agent access grant is required.')
-  await deps.externalResources.consumeAccessRequest(request.id, now)
-  if (grant.mode === 'once') await deps.externalResources.consumeGrant(grant.id, now)
-  await appendResourceAudit(deps, {
+  }
+  const audit = await resourceAuditEvent(deps, {
     action: 'api_resource.token_issued',
     result: 'allowed',
     principal,
@@ -1412,6 +1464,8 @@ export async function issueTargetAccessToken(
     authorizationDetails: grant.authorizationDetails,
     reasonCode: null,
   })
+  const lease = await deps.externalResources.issueTokenLeaseWithAudit(leaseInput, grant.mode, now, audit)
+  if (!lease) throw forbidden('Active Agent access grant is required.')
   return {
     accessToken,
     tokenType: 'DPoP' as const,
@@ -1488,7 +1542,10 @@ async function issueNativeAccessToken(
   if (!subject) throw forbidden('Agent home-space controller is unavailable.')
   const realmroot = isRealmrootResourceServer(resource.id)
   const realmrootAuthority = realmroot ? grant.authorizationDetails[0] : undefined
-  if (realmroot) assertRealmrootAuthoritySelection(grant.authorizationDetails)
+  if (realmroot) {
+    assertRealmrootAuthoritySelection(grant.authorizationDetails)
+    await assertRealmrootAuthorityAllowed(deps, identity, grant.authorizationDetails)
+  }
   const issuedScopes = realmroot ? [...new Set([...agentBootstrapScopes, ...request.scopes])] : request.scopes
   const accessToken = await signer.sign(
     {
@@ -1520,7 +1577,7 @@ async function issueNativeAccessToken(
     'at+jwt',
   )
   const leaseId = createId('tokenlease')
-  const lease = await deps.externalResources.createTokenLease({
+  const leaseInput = {
     id: leaseId,
     grantId: grant.id,
     requestId: request.id,
@@ -1535,11 +1592,8 @@ async function issueNativeAccessToken(
     expiresAt,
     revokedAt: null,
     createdAt: now,
-  })
-  if (!lease) throw forbidden('Active Agent access grant is required.')
-  await deps.externalResources.consumeAccessRequest(request.id, now)
-  if (grant.mode === 'once') await deps.externalResources.consumeGrant(grant.id, now)
-  await appendResourceAudit(deps, {
+  }
+  const audit = await resourceAuditEvent(deps, {
     action: 'api_resource.token_issued',
     result: 'allowed',
     principal,
@@ -1551,6 +1605,8 @@ async function issueNativeAccessToken(
     authorizationDetails: realmroot ? grant.authorizationDetails : [],
     reasonCode: null,
   })
+  const lease = await deps.externalResources.issueTokenLeaseWithAudit(leaseInput, grant.mode, now, audit)
+  if (!lease) throw forbidden('Active Agent access grant is required.')
   return {
     accessToken,
     tokenType: 'DPoP' as const,
@@ -1606,6 +1662,32 @@ export async function revokeAgentAccessGrant(deps: Deps, grantId: string, actorU
     authorizationDetails: grant.authorizationDetails,
     reasonCode: null,
   })
+}
+
+export async function revokeManagementAgentAccessGrant(
+  deps: Deps,
+  grantId: string,
+  actor: { userId: string } | { principal: AgentResourcePrincipal },
+) {
+  const grant = await deps.externalResources.findGrant(grantId)
+  if (!grant) throw notFound('Agent access grant was not found.')
+  const request = await deps.externalResources.findAccessRequestByGrant(grant.id)
+  if (!request) throw notFound('Approved Agent access request was not found.')
+  const connection = request.connectionId ? await deps.externalResources.findConnection(request.connectionId) : null
+  if (request.connectionId && !connection) throw notFound('Resource account connection was not found.')
+  const now = new Date()
+  const audit = await resourceAuditEvent(deps, {
+    action: 'api_resource.access_revoked',
+    result: 'allowed',
+    resourceId: grant.resourceId,
+    connection,
+    grantId: grant.id,
+    ...('userId' in actor ? { controllerUserId: actor.userId } : { principal: actor.principal }),
+    scopes: grant.scopes,
+    authorizationDetails: grant.authorizationDetails,
+    reasonCode: null,
+  })
+  await deps.externalResources.revokeGrantWithAudit(grant.id, now, audit)
 }
 
 export async function revokeAgentResourceAccess(deps: Deps, agentIdentityId: string) {
@@ -2402,29 +2484,38 @@ function assertConnectionInHomeSpace(
   throw forbidden('Resource account connection is outside the Agent home space.')
 }
 
-async function appendResourceAudit(
-  deps: Deps,
-  input: {
-    action: string
-    result: string
-    principal?: AgentResourcePrincipal
-    request?: AgentAccessRequestRecord
-    resourceId: string
-    connection: ResourceAccountConnectionRecord | null
-    grantId: string | null
-    controllerUserId?: string
-    scopes: string[]
-    authorizationDetails?: AuthorizationDetail[]
-    reasonCode: string | null
-  },
-) {
+async function appendResourceAudit(deps: Deps, input: ResourceAuditInput) {
+  await deps.agentAudit.append(await resourceAuditEvent(deps, input))
+}
+
+type ResourceAuditInput = {
+  action: string
+  result: string
+  principal?: AgentResourcePrincipal
+  request?: AgentAccessRequestRecord
+  resourceId: string
+  connection: ResourceAccountConnectionRecord | null
+  grantId: string | null
+  controllerUserId?: string
+  scopes: string[]
+  authorizationDetails?: AuthorizationDetail[]
+  reasonCode: string | null
+}
+
+async function resourceAuditEvent(deps: Deps, input: ResourceAuditInput) {
   const authorizationDetails =
     input.authorizationDetails ?? input.request?.authorizationDetails ?? input.connection?.authorizationDetails ?? []
   const authorizationDetailProjections = authorizationDetails.map((detail) => ({
     type: detail.type,
     ...(typeof detail.identifier === 'string' ? { identifier: detail.identifier } : {}),
   }))
-  await deps.agentAudit.append({
+  const owner = await resolveAgentAuditOwner(deps, {
+    connection: input.connection,
+    authorizationDetails,
+    identityId: input.principal?.identityId ?? input.request?.agentIdentityId ?? null,
+    resourceId: input.resourceId,
+  })
+  return {
     id: createId('agaudit'),
     action: input.action,
     result: input.result,
@@ -2433,6 +2524,9 @@ async function appendResourceAudit(
     subject: input.principal?.subject ?? null,
     agentIdentityId: input.principal?.identityId ?? input.request?.agentIdentityId ?? null,
     hostId: input.principal?.hostId ?? null,
+    ownerKind: owner.kind,
+    ownerId: owner.id,
+    quarantineReason: null,
     resourceId: input.resourceId,
     resourceConnectionId: input.connection?.id ?? null,
     accessGrantId: input.grantId,
@@ -2441,7 +2535,7 @@ async function appendResourceAudit(
     metadata:
       authorizationDetailProjections.length > 0 ? { authorizationDetails: authorizationDetailProjections } : null,
     occurredAt: new Date(),
-  })
+  }
 }
 
 async function revokeUncoveredGrants(
@@ -2566,6 +2660,17 @@ function assertRealmrootAuthoritySelection(authorizationDetails: AuthorizationDe
     typeof detail.id !== 'string'
   ) {
     throw invalidAuthorizationDetails('Select exactly one Realmroot authority Resource.')
+  }
+}
+
+async function assertRealmrootAuthorityAllowed(
+  deps: Deps,
+  identity: Awaited<ReturnType<typeof requireActiveIdentityAndBinding>>,
+  authorizationDetails: AuthorizationDetail[],
+) {
+  const allowed = await realmrootAuthorityDetails(deps, identity)
+  if (!allowed.some((detail) => exactAuthorizationDetails([detail], authorizationDetails))) {
+    throw invalidAuthorizationDetails('Requested Realmroot authority exceeds the Agent owner boundary.')
   }
 }
 
@@ -2811,12 +2916,22 @@ async function requireAgentScopeEligibility(
   resourceId: string,
   organizationId: string | null,
   scopes: string[],
+  requireExplicitAssignment = false,
 ) {
   const authorization = await getAgentRoleAuthorization(deps, agentIdentityId, resourceId, organizationId ?? undefined)
-  if (authorization.roles.length > 0 && scopes.some((scope) => !authorization.scopes.includes(scope))) {
+  if (
+    (requireExplicitAssignment || authorization.roles.length > 0) &&
+    scopes.some((scope) => !authorization.scopes.includes(scope))
+  ) {
     throw forbidden('Agent roles do not permit every requested scope.')
   }
   return authorization
+}
+
+function realmrootAuthorityOrganizationId(resourceId: string, authorizationDetails: AuthorizationDetail[]) {
+  if (!isRealmrootResourceServer(resourceId)) return null
+  const detail = authorizationDetails[0]
+  return detail?.authority === 'organization' && typeof detail.id === 'string' ? detail.id : null
 }
 
 function exactScopes(left: string[], right: string[]) {

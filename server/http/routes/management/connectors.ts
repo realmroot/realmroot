@@ -16,11 +16,17 @@ import {
   updateManagementConnectorRequestSchema,
 } from '@shared/api/management'
 import { Hono } from 'hono'
+import { requireManagementRealm } from '../../middleware/authz'
 import { getDeps } from '../../middleware/deps'
 import { readJson, readQuery } from '../validation'
 
 export function createManagementConnectorRoutes(canonicalOrigin?: string) {
   const app = new Hono()
+
+  app.use('*', async (c, next) => {
+    requireManagementRealm(c)
+    await next()
+  })
 
   app.get('/templates', async (c) => c.json(listConnectorTemplatesResponseSchema.parse(listConnectorTemplates())))
 

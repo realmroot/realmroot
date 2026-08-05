@@ -131,6 +131,8 @@ Feature: Agent identity and delegated API authorization
       And it cannot be disabled, archived, deleted, or reassigned through tenant management
       When the Agent lists that Resource Server's Resources
       Then Realm, Organization, and personal Account Resources reflect the controller boundaries available for approval
+      And each Resource permits only scopes from the Agent's explicit Role assignments in that exact authority boundary
+      And Organization membership alone never grants management scopes to a personal Agent
       And a token for one Resource cannot authorize another Resource
 
     @entrypoint:agent-protocol @journey:agent-resource-server-model

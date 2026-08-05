@@ -298,30 +298,7 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
 
     async archiveResource(id, now, audit) {
       await db.batch([
-        db.insert(agentAuditEvent).select(
-          db
-            .select({
-              id: sql<string>`${audit.id}`.as('id'),
-              action: sql<string>`${audit.action}`.as('action'),
-              result: sql<string>`${audit.result}`.as('result'),
-              controllerUserId: sql<string | null>`${audit.controllerUserId}`.as('controller_user_id'),
-              subjectIssuer: sql<string | null>`${audit.subjectIssuer}`.as('subject_issuer'),
-              subject: sql<string | null>`${audit.subject}`.as('subject'),
-              agentIdentityId: sql<string | null>`${audit.agentIdentityId}`.as('agent_identity_id'),
-              hostId: sql<string | null>`${audit.hostId}`.as('host_id'),
-              resourceId: apiResource.id,
-              resourceConnectionId: sql<string | null>`${audit.resourceConnectionId}`.as('resource_connection_id'),
-              accessGrantId: sql<string | null>`${audit.accessGrantId}`.as('access_grant_id'),
-              scopes: sql<string[] | null>`${audit.scopes === null ? null : JSON.stringify(audit.scopes)}`.as('scopes'),
-              reasonCode: sql<string | null>`${audit.reasonCode}`.as('reason_code'),
-              metadata: sql<Record<string, unknown> | null>`${
-                audit.metadata === null ? null : JSON.stringify(audit.metadata)
-              }`.as('metadata'),
-              occurredAt: sql<Date>`${audit.occurredAt.getTime()}`.as('occurred_at'),
-            })
-            .from(apiResource)
-            .where(and(eq(apiResource.id, id), isNull(apiResource.archivedAt))),
-        ),
+        db.insert(agentAuditEvent).values(audit),
         db
           .update(apiResource)
           .set({ enabled: false, archivedAt: now, updatedAt: now })
@@ -362,30 +339,7 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
 
     async restoreResource(id, now, audit) {
       await db.batch([
-        db.insert(agentAuditEvent).select(
-          db
-            .select({
-              id: sql<string>`${audit.id}`.as('id'),
-              action: sql<string>`${audit.action}`.as('action'),
-              result: sql<string>`${audit.result}`.as('result'),
-              controllerUserId: sql<string | null>`${audit.controllerUserId}`.as('controller_user_id'),
-              subjectIssuer: sql<string | null>`${audit.subjectIssuer}`.as('subject_issuer'),
-              subject: sql<string | null>`${audit.subject}`.as('subject'),
-              agentIdentityId: sql<string | null>`${audit.agentIdentityId}`.as('agent_identity_id'),
-              hostId: sql<string | null>`${audit.hostId}`.as('host_id'),
-              resourceId: apiResource.id,
-              resourceConnectionId: sql<string | null>`${audit.resourceConnectionId}`.as('resource_connection_id'),
-              accessGrantId: sql<string | null>`${audit.accessGrantId}`.as('access_grant_id'),
-              scopes: sql<string[] | null>`${audit.scopes === null ? null : JSON.stringify(audit.scopes)}`.as('scopes'),
-              reasonCode: sql<string | null>`${audit.reasonCode}`.as('reason_code'),
-              metadata: sql<Record<string, unknown> | null>`${
-                audit.metadata === null ? null : JSON.stringify(audit.metadata)
-              }`.as('metadata'),
-              occurredAt: sql<Date>`${audit.occurredAt.getTime()}`.as('occurred_at'),
-            })
-            .from(apiResource)
-            .where(and(eq(apiResource.id, id), isNotNull(apiResource.archivedAt))),
-        ),
+        db.insert(agentAuditEvent).values(audit),
         db
           .update(apiResource)
           .set({ enabled: false, archivedAt: null, updatedAt: now })

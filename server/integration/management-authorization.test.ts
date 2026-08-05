@@ -268,6 +268,8 @@ describe('authorization management over real D1', () => {
         action: 'agent.access.requested',
         result: 'pending',
         agentIdentityId: 'owned-agent',
+        ownerKind: 'organization',
+        ownerId: ownedOrganization.id,
         occurredAt: now,
       },
       {
@@ -275,6 +277,8 @@ describe('authorization management over real D1', () => {
         action: 'agent.access.requested',
         result: 'pending',
         agentIdentityId: 'other-agent',
+        ownerKind: 'organization',
+        ownerId: otherOrganization.id,
         occurredAt: now,
       },
     ])

@@ -151,6 +151,8 @@ Feature: Unified Realmroot resource API
     Then each Role assignment, Agent access request, and Agent access grant has one canonical API URI
     And filters only narrow the inventory and are never required to establish resource ownership
     And the server limits each principal to the records that principal may inspect
+    And Account authority includes personally owned Agents without inheriting Organization membership authority
+    And collection, detail, update, revocation, and deletion decisions use the same Resource owner boundary
     And Account Center does not publish duplicate Organization authority collection paths
 
 

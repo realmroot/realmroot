@@ -34,6 +34,7 @@ export interface PrincipalContext {
     protocolAgentId: string
     hostId: string
     scopes: string[]
+    owner: { kind: 'account'; accountId: string } | { kind: 'organization'; organizationId: string }
     authority:
       | { kind: 'realm' }
       | { kind: 'organization'; organizationId: string }
@@ -150,6 +151,9 @@ async function authenticateOAuthAgent(
     protocolAgentId,
     hostId,
     scopes,
+    owner: aggregate.identity.ownerUserId
+      ? { kind: 'account', accountId: aggregate.identity.ownerUserId }
+      : { kind: 'organization', organizationId: aggregate.identity.ownerOrganizationId! },
     authority,
   }
 }
@@ -184,6 +188,9 @@ async function authenticateAgent(
     protocolAgentId: session.agent.id,
     hostId: session.agent.hostId,
     scopes: [],
+    owner: identity.identity.ownerUserId
+      ? { kind: 'account', accountId: identity.identity.ownerUserId }
+      : { kind: 'organization', organizationId: identity.identity.ownerOrganizationId! },
     authority: null,
   }
 }

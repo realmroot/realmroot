@@ -23,9 +23,9 @@ import { apiResourceContractResponseSchema, listApiResourcesQuerySchema } from '
 import { Hono } from 'hono'
 import { getPrincipal } from '../../middleware/authn'
 import {
-  requireConsoleOrganizationAccess,
-  requireConsoleOwnedOrganization,
-  resolveOrganizationInventoryScope,
+  managementOrganizationIds,
+  requireManagementOrganization,
+  requireManagementOrganizationOwner,
 } from '../../middleware/authz'
 import { getDeps } from '../../middleware/deps'
 import { readJson, readQuery } from '../validation'
@@ -55,14 +55,14 @@ export function createManagementApiResourcesRoute(canonicalOrigin?: string) {
     const query = readQuery(c, listApiResourcesQuerySchema)
     return c.json(
       apiResourcesResponseSchema.parse(
-        await listApiResources(getDeps(c), query, resolveOrganizationInventoryScope(c, query.ownerOrganizationId)),
+        await listApiResources(getDeps(c), query, managementOrganizationIds(c, query.ownerOrganizationId)),
       ),
     )
   })
 
   app.post('/', async (c) => {
     const input = await readJson(c, createApiResourceSchema)
-    requireConsoleOwnedOrganization(c, input.ownerOrganizationId)
+    requireManagementOrganizationOwner(c, input.ownerOrganizationId)
     const resource = await createResource(getDeps(c), input)
     c.header('Location', `/api/resource-servers/${encodeURIComponent(resource.id)}`)
     return c.json(apiResourceSchema.parse(await getApiResource(getDeps(c), resource.id)), 201)
@@ -88,7 +88,7 @@ export function createManagementApiResourcesRoute(canonicalOrigin?: string) {
   app.patch('/:resourceId', async (c) => {
     await requireResourceAccess(c)
     const input = await readJson(c, updateApiResourceSchema)
-    if (input.ownerOrganizationId !== undefined) requireConsoleOwnedOrganization(c, input.ownerOrganizationId)
+    if (input.ownerOrganizationId !== undefined) requireManagementOrganizationOwner(c, input.ownerOrganizationId)
     await updateResource(getDeps(c), c.req.param('resourceId'), input)
     return c.json(apiResourceSchema.parse(await getApiResource(getDeps(c), c.req.param('resourceId'))))
   })
@@ -118,7 +118,7 @@ export function createManagementApiResourcesRoute(canonicalOrigin?: string) {
 
 async function requireResourceAccess(c: Parameters<typeof getPrincipal>[0]) {
   const resource = await getApiResource(getDeps(c), c.req.param('resourceId')!)
-  requireConsoleOrganizationAccess(c, resource.ownerOrganizationId)
+  requireManagementOrganization(c, resource.ownerOrganizationId)
   return resource
 }
 

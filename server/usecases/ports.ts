@@ -435,6 +435,9 @@ export interface AgentAuditEventRecord {
   subject: string | null
   agentIdentityId: string | null
   hostId: string | null
+  ownerKind: 'realm' | 'organization' | 'account' | null
+  ownerId: string | null
+  quarantineReason: string | null
   resourceId: string | null
   resourceConnectionId: string | null
   accessGrantId: string | null
@@ -448,7 +451,7 @@ export interface AgentAuditRepository {
   append(input: AgentAuditEventRecord): Promise<void>
   list(
     page: PaginationInput,
-    filter?: { agentIdentityId?: string; ownerOrganizationIds?: string[] },
+    filter?: { agentIdentityId?: string; ownerUserId?: string; ownerOrganizationIds?: string[] },
   ): Promise<PaginatedResult<AgentAuditEventRecord>>
 }
 
@@ -557,7 +560,7 @@ export interface AgentAccessGrantRecord {
   authorizationDetails: AuthorizationDetail[]
   mode: string
   status: string
-  grantedByUserId: string
+  grantedByUserId: string | null
   expiresAt: Date | null
   revokedAt: Date | null
   createdAt: Date
@@ -650,6 +653,18 @@ export interface ExternalResourceRepository {
       updatedAt: Date
     },
   ): Promise<AgentAccessRequestRecord | null>
+  decideAccessRequestWithAudit(
+    id: string,
+    input: {
+      status: 'approved' | 'denied'
+      grantId: string | null
+      connectionId?: string | null
+      decidedAt: Date
+      updatedAt: Date
+    },
+    grant: AgentAccessGrantRecord | null,
+    audit: AgentAuditEventRecord,
+  ): Promise<AgentAccessRequestRecord | null>
   consumeAccessRequest(id: string, now: Date): Promise<boolean>
   listPendingAccessRequestsByConnections(connectionIds: string[]): Promise<AgentAccessRequestRecord[]>
   createGrant(input: AgentAccessGrantRecord): Promise<AgentAccessGrantRecord | null>
@@ -667,8 +682,15 @@ export interface ExternalResourceRepository {
   summarizeAgentAccess(agentIdentityIds: string[], now: Date): Promise<Map<string, AgentAccessSummary>>
   listActiveGrantsByConnection(connectionId: string): Promise<AgentAccessGrantRecord[]>
   revokeGrant(id: string, now: Date): Promise<boolean>
+  revokeGrantWithAudit(id: string, now: Date, audit: AgentAuditEventRecord): Promise<boolean>
   consumeGrant(id: string, now: Date): Promise<boolean>
   createTokenLease(input: ExternalTokenLeaseRecord): Promise<ExternalTokenLeaseRecord | null>
+  issueTokenLeaseWithAudit(
+    input: ExternalTokenLeaseRecord,
+    grantMode: string,
+    now: Date,
+    audit: AgentAuditEventRecord,
+  ): Promise<ExternalTokenLeaseRecord | null>
   listActiveTokenLeasesByGrant(grantId: string, now: Date): Promise<ExternalTokenLeaseRecord[]>
   listActiveTokenLeasesByBinding(bindingId: string, now: Date): Promise<ExternalTokenLeaseRecord[]>
   revokeTokenLease(id: string, now: Date): Promise<boolean>
@@ -823,8 +845,8 @@ export interface AgentIdentityAggregate {
 export interface AgentIdentityRepository {
   listPersonal(userId: string): Promise<AgentIdentityAggregate[]>
   listOrganization(organizationId: string): Promise<AgentIdentityAggregate[]>
-  listOwnedByOrganizations(
-    organizationIds: string[],
+  listOwned(
+    owner: AgentAuthorityInventoryScope,
     page: PaginationInput,
   ): Promise<PaginatedResult<AgentIdentityAggregate>>
   listAll(page: PaginationInput): Promise<PaginatedResult<AgentIdentityAggregate>>
@@ -854,8 +876,8 @@ export interface AgentIdentityRepository {
     approvedAt: Date
   }): Promise<AgentIdentityAggregate>
   revokeBinding(identityId: string, protocolAgentId: string, now: Date): Promise<boolean>
-  recoverIdentity(identityId: string, now: Date): Promise<boolean>
-  retireIdentity(identityId: string, now: Date): Promise<boolean>
+  recoverIdentity(identityId: string, now: Date, audit: AgentAuditEventRecord): Promise<boolean>
+  retireIdentity(identityId: string, now: Date, audit: AgentAuditEventRecord): Promise<boolean>
 }
 
 export interface AgentTokenRepository {

@@ -184,6 +184,29 @@ describe('AgentService', () => {
     expect(agentAudit.append).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'agent.capability_decided', result: 'denied', scopes: ['users:write'] }),
     )
+
+    vi.mocked(deps.agentIdentities.findActiveByProtocolAgent).mockResolvedValue({
+      identity: {
+        id: 'agid-2',
+        issuer: 'https://auth.example.com',
+        subject: 'agt-2',
+        name: 'Organization Agent',
+        ownerUserId: null,
+        ownerOrganizationId: 'org-1',
+        status: 'active',
+      },
+      bindings: [],
+    } as never)
+    await decideAgentApproval(deps, { agentId: 'agent-2', userCode: 'bad-code', action: 'deny' }, 'user-2')
+    expect(agentAudit.append).toHaveBeenLastCalledWith(
+      expect.objectContaining({ ownerKind: 'organization', ownerId: 'org-1' }),
+    )
+
+    vi.mocked(deps.agentIdentities.findActiveByProtocolAgent).mockResolvedValue(null)
+    await decideAgentApproval(deps, { agentId: 'agent-2', userCode: 'bad-code', action: 'deny' }, 'user-2')
+    expect(agentAudit.append).toHaveBeenLastCalledWith(
+      expect.objectContaining({ ownerKind: 'account', ownerId: 'user-2' }),
+    )
   })
 })
 

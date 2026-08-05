@@ -42,10 +42,9 @@ import type { Context } from 'hono'
 import { Hono } from 'hono'
 import { getActorUserId } from '../../middleware/authn'
 import {
-  getConsoleOrganizationScope,
-  requireConsoleOrganizationAccess,
-  requireConsoleOwnedOrganization,
-  resolveOrganizationInventoryScope,
+  managementOrganizationIds,
+  requireManagementOrganization,
+  requireManagementOrganizationOwner,
 } from '../../middleware/authz'
 import { getDeps } from '../../middleware/deps'
 import { readJson, readQuery } from '../validation'
@@ -57,7 +56,7 @@ managementApplicationAuthorizationsRoute.get('/', async (c) => {
   const query = readQuery(c, listApplicationAuthorizationsQuerySchema)
   return c.json(
     listApplicationAuthorizationsResponseSchema.parse(
-      await listApplicationAuthorizations(getDeps(c), query, getConsoleOrganizationScope(c) ?? undefined),
+      await listApplicationAuthorizations(getDeps(c), query, managementOrganizationIds(c)),
     ),
   )
 })
@@ -90,18 +89,13 @@ managementApplicationAuthorizationsRoute.get('/:authorizationId/revocation', asy
 managementApplicationsRoute.get('/', async (c) => {
   const query = readQuery(c, listApplicationsQuerySchema)
   return c.json(
-    await listApplications(
-      getDeps(c),
-      issuerFor(c),
-      query,
-      resolveOrganizationInventoryScope(c, query.ownerOrganizationId),
-    ),
+    await listApplications(getDeps(c), issuerFor(c), query, managementOrganizationIds(c, query.ownerOrganizationId)),
   )
 })
 
 managementApplicationsRoute.post('/', async (c) => {
   const body = await readJson(c, createApplicationRequestSchema)
-  requireConsoleOwnedOrganization(c, body.ownerOrganizationId)
+  requireManagementOrganizationOwner(c, body.ownerOrganizationId)
   const application = await createApplication(getDeps(c), issuerFor(c), body, getActorUserId(c))
   await publishWebhookEvent(getDeps(c), 'application.created', { application: applicationWebhookData(application) })
   c.header('Location', `/api/applications/${encodeURIComponent(application.id)}`)
@@ -116,7 +110,7 @@ managementApplicationsRoute.get('/:applicationId', async (c) => {
 managementApplicationsRoute.patch('/:applicationId', async (c) => {
   await requireApplicationAccess(c)
   const body = await readJson(c, updateApplicationRequestSchema)
-  if (body.ownerOrganizationId !== undefined) requireConsoleOwnedOrganization(c, body.ownerOrganizationId)
+  if (body.ownerOrganizationId !== undefined) requireManagementOrganizationOwner(c, body.ownerOrganizationId)
   const application = await updateApplication(getDeps(c), issuerFor(c), c.req.param('applicationId'), body)
   await publishWebhookEvent(getDeps(c), 'application.updated', { application: applicationWebhookData(application) })
   return c.json(application)
@@ -261,6 +255,6 @@ function issuerFor(c: Context) {
 
 async function requireApplicationAccess(c: Context, applicationId = c.req.param('applicationId')!) {
   const application = await getApplication(getDeps(c), issuerFor(c), applicationId)
-  requireConsoleOrganizationAccess(c, application.ownerOrganizationId)
+  requireManagementOrganization(c, application.ownerOrganizationId)
   return application
 }
