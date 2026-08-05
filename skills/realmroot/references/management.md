@@ -4,8 +4,9 @@ Use this reference only when the user explicitly requests Realmroot tenant
 administration.
 
 Realmroot is a built-in Resource Server in its own Resource Server inventory.
-Its Resources are authority boundaries: the Realm, one Organization, or one
-personal Account. AgentAuth enrollment establishes identity only. Management
+Its Resources are tenant boundaries: one Organization or one User. Realm
+administration remains a human platform permission rather than a tenant.
+AgentAuth enrollment establishes identity only. Management
 requests use a short-lived OAuth 2.0 access token bound to the selected Resource
 with DPoP.
 
@@ -16,7 +17,7 @@ Follow the normal Resource Server flow in
 
 1. discover the Resource Server whose `identifier` is `realmroot`;
 2. list its `links.resources` collection;
-3. select exactly one Realm, Organization, or Account Resource;
+3. select exactly one Organization or User Resource;
 4. inspect the intended operations in the live OpenAPI document;
 5. request the union of their declared OAuth scopes with the `access` command.
 
@@ -36,7 +37,6 @@ the OAuth token endpoint and manages DPoP access tokens locally.
 | Application consents | `/access/consents` | `applications` |
 | Resource Servers | `/resource-servers` | `resource-servers` |
 | Organizations | `/organizations` | `organizations` |
-| Roles and assignments | `/access/roles`, `/access/assignments` | `roles` |
 | Users and security state | `/users` | `users` |
 | Agents and Resource access | `/agents`, `/access/requests`, `/access/authorizations` | `agents` |
 | Connectors | `/connectors` | `connectors` |
@@ -47,6 +47,11 @@ the OAuth token endpoint and manages DPoP access tokens locally.
 
 The live OpenAPI operation is authoritative for its exact scope, request
 schema, ETag requirements, and response headers.
+
+Organization Role definitions and member Role replacement are human
+membership operations under `/organizations/{organizationId}/roles` and
+`/organizations/{organizationId}/members/{memberId}/roles`. Agents and
+workloads cannot receive or mutate Roles; they use direct scopes.
 
 ## Operate Resources
 

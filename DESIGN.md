@@ -88,10 +88,10 @@ layout:
     contentMaxWidth: 1160px
     contexts:
       - Define one shared navigation hierarchy: Dashboard; Identity; Develop; Authorization; Authentication; Configuration. Context changes visibility only and never renames a menu item, changes its icon, or moves it to another group.
-      - Realm shows Dashboard; Identity with Users, Agents, and Organizations; Develop with Applications, Resource servers, and Webhooks; Authorization with Roles and Role assignments; Authentication with Identity providers, Sign-in and registration, and Security policies; Configuration with Experience and Settings.
-      - Organization is available only when the Realm Developer policy makes that Organization's eligible members able to enter Console. It shows Dashboard; Identity with Users and Agents; Develop with Applications, Resource servers, and Webhooks; Authorization with Roles and Role assignments; Configuration with Settings.
+      - Realm shows Dashboard; Identity with Users, Agents, and Organizations; Develop with Applications, Resource servers, and Webhooks; Authentication with Identity providers, Sign-in and registration, and Security policies; Configuration with Experience and Settings.
+      - Organization is available only when the Realm Developer policy makes that Organization's eligible members able to enter Console. It adds Organization-scoped Better Auth Roles for human members.
       - Realm and Organization contexts reuse the same Users, Agents, Applications, Resource servers, and Roles pages, columns, and actions. Context never selects a separate data inventory.
-      - Organization context preselects its Organization on Users and its Owner on Agents, Applications, and Resource servers. Roles are Realm-global and never receive an Owner filter; their Assignments default Context to the active Organization. These are ordinary visible filters that authorized users can change or clear.
+      - Organization context preselects its Organization on Users and its Owner on Agents, Applications, and Resource servers. Human Roles are always scoped to that Organization.
     footer: Management API, Help and documentation
     detailPages:
       - Preserve the list-page breadcrumb and heading rhythm; do not stack a second object card below the page heading.
@@ -108,7 +108,7 @@ layout:
       - In flat row groups, the first row has no top border and the last row has no added bottom border; use one divider only between adjacent rows.
       - In every object list, place its stable product identifier directly below the name: Organization ID, Client ID, Role key, Provider ID, or Agent DID. Never use that line for type, ownership, issuer, or descriptive copy.
       - Put Owner and Created by near the right edge. Status comes before Owner; only Created, Updated, or Last activity may follow Owner. Without a time column, Owner is the final business column.
-      - Give list-shaped tasks their own table-backed Tab: Agent Hosts and requests, User sessions and authorized apps, Application credentials, Organization members, and Role assignments.
+      - Give list-shaped tasks their own table-backed Tab: Agent Hosts and requests, User sessions and authorized apps, Application credentials, Organization members, and member Roles.
       - Do not duplicate Applications or Resource servers inside Organization details. Browse them in the shared Develop lists with an Owner filter.
       - Treat Realm as the deployment, user pool, issuer, policy boundary, and trust root. It is not a company, team, or Organization.
       - Treat Organization as the generic shared identity and authorization context for a company, team, department, household, group, project, or individual.
@@ -118,14 +118,12 @@ layout:
       - An Organization may exist only for membership and shared authorization. Its members can manage technical resources only when the Realm Developer policy makes them eligible.
       - Agent is a first-class identity, never a technical resource. Every Agent belongs to either one User or one Organization. Realm lists show both owner type and owner; User and Organization details expose their respective Agent identities.
       - Agents are established only through Agent enrollment. Console never offers a New Agent action; it governs enrolled identities, Hosts, access requests, grants, and lifecycle.
-      - Separate Organization Access Level from authorization Roles. Owner, Administrator, Developer, and Member govern Organization administration and never imply business API permissions.
-      - Roles are reusable Realm-global permission definitions and never belong to an Organization. A Role may contain scopes from multiple Resource servers.
-      - Role Assignments bind a Role to a User, Agent, or workload identity. A null Organization context is Realm-wide; an Organization context limits the assignment to requests acting in that Organization.
-      - Keep a Realm-wide Role assignments list under Authorization with Subject, Role, Context, expiry, status, assignment actor, and update time. Organization context preselects its Context without changing the inventory or columns.
-      - Keep OAuth consent with Applications, contextual authority with Role assignments, and delegated authority with each Agent's access grants. Do not merge them into one generic authorization object.
-      - Permissions list scopes in one table with a Resource server column and resource-server filter. Assignments show Subject, Type, Context, expiry, and audit metadata; Activity records definition and assignment changes.
+      - Better Auth Organization Roles are the only human Role system. Each Role maps to scopes and is meaningful only within its Organization.
+      - Assign human Roles only through Better Auth membership. Agents, Applications, and workloads receive tenant-bound scopes directly and never receive or inherit Roles.
+      - Keep OAuth consent with Applications, human authority with Organization membership Roles, and delegated authority with each Agent's access grants.
+      - Role permissions list scopes with a Resource server column and filter. Membership changes and direct workload grants retain audit metadata.
       - Keep Role metadata editing separate from permission maintenance. New Roles create metadata only; permissions are added later through the dedicated permission selector. The selector supports keyword search and Resource server filtering. Permissions come from Resource server scopes and are never free-form.
-      - Keep ownership, access eligibility, and authority independent. A developer-enabled Organization may own an Application or Resource server; audience or access eligibility controls who may request access; Role assignments and Agent access grants control what an eligible actor may do.
+      - Keep ownership, access eligibility, and authority independent. Audience eligibility controls which tenant may request access; membership Roles and direct workload grants control what eligible actors may do.
       - Use Realm Organization pages for inventory, audit, and governance intervention. Day-to-day Organization management belongs in the Organization Console and Account Center.
       - Realm operators always receive complete identity and technical-resource inventories. Application and Resource server creation requires an explicit owner Organization and defaults to the private platform Organization created during bootstrap. Role creation has no Owner field.
       - Treat Agent Hosts as runtime credentials; never represent Native Resource servers as external account connections.

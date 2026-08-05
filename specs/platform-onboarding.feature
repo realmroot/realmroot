@@ -23,10 +23,11 @@ Feature: Platform bootstrap and route access
     And each build uses the same Wrangler configuration that its deployment uses
 
   @entrypoint:product-ui @journey:existing-d1-upgrade
-  Scenario: Existing deployments migrate without losing authorization data
-    Given an existing D1 database contains Applications, Resource servers, and dependent authorization records
+  Scenario: Existing deployments migrate to Better Auth Organization Roles
+    Given an existing D1 database contains Applications, Resource servers, Better Auth memberships, and legacy custom Role records
     When the operator applies the pending production migrations
-    Then the migration preserves every dependent record
+    Then the migration preserves Applications, Resource servers, and Better Auth memberships
+    And the legacy custom Role definitions and assignments are deliberately removed without translation
     And existing Applications and Resource servers receive the platform Organization as owner
     And the migrated database satisfies all foreign key constraints
 

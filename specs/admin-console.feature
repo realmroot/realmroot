@@ -173,14 +173,15 @@ Feature: Admin Console
     And applications and Resource servers remain in the shared Develop inventory
 
   @entrypoint:product-ui @journey:admin-create-role
-  Scenario: Roles page creates a role
-    When I create a role
+  Scenario: Organization Roles page creates a dynamic role
+    Given I selected an Organization where my membership grants roles:write
+    When I create a dynamic role
     Then it appears in authorization inventory
-    And the Realm-global role can include Resource-server-qualified permissions from multiple contracts
+    And the Organization Role can include Resource-server-qualified scopes from multiple eligible contracts
     And its stable Role key cannot be changed after creation
-    And another Role cannot reuse the same Realm-global key
-    And its detail exposes only backed permission, assignment, metadata, and lifecycle surfaces
-    And deleting a custom Role explicitly warns that its active and historical assignments are also removed
+    And another Role in the same Organization cannot reuse its key
+    And predefined Roles remain readable but cannot be modified or deleted
+    And an assigned dynamic Role cannot be deleted
 
   @entrypoint:product-ui @journey:admin-create-api-resource
   Scenario: Resource servers page creates a Resource server
@@ -207,15 +208,15 @@ Feature: Admin Console
     Then the Console marks it disabled and does not enable it automatically
 
   @entrypoint:product-ui @journey:admin-authorization-inventory
-  Scenario: Authorization inventory lists organizations, roles, and Resource servers
+  Scenario: Authorization inventory lists organizations, Organization Roles, and Resource servers
     Given authorization resources exist
     When I open the authorization pages
     Then organizations, roles, and Resource servers are listed
-    And Role assignments identify their subject and optional Organization context
-    And Role assignments remain a Realm-wide canonical inventory that can be filtered
-    And revoking an assignment creates its durable idempotent revocation state without deleting its history
+    And each Organization member exposes its sorted Role keys
+    And replacing member Roles rejects unknown and cross-Organization Role keys
+    And the last Owner cannot be removed by a Role replacement
     And switching Console context preserves the current authorization page
-    And each native Resource server lists Roles using its permissions and their active assignment counts
+    And each dynamic Role references only scopes from eligible Resource servers
 
   @entrypoint:product-ui @journey:admin-branding-settings
   Scenario: Color schemes and brand assets update hosted auth
@@ -290,11 +291,11 @@ Feature: Admin Console
 
   @entrypoint:product-ui @journey:admin-agent-governance-detail
   Scenario: Agent detail presents the stable identity governance model
-    Given a stable Agent identity has bound Hosts, Role assignments, access requests, and access grants
+    Given a stable Agent identity has bound Hosts, access requests, and access grants
     When I open the Agent detail in Console
-    Then its inventory summary uses real active Role and access-grant counts
-    And separate tabs show Agent installations, effective Roles, access requests, access grants, and audit activity
-    And those tabs compose canonical Role assignment, Agent access request, Agent access grant, and audit collections
+    Then its inventory summary uses real active access-grant counts
+    And separate tabs show Agent installations, access requests, access grants, and audit activity
+    And those tabs compose canonical Agent access request, Agent access grant, and audit collections
     And protocol Agent implementation records and credential material are not exposed
 
   @entrypoint:product-ui @journey:admin-application-oidc-claims

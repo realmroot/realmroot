@@ -115,7 +115,7 @@ token contains:
 - the stable Agent issuer and subject in `act`, classified by
   `sub_profile: ai_agent`;
 - the DPoP public-key thumbprint in `cnf.jkt`;
-- effective resource roles and the organization home space when applicable.
+- exact grant scopes and the User or Organization home-space tenant.
 
 The protected API validates token type, signature, issuer, audience, expiry,
 scope, and the DPoP proof including its access-token hash.

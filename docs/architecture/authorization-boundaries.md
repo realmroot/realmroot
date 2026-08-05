@@ -18,7 +18,7 @@ Resource server code + OpenAPI
         |
         | defines scopes and operation requirements
         v
-Realmroot discovery, roles, assignments, consent, and Agent grants
+Realmroot discovery, Organization Roles, consent, and Agent grants
         |
         | issues exact scopes plus identity and policy context
         v
@@ -67,7 +67,7 @@ Realmroot manages facts that can be asserted about a principal:
 
 - stable user, application, organization-member, and Agent identities;
 - organization context and home-space ownership;
-- roles assigned to those principals;
+- Better Auth Roles assigned only to human Organization memberships;
 - user consent and exact OAuth scopes;
 - controller-approved Agent access requests and grants;
 - the target account connected to an external resource;
@@ -136,76 +136,35 @@ Agent request, approval, and Agent grant token issuance boundaries. This makes
 stale Agent scope references fail closed instead of turning Realmroot into
 another editable scope registry.
 
-## Role
+## Organization Role
 
-A Realmroot role is a named set of references to scopes published by one API
-Resource. It is a grouping and claim-management tool, not a new permission
-definition.
+Better Auth Organization RBAC is Realmroot's only Role system. A Role belongs
+to exactly one Organization and is assigned only to human memberships through
+Better Auth's `member.role` field. A User may hold multiple Roles in one
+Organization and a different set in another Organization.
 
-Role scopes are validated against the resource's current OpenAPI contract. A
-role cannot add a scope to a token by itself, and a role claim cannot expand the
-token's `scope`. The resource server may use the role name as additional local
-policy context, but it must continue to enforce the exact token scope.
+Static `owner`, `admin`, `developer`, and `member` Roles are defined in code.
+Dynamic Roles are stored in Better Auth `organizationRole`. Both map to the same
+tenant-bound scope set. External Resource Server scopes are stored as encoded
+`{resourceId, scope}` keys after Realmroot verifies the resource, current
+OpenAPI scope catalog, and Organization eligibility.
 
-Roles have optional context:
+Roles are never assigned to Agents, Applications, or workloads. Those actors
+receive exact scopes directly from grants, consent, or token exchange. The
+common runtime decision is therefore:
 
-- `resourceId` binds the role to one API Resource and allows it to reference
-  that resource's scopes;
-- `organizationId` limits the role to one organization context;
-- `applicationId` limits the role to one application context;
-- no organization or application context means the role is global in that
-  dimension, although it may still belong to one API Resource.
+```text
+authorization context tenant equals target tenant
+and
+authorization context contains the required scope
+```
 
-The role's resource and subject contexts are immutable after creation so an
-existing assignment cannot silently change meaning.
+A User tenant has no Role concept; its owner receives only self scopes. Realm
+administrator status is a platform permission and is not another tenant.
 
-### Assignment Subjects
-
-The current model assigns roles to principals, not directly to an Organization:
-
-| Subject | Allowed role context | Meaning |
-| --- | --- | --- |
-| User | No organization/application binding; optionally resource-bound | A role that follows the user across matching token contexts. |
-| Application | Global or bound to that same application; optionally resource-bound | A role asserted for the client application principal. |
-| Organization member | Global or bound to that same organization; optionally resource-bound | A role held by one user's membership in that organization. |
-| Agent | Required API Resource binding; optionally bound to its home organization | A role asserted for or used to constrain that stable Agent. |
-| Organization | Not assignable | Organization-wide policy is expressed through membership, Agent home space, group claims, or resource-local policy. |
-
-This distinction matters because an organization membership is contextual: the
-same user can have different roles in different organizations. Assigning a role
-to the Organization itself would also encourage centralized organization-wide
-business policy that the resource server may be better placed to own.
-
-The Better Auth organization roles `owner`, `admin`, and `member` are a separate
-governance system. They control who may administer the organization, its
-members, and Agent identities. They are not API Resource roles and do not imply
-business scopes.
-
-Realmroot tenant administrator status and AgentAuth management capabilities are
-also separate control-plane authority. Neither should be interpreted as access
-to a protected business API.
-
-## Current Role Semantics
-
-Roles intentionally do not behave as an automatic centralized RBAC permission
-engine:
-
-- User, Application, and Organization Member assignments contribute matching
-  `roles` claims for the selected resource and context. They do not add to or
-  subtract from the OAuth scopes already approved for the token.
-- An Agent with no matching resource role may request any scope currently
-  declared by the resource OpenAPI contract and proceed to controller approval.
-- Once one or more matching resource roles are assigned to an Agent, the union
-  of their scopes becomes an additional eligibility ceiling on what that Agent
-  may request.
-- The controller-approved Agent grant still determines the exact scope set in
-  the token. A role assignment alone cannot issue a token.
-- The resource server may apply stricter local rules than either roles or
-  scopes. Realmroot claims never require it to allow a request.
-
-This asymmetry keeps roles optional. Teams can use them as reusable Agent scope
-guardrails and standard claims without making every business authorization
-change depend on a centralized role assignment.
+Role definitions and member Role replacement use the Realmroot Organization
+facade so validation and audit persistence commit atomically. Better Auth's
+native Role mutation endpoints are not public mutation paths.
 
 ## Known Implementation Boundary
 
@@ -236,7 +195,7 @@ location of subject authorization differ.
 | Scope names and operation mapping | Resource server OpenAPI | Resource server OpenAPI |
 | User/application authorization | Realmroot consent and issuer policy | Target authorization server |
 | Agent request and controller grant | Realmroot | Realmroot |
-| Agent role eligibility ceiling | Realmroot, when roles are assigned | Realmroot, when roles are assigned |
+| Agent scope boundary | Realmroot controller-approved grant | Realmroot controller-approved grant |
 | Final token issuer | Realmroot | Target authorization server |
 | Object and request enforcement | Resource server | Resource server |
 
@@ -251,8 +210,8 @@ request decision.
 
 - Resource-server code and OpenAPI must change together.
 - Realmroot can reject stale scopes but cannot repair a stale resource contract.
-- Roles remain references to resource-owned scopes rather than editable
-  permissions.
+- Organization Roles remain references to resource-owned scopes rather than
+  editable permission vocabularies.
 - Realmroot owns issuance policy and auditable delegation, not object-level
   access policy.
 - Resource servers must not treat `roles`, `groups`, `sub`, or `act` as expanding

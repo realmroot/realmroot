@@ -76,30 +76,31 @@ Feature: Unified Realmroot resource API
 
 
   @entrypoint:restish @journey:management-restish-user-crud
-  Scenario: An authorized Agent manages users through the unified API
-    Given the Agent has approved users:read and users:write scopes
-    When I create, update, list, and delete a user with Restish
-    Then the unified API applies each user change
+  Scenario: Workload scopes cannot become Realm administrator permission
+    Given an Agent has direct users:read and users:write scopes bound to a User or Organization tenant
+    When it attempts Realm-wide user management with Restish
+    Then collection reads are tenant-filtered
+    And Realm-wide user mutations are rejected
 
 
   @entrypoint:restish @journey:management-restish-organization-crud
-  Scenario: An authorized Agent manages organizations through the unified API
-    Given the Agent has approved organizations:read and organizations:write scopes
-    When I create, update, list, and delete an organization with Restish
-    Then the unified API applies each organization change
+  Scenario: Organization Agents manage only their tenant through the unified API
+    Given an Agent has organizations:read and organizations:write scopes bound to one Organization
+    When it lists, reads, or updates organizations with Restish
+    Then the unified API exposes only that Organization
+    And Organization creation and deletion remain human Realm and Owner operations
     And Organization, member, and invitation creation return their canonical locations
 
 
   @entrypoint:restish @journey:management-restish-role-crud
-  Scenario: An authorized Agent manages roles and their scope eligibility through the unified API
-    Given the Agent has approved roles:read and roles:write scopes
-    When I create, update, list, and delete a role and replace its OpenAPI scope references with Restish
+  Scenario: An authorized Organization user manages dynamic Roles through the unified API
+    Given the Organization membership maps Better Auth Roles to roles:read and roles:write scopes
+    When I create, update, list, and delete a Role with its OpenAPI scope references
     Then the unified API applies each role change
     And each role scope must exist in its business resource server OpenAPI contract
-    And complete permission replacement uses conditional requests to prevent lost updates
     And Role creation returns its canonical location
-    And Role assignment creation returns its canonical location and duplicate active assignments conflict
-    And Role assignment revocation is an idempotent child resource
+    And member Role replacement uses the Organization member Roles child resource
+    And Agents and workloads cannot receive Organization Roles
 
 
   @entrypoint:restish @journey:management-restish-api-resource-crud
@@ -146,9 +147,9 @@ Feature: Unified Realmroot resource API
 
   @entrypoint:restish @journey:management-canonical-authority-inventory
   Scenario: Authority records keep one canonical URI across product surfaces
-    Given Role assignments and Agent access records exist for personal and Organization-owned subjects
+    Given Organization memberships and Agent access records exist for User and Organization tenants
     When a Realm operator, Organization developer, or Account Center member reads authority inventory
-    Then each Role assignment, Agent access request, and Agent access grant has one canonical API URI
+    Then each Organization Role, member Role collection, Agent access request, and Agent access grant has one canonical API URI
     And filters only narrow the inventory and are never required to establish resource ownership
     And the server limits each principal to the records that principal may inspect
     And Account Center does not publish duplicate Organization authority collection paths
