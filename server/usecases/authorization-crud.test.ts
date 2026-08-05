@@ -1,4 +1,5 @@
 import { userManagementActor } from '@server/domain/management-authorization'
+import { platformOrganization } from '@server/domain/platform-organization'
 import {
   addMember,
   archiveResource,
@@ -322,6 +323,24 @@ describe('authorization CRUD and assignment policy', () => {
         connectorId: null,
         description: null,
         enabled: true,
+      }),
+    )
+    await createResource(
+      deps,
+      {
+        identifier: 'audited-native',
+        name: 'Audited native',
+        resourceUrl: resource.resourceUrl,
+      },
+      userManagementActor('admin-1'),
+    )
+    expect(authorization.createResource).toHaveBeenLastCalledWith(
+      expect.objectContaining({ identifier: 'audited-native' }),
+      expect.objectContaining({
+        action: 'api_resource.created',
+        controllerUserId: 'admin-1',
+        ownerOrganizationId: platformOrganization.id,
+        resourceId: expect.stringMatching(/^res_/),
       }),
     )
     await createResource(deps, {
