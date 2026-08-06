@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ApplicationsPage } from '@/features/console/extracted/applications/applications-list'
+import { ApplicationsPage } from '@/features/applications/management/applications-list'
 import { queryClient } from '@/router'
 
 globalThis.ResizeObserver ??= class ResizeObserver {
@@ -27,6 +27,29 @@ import {
 } from './console.test-utils'
 
 describe('admin console applications-list', () => {
+  it('binds Organization Workspace inventory and creation to its Organization [spec: admin-console/organization-console-resource-boundary]', async () => {
+    const requests: string[] = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const request = input instanceof Request ? input : null
+      const url = request ? new URL(request.url) : new URL(String(input), window.location.origin)
+      requests.push(`${url.pathname}${url.search}`)
+      if (url.pathname === '/api/applications') {
+        return Promise.resolve(jsonResponse({ applications: [application], pagination }))
+      }
+      return consoleSharedFetch(input, init)
+    })
+
+    renderWithQuery(<ApplicationsPage organizationId="org-1" />)
+
+    const applicationLink = await screen.findByRole('link', { name: 'Customer portal' })
+    expect(applicationLink.getAttribute('href')).toBe('/organizations/org-1/applications/app-1')
+    expect(screen.queryByLabelText('Filter owner')).toBeNull()
+    expect(requests).toContain('/api/applications?ownerOrganizationId=org-1')
+    expect(requests).toContain('/api/users?limit=100&organizationId=org-1')
+    fireEvent.click(screen.getByRole('button', { name: 'New application' }))
+    expect(screen.queryByLabelText('Owner Organization')).toBeNull()
+  })
+
   it('renders application rows and posts validated create input [spec: admin-console/admin-application-inventory]', async () => {
     const requests: Array<{ url: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {

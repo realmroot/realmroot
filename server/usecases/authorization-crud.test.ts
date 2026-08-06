@@ -104,7 +104,8 @@ describe('authorization CRUD and assignment policy', () => {
     })
   })
 
-  it('persists one immutable built-in Realmroot Resource Server', async () => {
+  it(`persists one immutable built-in Realmroot Resource Server and reconciles its deployment URL
+      [spec: management-api/management-realmroot-resource-server-origin]`, async () => {
     const authorization = repository()
     authorization.createResource.mockImplementation(async (input) => ({
       ...input,
@@ -125,6 +126,27 @@ describe('authorization CRUD and assignment policy', () => {
 
     authorization.findResource.mockResolvedValue(created)
     await expect(ensureRealmrootResourceServer(deps, 'https://auth.example.com')).resolves.toBe(created)
+    expect(authorization.updateResource).not.toHaveBeenCalled()
+
+    const stale = { ...created, resourceUrl: 'https://previous.example.com/api' }
+    const reconciled = { ...created, resourceUrl: 'https://auth.example.com/api' }
+    authorization.findResource.mockResolvedValueOnce(stale).mockResolvedValueOnce(reconciled)
+    await expect(ensureRealmrootResourceServer(deps, 'https://auth.example.com')).resolves.toBe(reconciled)
+    expect(authorization.updateResource).toHaveBeenCalledWith('res_realmroot', {
+      resourceUrl: 'https://auth.example.com/api',
+    })
+
+    authorization.findResource.mockResolvedValueOnce(stale)
+    authorization.updateResource.mockResolvedValueOnce(false)
+    await expect(ensureRealmrootResourceServer(deps, 'https://auth.example.com')).rejects.toThrow(
+      'could not be reconciled',
+    )
+
+    authorization.findResource.mockResolvedValueOnce(stale).mockResolvedValueOnce(stale)
+    await expect(ensureRealmrootResourceServer(deps, 'https://auth.example.com')).rejects.toThrow(
+      'could not be reconciled',
+    )
+
     await expect(updateResource(deps, created.id, { name: 'Changed' })).rejects.toThrow('system-managed')
     await expect(archiveResource(deps, created.id, actor)).rejects.toThrow('system-managed')
     await expect(restoreResource(deps, created.id, actor)).rejects.toThrow('system-managed')
@@ -132,7 +154,6 @@ describe('authorization CRUD and assignment policy', () => {
 
     for (const invalid of [
       { ...created, identifier: 'changed' },
-      { ...created, resourceUrl: 'https://other.example.com/api' },
       { ...created, ownerOrganizationId: 'org-other' },
       { ...created, connectorId: 'connector-1' },
     ]) {

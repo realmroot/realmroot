@@ -38,7 +38,7 @@ afterEach(() => {
 })
 
 describe('deployment settings operations', () => {
-  it('persists independent Organization creation and Console access policies', async () => {
+  it('persists Organization creation without exposing obsolete Organization Console controls', async () => {
     const writes: Array<{ body: unknown; path: string }> = []
     vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
       const request = requestDetails(input, init)
@@ -69,12 +69,10 @@ describe('deployment settings operations', () => {
     expect(screen.getByRole('button', { name: 'Save changes' })).toHaveProperty('disabled', false)
     fireEvent.click(await screen.findByRole('combobox', { name: 'Approved users' }))
     fireEvent.click(await screen.findByRole('option', { name: /Jane Doe/ }))
-    fireEvent.change(screen.getByLabelText('Console access'), { target: { value: 'Selected organizations' } })
-    fireEvent.click(await screen.findByRole('combobox', { name: 'Selected organizations' }))
-    fireEvent.click(await screen.findByRole('option', { name: /Acme Inc/ }))
-    fireEvent.change(screen.getByLabelText('Eligible access levels'), {
-      target: { value: 'Owner, Administrator, Developer' },
-    })
+    expect(screen.getByText('Realm platform administrators only')).toBeTruthy()
+    expect(screen.queryByLabelText('Console access')).toBeNull()
+    expect(screen.queryByLabelText('Eligible access levels')).toBeNull()
+    expect(screen.queryByRole('combobox', { name: 'Selected organizations' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
 
     await waitFor(() => expect(writes).toHaveLength(2))
@@ -86,14 +84,12 @@ describe('deployment settings operations', () => {
       {
         path: '/api/realm/developer-console-access-policy',
         body: {
-          mode: 'selected_organizations',
-          eligibleAccessLevels: ['owner', 'admin', 'developer'],
-          selectedOrganizationIds: ['org-1'],
+          mode: 'realm_operators',
+          eligibleAccessLevels: ['owner', 'admin'],
+          selectedOrganizationIds: [],
         },
       },
     ])
-    expect((await screen.findAllByText('Selected organizations')).length).toBeGreaterThan(0)
-    expect(screen.getAllByText('Acme Inc.').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Jane Doe').length).toBeGreaterThan(0)
   })
 
@@ -136,7 +132,7 @@ describe('deployment settings operations', () => {
     await waitFor(() => expect(screen.queryByRole('heading', { name: 'Configure email delivery' })).toBeNull())
   })
 
-  it('renders selected policy members with fallback labels and saves the owner-only policy variants', async () => {
+  it('renders approved-user fallback labels while keeping Console access read-only', async () => {
     const nameOnlyOrganization = { ...organization, displayName: null, name: 'Acme Legal' }
     const displayNameUser = { ...user, displayName: 'Jane Display' }
     let emptySelections = false
@@ -170,25 +166,21 @@ describe('deployment settings operations', () => {
     })
 
     const { unmount } = renderWithQuery(<SettingsPage section="developer" />)
-    expect(await screen.findByRole('combobox', { name: 'Selected organizations' })).toBeTruthy()
-    expect(screen.getByRole('combobox', { name: 'Selected organizations' }).textContent).toContain('Acme Legal')
+    expect(await screen.findByText('Realm platform administrators only')).toBeTruthy()
     expect(screen.getByRole('combobox', { name: 'Approved users' }).textContent).toContain('Jane Display')
-    expect(screen.getByLabelText('Eligible access levels')).toHaveProperty('value', 'Owner only')
     fireEvent.change(await screen.findByLabelText('Organization creation'), {
       target: { value: 'Any verified user' },
     })
     expect(screen.queryByRole('combobox', { name: 'Approved users' })).toBeNull()
-    fireEvent.change(screen.getByLabelText('Console access'), { target: { value: 'All organizations' } })
     expect(screen.queryByRole('combobox', { name: 'Selected organizations' })).toBeNull()
-    fireEvent.change(screen.getByLabelText('Eligible access levels'), { target: { value: 'Owner only' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
 
     unmount()
     emptySelections = true
     queryClient.clear()
     renderWithQuery(<SettingsPage section="developer" />)
-    expect(await screen.findByText('missing-org')).toBeTruthy()
-    expect(screen.getByText('missing-user')).toBeTruthy()
+    expect(await screen.findByText('missing-user')).toBeTruthy()
+    expect(screen.queryByText('missing-org')).toBeNull()
   })
 
   it('retries all settings resources after a failed query and keeps General editing inline', async () => {

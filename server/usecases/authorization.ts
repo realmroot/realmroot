@@ -233,28 +233,48 @@ export async function createResource(deps: Deps, input: CreateApiResourceRequest
 }
 
 export async function ensureRealmrootResourceServer(deps: Deps, apiOrigin: string) {
-  const resourceUrl = realmrootResourceUrl(apiOrigin)
-  const existing = await deps.authorization.findResource(realmrootResourceServer.id)
-  if (existing) {
-    if (
-      existing.identifier !== realmrootResourceServer.identifier ||
-      existing.resourceUrl !== resourceUrl ||
-      existing.ownerOrganizationId !== realmrootResourceServer.ownerOrganizationId ||
-      existing.connectorId !== null
-    ) {
-      throw new Error('The persisted Realmroot Resource Server does not match this deployment.')
-    }
-    return existing
-  }
+  const existing = await reconcileRealmrootResourceServer(deps, apiOrigin)
+  if (existing) return existing
   return deps.authorization.createResource({
     ...realmrootResourceServer,
-    resourceUrl,
+    resourceUrl: realmrootResourceUrl(apiOrigin),
     connectorId: null,
     authorizationDetails: [],
     enabled: true,
     accessEligibility: { mode: 'realm', organizationIds: [] },
     availableToAgents: true,
   })
+}
+
+export async function reconcileRealmrootResourceServer(deps: Deps, apiOrigin: string) {
+  const resourceUrl = realmrootResourceUrl(apiOrigin)
+  const existing = await deps.authorization.findResource(realmrootResourceServer.id)
+  if (existing) {
+    assertRealmrootResourceServerIdentity(existing)
+    if (existing.resourceUrl === resourceUrl) return existing
+    const updated = await deps.authorization.updateResource(existing.id, { resourceUrl })
+    if (!updated) throw new Error('The persisted Realmroot Resource Server could not be reconciled.')
+    const reconciled = await deps.authorization.findResource(existing.id)
+    if (!reconciled) {
+      throw new Error('The persisted Realmroot Resource Server could not be reconciled.')
+    }
+    assertRealmrootResourceServerIdentity(reconciled)
+    if (reconciled.resourceUrl !== resourceUrl) {
+      throw new Error('The persisted Realmroot Resource Server could not be reconciled.')
+    }
+    return reconciled
+  }
+  return null
+}
+
+function assertRealmrootResourceServerIdentity(resource: ApiResourceResponse) {
+  if (
+    resource.identifier !== realmrootResourceServer.identifier ||
+    resource.ownerOrganizationId !== realmrootResourceServer.ownerOrganizationId ||
+    resource.connectorId !== null
+  ) {
+    throw new Error('The persisted Realmroot Resource Server does not match this deployment.')
+  }
 }
 
 export function listResources(deps: Deps, pagination: PaginationQuery) {

@@ -1,5 +1,7 @@
 import { useEffect } from 'react'
-import { consoleQueryKeys, createApplication, getAdminReadiness } from '@/lib/api/management'
+import { ApplicationTypeCards, createApplicationGrantTypes } from '@/features/management/create-dialogs'
+import { SwitchRow } from '@/features/management/dialogs'
+import { ResourcePage, SetupChecklist } from '@/features/management/resource-components'
 import {
   Badge,
   Button,
@@ -20,11 +22,9 @@ import {
   useQuery,
   useQueryClient,
   useState,
-} from '../console-shared'
-import { ApplicationTypeCards, createApplicationGrantTypes } from '../helpers/helpers-create'
-import { SwitchRow } from '../helpers/helpers-dialogs'
-import { ResourcePage, SetupChecklist } from '../helpers/helpers-resource'
-import { parseForm, useAdminMutation } from '../helpers/helpers-utils'
+} from '@/features/management/shared'
+import { parseForm, useAdminMutation } from '@/features/management/utils'
+import { consoleQueryKeys, createApplication, getAdminReadiness } from '@/lib/api/management'
 
 export function ConsoleOnboardingPage() {
   const navigate = useNavigate()

@@ -6,6 +6,15 @@ import { TextInput } from '@/components/product-form'
 import { hasSettingsChanges, SettingsForm, SettingsFormField, SettingsFormSection } from '@/components/settings-form'
 import { Field } from '@/components/ui/field'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { useConnectorPreviewProviders } from '@/features/management/dialogs'
+import {
+  HostedAuthPreview,
+  SignInExperienceEditorLayout,
+  SignInExperiencePreviewPanel,
+} from '@/features/management/previews'
+import { ResourcePage } from '@/features/management/resource-components'
+import type { HostedAuthPreviewState } from '@/features/management/shared'
+import { customCssProperties, nullableString, useAdminMutation } from '@/features/management/utils'
 import {
   consoleQueryKeys,
   getBrandingSettings,
@@ -15,15 +24,6 @@ import {
   updateSignInSettings,
 } from '@/lib/api/management'
 import { tt } from '@/lib/i18n'
-import type { HostedAuthPreviewState } from '../../console-shared'
-import { useConnectorPreviewProviders } from '../../helpers/helpers-dialogs'
-import {
-  HostedAuthPreview,
-  SignInExperienceEditorLayout,
-  SignInExperiencePreviewPanel,
-} from '../../helpers/helpers-preview'
-import { ResourcePage } from '../../helpers/helpers-resource'
-import { customCssProperties, nullableString, useAdminMutation } from '../../helpers/helpers-utils'
 
 export type ExperienceSection = 'theme' | 'assets' | 'legal'
 type ThemeId = 'aqua' | 'sage' | 'indigo' | 'custom'

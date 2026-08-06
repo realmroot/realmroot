@@ -5,24 +5,21 @@ import { LinkButton } from '@/components/link-button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { PageHeader } from '@/components/ui/page-header'
-import type { AdminDashboard, OrganizationDashboard } from '@/lib/api/management'
-import { consoleQueryKeys, getAdminDashboard, getOrganizationDashboard } from '@/lib/api/management'
-import { useConsoleScope } from '@/lib/console-context'
+import { ErrorState, LoadingState } from '@/features/management/dialogs'
+import type { AdminDashboard } from '@/lib/api/management'
+import { consoleQueryKeys, getAdminDashboard } from '@/lib/api/management'
 import { tt } from '@/lib/i18n'
-import { ErrorState, LoadingState } from '../helpers/helpers-dialogs'
 
 export function ConsoleDashboardPage() {
-  const { organizationId: context } = useConsoleScope()
-  const query = useQuery<AdminDashboard | OrganizationDashboard>({
-    queryKey: [...consoleQueryKeys.dashboard, { organizationId: context }],
-    queryFn: () => (context ? getOrganizationDashboard(context) : getAdminDashboard()),
+  const query = useQuery<AdminDashboard>({
+    queryKey: consoleQueryKeys.dashboard,
+    queryFn: getAdminDashboard,
   })
   if (query.isLoading) return <LoadingState label={tt('Loading Console dashboard')} />
   if (query.isError) return <ErrorState error={query.error} onRetry={() => query.refetch()} />
   const dashboard = query.data
   if (!dashboard) return null
-  if (context) return <OrganizationDashboardView context={context} dashboard={dashboard as OrganizationDashboard} />
-  const realmDashboard = dashboard as AdminDashboard
+  const realmDashboard = dashboard
 
   return (
     <>
@@ -52,87 +49,6 @@ export function ConsoleDashboardPage() {
         <RealmReadiness dashboard={realmDashboard} />
         <ConfigurationGaps dashboard={realmDashboard} />
       </div>
-    </>
-  )
-}
-
-function OrganizationDashboardView({ context, dashboard }: { context: string; dashboard: OrganizationDashboard }) {
-  const nextSteps: Array<{ href: string; icon: ReactNode; label: string; meta: string }> = []
-  if (dashboard.applications.pagination.total === 0)
-    nextSteps.push({
-      href: '/console/applications',
-      icon: <AppWindow />,
-      label: tt('Register an application'),
-      meta: tt('This Organization has no OIDC client yet.'),
-    })
-  if (dashboard.apiResources.pagination.total === 0)
-    nextSteps.push({
-      href: '/console/api-resources',
-      icon: <Server />,
-      label: tt('Register a resource server'),
-      meta: tt('This Organization has no protected API yet.'),
-    })
-  return (
-    <>
-      <PageHeader
-        description={tt(
-          'Review people, Agent identities, development inventory, and contextual authority for this Organization.',
-        )}
-        title={dashboard.organization.displayName ?? dashboard.organization.name}
-      />
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <MetricCard detail={tt('Organization members')} label={tt('Users')} value={dashboard.users.pagination.total} />
-        <MetricCard
-          detail={tt('Owned OIDC clients')}
-          label={tt('Applications')}
-          value={dashboard.applications.pagination.total}
-        />
-        <MetricCard
-          detail={tt('Owned protected APIs')}
-          label={tt('Resource servers')}
-          value={dashboard.apiResources.pagination.total}
-        />
-        <MetricCard
-          detail={tt('Organization-owned identities')}
-          label={tt('Agents')}
-          value={dashboard.agents.pagination.total}
-        />
-      </div>
-      <Card className="border shadow-none ring-0">
-        <CardHeader>
-          <CardTitle>{tt('Next steps')}</CardTitle>
-          <CardDescription>{tt('Actionable gaps in this Organization context.')}</CardDescription>
-        </CardHeader>
-        <CardContent className="grid p-0">
-          {nextSteps.length ? (
-            nextSteps.map((item) => (
-              <div className="consoleAttentionRow" key={item.label}>
-                <span className="consoleAttentionIcon">{item.icon}</span>
-                <div>
-                  <strong>{item.label}</strong>
-                  <span>{item.meta}</span>
-                </div>
-                <LinkButton
-                  aria-label={tt('Open {{item}}', { item: item.label })}
-                  href={`${item.href}?context=${encodeURIComponent(context)}`}
-                  size="icon-sm"
-                  variant="ghost"
-                >
-                  <ArrowRight />
-                </LinkButton>
-              </div>
-            ))
-          ) : (
-            <div className="consoleDashboardClearState">
-              <UsersRound />
-              <div>
-                <strong>{tt('Development inventory is ready')}</strong>
-                <span>{tt('Core applications, APIs, and authorization assignments are present.')}</span>
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
     </>
   )
 }

@@ -136,8 +136,8 @@ Feature: Account Center
   Scenario: Organization members manage their shared context
     When I create an Organization from Account Center
     Then I become its Owner
-    And I can open the Organization detail with its members and pending invitations
-    And its Agent identities, my Better Auth membership Roles, and active Agent access grants come from canonical resource collections shared with Console
+    And I can open its route-backed Organization Workspace with members, Roles, Applications, Resource Servers, Agents, Webhooks, activity, and settings
+    And its Agent identities, my Better Auth membership Roles, and active Agent access grants come from canonical resource collections
     And I can switch the active Organization without changing Developer Console eligibility
     When I update its profile or invite a member with one or more Roles
     Then the Organization detail reflects the change
@@ -146,8 +146,8 @@ Feature: Account Center
   Scenario: A consumer Organization does not imply Developer Console access
     Given Organization creation is allowed but Developer Console remains restricted to Realm operators
     When I create and manage an Organization from Account Center
-    Then I can manage its profile and members without an Open Console action
-    And its membership grants no access to technical resource management APIs
+    Then I can manage its authorized Organization resources without an Open Console action
+    And its membership grants no Realm platform administration
 
   @entrypoint:product-ui @journey:agent-approval
   Scenario: Delegated Agents receive identity separately from Resource authority

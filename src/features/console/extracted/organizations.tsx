@@ -23,6 +23,17 @@ import {
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { SimpleCreateDialog } from '@/features/management/create-dialogs'
+import { ErrorState, LoadingState, StatusBadge } from '@/features/management/dialogs'
+import {
+  DetailTabs,
+  ListToolbar,
+  navigateConsoleTab,
+  organizationDetailTabs,
+  ResourcePage,
+} from '@/features/management/resource-components'
+import type { OrganizationDetailSection } from '@/features/management/shared'
+import { formatDate, parseForm, useAdminMutation } from '@/features/management/utils'
 import {
   cancelOrganizationInvitation,
   consoleQueryKeys,
@@ -42,17 +53,6 @@ import {
   updateOrganization,
 } from '@/lib/api/management'
 import { tt } from '@/lib/i18n'
-import type { OrganizationDetailSection } from '../console-shared'
-import { SimpleCreateDialog } from '../helpers/helpers-create'
-import { ErrorState, LoadingState, StatusBadge } from '../helpers/helpers-dialogs'
-import {
-  DetailTabs,
-  ListToolbar,
-  navigateConsoleTab,
-  organizationDetailTabs,
-  ResourcePage,
-} from '../helpers/helpers-resource'
-import { formatDate, parseForm, useAdminMutation } from '../helpers/helpers-utils'
 
 export function OrganizationsPage() {
   const router = useRouter()
@@ -137,7 +137,7 @@ export function OrganizationsPage() {
             visibleOrganizations.map((organization) => (
               <TableRow key={organization.id}>
                 <TableCell>
-                  <a className="font-medium hover:underline" href={`/console/organizations/${organization.id}`}>
+                  <a className="font-medium hover:underline" href={`/organizations/${organization.id}/overview`}>
                     {organization.displayName ?? organization.name}
                   </a>
                   <div className="font-mono text-xs text-muted-foreground">{organization.id}</div>
@@ -160,7 +160,7 @@ export function OrganizationsPage() {
                 <TableCell className="text-right">
                   <a
                     aria-label={tt('Open {{name}}', { name: organization.name })}
-                    href={`/console/organizations/${organization.id}`}
+                    href={`/organizations/${organization.id}/overview`}
                   >
                     →
                   </a>
@@ -379,7 +379,9 @@ export function OrganizationDetailPage({
           </div>
           <div className="flex flex-wrap gap-2">
             <Button asChild variant="outline">
-              <a href={`/console?context=${encodeURIComponent(organization.id)}`}>{tt('Open Organization context')}</a>
+              <Link params={{ organizationId: organization.id }} to="/organizations/$organizationId/overview">
+                {tt('Open Organization Workspace')}
+              </Link>
             </Button>
           </div>
         </header>

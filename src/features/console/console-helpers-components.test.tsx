@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Dialog } from '@/components/ui/dialog'
 import { Table, TableBody } from '@/components/ui/table'
-import { ConfirmDialog, FormDialog, SimpleCreateDialog } from '@/features/console/helpers/helpers-create'
+import { ConfirmDialog, FormDialog, SimpleCreateDialog } from '@/features/management/create-dialogs'
 import {
   BanUserDialog,
   CopyButton,
@@ -19,13 +19,14 @@ import {
   StatusBadge,
   SummaryRow,
   SwitchRow,
-} from '@/features/console/helpers/helpers-dialogs'
+} from '@/features/management/dialogs'
 import {
   AssetUploadControl,
   AssetUploadPreview,
   AuthorizationForm,
   AuthorizationRows,
-} from '@/features/console/helpers/helpers-forms'
+} from '@/features/management/forms'
+import { HostedAuthPreview, PreviewBrandMark } from '@/features/management/hosted-auth-preview'
 import {
   ChangesSection,
   PayloadBlock,
@@ -35,7 +36,7 @@ import {
   WebhookEndpointRow,
   WebhookRequestDialog,
   WebhookSecretDisclosureDialog,
-} from '@/features/console/helpers/helpers-preview'
+} from '@/features/management/previews'
 import {
   DataTablePanel,
   DetailTabs,
@@ -44,8 +45,7 @@ import {
   ResourcePage,
   RoutedSettingsTabs,
   SetupChecklist,
-} from '@/features/console/helpers/helpers-resource'
-import { HostedAuthPreview, PreviewBrandMark } from '@/features/console/helpers/hosted-auth-preview'
+} from '@/features/management/resource-components'
 import {
   webhookEndpoint as webhookEndpointFixture,
   webhookRequest as webhookRequestFixture,

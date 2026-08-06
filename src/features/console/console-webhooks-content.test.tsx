@@ -1,9 +1,8 @@
 import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ApiResourcesPage } from '@/features/console/extracted/api-resources'
 import { OrganizationDetailPage, OrganizationsPage } from '@/features/console/extracted/organizations'
-import { RolesPage } from '@/features/console/extracted/roles'
-import { ConsoleScopeProvider } from '@/lib/console-context'
+import { ApiResourcesPage } from '@/features/resource-servers/management-resource-servers'
+import { RolesPage } from '@/features/roles/management-roles'
 import { queryClient } from '@/router'
 import {
   apiResource,
@@ -67,11 +66,7 @@ describe('admin console authorization creation and Organization detail', () => {
     await waitFor(() => expect(requests).toHaveLength(1))
 
     unmount()
-    renderWithQuery(
-      <ConsoleScopeProvider value={{ organizationId: 'org-1', realmOperator: true }}>
-        <RolesPage />
-      </ConsoleScopeProvider>,
-    )
+    renderWithQuery(<RolesPage organizationId="org-1" />)
     expect(await screen.findByText('Admin')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'New role' }))
     fireEvent.change(await screen.findByLabelText('Key'), { target: { value: 'auditor' } })

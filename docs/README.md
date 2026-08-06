@@ -23,6 +23,9 @@ system, not as a second copy of executable contracts or product behaviour.
   resource-server enforcement.
 - [Tenancy](architecture/tenancy.md): the deployment, user-pool, and isolation
   boundary.
+- [Tenant ownership and management surfaces](architecture/tenant-ownership-and-management-surfaces.md):
+  User and Organization resource ownership plus the Account Center,
+  Organization Workspace, and Realm Console separation.
 - [Security controls](architecture/security-controls.md): deployment security
   policy and WebAuthn configuration.
 

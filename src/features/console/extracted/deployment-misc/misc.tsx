@@ -1,6 +1,6 @@
-import { tt } from '../../console-shared'
-import { SettingsSections, TokenCustomizationCard } from '../../helpers/helpers-preview'
-import { ResourcePage } from '../../helpers/helpers-resource'
+import { SettingsSections, TokenCustomizationCard } from '@/features/management/previews'
+import { ResourcePage } from '@/features/management/resource-components'
+import { tt } from '@/features/management/shared'
 
 export function CustomizeJwtPage() {
   return (

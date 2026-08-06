@@ -13,10 +13,10 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { lines, ResourcePage } from '@/features/management/resource-components'
+import { useAdminMutation } from '@/features/management/utils'
 import { consoleQueryKeys, getSecurityPolicy, updateSecurityPolicy } from '@/lib/api/management'
 import { tt } from '@/lib/i18n'
-import { lines, ResourcePage } from '../helpers/helpers-resource'
-import { useAdminMutation } from '../helpers/helpers-utils'
 
 type SecuritySection = 'sign-in' | 'mfa' | 'abuse'
 type CaptchaProvider = 'turnstile' | 'hcaptcha' | 'recaptcha-enterprise'

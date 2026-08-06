@@ -3,7 +3,6 @@ import {
   archiveResource,
   createResource,
   deleteResource,
-  ensureRealmrootResourceServer,
   getResourceContract,
   restoreResource,
   updateResource,
@@ -27,15 +26,8 @@ import { authorizedOrganizationIds, authorizeOrganization } from '../../middlewa
 import { getDeps } from '../../middleware/deps'
 import { readJson, readQuery } from '../validation'
 
-export function createManagementApiResourcesRoute(canonicalOrigin?: string) {
+export function createManagementApiResourcesRoute() {
   const app = new Hono()
-
-  if (canonicalOrigin) {
-    app.use('*', async (c, next) => {
-      await ensureRealmrootResourceServer(getDeps(c), canonicalOrigin)
-      await next()
-    })
-  }
 
   app.get('/', async (c) => {
     const principal = getPrincipal(c).agent

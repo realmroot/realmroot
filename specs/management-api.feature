@@ -21,6 +21,14 @@ Feature: Unified Realmroot resource API
     And Restish can validate structured authorization detail request bodies without the root OpenAPI document
 
 
+  @entrypoint:restish @journey:management-realmroot-resource-server-origin
+  Scenario: The built-in Realmroot Resource Server follows deployment configuration
+    Given the deployment canonical origin changed since the Resource Server was persisted
+    When an authorized caller lists Resource Servers
+    Then the built-in Realmroot Resource Server uses the current deployment API URL
+    And its system identifier, platform owner, and native authorization model remain immutable
+
+
   @entrypoint:restish @journey:management-restish-command-surface
   Scenario: Restish keeps routine resource operations on its generic HTTP surface
     Given Restish is connected to the unified Realmroot API

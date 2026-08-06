@@ -10,6 +10,19 @@ import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { BanUserDialog, DangerConfirmDialog, ErrorState, LoadingState } from '@/features/management/dialogs'
+import { navigateConsoleTab } from '@/features/management/resource-components'
+import type { UserDetailSection } from '@/features/management/shared'
+import {
+  formatDate,
+  formatRealmAccess,
+  hasRealmAdminAccess,
+  nullableString,
+  parseForm,
+  setRealmAdminAccess,
+  useAdminMutation,
+  userDisplayName,
+} from '@/features/management/utils'
 import { consoleQueryKeys } from '@/lib/api/console-query-keys'
 import {
   banUser,
@@ -27,24 +40,9 @@ import {
   unbanUser,
   updateUser,
 } from '@/lib/api/management'
-import { useConsoleScope } from '@/lib/console-context'
 import { tt } from '@/lib/i18n'
-import type { UserDetailSection } from '../../console-shared'
-import { BanUserDialog, DangerConfirmDialog, ErrorState, LoadingState } from '../../helpers/helpers-dialogs'
-import { navigateConsoleTab } from '../../helpers/helpers-resource'
-import {
-  formatDate,
-  formatRealmAccess,
-  hasRealmAdminAccess,
-  nullableString,
-  parseForm,
-  setRealmAdminAccess,
-  useAdminMutation,
-  userDisplayName,
-} from '../../helpers/helpers-utils'
 
 export function UserDetailPage({ userId, section = 'overview' }: { userId: string; section?: UserDetailSection }) {
-  const { organizationId: context, realmOperator } = useConsoleScope()
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const [active, setActive] = useState<UserDetailSection>(section)
@@ -56,29 +54,23 @@ export function UserDetailPage({ userId, section = 'overview' }: { userId: strin
   const [sessionToRevoke, setSessionToRevoke] = useState<string | null>(null)
   const [passkeyToDelete, setPasskeyToDelete] = useState<string | null>(null)
   const userQuery = useQuery({ queryKey: [...consoleQueryKeys.users, userId], queryFn: () => getUser(userId) })
-  const realmIdentityAccess = realmOperator
   const sessions = useQuery({
-    enabled: realmIdentityAccess,
     queryKey: [...consoleQueryKeys.users, userId, 'sessions'],
     queryFn: () => listUserSessions(userId),
   })
   const linkedAccounts = useQuery({
-    enabled: realmIdentityAccess,
     queryKey: [...consoleQueryKeys.users, userId, 'linked-accounts'],
     queryFn: () => listUserLinkedAccounts(userId),
   })
   const applications = useQuery({
-    enabled: realmIdentityAccess,
     queryKey: [...consoleQueryKeys.users, userId, 'applications'],
     queryFn: () => listUserApplications(userId),
   })
   const passkeys = useQuery({
-    enabled: realmIdentityAccess,
     queryKey: [...consoleQueryKeys.users, userId, 'passkeys'],
     queryFn: () => listUserPasskeys(userId),
   })
   const agents = useQuery({
-    enabled: realmIdentityAccess,
     queryKey: [...consoleQueryKeys.agents, { purpose: 'user-detail' }],
     queryFn: () => getAgentInventory(),
   })
@@ -116,7 +108,7 @@ export function UserDetailPage({ userId, section = 'overview' }: { userId: strin
         exact: true,
         refetchType: 'none',
       })
-      await navigate({ search: context ? { context } : {}, to: '/console/users' })
+      await navigate({ to: '/console/users' })
       queryClient.removeQueries({ queryKey: detailKey })
     },
   })
@@ -142,13 +134,8 @@ export function UserDetailPage({ userId, section = 'overview' }: { userId: strin
     },
   })
   useEffect(() => {
-    if (!realmIdentityAccess && section !== 'overview') {
-      setActive('overview')
-      navigateConsoleTab(navigate, `/console/users/${userId}/overview`, context)
-      return
-    }
     setActive(section)
-  }, [context, navigate, realmIdentityAccess, section, userId])
+  }, [section])
   const loading = [userQuery, sessions, linkedAccounts, applications, passkeys, agents].some((item) => item.isLoading)
   const error =
     userQuery.error ?? sessions.error ?? linkedAccounts.error ?? applications.error ?? passkeys.error ?? agents.error
@@ -170,13 +157,13 @@ export function UserDetailPage({ userId, section = 'overview' }: { userId: strin
       />
     )
   if (!user) return <ErrorState error={new Error(tt('User not found.'))} />
-  const userAgents = (agents.data?.items ?? []).filter(
+  const userAgents = agents.data!.items.filter(
     (agent) => agent.homeSpace.type === 'personal' && agent.homeSpace.userId === userId,
   )
   return (
     <>
       <div className="consoleDetailStack">
-        <Link className="consoleBackLink" search={context ? { context } : {}} to="/console/users">
+        <Link className="consoleBackLink" to="/console/users">
           <ArrowLeft />
           {tt('Users')}
         </Link>
@@ -186,59 +173,47 @@ export function UserDetailPage({ userId, section = 'overview' }: { userId: strin
               <h1>{userDisplayName(user)}</h1>
               <Badge variant={user.banned ? 'outline' : 'secondary'}>{user.banned ? tt('Banned') : tt('Active')}</Badge>
             </div>
-            <p>
-              {tt(
-                realmIdentityAccess
-                  ? 'Human identity with authentication, sessions, Agent identities, and application consent.'
-                  : 'Organization member identity.',
-              )}
-            </p>
+            <p>{tt('Human identity with authentication, sessions, Agent identities, and application consent.')}</p>
             <span className="consoleDetailMeta">
               {user.id} · {user.email ?? tt('No email')}
             </span>
           </div>
-          {realmIdentityAccess ? (
-            <Button onClick={() => setEditOpen(true)}>
-              <Pencil />
-              {tt('Edit user')}
-            </Button>
-          ) : null}
+          <Button onClick={() => setEditOpen(true)}>
+            <Pencil />
+            {tt('Edit user')}
+          </Button>
         </header>
         <Tabs
           onValueChange={(value) => {
             const next = value as UserDetailSection
             setActive(next)
-            navigateConsoleTab(navigate, `/console/users/${userId}/${next}`, context)
+            navigateConsoleTab(navigate, `/console/users/${userId}/${next}`)
           }}
           value={active}
         >
           <TabsList className="w-full" variant="navigation">
             <TabsTrigger value="overview">{tt('Overview')}</TabsTrigger>
-            {realmIdentityAccess ? (
-              <>
-                <TabsTrigger value="authentication">{tt('Authentication')}</TabsTrigger>
-                <TabsTrigger value="sessions">{tt('Sessions')}</TabsTrigger>
-                <TabsTrigger value="agents">{tt('Agents')}</TabsTrigger>
-                <TabsTrigger value="authorized-apps">{tt('Authorized apps')}</TabsTrigger>
-                <TabsTrigger value="settings">{tt('Settings')}</TabsTrigger>
-              </>
-            ) : null}
+            <TabsTrigger value="authentication">{tt('Authentication')}</TabsTrigger>
+            <TabsTrigger value="sessions">{tt('Sessions')}</TabsTrigger>
+            <TabsTrigger value="agents">{tt('Agents')}</TabsTrigger>
+            <TabsTrigger value="authorized-apps">{tt('Authorized apps')}</TabsTrigger>
+            <TabsTrigger value="settings">{tt('Settings')}</TabsTrigger>
           </TabsList>
           <TabsContent className="mt-5" value="overview">
             <UserOverview
-              applications={applications.data?.applications.length ?? 0}
+              applications={applications.data!.applications.length}
               agents={userAgents.length}
-              linked={linkedAccounts.data?.accounts.length ?? 0}
-              realmDetails={realmIdentityAccess}
-              sessions={sessions.data?.sessions.length ?? 0}
+              linked={linkedAccounts.data!.accounts.length}
+              realmDetails
+              sessions={sessions.data!.sessions.length}
               user={user}
             />
           </TabsContent>
           <TabsContent className="mt-5" value="authentication">
             <UserAuthentication
-              accounts={linkedAccounts.data?.accounts ?? []}
+              accounts={linkedAccounts.data!.accounts}
               onDeletePasskey={setPasskeyToDelete}
-              passkeys={passkeys.data?.passkeys ?? []}
+              passkeys={passkeys.data!.passkeys}
               security={userQuery.data?.security}
             />
           </TabsContent>
@@ -246,14 +221,14 @@ export function UserDetailPage({ userId, section = 'overview' }: { userId: strin
             <UserSessions
               onRevoke={setSessionToRevoke}
               onRevokeAll={() => setRevokeAllOpen(true)}
-              sessions={sessions.data?.sessions ?? []}
+              sessions={sessions.data!.sessions}
             />
           </TabsContent>
           <TabsContent className="mt-5" value="agents">
             <UserAgents agents={userAgents} />
           </TabsContent>
           <TabsContent className="mt-5" value="authorized-apps">
-            <UserApplications applications={applications.data?.applications ?? []} />
+            <UserApplications applications={applications.data!.applications} />
           </TabsContent>
           <TabsContent className="mt-5" value="settings">
             <UserSettings

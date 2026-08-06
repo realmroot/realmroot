@@ -1,6 +1,7 @@
-import { createFileRoute } from '@tanstack/react-router'
-import { RolesPage } from '@/features/console/extracted/roles'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 
 export const Route = createFileRoute('/console/roles/')({
-  component: RolesPage,
+  beforeLoad: () => {
+    throw redirect({ href: '/organizations' })
+  },
 })

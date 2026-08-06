@@ -1,9 +1,8 @@
 import type { ApplicationResponse } from '@shared/api/applications'
 import { cleanup, fireEvent, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ApplicationDetailPage } from '@/features/console/extracted/applications/application-detail'
+import { ApplicationDetailPage } from '@/features/applications/management/application-detail'
 import { UsersPage } from '@/features/console/extracted/users/users-list'
-import { ConsoleScopeProvider } from '@/lib/console-context'
 import { queryClient } from '@/router'
 
 globalThis.ResizeObserver ??= class ResizeObserver {
@@ -154,11 +153,7 @@ describe('admin console applications-detail-b', () => {
       return consoleSharedFetch(input, init)
     })
 
-    renderWithQuery(
-      <ConsoleScopeProvider value={{ organizationId: 'org-1', realmOperator: false }}>
-        <ApplicationDetailPage applicationId="app-1" />
-      </ConsoleScopeProvider>,
-    )
+    renderWithQuery(<ApplicationDetailPage applicationId="app-1" organizationId="org-1" />)
     expect(await screen.findByText('Allowed Organizations')).toBeTruthy()
     expect(screen.getByText('Third-party')).toBeTruthy()
     expect(screen.getByText('Required')).toBeTruthy()
@@ -281,5 +276,16 @@ describe('admin console applications-detail-b', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     expect(await screen.findByText('Email already exists.')).toBeTruthy()
+  })
+
+  it('rejects an Application detail route under a different Organization', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      if (String(input) === '/api/applications/app-1') return Promise.resolve(jsonResponse(application))
+      return consoleSharedFetch(input, init)
+    })
+
+    renderWithQuery(<ApplicationDetailPage applicationId="app-1" organizationId="org-other" />)
+
+    expect(await screen.findByText('Application does not belong to this Organization.')).toBeTruthy()
   })
 })

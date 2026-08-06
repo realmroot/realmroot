@@ -7,6 +7,7 @@ import { createDeps } from '@server/composition'
 import { createDb } from '@server/db/client'
 import { type Env, type RuntimeConfig, validateEnv } from '@server/env'
 import { createApp, healthStatus } from '@server/http/app'
+import { reconcileRealmrootResourceServer } from '@server/usecases/authorization'
 import { defaultBuiltInProviders } from '@server/usecases/configz'
 import { loadAuthConnectorConfig } from '@server/usecases/connectors'
 import { publishWebhookEvent } from '@server/usecases/webhooks'
@@ -24,6 +25,7 @@ export default {
     if (new URL(request.url).pathname === '/api/health') return Response.json(healthStatus)
     const config = validateEnv(env, request.url)
     const deps = createDeps(env, config)
+    await reconcileRealmrootResourceServer(deps, config.baseURL)
     const securityPolicy = await deps.security.getPolicy()
     const auth = await getAuth(env, { ...config, securityPolicy }, deps)
     return createApp(auth, deps, {

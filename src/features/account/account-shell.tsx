@@ -120,9 +120,7 @@ export function AccountPageShell({
             <ProductAccountMenu
               onSignOut={() => void signOutFromAccount()}
               primaryAction={
-                access.realmOperator || access.consoleOrganizations.length
-                  ? { icon: LayoutDashboard, label: 'Console', to: '/console' }
-                  : undefined
+                access.realmOperator ? { icon: LayoutDashboard, label: 'Console', to: '/console' } : undefined
               }
               profile={profile}
             />

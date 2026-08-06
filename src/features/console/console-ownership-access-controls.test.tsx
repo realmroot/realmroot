@@ -9,7 +9,7 @@ import {
   resourceEligibilityLabel,
   selectionSummary,
   userOptions,
-} from '@/features/console/helpers/ownership-access-controls'
+} from '@/features/management/ownership-controls'
 import { organization, user } from './console.test-utils'
 
 globalThis.ResizeObserver ??= class ResizeObserver {

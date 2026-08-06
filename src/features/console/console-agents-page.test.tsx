@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { AgentsPage } from '@/features/console/pages/agents-page'
+import { AgentsPage } from '@/features/agents/management-agents-page'
 import { queryClient } from '@/router'
 import { emptyPagination, jsonResponse, renderWithQuery } from './console.test-utils'
 
@@ -11,6 +11,24 @@ afterEach(() => {
 })
 
 describe('console Agents page', () => {
+  it('binds Organization Workspace Agent inventory and links to its Organization [spec: admin-console/organization-console-resource-boundary]', async () => {
+    const requests: string[] = []
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const request = input instanceof Request ? input : null
+      const url = new URL(request?.url ?? String(input), window.location.origin)
+      requests.push(`${url.pathname}${url.search}`)
+      if (url.pathname === '/api/agents') return Promise.resolve(jsonResponse(agentInventory))
+      throw new Error(`Unexpected request: ${url.pathname}${url.search}`)
+    })
+
+    renderWithQuery(<AgentsPage organizationId="org-1" />)
+
+    const agentLink = await screen.findByRole('link', { name: 'Open Stable Build Agent' })
+    expect(agentLink.getAttribute('href')).toBe('/organizations/org-1/agents/agent-1')
+    expect(screen.queryByLabelText('Filter owner type')).toBeNull()
+    expect(requests).toEqual(['/api/agents?organizationId=org-1'])
+  })
+
   it(`governs stable Agents without exposing protocol implementation records
       [spec: admin-console/admin-agent-inventory]
       [spec: agent-identity/agent-governance-surfaces]`, async () => {

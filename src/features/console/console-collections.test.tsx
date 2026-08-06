@@ -1,19 +1,18 @@
 import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ApiResourcesPage } from '@/features/console/extracted/api-resources'
-import { ApplicationsPage } from '@/features/console/extracted/applications/applications-list'
+import { ApplicationsPage } from '@/features/applications/management/applications-list'
 import { BrandingPage } from '@/features/console/extracted/branding-content/branding'
 import { ContentSettingsPage } from '@/features/console/extracted/branding-content/content-settings'
 import { ConnectorsPage } from '@/features/console/extracted/connectors'
 import { DeploymentSettingsPage, SettingsPage } from '@/features/console/extracted/deployment-misc/deployment'
-import { WebhooksPage } from '@/features/console/extracted/deployment-misc/webhooks'
 import { ConsoleOnboardingPage } from '@/features/console/extracted/onboarding'
 import { OrganizationsPage } from '@/features/console/extracted/organizations'
-import { RolesPage } from '@/features/console/extracted/roles'
 import { MfaPage } from '@/features/console/extracted/security-settings'
 import { SignInSettingsPage } from '@/features/console/extracted/sign-in-settings'
 import { UsersPage } from '@/features/console/extracted/users/users-list'
-import { ConsoleScopeProvider } from '@/lib/console-context'
+import { ApiResourcesPage } from '@/features/resource-servers/management-resource-servers'
+import { RolesPage } from '@/features/roles/management-roles'
+import { WebhooksPage } from '@/features/webhooks/management-webhooks'
 import { queryClient } from '@/router'
 
 globalThis.ResizeObserver ??= class ResizeObserver {
@@ -51,11 +50,7 @@ import {
 } from './console.test-utils'
 
 describe('console collections', () => {
-  const organizationRolesPage = (
-    <ConsoleScopeProvider value={{ organizationId: 'org-1', realmOperator: true }}>
-      <RolesPage />
-    </ConsoleScopeProvider>
-  )
+  const organizationRolesPage = <RolesPage organizationId="org-1" />
 
   it('renders page-specific resource actions and list toolbars', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {

@@ -1,9 +1,8 @@
 import type { ManagementAgent } from '@shared/api/agent-api'
 import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ConsoleScopeProvider } from '@/lib/console-context'
+import { AgentDetailPage } from '@/features/agents/management-agent-detail'
 import { emptyPagination, jsonResponse, renderWithQuery } from './console.test-utils'
-import { AgentDetailPage } from './pages/agent-detail-page'
 
 afterEach(() => {
   cleanup()
@@ -69,7 +68,8 @@ describe('console Agent detail', () => {
     await waitFor(() => expect(requests).toContainEqual({ method: 'PUT', path: '/api/agents/agent-1/retirement' }))
   })
 
-  it('shows empty collections and protects Realm settings in Organization context', async () => {
+  it('rejects cross-owner routes and shows empty Agent collections', async () => {
+    let organizationOwned = false
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const request = requestDetails(input, init)
       return Promise.resolve(
@@ -77,23 +77,27 @@ describe('console Agent detail', () => {
           ...emptyCollections,
           agent: {
             ...agent,
-            homeSpace: { type: 'personal', userId: 'user-1' },
-            owner: { id: 'user-1', type: 'user', displayName: 'Jane Doe' },
+            homeSpace: organizationOwned
+              ? { type: 'organization', organizationId: 'org-1' }
+              : { type: 'personal', userId: 'user-1' },
+            owner: organizationOwned
+              ? { id: 'org-1', type: 'organization', displayName: 'Acme Engineering' }
+              : { id: 'user-1', type: 'user', displayName: 'Jane Doe' },
             status: 'retired',
           },
         }),
       )
     })
 
-    const scoped = renderWithQuery(
-      <ConsoleScopeProvider value={{ organizationId: 'org-1', realmOperator: false }}>
-        <AgentDetailPage agentId="agent-1" section="settings" />
-      </ConsoleScopeProvider>,
-    )
+    const mismatched = renderWithQuery(<AgentDetailPage agentId="agent-1" organizationId="org-1" section="settings" />)
+    expect(await screen.findByText('Agent does not belong to this Organization.')).toBeTruthy()
+    mismatched.unmount()
 
+    organizationOwned = true
+    const scoped = renderWithQuery(<AgentDetailPage agentId="agent-1" organizationId="org-1" section="settings" />)
     expect(await screen.findByRole('heading', { name: 'Build Agent' })).toBeTruthy()
-    expect(screen.getByText('User')).toBeTruthy()
-    expect(screen.queryByRole('tab', { name: 'Settings' })).toBeNull()
+    expect(screen.getByRole('tab', { name: 'Settings' })).toBeTruthy()
+    expect(screen.getByText('Already retired')).toBeTruthy()
 
     const emptyTabs: Array<[string, string]> = [
       ['Installations', 'No installations'],

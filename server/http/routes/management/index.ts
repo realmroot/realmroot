@@ -23,7 +23,7 @@ export function createProtectedResourceRoutes(options: ProtectedResourceRoutesOp
 
   app.route('/applications', managementApplicationsRoute)
   app.route('/access/consents', managementApplicationAuthorizationsRoute)
-  app.route('/resource-servers', createManagementApiResourcesRoute(options.canonicalOrigin))
+  app.route('/resource-servers', createManagementApiResourcesRoute())
   app.route('/', managementAgentsRoute)
   app.route('/organizations', managementOrganizationsRoute)
   app.route('/users', managementUserRoutes(options.authApi, { normalizeListResponse: true }))

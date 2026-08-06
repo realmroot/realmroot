@@ -31,7 +31,15 @@ That means a separate Worker, D1 database, R2 bucket, queue, domain, and
   boundary for users or administrators.
 - Organization: an authorization and membership object inside a realm. It is not
   a separate user pool.
+- User tenant: the personal authorization boundary for resources owned by one
+  Realm User. It does not create another copy of that User.
+- Organization tenant: the shared ownership and authorization boundary for
+  Organization resources. It does not own its members' Realm identities.
 - Product deployment: a complete Cloudflare resource set for one auth realm.
+
+Resource ownership and the separation between Account Center, Organization
+Workspace, and Realm Console are defined in
+[Tenant ownership and management surfaces](tenant-ownership-and-management-surfaces.md).
 
 ## Supported Sharing
 

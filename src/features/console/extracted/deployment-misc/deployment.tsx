@@ -13,6 +13,9 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { IdentityMultiSelectControl, userOptions } from '@/features/management/ownership-controls'
+import { ResourcePage } from '@/features/management/resource-components'
+import { useAdminMutation } from '@/features/management/utils'
 import {
   consoleQueryKeys,
   getDeveloperSettings,
@@ -25,9 +28,6 @@ import {
   updateRealm,
 } from '@/lib/api/management'
 import { tt } from '@/lib/i18n'
-import { ResourcePage } from '../../helpers/helpers-resource'
-import { useAdminMutation } from '../../helpers/helpers-utils'
-import { IdentityMultiSelectControl, organizationOptions, userOptions } from '../../helpers/ownership-access-controls'
 
 export type SettingsSection = 'general' | 'email' | 'developer' | 'deployment'
 type SettingsState = {
@@ -45,8 +45,6 @@ type SettingsState = {
 
 export const developerPolicyOptions = {
   organizationCreation: ['Realm administrators only', 'Approved users', 'Any verified user'],
-  consoleAccess: ['Realm operators only', 'Selected organizations', 'All organizations'],
-  eligibleLevels: ['Owner only', 'Owner and Administrator', 'Owner, Administrator, Developer'],
 } as const
 
 const initialSettings: SettingsState = {
@@ -305,7 +303,7 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
             pending={developerMutation.isPending}
           >
             <SettingsFormSection
-              description="Organization creation and Console developer access are independent product capabilities."
+              description="Organization creation is configurable. Console is reserved for Realm platform administrators."
               title="Access policies"
             >
               <SettingsFormField
@@ -336,53 +334,7 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
                   />
                 </SettingsFormField>
               ) : null}
-              <SettingsFormField
-                description="Choose which Organization members may register and manage technical resources."
-                label="Console access"
-              >
-                <SelectInput
-                  name="consoleAccess"
-                  onChange={(event) => setSaved((current) => ({ ...current, consoleAccess: event.target.value }))}
-                  value={saved.consoleAccess}
-                >
-                  {developerPolicyOptions.consoleAccess.map((option) => (
-                    <option key={option}>{option}</option>
-                  ))}
-                </SelectInput>
-              </SettingsFormField>
-              <SettingsFormField
-                description="Members must also hold one of these Organization access levels."
-                label="Eligible access levels"
-              >
-                <SelectInput
-                  name="eligibleLevels"
-                  onChange={(event) => setSaved((current) => ({ ...current, eligibleLevels: event.target.value }))}
-                  value={saved.eligibleLevels}
-                >
-                  {developerPolicyOptions.eligibleLevels.map((option) => (
-                    <option key={option}>{option}</option>
-                  ))}
-                </SelectInput>
-              </SettingsFormField>
-              {saved.consoleAccess === 'Selected organizations' ? (
-                <SettingsFormField
-                  description="Organizations whose eligible members may use Console."
-                  label="Selected organizations"
-                >
-                  <IdentityMultiSelectControl
-                    emptyLabel={tt('No Organizations found')}
-                    label={tt('Selected organizations')}
-                    onChange={(selectedOrganizationIds) =>
-                      setSaved((current) => ({ ...current, selectedOrganizationIds }))
-                    }
-                    options={organizationOptions(organizations.data?.organizations ?? []).filter(
-                      (organization) => organization.id !== 'org_platform',
-                    )}
-                    placeholder={tt('Select Organizations')}
-                    value={saved.selectedOrganizationIds}
-                  />
-                </SettingsFormField>
-              ) : null}
+              <SettingsValueField label="Console access" value={tt('Realm platform administrators only')} />
             </SettingsFormSection>
           </SettingsForm>
         </TabsContent>

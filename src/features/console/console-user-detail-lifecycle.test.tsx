@@ -1,7 +1,6 @@
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { UserDetailPage } from '@/features/console/extracted/users/user-detail'
-import { ConsoleScopeProvider } from '@/lib/console-context'
 import {
   consolePasskey,
   consoleSession,
@@ -248,29 +247,5 @@ describe('admin console user detail lifecycle', () => {
         body: { reason: 'Policy violation' },
       }),
     )
-  })
-
-  it('limits Organization-scoped operators to the member overview', async () => {
-    const requests: string[] = []
-    vi.spyOn(window, 'fetch').mockImplementation((input) => {
-      const url = String(input).split('?')[0]!
-      requests.push(url)
-      if (url === '/api/users/user-1') {
-        return Promise.resolve(jsonResponse({ user: { ...profile, email: null, role: 'user', banned: false } }))
-      }
-      throw new Error(`Unexpected request: ${url}`)
-    })
-
-    renderWithQuery(
-      <ConsoleScopeProvider value={{ organizationId: 'org-1', realmOperator: false }}>
-        <UserDetailPage section="sessions" userId="user-1" />
-      </ConsoleScopeProvider>,
-    )
-
-    expect(await screen.findByText('Organization member identity.')).toBeTruthy()
-    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Overview'])
-    expect(screen.queryByRole('button', { name: 'Edit user' })).toBeNull()
-    expect(screen.getByText('—')).toBeTruthy()
-    expect(requests).toEqual(['/api/users/user-1'])
   })
 })

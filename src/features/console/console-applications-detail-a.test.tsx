@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ApplicationDetailPage } from '@/features/console/extracted/applications/application-detail'
-import { ApplicationsPage } from '@/features/console/extracted/applications/applications-list'
+import { ApplicationDetailPage } from '@/features/applications/management/application-detail'
+import { ApplicationsPage } from '@/features/applications/management/applications-list'
 import { queryClient } from '@/router'
 import { application, consoleSharedFetch, jsonResponse, pagination, renderWithQuery } from './console.test-utils'
 
