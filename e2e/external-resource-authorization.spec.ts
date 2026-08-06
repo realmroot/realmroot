@@ -41,6 +41,7 @@ test.describe('external API resource authorization', () => {
           identifier: 'e2e-projects',
           name: 'E2E Projects API',
           resourceUrl: externalResource,
+          ownerOrganizationId: 'org_platform',
           connectorId: connector.id,
         },
       })
@@ -170,6 +171,7 @@ test.describe('external API resource authorization', () => {
           identifier: 'e2e-realmroot-projects',
           name: 'E2E Realmroot Projects API',
           resourceUrl: realmrootResource,
+          ownerOrganizationId: 'org_platform',
         },
       })
       expect(resourceResponse.status(), await resourceResponse.text()).toBe(201)
