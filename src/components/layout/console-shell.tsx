@@ -120,7 +120,7 @@ const consoleNavGroups: ConsoleNavGroup[] = [
 ]
 
 const consoleUtilities = [
-  { href: '/api/openapi.json', label: 'Management API', icon: Code2 },
+  { href: '/api/docs', label: 'API Documentation', icon: Code2 },
   { href: 'https://github.com/realmroot/realmroot/tree/main/docs', label: 'Help & documentation', icon: HelpCircle },
 ]
 

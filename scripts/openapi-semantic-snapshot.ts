@@ -25,7 +25,7 @@ export function openApiSemanticSnapshot(
         method: method.toUpperCase(),
         path,
         operationId: String(operation.operationId),
-        semanticHash: createHash('sha256').update(stableJson(operation)).digest('hex'),
+        semanticHash: createHash('sha256').update(stableJson(semanticOperation(operation))).digest('hex'),
       })
     }
   }
@@ -61,6 +61,12 @@ function dereference(value: unknown, document: Record<string, unknown>, seen: Se
       .sort(([left], [right]) => left.localeCompare(right))
       .map(([key, item]) => [key, dereference(item, document, seen)]),
   )
+}
+
+function semanticOperation(operation: Record<string, unknown>) {
+  if (operation['x-cli-hidden'] !== true) return operation
+  const { tags: _documentationTags, ...semanticFields } = operation
+  return semanticFields
 }
 
 function stableJson(value: unknown) {

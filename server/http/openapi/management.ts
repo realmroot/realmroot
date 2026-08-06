@@ -62,6 +62,24 @@ export const unifiedOpenApiLinkHeader = [
   `<${unifiedOpenApiPath}>; rel="describedby"; type="application/openapi+json"`,
 ].join(', ')
 
+const managementOpenApiTags = [
+  { name: 'Assets', description: 'Uploaded assets used by Realmroot resources.' },
+  { name: 'Agents', description: 'Agent identities, installations, and lifecycle.' },
+  { name: 'Agent Access', description: 'Agent access requests, authorizations, and credentials.' },
+  { name: 'Applications', description: 'OIDC and machine-to-machine client applications.' },
+  { name: 'Consents', description: 'User consent records for delegated Application access.' },
+  { name: 'Scope Grants', description: 'Direct User and Application Resource Server scope grants.' },
+  { name: 'Resource Servers', description: 'Protected Resource Servers, contracts, and connections.' },
+  { name: 'Organizations', description: 'Organizations, memberships, invitations, and roles.' },
+  { name: 'Users', description: 'Realmroot users and account security resources.' },
+  { name: 'Connectors', description: 'External identity and resource connectors.' },
+  { name: 'Realm Configuration', description: 'Realm-wide hosted experience and platform configuration.' },
+  { name: 'Security', description: 'Realm-wide authentication and security policy.' },
+  { name: 'Webhooks', description: 'Webhook endpoints, deliveries, attempts, and secrets.' },
+  { name: 'Audit Events', description: 'Immutable Realmroot governance audit events.' },
+  { name: 'auth', description: 'Restish Agent authentication commands.' },
+] as const
+
 const managementRoutes: ManagementRouteConfig[] = [
   {
     method: 'post',
@@ -199,6 +217,7 @@ function buildUnifiedOpenApi(): UnifiedOpenApiDocument {
         description:
           'Unified API for Agent identity, self-service resources, and permission-gated tenant administration.',
       },
+      tags: [...managementOpenApiTags],
       servers: [{ url: '/api' }],
     },
     { unionPreferredType: 'oneOf' },
@@ -241,6 +260,7 @@ function createManagementRoute(routeConfig: ManagementRouteConfig) {
     path: routeConfig.path,
     operationId: routeConfig.operationId,
     summary: routeConfig.summary,
+    ...(!routeConfig.cli ? { tags: [managementTagForPath(routeConfig.path)] } : {}),
     ...(routeConfig.cli
       ? {
           ...(routeConfig.cli.group ? { tags: [routeConfig.cli.group] } : {}),
@@ -253,6 +273,24 @@ function createManagementRoute(routeConfig: ManagementRouteConfig) {
     request: routeConfig.request as never,
     responses: routeResponses(routeConfig) as never,
   })
+}
+
+function managementTagForPath(path: string): (typeof managementOpenApiTags)[number]['name'] {
+  if (path.startsWith('/assets')) return 'Assets'
+  if (path === '/agent/status' || path.startsWith('/agents')) return 'Agents'
+  if (path.startsWith('/access/requests') || path.startsWith('/access/authorizations')) return 'Agent Access'
+  if (path.startsWith('/access/consents')) return 'Consents'
+  if (path.startsWith('/applications')) return 'Applications'
+  if (path.startsWith('/application-scope-grants') || path.startsWith('/user-scope-grants')) return 'Scope Grants'
+  if (path.startsWith('/resource-servers')) return 'Resource Servers'
+  if (path.startsWith('/organizations')) return 'Organizations'
+  if (path.startsWith('/users')) return 'Users'
+  if (path.startsWith('/connectors')) return 'Connectors'
+  if (path === '/realm/security-policy') return 'Security'
+  if (path === '/realm/audit-events') return 'Audit Events'
+  if (path.startsWith('/realm')) return 'Realm Configuration'
+  if (path.startsWith('/webhooks')) return 'Webhooks'
+  throw new Error(`Management OpenAPI route has no domain tag: ${path}`)
 }
 
 function routeResponses(routeConfig: ManagementRouteConfig) {

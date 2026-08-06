@@ -81,6 +81,7 @@ describe('ConsoleShell', () => {
     expect(screen.getAllByRole('link', { name: /Dashboard/ })[0].getAttribute('aria-current')).toBe('page')
     expect(screen.getAllByRole('link', { name: /Dashboard/ })[0].className).toContain('is-active')
     expect(screen.getAllByRole('link', { name: /Applications/ })[0].className).not.toContain('is-active')
+    expect(screen.getAllByRole('link', { name: 'API Documentation' })[0].getAttribute('href')).toBe('/api/docs')
     expect(screen.queryByText('Tenant health')).toBeNull()
     expect(screen.queryByText('OIDC clients')).toBeNull()
     expect(screen.queryByRole('link', { name: /Onboarding/ })).toBeNull()

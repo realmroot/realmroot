@@ -1,4 +1,5 @@
 import { oauthProviderAuthServerMetadata, oauthProviderOpenIdConfigMetadata } from '@better-auth/oauth-provider'
+import { Scalar } from '@scalar/hono-api-reference'
 import type { Auth } from '@server/auth'
 import { ApiError, forbidden, notFound, oauthError } from '@server/domain/errors'
 import { handleApiError } from '@server/http/errors'
@@ -264,6 +265,16 @@ function createUnifiedApiRoutes(_auth: AuthHandler, _config: AppConfig) {
   const app = new Hono()
 
   app.get('/openapi.json', (c) => c.json(unifiedOpenApi))
+  app.get(
+    '/docs',
+    Scalar({
+      url: '/api/openapi.json',
+      pageTitle: 'Realmroot API Documentation',
+      theme: 'default',
+      telemetry: false,
+      cdn: 'https://cdn.jsdelivr.net/npm/@scalar/api-reference@1.64.0',
+    }),
+  )
   return app
 }
 

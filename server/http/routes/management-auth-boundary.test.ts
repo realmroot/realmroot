@@ -124,12 +124,29 @@ describe('management routes 1', () => {
     )
 
     const contract = await app.request('/api/openapi.json')
+    const documentation = await app.request('/api/docs')
     const protectedResponse = await app.request('/api/users')
 
     expect(contract.status).toBe(200)
     expect(contract.headers.get('content-type')).toContain('application/json')
     expect(contract.headers.get('link')).toBeNull()
     await expect(contract.json()).resolves.toEqual(unifiedOpenApi)
+    expect(documentation.status).toBe(200)
+    expect(documentation.headers.get('content-type')).toContain('text/html')
+    const documentationHtml = await documentation.text()
+    expect(documentationHtml).toContain('<title>Realmroot API Documentation</title>')
+    expect(documentationHtml).toContain('/api/openapi.json')
+    expect(documentationHtml).toContain('@scalar/api-reference@1.64.0')
+
+    const declaredTags = new Set(
+      ((unifiedOpenApi as { tags?: Array<{ name: string }> }).tags ?? []).map((tag) => tag.name),
+    )
+    const routineOperations = openApiOperationObjects().filter((operation) => operation.cliHidden === true)
+    expect(declaredTags.size).toBeGreaterThan(1)
+    for (const operation of routineOperations) {
+      expect(operation.tags, operation.key).toHaveLength(1)
+      expect(declaredTags.has(operation.tags?.[0] ?? ''), operation.key).toBe(true)
+    }
 
     const accessRequest = openApiOperationObjects().find((operation) => operation.key === 'POST /access/requests')
     const standaloneRequestSchema = requestBodyContent(accessRequest?.requestBody).schema

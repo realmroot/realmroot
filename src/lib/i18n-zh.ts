@@ -159,6 +159,7 @@ export const zhFlatTranslations: Record<string, string> = {
   'MFA state': 'MFA 状态',
   Management: '管理',
   'Management API': '管理 API',
+  'API Documentation': 'API 文档',
   Mobile: '移动端',
   'Multi-factor authentication': '多因素认证',
   'Multi-factor auth': '多因素认证',
