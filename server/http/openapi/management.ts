@@ -260,10 +260,9 @@ function createManagementRoute(routeConfig: ManagementRouteConfig) {
     path: routeConfig.path,
     operationId: routeConfig.operationId,
     summary: routeConfig.summary,
-    ...(!routeConfig.cli ? { tags: [managementTagForPath(routeConfig.path)] } : {}),
+    tags: [routeConfig.cli?.group ?? managementTagForPath(routeConfig.path)],
     ...(routeConfig.cli
       ? {
-          ...(routeConfig.cli.group ? { tags: [routeConfig.cli.group] } : {}),
           'x-cli-name': routeConfig.cli.name,
         }
       : { 'x-cli-hidden': true }),

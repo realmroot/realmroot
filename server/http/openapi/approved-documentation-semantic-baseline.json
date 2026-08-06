@@ -1,0 +1,14 @@
+[
+  {
+    "method": "POST",
+    "path": "/access/requests",
+    "operationId": "createAgentAuthorizationRequest",
+    "semanticHash": "dfd105aaf5bcfb3365c59392965df35a12179739494d14360854ccdcf4004797"
+  },
+  {
+    "method": "POST",
+    "path": "/resource-servers/{resourceServerId}/connection-requests",
+    "operationId": "createConnectionRequest",
+    "semanticHash": "15c6ae32518665de229e6bc46f700a3ec684f9c265ea9c8f9fb79331fc150334"
+  }
+]

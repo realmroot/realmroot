@@ -14,11 +14,17 @@ describe('OpenAPI semantic contract gate', () => {
     const ownerSelectorContract = JSON.parse(
       readFileSync(new URL('./approved-owner-selector-semantic-baseline.json', import.meta.url), 'utf8'),
     ) as typeof unchanged
-    const approvedOwnerSelectors = new Set(ownerSelectorContract.map(({ method, path }) => `${method}:${path}`))
+    const documentationContract = JSON.parse(
+      readFileSync(new URL('./approved-documentation-semantic-baseline.json', import.meta.url), 'utf8'),
+    ) as typeof unchanged
+    const approvedChanges = new Set(
+      [...ownerSelectorContract, ...documentationContract].map(({ method, path }) => `${method}:${path}`),
+    )
     const baseline = [
-      ...unchanged.filter(({ method, path }) => !approvedOwnerSelectors.has(`${method}:${path}`)),
+      ...unchanged.filter(({ method, path }) => !approvedChanges.has(`${method}:${path}`)),
       ...authorizationContract,
       ...ownerSelectorContract,
+      ...documentationContract,
     ].sort((left, right) => `${left.path}:${left.method}`.localeCompare(`${right.path}:${right.method}`))
 
     expect(openApiSemanticSnapshot(unifiedOpenApi as unknown as Record<string, unknown>, () => true)).toEqual(baseline)

@@ -12,7 +12,7 @@ Feature: Unified Realmroot resource API
     When an API client requests service discovery
     Then /api/openapi.json returns the OpenAPI 3.1 contract
     And /api/docs renders interactive API documentation from that contract
-    And every routine operation is grouped under a declared domain tag
+    And every operation is grouped under a declared domain tag
     And API responses advertise that contract with Restish-compatible Link headers
     And the default hosted Restish profile targets https://id.realmroot.dev/api
     And Restish v2 exposes the current Agent and resource operations from the same contract

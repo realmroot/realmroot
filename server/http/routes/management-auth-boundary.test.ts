@@ -141,9 +141,8 @@ describe('management routes 1', () => {
     const declaredTags = new Set(
       ((unifiedOpenApi as { tags?: Array<{ name: string }> }).tags ?? []).map((tag) => tag.name),
     )
-    const routineOperations = openApiOperationObjects().filter((operation) => operation.cliHidden === true)
     expect(declaredTags.size).toBeGreaterThan(1)
-    for (const operation of routineOperations) {
+    for (const operation of openApiOperationObjects()) {
       expect(operation.tags, operation.key).toHaveLength(1)
       expect(declaredTags.has(operation.tags?.[0] ?? ''), operation.key).toBe(true)
     }
@@ -167,8 +166,8 @@ describe('management routes 1', () => {
 
     expect(generatedCommands).toEqual([
       { group: 'auth', name: 'whoami', operationId: 'getAgentStatus' },
-      { group: undefined, name: 'connect', operationId: 'createConnectionRequest' },
-      { group: undefined, name: 'access', operationId: 'createAgentAuthorizationRequest' },
+      { group: 'Resource Servers', name: 'connect', operationId: 'createConnectionRequest' },
+      { group: 'Agent Access', name: 'access', operationId: 'createAgentAuthorizationRequest' },
     ])
   })
 
