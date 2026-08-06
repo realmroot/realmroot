@@ -176,7 +176,7 @@ export const createApplicationRequestSchema = z.object({
   allowedScopes: z.array(userConfigurableApplicationScopeSchema).min(1).optional(),
   firstParty: z.boolean().optional(),
   trusted: z.boolean().optional(),
-  ownerOrganizationId: nonEmptyString.optional(),
+  ownerOrganizationId: nonEmptyString,
   audience: applicationAudienceSchema.optional(),
   oidcClaims: applicationOidcClaimsSchema.optional(),
 })

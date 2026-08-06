@@ -925,7 +925,7 @@ function AudienceEditor({
           emptyLabel={tt('No Organizations found')}
           label={tt('Allowed Organizations')}
           onChange={setOrganizationIds}
-          options={organizationOptions(organizations).filter((organization) => organization.id !== 'org_platform')}
+          options={organizationOptions(organizations)}
           placeholder={tt('Select Organizations')}
           value={organizationIds}
         />

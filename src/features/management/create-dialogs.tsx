@@ -87,13 +87,7 @@ export function CreateApplicationDialog({
   const [validationError, setValidationError] = useState<string | null>(null)
   useEffect(() => {
     if (!open || ownerOrganizationId) return
-    setOwnerOrganizationId(
-      fixedOwnerOrganizationId ??
-        defaultOwnerOrganizationId ??
-        organizations.find((organization) => organization.id === 'org_platform')?.id ??
-        organizations[0]?.id ??
-        '',
-    )
+    setOwnerOrganizationId(fixedOwnerOrganizationId ?? defaultOwnerOrganizationId ?? organizations[0]?.id ?? '')
   }, [defaultOwnerOrganizationId, fixedOwnerOrganizationId, open, organizations, ownerOrganizationId])
   return (
     <Dialog
@@ -244,7 +238,7 @@ export function CreateApplicationDialog({
               emptyLabel={tt('No Organizations found')}
               label={tt('Allowed Organizations')}
               onChange={setAudienceOrganizationIds}
-              options={organizationOptions(organizations).filter((organization) => organization.id !== 'org_platform')}
+              options={organizationOptions(organizations)}
               placeholder={tt('Select Organizations')}
               value={audienceOrganizationIds}
             />

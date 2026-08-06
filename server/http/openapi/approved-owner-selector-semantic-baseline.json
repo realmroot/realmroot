@@ -1,0 +1,14 @@
+[
+  {
+    "method": "POST",
+    "path": "/applications",
+    "operationId": "createApplication",
+    "semanticHash": "78b3bff5e76518816bf4cf8a7f12f2d2a4ae4c40be7b824d797ed491608261a7"
+  },
+  {
+    "method": "POST",
+    "path": "/resource-servers",
+    "operationId": "createResourceServer",
+    "semanticHash": "e4327746448c292312fda9bf0925f2af8714bf47176faee98f3b5a9598b80c84"
+  }
+]

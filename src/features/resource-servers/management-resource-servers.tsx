@@ -292,13 +292,7 @@ function ApiResourceCreateDialog({
   const [validationError, setValidationError] = useState<string | null>(null)
   useEffect(() => {
     if (!open || ownerOrganizationId) return
-    setOwnerOrganizationId(
-      fixedOwnerOrganizationId ??
-        defaultOwnerOrganizationId ??
-        organizations.find((organization) => organization.id === 'org_platform')?.id ??
-        organizations[0]?.id ??
-        '',
-    )
+    setOwnerOrganizationId(fixedOwnerOrganizationId ?? defaultOwnerOrganizationId ?? organizations[0]?.id ?? '')
   }, [defaultOwnerOrganizationId, fixedOwnerOrganizationId, open, organizations, ownerOrganizationId])
   return (
     <Dialog open={open}>
@@ -407,7 +401,7 @@ function ApiResourceCreateDialog({
             emptyLabel={tt('No Organizations found')}
             label={tt('Eligible Organizations')}
             onChange={setEligibleOrganizationIds}
-            options={organizationOptions(organizations).filter((organization) => organization.id !== 'org_platform')}
+            options={organizationOptions(organizations)}
             placeholder={tt('Select Organizations')}
             value={eligibleOrganizationIds}
           />
@@ -1154,9 +1148,7 @@ function ResourceEditorSheet({
                 emptyLabel={tt('No Organizations found')}
                 label={tt('Eligible Organizations')}
                 onChange={setOrganizationIds}
-                options={organizationOptions(organizations).filter(
-                  (organization) => organization.id !== 'org_platform',
-                )}
+                options={organizationOptions(organizations)}
                 placeholder={tt('Select Organizations')}
                 value={organizationIds}
               />

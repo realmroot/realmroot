@@ -393,6 +393,7 @@ describe('Agent identity enrollment over real D1', () => {
       name: 'Native API',
       resourceUrl: 'https://api.example.com',
       description: 'Read private code repositories',
+      ownerOrganizationId: 'org_platform',
     })
     const principal = {
       issuer: approved.agent.issuer,

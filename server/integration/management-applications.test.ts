@@ -26,6 +26,7 @@ async function createApplication(
       slug: 'customer-portal',
       clientType: 'confidential_web',
       redirectUris: ['http://localhost/callback'],
+      ownerOrganizationId: 'org_platform',
       firstParty: true,
       trusted: true,
       ...overrides,

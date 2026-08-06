@@ -3,18 +3,22 @@ import { DatabaseSync } from 'node:sqlite'
 import { describe, expect, it } from 'vitest'
 
 const migrationName = '20260806005241_same_mathemanic.sql'
+const platformOwnerMigrationName = '20260806040000_platform_organization_owner.sql'
 
 describe('tenant ownership migration', () => {
   it('rebuilds legacy ownership into the final schema and quarantines ambiguity', () => {
     const database = new DatabaseSync(':memory:')
     try {
-      for (const name of migrationNames().filter((name) => name !== migrationName)) {
+      for (const name of migrationNames().filter(
+        (name) => ![migrationName, platformOwnerMigrationName].includes(name),
+      )) {
         database.exec(readFileSync(new URL(`../../migrations/${name}`, import.meta.url), 'utf8'))
       }
       seedCurrentSchema(database)
       database.exec('pragma foreign_keys = on; begin')
       try {
         database.exec(readFileSync(new URL(`../../migrations/${migrationName}`, import.meta.url), 'utf8'))
+        database.exec(readFileSync(new URL(`../../migrations/${platformOwnerMigrationName}`, import.meta.url), 'utf8'))
         database.exec('commit')
       } catch (error) {
         database.exec('rollback')
@@ -49,11 +53,9 @@ describe('tenant ownership migration', () => {
           )
           .get('intent-org'),
       ).toEqual({ initiated_by_user_id: 'user-1', owner_organization_id: 'org-1', owner_user_id: null })
-      expect(
-        database.prepare("select count(*) as count from member where organization_id = 'org_platform'").get(),
-      ).toEqual({
-        count: 0,
-      })
+      expect(database.prepare("select user_id, role from member where organization_id = 'org_platform'").get()).toEqual(
+        { user_id: 'user-1', role: 'owner' },
+      )
       expect(database.prepare("select status from agent_identity where id = 'platform-agent'").get()).toEqual({
         status: 'retired',
       })
@@ -64,9 +66,9 @@ describe('tenant ownership migration', () => {
           )
           .get(),
       ).toEqual({
-        owner_organization_id: null,
+        owner_organization_id: 'org_platform',
         owner_user_id: null,
-        realm_owned: 1,
+        realm_owned: 0,
       })
       expect(
         database
@@ -76,6 +78,17 @@ describe('tenant ownership migration', () => {
           .get(),
       ).toEqual({
         owner_organization_id: 'org-1',
+        owner_user_id: null,
+        realm_owned: 0,
+      })
+      expect(
+        database
+          .prepare(
+            "select realm_owned, owner_user_id, owner_organization_id from agent_audit_event where id = 'audit-grant'",
+          )
+          .get(),
+      ).toEqual({
+        owner_organization_id: 'org_platform',
         owner_user_id: null,
         realm_owned: 0,
       })
@@ -123,7 +136,9 @@ function columnNames(database: DatabaseSync, table: string) {
 function seedCurrentSchema(database: DatabaseSync) {
   database.exec(`
     insert into user (id, name, email, email_verified, role, created_at, updated_at)
-    values ('user-1', 'User One', 'user-1@example.test', 1, 'user', 1, 1);
+    values
+      ('user-0', 'Earlier User', 'user-0@example.test', 1, 'user', 0, 0),
+      ('user-1', 'User One', 'user-1@example.test', 1, 'user,admin', 1, 1);
     insert into organization (id, slug, name, created_at, updated_at)
     values ('org-1', 'org-1', 'Organization One', 1, 1);
     insert into member (id, organization_id, user_id, role, created_at, updated_at)
@@ -161,10 +176,15 @@ function seedCurrentSchema(database: DatabaseSync) {
     values ('agent-1', 'https://issuer.example.test', 'agent-1', 'Agent', 'org-1', 'active', 1, 1);
     insert into agent_identity (id, issuer, subject, name, owner_organization_id, status, created_at, updated_at)
     values ('platform-agent', 'https://issuer.example.test', 'platform-agent', 'Platform Agent', 'org_platform', 'active', 1, 1);
+    insert into agent_access_grant (
+      id, resource_id, agent_identity_id, scopes, mode, status, granted_by_user_id, created_at, updated_at
+    ) values ('platform-grant', 'resource-1', 'platform-agent', '[]', 'direct', 'active', 'user-1', 1, 1);
     insert into agent_audit_event (id, action, result, agent_identity_id, occurred_at)
     values ('audit-org', 'agent.updated', 'allowed', 'agent-1', 1);
     insert into agent_audit_event (id, action, result, resource_id, occurred_at)
     values ('audit-realm', 'resource.updated', 'allowed', 'resource-1', 1);
+    insert into agent_audit_event (id, action, result, access_grant_id, occurred_at)
+    values ('audit-grant', 'grant.updated', 'allowed', 'platform-grant', 1);
     insert into agent_audit_event (id, action, result, agent_identity_id, resource_id, occurred_at)
     values ('audit-conflict', 'legacy.conflict', 'allowed', 'agent-1', 'resource-1', 1);
     insert into agent_audit_event (id, action, result, metadata, occurred_at)

@@ -611,6 +611,7 @@ describe('authorization CRUD and assignment policy', () => {
 
   it('manages native and external API resources', async () => {
     const authorization = repository()
+    authorization.findOrganization.mockResolvedValue(organization)
     authorization.createResource.mockResolvedValue(resource)
     authorization.listResources.mockResolvedValue({ items: [resource], pagination })
     authorization.findResource.mockResolvedValue(resource)
@@ -665,6 +666,7 @@ describe('authorization CRUD and assignment policy', () => {
       identifier: 'native',
       name: 'Native',
       resourceUrl: resource.resourceUrl,
+      ownerOrganizationId: organization.id,
     })
     expect(authorization.createResource).toHaveBeenLastCalledWith(
       expect.objectContaining({
@@ -678,6 +680,7 @@ describe('authorization CRUD and assignment policy', () => {
       name: 'External without RAR',
       resourceUrl: resource.resourceUrl,
       connectorId: 'connector-1',
+      ownerOrganizationId: organization.id,
     })
     expect(authorization.createResource).toHaveBeenLastCalledWith(
       expect.objectContaining({ authorizationDetails: [], connectorId: 'connector-1' }),
@@ -687,6 +690,7 @@ describe('authorization CRUD and assignment policy', () => {
         identifier: 'invalid-native-rar',
         name: 'Invalid native RAR',
         resourceUrl: resource.resourceUrl,
+        ownerOrganizationId: organization.id,
         authorizationDetails: [{ type: 'project_access', project_id: 'project-1' }],
       }),
     ).rejects.toThrow('Authorization details require an external API resource connector.')
@@ -695,6 +699,7 @@ describe('authorization CRUD and assignment policy', () => {
       name: 'External',
       resourceUrl: resource.resourceUrl,
       connectorId: 'connector-1',
+      ownerOrganizationId: organization.id,
       authorizationDetails: [
         { type: 'payment_initiation', actions: ['initiate'], locations: ['https://merchant.example.com'] },
       ],
@@ -890,6 +895,7 @@ describe('authorization CRUD and assignment policy', () => {
 
   it('validates the resource contract before enabling it [spec: agent-identity/api-resource-contract-validation]', async () => {
     const authorization = repository()
+    authorization.findOrganization.mockResolvedValue(organization)
     authorization.createResource.mockResolvedValue(resource)
     authorization.findResource.mockResolvedValue(resource)
     const externalHttp = { fetch: vi.fn().mockResolvedValue(new Response('<html></html>')) }
@@ -902,6 +908,7 @@ describe('authorization CRUD and assignment policy', () => {
       identifier: 'projects',
       name: 'Projects',
       resourceUrl: resource.resourceUrl,
+      ownerOrganizationId: organization.id,
     }
 
     await expect(createResource(deps, input)).rejects.toThrow('Business resource must advertise its OpenAPI document')

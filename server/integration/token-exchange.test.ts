@@ -76,6 +76,7 @@ describe('OAuth token exchange over real D1', () => {
         slug: 'exchange-client',
         clientType: 'confidential_web',
         redirectUris: ['http://localhost/callback'],
+        ownerOrganizationId: 'org_platform',
         allowedGrantTypes: ['urn:ietf:params:oauth:grant-type:token-exchange'],
       }),
     })
@@ -86,7 +87,12 @@ describe('OAuth token exchange over real D1', () => {
     const createResource = await harness.request('/api/resource-servers', {
       method: 'POST',
       headers: { 'content-type': 'application/json', cookie },
-      body: JSON.stringify({ identifier: audience, name: 'Example API', resourceUrl: audience }),
+      body: JSON.stringify({
+        identifier: audience,
+        name: 'Example API',
+        resourceUrl: audience,
+        ownerOrganizationId: 'org_platform',
+      }),
     })
     expect(createResource.status, await createResource.clone().text()).toBe(201)
     const resource = (await createResource.json()) as { id: string }
@@ -166,6 +172,7 @@ describe('OAuth token exchange over real D1', () => {
         slug: 'exchange-client-2',
         clientType: 'confidential_web',
         redirectUris: ['http://localhost/callback'],
+        ownerOrganizationId: 'org_platform',
         allowedGrantTypes: ['urn:ietf:params:oauth:grant-type:token-exchange'],
       }),
     })

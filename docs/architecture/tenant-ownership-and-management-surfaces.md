@@ -118,7 +118,9 @@ Every durable resource must be one of four shapes:
 Applications and Resource Servers remain Organization-owned in this decision.
 Supporting personal developer-owned Applications later would require an
 explicit User-owner variant and its own product journey. It must not be modeled
-through a nullable owner or an implicit platform Organization.
+through a nullable owner. The Realmroot Platform Organization is an ordinary,
+visible Organization whose members and resources use the same RBAC rules as
+every other Organization.
 
 ## Management Surface Responsibilities
 

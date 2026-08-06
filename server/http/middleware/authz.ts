@@ -6,7 +6,6 @@ import {
   authorizeOwner,
 } from '@server/domain/authorization-context'
 import { forbidden, unauthorized } from '@server/domain/errors'
-import { platformOrganization } from '@server/domain/platform-organization'
 import { resolveOrganizationUserAuthorizationContext } from '@server/usecases/organization-membership-scopes'
 import { type ProtectedResource, requiredResourceScope } from '@shared/authz'
 import { predefinedOrganizationRoleScopes } from '@shared/organization-access'
@@ -55,9 +54,8 @@ export async function authorizeOrganizationOwner(
 }
 
 export function authorizedOrganizationOwnerId(owner: AuthorizedOwner) {
-  if (owner.type === 'realm') return platformOrganization.id
   if (owner.type === 'organization') return owner.id
-  throw new Error('A User tenant cannot own an Organization-owned resource.')
+  throw new Error('Only an Organization tenant can own an Organization-owned resource.')
 }
 
 export async function authorizedOrganizationIds(
@@ -92,7 +90,6 @@ export async function authorizedTenantInventory(
     throw forbidden(`OAuth scope "${requiredScope}" is required.`)
   }
   if (agent.authority?.kind === 'organization') {
-    if (agent.authority.organizationId === platformOrganization.id) return []
     return [{ type: 'organization', id: agent.authority.organizationId }]
   }
   if (agent.authority?.kind === 'user') return [{ type: 'user', id: agent.authority.userId }]
@@ -167,7 +164,7 @@ export async function resolveAuthorizationContext(
 }
 
 function organizationBoundary(organizationId: string): AuthorizationTenant {
-  return organizationId === platformOrganization.id ? { type: 'realm' } : { type: 'organization', id: organizationId }
+  return { type: 'organization', id: organizationId }
 }
 
 export function authenticatedUser(): MiddlewareHandler {

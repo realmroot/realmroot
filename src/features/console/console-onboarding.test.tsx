@@ -90,6 +90,7 @@ describe('console onboarding', () => {
     expect(screen.getByDisplayValue('customer-portal')).toBeTruthy()
     expect(screen.getByLabelText('Application name')).toHaveProperty('value', 'Customer portal')
     expect(screen.getByLabelText('Slug')).toHaveProperty('value', 'customer-portal')
+    await waitFor(() => expect(screen.getByRole('combobox')).toHaveProperty('value', 'org-1'))
     expect(screen.getByRole('button', { name: /Single-page app/ }).getAttribute('aria-pressed')).toBe('true')
     expect(screen.queryByRole('switch', { name: 'Device login' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: /Native app/ }))
@@ -111,6 +112,7 @@ describe('console onboarding', () => {
             slug: 'review-app',
             clientType: 'public_native',
             firstParty: true,
+            ownerOrganizationId: 'org-1',
             allowedGrantTypes: ['authorization_code', 'refresh_token', deviceCodeGrantType],
             redirectUris: ['http://localhost:4173/oidc/callback'],
           },

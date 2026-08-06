@@ -1,5 +1,4 @@
 import { badRequest, conflict, forbidden, notFound, preconditionFailed, resourceInUse } from '@server/domain/errors'
-import { platformOrganization } from '@server/domain/platform-organization'
 import {
   isRealmrootResourceServer,
   realmrootResourceServer,
@@ -209,8 +208,8 @@ export async function cancelInvitation(deps: Deps, organizationId: string, id: s
 
 export async function createResource(deps: Deps, input: CreateApiResourceRequest) {
   const enabled = input.enabled ?? true
-  const ownerOrganizationId = input.ownerOrganizationId ?? platformOrganization.id
-  if (input.ownerOrganizationId) await requireActiveOrganization(deps, input.ownerOrganizationId)
+  const ownerOrganizationId = input.ownerOrganizationId
+  await requireActiveOrganization(deps, ownerOrganizationId)
   const accessEligibility = apiResourceEligibilitySchema.parse(
     input.accessEligibility ?? { mode: 'realm', organizationIds: [] },
   )
@@ -388,9 +387,9 @@ function resourceMutationAudit(
     id: createId('agaudit'),
     action,
     result: 'allowed',
-    realmOwned: ownerOrganizationId === platformOrganization.id,
+    realmOwned: false,
     ownerUserId: null,
-    ownerOrganizationId: ownerOrganizationId === platformOrganization.id ? null : ownerOrganizationId,
+    ownerOrganizationId,
     controllerUserId: actor.controllerUserId,
     subjectIssuer: actor.agent?.issuer ?? null,
     subject: actor.agent?.subject ?? null,

@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { ApplicationTypeCards, createApplicationGrantTypes } from '@/features/management/create-dialogs'
 import { SwitchRow } from '@/features/management/dialogs'
+import { OrganizationOwnerField } from '@/features/management/ownership-controls'
 import { ResourcePage, SetupChecklist } from '@/features/management/resource-components'
 import {
   Badge,
@@ -24,7 +25,7 @@ import {
   useState,
 } from '@/features/management/shared'
 import { parseForm, useAdminMutation } from '@/features/management/utils'
-import { consoleQueryKeys, createApplication, getAdminReadiness } from '@/lib/api/management'
+import { consoleQueryKeys, createApplication, getAdminReadiness, listOrganizations } from '@/lib/api/management'
 
 export function ConsoleOnboardingPage() {
   const navigate = useNavigate()
@@ -33,6 +34,8 @@ export function ConsoleOnboardingPage() {
     queryKey: consoleQueryKeys.readiness,
     queryFn: getAdminReadiness,
   })
+  const organizationsQuery = useQuery({ queryKey: consoleQueryKeys.organizations, queryFn: listOrganizations })
+  const [ownerOrganizationId, setOwnerOrganizationId] = useState('')
   const [form, setForm] = useState({
     name: 'Customer portal',
     slug: 'customer-portal',
@@ -56,6 +59,11 @@ export function ConsoleOnboardingPage() {
   const setupComplete = readinessQuery.data?.admin.setupRequired === false
   const showApplicationSetup =
     Boolean(application) || readinessQuery.data?.admin.missing.includes('oidc_application') === true
+
+  useEffect(() => {
+    if (ownerOrganizationId) return
+    setOwnerOrganizationId(organizationsQuery.data?.organizations[0]?.id ?? '')
+  }, [organizationsQuery.data?.organizations, ownerOrganizationId, setOwnerOrganizationId])
 
   useEffect(() => {
     if (!setupComplete || application) return
@@ -115,12 +123,18 @@ export function ConsoleOnboardingPage() {
                       slug: form.slug,
                       clientType: form.clientType,
                       firstParty: true,
+                      ownerOrganizationId,
                       allowedGrantTypes: createApplicationGrantTypes(form.clientType, form.deviceLoginEnabled),
                       redirectUris: form.redirectUris.split('\n').filter(Boolean),
                     }),
                   )
                 }}
               >
+                <OrganizationOwnerField
+                  onChange={setOwnerOrganizationId}
+                  organizations={organizationsQuery.data?.organizations ?? []}
+                  value={ownerOrganizationId}
+                />
                 <ApplicationTypeCards
                   onChange={(clientType) =>
                     setForm((value) => ({

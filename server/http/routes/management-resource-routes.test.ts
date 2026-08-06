@@ -117,6 +117,7 @@ describe('management resource routes', () => {
         identifier: 'contacts',
         name: 'Contacts',
         resourceUrl: 'https://api.example.com',
+        ownerOrganizationId: 'org-1',
       },
       201,
     )

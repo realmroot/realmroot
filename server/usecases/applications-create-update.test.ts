@@ -1,5 +1,5 @@
 import {
-  createApplication,
+  createApplication as createApplicationUsecase,
   deleteApplication,
   getApplication,
   listApplicationSecrets,
@@ -17,6 +17,29 @@ import type {
 } from '@server/usecases/ports'
 import { type ApplicationResponse, deviceCodeGrantType } from '@shared/api/applications'
 import { describe, expect, it, vi } from 'vitest'
+
+function createApplication(
+  deps: Deps,
+  issuer: string,
+  input: Omit<Parameters<typeof createApplicationUsecase>[2], 'ownerOrganizationId'> & {
+    ownerOrganizationId?: string
+  },
+  actorUserId: string,
+) {
+  const ownerOrganizationId = input.ownerOrganizationId ?? 'org_platform'
+  return createApplicationUsecase(
+    {
+      ...deps,
+      authorization: {
+        ...deps.authorization,
+        findOrganization: deps.authorization?.findOrganization ?? (async () => ({ disabled: false })),
+      },
+    } as Deps,
+    issuer,
+    { ...input, ownerOrganizationId },
+    actorUserId,
+  )
+}
 
 describe('service.test 1', () => {
   it('requires an explicitly selected owner Organization to be active', async () => {

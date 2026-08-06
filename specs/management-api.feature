@@ -167,8 +167,9 @@ Feature: Unified Realmroot resource API
     Given User, Organization, and Realm resources exist
     When a Session or tenant-bound Agent lists, reads, updates, or deletes those resources
     Then required scopes and the persisted resource boundary are checked by the same authorizer
+    And creating an Organization-owned Application or Resource server requires an explicit owner selector
     And an owner selector can only narrow to a tenant the caller controls
-    And the Realm sentinel is never exposed as an Organization membership
+    And every persisted Organization is exposed and authorized through ordinary Organization membership
 
 
   @entrypoint:restish @journey:management-restish-settings-update

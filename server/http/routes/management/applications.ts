@@ -1,4 +1,3 @@
-import { platformOrganization } from '@server/domain/platform-organization'
 import {
   createApplication,
   deleteApplication,
@@ -102,11 +101,7 @@ managementApplicationsRoute.get('/', async (c) => {
 
 managementApplicationsRoute.post('/', async (c) => {
   const body = await readJson(c, createApplicationRequestSchema)
-  const owner = await authorizeOrganizationOwner(
-    c,
-    body.ownerOrganizationId ?? platformOrganization.id,
-    'applications:write',
-  )
+  const owner = await authorizeOrganizationOwner(c, body.ownerOrganizationId, 'applications:write')
   const application = await createApplication(
     getDeps(c),
     issuerFor(c),

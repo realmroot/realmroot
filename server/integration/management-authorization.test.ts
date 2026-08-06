@@ -82,19 +82,19 @@ describe('authorization management over real D1', () => {
     }
   })
 
-  it('never exposes the Realm sentinel as an Organization aggregate', async () => {
+  it('exposes the platform Organization through ordinary Organization authorization', async () => {
     const cookie = await signInAdmin(harness)
+    const listResponse = await harness.request('/api/organizations', { headers: { cookie } })
+    expect(listResponse.status).toBe(200)
+    expect((await listResponse.json()) as { organizations: Array<{ id: string }> }).toMatchObject({
+      organizations: expect.arrayContaining([expect.objectContaining({ id: 'org_platform' })]),
+    })
     for (const request of [
       harness.request('/api/organizations/org_platform', { headers: { cookie } }),
       harness.request('/api/organizations/org_platform/members', { headers: { cookie } }),
-      harness.request('/api/organizations/org_platform/roles', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', cookie },
-        body: JSON.stringify({ key: 'invalid', displayName: 'Invalid', scopes: [] }),
-      }),
     ]) {
       const response = await request
-      expect(response.status).toBe(404)
+      expect(response.status).toBe(200)
     }
   })
 
@@ -253,6 +253,7 @@ describe('authorization management over real D1', () => {
       identifier: 'atomic-agent-api',
       name: 'Atomic Agent API',
       resourceUrl: 'https://atomic-agent.example.com/api',
+      ownerOrganizationId: 'org_platform',
     })
     await harness.db.insert(agentHost).values({
       id: 'atomic-host',
@@ -590,6 +591,7 @@ describe('authorization management over real D1', () => {
       name: 'RAR Projects API',
       resourceUrl: 'https://projects.example.com/api',
       connectorId: connector.id,
+      ownerOrganizationId: 'org_platform',
       authorizationDetails,
     })
     const resource = (await created.json()) as { id: string; authorizationDetails: unknown }
@@ -624,6 +626,7 @@ describe('authorization management over real D1', () => {
       identifier: 'projects-api',
       name: 'Projects API',
       resourceUrl: 'https://projects.example.com/api',
+      ownerOrganizationId: 'org_platform',
     }
 
     const enabled = await harness.request('/api/resource-servers', {
@@ -701,6 +704,7 @@ describe('authorization management over real D1', () => {
       name: 'Projects API',
       resourceUrl: 'https://projects.example.com/api',
       connectorId: connector.id,
+      ownerOrganizationId: 'org_platform',
     })
 
     const response = await harness.request(`/api/resource-servers/${resource.id}`, {
@@ -723,6 +727,7 @@ describe('authorization management over real D1', () => {
         identifier: 'https://api.example.com',
         name: 'Example API',
         resourceUrl: 'https://api.example.com',
+        ownerOrganizationId: 'org_platform',
       })
     ).json()) as { id: string }
 
@@ -756,6 +761,7 @@ describe('authorization management over real D1', () => {
         identifier: 'history-api',
         name: 'History API',
         resourceUrl: 'https://history.example.com/api',
+        ownerOrganizationId: 'org_platform',
       })
     ).json()) as { id: string }
     const [admin] = await harness.db.select({ id: user.id }).from(user).where(eq(user.email, 'admin@example.com'))
@@ -855,6 +861,7 @@ describe('authorization management over real D1', () => {
       name: 'Conditional external API',
       resourceUrl: 'https://conditional.example.com/api',
       connectorId: connector.id,
+      ownerOrganizationId: 'org_platform',
     })
 
     const archived = await harness.request(`/api/resource-servers/${resource.id}/archival`, {
@@ -881,6 +888,7 @@ describe('authorization management over real D1', () => {
         identifier: 'archived-api',
         name: 'Archived API',
         resourceUrl: 'https://archived.example.com/api',
+        ownerOrganizationId: 'org_platform',
       })
     ).json()) as { id: string }
     const [admin] = await harness.db.select({ id: user.id }).from(user).where(eq(user.email, 'admin@example.com'))

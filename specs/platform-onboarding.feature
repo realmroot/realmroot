@@ -28,7 +28,7 @@ Feature: Platform bootstrap and route access
     When the operator applies the pending production migrations
     Then the migration preserves Applications, Resource servers, and Better Auth memberships
     And the legacy custom Role definitions and assignments are deliberately removed without translation
-    And existing Applications and Resource servers receive the platform Organization as owner
+    And existing Applications and Resource servers retain their real owning Organization
     And the migrated database satisfies all foreign key constraints
 
   @e2e @entrypoint:product-ui @journey:first-admin-gate
@@ -42,7 +42,7 @@ Feature: Platform bootstrap and route access
     Given no users exist
     When I submit the onboarding form with admin profile and password details
     Then the first admin user is created
-    And a private Realm sentinel is created without Organization membership
+    And the bootstrap admin becomes Owner of the Realmroot Platform Organization
     And the page confirms that Console setup can continue from sign-in
 
   @e2e @entrypoint:product-ui @journey:root-signed-out-redirect

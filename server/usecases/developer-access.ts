@@ -30,7 +30,7 @@ export async function resolveDeveloperAccess(
   const selected = new Set(consoleAccessPolicy.selectedOrganizationIds)
   const eligibleLevels = new Set(consoleAccessPolicy.eligibleAccessLevels)
   const consoleOrganizations = activeMemberships.flatMap(({ membership, organization }) => {
-    if (!organization || organization.id === 'org_platform') return []
+    if (!organization) return []
     const accessLevel = (['owner', 'admin', 'developer'] as const).find(
       (role) => membership.roles.includes(role) && eligibleLevels.has(role),
     )
