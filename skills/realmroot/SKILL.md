@@ -30,7 +30,7 @@ or asking for a manually provisioned API key.
 Read [references/setup.md](references/setup.md) and complete its setup and
 identity procedure.
 
-This step is complete only when `whoami` succeeds and returns both
+This step is complete only after `restish auth login` succeeds and `whoami` returns both
 `agent.issuer` and `agent.subject`. If the user asked only for enrollment or
 identity, return those non-secret identifiers and stop.
 

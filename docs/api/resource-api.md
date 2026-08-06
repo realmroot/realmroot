@@ -55,6 +55,11 @@ connect <resource-server-id>
 access
 ```
 
+The plugin separately contributes `restish auth login`, `restish auth logout`,
+and `restish auth status`. Login is the only identity-establishing command;
+status is a zero-network local inventory. The generated `whoami` operation is a
+read-only current-identity query and never initiates login or token refresh.
+
 Resource Server and Resource representations are ordinary HTTP resources and
 are read with Restish's generic `get` command. This keeps local configuration
 logic out of the Realmroot plugin and avoids turning routine reads into custom

@@ -57,7 +57,7 @@ restish plugin install "$PLUGIN_BIN_DIR/restish-realmroot" --yes
 restish plugin list
 ```
 
-Optionally name a new Agent before its first protected operation:
+Optionally name a new Agent before explicit login:
 
 ```bash
 export REALMROOT_AGENT_NAME="Build Agent"
@@ -156,33 +156,36 @@ PROFILE_ORIGIN="${PROFILE_ORIGIN%/}"
 restish api set "$API_NAME" \
   "profiles.${PROFILE_NAME}.base_url: ${PROFILE_ORIGIN}/api"
 restish api inspect "$API_NAME"
+restish auth login --hostname "${PROFILE_ORIGIN#*://}"
 restish -p "$PROFILE_NAME" "$API_NAME" whoami -o json
 AUTH_ORIGIN="$PROFILE_ORIGIN"
 export RSH_PROFILE="$PROFILE_NAME"
 ```
 
 Validate `PROFILE_ORIGIN` by the same origin rules. Keep each profile's
-credentials isolated and invoke its first protected operation explicitly.
+credentials isolated and invoke login explicitly.
 Profiles resolving to the same issuer may reuse the stable identity; a
 different issuer uses a separate identity.
 
 Profile setup is complete when inspection shows the exact profile base URL and
-its explicit `whoami` call succeeds. Keep the selected `RSH_PROFILE` and
+its explicit login and `whoami` calls succeed. Keep the selected `RSH_PROFILE` and
 matching `AUTH_ORIGIN` for every later branch command.
 
 ## Establish Identity
 
-Invoke the generated identity operation in the selected profile:
+Log in first, then invoke the generated current-identity operation:
 
 ```bash
+restish auth login
 restish "$API_NAME" whoami -o json
 ```
 
-On first use, the adapter registers a stable Agent, opens the controller's
+Login registers or restores the runtime's stable Agent, opens the controller's
 approval page, waits, and resumes the same operation after approval. The
 controller signs in and decides; the Agent remains the Restish request
 identity.
 
-Repeat `whoami` after interruption to resume enrollment. Use
+Repeat `restish auth login` after interruption to resume enrollment. `whoami`
+is read-only and returns a clear not-logged-in error instead of enrolling. Use
 `AUTH_ORIGIN/api/auth` as the returned OIDC issuer and consume its discovery
 metadata for OIDC endpoints.

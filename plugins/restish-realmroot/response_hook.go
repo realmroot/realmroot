@@ -218,7 +218,7 @@ func acceptCredentialOffer(
 	if !ok {
 		return plugin.ResponseMiddlewareOutput{}, errors.New("Agent state store cannot persist Resource credentials")
 	}
-	runtime, err := agentRuntime()
+	runtime, err := agentRuntimeForStateStore(store)
 	if err != nil {
 		return plugin.ResponseMiddlewareOutput{}, err
 	}
@@ -276,7 +276,7 @@ func removeRejectedTargetCredential(requestURI string, states agentStateFinder) 
 	if !ok {
 		return false, nil
 	}
-	runtime, err := agentRuntime()
+	runtime, err := agentRuntimeForStateStore(credentials)
 	if err != nil {
 		return false, err
 	}

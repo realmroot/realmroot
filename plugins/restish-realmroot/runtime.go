@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-const defaultAgentRuntime = "restish"
+var errUnknownAgentRuntime = errors.New("Agent runtime could not be detected; run `restish auth login --runtime RUNTIME`")
 
 var sessionEnvironmentNames = []string{
 	"AGENT_SESSION_ID",
@@ -31,7 +31,7 @@ var runtimeDetectors = []runtimeDetector{
 	{name: "cursor", matches: hasEnvironment("CURSOR_AGENT")},
 	{name: "kiro", matches: hasEnvironments("AGENT_DISPLAY_OUT", "AGENT_CONTEXT_OUT")},
 	{name: "pi", matches: hasEnvironment("PI_CODING_AGENT")},
-	{name: "codex", matches: hasEnvironment("CODEX_CI")},
+	{name: "codex", matches: hasAnyEnvironment("CODEX_CI", "CODEX_THREAD_ID")},
 	{name: "copilot", matches: hasEnvironment("COPILOT_CLI")},
 	{name: "gemini", matches: hasEnvironment("GEMINI_CLI")},
 	{name: "claude", matches: hasEnvironment("CLAUDECODE")},
@@ -65,13 +65,13 @@ func detectAgentRuntime(lookup environmentLookup) (string, error) {
 			return detector.name, nil
 		}
 	}
-	return defaultAgentRuntime, nil
+	return "", errUnknownAgentRuntime
 }
 
 func normalizeAgentRuntime(value string) (string, error) {
 	runtime := strings.ToLower(strings.TrimSpace(value))
 	if runtime == "" || len(runtime) > 64 {
-		return "", errors.New("AGENT must name a runtime with 1 to 64 characters")
+		return "", errors.New("runtime must have 1 to 64 characters")
 	}
 	for index, char := range runtime {
 		if (char >= 'a' && char <= 'z') || (char >= '0' && char <= '9') || char == '.' || char == '_' || char == '-' {
@@ -79,7 +79,7 @@ func normalizeAgentRuntime(value string) (string, error) {
 				continue
 			}
 		}
-		return "", errors.New("AGENT must contain only letters, numbers, dots, underscores, or hyphens")
+		return "", errors.New("runtime must contain only letters, numbers, dots, underscores, or hyphens")
 	}
 	return runtime, nil
 }

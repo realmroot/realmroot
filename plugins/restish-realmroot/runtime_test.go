@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"strings"
 	"testing"
 )
@@ -31,6 +32,7 @@ func TestDetectAgentRuntimeRecognizesAgentTools(t *testing.T) {
 		{environment: map[string]string{"AGENT_DISPLAY_OUT": "", "AGENT_CONTEXT_OUT": ""}, expected: "kiro"},
 		{environment: map[string]string{"PI_CODING_AGENT": ""}, expected: "pi"},
 		{environment: map[string]string{"CODEX_CI": ""}, expected: "codex"},
+		{environment: map[string]string{"CODEX_THREAD_ID": "thread-1"}, expected: "codex"},
 		{environment: map[string]string{"COPILOT_CLI": ""}, expected: "copilot"},
 		{environment: map[string]string{"GEMINI_CLI": ""}, expected: "gemini"},
 		{environment: map[string]string{"CLAUDECODE": ""}, expected: "claude"},
@@ -46,13 +48,9 @@ func TestDetectAgentRuntimeRecognizesAgentTools(t *testing.T) {
 	}
 }
 
-func TestDetectAgentRuntimeFallsBackToRestish(t *testing.T) {
-	runtime, err := detectAgentRuntime(testEnvironment(nil))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if runtime != defaultAgentRuntime {
-		t.Fatalf("runtime = %q", runtime)
+func TestDetectAgentRuntimeDoesNotGuess(t *testing.T) {
+	if _, err := detectAgentRuntime(testEnvironment(nil)); !errors.Is(err, errUnknownAgentRuntime) {
+		t.Fatalf("error = %v", err)
 	}
 }
 

@@ -19,7 +19,16 @@ import (
 const (
 	authProvider       = "realmroot-agent"
 	targetAuthProvider = "realmroot-target"
+	platformScopes     = "agent:read resource-servers:read resources:read connection-requests:read connection-requests:write access-requests:read access-requests:write access-authorizations:read access-authorizations:issue"
 )
+
+type terminalAgentApprovalError struct {
+	status string
+}
+
+func (e *terminalAgentApprovalError) Error() string {
+	return fmt.Sprintf("Agent enrollment was %s", e.status)
+}
 
 type registrationResponse struct {
 	AgentID  string `json:"agent_id"`
@@ -36,7 +45,11 @@ type agentStatusResponse struct {
 }
 
 type agentSelfStatusResponse struct {
-	Agent *stableIdentity `json:"agent"`
+	Agent        *stableIdentity `json:"agent"`
+	Installation *struct {
+		ID     string `json:"id"`
+		Status string `json:"status"`
+	} `json:"installation"`
 }
 
 type targetTokenResponse struct {
@@ -76,17 +89,18 @@ func authenticateRequest(
 	client httpDoer,
 	prompt approvalPrompt,
 ) (plugin.AuthHookOutput, error) {
-	runtime, err := agentRuntime()
-	if err != nil {
-		return plugin.AuthHookOutput{}, err
-	}
+	detectedRuntime, detectionErr := agentRuntimeForStateStore(states)
 	switch input.Params["provider"] {
 	case targetAuthProvider:
 		credentials, ok := states.(resourceCredentialStore)
 		if !ok {
 			return plugin.AuthHookOutput{}, nil
 		}
-		return authenticateTargetRequest(input, credentials, client, runtime, strings.TrimSuffix(input.Params["issuer"], "/"))
+		issuer := strings.TrimSuffix(input.Params["issuer"], "/")
+		if detectionErr != nil {
+			return plugin.AuthHookOutput{}, detectionErr
+		}
+		return authenticateTargetRequest(input, credentials, client, detectedRuntime, issuer)
 	case authProvider:
 	default:
 		return plugin.AuthHookOutput{}, nil
@@ -99,6 +113,10 @@ func authenticateRequest(
 	if err != nil {
 		return plugin.AuthHookOutput{}, err
 	}
+	if detectionErr != nil {
+		return plugin.AuthHookOutput{}, detectionErr
+	}
+	runtime := detectedRuntime
 	target := agentTarget{
 		API:     input.API,
 		Profile: input.Profile,
@@ -106,21 +124,50 @@ func authenticateRequest(
 		Origin:  origin,
 		Issuer:  configuration.AgentIdentityIssuer,
 	}
-	state, err := ensureAgentIdentity(context.Background(), states, client, prompt, target, configuration)
+	state, err := states.Load(target)
 	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return plugin.AuthHookOutput{}, fmt.Errorf(
+				"runtime %q is not logged in to %s; run `restish auth login`",
+				runtime,
+				originHostname(origin),
+			)
+		}
 		return plugin.AuthHookOutput{}, err
 	}
-	state, credential, err := ensurePlatformCredential(context.Background(), states, client, target, state, configuration)
-	if err != nil {
-		return plugin.AuthHookOutput{}, err
+	if state.Identity == nil || state.PlatformCredential == nil {
+		return plugin.AuthHookOutput{}, fmt.Errorf(
+			"runtime %q has not completed login to %s; run `restish auth login` to resume",
+			runtime,
+			originHostname(origin),
+		)
 	}
-	if credentials, ok := states.(resourceCredentialStore); ok {
+	credential := *state.PlatformCredential
+	readOnlyWhoami := input.Request.Method == http.MethodGet && sameRequestEndpoint(input.Request.URI, configuration.AgentEndpoint)
+	if credential.AccessToken == "" || credential.ExpiresAt == nil || !time.Now().Add(5*time.Second).Before(*credential.ExpiresAt) {
+		if readOnlyWhoami {
+			return plugin.AuthHookOutput{}, errors.New("current Realmroot login cannot be read without a valid local token; run `restish auth login`")
+		}
+		state, credential, err = ensurePlatformCredential(context.Background(), states, client, target, state, configuration)
+		if err != nil {
+			return plugin.AuthHookOutput{}, err
+		}
+	}
+	if !readOnlyWhoami {
+		credentials, ok := states.(resourceCredentialStore)
+		if !ok {
+			return signAuthenticatedRequest(input, credential)
+		}
 		if _, lookupErr := credentials.FindByResourceURL(input.Request.URI, runtime, state.Issuer); lookupErr == nil {
 			return authenticateTargetRequest(input, credentials, client, runtime, state.Issuer)
 		} else if !errors.Is(lookupErr, os.ErrNotExist) {
 			return plugin.AuthHookOutput{}, lookupErr
 		}
 	}
+	return signAuthenticatedRequest(input, credential)
+}
+
+func signAuthenticatedRequest(input plugin.AuthHookInput, credential dpopCredential) (plugin.AuthHookOutput, error) {
 	proof, err := signDPoPProof(credential.PrivateKey, input.Request.Method, input.Request.URI, credential.AccessToken, time.Now())
 	if err != nil {
 		return plugin.AuthHookOutput{}, err
@@ -131,6 +178,35 @@ func authenticateRequest(
 			Headers: headers,
 		},
 	}, nil
+}
+
+func sameRequestEndpoint(requestURI string, endpoint string) bool {
+	requestURL, requestErr := url.Parse(requestURI)
+	endpointURL, endpointErr := url.Parse(endpoint)
+	if requestErr != nil || endpointErr != nil {
+		return false
+	}
+	return requestURL.Scheme == endpointURL.Scheme && requestURL.Host == endpointURL.Host &&
+		strings.TrimSuffix(requestURL.EscapedPath(), "/") == strings.TrimSuffix(endpointURL.EscapedPath(), "/")
+}
+
+func agentRuntimeForStateStore(states any) (string, error) {
+	runtime, err := agentRuntime()
+	if err == nil || !errors.Is(err, errUnknownAgentRuntime) {
+		return runtime, err
+	}
+	fileStates, ok := states.(*fileStateStore)
+	if !ok {
+		return "", err
+	}
+	fallback, fallbackErr := newAuthBindingStore(fileStates).RuntimeFallback()
+	if fallbackErr != nil {
+		return "", fallbackErr
+	}
+	if fallback == "" {
+		return "", err
+	}
+	return fallback, nil
 }
 
 func authenticateTargetRequest(
@@ -278,12 +354,24 @@ func ensureAgentIdentity(
 	target agentTarget,
 	configuration agentConfiguration,
 ) (agentState, error) {
+	return ensureAgentIdentityNamed(ctx, states, client, prompt, target, configuration, agentDisplayName())
+}
+
+func ensureAgentIdentityNamed(
+	ctx context.Context,
+	states stateStore,
+	client httpDoer,
+	prompt approvalPrompt,
+	target agentTarget,
+	configuration agentConfiguration,
+	displayName string,
+) (agentState, error) {
 	state, err := states.Load(target)
 	if err != nil {
 		if !errors.Is(err, os.ErrNotExist) {
 			return agentState{}, err
 		}
-		state, err = registerAgent(ctx, states, client, target, agentDisplayName(), false, configuration)
+		state, err = registerAgent(ctx, states, client, target, displayName, false, configuration)
 		if err != nil {
 			return agentState{}, err
 		}
@@ -303,6 +391,13 @@ func ensureAgentIdentity(
 		return agentState{}, err
 	}
 	if err := waitForAgentApproval(ctx, client, state, configuration); err != nil {
+		var terminal *terminalAgentApprovalError
+		if errors.As(err, &terminal) {
+			state.RegistrationApproval = nil
+			if updateErr := states.Update(target, state); updateErr != nil {
+				return agentState{}, errors.Join(err, updateErr)
+			}
+		}
 		return agentState{}, err
 	}
 
@@ -408,7 +503,11 @@ func ensurePlatformCredential(
 	if err := states.Update(target, state); err != nil {
 		return state, dpopCredential{}, err
 	}
-	return state, *credential, nil
+	state, err := states.Load(target)
+	if err != nil {
+		return state, dpopCredential{}, err
+	}
+	return state, *state.PlatformCredential, nil
 }
 
 func requestPlatformToken(
@@ -433,7 +532,7 @@ func requestPlatformToken(
 		"grant_type": {"urn:ietf:params:oauth:grant-type:jwt-bearer"},
 		"assertion":  {mustAgentJWT(state, configuration.Issuer)},
 		"resource":   {credential.ResourceIndicator},
-		"scope":      {"agent:read resource-servers:read resources:read connection-requests:read connection-requests:write access-requests:read access-requests:write access-authorizations:read access-authorizations:issue"},
+		"scope":      {platformScopes},
 	}, &response); err != nil {
 		return credential, fmt.Errorf("obtain Realmroot OAuth access token: %w", err)
 	}
@@ -545,11 +644,19 @@ func registerAgent(
 		},
 	}
 	if replace {
+		previous, loadErr := states.Load(target)
+		if loadErr != nil {
+			return agentState{}, loadErr
+		}
+		state.snapshot = previous.snapshot
 		err = states.Update(target, state)
 	} else {
 		_, err = states.Create(target, state)
 	}
-	return state, err
+	if err != nil {
+		return agentState{}, err
+	}
+	return states.Load(target)
 }
 
 func waitForAgentApproval(
@@ -587,7 +694,7 @@ func waitForAgentApproval(
 			case <-timer.C:
 			}
 		case "rejected", "revoked", "expired":
-			return fmt.Errorf("Agent enrollment was %s", status.Status)
+			return &terminalAgentApprovalError{status: status.Status}
 		default:
 			return fmt.Errorf("Agent enrollment returned unexpected status %q", status.Status)
 		}

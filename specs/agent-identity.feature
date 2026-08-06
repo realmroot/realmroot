@@ -21,20 +21,20 @@ Feature: Agent identity and delegated API authorization
 
   Rule: Agent identities remain stable across hosts and credentials
 
-    @e2e @entrypoint:agent-protocol @journey:agent-identity-enrollment
-    Scenario: A new Agent establishes a stable identity on its first protected API operation
+    @e2e @entrypoint:restish @journey:agent-identity-enrollment
+    Scenario: A new runtime establishes a stable identity through explicit login
       Given a new Agent connects Restish to the Realmroot OpenAPI contract
-      When the Agent invokes whoami without a local Realmroot identity
+      When the Agent invokes auth login without a local Realmroot identity
       Then the transparent Restish authentication adapter registers locally generated host and Agent keys
-      And whoami waits while an authorized controller approves the Agent once from the hosted verification page
+      And auth login waits while an authorized controller approves the Agent once from the hosted verification page
       And the adapter creates a personal stable identity through the approved Agent session
       Then Realmroot creates an Agent with a stable issuer and subject
       And the Agent belongs to exactly one home space
       And users govern the Agent through roles in that space
       And the host registration is bound to that Agent identity
-      And the original whoami operation resumes and returns the stable issuer and subject
+      And auth login resumes and returns the stable issuer and subject
       And the hosted approval page replaces the request with a clear completion state that says it can be closed
-      And later OpenAPI operations reuse the Agent identity without another login command
+      And later OpenAPI operations reuse the Agent identity without another registration
       And enrollment alone grants no management or external API resource access
       And an unbound protocol registration cannot exercise Agent identity capabilities
 
@@ -47,15 +47,48 @@ Feature: Agent identity and delegated API authorization
       And the controller's browser session is used only to approve enrollment or authority
 
     @entrypoint:restish @journey:agent-runtime-identity-continuity
-    Scenario: Restish API aliases and sessions reuse the runtime Agent identity
-      Given the plugin detects the current Agent runtime or reads an explicit runtime declaration
+    Scenario: Realmroot issuer and runtime select one stable local identity
+      Given the plugin detects the current Agent runtime or receives an explicit runtime from auth login
       And one Realmroot issuer is connected through multiple Restish API names or profiles
-      When the Agent invokes Realmroot operations across those connections and later runtime sessions
+      When the Agent logs in and invokes Realmroot operations across those connections and later runtime sessions
       Then the plugin reuses one host registration and stable Agent issuer and subject for that runtime
       And Restish API names, profiles, and runtime session identifiers do not create another Agent identity
       And another runtime uses a separately secured local identity
       And another Realmroot issuer uses a separately secured local identity
-      And an explicitly supplied AGENT runtime selects that runtime identity instead of the detected runtime
+      And an explicitly supplied runtime selects that runtime identity instead of the detected runtime
+
+    @entrypoint:restish @journey:restish-agent-auth-accounts
+    Scenario: Restish exposes a narrow local auth lifecycle and identity inventory
+      Given multiple runtimes have authenticated stable identities across Realmroot hosts
+      When the Agent opens auth help or invokes auth status
+      Then only login, logout, and status are exposed by the plugin auth command group
+      And status lists every locally authenticated runtime identity grouped by issuer and marks identities matching the current runtime without contacting Realmroot or exposing credentials
+      When the Agent invokes auth logout for the current or explicitly named runtime
+      Then only that local identity's protected credential and session state are removed
+      And the remote installation and stable Agent identity remain active
+      And the plugin retains only the non-secret issuer, runtime, and stable identity binding needed for a later login
+      And another local runtime identity and another Realmroot issuer remain unchanged
+
+    @entrypoint:restish @journey:restish-agent-whoami
+    Scenario: Restish whoami reads only the current identity
+      Given the current runtime is authenticated to the current Realmroot issuer
+      When the Agent invokes the existing whoami command
+      Then Realmroot returns only the stable identity used by that issuer and runtime
+      And the plugin uses only an existing unexpired local token without registering, logging in, obtaining, or refreshing a token
+      And an unauthenticated runtime receives a clear not-logged-in error
+      And whoami remains distinct from the all-host local status inventory
+
+    @entrypoint:restish @journey:restish-agent-login-boundaries
+    Scenario: Login is the only command that can establish remote authentication
+      Given the current runtime has no local identity for the selected Realmroot host
+      When the Agent invokes auth status or auth logout
+      Then the plugin performs no network request, registration, token exchange, or remote mutation
+      When the Agent invokes auth login and the runtime cannot be detected
+      Then the plugin requires an interactive runtime name or an explicit runtime flag and never guesses
+      When registration or polling is interrupted by a network failure
+      Then login fails with the network error while preserving resumable pending local state when one exists
+      And retrying login for the same issuer and runtime resumes that registration instead of creating another stable identity
+      And auth logout can discard that pending local state without changing any remote identity
 
     @e2e @entrypoint:product-ui @journey:agent-enrollment-denial
     Scenario: A controller can deny Agent enrollment

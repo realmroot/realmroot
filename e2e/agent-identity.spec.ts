@@ -18,14 +18,14 @@ test.describe('new Agent stable identity enrollment', () => {
     const plugin = createRestishAgentPlugin(baseURL)
 
     try {
-      const whoami = plugin.firstWhoami('E2E Build Agent')
-      await page.goto(await whoami.approvalUrl)
+      const login = plugin.login('E2E Build Agent')
+      await page.goto(await login.approvalUrl)
       await expect(page.getByRole('heading', { name: 'Approve Agent login' })).toBeVisible()
       await page.getByRole('button', { name: 'Approve login' }).click()
       await expect(page.getByRole('heading', { name: 'Authorization successful' })).toBeVisible()
       await expect(page.getByText('You can safely close this page.')).toBeVisible()
 
-      const result = await whoami.result
+      const result = await login.result
       expect(result.agent).toMatchObject({
         issuer: `${baseURL}/api/auth`,
         name: 'E2E Build Agent',
@@ -35,6 +35,9 @@ test.describe('new Agent stable identity enrollment', () => {
         issuer: result.agent.issuer,
         subject: result.agent.subject,
       })
+      expect(plugin.status().hosts[0]?.accounts).toContainEqual(
+        expect.objectContaining({ runtime: 'e2e', current: true, loggedIn: true }),
+      )
 
       await page.goto('/agents')
       await expect(page.getByRole('heading', { name: 'Agents' })).toBeVisible()
@@ -50,9 +53,9 @@ test.describe('new Agent stable identity enrollment', () => {
 
     const deniedEnrollmentPlugin = createRestishAgentPlugin(baseURL)
     try {
-      const whoami = deniedEnrollmentPlugin.firstWhoami('Denied Enrollment Agent')
-      const enrollmentResult = whoami.result.catch((error: unknown) => error)
-      await page.goto(await whoami.approvalUrl)
+      const login = deniedEnrollmentPlugin.login('Denied Enrollment Agent')
+      const enrollmentResult = login.result.catch((error: unknown) => error)
+      await page.goto(await login.approvalUrl)
       await page.getByRole('button', { name: 'Deny' }).click()
       await expect(page.getByRole('heading', { name: 'Authorization denied' })).toBeVisible()
       await expect(page.getByText('You can safely close this page.')).toBeVisible()
@@ -61,6 +64,33 @@ test.describe('new Agent stable identity enrollment', () => {
       })
     } finally {
       deniedEnrollmentPlugin.dispose()
+    }
+  })
+
+  test('[spec: agent-identity/restish-agent-auth-accounts] logout and login restore the same stable identity', async ({
+    page,
+  }) => {
+    await signIn(page)
+    const plugin = createRestishAgentPlugin(baseURL)
+    try {
+      const first = plugin.login('E2E Persistent Agent')
+      await page.goto(await first.approvalUrl)
+      await page.getByRole('button', { name: 'Approve login' }).click()
+      const original = await first.result
+
+      expect(plugin.logout()).toMatchObject({ loggedIn: false, remoteIdentityChanged: false })
+      expect(() => plugin.whoami()).toThrow(/not logged in/i)
+
+      const restored = plugin.login('E2E Persistent Agent')
+      await page.goto(await restored.approvalUrl)
+      await page.getByRole('button', { name: 'Approve login' }).click()
+      await page.goto(await restored.nextApprovalUrl())
+      await expect(page.getByRole('heading', { name: 'Add trusted host' })).toBeVisible()
+      await page.getByRole('button', { name: 'Add trusted host' }).click()
+      const result = await restored.result
+      expect(result.agent).toMatchObject({ id: original.agent.id, subject: original.agent.subject })
+    } finally {
+      plugin.dispose()
     }
   })
 })

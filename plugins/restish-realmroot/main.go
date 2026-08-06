@@ -8,7 +8,13 @@ import (
 	"github.com/rest-sh/restish/v2/plugin"
 )
 
-const pluginVersion = "0.9.0"
+const pluginVersion = "0.10.0"
+
+var commands = []plugin.CommandDecl{{
+	Name:  "auth",
+	Short: "Authenticate Realmroot Agent identities",
+	Long:  authCommandHelp,
+}}
 
 func main() {
 	manifest := plugin.Manifest{
@@ -16,13 +22,13 @@ func main() {
 		Version:           pluginVersion,
 		Description:       "Authenticate Realmroot and DPoP-bound target API requests as a stable Agent identity",
 		RestishAPIVersion: 2,
-		Hooks:             []string{"auth", "response-middleware"},
+		Hooks:             []string{"auth", "response-middleware", "command"},
 		HookTimeouts: map[string]time.Duration{
 			"auth":                10 * time.Minute,
 			"response-middleware": 10 * time.Minute,
 		},
 	}
-	if plugin.HandleStartupFlags(os.Stdout, manifest, nil) {
+	if plugin.HandleStartupFlags(os.Stdout, manifest, commands) {
 		return
 	}
 
@@ -32,6 +38,28 @@ func main() {
 	}
 
 	switch messageType {
+	case plugin.MsgTypeInit:
+		var input plugin.InitMsg
+		if err := plugin.DecMode.Unmarshal(raw, &input); err != nil {
+			exitWithError(fmt.Errorf("decode command input: %w", err))
+		}
+		// The command host sends no further frames until the plugin makes its
+		// first request, so a fresh decoder cannot lose buffered reply bytes.
+		client := plugin.NewCommandClient(os.Stdin, os.Stdout)
+		states := newFileStateStore()
+		err := runAuthCommand(input.Args, client, states, newAuthBindingStore(states))
+		if err != nil {
+			if writeErr := client.WriteStderr([]byte(err.Error() + "\n")); writeErr != nil {
+				exitWithError(writeErr)
+			}
+			if doneErr := client.Done(1); doneErr != nil {
+				exitWithError(doneErr)
+			}
+			return
+		}
+		if err := client.Done(0); err != nil {
+			exitWithError(err)
+		}
 	case "auth":
 		var input plugin.AuthHookInput
 		if err := plugin.DecMode.Unmarshal(raw, &input); err != nil {
