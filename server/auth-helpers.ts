@@ -1,10 +1,8 @@
 import type { TransactionalEmailSender } from '@server/adapters/gateways/email/sender'
 import { type AuthorizationTokenClaimInput, buildTokenClaims } from '@server/usecases/authorization'
 import type { Deps } from '@server/usecases/deps'
-import {
-  filterCurrentResourceScopes,
-  resolveOrganizationMembershipScopes,
-} from '@server/usecases/organization-membership-scopes'
+import { filterCurrentResourceScopes } from '@server/usecases/organization-membership-scopes'
+import { activeResourceEligibleForOrganization } from '@server/usecases/resource-eligibility'
 import { userConfigurableApplicationScopes } from '@shared/api/applications'
 import { type ApplicationOidcClaims, defaultApplicationOidcClaims } from '../shared/api/applications'
 import type { ManagementSignInSettingsResponse } from '../shared/api/management'
@@ -196,18 +194,19 @@ export async function filterOAuthAccessTokenScopes(
   }
 
   const identityScopes = new Set<string>(userConfigurableApplicationScopes)
-  if (!input.user.id || !input.referenceId || !input.resource) {
-    return requestedScopes.filter((scope) => identityScopes.has(scope))
-  }
+  if (!input.user.id || !input.resource) return requestedScopes.filter((scope) => identityScopes.has(scope))
 
   const resource = await deps.authorization.findResourceByResourceUrl(input.resource)
-  const membership = await deps.authorization.findMemberByOrganizationUser(input.referenceId, input.user.id)
-  if (!resource || !membership) return requestedScopes.filter((scope) => identityScopes.has(scope))
-
-  const authorizedScopes = new Set(
-    await resolveOrganizationMembershipScopes(deps, input.referenceId, membership.roles, resource.id),
-  )
-  return requestedScopes.filter((scope) => identityScopes.has(scope) || authorizedScopes.has(scope))
+  if (!resource || !activeResourceEligibleForOrganization(resource, input.referenceId)) {
+    return requestedScopes.filter((scope) => identityScopes.has(scope))
+  }
+  if (resource.accessEligibility.mode !== 'realm') {
+    const membership = input.referenceId
+      ? await deps.authorization.findMemberByOrganizationUser(input.referenceId, input.user.id)
+      : null
+    if (!membership) return requestedScopes.filter((scope) => identityScopes.has(scope))
+  }
+  return requestedScopes
 }
 
 export async function buildOAuthIdTokenClaims(

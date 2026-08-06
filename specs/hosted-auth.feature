@@ -124,8 +124,10 @@ Feature: Hosted authentication
   @entrypoint:product-ui @journey:oauth-consent
   Scenario: OAuth consent approves requested scopes
     Given a third-party OIDC application requests scopes
-    When I approve consent
+    And its protected resource is Realm-wide
+    When I approve consent without an active Organization context
     Then Realmroot redirects to the client callback with an authorization result
+    And the access token retains the approved resource scopes
     And an incomplete consent URL shows a recovery state without exposing validation internals
 
   @entrypoint:product-ui @journey:oauth-consent-account-switch
