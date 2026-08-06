@@ -1,7 +1,13 @@
-import { type AuthorizationContext, type AuthorizationTenant, authorize } from '@server/domain/authorization-context'
+import {
+  type AuthorizationContext,
+  type AuthorizationTenant,
+  type AuthorizedOwner,
+  authorize,
+  authorizeOwner,
+} from '@server/domain/authorization-context'
 import { forbidden, unauthorized } from '@server/domain/errors'
-import { realmrootResourceServer } from '@server/domain/realmroot-resource-server'
-import { resolveOrganizationMembershipScopes } from '@server/usecases/organization-membership-scopes'
+import { platformOrganization } from '@server/domain/platform-organization'
+import { resolveOrganizationUserAuthorizationContext } from '@server/usecases/organization-membership-scopes'
 import { type ProtectedResource, requiredResourceScope } from '@shared/authz'
 import { predefinedOrganizationRoleScopes } from '@shared/organization-access'
 import type { RealmrootOrganizationScope } from '@shared/scope-registry'
@@ -35,8 +41,23 @@ export async function authorizeOrganization(
   organizationId: string,
   requiredScope: RealmrootOrganizationScope,
 ) {
-  const target = { type: 'organization' as const, id: organizationId }
+  const target = organizationBoundary(organizationId)
   authorize(await resolveAuthorizationContext(c, target), target, requiredScope)
+}
+
+export async function authorizeOrganizationOwner(
+  c: Context,
+  organizationId: string,
+  requiredScope: RealmrootOrganizationScope,
+): Promise<AuthorizedOwner> {
+  const target = organizationBoundary(organizationId)
+  return authorizeOwner(await resolveAuthorizationContext(c, target), target, requiredScope)
+}
+
+export function authorizedOrganizationOwnerId(owner: AuthorizedOwner) {
+  if (owner.type === 'realm') return platformOrganization.id
+  if (owner.type === 'organization') return owner.id
+  throw new Error('A User tenant cannot own an Organization-owned resource.')
 }
 
 export async function authorizedOrganizationIds(
@@ -71,6 +92,7 @@ export async function authorizedTenantInventory(
     throw forbidden(`OAuth scope "${requiredScope}" is required.`)
   }
   if (agent.authority?.kind === 'organization') {
+    if (agent.authority.organizationId === platformOrganization.id) return []
     return [{ type: 'organization', id: agent.authority.organizationId }]
   }
   if (agent.authority?.kind === 'user') return [{ type: 'user', id: agent.authority.userId }]
@@ -98,6 +120,15 @@ export async function resolveAuthorizationContext(
 ): Promise<AuthorizationContext> {
   const principal = getPrincipal(c)
   if (principal.user) {
+    if (targetTenant.type === 'realm') {
+      return {
+        subject: { type: 'user', id: principal.user.id },
+        tenant: hasRealmAdminRole(principal.user.role) ? targetTenant : { type: 'user', id: principal.user.id },
+        scopes: new Set(
+          hasRealmAdminRole(principal.user.role) ? Object.values(predefinedOrganizationRoleScopes).flat() : [],
+        ),
+      }
+    }
     if (targetTenant.type === 'user') {
       const platformAdministrator = hasRealmAdminRole(principal.user.role)
       return {
@@ -105,7 +136,7 @@ export async function resolveAuthorizationContext(
         tenant: platformAdministrator ? targetTenant : { type: 'user', id: principal.user.id },
         scopes: new Set(
           platformAdministrator || principal.user.id === targetTenant.id
-            ? ['self:read', 'self:write', 'agents:read', 'agents:write']
+            ? ['self:read', 'self:write', 'agents:read', 'agents:write', 'audit-events:read']
             : [],
         ),
       }
@@ -117,21 +148,7 @@ export async function resolveAuthorizationContext(
         scopes: new Set(Object.values(predefinedOrganizationRoleScopes).flat()),
       }
     }
-    const membership = await getDeps(c).authorization.findMemberByOrganizationUser(targetTenant.id, principal.user.id)
-    return {
-      subject: { type: 'user', id: principal.user.id },
-      tenant: targetTenant,
-      scopes: new Set(
-        membership
-          ? await resolveOrganizationMembershipScopes(
-              getDeps(c),
-              targetTenant.id,
-              membership.roles,
-              realmrootResourceServer.id,
-            )
-          : [],
-      ),
-    }
+    return resolveOrganizationUserAuthorizationContext(getDeps(c), targetTenant.id, principal.user.id)
   }
   const agent = principal.agent
   if (!agent) throw unauthorized()
@@ -147,6 +164,10 @@ export async function resolveAuthorizationContext(
     tenant,
     scopes: new Set(agent.scopes),
   }
+}
+
+function organizationBoundary(organizationId: string): AuthorizationTenant {
+  return organizationId === platformOrganization.id ? { type: 'realm' } : { type: 'organization', id: organizationId }
 }
 
 export function authenticatedUser(): MiddlewareHandler {

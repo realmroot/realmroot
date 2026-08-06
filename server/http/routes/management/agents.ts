@@ -39,12 +39,10 @@ import { paginationMetadata, paginationQuerySchema } from '@shared/api/paginatio
 import { Hono } from 'hono'
 import { getActorUserId, getPrincipal } from '../../middleware/authn'
 import {
-  authorizedOrganizationIds,
   authorizedTenantInventory,
   authorizeOrganization,
   authorizeUser,
   requireAgentScope,
-  requirePlatformAccess,
 } from '../../middleware/authz'
 import { getDeps } from '../../middleware/deps'
 import { readJson, readQuery } from '../validation'
@@ -189,18 +187,29 @@ managementAgentsRoute.delete('/agents/:agentId/retirement', async (c) => {
 
 managementAgentsRoute.get('/realm/audit-events', async (c) => {
   const query = readQuery(c, listAgentAuditEventsQuerySchema)
-  const organizationIds = await organizationSelection(c, query.organizationId, 'audit-events:read')
+  const tenants = await authorizedTenantInventory(c, 'audit-events:read')
+  const organizationIds = tenants
+    ? tenants.filter((tenant) => tenant.type === 'organization').map((tenant) => tenant.id)
+    : query.organizationId
+      ? [query.organizationId]
+      : undefined
+  const selectedOrganizationIds = query.organizationId
+    ? organizationIds?.includes(query.organizationId)
+      ? [query.organizationId]
+      : []
+    : organizationIds
   if (query.agentId) {
     const agent = await getAgent(getDeps(c), query.agentId)
     if (agent.homeSpace.type === 'organization') {
       await authorizeOrganization(c, agent.homeSpace.organizationId, 'audit-events:read')
     } else {
-      requirePlatformAccess(c, 'audit-events:read')
+      await authorizeUser(c, agent.homeSpace.userId, 'audit-events:read')
     }
   }
   const result = await getDeps(c).agentAudit.list(query, {
     agentIdentityId: query.agentId,
-    ownerOrganizationIds: organizationIds,
+    ownerUserId: query.organizationId ? undefined : tenants?.find((tenant) => tenant.type === 'user')?.id,
+    ownerOrganizationIds: selectedOrganizationIds,
   })
   return c.json({
     items: result.items.map((event) => agentAuditEventSchema.parse(event)),
@@ -247,15 +256,4 @@ async function requireAgentAccess(
     return
   }
   await authorizeUser(c, agent.homeSpace.userId, write ? 'agents:write' : 'agents:read')
-}
-
-async function organizationSelection(
-  c: Parameters<typeof getDeps>[0],
-  requestedOrganizationId: string | undefined,
-  scope: 'agents:read' | 'audit-events:read',
-) {
-  const allowed = await authorizedOrganizationIds(c, scope)
-  if (!allowed) return requestedOrganizationId ? [requestedOrganizationId] : undefined
-  if (!requestedOrganizationId) return allowed
-  return allowed.includes(requestedOrganizationId) ? [requestedOrganizationId] : []
 }

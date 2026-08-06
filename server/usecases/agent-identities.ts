@@ -542,6 +542,10 @@ async function appendIdentityAudit(
   await appendAgentGovernanceAudit(deps, {
     action,
     result: 'allowed',
+    tenant:
+      aggregate.identity.ownerUserId !== null
+        ? { type: 'user', id: aggregate.identity.ownerUserId }
+        : { type: 'organization', id: aggregate.identity.ownerOrganizationId! },
     controllerUserId,
     issuer: aggregate.identity.issuer,
     subject: aggregate.identity.subject,

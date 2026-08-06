@@ -1,3 +1,4 @@
+import { type AuthorizationContext, canAuthorize } from '@server/domain/authorization-context'
 import { realmrootResourceServer } from '@server/domain/realmroot-resource-server'
 import type { Deps } from '@server/usecases/deps'
 import { readDeclaredScopes } from '@server/usecases/resource-openapi'
@@ -61,13 +62,27 @@ export async function organizationUserHasScope(
   userId: string,
   requiredScope: RealmrootOrganizationScope,
 ) {
-  const member = await deps.authorization.findMemberByOrganizationUser(organizationId, userId)
-  if (!member) return false
-  const scopes = await resolveOrganizationMembershipScopes(
-    deps,
-    organizationId,
-    member.roles,
-    realmrootResourceServer.id,
+  const target = { type: 'organization' as const, id: organizationId }
+  return canAuthorize(
+    await resolveOrganizationUserAuthorizationContext(deps, organizationId, userId),
+    target,
+    requiredScope,
   )
-  return scopes.includes(requiredScope)
+}
+
+export async function resolveOrganizationUserAuthorizationContext(
+  deps: Deps,
+  organizationId: string,
+  userId: string,
+): Promise<AuthorizationContext> {
+  const member = await deps.authorization.findMemberByOrganizationUser(organizationId, userId)
+  return {
+    subject: { type: 'user', id: userId },
+    tenant: { type: 'organization', id: organizationId },
+    scopes: new Set(
+      member
+        ? await resolveOrganizationMembershipScopes(deps, organizationId, member.roles, realmrootResourceServer.id)
+        : [],
+    ),
+  }
 }
