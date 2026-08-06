@@ -119,7 +119,7 @@ export interface ManagementRouteConfig {
   operationId: string
   summary: string
   cli?: {
-    group?: 'auth'
+    group?: 'Agent'
     name: string
   }
   request?: {

@@ -6,6 +6,12 @@
     "semanticHash": "dfd105aaf5bcfb3365c59392965df35a12179739494d14360854ccdcf4004797"
   },
   {
+    "method": "GET",
+    "path": "/agent/status",
+    "operationId": "getAgentStatus",
+    "semanticHash": "2823446265e8f5fb9c6f8abce86903c9e95731c3b52e1a9a31c0b08d985388ef"
+  },
+  {
     "method": "POST",
     "path": "/resource-servers/{resourceServerId}/connection-requests",
     "operationId": "createConnectionRequest",

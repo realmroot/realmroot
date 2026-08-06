@@ -165,7 +165,7 @@ describe('management routes 1', () => {
       }))
 
     expect(generatedCommands).toEqual([
-      { group: 'auth', name: 'whoami', operationId: 'getAgentStatus' },
+      { group: 'Agent', name: 'whoami', operationId: 'getAgentStatus' },
       { group: 'Resource Servers', name: 'connect', operationId: 'createConnectionRequest' },
       { group: 'Agent Access', name: 'access', operationId: 'createAgentAuthorizationRequest' },
     ])

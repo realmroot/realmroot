@@ -77,7 +77,7 @@ const managementOpenApiTags = [
   { name: 'Security', description: 'Realm-wide authentication and security policy.' },
   { name: 'Webhooks', description: 'Webhook endpoints, deliveries, attempts, and secrets.' },
   { name: 'Audit Events', description: 'Immutable Realmroot governance audit events.' },
-  { name: 'auth', description: 'Restish Agent authentication commands.' },
+  { name: 'Agent', description: 'Operations performed by the current Agent principal.' },
 ] as const
 
 const managementRoutes: ManagementRouteConfig[] = [
@@ -116,7 +116,7 @@ const managementRoutes: ManagementRouteConfig[] = [
     path: '/agent/status',
     operationId: 'getAgentStatus',
     summary: 'Read the current Agent status',
-    cli: { group: 'auth', name: 'whoami' },
+    cli: { group: 'Agent', name: 'whoami' },
     security: [{ dpop: ['agent:read'] }],
     response: agentStatusSchema,
   },
