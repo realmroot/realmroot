@@ -1,0 +1,180 @@
+import { createTestDeps } from '@server/http/test-deps'
+import { readProtectedResourceMetadata, synchronizeResourceScopeRegistry } from '@server/usecases/resource-metadata'
+import { describe, expect, it, vi } from 'vitest'
+
+const resourceUrl = 'https://orders.example.com/api'
+const metadataUrl = 'https://orders.example.com/.well-known/oauth-protected-resource/api'
+
+describe('protected resource scope discovery', () => {
+  it('[spec: admin-console/admin-create-api-resource] uses RFC 9728 scopes as authority and OpenAPI only for descriptions', async () => {
+    const deps = createTestDeps()
+    vi.mocked(deps.externalHttp.fetch).mockImplementation(
+      resourceDiscoveryFetch({
+        advertisedScopes: ['orders:archive', 'orders:read'],
+        documentedScopes: {
+          'orders:read': 'Read orders',
+          'orders:write': 'Write orders',
+        },
+      }),
+    )
+
+    await expect(synchronizeResourceScopeRegistry(deps, resourceUrl, null)).resolves.toMatchObject({
+      discovery: {
+        sourceUrl: metadataUrl,
+        etag: '"metadata-v1"',
+        documentHash: expect.any(String),
+        lastError: null,
+      },
+      scopes: [
+        { value: 'orders:archive', description: null, grantMode: 'assigned' },
+        { value: 'orders:read', description: 'Read orders', grantMode: 'assigned' },
+      ],
+    })
+  })
+
+  it('preserves grant modes while synchronizing the advertised scope set', async () => {
+    const deps = createTestDeps()
+    vi.mocked(deps.externalHttp.fetch).mockImplementation(
+      resourceDiscoveryFetch({ advertisedScopes: ['orders:read', 'orders:write'] }),
+    )
+    const previous = {
+      discovery: {
+        sourceUrl: metadataUrl,
+        etag: null,
+        documentHash: 'previous',
+        syncedAt: new Date('2026-08-01T00:00:00.000Z').toISOString(),
+        lastError: null,
+      },
+      scopes: [
+        { value: 'orders:read', description: null, grantMode: 'automatic' as const },
+        { value: 'orders:removed', description: null, grantMode: 'assigned' as const },
+      ],
+    }
+
+    await expect(synchronizeResourceScopeRegistry(deps, resourceUrl, previous)).resolves.toMatchObject({
+      scopes: [
+        { value: 'orders:read', grantMode: 'automatic' },
+        { value: 'orders:write', grantMode: 'assigned' },
+      ],
+    })
+  })
+
+  it('accepts an operation mapping whose scope is absent from OAuth flow descriptions', async () => {
+    const deps = createTestDeps()
+    vi.mocked(deps.externalHttp.fetch).mockImplementation(
+      resourceDiscoveryFetch({ advertisedScopes: ['orders:read'], operationScopes: ['orders:read'] }),
+    )
+
+    await expect(synchronizeResourceScopeRegistry(deps, resourceUrl, null)).resolves.toMatchObject({
+      scopes: [{ value: 'orders:read', description: null }],
+    })
+  })
+
+  it.each([
+    ['is missing', undefined],
+    ['is empty', []],
+    ['contains an empty scope', ['orders:read', '']],
+    ['contains a scope with whitespace', ['orders:read write']],
+    ['contains a double quote', ['orders:"read']],
+    ['contains a backslash', ['orders:\\read']],
+    ['contains Unicode', ['订单:read']],
+    ['is not a string array', ['orders:read', 42]],
+  ])('rejects metadata when scopes_supported %s', async (_label, scopesSupported) => {
+    const deps = createTestDeps()
+    vi.mocked(deps.externalHttp.fetch).mockResolvedValue(
+      Response.json({ resource: resourceUrl, scopes_supported: scopesSupported }),
+    )
+
+    await expect(readProtectedResourceMetadata(deps, resourceUrl)).rejects.toThrow(
+      'Protected resource metadata must advertise at least one valid scope.',
+    )
+  })
+
+  it.each([
+    ['an HTTP failure', new Response(null, { status: 503 })],
+    ['the wrong media type', new Response('{}', { headers: { 'content-type': 'text/application/json-evil' } })],
+    ['malformed JSON', new Response('{', { headers: { 'content-type': 'application/json' } })],
+  ])('classifies %s as an upstream discovery failure', async (_label, response) => {
+    const deps = createTestDeps()
+    vi.mocked(deps.externalHttp.fetch).mockResolvedValue(response)
+
+    await expect(readProtectedResourceMetadata(deps, resourceUrl)).rejects.toMatchObject({
+      status: 502,
+      code: 'bad_gateway',
+      details: { stage: 'protected_resource_metadata', url: metadataUrl, status: response.status },
+    })
+  })
+
+  it('times out even when the HTTP gateway ignores the abort signal', async () => {
+    vi.useFakeTimers()
+    try {
+      const deps = createTestDeps()
+      vi.mocked(deps.externalHttp.fetch).mockReturnValue(new Promise<Response>(() => {}))
+
+      const result = readProtectedResourceMetadata(deps, resourceUrl)
+      const rejection = expect(result).rejects.toMatchObject({ status: 502, code: 'bad_gateway' })
+      await vi.advanceTimersByTimeAsync(5_000)
+
+      await rejection
+      expect(vi.mocked(deps.externalHttp.fetch).mock.calls[0]?.[0].signal.aborted).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('rejects OpenAPI operations that reference a scope not advertised by RFC 9728 metadata', async () => {
+    const deps = createTestDeps()
+    vi.mocked(deps.externalHttp.fetch).mockImplementation(
+      resourceDiscoveryFetch({
+        advertisedScopes: ['orders:read'],
+        documentedScopes: { 'orders:read': 'Read orders', 'orders:write': 'Write orders' },
+        operationScopes: ['orders:write'],
+      }),
+    )
+
+    await expect(synchronizeResourceScopeRegistry(deps, resourceUrl, null)).rejects.toThrow(
+      'OpenAPI operation references a scope not advertised by protected-resource metadata.',
+    )
+  })
+})
+
+function resourceDiscoveryFetch({
+  advertisedScopes,
+  documentedScopes = {},
+  operationScopes = [],
+}: {
+  advertisedScopes: string[]
+  documentedScopes?: Record<string, string>
+  operationScopes?: string[]
+}) {
+  return async (request: Request) => {
+    if (request.url === metadataUrl) {
+      return Response.json(
+        { resource: resourceUrl, scopes_supported: advertisedScopes },
+        { headers: { etag: '"metadata-v1"' } },
+      )
+    }
+    if (request.url === resourceUrl) {
+      return new Response(null, { headers: { link: '</openapi.json>; rel="service-desc"' } })
+    }
+    if (request.url === 'https://orders.example.com/openapi.json') {
+      return Response.json({
+        openapi: '3.1.0',
+        components: {
+          securitySchemes: {
+            oauth: {
+              type: 'oauth2',
+              flows: { clientCredentials: { scopes: documentedScopes } },
+            },
+          },
+        },
+        paths: {
+          '/orders': {
+            get: { security: [{ oauth: operationScopes }], responses: {} },
+          },
+        },
+      })
+    }
+    throw new Error(`Unexpected request: ${request.url}`)
+  }
+}

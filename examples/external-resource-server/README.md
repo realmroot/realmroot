@@ -45,8 +45,8 @@ external API Resource in Realmroot with the returned Connector ID:
 }
 ```
 
-Realmroot discovers `projects:read` from the OpenAPI operation security
-requirement.
+Realmroot discovers `projects:read` from RFC 9728 protected-resource metadata;
+the OpenAPI operation security requirement maps the operation to that scope.
 
 See the
 [resource server integration guide](../../docs/integrations/resource-servers.md)

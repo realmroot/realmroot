@@ -534,6 +534,9 @@ describe('Agent identity enrollment over real D1', () => {
 
 function resourceOpenApiFetch(resourceUrl: string, scope: string) {
   return async (request: Request) => {
+    if (request.url.includes('/.well-known/oauth-protected-resource')) {
+      return Response.json({ resource: resourceUrl, scopes_supported: [scope] })
+    }
     if (request.url === new URL(resourceUrl).toString()) {
       return new Response(null, { headers: { link: '</openapi.json>; rel="service-desc"' } })
     }

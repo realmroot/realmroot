@@ -37,6 +37,9 @@ describe('OAuth token claim building over real D1', () => {
   // real SQL: resource lookup, Organization membership, and dynamic BA Roles.
   it('resolves audience and Organization member Roles without assigning Roles to workloads [spec: admin-console/oidc-claim-emission]', async () => {
     harness.deps.externalHttp.fetch = async (request) => {
+      if (request.url.includes('/.well-known/oauth-protected-resource')) {
+        return Response.json({ resource: audience, scopes_supported: ['contacts:read'] })
+      }
       if (new URL(request.url).pathname.endsWith('/openapi.json')) {
         return Response.json({
           openapi: '3.1.0',
@@ -138,6 +141,9 @@ describe('OAuth token claim building over real D1', () => {
     expect(claims.authorization.scopes).toEqual(['contacts:read'])
 
     harness.deps.externalHttp.fetch = async (request) => {
+      if (request.url.includes('/.well-known/oauth-protected-resource')) {
+        return Response.json({ resource: audience, scopes_supported: ['contacts:other'] })
+      }
       if (new URL(request.url).pathname.endsWith('/openapi.json')) {
         return Response.json({
           openapi: '3.1.0',
@@ -302,6 +308,9 @@ describe('OAuth token claim building over real D1', () => {
 })
 
 async function removedScopeOpenApiFetch(request: Request) {
+  if (request.url.includes('/.well-known/oauth-protected-resource')) {
+    return Response.json({ resource: resourceUrlFromMetadataUrl(request.url), scopes_supported: ['contacts:other'] })
+  }
   if (new URL(request.url).pathname.endsWith('/openapi.json')) {
     return Response.json({ openapi: '3.1.0', components: { securitySchemes: {} }, paths: {} })
   }
@@ -309,6 +318,9 @@ async function removedScopeOpenApiFetch(request: Request) {
 }
 
 async function contactsScopeOpenApiFetch(request: Request) {
+  if (request.url.includes('/.well-known/oauth-protected-resource')) {
+    return Response.json({ resource: resourceUrlFromMetadataUrl(request.url), scopes_supported: ['contacts:read'] })
+  }
   if (new URL(request.url).pathname.endsWith('/openapi.json')) {
     return Response.json({
       openapi: '3.1.0',
@@ -326,6 +338,12 @@ async function contactsScopeOpenApiFetch(request: Request) {
     })
   }
   return new Response(null, { headers: { link: '</openapi.json>; rel="service-desc"' } })
+}
+
+function resourceUrlFromMetadataUrl(metadataUrl: string) {
+  const metadata = new URL(metadataUrl)
+  const prefix = '/.well-known/oauth-protected-resource'
+  return `${metadata.origin}${metadata.pathname.slice(prefix.length)}${metadata.search}`
 }
 
 async function issueClientCredentials(

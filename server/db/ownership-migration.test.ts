@@ -6,6 +6,7 @@ const migrationName = '20260806005241_same_mathemanic.sql'
 const platformOwnerMigrationName = '20260806040000_platform_organization_owner.sql'
 const resourceScopeMigrationName = '20260806155546_typical_demogoblin.sql'
 const consentScopeMigrationName = '20260806190437_brown_sabra.sql'
+const rfc9728ScopeRegistryMigrationName = '20260806214840_rfc9728_scope_registry.sql'
 
 describe('tenant ownership migration', () => {
   it('rebuilds legacy ownership into the final schema and quarantines ambiguity', () => {
@@ -13,9 +14,13 @@ describe('tenant ownership migration', () => {
     try {
       for (const name of migrationNames().filter(
         (name) =>
-          ![migrationName, platformOwnerMigrationName, resourceScopeMigrationName, consentScopeMigrationName].includes(
-            name,
-          ),
+          ![
+            migrationName,
+            platformOwnerMigrationName,
+            resourceScopeMigrationName,
+            consentScopeMigrationName,
+            rfc9728ScopeRegistryMigrationName,
+          ].includes(name),
       )) {
         database.exec(readFileSync(new URL(`../../migrations/${name}`, import.meta.url), 'utf8'))
       }
@@ -31,6 +36,9 @@ describe('tenant ownership migration', () => {
       }
       database.exec(readFileSync(new URL(`../../migrations/${resourceScopeMigrationName}`, import.meta.url), 'utf8'))
       database.exec(readFileSync(new URL(`../../migrations/${consentScopeMigrationName}`, import.meta.url), 'utf8'))
+      database.exec(
+        readFileSync(new URL(`../../migrations/${rfc9728ScopeRegistryMigrationName}`, import.meta.url), 'utf8'),
+      )
 
       expect(columnNames(database, 'application')).not.toContain('owner_user_id')
       expect(columnNames(database, 'application')).not.toContain('audience_mode')

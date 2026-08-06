@@ -213,7 +213,8 @@ Feature: Admin Console
     And omitting a connector makes it natively authorized
     And its authorization mode cannot change after creation
     And its protected resource URL is the OAuth resource identifier and access-token audience
-    And OAuth scopes declared by the business resource server OpenAPI contract remain the scope authority
+    And OAuth scopes advertised by the business resource server protected-resource metadata remain the scope authority
+    And its OpenAPI contract may add scope descriptions and maps protected operations only to advertised scopes
     And its Scopes tab manages each discovered scope's automatic or assigned grant mode
     And its Endpoints tab lists protected operations and required scope sets derived from that contract
     And external authorization connection details are included in Overview

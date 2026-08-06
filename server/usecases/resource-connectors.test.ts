@@ -12,7 +12,10 @@ describe('external resource connector validation', () => {
   it('accepts a complete OIDC connector and preserves the resource path in metadata discovery', async () => {
     const deps = createDeps()
 
-    await expect(validateExternalResourceConnector(deps, resourceUrl, 'connector-1')).resolves.toBeUndefined()
+    await expect(validateExternalResourceConnector(deps, resourceUrl, 'connector-1')).resolves.toMatchObject({
+      resource: resourceUrl,
+      scopesSupported: ['projects:read'],
+    })
 
     expect(deps.externalHttp.fetch).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -71,8 +74,8 @@ describe('external resource connector validation', () => {
     const deps = createDeps({ metadata, metadataStatus: status })
 
     await expect(validateExternalResourceConnector(deps, resourceUrl, 'connector-1')).rejects.toMatchObject({
-      status: 400,
-      message: 'Protected resource metadata discovery failed.',
+      status: 502,
+      message: 'Protected resource metadata returned an invalid response.',
     })
   })
 
@@ -120,7 +123,9 @@ describe('external resource connector validation', () => {
       metadata: protectedMetadata({ authorization_servers: [`${loopbackIssuer}/`] }),
     })
 
-    await expect(validateExternalResourceConnector(deps, resourceUrl, 'connector-1')).resolves.toBeUndefined()
+    await expect(validateExternalResourceConnector(deps, resourceUrl, 'connector-1')).resolves.toMatchObject({
+      resource: resourceUrl,
+    })
   })
 
   it('requires the resource authorization server to match the connector issuer', async () => {
@@ -192,7 +197,7 @@ describe('external resource connector validation', () => {
     })
     await expect(
       validateExternalResourceConnector(complete, resourceUrl, 'connector-1', authorizationDetails),
-    ).resolves.toBeUndefined()
+    ).resolves.toMatchObject({ resource: resourceUrl })
   })
 
   it('[spec: agent-identity/external-resource-rar-without-catalog] treats the detail catalog as an optional paired extension', async () => {
@@ -207,7 +212,7 @@ describe('external resource connector validation', () => {
     })
     await expect(
       validateExternalResourceConnector(withoutCatalog, resourceUrl, 'connector-1', authorizationDetails),
-    ).resolves.toBeUndefined()
+    ).resolves.toMatchObject({ resource: resourceUrl })
 
     const incompleteCatalog = createDeps({
       connector: connector({
@@ -263,6 +268,7 @@ function protectedMetadata(overrides: Record<string, unknown> = {}) {
   return {
     resource: resourceUrl,
     authorization_servers: [issuer],
+    scopes_supported: ['projects:read'],
     ...overrides,
   }
 }

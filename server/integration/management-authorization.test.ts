@@ -700,6 +700,7 @@ describe('authorization management over real D1', () => {
         return Response.json({
           resource: 'https://projects.example.com/api',
           authorization_servers: [connector.issuer],
+          scopes_supported: ['projects:read'],
         })
       }
       return resourceOpenApiFetch(request)
@@ -756,7 +757,7 @@ describe('authorization management over real D1', () => {
       headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify(input),
     })
-    expect(enabled.status).toBe(400)
+    expect(enabled.status).toBe(502)
 
     const draft = await postJson(harness, cookie, '/api/resource-servers', { ...input, enabled: false })
     const resource = (await draft.json()) as { id: string; enabled: boolean }
@@ -767,7 +768,7 @@ describe('authorization management over real D1', () => {
       headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({ enabled: true }),
     })
-    expect(enable.status).toBe(400)
+    expect(enable.status).toBe(502)
   })
 
   it('requires authorization reconfiguration when an external resource URL changes [spec: agent-identity/external-api-resource-reconfiguration]', async () => {
@@ -817,6 +818,7 @@ describe('authorization management over real D1', () => {
           authorization_servers: [
             request.url.includes('new-projects') ? 'https://different.example.com' : connector.issuer,
           ],
+          scopes_supported: ['projects:read'],
         })
       }
       return resourceOpenApiFetch(request)
@@ -974,6 +976,7 @@ describe('authorization management over real D1', () => {
         return Response.json({
           resource: 'https://conditional.example.com/api',
           authorization_servers: [connector.issuer],
+          scopes_supported: ['projects:read'],
         })
       }
       return resourceOpenApiFetch(request)

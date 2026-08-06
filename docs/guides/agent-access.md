@@ -36,7 +36,7 @@ API aliases do not create additional identities.
 `GET /api/resource-servers` is the top-level Agent inventory. Each item reports:
 
 - the target `serviceUrl` and resource indicator;
-- current OpenAPI-derived scope descriptions;
+- current RFC 9728 scope catalog with optional OpenAPI descriptions;
 - `available` or `unavailable` contract state;
 - `connected`, `not_connected`, or `not_required` account state;
 - scopes held by the connected account;

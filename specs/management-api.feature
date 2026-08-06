@@ -105,9 +105,9 @@ Feature: Unified Realmroot resource API
   @entrypoint:restish @journey:management-restish-role-crud
   Scenario: An authorized Organization user manages dynamic Roles through the unified API
     Given the Organization membership maps Better Auth Roles to roles:read and roles:write scopes
-    When I create, update, list, and delete a Role with its OpenAPI scope references
+    When I create, update, list, and delete a Role with its Resource Server scope references
     Then the unified API applies each role change
-    And each role scope must exist in its business resource server OpenAPI contract
+    And each role scope must exist in its business resource server protected-resource metadata
     And Role creation returns its canonical location
     And member Role replacement uses the Organization member Roles child resource
     And Agents and workloads cannot receive Organization Roles
@@ -120,7 +120,7 @@ Feature: Unified Realmroot resource API
     Then the unified API applies each API authorization change
     And API resource creation returns its canonical location
     And no permission catalog, scope catalog, or scope mutation operation exists
-    And requestable scopes come only from each business resource server's OpenAPI security requirements
+    And requestable scopes come only from each business resource server's protected-resource metadata
 
   @entrypoint:restish @journey:management-api-resource-delete-conflict
   Scenario: API resources with authorization history cannot be permanently deleted

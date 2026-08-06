@@ -14,9 +14,9 @@ second permission catalog or decide whether a concrete business request may
 proceed.
 
 ```text
-Resource server code + OpenAPI
+Resource server metadata + code + OpenAPI
         |
-        | defines scopes and operation requirements
+        | advertises scopes and defines operation requirements
         v
 Realmroot discovery, Organization Roles, consent, and Agent grants
         |
@@ -29,9 +29,10 @@ JWT or target-issued access token
 Resource server makes the final allow/deny decision
 ```
 
-This avoids two independent permission definitions drifting apart. Changing an
-operation's required authority starts in resource-server code and its OpenAPI
-contract, not in Realmroot configuration.
+This avoids a Realmroot-owned permission definition drifting away from the
+resource. Scope names start in protected-resource metadata, while an operation's
+required authority starts in resource-server code and its OpenAPI contract.
+Realmroot rejects operation mappings to scopes the resource did not advertise.
 
 ## Four Separate Responsibilities
 
@@ -40,24 +41,24 @@ contract, not in Realmroot configuration.
 The resource server defines:
 
 - which business actions exist;
-- the scope names that represent those actions;
+- the scope names advertised through RFC 9728 protected-resource metadata;
 - which OpenAPI operations require each scope;
 - any finer object, tenant, ownership, state, or attribute rules;
 - the final behavior when a request is allowed or denied.
 
 Realmroot has no first-class business `Permission` resource. It does not create
-scope strings or map them to endpoints. A scope mentioned only in Realmroot,
-authorization-server metadata, descriptive text, or a custom extension is not
-requestable.
+scope strings or map them to endpoints. A scope absent from the Resource
+Server's RFC 9728 `scopes_supported` metadata is not requestable.
 
-The protected API publishes its scope vocabulary through standard OAuth or OIDC
-security requirements in its OpenAPI contract. Realmroot follows the resource's
-RFC 8631 `service-desc` link and derives the current requestable scope set from
-that contract.
+The protected API publishes its scope vocabulary through RFC 9728
+`scopes_supported`. Realmroot derives the current requestable scope set from
+that metadata and follows the RFC 8631 `service-desc` link for optional
+descriptions and operation mappings.
 
 Realmroot's own management capabilities such as `applications:read` and
 `api-resources:write` follow the same rule: Realmroot is the resource server for
-its Resource API, so its code and `/api/openapi.json` own those definitions.
+its Resource API, so its code and RFC 9728 metadata own those definitions;
+`/api/openapi.json` maps them to management operations.
 They authorize Realmroot administration only and never imply access to a
 registered business API.
 
@@ -80,15 +81,15 @@ is accessible at runtime.
 ### 3. Token Issuance
 
 For a native API Resource, Realmroot is the authorization server. Agent access
-validates the audience and requested scopes against the current resource
-contract, applies the controller-approved grant boundary, and issues the exact
-scopes with identity and policy context. Ordinary application OAuth currently
-uses the application's scope allowlist and user consent; its known OpenAPI
-revalidation gap is described below.
+validates the audience and requested scopes against the current scope registry,
+applies the controller-approved grant boundary, and issues the exact
+scopes with identity and policy context. Ordinary application OAuth uses the
+application's scope allowlist and user consent against the same synchronized
+registry.
 
 For an external API Resource, the target platform remains the authorization
-server. Realmroot validates the Agent request against the target contract and
-controller grant, then presents the connected user's subject token and stable
+server. Realmroot validates the Agent request against the target scope registry
+and controller grant, then presents the connected user's subject token and stable
 Agent actor token to the target. The target intersects their authority and
 issues the final token.
 
@@ -131,10 +132,13 @@ redefines what reading a document means. The API can still require that the
 verified subject belongs to the document's organization or that the Agent actor
 is allowed for that document's state.
 
-OpenAPI remains authoritative at resource registration, role scope update,
-Agent request, approval, and Agent grant token issuance boundaries. This makes
-stale Agent scope references fail closed instead of turning Realmroot into
-another editable scope registry.
+RFC 9728 protected-resource metadata remains authoritative at resource
+registration and scope synchronization. The synchronized registry governs role
+scope updates, Agent requests, approvals, and token issuance, while OpenAPI may
+add descriptions and maps operations only to advertised scopes.
+
+Registries created by older OpenAPI-based discovery are cleared by migration.
+New registries are populated only after successful RFC 9728 discovery.
 
 ## Organization Role
 
@@ -146,8 +150,8 @@ Organization and a different set in another Organization.
 Static `owner`, `admin`, `developer`, and `member` Roles are defined in code.
 Dynamic Roles are stored in Better Auth `organizationRole`. Both map to the same
 tenant-bound scope set. External Resource Server scopes are stored as encoded
-`{resourceId, scope}` keys after Realmroot verifies the resource, current
-OpenAPI scope catalog, and Organization eligibility.
+`{resourceId, scope}` keys after Realmroot verifies the resource, current RFC
+9728 scope catalog, and Organization eligibility.
 
 Roles are never assigned to Agents, Applications, or workloads. Those actors
 receive exact scopes directly from grants, consent, or token exchange. The
@@ -166,25 +170,6 @@ Role definitions and member Role replacement use the Realmroot Organization
 facade so validation and audit persistence commit atomically. Better Auth's
 native Role mutation endpoints are not public mutation paths.
 
-## Known Implementation Boundary
-
-Tracked by [GitHub issue #121](https://github.com/realmroot/realmroot/issues/121).
-
-Application `allowedScopes` currently accepts custom scope strings as a client
-request allowlist. Those strings do not define permissions or map scopes to
-operations, and the resource server remains free to reject them. However,
-ordinary application OAuth issuance checks the application allowlist and user
-consent without revalidating a custom scope against the selected API Resource's
-current OpenAPI contract.
-
-This is a remaining drift boundary. It is narrower than a centralized
-permission catalog, but it does duplicate resource-owned scope references. A
-future change should associate custom application scopes with the requested
-resource audience and validate or derive them from that resource's OpenAPI
-contract. Until then, do not claim that every native OAuth scope is revalidated
-against OpenAPI at issuance; that guarantee currently applies to Agent resource
-grants.
-
 ## Native And External Resources
 
 The ownership principle is the same in both modes; only the token issuer and
@@ -192,15 +177,17 @@ location of subject authorization differ.
 
 | Responsibility | Native | External |
 | --- | --- | --- |
-| Scope names and operation mapping | Resource server OpenAPI | Resource server OpenAPI |
+| Scope names | Resource server RFC 9728 metadata | Resource server RFC 9728 metadata |
+| Operation mapping and descriptions | Resource server OpenAPI | Resource server OpenAPI |
 | User/application authorization | Realmroot consent and issuer policy | Target authorization server |
 | Agent request and controller grant | Realmroot | Realmroot |
 | Agent scope boundary | Realmroot controller-approved grant | Realmroot controller-approved grant |
 | Final token issuer | Realmroot | Target authorization server |
 | Object and request enforcement | Resource server | Resource server |
 
-For external resources, Realmroot does not copy the target authorization
-server's `scopes_supported` list into a local permission catalog. The connected
+For external resources, Realmroot copies the protected resource's RFC 9728
+`scopes_supported` list into its synchronized scope registry; it does not use
+the target authorization server's global `scopes_supported` list. The connected
 account establishes the user's target-side authority; the Agent grant establishes
 the controller-approved subset; the target authorization server performs the
 subject/actor intersection; and the resource server still makes the final
@@ -208,7 +195,7 @@ request decision.
 
 ## Consequences
 
-- Resource-server code and OpenAPI must change together.
+- Resource-server RFC 9728 metadata, code, and OpenAPI operation mappings must change together.
 - Realmroot can reject stale scopes but cannot repair a stale resource contract.
 - Organization Roles remain references to resource-owned scopes rather than
   editable permission vocabularies.
@@ -217,7 +204,7 @@ request decision.
 - Resource servers must not treat `roles`, `groups`, `sub`, or `act` as expanding
   the granted `scope`.
 - A token can be valid and still be denied by resource-local policy.
-- Removing a scope from OpenAPI stops new role-scope updates and Agent requests,
+- Removing a scope from protected-resource metadata stops new role-scope updates and Agent requests,
   approvals, and grant token issuance for that scope. Existing short-lived
   tokens remain governed by expiry, revocation, and resource-server policy.
 

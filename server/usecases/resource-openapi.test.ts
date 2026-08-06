@@ -12,7 +12,7 @@ async function readScopes(deps: ReturnType<typeof createTestDeps>, resourceUrl: 
   return (await readResourceContract(deps, resourceUrl))!.scopes
 }
 
-describe('business resource OpenAPI scope discovery', () => {
+describe('business resource OpenAPI scope annotations', () => {
   it('returns protected operations and exact alternative scope sets [spec: admin-console/admin-create-api-resource]', async () => {
     const deps = createTestDeps()
     vi.mocked(deps.externalHttp.fetch)
@@ -92,58 +92,20 @@ describe('business resource OpenAPI scope discovery', () => {
     })
   })
 
-  it('derives native and external requestable scopes from OAuth flow declarations [spec: agent-identity/native-api-resource-registration]', async () => {
-    const deps = createTestDeps()
-    vi.mocked(deps.externalHttp.fetch).mockImplementation(async (request) => {
-      if (request.url === 'https://orders.example.com/') {
-        return new Response(null, {
-          headers: {
-            link: '</openapi.yaml>; rel="service-desc"; type="application/yaml"',
-          },
-        })
-      }
-      return new Response(
-        `
-openapi: 3.1.0
-components:
-  securitySchemes:
-    businessOAuth:
-      type: oauth2
-      flows:
-        clientCredentials:
-          tokenUrl: https://orders.example.com/token
-          scopes:
-            orders:read: Read orders
-            orders:write: Write orders
-security:
-  - businessOAuth: [orders:read]
-paths:
-  /orders:
-    get:
-      responses: {}
-    post:
-      security:
-        - businessOAuth: [orders:write]
-      responses: {}
-  /health:
-    get:
-      security: []
-      responses: {}
-`,
-        { headers: { 'content-type': 'application/yaml' } },
-      )
-    })
-
-    const contract = await readResourceContract(deps, 'https://orders.example.com/')
+  it('validates requested scopes against the synchronized resource scope registry', () => {
     const registry = {
       discovery: {
-        sourceUrl: contract!.sourceUrl,
-        etag: contract!.etag,
-        documentHash: contract!.documentHash,
+        sourceUrl: 'https://orders.example.com/.well-known/oauth-protected-resource',
+        etag: null,
+        documentHash: 'registry',
         syncedAt: new Date().toISOString(),
         lastError: null,
       },
-      scopes: contract!.scopes.map((scope) => ({ ...scope, grantMode: 'assigned' as const })),
+      scopes: ['orders:read', 'orders:write'].map((value) => ({
+        value,
+        description: null,
+        grantMode: 'assigned' as const,
+      })),
     }
     expect(() => validateRequestedScopes(registry, ['orders:read', 'orders:write'])).not.toThrow()
     expect(() => validateRequestedScopes(registry, ['orders:delete'])).toThrow(
@@ -313,6 +275,7 @@ paths:
     ['http://api.example.com', false],
     ['ftp://api.example.com', false],
     ['https://user:password@api.example.com', false],
+    ['https://api.example.com/resource#fragment', false],
   ])('validates protected resource URL boundaries (%s)', (resourceUrl, valid) => {
     const validate = () => validateResourceUrl(resourceUrl)
     if (valid) expect(validate).not.toThrow()

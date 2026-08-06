@@ -39,8 +39,9 @@ When another platform copies business permissions and endpoint mappings away
 from the resource server, policy can drift from the code that actually protects
 the data.
 
-Realmroot avoids both duplicated surfaces. OpenAPI remains the tool contract and
-scope vocabulary. The resource server remains the final authorization boundary.
+Realmroot avoids both duplicated surfaces. RFC 9728 protected-resource metadata
+remains the scope vocabulary, OpenAPI remains the tool contract, and the
+resource server remains the final authorization boundary.
 
 ### Value 1: The Agent Tool Plane
 
@@ -124,8 +125,8 @@ Realmroot deliberately owns:
 The resource server deliberately owns:
 
 - its API behavior and OpenAPI contract;
-- the definition of business scopes;
-- the mapping from scopes to operations and data;
+- the definition of business scopes in RFC 9728 protected-resource metadata;
+- the mapping from scopes to operations and data in OpenAPI and local policy;
 - resource ownership, tenancy, and object-level policy;
 - final token validation and the allow-or-deny decision.
 
@@ -182,8 +183,8 @@ Realmroot 的长期愿景，是让互联网已经积累的能力都能被 Agent 
 中心化权限注册表会为最后一个问题制造类似风险。当另一个平台把业务权限和 Endpoint
 映射复制到资源服务器之外时，策略可能逐渐偏离真正保护数据的代码。
 
-Realmroot 避免复制这两个表面。OpenAPI 继续作为工具契约和 Scope 词汇来源，资源服务器
-继续作为最终授权边界。
+Realmroot 避免复制这两个表面。RFC 9728 受保护资源元数据继续作为 Scope 词汇来源，
+OpenAPI 继续作为工具契约，资源服务器继续作为最终授权边界。
 
 ### 价值一：Agent 工具平面
 
@@ -256,8 +257,8 @@ Realmroot 刻意负责：
 资源服务器刻意负责：
 
 - 自身 API 行为和 OpenAPI 契约；
-- 业务 Scope 的定义；
-- Scope 到操作和数据的映射；
+- 在 RFC 9728 受保护资源元数据中定义业务 Scope；
+- 在 OpenAPI 和本地策略中定义 Scope 到操作和数据的映射；
 - 资源所有权、租户和对象级策略；
 - 最终 Token 验证和允许或拒绝决定。
 

@@ -84,9 +84,10 @@ business APIs and use one authorization mode:
   RFC 9449 DPoP, and RFC 7009 revocation. OAuth clients may be dynamically
   registered through RFC 7591 or configured by an administrator.
 
-The protected resource advertises its OpenAPI contract through an RFC 8631
-`service-desc` link. That contract is authoritative for scope names and
-operation requirements.
+The protected resource advertises requestable scope names through RFC 9728
+`scopes_supported` and its OpenAPI contract through an RFC 8631 `service-desc`
+link. Protected-resource metadata is authoritative for scope names; OpenAPI may
+add descriptions and maps protected operations only to advertised scopes.
 
 External account connections store encrypted refresh credentials but grant no
 Agent authority. `CREDENTIAL_ENCRYPTION_KEY` protects those credentials along

@@ -12,6 +12,14 @@ const usedDpopProofs = new Map<string, number>()
 
 const app = express()
 
+app.get('/.well-known/oauth-protected-resource/api', (_request, response) => {
+  response.json({
+    resource,
+    authorization_servers: [realmrootIssuer],
+    scopes_supported: ['projects:read'],
+  })
+})
+
 app.get('/api', (_request, response) => {
   response
     .set('Link', `<${origin}/openapi.json>; rel="service-desc"; type="application/vnd.oai.openapi+json"`)

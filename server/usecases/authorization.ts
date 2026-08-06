@@ -17,11 +17,11 @@ import type { Deps } from '@server/usecases/deps'
 import { resolveOrganizationMembershipScopes } from '@server/usecases/organization-membership-scopes'
 import { validateExternalResourceConnector } from '@server/usecases/resource-connectors'
 import {
-  readResourceContract,
+  assertOperationScopesAdvertised,
+  readProtectedResourceMetadata,
   synchronizeResourceScopeRegistry,
-  validateRequestedScopes,
-  validateResourceUrl,
-} from '@server/usecases/resource-openapi'
+} from '@server/usecases/resource-metadata'
+import { readResourceContract, validateRequestedScopes, validateResourceUrl } from '@server/usecases/resource-openapi'
 import { activeResourceVisibleToOrganization } from '@server/usecases/resource-visibility'
 
 export type { AuthorizationTokenClaimInput } from '@server/usecases/authorization-utils'
@@ -222,17 +222,25 @@ export async function createResource(deps: Deps, input: CreateApiResourceRequest
   const ownerOrganizationId = input.ownerOrganizationId
   await requireActiveOrganization(deps, ownerOrganizationId)
   validateResourceUrl(input.resourceUrl)
-  if (input.connectorId) {
-    await validateExternalResourceConnector(
-      deps,
-      input.resourceUrl,
-      input.connectorId,
-      input.authorizationDetails ?? [],
-    )
-  } else if ((input.authorizationDetails?.length ?? 0) > 0) {
+  const protectedMetadata = input.connectorId
+    ? await validateExternalResourceConnector(
+        deps,
+        input.resourceUrl,
+        input.connectorId,
+        input.authorizationDetails ?? [],
+      )
+    : null
+  if (!input.connectorId && (input.authorizationDetails?.length ?? 0) > 0) {
     throw badRequest('Authorization details require an external API resource connector.')
   }
-  const scopeRegistry = enabled ? await synchronizeResourceScopeRegistry(deps, input.resourceUrl, null) : null
+  const scopeRegistry = enabled
+    ? await synchronizeResourceScopeRegistry(
+        deps,
+        input.resourceUrl,
+        null,
+        protectedMetadata ?? (await readProtectedResourceMetadata(deps, input.resourceUrl)),
+      )
+    : null
   return deps.authorization.createResource({
     id: createId('res'),
     identifier: input.identifier,
@@ -311,11 +319,15 @@ export async function getResourceContract(deps: Deps, id: string) {
   const resource = await getResource(deps, id)
   const contract = await readResourceContract(deps, resource.resourceUrl)
   if (!contract) throw new Error('Unconditional Resource Server contract read returned no document.')
-  const modes = new Map(resource.scopeRegistry?.scopes.map((scope) => [scope.value, scope.grantMode]))
+  const scopes = resource.scopeRegistry?.scopes ?? []
+  assertOperationScopesAdvertised(
+    contract.operations,
+    scopes.map((scope) => scope.value),
+  )
   return {
     resourceId: resource.id,
     ...contract,
-    scopes: contract.scopes.map((scope) => ({ ...scope, grantMode: modes.get(scope.value) ?? 'assigned' })),
+    scopes,
   }
 }
 
@@ -325,7 +337,22 @@ export async function refreshResourceScopeRegistry(deps: Deps, id: string) {
     throw badRequest('Resource Server must be active before synchronizing scopes.')
   if (isRealmrootResourceServer(id)) throw badRequest('The Realmroot Resource Server is system-managed.')
   try {
-    const registry = await synchronizeResourceScopeRegistry(deps, resource.resourceUrl, resource.scopeRegistry)
+    const metadata = await readProtectedResourceMetadata(deps, resource.resourceUrl)
+    if (resource.connectorId) {
+      await validateExternalResourceConnector(
+        deps,
+        resource.resourceUrl,
+        resource.connectorId,
+        resource.authorizationDetails,
+        metadata,
+      )
+    }
+    const registry = await synchronizeResourceScopeRegistry(
+      deps,
+      resource.resourceUrl,
+      resource.scopeRegistry,
+      metadata,
+    )
     if (!(await deps.authorization.replaceResourceScopeRegistry(id, registry))) {
       throw badRequest('Resource Server is no longer active.')
     }
@@ -375,14 +402,21 @@ export async function updateResource(deps: Deps, id: string, input: UpdateApiRes
   const enabled = input.enabled ?? resource.enabled
   const boundaryChanged =
     input.connectorId !== undefined || input.resourceUrl !== undefined || input.authorizationDetails !== undefined
-  if (connectorId && (boundaryChanged || input.enabled === true)) {
-    await validateExternalResourceConnector(deps, resourceUrl, connectorId, authorizationDetails)
-  } else if (!connectorId && authorizationDetails.length > 0) {
+  const protectedMetadata =
+    connectorId && (boundaryChanged || input.enabled === true)
+      ? await validateExternalResourceConnector(deps, resourceUrl, connectorId, authorizationDetails)
+      : null
+  if (!connectorId && authorizationDetails.length > 0) {
     throw badRequest('Authorization details require an external API resource connector.')
   }
   const shouldSynchronize = enabled && (input.enabled === true || input.resourceUrl !== undefined)
   const synchronizedRegistry = shouldSynchronize
-    ? await synchronizeResourceScopeRegistry(deps, resourceUrl, input.resourceUrl ? null : resource.scopeRegistry)
+    ? await synchronizeResourceScopeRegistry(
+        deps,
+        resourceUrl,
+        input.resourceUrl ? null : resource.scopeRegistry,
+        protectedMetadata ?? (await readProtectedResourceMetadata(deps, resourceUrl)),
+      )
     : null
   const scopeRegistry = input.scopeGrantModes
     ? updateScopeGrantModes(synchronizedRegistry ?? resource.scopeRegistry, input.scopeGrantModes)

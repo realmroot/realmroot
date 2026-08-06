@@ -6,6 +6,7 @@ const rolePermissionMigration = migration('20260801120140_natural_exodus.sql')
 const roleCleanupMigration = migration('20260801121526_worthless_ultragirl.sql')
 const ownershipMigration = migration('20260801123349_next_tattoo.sql')
 const organizationRbacMigration = migration('20260805160616_round_wither.sql')
+const rfc9728ScopeRegistryMigration = migration('20260806214840_rfc9728_scope_registry.sql')
 
 describe('D1 migration upgrades', () => {
   it('preserves populated Application and Resource server dependents [spec: platform-onboarding/existing-d1-upgrade]', () => {
@@ -61,6 +62,40 @@ describe('D1 migration upgrades', () => {
         owner_organization_id: 'org_platform',
       })
       expect(database.prepare('PRAGMA foreign_key_check').all()).toEqual([])
+    } finally {
+      database.close()
+    }
+  })
+
+  it('invalidates legacy non-built-in registries [spec: platform-onboarding/existing-d1-upgrade]', () => {
+    const database = new DatabaseSync(':memory:')
+
+    try {
+      database.exec(`
+        CREATE TABLE api_resource (
+          id TEXT PRIMARY KEY NOT NULL,
+          scope_registry TEXT
+        );
+        INSERT INTO api_resource (id, scope_registry) VALUES
+          ('res_realmroot', '{"discovery":{"sourceUrl":"https://auth.example/api/openapi.json","syncedAt":"2026-08-01T00:00:00.000Z"},"scopes":[{"value":"applications:read","grantMode":"assigned"}]}'),
+          ('resource-1', '{"discovery":{"sourceUrl":"https://api.example/openapi.json","syncedAt":"2026-08-01T00:00:00.000Z"},"scopes":[{"value":"items:read","grantMode":"automatic"}]}'),
+          ('resource-2', NULL);
+      `)
+
+      applyMigration(database, rfc9728ScopeRegistryMigration)
+
+      expect(database.prepare('SELECT id, scope_registry FROM api_resource ORDER BY id').all()).toEqual([
+        {
+          id: 'res_realmroot',
+          scope_registry:
+            '{"discovery":{"sourceUrl":"https://auth.example/api/openapi.json","syncedAt":"2026-08-01T00:00:00.000Z"},"scopes":[{"value":"applications:read","grantMode":"assigned"}]}',
+        },
+        {
+          id: 'resource-1',
+          scope_registry: null,
+        },
+        { id: 'resource-2', scope_registry: null },
+      ])
     } finally {
       database.close()
     }

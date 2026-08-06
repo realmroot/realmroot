@@ -513,7 +513,7 @@ function validateResourceRequestedScopes(
 ) {
   if (isRealmrootResourceServer(resource.id)) {
     if (scopes.some((scope) => !realmrootOAuthScopes.includes(scope as (typeof realmrootOAuthScopes)[number]))) {
-      throw badRequest('Requested scope is not declared by the Realmroot OpenAPI document.')
+      throw badRequest('Requested scope is not declared by the Realmroot scope registry.')
     }
     return
   }

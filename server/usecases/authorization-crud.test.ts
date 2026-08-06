@@ -20,6 +20,7 @@ import {
   listOrganizations,
   listResources,
   listRoles,
+  refreshResourceScopeRegistry,
   removeMember,
   replaceMemberRoles,
   restoreResource,
@@ -608,7 +609,6 @@ describe('authorization CRUD and assignment policy', () => {
     authorization.createResource.mockResolvedValue(resource)
     authorization.listResources.mockResolvedValue({ items: [resource], pagination })
     authorization.findResource.mockResolvedValue(resource)
-    const canonicalResourceUrl = new URL(resource.resourceUrl).toString()
     const connector = {
       id: 'connector-1',
       providerType: 'generic_oauth',
@@ -646,8 +646,9 @@ describe('authorization CRUD and assignment policy', () => {
           request.url.endsWith('/.well-known/oauth-protected-resource')
             ? Promise.resolve(
                 Response.json({
-                  resource: canonicalResourceUrl,
+                  resource: resource.resourceUrl,
                   authorization_servers: [resource.resourceUrl],
+                  scopes_supported: ['projects:read'],
                 }),
               )
             : openApiFetch(request),
@@ -847,6 +848,63 @@ describe('authorization CRUD and assignment policy', () => {
     await expect(getResource(deps, 'missing')).rejects.toMatchObject({ status: 404 })
   })
 
+  it('rejects external scope refresh when the protected resource authorization server drifts', async () => {
+    const authorization = repository()
+    const existingRegistry = scopeRegistry(['projects:read'])
+    authorization.findResource.mockResolvedValue({
+      ...resource,
+      connectorId: 'connector-1',
+      scopeRegistry: existingRegistry,
+    })
+    const deps = {
+      authorization,
+      connectors: {
+        findById: vi.fn().mockResolvedValue({
+          id: 'connector-1',
+          providerType: 'generic_oauth',
+          enabled: true,
+          clientId: 'client-1',
+          clientSecret: 'secret',
+          issuer: 'https://issuer.example.com',
+          authorizationEndpoint: 'https://issuer.example.com/authorize',
+          tokenEndpoint: 'https://issuer.example.com/token',
+          userInfoEndpoint: 'https://issuer.example.com/userinfo',
+          jwksEndpoint: 'https://issuer.example.com/jwks',
+          revocationEndpoint: 'https://issuer.example.com/revoke',
+          providerMetadata: {
+            grant_types_supported: [
+              'authorization_code',
+              'refresh_token',
+              'urn:ietf:params:oauth:grant-type:jwt-bearer',
+              'urn:ietf:params:oauth:grant-type:token-exchange',
+            ],
+            dpop_signing_alg_values_supported: ['ES256'],
+          },
+        }),
+      },
+      externalHttp: {
+        fetch: vi.fn().mockResolvedValue(
+          Response.json({
+            resource: resource.resourceUrl,
+            authorization_servers: ['https://drifted.example.com'],
+            scopes_supported: ['projects:write'],
+          }),
+        ),
+      },
+    } as unknown as Deps
+
+    await expect(refreshResourceScopeRegistry(deps, resource.id)).rejects.toThrow(
+      'authorization server does not match the selected OIDC connector',
+    )
+    expect(authorization.replaceResourceScopeRegistry).toHaveBeenCalledWith(resource.id, {
+      ...existingRegistry,
+      discovery: {
+        ...existingRegistry.discovery,
+        lastError: expect.objectContaining({ code: 'bad_request' }),
+      },
+    })
+  })
+
   it('reads resource contracts and rejects disabled owner Organizations', async () => {
     const authorization = repository()
     authorization.findResource.mockResolvedValue(resource)
@@ -891,7 +949,16 @@ describe('authorization CRUD and assignment policy', () => {
     authorization.findOrganization.mockResolvedValue(organization)
     authorization.createResource.mockResolvedValue(resource)
     authorization.findResource.mockResolvedValue(resource)
-    const externalHttp = { fetch: vi.fn().mockResolvedValue(new Response('<html></html>')) }
+    const externalHttp = {
+      fetch: vi.fn(async (request: Request) =>
+        request.url.includes('/.well-known/oauth-protected-resource')
+          ? Response.json({
+              resource: resourceUrlFromMetadataUrl(request.url),
+              scopes_supported: ['projects:read'],
+            })
+          : new Response('<html></html>'),
+      ),
+    }
     const deps = {
       authorization,
       externalResources: { findAuthorization: vi.fn() },
@@ -909,7 +976,7 @@ describe('authorization CRUD and assignment policy', () => {
 
     await expect(createResource(deps, { ...input, enabled: false })).resolves.toBe(resource)
     expect(authorization.createResource).toHaveBeenCalledWith(expect.objectContaining({ enabled: false }))
-    expect(externalHttp.fetch).toHaveBeenCalledTimes(1)
+    expect(externalHttp.fetch).toHaveBeenCalledTimes(2)
 
     await expect(updateResource(deps, resource.id, { enabled: true })).rejects.toThrow(
       'Business resource must advertise its OpenAPI document',
@@ -977,6 +1044,9 @@ function scopeRegistry(scopes: string[]) {
 
 function resourceOpenApiFetch(resourceUrl: string) {
   return async (request: Request) => {
+    if (request.url === protectedResourceMetadataUrl(resourceUrl)) {
+      return Response.json({ resource: resourceUrl, scopes_supported: ['projects:read'] })
+    }
     if (request.url === new URL(resourceUrl).toString()) {
       return new Response(null, { headers: { link: '</openapi.json>; rel="service-desc"' } })
     }
@@ -989,6 +1059,9 @@ function resourceOpenApiFetch(resourceUrl: string) {
 
 function resourceScopeOpenApiFetch(resourceUrl: string, scopes: string[]) {
   return async (request: Request) => {
+    if (request.url === protectedResourceMetadataUrl(resourceUrl)) {
+      return Response.json({ resource: resourceUrl, scopes_supported: scopes })
+    }
     if (request.url === new URL(resourceUrl).toString()) {
       return new Response(null, { headers: { link: '</openapi.json>; rel="service-desc"' } })
     }
@@ -1013,4 +1086,16 @@ function resourceScopeOpenApiFetch(resourceUrl: string, scopes: string[]) {
     }
     return new Response(null, { status: 404 })
   }
+}
+
+function protectedResourceMetadataUrl(resourceUrl: string) {
+  const resource = new URL(resourceUrl)
+  const path = resource.pathname === '/' ? '' : resource.pathname
+  return new URL(`/.well-known/oauth-protected-resource${path}`, resource.origin).toString()
+}
+
+function resourceUrlFromMetadataUrl(metadataUrl: string) {
+  const metadata = new URL(metadataUrl)
+  const prefix = '/.well-known/oauth-protected-resource'
+  return `${metadata.origin}${metadata.pathname.slice(prefix.length)}${metadata.search}`
 }

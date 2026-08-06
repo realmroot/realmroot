@@ -7,8 +7,9 @@ endpoint.
 
 It implements only the native resource-server responsibilities:
 
+- RFC 9728 protected resource metadata and scope discovery
 - RFC 8631 OpenAPI discovery
-- scopes declared by OpenAPI operation security requirements
+- optional OpenAPI operation-to-scope mapping
 - Realmroot issuer and JWKS validation
 - audience and `at+jwt` validation
 - RFC 9449 DPoP proof and `ath` validation
@@ -36,7 +37,8 @@ Create a native API Resource in Realmroot with:
 }
 ```
 
-Realmroot discovers `projects:read` from `/openapi.json`. No external
+Realmroot discovers `projects:read` from the RFC 9728 metadata and its operation
+mapping from `/openapi.json`. No external
 authorization configuration or account connection is used.
 
 See the

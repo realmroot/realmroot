@@ -41,8 +41,8 @@ and each Agent runtime needs another adapter.
 
 Realmroot follows a reusable path:
 
-1. A resource server maintains its API, OpenAPI document, and permission
-   enforcement.
+1. A resource server maintains its API, RFC 9728 scope metadata, OpenAPI
+   document, and permission enforcement.
 2. Realmroot registers the resource, makes it discoverable, and handles Agent
    identity and delegated authorization.
 3. Restish turns the OpenAPI contract into generic CLI operations.
@@ -112,8 +112,8 @@ Agent
 ```
 
 Realmroot is not an HTTP proxy and does not replace the resource server's
-authorization logic. The resource server defines its scopes in OpenAPI, maps
-them to operations, and makes the final allow-or-deny decision. Realmroot
+authorization logic. The resource server advertises its scopes through RFC 9728,
+may map them to operations in OpenAPI, and makes the final allow-or-deny decision. Realmroot
 recognizes those scopes, obtains controller approval, groups scopes into roles
 where useful, and signs the resulting authority into a token or coordinates
 issuance with an external authorization server.
@@ -126,8 +126,9 @@ for the detailed ownership model.
 
 An Agent can inspect the resource catalog without receiving business authority.
 When it selects an operation, Realmroot derives the requestable scopes from the
-resource's live OpenAPI document. A controller reviews the Agent, resource,
-account, purpose, exact scopes, and grant lifetime.
+resource's live RFC 9728 protected-resource metadata and uses OpenAPI to map
+operations to those scopes. A controller reviews the Agent, resource, account,
+purpose, exact scopes, and grant lifetime.
 
 Enrollment establishes identity, not authority. Realmroot keeps two approval
 boundaries independent:
@@ -187,11 +188,12 @@ To make an API available to Agents, a resource server owns only its normal API
 contract and authorization boundary:
 
 1. Maintain a stable protected resource URL.
-2. Advertise an OpenAPI 3.x document from that URL with an RFC 8631
+2. Publish its requestable scopes in RFC 9728 protected-resource metadata.
+3. Advertise an OpenAPI 3.x document from that URL with an RFC 8631
    `service-desc` link.
-3. Declare operation scopes with standard OpenAPI security requirements.
-4. Validate the issued token and enforce permissions locally.
-5. Register the resource in Realmroot as `native` or `external`.
+4. Optionally map operations to advertised scopes with standard OpenAPI security requirements.
+5. Validate the issued token and enforce permissions locally.
+6. Register the resource in Realmroot as `native` or `external`.
 
 Choose `native` when the API trusts Realmroot as its authorization server.
 Choose `external` when the target owns its users and OAuth server. There is no

@@ -51,6 +51,7 @@ import type {
   ResourceConnectionIntentRecord,
 } from '@server/usecases/ports'
 import { validateExternalResourceConnector } from '@server/usecases/resource-connectors'
+import { protectedResourceMetadataUrl } from '@server/usecases/resource-metadata'
 import type { ApiResourceResponse } from '@shared/api/authorization'
 import { exportJWK, generateKeyPair, type JWTHeaderParameters, SignJWT } from 'jose'
 import { describe, expect, it, vi } from 'vitest'
@@ -91,6 +92,7 @@ describe('external API resource authorization', () => {
         return Response.json({
           resource: 'https://projects.example.com/api',
           authorization_servers: ['https://projects.example.com'],
+          scopes_supported: ['projects:read'],
         })
       }
       return new Response(null, { status: 404 })
@@ -98,7 +100,7 @@ describe('external API resource authorization', () => {
 
     await expect(
       validateExternalResourceConnector(deps, 'https://projects.example.com/api', 'connector-1'),
-    ).resolves.toBeUndefined()
+    ).resolves.toMatchObject({ scopesSupported: ['projects:read'] })
   })
 
   it('rejects a connector whose issuer does not authorize the resource', async () => {
@@ -115,6 +117,7 @@ describe('external API resource authorization', () => {
         return Response.json({
           resource: 'https://projects.example.com/api',
           authorization_servers: ['https://different.example.com'],
+          scopes_supported: ['projects:read'],
         })
       }
       return new Response(null, { status: 404 })
@@ -3863,7 +3866,7 @@ describe('external API resource authorization', () => {
     ).resolves.toMatchObject({ status: 'pending', scopes: ['projects:read'] })
   })
 
-  it('[spec: agent-identity/agent-resource-access-without-role] allows an Agent without roles to request OpenAPI scopes', async () => {
+  it('[spec: agent-identity/agent-resource-access-without-role] allows an Agent without roles to request advertised scopes', async () => {
     const deps = createTestDeps()
     authorizationDeps(deps)
     vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
@@ -4798,6 +4801,9 @@ function mockResourceOpenApi(deps: ReturnType<typeof createTestDeps>, resourceUr
   vi.mocked(deps.externalHttp.fetch).mockImplementation(async (request) => {
     if (request.url === 'https://projects.example.com/.well-known/openid-configuration') {
       return Response.json(metadata())
+    }
+    if (request.url === protectedResourceMetadataUrl(resourceUrl)) {
+      return Response.json({ resource: resourceUrl, scopes_supported: scopes })
     }
     if (request.url === resourceUrl) {
       return new Response(null, { headers: { link: '</openapi.json>; rel="service-desc"' } })

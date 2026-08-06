@@ -29,6 +29,7 @@ Feature: Platform bootstrap and route access
     Then the migration preserves Applications, Resource servers, and Better Auth memberships
     And the legacy custom Role definitions and assignments are deliberately removed without translation
     And existing Applications and Resource servers retain their real owning Organization
+    And legacy Resource server scope registries are cleared before RFC 9728 metadata replaces them
     And the migrated database satisfies all foreign key constraints
 
   @e2e @entrypoint:product-ui @journey:first-admin-gate

@@ -32,14 +32,16 @@ export function validateResourceUrl(resourceUrl: string) {
   const url = new URL(resourceUrl)
   const loopback =
     url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '::1' || url.hostname === '[::1]'
-  if ((url.protocol !== 'https:' && !(loopback && url.protocol === 'http:')) || url.username || url.password) {
-    throw badRequest('Resource URL must use HTTPS, except for loopback development URLs, and contain no userinfo.')
+  if (
+    (url.protocol !== 'https:' && !(loopback && url.protocol === 'http:')) ||
+    url.username ||
+    url.password ||
+    url.hash
+  ) {
+    throw badRequest(
+      'Resource URL must use HTTPS, except for loopback development URLs, and contain no userinfo or fragment.',
+    )
   }
-}
-
-export async function validateResourceContract(deps: Deps, resourceUrl: string) {
-  validateResourceUrl(resourceUrl)
-  await readResourceContract(deps, resourceUrl)
 }
 
 export function validateRequestedScopes(registry: ResourceScopeRegistry | null, requestedScopes: string[]) {
@@ -94,36 +96,6 @@ export async function readResourceContract(
   }
 }
 
-export async function synchronizeResourceScopeRegistry(
-  deps: Deps,
-  resourceUrl: string,
-  previousRegistry: ResourceScopeRegistry | null,
-  now = new Date(),
-): Promise<ResourceScopeRegistry> {
-  const contract = await readResourceContract(deps, resourceUrl, previousRegistry)
-  if (!contract) {
-    if (!previousRegistry) throw badRequest('Resource Server scope registry has not been synchronized.')
-    return {
-      ...previousRegistry,
-      discovery: { ...previousRegistry.discovery, syncedAt: now.toISOString(), lastError: null },
-    }
-  }
-  const previousModes = new Map(previousRegistry?.scopes.map((scope) => [scope.value, scope.grantMode]))
-  return {
-    discovery: {
-      sourceUrl: contract.sourceUrl,
-      etag: contract.etag,
-      documentHash: contract.documentHash,
-      syncedAt: now.toISOString(),
-      lastError: null,
-    },
-    scopes: contract.scopes.map((scope) => ({
-      ...scope,
-      grantMode: previousModes.get(scope.value) ?? 'assigned',
-    })),
-  }
-}
-
 async function fetchForDiscovery(
   deps: Deps,
   request: Request,
@@ -171,7 +143,6 @@ export function extractResourceScopes(document: unknown): ResourceScopeDefinitio
       }
     }
   }
-  validateOperationScopeReferences(root, securitySchemes, new Set(scopeDescriptions.keys()))
   return [...scopeDescriptions]
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([value, description]) => ({
@@ -214,36 +185,6 @@ export function extractProtectedOperations(document: unknown): ResourceOperation
     }
   }
   return operations
-}
-
-function validateOperationScopeReferences(
-  root: Record<string, unknown>,
-  securitySchemes: Record<string, unknown>,
-  declaredScopes: Set<string>,
-) {
-  const oauthSchemeNames = new Set(
-    Object.entries(securitySchemes)
-      .filter(([, candidate]) => resolveSecurityScheme(candidate, securitySchemes)?.type === 'oauth2')
-      .map(([name]) => name),
-  )
-  const documentSecurity = securityRequirements(root.security)
-  for (const pathItem of Object.values(objectValueOrEmpty(root.paths))) {
-    const path = objectValueOrEmpty(pathItem)
-    for (const method of operationMethods) {
-      const operation = objectValueOrEmpty(path[method])
-      if (Object.keys(operation).length === 0) continue
-      const requirements = 'security' in operation ? securityRequirements(operation.security) : documentSecurity
-      for (const requirement of requirements) {
-        for (const [schemeName, values] of Object.entries(requirement)) {
-          if (!oauthSchemeNames.has(schemeName) || !Array.isArray(values)) continue
-          const undeclared = values.find(
-            (value) => typeof value === 'string' && value.trim() && !declaredScopes.has(value),
-          )
-          if (undeclared) throw badRequest(`Operation security references undeclared OAuth scope "${undeclared}".`)
-        }
-      }
-    }
-  }
 }
 
 async function hashDiscoveryData(scopes: ResourceScopeDefinition[]) {

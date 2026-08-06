@@ -1,6 +1,6 @@
 import { badRequest, notFound } from '@server/domain/errors'
 import type { Deps } from '@server/usecases/deps'
-import { validateResourceContract } from '@server/usecases/resource-openapi'
+import { type ProtectedResourceMetadata, readProtectedResourceMetadata } from '@server/usecases/resource-metadata'
 import type { AuthorizationDetail } from '@shared/api/authorization-details'
 
 const tokenExchangeGrantType = 'urn:ietf:params:oauth:grant-type:token-exchange'
@@ -11,7 +11,8 @@ export async function validateExternalResourceConnector(
   resourceUrlInput: string,
   connectorId: string,
   authorizationDetails: AuthorizationDetail[] = [],
-) {
+  discoveredMetadata?: ProtectedResourceMetadata,
+): Promise<ProtectedResourceMetadata> {
   const connector = await deps.connectors.findById(connectorId)
   if (!connector || connector.providerType !== 'generic_oauth') {
     throw notFound('OIDC connector was not found.')
@@ -29,17 +30,10 @@ export async function validateExternalResourceConnector(
     throw badRequest('OIDC connector is missing endpoints required for external API access.')
   }
 
-  const resourceUrl = requireNetworkUrl(resourceUrlInput, 'resource URL')
-  await validateResourceContract(deps, resourceUrl)
-  const protectedMetadata = await fetchObject(
-    deps,
-    protectedResourceMetadataUrl(resourceUrl),
-    'Protected resource metadata discovery failed.',
-  )
-  if (protectedMetadata.resource !== resourceUrl) {
-    throw badRequest('Protected resource metadata does not match the configured resource URL.')
-  }
-  const authorizationServers = stringArray(protectedMetadata.authorization_servers)
+  requireNetworkUrl(resourceUrlInput, 'resource URL')
+  const resourceUrl = resourceUrlInput
+  const protectedMetadata = discoveredMetadata ?? (await readProtectedResourceMetadata(deps, resourceUrl))
+  const authorizationServers = protectedMetadata.authorizationServers
   if (authorizationServers.length !== 1) {
     throw badRequest('External API resource must advertise exactly one authorization server.')
   }
@@ -62,7 +56,7 @@ export async function validateExternalResourceConnector(
   if (stringArray(connector.providerMetadata?.dpop_signing_alg_values_supported).length === 0) {
     throw badRequest('OIDC connector must advertise RFC 9449 DPoP support for external API access.')
   }
-  if (authorizationDetails.length === 0) return
+  if (authorizationDetails.length === 0) return protectedMetadata
   const supportedTypes = stringArray(connector.providerMetadata?.authorization_details_types_supported)
   if (authorizationDetails.some((detail) => !supportedTypes.includes(detail.type))) {
     throw badRequest('OIDC connector does not support every configured authorization detail type.')
@@ -75,7 +69,9 @@ export async function validateExternalResourceConnector(
   const catalogEndpoint = connector.providerMetadata?.authorization_details_catalog_endpoint
   const catalogScope = connector.providerMetadata?.authorization_details_catalog_scope
   const catalogVersion = connector.providerMetadata?.authorization_details_catalog_version
-  if (catalogEndpoint === undefined && catalogScope === undefined && catalogVersion === undefined) return
+  if (catalogEndpoint === undefined && catalogScope === undefined && catalogVersion === undefined) {
+    return protectedMetadata
+  }
   if (
     typeof catalogEndpoint !== 'string' ||
     typeof catalogScope !== 'string' ||
@@ -88,22 +84,7 @@ export async function validateExternalResourceConnector(
     )
   }
   requireNetworkUrl(catalogEndpoint, 'authorization detail catalog endpoint')
-}
-
-async function fetchObject(deps: Deps, url: string, message: string) {
-  const response = await deps.externalHttp.fetch(new Request(url, { headers: { accept: 'application/json' } }))
-  if (!response.ok) throw badRequest(message)
-  const value = await response.json().catch(() => null)
-  if (!value || typeof value !== 'object' || Array.isArray(value)) throw badRequest(message)
-  return value as Record<string, unknown>
-}
-
-function protectedResourceMetadataUrl(resourceUrl: string) {
-  const resource = new URL(resourceUrl)
-  const path = resource.pathname === '/' ? '' : resource.pathname
-  const metadata = new URL(`/.well-known/oauth-protected-resource${path}`, resource.origin)
-  metadata.search = resource.search
-  return metadata.toString()
+  return protectedMetadata
 }
 
 function requireNetworkUrl(value: string, label: string) {

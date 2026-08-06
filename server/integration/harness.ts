@@ -249,10 +249,22 @@ export async function seedAgent(harness: Harness, userId: string, suffix = '1'):
 }
 
 export async function resourceOpenApiFetch(request: Request) {
+  if (request.url.includes('/.well-known/oauth-protected-resource')) {
+    return Response.json({
+      resource: resourceUrlFromMetadataUrl(request.url),
+      scopes_supported: ['resource:read'],
+    })
+  }
   if (new URL(request.url).pathname.endsWith('/openapi.json')) {
     return Response.json({ openapi: '3.1.0', paths: {} })
   }
   return new Response(null, { headers: { link: '</openapi.json>; rel="service-desc"' } })
+}
+
+function resourceUrlFromMetadataUrl(metadataUrl: string) {
+  const metadata = new URL(metadataUrl)
+  const prefix = '/.well-known/oauth-protected-resource'
+  return `${metadata.origin}${metadata.pathname.slice(prefix.length)}${metadata.search}`
 }
 
 /**

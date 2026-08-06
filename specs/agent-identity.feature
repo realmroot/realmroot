@@ -172,10 +172,12 @@ Feature: Agent identity and delegated API authorization
       And Realmroot uses that URL as the OAuth resource identifier and access-token audience
       And no external authorization server, OAuth client, or account connection is configured
       And the product API validates Realmroot access tokens with the published issuer and JWKS
+      And the protected resource publishes its requestable scopes through RFC 9728 metadata
       And the protected resource advertises its OpenAPI contract with a standard service-desc link
-      And Realmroot derives its local scope registry from OAuth flow scope declarations in that OpenAPI contract
-      And declared scopes remain valid even when no public operation references them
-      And Realmroot stores only discovered scope metadata and local grant modes, never the OpenAPI document
+      And Realmroot derives its local scope registry from that protected-resource metadata
+      And OpenAPI may add descriptions and maps operations only to advertised scopes
+      And advertised scopes remain valid even when no public operation references them
+      And Realmroot stores only discovered scope metadata and local grant modes, never either source document
 
     @entrypoint:product-ui @journey:api-resource-contract-validation
     Scenario: Enabled API resources require a discoverable OpenAPI contract
@@ -311,7 +313,8 @@ Feature: Agent identity and delegated API authorization
       When an administrator creates the API resource and selects that connector
       Then Realmroot validates the resource issuer, token exchange, DPoP, and revocation against the connector
       And the resource URL advertises its OpenAPI contract with a standard service-desc link
-      And Realmroot derives every requestable scope only from OAuth flow declarations in that OpenAPI contract
+      And Realmroot derives every requestable scope only from scopes_supported in that protected-resource metadata
+      And the OpenAPI contract may add descriptions and operation mappings only for advertised scopes
       And authorization-server scopes_supported is not a scope catalog
       And the resource stores only its connector association rather than another OAuth client
       And the resource cannot be enabled for Agents when a required capability is absent
@@ -395,7 +398,7 @@ Feature: Agent identity and delegated API authorization
       Given an enabled external API resource has active authorization configuration
       And the Agent's home space has no account connection for that resource
       When the Agent discovers every target operation required by the current task
-      And requests a controller-managed account connection for their combined exact OpenAPI scope set
+      And requests a controller-managed account connection for their combined exact advertised scope set
       Then Realmroot creates a hosted connection request without authorization details or an Agent grant
       When the controller opens the connection approval page
       Then Realmroot requires the controller to connect that resource account

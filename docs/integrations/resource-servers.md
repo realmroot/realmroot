@@ -21,6 +21,22 @@ Both modes register one protected resource URL:
 Production URLs must use HTTPS and contain no username or password. Plain HTTP
 is accepted only for loopback development URLs.
 
+### Publish Protected Resource Metadata
+
+Both authorization modes publish RFC 9728 metadata at the well-known URL
+derived from the exact `resourceUrl`. `scopes_supported` is Realmroot's
+authoritative list of requestable scopes:
+
+```json
+{
+  "resource": "https://api.example.com/v1",
+  "scopes_supported": ["projects:read", "projects:write"]
+}
+```
+
+The `resource` value must exactly match the configured `resourceUrl`. External
+authorization also includes exactly one `authorization_servers` issuer.
+
 ### Advertise OpenAPI
 
 An unauthenticated `GET` to the exact `resourceUrl` must return a successful
@@ -35,9 +51,9 @@ Content-Type: application/json
 Relative link targets are allowed. The linked document must be OpenAPI 3.x in
 JSON or YAML.
 
-Realmroot derives requestable scopes from protected OpenAPI operations. Declare
-an OAuth 2.0 or OpenID Connect security scheme and put the required scopes in
-each operation's standard `security` requirement:
+OpenAPI may supply descriptions for advertised scopes through an OAuth 2.0
+flow and may map protected operations to those scopes through standard
+`security` requirements:
 
 ```yaml
 openapi: 3.1.0
@@ -62,10 +78,10 @@ paths:
           description: Projects visible to the caller
 ```
 
-Document-level `security` is also supported. A scope mentioned only in
-`scopes_supported`, descriptive text, or a custom extension is not requestable.
-The resource URL and OpenAPI document must remain reachable because Realmroot
-revalidates scopes at request, approval, and token-issuance boundaries.
+Document-level `security` is also supported. An advertised scope remains
+requestable even when OpenAPI provides no description or public operation
+mapping. An OpenAPI operation cannot reference a scope absent from RFC 9728
+`scopes_supported`.
 
 An enabled Resource Server whose contract is temporarily unavailable remains visible
 to Agents with `availability.status: unavailable` and no requestable scopes; it does not
@@ -220,7 +236,7 @@ The presence of `connectorId` makes the resource externally authorized. Its
 authorization mode cannot change after creation, although it may switch to
 another compatible OIDC Connector.
 
-### Publish Protected Resource Metadata
+### Bind Protected Resource Metadata To The Authorization Server
 
 For resource URL `https://api.example.com/v1`, Realmroot fetches:
 
@@ -228,17 +244,16 @@ For resource URL `https://api.example.com/v1`, Realmroot fetches:
 https://api.example.com/.well-known/oauth-protected-resource/v1
 ```
 
-Publish RFC 9728 metadata containing the exact resource URL and exactly one
-authorization server:
+For external authorization, publish the shared RFC 9728 scope metadata with
+exactly one authorization server:
 
 ```json
 {
   "resource": "https://api.example.com/v1",
-  "authorization_servers": ["https://accounts.example.com"]
+  "authorization_servers": ["https://accounts.example.com"],
+  "scopes_supported": ["projects:read", "projects:write"]
 }
 ```
-
-The `resource` value must exactly match the configured `resourceUrl`.
 
 ### Publish Authorization Server Metadata
 
@@ -317,9 +332,9 @@ Realmroot starts authorization code with S256 PKCE using:
 
 One personal or organization home space can have only one connected account for
 an API Resource. When connection starts from a pending Agent approval,
-Realmroot requests the resource's complete current Agent-delegable OpenAPI scope
-catalog for the account connection; the later Agent grant remains limited to
-the exact scopes displayed in that approval. Authorization-server
+Realmroot requests the resource's complete current Agent-delegable RFC 9728
+scope catalog for the account connection; the later Agent grant remains limited
+to the exact scopes displayed in that approval. Authorization-server
 `scopes_supported` metadata is not used as the resource scope catalog.
 
 The token endpoint must authenticate the client with
@@ -344,7 +359,7 @@ Agent scopes and lifetime separately.
 ### Support Rich Authorization And Resource Contexts
 
 An external resource may use RFC 9396 authorization details in addition to
-OpenAPI scopes. Configure the API Resource with opaque authorization-detail
+its advertised scopes. Configure the API Resource with opaque authorization-detail
 templates whose `type` values appear in the authorization server's
 `authorization_details_types_supported` metadata. Realmroot sends those
 templates through an RFC 9126 pushed authorization request when connecting the
@@ -480,6 +495,8 @@ host revocation invalidates a token lease.
 Before enabling a resource:
 
 - The exact resource URL returns a `service-desc` OpenAPI link.
+- The RFC 9728 metadata resource value exactly matches the configured URL and
+  advertises non-empty `scopes_supported`.
 - OpenAPI is 3.x and protected operations declare OAuth/OIDC security scopes.
 - Realmroot can fetch the resource URL and linked contract without a user
   session.
