@@ -122,15 +122,15 @@ describe('AgentService', () => {
       ),
     ).resolves.toEqual({ status: 'approved' })
 
-    expect(repository.decideApproval).toHaveBeenCalledWith({
-      agentId: 'agent-1',
-      userCodeHash: await sha256Base64url('ABCD-1234'),
-      action: 'approve',
-      capabilities: ['applications:read'],
-      userId: 'user-1',
-      now: expect.any(Date),
-    })
-    expect(agentAudit.append).toHaveBeenCalledWith(
+    expect(repository.decideApproval).toHaveBeenCalledWith(
+      {
+        agentId: 'agent-1',
+        userCodeHash: await sha256Base64url('ABCD-1234'),
+        action: 'approve',
+        capabilities: ['applications:read'],
+        userId: 'user-1',
+        now: expect.any(Date),
+      },
       expect.objectContaining({
         action: 'agent.capability_decided',
         result: 'allowed',
@@ -145,7 +145,10 @@ describe('AgentService', () => {
     await expect(
       decideAgentApproval(deps, { agentId: 'agent-1', userCode: 'abcd1234', action: 'approve' }, 'user-1'),
     ).resolves.toEqual({ status: 'approved' })
-    expect(agentAudit.append).toHaveBeenLastCalledWith(expect.objectContaining({ scopes: ['applications:read'] }))
+    expect(repository.decideApproval).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.objectContaining({ scopes: ['applications:read'] }),
+    )
   })
 
   it('preserves a nonstandard Agent approval code shape and returns denial', async () => {
@@ -173,16 +176,58 @@ describe('AgentService', () => {
       ),
     ).resolves.toEqual({ status: 'denied' })
 
-    expect(repository.decideApproval).toHaveBeenCalledWith({
-      agentId: 'agent-2',
-      userCodeHash: await sha256Base64url('BAD-CODE'),
-      action: 'deny',
-      capabilities: undefined,
-      userId: 'user-2',
-      now: expect.any(Date),
-    })
-    expect(agentAudit.append).toHaveBeenCalledWith(
+    expect(repository.decideApproval).toHaveBeenCalledWith(
+      {
+        agentId: 'agent-2',
+        userCodeHash: await sha256Base64url('BAD-CODE'),
+        action: 'deny',
+        capabilities: undefined,
+        userId: 'user-2',
+        now: expect.any(Date),
+      },
       expect.objectContaining({ action: 'agent.capability_decided', result: 'denied', scopes: ['users:write'] }),
+    )
+  })
+
+  it('materializes the controlled tenant for approval audit and uses the approving controller for first enrollment', async () => {
+    const repository = createAgentRepositoryMock()
+    repository.decideApproval.mockResolvedValue('approved')
+    const identities = createAgentIdentityRepositoryMock()
+    const agentAudit = { append: vi.fn() }
+    const deps = { agents: repository, agentIdentities: identities, agentAudit } as unknown as Deps
+
+    identities.findActiveByProtocolAgent.mockResolvedValueOnce({
+      identity: {
+        id: 'agid-org',
+        issuer: 'https://auth.example.com',
+        subject: 'agt-org',
+        name: 'Organization Agent',
+        ownerUserId: null,
+        ownerOrganizationId: 'org-1',
+        status: 'active',
+      },
+      bindings: [],
+    })
+    await decideAgentApproval(deps, { agentId: 'agent-org', userCode: 'ABCD-1234', action: 'approve' }, 'user-1')
+    expect(repository.decideApproval).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.objectContaining({ ownerUserId: null, ownerOrganizationId: 'org-1' }),
+    )
+
+    identities.findActiveByProtocolAgent.mockResolvedValueOnce(null)
+    identities.findProtocolAgent.mockResolvedValueOnce({ hostId: 'host-1', userId: 'user-2' })
+    await decideAgentApproval(deps, { agentId: 'agent-user', userCode: 'ABCD-1234', action: 'approve' }, 'user-1')
+    expect(repository.decideApproval).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.objectContaining({ ownerUserId: 'user-2', ownerOrganizationId: null }),
+    )
+
+    identities.findActiveByProtocolAgent.mockResolvedValueOnce(null)
+    identities.findProtocolAgent.mockResolvedValueOnce({ hostId: 'host-1', userId: null })
+    await decideAgentApproval(deps, { agentId: 'agent-unowned', userCode: 'ABCD-1234', action: 'approve' }, 'user-1')
+    expect(repository.decideApproval).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.objectContaining({ ownerUserId: 'user-1', ownerOrganizationId: null }),
     )
   })
 })

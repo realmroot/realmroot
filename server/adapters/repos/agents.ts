@@ -1,9 +1,9 @@
 import { badRequest, forbidden, notFound } from '@server/domain/errors'
 import type { AgentRepository } from '@server/usecases/ports'
-import { and, count, desc, eq, gt, inArray } from 'drizzle-orm'
+import { and, count, desc, eq, exists, gt, inArray, isNull, or, sql } from 'drizzle-orm'
 import type { PaginatedResult, PaginationInput } from '../../../shared/api/pagination'
 import type { Database } from '../../db/client'
-import { agent, agentCapabilityGrant, agentHost, approvalRequest } from '../../db/schema'
+import { agent, agentAuditEvent, agentCapabilityGrant, agentHost, approvalRequest } from '../../db/schema'
 
 export type AgentHostRecord = typeof agentHost.$inferSelect
 export type AgentRecord = typeof agent.$inferSelect
@@ -71,7 +71,7 @@ export function createDrizzleAgentRepository(db: Database): AgentRepository {
       return db.select().from(agentCapabilityGrant).where(eq(agentCapabilityGrant.agentId, agentId))
     },
 
-    async decideApproval(input) {
+    async decideApproval(input, audit) {
       const [request] = await db
         .select()
         .from(approvalRequest)
@@ -109,64 +109,117 @@ export function createDrizzleAgentRepository(db: Database): AgentRepository {
       if (requestedCapabilities.some((capability) => !pendingGrants.some((grant) => grant.capability === capability))) {
         throw badRequest('Agent approval includes a capability that is not pending.')
       }
+      const controllerClaim = and(
+        exists(
+          db
+            .select({ id: agent.id })
+            .from(agent)
+            .where(and(eq(agent.id, input.agentId), or(isNull(agent.userId), eq(agent.userId, input.userId)))),
+        ),
+        request.hostId
+          ? exists(
+              db
+                .select({ id: agentHost.id })
+                .from(agentHost)
+                .where(
+                  and(
+                    eq(agentHost.id, request.hostId),
+                    or(isNull(agentHost.userId), eq(agentHost.userId, input.userId)),
+                  ),
+                ),
+            )
+          : undefined,
+      )
 
       if (input.action === 'deny') {
-        await db
-          .update(approvalRequest)
-          .set({ status: 'denied', updatedAt: input.now })
-          .where(and(eq(approvalRequest.id, request.id), eq(approvalRequest.status, 'pending')))
-        if (pendingGrants.length > 0) {
-          await db
-            .update(agentCapabilityGrant)
-            .set({ status: 'denied', deniedBy: input.userId, updatedAt: input.now })
-            .where(and(eq(agentCapabilityGrant.agentId, input.agentId), eq(agentCapabilityGrant.status, 'pending')))
-        }
-        if (currentAgent.status === 'pending') {
-          await db
-            .update(agent)
-            .set({ status: 'rejected', userId: input.userId, updatedAt: input.now })
-            .where(and(eq(agent.id, input.agentId), eq(agent.status, 'pending')))
-        }
+        const statements = [
+          db.insert(agentAuditEvent).select(
+            db
+              .select(agentAuditProjection(audit))
+              .from(approvalRequest)
+              .where(and(eq(approvalRequest.id, request.id), eq(approvalRequest.status, 'pending'), controllerClaim)),
+          ),
+          db
+            .update(approvalRequest)
+            .set({ status: 'denied', updatedAt: input.now })
+            .where(and(eq(approvalRequest.id, request.id), eq(approvalRequest.status, 'pending'), controllerClaim))
+            .returning({ id: approvalRequest.id }),
+          ...(pendingGrants.length > 0
+            ? [
+                db
+                  .update(agentCapabilityGrant)
+                  .set({ status: 'denied', deniedBy: input.userId, updatedAt: input.now })
+                  .where(
+                    and(eq(agentCapabilityGrant.agentId, input.agentId), eq(agentCapabilityGrant.status, 'pending')),
+                  ),
+              ]
+            : []),
+          ...(currentAgent.status === 'pending'
+            ? [
+                db
+                  .update(agent)
+                  .set({ status: 'rejected', userId: input.userId, updatedAt: input.now })
+                  .where(and(eq(agent.id, input.agentId), eq(agent.status, 'pending'))),
+              ]
+            : []),
+        ] as const
+        const results = await db.batch(statements)
+        if (results[1].length === 0) throw badRequest('Agent approval is invalid, expired, or no longer pending.')
         return 'denied'
       }
 
       const approvedCapabilities = new Set(requestedCapabilities)
-      for (const grant of pendingGrants) {
-        await db
-          .update(agentCapabilityGrant)
-          .set(
-            approvedCapabilities.has(grant.capability)
-              ? { status: 'active', grantedBy: input.userId, updatedAt: input.now }
-              : { status: 'denied', deniedBy: input.userId, updatedAt: input.now },
-          )
-          .where(and(eq(agentCapabilityGrant.id, grant.id), eq(agentCapabilityGrant.status, 'pending')))
-      }
-      if (currentAgent.status === 'pending') {
-        await db
-          .update(agent)
-          .set({
-            status: 'active',
-            userId: input.userId,
-            activatedAt: input.now,
-            updatedAt: input.now,
-          })
-          .where(and(eq(agent.id, input.agentId), eq(agent.status, 'pending')))
-      }
-      if (host?.status === 'pending') {
-        await db
-          .update(agentHost)
-          .set({
-            status: 'active',
-            userId: input.userId,
-            activatedAt: input.now,
-            updatedAt: input.now,
-          })
-          .where(and(eq(agentHost.id, host.id), eq(agentHost.status, 'pending')))
-      }
-      await db
-        .update(approvalRequest)
-        .set({ status: 'approved', updatedAt: input.now })
-        .where(and(eq(approvalRequest.id, request.id), eq(approvalRequest.status, 'pending')))
+      const statements = [
+        db.insert(agentAuditEvent).select(
+          db
+            .select(agentAuditProjection(audit))
+            .from(approvalRequest)
+            .where(and(eq(approvalRequest.id, request.id), eq(approvalRequest.status, 'pending'), controllerClaim)),
+        ),
+        db
+          .update(approvalRequest)
+          .set({ status: 'approved', updatedAt: input.now })
+          .where(and(eq(approvalRequest.id, request.id), eq(approvalRequest.status, 'pending'), controllerClaim))
+          .returning({ id: approvalRequest.id }),
+        ...pendingGrants.map((grant) =>
+          db
+            .update(agentCapabilityGrant)
+            .set(
+              approvedCapabilities.has(grant.capability)
+                ? { status: 'active', grantedBy: input.userId, updatedAt: input.now }
+                : { status: 'denied', deniedBy: input.userId, updatedAt: input.now },
+            )
+            .where(and(eq(agentCapabilityGrant.id, grant.id), eq(agentCapabilityGrant.status, 'pending'))),
+        ),
+        ...(currentAgent.status === 'pending'
+          ? [
+              db
+                .update(agent)
+                .set({
+                  status: 'active',
+                  userId: input.userId,
+                  activatedAt: input.now,
+                  updatedAt: input.now,
+                })
+                .where(and(eq(agent.id, input.agentId), eq(agent.status, 'pending'))),
+            ]
+          : []),
+        ...(host?.status === 'pending'
+          ? [
+              db
+                .update(agentHost)
+                .set({
+                  status: 'active',
+                  userId: input.userId,
+                  activatedAt: input.now,
+                  updatedAt: input.now,
+                })
+                .where(and(eq(agentHost.id, host.id), eq(agentHost.status, 'pending'))),
+            ]
+          : []),
+      ] as const
+      const results = await db.batch(statements)
+      if (results[1].length === 0) throw badRequest('Agent approval is invalid, expired, or no longer pending.')
       return 'approved'
     },
 
@@ -227,6 +280,31 @@ export function createDrizzleAgentRepository(db: Database): AgentRepository {
       if (!current) throw notFound('Agent capability grant was not found.')
       await revokeCapabilityGrantRecord(db, grantId)
     },
+  }
+}
+
+function agentAuditProjection(audit: Parameters<AgentRepository['decideApproval']>[1]) {
+  return {
+    id: sql<string>`${audit.id}`.as('id'),
+    action: sql<string>`${audit.action}`.as('action'),
+    result: sql<string>`${audit.result}`.as('result'),
+    realmOwned: sql<boolean>`${audit.realmOwned}`.as('realm_owned'),
+    ownerUserId: sql<string | null>`${audit.ownerUserId}`.as('owner_user_id'),
+    ownerOrganizationId: sql<string | null>`${audit.ownerOrganizationId}`.as('owner_organization_id'),
+    controllerUserId: sql<string | null>`${audit.controllerUserId}`.as('controller_user_id'),
+    subjectIssuer: sql<string | null>`${audit.subjectIssuer}`.as('subject_issuer'),
+    subject: sql<string | null>`${audit.subject}`.as('subject'),
+    agentIdentityId: sql<string | null>`${audit.agentIdentityId}`.as('agent_identity_id'),
+    hostId: sql<string | null>`${audit.hostId}`.as('host_id'),
+    resourceId: sql<string | null>`${audit.resourceId}`.as('resource_id'),
+    resourceConnectionId: sql<string | null>`${audit.resourceConnectionId}`.as('resource_connection_id'),
+    accessGrantId: sql<string | null>`${audit.accessGrantId}`.as('access_grant_id'),
+    scopes: sql<string[] | null>`${audit.scopes === null ? null : JSON.stringify(audit.scopes)}`.as('scopes'),
+    reasonCode: sql<string | null>`${audit.reasonCode}`.as('reason_code'),
+    metadata: sql<Record<string, unknown> | null>`${
+      audit.metadata === null ? null : JSON.stringify(audit.metadata)
+    }`.as('metadata'),
+    occurredAt: sql<Date>`${audit.occurredAt.getTime()}`.as('occurred_at'),
   }
 }
 

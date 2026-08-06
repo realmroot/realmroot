@@ -64,6 +64,24 @@ Every workflow deployment applies pending D1 migrations before publishing code.
 Review migration release notes before intentionally deploying an older commit:
 database migrations are not rolled back by selecting older code.
 
+### Tenant ownership schema cutover
+
+The tenant ownership migration is intentionally one-way and the corresponding
+Worker does not support the previous schema. For this upgrade:
+
+1. stop writes to the Realmroot Worker;
+2. create and verify a D1 backup;
+3. apply pending migrations and require the ownership verifier to succeed;
+4. deploy the matching Worker immediately;
+5. verify health, sign-in, User Agent inventory, Organization resource isolation,
+   Application consent account switching, and Realm audit inventory;
+6. restore writes only after those checks pass.
+
+Do not deploy the new Worker when the migration fails. Records whose historical
+audit owner cannot be proved are listed in `ownership_quarantine` and are not
+served from the normal audit collection. Roll forward from the backup and the
+failed migration evidence; do not add runtime fallback logic.
+
 ## Agent Client Compatibility
 
 Deploying a new Worker does not update globally installed Realmroot skills or

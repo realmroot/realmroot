@@ -19,7 +19,12 @@ describe('management resource routes', () => {
       app,
       '/applications',
       'POST',
-      { name: 'Portal', clientType: 'public_spa', redirectUris: ['https://app.example.com/callback'] },
+      {
+        name: 'Portal',
+        clientType: 'public_spa',
+        redirectUris: ['https://app.example.com/callback'],
+        ownerOrganizationId: 'org_platform',
+      },
       201,
     )
     expect(createdApplication.headers.get('location')).toBe('/api/applications/app-1')
@@ -42,7 +47,12 @@ describe('management resource routes', () => {
 
     expect(applicationService.list).toHaveBeenCalledWith({ limit: 10, offset: 0 })
     expect(applicationService.create).toHaveBeenCalledWith(
-      { name: 'Portal', clientType: 'public_spa', redirectUris: ['https://app.example.com/callback'] },
+      {
+        name: 'Portal',
+        clientType: 'public_spa',
+        redirectUris: ['https://app.example.com/callback'],
+        ownerOrganizationId: 'org_platform',
+      },
       'admin-1',
     )
     expect(applicationService.replaceRedirectUris).toHaveBeenCalledWith('app-1', {

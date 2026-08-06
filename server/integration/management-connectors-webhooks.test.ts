@@ -143,6 +143,24 @@ describe('webhook management over real D1', () => {
     expect(response.status).toBe(400)
   })
 
+  it('normalizes the Realm owner selector to the canonical null Webhook owner', async () => {
+    const cookie = await signInAdmin(harness)
+    const response = await harness.request('/api/webhooks', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({
+        url: 'https://example.com/realm-hook',
+        events: ['user.created'],
+        organizationId: 'org_platform',
+      }),
+    })
+
+    expect(response.status, await response.clone().text()).toBe(201)
+    expect(
+      ((await response.json()) as { endpoint: { organizationId: string | null } }).endpoint.organizationId,
+    ).toBeNull()
+  })
+
   it('runs the endpoint lifecycle and secret rotation through real SQL [spec: management-api/management-restish-webhook-crud]', async () => {
     const cookie = await signInAdmin(harness)
 

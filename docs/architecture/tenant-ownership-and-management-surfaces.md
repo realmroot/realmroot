@@ -1,6 +1,6 @@
 # Tenant Ownership And Management Surfaces
 
-Status: accepted; Part One implemented, Part Two tracked separately
+Status: accepted; Part One implemented, Part Two implemented by the backend ownership migration
 
 ## Context
 
@@ -110,9 +110,9 @@ Every durable resource must be one of four shapes:
 | External resource account connection | User or Organization | exactly one owner; initiation actor is recorded separately |
 | Organization Webhook and delivery history | Organization | delivery and attempts inherit the endpoint tenant |
 | Realm Webhook | Realm | platform operations only; never exposed as an Organization resource |
-| Branding, assets, and custom domains | inherited | derive tenant from the owning Organization or Application |
+| Branding | Realm | unchanged shared presentation settings |
 | Audit event | inherited and materialized | persist the affected resource tenant at event creation |
-| Application consent | User decision in a User or Organization context | represent the authorizing User and target tenant independently |
+| Application consent | User | the authenticated User and Application identify the consent; Organization Roles are irrelevant |
 | identity providers, sign-in policy, email, security, deployment, issuer keys | Realm | shared infrastructure for the complete user pool |
 
 Applications and Resource Servers remain Organization-owned in this decision.
@@ -269,15 +269,17 @@ After the browser boundary is stable:
 2. materialize and constrain tenant identity for ambiguous aggregate roots;
 3. make child resources inherit tenant through one canonical parent;
 4. separate owner, mutation actor, audience, and eligibility fields;
-5. correct audit, asset, consent, connection-intent, branding, custom-domain,
-   and platform-resource ambiguity;
+5. correct audit, consent, connection-intent, and platform-resource ambiguity;
 6. require collection, item read, write, delete, and audit queries to use the
    same owner boundary;
 7. migrate live data with explicit validation, quarantine, and fail-closed
    handling for records whose tenant cannot be proved.
 
-Part Two owns its own migration plan, rollout proof, and rollback or roll-forward
-procedure. It must not be hidden inside the frontend pull request.
+Part Two uses a one-way D1 table rebuild. Runtime code supports only the final
+schema: it does not dual-read or infer legacy ownership. Historical audit rows
+whose boundary cannot be proved are quarantined. Branding remains Realm-owned,
+and Custom Domain is outside this decision because it has no exposed product
+lifecycle.
 
 ## Verification
 

@@ -207,7 +207,6 @@ export const applicationConsent = sqliteTable(
     userId: text('user_id')
       .notNull()
       .references(() => user.id, { onDelete: 'cascade' }),
-    organizationId: text('organization_id').references(() => organization.id, { onDelete: 'cascade' }),
     scopes: text('scopes', { mode: 'json' }).$type<string[]>().notNull(),
     permissions: text('permissions', { mode: 'json' }).$type<string[]>(),
     grantedAt: integer('granted_at', { mode: 'timestamp_ms' })
@@ -219,7 +218,6 @@ export const applicationConsent = sqliteTable(
   (table) => [
     index('applicationConsent_applicationId_idx').on(table.applicationId),
     index('applicationConsent_userId_idx').on(table.userId),
-    index('applicationConsent_organizationId_idx').on(table.organizationId),
     uniqueIndex('applicationConsent_activeApplicationUser_unique')
       .on(table.applicationId, table.userId)
       .where(sql`${table.revokedAt} is null`),

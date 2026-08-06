@@ -19,6 +19,34 @@ import type { ApplicationResponse } from '@shared/api/applications'
 import { describe, expect, it } from 'vitest'
 
 describe('service.test 3', () => {
+  it('keeps consent bound to the authenticated account after account switching [spec: hosted-auth/oauth-consent-account-switch]', async () => {
+    const repository = new InMemoryApplicationRepository()
+    const deps = { applications: repository } as unknown as Deps
+    const issuer = 'https://auth.example.com'
+    const application = await createApplication(
+      deps,
+      issuer,
+      {
+        name: 'Account Switch App',
+        clientType: 'public_spa',
+        redirectUris: ['https://spa.example.com/callback'],
+      },
+      'admin-1',
+    )
+    const first = await createConsent(deps, { clientId: application.clientId, scopes: ['openid'] }, 'user-1')
+
+    await expect(
+      loadConsentRequest(
+        deps,
+        issuer,
+        { clientId: application.clientId, redirectUri: 'https://spa.example.com/callback' },
+        { id: 'user-2' },
+      ),
+    ).resolves.toMatchObject({ existingConsent: null })
+    const second = await createConsent(deps, { clientId: application.clientId, scopes: ['openid'] }, 'user-2')
+    expect(second.id).not.toBe(first.id)
+  })
+
   it('revokes consent for the owning user and rejects missing consent', async () => {
     const repository = new InMemoryApplicationRepository()
     const deps = { applications: repository } as unknown as Deps
@@ -117,8 +145,6 @@ describe('service.test 3', () => {
       userId: 'user-1',
       userDisplayName: 'Test user',
       userEmail: 'user@example.com',
-      organizationId: 'org-1',
-      organizationName: 'Acme',
       scopes: ['openid'],
       permissions: ['projects:read'],
       grantedAt: new Date('2026-08-01T00:00:00.000Z'),
@@ -138,7 +164,7 @@ describe('service.test 3', () => {
     await expect(listApplicationAuthorizations(deps, { limit: 20, offset: 0 })).resolves.toMatchObject({
       authorizations: [
         {
-          organization: { id: 'org-1', name: 'Acme' },
+          organization: null,
           status: 'expired',
           expiresAt: expiredAt.toISOString(),
         },
@@ -361,8 +387,6 @@ class InMemoryApplicationRepository implements ApplicationRepository {
         userId: key.slice(key.indexOf(':') + 1),
         userDisplayName: 'Test user',
         userEmail: 'user@example.com',
-        organizationId: null,
-        organizationName: null,
         permissions: [],
         expiresAt: null,
         revokedAt: this.authorizationRevocations.get(consent.id) ?? null,
@@ -384,8 +408,6 @@ class InMemoryApplicationRepository implements ApplicationRepository {
       userId: key.slice(applicationId.length + 1),
       userDisplayName: 'Test user',
       userEmail: 'user@example.com',
-      organizationId: null,
-      organizationName: null,
       permissions: [],
       expiresAt: null,
       revokedAt: this.authorizationRevocations.get(consent.id) ?? null,

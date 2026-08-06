@@ -59,10 +59,11 @@ export const resourceConnectionIntent = sqliteTable(
     resourceId: text('resource_id')
       .notNull()
       .references(() => apiResource.id, { onDelete: 'restrict' }),
-    ownerUserId: text('owner_user_id')
+    ownerUserId: text('owner_user_id').references(() => user.id, { onDelete: 'restrict' }),
+    ownerOrganizationId: text('owner_organization_id').references(() => organization.id, { onDelete: 'restrict' }),
+    initiatedByUserId: text('initiated_by_user_id')
       .notNull()
       .references(() => user.id, { onDelete: 'restrict' }),
-    ownerOrganizationId: text('owner_organization_id').references(() => organization.id, { onDelete: 'restrict' }),
     scopes: text('scopes', { mode: 'json' }).$type<string[]>().notNull(),
     authorizationDetails: text('authorization_details', { mode: 'json' })
       .$type<AuthorizationDetail[]>()
@@ -84,8 +85,14 @@ export const resourceConnectionIntent = sqliteTable(
   (table) => [
     index('resourceConnectionIntent_resourceId_idx').on(table.resourceId),
     index('resourceConnectionIntent_ownerUserId_idx').on(table.ownerUserId),
+    index('resourceConnectionIntent_ownerOrganizationId_idx').on(table.ownerOrganizationId),
+    index('resourceConnectionIntent_initiatedByUserId_idx').on(table.initiatedByUserId),
     index('resourceConnectionIntent_status_idx').on(table.status),
     index('resourceConnectionIntent_expiresAt_idx').on(table.expiresAt),
+    check(
+      'resourceConnectionIntent_exactly_one_owner_check',
+      sql`((${table.ownerUserId} IS NOT NULL) + (${table.ownerOrganizationId} IS NOT NULL)) = 1`,
+    ),
   ],
 )
 

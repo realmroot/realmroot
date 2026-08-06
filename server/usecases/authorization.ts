@@ -127,7 +127,10 @@ export async function removeMember(deps: Deps, organizationId: string, memberId:
     organizationId,
     memberId,
     member.updatedAt,
-    authorizationAudit('organization.member.removed', actorUserId, new Date(), { organizationId, memberId }),
+    authorizationAudit('organization.member.removed', organizationId, actorUserId, new Date(), {
+      organizationId,
+      memberId,
+    }),
   )
   if (!removed) throw preconditionFailed('The Organization member changed or is the last Owner.')
 }
@@ -150,7 +153,7 @@ export async function replaceMemberRoles(
     memberId,
     input.roles,
     target.updatedAt,
-    authorizationAudit('organization.member.roles-replaced', actorUserId, now, {
+    authorizationAudit('organization.member.roles-replaced', organizationId, actorUserId, now, {
       organizationId,
       memberId,
       previousRoles: target.roles,
@@ -343,7 +346,11 @@ export async function archiveResource(deps: Deps, id: string, actor: ResourceMut
   if (isRealmrootResourceServer(id)) throw badRequest('The Realmroot Resource Server is system-managed.')
   if (!resource.archivedAt) {
     const now = new Date()
-    await deps.authorization.archiveResource(id, now, resourceMutationAudit('api_resource.archived', id, now, actor))
+    await deps.authorization.archiveResource(
+      id,
+      now,
+      resourceMutationAudit('api_resource.archived', id, resource.ownerOrganizationId, now, actor),
+    )
   }
   return getResource(deps, id)
 }
@@ -353,7 +360,11 @@ export async function restoreResource(deps: Deps, id: string, actor: ResourceMut
   if (isRealmrootResourceServer(id)) throw badRequest('The Realmroot Resource Server is system-managed.')
   if (resource.archivedAt) {
     const now = new Date()
-    await deps.authorization.restoreResource(id, now, resourceMutationAudit('api_resource.restored', id, now, actor))
+    await deps.authorization.restoreResource(
+      id,
+      now,
+      resourceMutationAudit('api_resource.restored', id, resource.ownerOrganizationId, now, actor),
+    )
   }
   return getResource(deps, id)
 }
@@ -361,6 +372,7 @@ export async function restoreResource(deps: Deps, id: string, actor: ResourceMut
 function resourceMutationAudit(
   action: 'api_resource.archived' | 'api_resource.restored',
   resourceId: string,
+  ownerOrganizationId: string,
   occurredAt: Date,
   actor: ResourceMutationActor,
 ) {
@@ -368,6 +380,9 @@ function resourceMutationAudit(
     id: createId('agaudit'),
     action,
     result: 'allowed',
+    realmOwned: ownerOrganizationId === platformOrganization.id,
+    ownerUserId: null,
+    ownerOrganizationId: ownerOrganizationId === platformOrganization.id ? null : ownerOrganizationId,
     controllerUserId: actor.controllerUserId,
     subjectIssuer: actor.agent?.issuer ?? null,
     subject: actor.agent?.subject ?? null,
@@ -404,7 +419,10 @@ export async function createRole(deps: Deps, organizationId: string, input: Crea
     organizationId,
     { key: input.key, displayName: input.displayName, description: input.description ?? null, scopes },
     toBetterAuthPermission(scopes),
-    authorizationAudit('organization.role.created', actorUserId, now, { organizationId, roleKey: input.key }),
+    authorizationAudit('organization.role.created', organizationId, actorUserId, now, {
+      organizationId,
+      roleKey: input.key,
+    }),
   )
 }
 
@@ -457,7 +475,7 @@ export async function updateRole(
     input,
     scopes ? toBetterAuthPermission(scopes) : undefined,
     role.updatedAt!,
-    authorizationAudit('organization.role.updated', actorUserId, now, { organizationId, roleKey }),
+    authorizationAudit('organization.role.updated', organizationId, actorUserId, now, { organizationId, roleKey }),
   )
   if (!updated) throw preconditionFailed('The Organization Role changed after it was read.')
   return getRole(deps, organizationId, roleKey)
@@ -471,7 +489,7 @@ export async function deleteRole(deps: Deps, organizationId: string, roleKey: st
     organizationId,
     roleKey,
     role.updatedAt!,
-    authorizationAudit('organization.role.deleted', actorUserId, now, { organizationId, roleKey }),
+    authorizationAudit('organization.role.deleted', organizationId, actorUserId, now, { organizationId, roleKey }),
   )
   if (result === 'assigned') throw conflict('Assigned Organization Roles cannot be deleted.')
   if (result === 'not_found') throw preconditionFailed('The Organization Role changed after it was read.')
@@ -603,6 +621,7 @@ async function rejectOwnerAssignmentByNonOwner(
 
 function authorizationAudit(
   action: string,
+  ownerOrganizationId: string,
   controllerUserId: string,
   occurredAt: Date,
   metadata: Record<string, unknown>,
@@ -611,6 +630,9 @@ function authorizationAudit(
     id: createId('agaudit'),
     action,
     result: 'allowed',
+    realmOwned: false,
+    ownerUserId: null,
+    ownerOrganizationId,
     controllerUserId,
     subjectIssuer: null,
     subject: controllerUserId,

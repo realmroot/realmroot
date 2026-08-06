@@ -428,6 +428,9 @@ export interface AgentAuditEventRecord {
   id: string
   action: string
   result: string
+  realmOwned: boolean
+  ownerUserId: string | null
+  ownerOrganizationId: string | null
   controllerUserId: string | null
   subjectIssuer: string | null
   subject: string | null
@@ -446,7 +449,7 @@ export interface AgentAuditRepository {
   append(input: AgentAuditEventRecord): Promise<void>
   list(
     page: PaginationInput,
-    filter?: { agentIdentityId?: string; ownerOrganizationIds?: string[] },
+    filter?: { agentIdentityId?: string; ownerUserId?: string; ownerOrganizationIds?: string[] },
   ): Promise<PaginatedResult<AgentAuditEventRecord>>
 }
 
@@ -498,8 +501,9 @@ export interface ResourceConnectionIntentRecord {
   id: string
   stateHash: string
   resourceId: string
-  ownerUserId: string
+  ownerUserId: string | null
   ownerOrganizationId: string | null
+  initiatedByUserId: string
   scopes: string[]
   authorizationDetails: AuthorizationDetail[]
   encryptedPkceVerifier: string
@@ -624,6 +628,10 @@ export interface ExternalResourceRepository {
   findAgentConnectionRequest(id: string): Promise<AgentConnectionRequestRecord | null>
   findAgentConnectionRequestByApprovalTokenHash(tokenHash: string): Promise<AgentConnectionRequestRecord | null>
   createAccessRequest(input: AgentAccessRequestRecord): Promise<AgentAccessRequestRecord | null>
+  createAccessRequestWithAudit(
+    input: AgentAccessRequestRecord,
+    audit: AgentAuditEventRecord,
+  ): Promise<AgentAccessRequestRecord | null>
   findAccessRequest(id: string): Promise<AgentAccessRequestRecord | null>
   findAccessRequestByGrant(grantId: string): Promise<AgentAccessRequestRecord | null>
   findAccessRequestByApprovalTokenHash(tokenHash: string): Promise<AgentAccessRequestRecord | null>
@@ -648,9 +656,34 @@ export interface ExternalResourceRepository {
       updatedAt: Date
     },
   ): Promise<AgentAccessRequestRecord | null>
+  decideAccessRequestWithAudit(
+    id: string,
+    input: {
+      status: 'approved' | 'denied'
+      grantId: string | null
+      connectionId?: string | null
+      decidedAt: Date
+      updatedAt: Date
+    },
+    audit: AgentAuditEventRecord,
+  ): Promise<AgentAccessRequestRecord | null>
   consumeAccessRequest(id: string, now: Date): Promise<boolean>
   listPendingAccessRequestsByConnections(connectionIds: string[]): Promise<AgentAccessRequestRecord[]>
   createGrant(input: AgentAccessGrantRecord): Promise<AgentAccessGrantRecord | null>
+  approveAccessRequestWithAudit(
+    grant: AgentAccessGrantRecord,
+    requestId: string,
+    decision: {
+      status: 'approved'
+      grantId: string
+      connectionId: string | null
+      decidedAt: Date
+      updatedAt: Date
+    },
+    audit: AgentAuditEventRecord,
+  ): Promise<
+    { grant: AgentAccessGrantRecord; request: AgentAccessRequestRecord } | 'grant_unavailable' | 'request_changed'
+  >
   findGrant(id: string): Promise<AgentAccessGrantRecord | null>
   listActiveGrantsByAgent(agentIdentityId: string): Promise<AgentAccessGrantRecord[]>
   listGrants(
@@ -665,8 +698,15 @@ export interface ExternalResourceRepository {
   summarizeAgentAccess(agentIdentityIds: string[], now: Date): Promise<Map<string, AgentAccessSummary>>
   listActiveGrantsByConnection(connectionId: string): Promise<AgentAccessGrantRecord[]>
   revokeGrant(id: string, now: Date): Promise<boolean>
+  revokeGrantWithAudit(id: string, tokenLeaseIds: string[], now: Date, audit: AgentAuditEventRecord): Promise<boolean>
   consumeGrant(id: string, now: Date): Promise<boolean>
   createTokenLease(input: ExternalTokenLeaseRecord): Promise<ExternalTokenLeaseRecord | null>
+  issueTokenLeaseWithAudit(
+    input: ExternalTokenLeaseRecord,
+    consumeGrant: boolean,
+    now: Date,
+    audit: AgentAuditEventRecord,
+  ): Promise<ExternalTokenLeaseRecord | null>
   listActiveTokenLeasesByGrant(grantId: string, now: Date): Promise<ExternalTokenLeaseRecord[]>
   listActiveTokenLeasesByBinding(bindingId: string, now: Date): Promise<ExternalTokenLeaseRecord[]>
   revokeTokenLease(id: string, now: Date): Promise<boolean>
@@ -756,14 +796,17 @@ export interface AgentRepository {
   listHostsForAgents(hostIds: string[]): Promise<AgentHostRecord[]>
   listCapabilityGrantsForUser(userId: string): Promise<AgentCapabilityGrantRecord[]>
   listCapabilityGrantsForAgent(agentId: string): Promise<AgentCapabilityGrantRecord[]>
-  decideApproval(input: {
-    agentId: string
-    userCodeHash: string
-    action: 'approve' | 'deny'
-    capabilities?: string[]
-    userId: string
-    now: Date
-  }): Promise<'approved' | 'denied'>
+  decideApproval(
+    input: {
+      agentId: string
+      userCodeHash: string
+      action: 'approve' | 'deny'
+      capabilities?: string[]
+      userId: string
+      now: Date
+    },
+    audit: AgentAuditEventRecord,
+  ): Promise<'approved' | 'denied'>
   revokeAgentForUser(agentId: string, userId: string): Promise<void>
   revokeCapabilityGrantForUser(grantId: string, userId: string): Promise<void>
   revokeAgent(agentId: string): Promise<void>
@@ -991,8 +1034,6 @@ export interface ApplicationAuthorizationRecord {
   userId: string
   userDisplayName: string
   userEmail: string
-  organizationId: string | null
-  organizationName: string | null
   scopes: ApplicationResponse['allowedScopes']
   permissions: string[]
   grantedAt: Date

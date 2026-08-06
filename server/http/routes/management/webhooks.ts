@@ -1,4 +1,5 @@
 import { badRequest, notFound } from '@server/domain/errors'
+import { platformOrganization } from '@server/domain/platform-organization'
 import {
   createWebhookDeliveryAttempt,
   createWebhookEndpoint,
@@ -29,7 +30,13 @@ import {
 import type { Context } from 'hono'
 import { Hono } from 'hono'
 import { getActorUserId } from '../../middleware/authn'
-import { authorizedOrganizationIds, authorizeOrganization, requirePlatformAccess } from '../../middleware/authz'
+import {
+  authorizedOrganizationIds,
+  authorizedOrganizationOwnerId,
+  authorizeOrganization,
+  authorizeOrganizationOwner,
+  requirePlatformAccess,
+} from '../../middleware/authz'
 import { getDeps } from '../../middleware/deps'
 import { readJson, readQuery } from '../validation'
 
@@ -50,9 +57,8 @@ export function createManagementWebhookRoutes() {
 
   app.post('/', async (c) => {
     const input = await readJson(c, createWebhookEndpointRequestSchema)
-    if (input.organizationId) await authorizeOrganization(c, input.organizationId, 'webhooks:write')
-    else requirePlatformAccess(c, 'webhooks:write')
-    const endpoint = await createWebhookEndpoint(getDeps(c), input, getActorUserId(c))
+    const organizationId = await authorizedWebhookOrganizationId(c, input.organizationId ?? null)
+    const endpoint = await createWebhookEndpoint(getDeps(c), { ...input, organizationId }, getActorUserId(c))
     c.header('Location', `/api/webhooks/${encodeURIComponent(endpoint.endpoint.id)}`)
     return c.json(webhookEndpointSecretResponseSchema.parse(endpoint), 201)
   })
@@ -62,11 +68,13 @@ export function createManagementWebhookRoutes() {
   app.patch('/:webhookId', async (c) => {
     await requireEndpointAccess(c)
     const input = await readJson(c, updateWebhookEndpointRequestSchema)
-    if (input.organizationId !== undefined) {
-      if (input.organizationId) await authorizeOrganization(c, input.organizationId, 'webhooks:write')
-      else requirePlatformAccess(c, 'webhooks:write')
-    }
-    return c.json(webhookEndpointSchema.parse(await updateWebhookEndpoint(getDeps(c), c.req.param('webhookId'), input)))
+    const organizationId =
+      input.organizationId === undefined ? undefined : await authorizedWebhookOrganizationId(c, input.organizationId)
+    return c.json(
+      webhookEndpointSchema.parse(
+        await updateWebhookEndpoint(getDeps(c), c.req.param('webhookId'), { ...input, organizationId }),
+      ),
+    )
   })
 
   app.delete('/:webhookId', async (c) => {
@@ -139,6 +147,17 @@ export function createManagementWebhookRoutes() {
   })
 
   return app
+}
+
+async function authorizedWebhookOrganizationId(c: Context, organizationId: string | null) {
+  if (organizationId) {
+    const authorizedId = authorizedOrganizationOwnerId(
+      await authorizeOrganizationOwner(c, organizationId, 'webhooks:write'),
+    )
+    return authorizedId === platformOrganization.id ? null : authorizedId
+  }
+  requirePlatformAccess(c, 'webhooks:write')
+  return null
 }
 
 async function requireEndpointAccess(c: Context) {

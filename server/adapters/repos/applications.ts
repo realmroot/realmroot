@@ -13,7 +13,6 @@ import {
   oauthClient,
   oauthConsent,
   oauthRefreshToken,
-  organization,
   user,
 } from '../../db/schema'
 import {
@@ -311,8 +310,6 @@ export function createDrizzleApplicationRepository(db: Database): ApplicationRep
           userId: user.id,
           userDisplayName: user.name,
           userEmail: user.email,
-          organizationId: organization.id,
-          organizationName: organization.name,
           scopes: applicationConsent.scopes,
           permissions: applicationConsent.permissions,
           grantedAt: applicationConsent.grantedAt,
@@ -322,7 +319,6 @@ export function createDrizzleApplicationRepository(db: Database): ApplicationRep
         .from(applicationConsent)
         .innerJoin(application, eq(applicationConsent.applicationId, application.id))
         .innerJoin(user, eq(applicationConsent.userId, user.id))
-        .leftJoin(organization, eq(applicationConsent.organizationId, organization.id))
         .where(where)
         .orderBy(desc(applicationConsent.grantedAt), desc(applicationConsent.id))
         .limit(query.limit)
@@ -351,8 +347,6 @@ export function createDrizzleApplicationRepository(db: Database): ApplicationRep
           userId: user.id,
           userDisplayName: user.name,
           userEmail: user.email,
-          organizationId: organization.id,
-          organizationName: organization.name,
           scopes: applicationConsent.scopes,
           permissions: applicationConsent.permissions,
           grantedAt: applicationConsent.grantedAt,
@@ -361,7 +355,6 @@ export function createDrizzleApplicationRepository(db: Database): ApplicationRep
         })
         .from(applicationConsent)
         .innerJoin(user, eq(applicationConsent.userId, user.id))
-        .leftJoin(organization, eq(applicationConsent.organizationId, organization.id))
         .where(eq(applicationConsent.id, authorizationId))
         .limit(1)
       return row ? { ...row, scopes: row.scopes.filter(isScope), permissions: row.permissions ?? [] } : null

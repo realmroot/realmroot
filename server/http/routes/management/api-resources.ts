@@ -22,7 +22,12 @@ import {
 import { apiResourceContractResponseSchema, listApiResourcesQuerySchema } from '@shared/api/authorization'
 import { Hono } from 'hono'
 import { getPrincipal } from '../../middleware/authn'
-import { authorizedOrganizationIds, authorizeOrganization } from '../../middleware/authz'
+import {
+  authorizedOrganizationIds,
+  authorizedOrganizationOwnerId,
+  authorizeOrganization,
+  authorizeOrganizationOwner,
+} from '../../middleware/authz'
 import { getDeps } from '../../middleware/deps'
 import { readJson, readQuery } from '../validation'
 
@@ -51,8 +56,15 @@ export function createManagementApiResourcesRoute() {
 
   app.post('/', async (c) => {
     const input = await readJson(c, createApiResourceSchema)
-    await authorizeOrganization(c, input.ownerOrganizationId ?? platformOrganization.id, 'resource-servers:write')
-    const resource = await createResource(getDeps(c), input)
+    const owner = await authorizeOrganizationOwner(
+      c,
+      input.ownerOrganizationId ?? platformOrganization.id,
+      'resource-servers:write',
+    )
+    const resource = await createResource(getDeps(c), {
+      ...input,
+      ownerOrganizationId: authorizedOrganizationOwnerId(owner),
+    })
     c.header('Location', `/api/resource-servers/${encodeURIComponent(resource.id)}`)
     return c.json(apiResourceSchema.parse(await getApiResource(getDeps(c), resource.id)), 201)
   })
@@ -77,10 +89,13 @@ export function createManagementApiResourcesRoute() {
   app.patch('/:resourceId', async (c) => {
     await requireResourceAccess(c)
     const input = await readJson(c, updateApiResourceSchema)
-    if (input.ownerOrganizationId !== undefined) {
-      await authorizeOrganization(c, input.ownerOrganizationId, 'resource-servers:write')
-    }
-    await updateResource(getDeps(c), c.req.param('resourceId'), input)
+    const owner = input.ownerOrganizationId
+      ? await authorizeOrganizationOwner(c, input.ownerOrganizationId, 'resource-servers:write')
+      : null
+    await updateResource(getDeps(c), c.req.param('resourceId'), {
+      ...input,
+      ...(owner ? { ownerOrganizationId: authorizedOrganizationOwnerId(owner) } : {}),
+    })
     return c.json(apiResourceSchema.parse(await getApiResource(getDeps(c), c.req.param('resourceId'))))
   })
 

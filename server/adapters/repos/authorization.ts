@@ -1,6 +1,7 @@
 import { conflict } from '@server/domain/errors'
+import { platformOrganization } from '@server/domain/platform-organization'
 import type { AuthorizationRepository } from '@server/usecases/ports'
-import { and, count, desc, eq, gt, inArray, isNotNull, isNull, notExists, sql } from 'drizzle-orm'
+import { and, count, desc, eq, gt, inArray, isNotNull, isNull, ne, notExists, sql } from 'drizzle-orm'
 import type { BatchItem } from 'drizzle-orm/batch'
 import type { Database } from '../../db/client'
 import {
@@ -41,7 +42,10 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
       if (organizationIds?.length === 0) {
         return { items: [], pagination: toPagination(pagination, 0) }
       }
-      const organizationCondition = organizationIds ? inArray(organization.id, organizationIds) : undefined
+      const organizationCondition = and(
+        ne(organization.id, platformOrganization.id),
+        organizationIds ? inArray(organization.id, organizationIds) : undefined,
+      )
       const rows = await db
         .select()
         .from(organization)
@@ -109,7 +113,7 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
       const rows = await db
         .select()
         .from(member)
-        .where(eq(member.userId, userId))
+        .where(and(eq(member.userId, userId), ne(member.organizationId, platformOrganization.id)))
         .orderBy(desc(member.createdAt), desc(member.id))
       return rows.map(toMember)
     },
@@ -363,6 +367,9 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
               id: sql<string>`${audit.id}`.as('id'),
               action: sql<string>`${audit.action}`.as('action'),
               result: sql<string>`${audit.result}`.as('result'),
+              realmOwned: sql<boolean>`${audit.realmOwned}`.as('realm_owned'),
+              ownerUserId: sql<string | null>`${audit.ownerUserId}`.as('owner_user_id'),
+              ownerOrganizationId: sql<string | null>`${audit.ownerOrganizationId}`.as('owner_organization_id'),
               controllerUserId: sql<string | null>`${audit.controllerUserId}`.as('controller_user_id'),
               subjectIssuer: sql<string | null>`${audit.subjectIssuer}`.as('subject_issuer'),
               subject: sql<string | null>`${audit.subject}`.as('subject'),
@@ -427,6 +434,9 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
               id: sql<string>`${audit.id}`.as('id'),
               action: sql<string>`${audit.action}`.as('action'),
               result: sql<string>`${audit.result}`.as('result'),
+              realmOwned: sql<boolean>`${audit.realmOwned}`.as('realm_owned'),
+              ownerUserId: sql<string | null>`${audit.ownerUserId}`.as('owner_user_id'),
+              ownerOrganizationId: sql<string | null>`${audit.ownerOrganizationId}`.as('owner_organization_id'),
               controllerUserId: sql<string | null>`${audit.controllerUserId}`.as('controller_user_id'),
               subjectIssuer: sql<string | null>`${audit.subjectIssuer}`.as('subject_issuer'),
               subject: sql<string | null>`${audit.subject}`.as('subject'),
@@ -691,6 +701,9 @@ function auditSelect(audit: import('@server/usecases/ports').AgentAuditEventReco
     id: sql<string>`${audit.id}`.as('id'),
     action: sql<string>`${audit.action}`.as('action'),
     result: sql<string>`${audit.result}`.as('result'),
+    realmOwned: sql<boolean>`${audit.realmOwned}`.as('realm_owned'),
+    ownerUserId: sql<string | null>`${audit.ownerUserId}`.as('owner_user_id'),
+    ownerOrganizationId: sql<string | null>`${audit.ownerOrganizationId}`.as('owner_organization_id'),
     controllerUserId: sql<string | null>`${audit.controllerUserId}`.as('controller_user_id'),
     subjectIssuer: sql<string | null>`${audit.subjectIssuer}`.as('subject_issuer'),
     subject: sql<string | null>`${audit.subject}`.as('subject'),

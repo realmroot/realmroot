@@ -42,7 +42,12 @@ import {
 import type { Context } from 'hono'
 import { Hono } from 'hono'
 import { getActorUserId } from '../../middleware/authn'
-import { authorizedOrganizationIds, authorizeOrganization } from '../../middleware/authz'
+import {
+  authorizedOrganizationIds,
+  authorizedOrganizationOwnerId,
+  authorizeOrganization,
+  authorizeOrganizationOwner,
+} from '../../middleware/authz'
 import { getDeps } from '../../middleware/deps'
 import { readJson, readQuery } from '../validation'
 
@@ -97,8 +102,17 @@ managementApplicationsRoute.get('/', async (c) => {
 
 managementApplicationsRoute.post('/', async (c) => {
   const body = await readJson(c, createApplicationRequestSchema)
-  await authorizeOrganization(c, body.ownerOrganizationId ?? platformOrganization.id, 'applications:write')
-  const application = await createApplication(getDeps(c), issuerFor(c), body, getActorUserId(c))
+  const owner = await authorizeOrganizationOwner(
+    c,
+    body.ownerOrganizationId ?? platformOrganization.id,
+    'applications:write',
+  )
+  const application = await createApplication(
+    getDeps(c),
+    issuerFor(c),
+    { ...body, ownerOrganizationId: authorizedOrganizationOwnerId(owner) },
+    getActorUserId(c),
+  )
   await publishWebhookEvent(getDeps(c), 'application.created', { application: applicationWebhookData(application) })
   c.header('Location', `/api/applications/${encodeURIComponent(application.id)}`)
   return c.json(application, 201)
@@ -112,9 +126,13 @@ managementApplicationsRoute.get('/:applicationId', async (c) => {
 managementApplicationsRoute.patch('/:applicationId', async (c) => {
   await requireApplicationAccess(c)
   const body = await readJson(c, updateApplicationRequestSchema)
-  if (body.ownerOrganizationId !== undefined)
-    await authorizeOrganization(c, body.ownerOrganizationId, 'applications:write')
-  const application = await updateApplication(getDeps(c), issuerFor(c), c.req.param('applicationId'), body)
+  const owner = body.ownerOrganizationId
+    ? await authorizeOrganizationOwner(c, body.ownerOrganizationId, 'applications:write')
+    : null
+  const application = await updateApplication(getDeps(c), issuerFor(c), c.req.param('applicationId'), {
+    ...body,
+    ...(owner ? { ownerOrganizationId: authorizedOrganizationOwnerId(owner) } : {}),
+  })
   await publishWebhookEvent(getDeps(c), 'application.updated', { application: applicationWebhookData(application) })
   return c.json(application)
 })

@@ -155,8 +155,9 @@ export async function createResourceConnectionIntent(
     id,
     stateHash: await sha256(state),
     resourceId,
-    ownerUserId: actorUserId,
+    ownerUserId: input.owner.type === 'user' ? actorUserId : null,
     ownerOrganizationId: input.owner.type === 'organization' ? input.owner.organizationId : null,
+    initiatedByUserId: actorUserId,
     scopes: requestedScopes,
     authorizationDetails,
     encryptedPkceVerifier: await deps.secrets.seal(verifier, connectionIntentContext(id)),
@@ -225,10 +226,9 @@ export async function completeResourceConnectionIntent(
   const displayName =
     optionalString(profile, 'name') ?? optionalString(profile, 'preferred_username') ?? externalSubject
   const expiresAt = tokenExpiry(token, now)
-  const ownerUserId = intent.ownerOrganizationId ? null : intent.ownerUserId
   const existing = await deps.externalResources.findConnectionByOwnerResource({
     resourceId: intent.resourceId,
-    ownerUserId,
+    ownerUserId: intent.ownerUserId,
     ownerOrganizationId: intent.ownerOrganizationId,
   })
   if (existing?.status === 'active' && existing.externalSubject !== externalSubject) {
@@ -256,14 +256,14 @@ export async function completeResourceConnectionIntent(
     : await deps.externalResources.createConnection({
         id: connectionId,
         resourceId: intent.resourceId,
-        ownerUserId,
+        ownerUserId: intent.ownerUserId,
         ownerOrganizationId: intent.ownerOrganizationId,
         ...authorizationInput,
         createdAt: now,
       })
   if (!connection) throw badRequest('The API resource was archived while completing the connection.')
   if (existing) {
-    await revokeUncoveredGrants(deps, connection, intent.authorizationDetails.length > 0, intent.ownerUserId, now)
+    await revokeUncoveredGrants(deps, connection, intent.authorizationDetails.length > 0, intent.initiatedByUserId, now)
   }
   return {
     ...toResourceConnection(connection),
@@ -892,9 +892,7 @@ export async function createAgentAccessRequest(
     createdAt: now,
     updatedAt: now,
   }
-  const created = await deps.externalResources.createAccessRequest(request)
-  if (!created) throw forbidden('Enabled Resource Server is required.')
-  await appendResourceAudit(deps, {
+  const audit = await resourceAuditRecord(deps, {
     action: 'api_resource.access_requested',
     result: existingGrant ? 'allowed' : 'pending',
     principal,
@@ -905,6 +903,8 @@ export async function createAgentAccessRequest(
     authorizationDetails,
     reasonCode: null,
   })
+  const created = await deps.externalResources.createAccessRequestWithAudit(request, audit)
+  if (!created) throw forbidden('Enabled Resource Server is required.')
   return toAgentAccessRequest(
     created,
     principal.hostId,
@@ -1128,14 +1128,7 @@ export async function decideAgentAccessRequest(
   const controlledConnection = await requireControlledRequestTarget(deps, request, actorUserId)
   const now = new Date()
   if (input.decision === 'deny') {
-    const decided = await deps.externalResources.decideAccessRequest(request.id, {
-      status: 'denied',
-      grantId: null,
-      decidedAt: now,
-      updatedAt: now,
-    })
-    if (!decided) throw badRequest('Agent access request was already decided.')
-    await appendResourceAudit(deps, {
+    const audit = await resourceAuditRecord(deps, {
       action: 'api_resource.access_decided',
       result: 'denied',
       resourceId: request.resourceId,
@@ -1147,6 +1140,12 @@ export async function decideAgentAccessRequest(
       authorizationDetails: request.authorizationDetails,
       reasonCode: 'controller_denied',
     })
+    const decided = await deps.externalResources.decideAccessRequestWithAudit(
+      request.id,
+      { status: 'denied', grantId: null, decidedAt: now, updatedAt: now },
+      audit,
+    )
+    if (!decided) throw badRequest('Agent access request was already decided.')
     return toAgentAccessRequest(decided, await requestHostId(deps, request), null)
   }
 
@@ -1188,7 +1187,7 @@ export async function decideAgentAccessRequest(
   }
   const expiresAt = input.mode === 'until' ? new Date(input.expiresAt!) : null
   if (expiresAt && expiresAt.getTime() <= now.getTime()) throw badRequest('Grant expiry must be in the future.')
-  const grant = await deps.externalResources.createGrant({
+  const grantRecord = {
     id: createId('accessgrant'),
     resourceId: request.resourceId,
     connectionId,
@@ -1202,29 +1201,36 @@ export async function decideAgentAccessRequest(
     revokedAt: null,
     createdAt: now,
     updatedAt: now,
-  })
-  if (!grant) throw badRequest('The API resource was archived before access could be approved.')
-  const decided = await deps.externalResources.decideAccessRequest(request.id, {
-    status: 'approved',
-    grantId: grant.id,
-    connectionId,
-    decidedAt: now,
-    updatedAt: now,
-  })
-  if (!decided) throw badRequest('Agent access request was already decided.')
-  await appendResourceAudit(deps, {
+  }
+  const audit = await resourceAuditRecord(deps, {
     action: 'api_resource.access_decided',
     result: 'allowed',
     resourceId: request.resourceId,
     connection,
     request,
-    grantId: grant.id,
+    grantId: grantRecord.id,
     controllerUserId: actorUserId,
     scopes: request.scopes,
     authorizationDetails,
     reasonCode: null,
   })
-  return toAgentAccessRequest(decided, await requestHostId(deps, request), null)
+  const approved = await deps.externalResources.approveAccessRequestWithAudit(
+    grantRecord,
+    request.id,
+    {
+      status: 'approved',
+      grantId: grantRecord.id,
+      connectionId,
+      decidedAt: now,
+      updatedAt: now,
+    },
+    audit,
+  )
+  if (approved === 'grant_unavailable') {
+    throw badRequest('The API resource was archived before access could be approved.')
+  }
+  if (approved === 'request_changed') throw badRequest('Agent access request was already decided.')
+  return toAgentAccessRequest(approved.request, await requestHostId(deps, request), null)
 }
 
 export async function decideAccessRequest(
@@ -1382,7 +1388,7 @@ export async function issueTargetAccessToken(
   }
   const now = new Date()
   const leaseId = createId('tokenlease')
-  const lease = await deps.externalResources.createTokenLease({
+  const leaseRecord = {
     id: leaseId,
     grantId: grant.id,
     requestId: request.id,
@@ -1397,11 +1403,8 @@ export async function issueTargetAccessToken(
     expiresAt: new Date(now.getTime() + expiresIn * 1000),
     revokedAt: null,
     createdAt: now,
-  })
-  if (!lease) throw forbidden('Active Agent access grant is required.')
-  await deps.externalResources.consumeAccessRequest(request.id, now)
-  if (grant.mode === 'once') await deps.externalResources.consumeGrant(grant.id, now)
-  await appendResourceAudit(deps, {
+  }
+  const audit = await resourceAuditRecord(deps, {
     action: 'api_resource.token_issued',
     result: 'allowed',
     principal,
@@ -1413,6 +1416,8 @@ export async function issueTargetAccessToken(
     authorizationDetails: grant.authorizationDetails,
     reasonCode: null,
   })
+  const lease = await deps.externalResources.issueTokenLeaseWithAudit(leaseRecord, grant.mode === 'once', now, audit)
+  if (!lease) throw forbidden('Active Agent access grant is required.')
   return {
     accessToken,
     tokenType: 'DPoP' as const,
@@ -1521,7 +1526,7 @@ async function issueNativeAccessToken(
     'at+jwt',
   )
   const leaseId = createId('tokenlease')
-  const lease = await deps.externalResources.createTokenLease({
+  const leaseRecord = {
     id: leaseId,
     grantId: grant.id,
     requestId: request.id,
@@ -1536,11 +1541,8 @@ async function issueNativeAccessToken(
     expiresAt,
     revokedAt: null,
     createdAt: now,
-  })
-  if (!lease) throw forbidden('Active Agent access grant is required.')
-  await deps.externalResources.consumeAccessRequest(request.id, now)
-  if (grant.mode === 'once') await deps.externalResources.consumeGrant(grant.id, now)
-  await appendResourceAudit(deps, {
+  }
+  const audit = await resourceAuditRecord(deps, {
     action: 'api_resource.token_issued',
     result: 'allowed',
     principal,
@@ -1552,6 +1554,8 @@ async function issueNativeAccessToken(
     authorizationDetails: realmroot ? grant.authorizationDetails : [],
     reasonCode: null,
   })
+  const lease = await deps.externalResources.issueTokenLeaseWithAudit(leaseRecord, grant.mode === 'once', now, audit)
+  if (!lease) throw forbidden('Active Agent access grant is required.')
   return {
     accessToken,
     tokenType: 'DPoP' as const,
@@ -1594,9 +1598,8 @@ export async function revokeAgentAccessGrant(deps: Deps, grantId: string, actorU
   if (!request) throw notFound('Approved Agent access request was not found.')
   const connection = await requireControlledRequestTarget(deps, request, actorUserId)
   const now = new Date()
-  await revokeGrantTokenLeases(deps, grant, now)
-  if (grant.status === 'active') await deps.externalResources.revokeGrant(grant.id, now)
-  await appendResourceAudit(deps, {
+  const leaseIds = await revokeGrantTokenLeasesAtTarget(deps, grant, now)
+  const audit = await resourceAuditRecord(deps, {
     action: 'api_resource.access_revoked',
     result: 'allowed',
     resourceId: grant.resourceId,
@@ -1607,6 +1610,7 @@ export async function revokeAgentAccessGrant(deps: Deps, grantId: string, actorU
     authorizationDetails: grant.authorizationDetails,
     reasonCode: null,
   })
+  await deps.externalResources.revokeGrantWithAudit(grant.id, leaseIds, now, audit)
 }
 
 export async function revokeAgentResourceAccess(deps: Deps, agentIdentityId: string) {
@@ -1632,16 +1636,23 @@ async function revokeGrantTokenLeases(deps: Deps, grant: AgentAccessGrantRecord,
   }
 }
 
+async function revokeGrantTokenLeasesAtTarget(deps: Deps, grant: AgentAccessGrantRecord, now: Date) {
+  const leases = await deps.externalResources.listActiveTokenLeasesByGrant(grant.id, now)
+  for (const lease of leases) await revokeTokenLeaseAtTarget(deps, grant, lease, now, false)
+  return leases.map((lease) => lease.id)
+}
+
 async function revokeTokenLeaseAtTarget(
   deps: Deps,
   grant: AgentAccessGrantRecord,
   lease: Awaited<ReturnType<Deps['externalResources']['listActiveTokenLeasesByGrant']>>[number],
   now: Date,
+  persist = true,
 ) {
   const resource = await deps.authorization.findResource(grant.resourceId)
   if (!resource) throw notFound('API resource was not found.')
   if (resource.connectorId === null) {
-    await deps.externalResources.revokeTokenLease(lease.id, now)
+    if (persist) await deps.externalResources.revokeTokenLease(lease.id, now)
     return
   }
   const connection = grant.connectionId ? await deps.externalResources.findConnection(grant.connectionId) : null
@@ -1660,7 +1671,7 @@ async function revokeTokenLeaseAtTarget(
     authorization.clientId,
     clientSecret,
   )
-  await deps.externalResources.revokeTokenLease(lease.id, now)
+  if (persist) await deps.externalResources.revokeTokenLease(lease.id, now)
 }
 
 async function readAuthorizationDetailCatalog(
@@ -2389,7 +2400,7 @@ function assertConnectionInHomeSpace(
   throw forbidden('Resource account connection is outside the Agent home space.')
 }
 
-async function appendResourceAudit(
+async function resourceAuditRecord(
   deps: Deps,
   input: {
     action: string
@@ -2405,16 +2416,20 @@ async function appendResourceAudit(
     reasonCode: string | null
   },
 ) {
+  const tenant = await resolveAuditTenant(deps, input)
   const authorizationDetails =
     input.authorizationDetails ?? input.request?.authorizationDetails ?? input.connection?.authorizationDetails ?? []
   const authorizationDetailProjections = authorizationDetails.map((detail) => ({
     type: detail.type,
     ...(typeof detail.identifier === 'string' ? { identifier: detail.identifier } : {}),
   }))
-  await deps.agentAudit.append({
+  return {
     id: createId('agaudit'),
     action: input.action,
     result: input.result,
+    realmOwned: false,
+    ownerUserId: tenant.type === 'user' ? tenant.id : null,
+    ownerOrganizationId: tenant.type === 'organization' ? tenant.id : null,
     controllerUserId: input.controllerUserId ?? null,
     subjectIssuer: input.principal?.issuer ?? null,
     subject: input.principal?.subject ?? null,
@@ -2428,7 +2443,28 @@ async function appendResourceAudit(
     metadata:
       authorizationDetailProjections.length > 0 ? { authorizationDetails: authorizationDetailProjections } : null,
     occurredAt: new Date(),
-  })
+  }
+}
+
+async function resolveAuditTenant(
+  deps: Deps,
+  input: {
+    principal?: AgentResourcePrincipal
+    request?: AgentAccessRequestRecord
+    connection: ResourceAccountConnectionRecord | null
+  },
+) {
+  if (input.connection?.ownerUserId) return { type: 'user' as const, id: input.connection.ownerUserId }
+  if (input.connection?.ownerOrganizationId) {
+    return { type: 'organization' as const, id: input.connection.ownerOrganizationId }
+  }
+  const identityId = input.principal?.identityId ?? input.request?.agentIdentityId
+  if (!identityId) throw new Error('Agent audit event has no tenant-owned resource.')
+  const identity = await deps.agentIdentities.findIdentity(identityId)
+  if (!identity) throw new Error(`Agent identity ${identityId} was not found while writing its audit event.`)
+  return identity.identity.ownerUserId
+    ? { type: 'user' as const, id: identity.identity.ownerUserId }
+    : { type: 'organization' as const, id: identity.identity.ownerOrganizationId! }
 }
 
 async function revokeUncoveredGrants(
@@ -2444,9 +2480,8 @@ async function revokeUncoveredGrants(
       (!authorizationDetailsRequired || grant.authorizationDetails.length > 0) &&
       isAuthorizationDetailsSubset(grant.authorizationDetails, connection.authorizationDetails)
     if (covered) continue
-    await revokeGrantTokenLeases(deps, grant, now)
-    await deps.externalResources.revokeGrant(grant.id, now)
-    await appendResourceAudit(deps, {
+    const leaseIds = await revokeGrantTokenLeasesAtTarget(deps, grant, now)
+    const audit = await resourceAuditRecord(deps, {
       action: 'api_resource.access_revoked',
       result: 'allowed',
       resourceId: grant.resourceId,
@@ -2457,6 +2492,7 @@ async function revokeUncoveredGrants(
       authorizationDetails: grant.authorizationDetails,
       reasonCode: 'connection_authorization_changed',
     })
+    await deps.externalResources.revokeGrantWithAudit(grant.id, leaseIds, now, audit)
   }
 }
 

@@ -253,10 +253,7 @@ function toApplicationAuthorization(authorization: ApplicationAuthorizationRecor
       displayName: authorization.userDisplayName,
       email: authorization.userEmail,
     },
-    organization:
-      authorization.organizationId && authorization.organizationName
-        ? { id: authorization.organizationId, name: authorization.organizationName }
-        : null,
+    organization: null,
     scopes: authorization.scopes,
     permissions: authorization.permissions,
     grantedAt: authorization.grantedAt.toISOString(),
