@@ -1,0 +1,1 @@
+ALTER TABLE `application_consent` DROP COLUMN `permissions`;

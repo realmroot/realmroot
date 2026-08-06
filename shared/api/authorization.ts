@@ -248,10 +248,14 @@ const scopeGrantFieldsSchema = z.object({
   id: z.string(),
   resourceServerId: z.string(),
   scopes: z.array(nonEmptyString),
+  status: z.enum(['active', 'expired']),
   grantedByUserId: z.string(),
   expiresAt: z.iso.datetime().nullable(),
-  revokedAt: z.iso.datetime().nullable(),
   createdAt: z.string(),
+  links: z.object({
+    self: z.string(),
+    resourceServer: z.string(),
+  }),
 })
 
 export const userScopeGrantResponseSchema = scopeGrantFieldsSchema.extend({
@@ -262,20 +266,28 @@ export const applicationScopeGrantResponseSchema = scopeGrantFieldsSchema.extend
   applicationId: z.string(),
 })
 export const createUserScopeGrantRequestSchema = z.object({
-  userId: nonEmptyString,
   organizationId: nonEmptyString.nullable().optional(),
   resourceServerId: nonEmptyString,
   scopes: z.array(nonEmptyString).min(1),
   expiresAt: z.iso.datetime().nullable().optional(),
 })
 export const createApplicationScopeGrantRequestSchema = z.object({
-  applicationId: nonEmptyString,
   resourceServerId: nonEmptyString,
   scopes: z.array(nonEmptyString).min(1),
   expiresAt: z.iso.datetime().nullable().optional(),
 })
-export const userScopeGrantResponseEnvelopeSchema = z.object({ grant: userScopeGrantResponseSchema })
-export const applicationScopeGrantResponseEnvelopeSchema = z.object({ grant: applicationScopeGrantResponseSchema })
+export const listScopeGrantsQuerySchema = paginationQuerySchema.extend({
+  resourceServerId: nonEmptyString.optional(),
+  status: z.enum(['active', 'expired']).optional(),
+})
+export const listUserScopeGrantsResponseSchema = z.object({
+  items: z.array(userScopeGrantResponseSchema),
+  pagination: paginationMetadataSchema,
+})
+export const listApplicationScopeGrantsResponseSchema = z.object({
+  items: z.array(applicationScopeGrantResponseSchema),
+  pagination: paginationMetadataSchema,
+})
 
 export const listRolesResponseSchema = z.object({
   roles: z.array(roleResponseSchema),
@@ -316,3 +328,4 @@ export type UserScopeGrantResponse = z.infer<typeof userScopeGrantResponseSchema
 export type ApplicationScopeGrantResponse = z.infer<typeof applicationScopeGrantResponseSchema>
 export type CreateUserScopeGrantRequest = z.infer<typeof createUserScopeGrantRequestSchema>
 export type CreateApplicationScopeGrantRequest = z.infer<typeof createApplicationScopeGrantRequestSchema>
+export type ListScopeGrantsQuery = z.infer<typeof listScopeGrantsQuerySchema>

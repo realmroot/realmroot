@@ -235,7 +235,7 @@ describe('console route navigation', () => {
       if (
         url.startsWith('/api/agents/agent-1/installations') ||
         url.startsWith('/api/access/requests?agentId=agent-1') ||
-        url.startsWith('/api/access/authorizations?agentId=agent-1')
+        url.startsWith('/api/agents/agent-1/access-grants')
       ) {
         return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
       }

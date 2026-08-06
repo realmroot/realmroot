@@ -128,10 +128,10 @@ layout:
       - Realm operators always receive complete identity and technical-resource inventories. Application and Resource server creation requires an explicit owner Organization and defaults to the private platform Organization created during bootstrap. Role creation has no Owner field.
       - Treat Agent Hosts as runtime credentials; never represent Native Resource servers as external account connections.
       - Keep edit forms in the heading action drawer and reserve Settings for access eligibility, recovery, and lifecycle operations.
-      - Native Resource server details organize Overview, Resources, Roles & grants, and Settings around the authorization boundary; external Resource servers add Connections for delegated account authority.
-      - Resource server Overview uses one content column for authorization and discovery readiness; Resources owns the OpenAPI resource and operation inventory, including the scopes required by each operation.
+      - Resource server details organize Overview, Scopes, Endpoints, and Settings around the authorization boundary.
+      - Resource server Overview uses one content column for authorization and discovery readiness; Scopes owns the synchronized scope registry and grant modes, while Endpoints owns protected OpenAPI operations and their required scopes.
       - External Overview exposes its OIDC connector, target issuer, and token-exchange capabilities; Native Overview does not repeat realm-wide issuer or JWKS integration values.
-      - Do not add a separate Permissions tab or Console-owned scope editor; scopes appear once beside the OpenAPI resources and operations that require them.
+      - Do not add a separate Permissions or aggregate grants tab. Scope grant modes are maintained in Scopes; direct grants remain below their User, Application, or Agent owner.
       - Keep resource metadata in the heading, Overview, and Edit resource flow; Settings contains only access eligibility and lifecycle actions rather than repeating read-only details.
       - Archive actions live in Settings and require confirmation because they revoke active authorization while preserving history.
   hostedAuth:

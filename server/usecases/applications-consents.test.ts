@@ -160,7 +160,6 @@ describe('service.test 3', () => {
       userDisplayName: 'Test user',
       userEmail: 'user@example.com',
       scopes: ['openid'],
-      permissions: ['projects:read'],
       grantedAt: new Date('2026-08-01T00:00:00.000Z'),
       expiresAt: expiredAt,
       revokedAt: null,
@@ -178,7 +177,6 @@ describe('service.test 3', () => {
     await expect(listApplicationAuthorizations(deps, { limit: 20, offset: 0 })).resolves.toMatchObject({
       authorizations: [
         {
-          organization: null,
           status: 'expired',
           expiresAt: expiredAt.toISOString(),
         },
@@ -384,7 +382,6 @@ class InMemoryApplicationRepository implements ApplicationRepository {
         userId: key.slice(key.indexOf(':') + 1),
         userDisplayName: 'Test user',
         userEmail: 'user@example.com',
-        permissions: [],
         expiresAt: null,
         revokedAt: this.authorizationRevocations.get(consent.id) ?? null,
       }))
@@ -405,7 +402,6 @@ class InMemoryApplicationRepository implements ApplicationRepository {
       userId: key.slice(applicationId.length + 1),
       userDisplayName: 'Test user',
       userEmail: 'user@example.com',
-      permissions: [],
       expiresAt: null,
       revokedAt: this.authorizationRevocations.get(consent.id) ?? null,
     }
@@ -434,7 +430,6 @@ class InMemoryApplicationRepository implements ApplicationRepository {
     userId: string
     resourceServerId: string | null
     scopes: string[]
-    permissions: string[]
   }) {
     const consent = {
       id: `consent-${this.consents.size + 1}`,

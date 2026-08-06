@@ -338,6 +338,7 @@ describe('Agent identity lifecycle', () => {
         status: 'active',
         expiresAt: new Date('2020-01-01T00:00:00.000Z'),
         createdAt: new Date('2026-08-01T00:00:00.000Z'),
+        updatedAt: new Date('2026-08-01T00:00:00.000Z'),
       },
       {
         id: 'grant-active',
@@ -348,6 +349,7 @@ describe('Agent identity lifecycle', () => {
         status: 'active',
         expiresAt: null,
         createdAt: new Date('2026-08-01T00:00:00.000Z'),
+        updatedAt: new Date('2026-08-01T00:00:00.000Z'),
       },
     ]
     vi.mocked(deps.externalResources.listGrants).mockResolvedValue({
@@ -356,7 +358,9 @@ describe('Agent identity lifecycle', () => {
       limit: 20,
       offset: 0,
     } as never)
-    await expect(listManagementAgentAccessGrants(deps, { limit: 20, offset: 0 })).resolves.toMatchObject({
+    await expect(
+      listManagementAgentAccessGrants(deps, { agentId: 'agent-1', limit: 20, offset: 0 }),
+    ).resolves.toMatchObject({
       items: [
         { id: 'grant-expired', status: 'expired', expiresAt: '2020-01-01T00:00:00.000Z' },
         { id: 'grant-active', status: 'active', expiresAt: null },

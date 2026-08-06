@@ -1,7 +1,7 @@
 import { conflict } from '@server/domain/errors'
 import type { AuthorizationRepository } from '@server/usecases/ports'
 import { decodeRoleScope, encodeRoleScope } from '@shared/organization-access'
-import { and, count, desc, eq, gt, inArray, isNotNull, isNull, notExists, or, sql } from 'drizzle-orm'
+import { and, count, desc, eq, gt, inArray, isNotNull, isNull, lte, notExists, or, sql } from 'drizzle-orm'
 import type { BatchItem } from 'drizzle-orm/batch'
 import type { Database } from '../../db/client'
 import {
@@ -496,6 +496,43 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
       return row ?? null
     },
 
+    async listUserScopeGrants(userId, query, ownerOrganizationIds) {
+      const now = new Date()
+      const statusCondition =
+        query.status === 'expired'
+          ? and(isNotNull(userScopeGrant.expiresAt), lte(userScopeGrant.expiresAt, now))
+          : query.status === 'active'
+            ? or(isNull(userScopeGrant.expiresAt), gt(userScopeGrant.expiresAt, now))
+            : undefined
+      const effectiveOwnerOrganizationId = sql<string>`coalesce(${userScopeGrant.organizationId}, ${apiResource.ownerOrganizationId})`
+      const where = and(
+        eq(userScopeGrant.userId, userId),
+        isNull(userScopeGrant.revokedAt),
+        query.resourceServerId ? eq(userScopeGrant.resourceServerId, query.resourceServerId) : undefined,
+        ownerOrganizationIds ? inArray(effectiveOwnerOrganizationId, ownerOrganizationIds) : undefined,
+        statusCondition,
+      )
+      const [items, totals] = await Promise.all([
+        db
+          .select({ grant: userScopeGrant })
+          .from(userScopeGrant)
+          .innerJoin(apiResource, eq(userScopeGrant.resourceServerId, apiResource.id))
+          .where(where)
+          .orderBy(desc(userScopeGrant.createdAt), desc(userScopeGrant.id))
+          .limit(query.limit)
+          .offset(query.offset),
+        db
+          .select({ value: count() })
+          .from(userScopeGrant)
+          .innerJoin(apiResource, eq(userScopeGrant.resourceServerId, apiResource.id))
+          .where(where),
+      ])
+      return {
+        items: items.map(({ grant }) => grant),
+        pagination: toPagination(query, totals[0]?.value ?? 0),
+      }
+    },
+
     async listActiveUserScopeGrants(userId, resourceServerId, now) {
       return db
         .select()
@@ -527,6 +564,36 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
     async findApplicationScopeGrant(id) {
       const [row] = await db.select().from(applicationScopeGrant).where(eq(applicationScopeGrant.id, id)).limit(1)
       return row ?? null
+    },
+
+    async listApplicationScopeGrants(applicationId, query) {
+      const now = new Date()
+      const statusCondition =
+        query.status === 'expired'
+          ? and(isNotNull(applicationScopeGrant.expiresAt), lte(applicationScopeGrant.expiresAt, now))
+          : query.status === 'active'
+            ? or(isNull(applicationScopeGrant.expiresAt), gt(applicationScopeGrant.expiresAt, now))
+            : undefined
+      const where = and(
+        eq(applicationScopeGrant.applicationId, applicationId),
+        isNull(applicationScopeGrant.revokedAt),
+        query.resourceServerId ? eq(applicationScopeGrant.resourceServerId, query.resourceServerId) : undefined,
+        statusCondition,
+      )
+      const [items, totals] = await Promise.all([
+        db
+          .select()
+          .from(applicationScopeGrant)
+          .where(where)
+          .orderBy(desc(applicationScopeGrant.createdAt), desc(applicationScopeGrant.id))
+          .limit(query.limit)
+          .offset(query.offset),
+        db.select({ value: count() }).from(applicationScopeGrant).where(where),
+      ])
+      return {
+        items,
+        pagination: toPagination(query, totals[0]?.value ?? 0),
+      }
     },
 
     async listActiveApplicationScopeGrants(applicationId, resourceServerId, now) {

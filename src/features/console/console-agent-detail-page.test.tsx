@@ -184,7 +184,7 @@ function agentDetailResponse(url: URL, collections: AgentCollections) {
   if (path === '/api/access/requests') {
     return jsonResponse({ items: collections.requests, pagination: page(collections.requests.length) })
   }
-  if (path === '/api/access/authorizations') {
+  if (path === '/api/agents/agent-1/access-grants') {
     return jsonResponse({ items: collections.grants, pagination: page(collections.grants.length) })
   }
   if (path === '/api/realm/audit-events') {

@@ -253,10 +253,8 @@ function toApplicationAuthorization(authorization: ApplicationAuthorizationRecor
       displayName: authorization.userDisplayName,
       email: authorization.userEmail,
     },
-    organization: null,
     resourceServerId: authorization.resourceServerId,
     scopes: authorization.scopes,
-    permissions: authorization.permissions,
     grantedAt: authorization.grantedAt.toISOString(),
     expiresAt: authorization.expiresAt?.toISOString() ?? null,
     revokedAt: authorization.revokedAt?.toISOString() ?? null,
@@ -378,7 +376,6 @@ export async function createConsent(deps: Deps, input: CreateConsentRequest, use
     userId,
     resourceServerId: resource?.id ?? null,
     scopes: requestedScopes,
-    permissions: input.permissions ?? [],
   })
 
   return {

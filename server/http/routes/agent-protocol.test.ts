@@ -179,12 +179,12 @@ describe('Agent protocol routes', () => {
     })
     expect(created.status).toBe(201)
     expect(await created.clone().json()).not.toHaveProperty('grantId')
-    const issued = await app.request('/api/access/authorizations/grant-1/credentials', {
+    const issued = await app.request('/api/agents/identity-1/access-grants/grant-1/credentials', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ proof: { type: 'dpop+jwt', value: 'proof' } }),
     })
-    expect(issued.status).toBe(200)
+    expect(issued.status).toBe(201)
     await expect(issued.json()).resolves.toEqual({
       accessToken: credential.accessToken,
       tokenType: credential.tokenType,
@@ -243,6 +243,7 @@ function createRouteApp(overrides: { signJWT?: () => Promise<{ token: string }> 
   vi.mocked(deps.externalResources.findGrant).mockResolvedValue({
     id: 'grant-1',
     agentIdentityId: 'identity-1',
+    status: 'active',
   } as never)
   vi.mocked(deps.externalResources.findAccessRequestByGrant).mockResolvedValue({ id: 'request-1' } as never)
   return new Hono()
@@ -265,8 +266,8 @@ function createRouteApp(overrides: { signJWT?: () => Promise<{ token: string }> 
             'connection-requests:write',
             'access-requests:read',
             'access-requests:write',
-            'access-authorizations:read',
-            'access-authorizations:issue',
+            'access-grants:read',
+            'access-grants:issue',
           ],
           authority: null,
         },
@@ -333,17 +334,17 @@ function accessRequest() {
     interaction: { type: 'user-approval' as const, status: 'completed' as const, url: null, expiresAt: null },
     links: {
       self: 'https://auth.example.com/api/access/requests/request-1',
-      credentials: 'https://auth.example.com/api/access/authorizations/grant-1/credentials',
+      credentials: 'https://auth.example.com/api/agents/identity-1/access-grants/grant-1/credentials',
     },
     credentialOffer: {
       type: 'dpop' as const,
       resource: { href: resourceHref },
       resourceIndicator: 'https://drive.example.com/api',
-      endpoint: 'https://auth.example.com/api/access/authorizations/grant-1/credentials',
+      endpoint: 'https://auth.example.com/api/agents/identity-1/access-grants/grant-1/credentials',
       proof: {
         algorithm: 'ES256' as const,
         method: 'POST' as const,
-        uri: 'https://auth.example.com/api/access/authorizations/grant-1/credentials',
+        uri: 'https://auth.example.com/api/agents/identity-1/access-grants/grant-1/credentials',
       },
     },
     expiresAt,

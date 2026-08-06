@@ -97,11 +97,12 @@ second title and description. Flat row groups omit outer top and bottom borders.
 
 Resource server details treat the object as an authorization boundary rather
 than a generic settings record. Overview is a single-column operational summary.
-Resources owns the OpenAPI resource and operation inventory with each operation's
-required scopes, replacing a separate Permissions view. Roles & grants shows
-Roles in the current Organization that use the API, plus issued authority. External resources also add account
-Connections. Resource metadata is edited from the detail-page action; Settings
-contains only access eligibility and archival.
+Scopes owns the synchronized registry and each scope's grant mode. Endpoints owns
+the protected OpenAPI operation inventory and required scope sets. Roles and direct
+grants remain below their owning Organization, User, Application, or Agent instead
+of being aggregated on the Resource server. External authorization details appear
+in Overview. Resource metadata is edited from the detail-page action; Settings
+contains only visibility and archival.
 
 Ownership, access eligibility, and authority are deliberately separate. A
 developer-enabled Organization can own an application or API while making it

@@ -149,7 +149,6 @@ export function createUserRepository(db: Database): UserRepository {
           applicationName: application.name,
           applicationSlug: application.slug,
           scopes: applicationConsent.scopes,
-          permissions: applicationConsent.permissions,
           grantedAt: applicationConsent.grantedAt,
           expiresAt: applicationConsent.expiresAt,
         })

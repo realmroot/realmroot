@@ -9,7 +9,6 @@ import {
   getDeveloperConsoleAccess,
   listAccountAgents,
   listAccountConnections,
-  listAccountOrganizationAgentAccessGrants,
   listAccountOrganizationAgents,
   listAccountOrganizationInvitations,
   listAccountOrganizationRoles,
@@ -39,8 +38,6 @@ export const accountQueryKeys = {
   organizationInvitations: ['account', 'organization-invitations'] as const,
   organizationAgents: (organizationId: string) => ['account', 'organizations', organizationId, 'agents'] as const,
   organizationRoles: (organizationId: string) => ['account', 'organizations', organizationId, 'roles'] as const,
-  organizationAgentAccessGrants: (organizationId: string) =>
-    ['account', 'organizations', organizationId, 'agent-access-grants'] as const,
   security: ['account', 'security'] as const,
   sessions: ['account', 'sessions'] as const,
 }
@@ -117,15 +114,6 @@ export function useAccountOrganizationAgents(organizationId: string, enabled = t
   return useQuery({
     queryKey: accountQueryKeys.organizationAgents(organizationId),
     queryFn: () => listAccountOrganizationAgents(organizationId),
-    enabled,
-    ...accountQueryOptions,
-  })
-}
-
-export function useAccountOrganizationAgentAccessGrants(organizationId: string, enabled = true) {
-  return useQuery({
-    queryKey: accountQueryKeys.organizationAgentAccessGrants(organizationId),
-    queryFn: () => listAccountOrganizationAgentAccessGrants(organizationId),
     enabled,
     ...accountQueryOptions,
   })

@@ -3,7 +3,7 @@ import type {
   AgentAuthorityInventoryScope,
   ExternalResourceRepository,
 } from '@server/usecases/ports'
-import { and, count, desc, eq, exists, gt, inArray, isNull, lte, or, sql } from 'drizzle-orm'
+import { and, count, desc, eq, exists, gt, inArray, isNull, lte, ne, or, sql } from 'drizzle-orm'
 import type { Database } from '../../db/client'
 import {
   agentAccessGrant,
@@ -413,6 +413,7 @@ export function createExternalResourceRepository(db: Database): ExternalResource
         query.resourceId ? eq(agentAccessGrant.resourceId, query.resourceId) : undefined,
         query.organizationId ? eq(agentIdentity.ownerOrganizationId, query.organizationId) : undefined,
         authorityOwnerCondition(scope),
+        ne(agentAccessGrant.status, 'revoked'),
         statusCondition,
       )
       const [items, totals] = await Promise.all([

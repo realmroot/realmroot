@@ -209,15 +209,8 @@ export const applicationAuthorizationSchema = z.object({
     displayName: z.string(),
     email: z.email(),
   }),
-  organization: z
-    .object({
-      id: z.string(),
-      name: z.string(),
-    })
-    .nullable(),
   resourceServerId: z.string().nullable(),
   scopes: z.array(z.string()),
-  permissions: z.array(z.string()),
   grantedAt: z.string(),
   expiresAt: z.string().nullable(),
   revokedAt: z.string().nullable(),
@@ -274,14 +267,15 @@ export const consentRequestResponseSchema = z.object({
   state: z.string().nullable(),
 })
 
-export const createConsentRequestSchema = z.object({
-  clientId: nonEmptyString,
-  resourceServerId: nonEmptyString.nullable(),
-  scopes: z.array(nonEmptyString).min(1),
-  permissions: z.array(nonEmptyString).optional(),
-})
+export const createConsentRequestSchema = z
+  .object({
+    clientId: nonEmptyString,
+    resourceServerId: nonEmptyString.nullable(),
+    scopes: z.array(nonEmptyString).min(1),
+  })
+  .strict()
 
-export const hostedConsentApprovalRequestSchema = createConsentRequestSchema.omit({ permissions: true }).strict()
+export const hostedConsentApprovalRequestSchema = createConsentRequestSchema
 
 export type ApplicationResponse = z.infer<typeof applicationResponseSchema>
 export type ApplicationOidcClaims = z.infer<typeof applicationOidcClaimsSchema>

@@ -159,10 +159,10 @@ Feature: Unified Realmroot resource API
   Scenario: Authority records keep one canonical URI across product surfaces
     Given Organization memberships and Agent access records exist for User and Organization tenants
     When a Realm operator, Organization developer, or Account Center member reads authority inventory
-    Then each Organization Role, member Role collection, Agent access request, and Agent access grant has one canonical API URI
+    Then each Organization Role, member Role collection, User Scope Grant, Application Scope Grant, Agent access request, and Agent access grant has one canonical API URI below its owning subject
     And filters only narrow the inventory and are never required to establish resource ownership
     And the server limits each principal to the records that principal may inspect
-    And Account Center does not publish duplicate Organization authority collection paths
+    And no top-level Grant inventory or duplicate Account Center Grant URI exists
 
   @entrypoint:restish @journey:management-tenant-owner-enforcement
   Scenario: Resource ownership is enforced consistently across the Management API

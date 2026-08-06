@@ -5,13 +5,17 @@ import { describe, expect, it } from 'vitest'
 const migrationName = '20260806005241_same_mathemanic.sql'
 const platformOwnerMigrationName = '20260806040000_platform_organization_owner.sql'
 const resourceScopeMigrationName = '20260806155546_typical_demogoblin.sql'
+const consentScopeMigrationName = '20260806190437_brown_sabra.sql'
 
 describe('tenant ownership migration', () => {
   it('rebuilds legacy ownership into the final schema and quarantines ambiguity', () => {
     const database = new DatabaseSync(':memory:')
     try {
       for (const name of migrationNames().filter(
-        (name) => ![migrationName, platformOwnerMigrationName, resourceScopeMigrationName].includes(name),
+        (name) =>
+          ![migrationName, platformOwnerMigrationName, resourceScopeMigrationName, consentScopeMigrationName].includes(
+            name,
+          ),
       )) {
         database.exec(readFileSync(new URL(`../../migrations/${name}`, import.meta.url), 'utf8'))
       }
@@ -26,11 +30,13 @@ describe('tenant ownership migration', () => {
         throw error
       }
       database.exec(readFileSync(new URL(`../../migrations/${resourceScopeMigrationName}`, import.meta.url), 'utf8'))
+      database.exec(readFileSync(new URL(`../../migrations/${consentScopeMigrationName}`, import.meta.url), 'utf8'))
 
       expect(columnNames(database, 'application')).not.toContain('owner_user_id')
       expect(columnNames(database, 'application')).not.toContain('audience_mode')
       expect(columnNames(database, 'application')).toEqual(expect.arrayContaining(['oidc_scopes', 'resource_scopes']))
       expect(columnNames(database, 'application_consent')).not.toContain('organization_id')
+      expect(columnNames(database, 'application_consent')).not.toContain('permissions')
       expect(database.prepare("select id from application_consent where id = 'consent-1'").get()).toEqual({
         id: 'consent-1',
       })

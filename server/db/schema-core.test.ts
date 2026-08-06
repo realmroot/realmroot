@@ -127,10 +127,6 @@ describe('schema.test 1', () => {
     expect(applicationClientMetadata.allowedEnvironments.mapToDriverValue(['production', 'preview'])).toBe(
       '["production","preview"]',
     )
-    expect(applicationConsent.permissions.mapFromDriverValue('["read:users","write:users"]')).toEqual([
-      'read:users',
-      'write:users',
-    ])
     expect(identityProviderConnector.attributeMapping.mapToDriverValue({ email: 'mail', name: 'displayName' })).toBe(
       '{"email":"mail","name":"displayName"}',
     )

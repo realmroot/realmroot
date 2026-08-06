@@ -13,7 +13,7 @@ import type {
   Agent,
   AgentEnrollment,
   AgentInfo,
-  ListManagementAgentAccessGrantsQuery,
+  ListAgentAccessGrantsQuery,
   ListManagementAgentAccessRequestsQuery,
 } from '@shared/api/agent-api'
 import type {
@@ -167,7 +167,7 @@ export async function getManagementAgentAccessRequest(deps: Deps, requestId: str
 
 export async function listManagementAgentAccessGrants(
   deps: Deps,
-  query: ListManagementAgentAccessGrantsQuery,
+  query: ListAgentAccessGrantsQuery & { agentId: string },
   scope?: AgentAuthorityInventoryScope,
 ) {
   const result = await deps.externalResources.listGrants(query, scope)
@@ -179,6 +179,11 @@ export async function listManagementAgentAccessGrants(
     items: result.items.map((grant) => ({
       id: grant.id,
       agentId: grant.agentIdentityId,
+      target: {
+        type: 'api-resource' as const,
+        apiResourceId: grant.resourceId,
+        ...(grant.connectionId ? { accountConnectionId: grant.connectionId } : {}),
+      },
       resource: resources.get(grant.resourceId)!,
       scopes: grant.scopes,
       authorizationDetails: grant.authorizationDetails,
@@ -189,6 +194,10 @@ export async function listManagementAgentAccessGrants(
           : grant.status,
       expiresAt: grant.expiresAt?.toISOString() ?? null,
       createdAt: grant.createdAt.toISOString(),
+      updatedAt: grant.updatedAt.toISOString(),
+      links: {
+        self: `/api/agents/${encodeURIComponent(grant.agentIdentityId)}/access-grants/${encodeURIComponent(grant.id)}`,
+      },
     })),
     pagination: paginationMetadata(result),
   }
@@ -196,12 +205,17 @@ export async function listManagementAgentAccessGrants(
 
 export async function getManagementAgentAccessGrant(deps: Deps, grantId: string) {
   const grant = await deps.externalResources.findGrant(grantId)
-  if (!grant) throw notFound('Agent access grant was not found.')
+  if (!grant || grant.status === 'revoked') throw notFound('Agent access grant was not found.')
   await requireIdentity(deps, grant.agentIdentityId)
   const resources = await loadManagementResources(deps, [grant.resourceId])
   return {
     id: grant.id,
     agentId: grant.agentIdentityId,
+    target: {
+      type: 'api-resource' as const,
+      apiResourceId: grant.resourceId,
+      ...(grant.connectionId ? { accountConnectionId: grant.connectionId } : {}),
+    },
     resource: resources.get(grant.resourceId)!,
     scopes: grant.scopes,
     authorizationDetails: grant.authorizationDetails,
@@ -212,6 +226,10 @@ export async function getManagementAgentAccessGrant(deps: Deps, grantId: string)
         : grant.status,
     expiresAt: grant.expiresAt?.toISOString() ?? null,
     createdAt: grant.createdAt.toISOString(),
+    updatedAt: grant.updatedAt.toISOString(),
+    links: {
+      self: `/api/agents/${encodeURIComponent(grant.agentIdentityId)}/access-grants/${encodeURIComponent(grant.id)}`,
+    },
   }
 }
 

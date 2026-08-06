@@ -26,7 +26,6 @@ import {
   listAccountAccessRequests,
   listAccountConnections,
   listConnectableExternalResources,
-  revokeAgentAccessGrant,
   revokeResourceConnection,
 } from '@server/usecases/external-resources'
 import type { ConfigzAccountCenter } from '@server/usecases/ports'
@@ -555,11 +554,6 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
       getPrincipal(c).user!.id,
     )
     return c.json(accessRequestSchema.parse(result))
-  })
-
-  app.delete('/access-grants/:grantId', async (c) => {
-    await revokeAgentAccessGrant(getDeps(c), c.req.param('grantId'), getPrincipal(c).user!.id)
-    return c.body(null, 204)
   })
 
   app.route(

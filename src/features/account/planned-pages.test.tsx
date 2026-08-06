@@ -629,7 +629,7 @@ describe('planned Account Center journeys', () => {
     expect(await screen.findByText('No Organization Agents')).toBeTruthy()
     openTab('Roles')
     expect(await screen.findByText('Your Organization Roles')).toBeTruthy()
-    expect(screen.getByText('No active Agent access grants')).toBeTruthy()
+    expect(screen.getByText('Assigned Roles')).toBeTruthy()
     openTab('Settings')
     fireEvent.click(screen.getByRole('button', { name: 'Leave' }))
     fireEvent.click(screen.getByRole('button', { name: 'Leave organization' }))
@@ -739,7 +739,6 @@ describe('planned Account Center journeys', () => {
       http.get(`${base}/api/account/organizations/org-family/agents`, () =>
         json({ items: [], pagination: pagination(0) }),
       ),
-      http.get(`${base}/api/access/authorizations`, () => json({ items: [], pagination: pagination(0) })),
     )
     renderWithClient(<AccountOrganizationDetailPage organizationId="org-family" />)
     expect((await screen.findByRole('alert')).textContent).toContain('Organization unavailable')
@@ -884,25 +883,6 @@ function organizationDetailHandlers(role: string, options: { empty?: boolean } =
     ),
     http.get(`${base}/api/account/organizations/org-family/agents`, () =>
       json({ items: agents, pagination: pagination(agents.length) }),
-    ),
-    http.get(`${base}/api/access/authorizations`, () =>
-      json({
-        items: options.empty
-          ? []
-          : [
-              {
-                id: 'grant-1',
-                agentId: 'agent-family',
-                resource: { id: 'resource-1', identifier: 'projects', name: 'Projects API' },
-                scopes: ['projects:read'],
-                mode: 'persistent',
-                status: 'active',
-                expiresAt: null,
-                createdAt: '2026-08-01T00:00:00.000Z',
-              },
-            ],
-        pagination: pagination(options.empty ? 0 : 1),
-      }),
     ),
   ]
 }

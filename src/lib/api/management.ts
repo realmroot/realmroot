@@ -20,12 +20,15 @@ import type {
   AddMemberRequest,
   ApiResourceContractResponse,
   ApiResourceResponse,
+  CreateApplicationScopeGrantRequest,
   CreateInvitationRequest,
   CreateOrganizationRequest,
   CreateRoleRequest,
+  CreateUserScopeGrantRequest,
   InvitationResponse,
   ListInvitationsResponse,
   ListMembersResponse,
+  ListScopeGrantsQuery,
   MemberResponse,
   MemberRolesResponse,
   OrganizationResponse,
@@ -325,7 +328,6 @@ export async function listUserApplications(
         applicationName: application?.name ?? authorization.applicationId,
         applicationSlug: application?.slug ?? authorization.applicationId,
         scopes: authorization.scopes,
-        permissions: authorization.permissions,
         grantedAt: authorization.grantedAt,
         expiresAt: authorization.expiresAt,
       }
@@ -540,9 +542,60 @@ export function listAgentAccessRequests(
 }
 
 export function listAgentAccessGrants(
-  query: Partial<import('@shared/api/agent-api').ListManagementAgentAccessGrantsQuery> = {},
+  agentId: string,
+  query: Partial<import('@shared/api/agent-api').ListAgentAccessGrantsQuery> = {},
 ) {
-  return readRpcResponse(apiClient.api.access.authorizations.$get({ query: stringifyQuery(query) }))
+  return readRpcResponse(
+    apiClient.api.agents[':agentId']['access-grants'].$get({
+      param: { agentId },
+      query: stringifyQuery(query),
+    }),
+  )
+}
+
+export function listUserScopeGrants(userId: string, query: Partial<ListScopeGrantsQuery> = {}) {
+  return readRpcResponse(
+    apiClient.api.users[':userId']['scope-grants'].$get({
+      param: { userId },
+      query: stringifyQuery(query),
+    }),
+  )
+}
+
+export function createUserScopeGrant(userId: string, input: CreateUserScopeGrantRequest) {
+  return readRpcResponse(apiClient.api.users[':userId']['scope-grants'].$post({ param: { userId }, json: input }))
+}
+
+export function deleteUserScopeGrant(userId: string, grantId: string) {
+  return readRpcResponse(
+    apiClient.api.users[':userId']['scope-grants'][':grantId'].$delete({ param: { userId, grantId } }),
+  )
+}
+
+export function listApplicationScopeGrants(applicationId: string, query: Partial<ListScopeGrantsQuery> = {}) {
+  return readRpcResponse(
+    apiClient.api.applications[':applicationId']['scope-grants'].$get({
+      param: { applicationId },
+      query: stringifyQuery(query),
+    }),
+  )
+}
+
+export function createApplicationScopeGrant(applicationId: string, input: CreateApplicationScopeGrantRequest) {
+  return readRpcResponse(
+    apiClient.api.applications[':applicationId']['scope-grants'].$post({
+      param: { applicationId },
+      json: input,
+    }),
+  )
+}
+
+export function deleteApplicationScopeGrant(applicationId: string, grantId: string) {
+  return readRpcResponse(
+    apiClient.api.applications[':applicationId']['scope-grants'][':grantId'].$delete({
+      param: { applicationId, grantId },
+    }),
+  )
 }
 
 export function getAgentAuditEvents(

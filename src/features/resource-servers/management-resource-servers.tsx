@@ -42,7 +42,6 @@ import {
   listApiResources,
   listConnectors,
   listOrganizations,
-  listRoles,
   refreshApiResourceScopeRegistry,
   restoreApiResource,
   updateApiResource,
@@ -437,7 +436,7 @@ export function ApiResourceDetailPage({
     queryFn: () => getApiResource(resourceId),
   })
   const contractQuery = useQuery({
-    enabled: selectedTab === 'resources',
+    enabled: selectedTab === 'endpoints',
     queryFn: () => getApiResourceContract(resourceId),
     queryKey: [...consoleQueryKeys.apiResources, resourceId, 'contract'],
   })
@@ -535,29 +534,30 @@ export function ApiResourceDetailPage({
         >
           <TabsList className="w-full" variant="navigation">
             <TabsTrigger value="overview">{tt('Overview')}</TabsTrigger>
-            <TabsTrigger value="resources">{tt('Resources')}</TabsTrigger>
-            <TabsTrigger value="authority">{tt(mode === 'native' ? 'Roles & grants' : 'Authorization')}</TabsTrigger>
+            <TabsTrigger value="scopes">{tt('Scopes')}</TabsTrigger>
+            <TabsTrigger value="endpoints">{tt('Endpoints')}</TabsTrigger>
             <TabsTrigger value="settings">{tt('Settings')}</TabsTrigger>
           </TabsList>
           <TabsContent className="mt-5" value="overview">
             <ResourceOverview mode={mode} organizations={organizations} resource={resource} />
           </TabsContent>
-          <TabsContent className="mt-5" value="resources">
-            <ProtectedResources
-              contract={contractQuery.data}
-              error={contractQuery.error}
-              loading={contractQuery.isLoading}
+          <TabsContent className="mt-5" value="scopes">
+            <ScopeRegistry
               onGrantModeChange={(scope, grantMode) =>
                 updateMutation.mutate({ scopeGrantModes: [{ scope, grantMode }] })
               }
               onRefresh={() => refreshScopesMutation.mutate(undefined)}
-              onRetry={() => contractQuery.refetch()}
               pending={updateMutation.isPending || refreshScopesMutation.isPending}
               resource={resource}
             />
           </TabsContent>
-          <TabsContent className="mt-5" value="authority">
-            <ResourceAuthority organizationId={organizationId} mode={mode} resource={resource} />
+          <TabsContent className="mt-5" value="endpoints">
+            <ProtectedEndpoints
+              contract={contractQuery.data}
+              error={contractQuery.error}
+              loading={contractQuery.isLoading}
+              onRetry={() => contractQuery.refetch()}
+            />
           </TabsContent>
           <TabsContent className="mt-5" value="settings">
             <ResourceSettings
@@ -624,89 +624,107 @@ function ResourceOverview({
       <DetailRow label="Available to Agents" value={resource.availableToAgents ? tt('Yes') : tt('No')} />
       <DetailRow label="Protected resource URL" value={<code>{resource.resourceUrl}</code>} />
       <DetailRow label="Identifier" value={<code>{resource.identifier}</code>} />
+      {mode === 'external' ? (
+        <>
+          <DetailRow label="Issuer" value={<code>{resource.authorization?.issuer ?? tt('Not configured')}</code>} />
+          <DetailRow
+            label="Connection status"
+            value={resource.authorization ? tt(resource.authorization.status) : tt('Not configured')}
+          />
+          <DetailRow
+            label="Client registration"
+            value={resource.authorization ? tt(resource.authorization.registrationMode) : tt('Not configured')}
+          />
+        </>
+      ) : null}
       <DetailRow label="Created" value={formatDate(resource.createdAt)} />
       <DetailRow label="Last updated" value={formatDate(resource.updatedAt)} />
     </div>
   )
 }
 
-function ProtectedResources({
+function ScopeRegistry({
+  onGrantModeChange,
+  onRefresh,
+  pending,
+  resource,
+}: {
+  onGrantModeChange: (scope: string, grantMode: 'automatic' | 'assigned') => void
+  onRefresh: () => void
+  pending: boolean
+  resource: ApiResource
+}) {
+  return (
+    <div className="overflow-hidden rounded-xl border">
+      <div className="flex items-center justify-between gap-4 border-b p-4">
+        <div>
+          <h2 className="font-medium">{tt('Scope registry')}</h2>
+          <p className="text-sm text-muted-foreground">
+            {tt(
+              'Automatic scopes are requestable by visible principals. Assigned scopes require an explicit grant or Role.',
+            )}
+          </p>
+        </div>
+        <Button disabled={pending || !resource.enabled} onClick={onRefresh} variant="outline">
+          <RotateCw /> {tt('Refresh scopes')}
+        </Button>
+      </div>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>{tt('Scope')}</TableHead>
+            <TableHead>{tt('Description')}</TableHead>
+            <TableHead>{tt('Grant mode')}</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {resource.scopeRegistry?.scopes.length ? (
+            resource.scopeRegistry.scopes.map((scope) => (
+              <TableRow key={scope.value}>
+                <TableCell>
+                  <code>{scope.value}</code>
+                </TableCell>
+                <TableCell>{scope.description ?? tt('—')}</TableCell>
+                <TableCell>
+                  <SelectInput
+                    aria-label={tt('Grant mode for {{scope}}', { scope: scope.value })}
+                    disabled={pending}
+                    onChange={(event) => onGrantModeChange(scope.value, event.target.value as 'automatic' | 'assigned')}
+                    value={scope.grantMode}
+                  >
+                    <option value="assigned">{tt('Assigned')}</option>
+                    <option value="automatic">{tt('Automatic')}</option>
+                  </SelectInput>
+                </TableCell>
+              </TableRow>
+            ))
+          ) : (
+            <TableEmptyRow
+              colSpan={3}
+              description={tt('Refresh this Resource Server to discover its OAuth scopes.')}
+              title={tt('No synchronized scopes')}
+            />
+          )}
+        </TableBody>
+      </Table>
+    </div>
+  )
+}
+
+function ProtectedEndpoints({
   contract,
   error,
   loading,
-  onGrantModeChange,
-  onRefresh,
   onRetry,
-  pending,
-  resource,
 }: {
   contract?: ApiResourceContractResponse
   error: Error | null
   loading: boolean
-  onGrantModeChange: (scope: string, grantMode: 'automatic' | 'assigned') => void
-  onRefresh: () => void
   onRetry: () => void
-  pending: boolean
-  resource: ApiResource
 }) {
   const operations = contract?.operations ?? []
   return (
     <div className="grid gap-5">
-      <div className="overflow-hidden rounded-xl border">
-        <div className="flex items-center justify-between gap-4 border-b p-4">
-          <div>
-            <h2 className="font-medium">{tt('Scope registry')}</h2>
-            <p className="text-sm text-muted-foreground">
-              {tt(
-                'Automatic scopes are requestable by visible principals. Assigned scopes require an explicit grant or Role.',
-              )}
-            </p>
-          </div>
-          <Button disabled={pending || !resource.enabled} onClick={onRefresh} variant="outline">
-            <RotateCw /> {tt('Refresh scopes')}
-          </Button>
-        </div>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>{tt('Scope')}</TableHead>
-              <TableHead>{tt('Description')}</TableHead>
-              <TableHead>{tt('Grant mode')}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {resource.scopeRegistry?.scopes.length ? (
-              resource.scopeRegistry.scopes.map((scope) => (
-                <TableRow key={scope.value}>
-                  <TableCell>
-                    <code>{scope.value}</code>
-                  </TableCell>
-                  <TableCell>{scope.description ?? tt('—')}</TableCell>
-                  <TableCell>
-                    <SelectInput
-                      aria-label={tt('Grant mode for {{scope}}', { scope: scope.value })}
-                      disabled={pending}
-                      onChange={(event) =>
-                        onGrantModeChange(scope.value, event.target.value as 'automatic' | 'assigned')
-                      }
-                      value={scope.grantMode}
-                    >
-                      <option value="assigned">{tt('Assigned')}</option>
-                      <option value="automatic">{tt('Automatic')}</option>
-                    </SelectInput>
-                  </TableCell>
-                </TableRow>
-              ))
-            ) : (
-              <TableEmptyRow
-                colSpan={3}
-                description={tt('Refresh this Resource Server to discover its OAuth scopes.')}
-                title={tt('No synchronized scopes')}
-              />
-            )}
-          </TableBody>
-        </Table>
-      </div>
       {loading ? <LoadingState label={tt('Reading protected resources')} /> : null}
       {error ? <ErrorState error={error} onRetry={onRetry} /> : null}
       {!loading && !error ? (
@@ -783,107 +801,6 @@ function ScopeRequirements({ scopeSets }: { scopeSets: string[][] }) {
           </span>
         </span>
       ))}
-    </div>
-  )
-}
-
-function ResourceAuthority({
-  organizationId,
-  mode,
-  resource,
-}: {
-  organizationId?: string
-  mode: 'native' | 'external'
-  resource: ApiResource
-}) {
-  const rolesQuery = useQuery({
-    enabled: mode === 'native' && Boolean(organizationId),
-    queryFn: () => listRoles(organizationId!),
-    queryKey: [...consoleQueryKeys.roles, organizationId],
-  })
-  const roles = rolesQuery.data?.roles ?? []
-  if (mode === 'external') {
-    return (
-      <div className="detailFlatRows">
-        <DetailRow label="Authority source" value={tt('External OIDC provider')} />
-        <DetailRow label="Issuer" value={<code>{resource.authorization?.issuer ?? tt('Not configured')}</code>} />
-        <DetailRow
-          label="Connection status"
-          value={resource.authorization ? tt(resource.authorization.status) : tt('Not configured')}
-        />
-        <DetailRow
-          label="Client registration"
-          value={resource.authorization ? tt(resource.authorization.registrationMode) : tt('Not configured')}
-        />
-      </div>
-    )
-  }
-  if (rolesQuery.isLoading) {
-    return <LoadingState label={tt('Loading roles and grants')} />
-  }
-  const error = rolesQuery.error
-  if (error) {
-    return <ErrorState error={error} onRetry={() => rolesQuery.refetch()} />
-  }
-  const rows = roles.flatMap((role) => {
-    const permissions = role.scopes.filter((permission) => permission.resourceId === resource.id)
-    if (!permissions.length) return []
-    return [
-      {
-        permissions,
-        role,
-      },
-    ]
-  })
-  return (
-    <div className="overflow-hidden rounded-xl border">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>{tt('Role')}</TableHead>
-            <TableHead>{tt('Permissions from this server')}</TableHead>
-            <TableHead>{tt('Assignment model')}</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rows.length ? (
-            rows.map(({ permissions, role }) => (
-              <TableRow key={role.key}>
-                <TableCell>
-                  {organizationId ? (
-                    <Link
-                      className="font-medium hover:underline"
-                      params={{ organizationId, roleId: role.key }}
-                      to="/organizations/$organizationId/roles/$roleId"
-                    >
-                      {role.displayName}
-                    </Link>
-                  ) : (
-                    <span className="font-medium">{role.displayName}</span>
-                  )}
-                  <code className="mt-0.5 block text-xs text-muted-foreground">{role.key}</code>
-                </TableCell>
-                <TableCell>
-                  <div className="flex flex-wrap gap-1.5">
-                    {permissions.map((permission) => (
-                      <Badge key={permission.scope} variant="secondary">
-                        <code>{permission.scope}</code>
-                      </Badge>
-                    ))}
-                  </div>
-                </TableCell>
-                <TableCell>{tt('Human members only')}</TableCell>
-              </TableRow>
-            ))
-          ) : (
-            <TableEmptyRow
-              colSpan={3}
-              description={tt('Add one of this server’s scopes to an Organization Role to make it reusable.')}
-              title={tt('No Roles use this server')}
-            />
-          )}
-        </TableBody>
-      </Table>
     </div>
   )
 }

@@ -59,7 +59,6 @@ import {
   useAccountConnections,
   useAccountMutation,
   useAccountOrganization,
-  useAccountOrganizationAgentAccessGrants,
   useAccountOrganizationAgents,
   useAccountOrganizationInvitations,
   useAccountOrganizationRoles,
@@ -1003,10 +1002,6 @@ export function AccountOrganizationDetailPage({
     organizationId,
     activeSection === 'overview' || (activeSection === 'agents' && !content),
   )
-  const agentAccessGrantsQuery = useAccountOrganizationAgentAccessGrants(
-    organizationId,
-    activeSection === 'roles' && !content,
-  )
   const mutate = useAccountMutation()
   const [editOpen, setEditOpen] = useState(false)
   const [inviteOpen, setInviteOpen] = useState(false)
@@ -1020,7 +1015,6 @@ export function AccountOrganizationDetailPage({
   >(null)
   const organization = organizationQuery.data
   const agents = agentsQuery.data?.items ?? []
-  const agentAccessGrants = agentAccessGrantsQuery.data?.grants ?? []
   useEffect(() => setActiveSection(section), [section])
   return (
     <AccountSurface section="organizations">
@@ -1148,53 +1142,18 @@ export function AccountOrganizationDetailPage({
                 ) : null}
               </AccountTabContent>
               <AccountTabContent surface value={content && section === 'roles' ? '__legacy-roles' : 'roles'}>
-                {agentAccessGrantsQuery.isLoading ? (
-                  <p className="text-sm text-muted-foreground">{tt('Loading Organization authority…')}</p>
-                ) : null}
-                {agentAccessGrantsQuery.error ? (
-                  <p className="text-sm text-destructive" role="alert">
-                    {agentAccessGrantsQuery.error instanceof Error
-                      ? agentAccessGrantsQuery.error.message
-                      : tt('Unable to load Organization authority.')}
-                  </p>
-                ) : null}
-                {!agentAccessGrantsQuery.isLoading ? (
-                  <div className="accountSectionStack">
-                    <AccountObjectSection
-                      description={tt('Better Auth Organization Roles assigned to your membership.')}
-                      title={tt('Your Organization Roles')}
-                    >
-                      <AccountRows>
-                        <AccountRow
-                          description={tt('Roles are resolved to scopes for this Organization only.')}
-                          label={tt('Assigned Roles')}
-                          value={<code>{membership?.role ?? 'member'}</code>}
-                        />
-                      </AccountRows>
-                    </AccountObjectSection>
-                    <AccountObjectSection
-                      description={tt('Active delegated Resource server access held by Organization Agents.')}
-                      title={tt('Agent access grants')}
-                    >
-                      <AccountRows>
-                        {agentAccessGrants.map((grant) => (
-                          <AccountRow
-                            description={tt('Resource {{resource}} · {{mode}}', {
-                              resource: grant.resourceId,
-                              mode: grant.mode,
-                            })}
-                            key={grant.id}
-                            label={grant.agentName}
-                            value={<code>{grant.scopes.join(' ')}</code>}
-                          />
-                        ))}
-                        {!agentAccessGrants.length ? (
-                          <AccountRow label={tt('No active Agent access grants')} value="—" />
-                        ) : null}
-                      </AccountRows>
-                    </AccountObjectSection>
-                  </div>
-                ) : null}
+                <AccountObjectSection
+                  description={tt('Better Auth Organization Roles assigned to your membership.')}
+                  title={tt('Your Organization Roles')}
+                >
+                  <AccountRows>
+                    <AccountRow
+                      description={tt('Roles are resolved to scopes for this Organization only.')}
+                      label={tt('Assigned Roles')}
+                      value={<code>{membership?.role ?? 'member'}</code>}
+                    />
+                  </AccountRows>
+                </AccountObjectSection>
               </AccountTabContent>
               <AccountTabContent surface value="settings">
                 <AccountRows>

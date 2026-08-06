@@ -16,6 +16,7 @@ import type { AssetPurpose } from '@shared/api/assets'
 import type {
   ApiResourceResponse,
   InvitationResponse,
+  ListScopeGrantsQuery,
   MemberResponse,
   OrganizationResponse,
   ResourceScopeRegistry,
@@ -221,7 +222,6 @@ export interface ConsentedApplication {
   applicationName: string
   applicationSlug: string
   scopes: string[]
-  permissions: string[] | null
   grantedAt: Date
   expiresAt: Date | null
 }
@@ -692,7 +692,7 @@ export interface ExternalResourceRepository {
       agentId?: string
       organizationId?: string
       resourceId?: string
-      status?: 'active' | 'revoked' | 'consumed' | 'expired'
+      status?: 'active' | 'consumed' | 'expired'
     },
     scope?: AgentAuthorityInventoryScope,
   ): Promise<PaginatedResult<AgentAccessGrantRecord>>
@@ -1038,7 +1038,6 @@ export interface ApplicationAuthorizationRecord {
   userEmail: string
   resourceServerId: string | null
   scopes: string[]
-  permissions: string[]
   grantedAt: Date
   expiresAt: Date | null
   revokedAt: Date | null
@@ -1087,7 +1086,6 @@ export interface ApplicationRepository {
     userId: string
     resourceServerId: string | null
     scopes: string[]
-    permissions: string[]
   }): Promise<ConsentRecord>
 }
 
@@ -1191,10 +1189,19 @@ export interface AuthorizationRepository {
   replaceResourceScopeRegistry(id: string, registry: ResourceScopeRegistry): Promise<boolean>
   createUserScopeGrant(input: UserScopeGrantRecord): Promise<UserScopeGrantRecord>
   findUserScopeGrant(id: string): Promise<UserScopeGrantRecord | null>
+  listUserScopeGrants(
+    userId: string,
+    query: ListScopeGrantsQuery,
+    ownerOrganizationIds?: string[],
+  ): Promise<AuthorizationPaginatedResult<UserScopeGrantRecord>>
   listActiveUserScopeGrants(userId: string, resourceServerId: string, now: Date): Promise<UserScopeGrantRecord[]>
   revokeUserScopeGrant(id: string, now: Date): Promise<boolean>
   createApplicationScopeGrant(input: ApplicationScopeGrantRecord): Promise<ApplicationScopeGrantRecord>
   findApplicationScopeGrant(id: string): Promise<ApplicationScopeGrantRecord | null>
+  listApplicationScopeGrants(
+    applicationId: string,
+    query: ListScopeGrantsQuery,
+  ): Promise<AuthorizationPaginatedResult<ApplicationScopeGrantRecord>>
   listActiveApplicationScopeGrants(
     applicationId: string,
     resourceServerId: string,

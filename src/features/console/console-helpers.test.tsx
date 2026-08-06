@@ -77,6 +77,7 @@ describe('admin console helpers', () => {
       'overview',
       'authentication',
       'sessions',
+      'access-grants',
       'agents',
       'authorized-apps',
       'settings',
@@ -95,7 +96,7 @@ describe('admin console helpers', () => {
       'activity',
       'settings',
     ])
-    expect(apiResourceDetailTabs().map((tab) => tab.value)).toEqual(['overview', 'resources', 'authority', 'settings'])
+    expect(apiResourceDetailTabs().map((tab) => tab.value)).toEqual(['overview', 'scopes', 'endpoints', 'settings'])
     expect(formatDashboardDate(new Date('2026-05-01T12:00:00.000Z'))).toBe('2026-05-01')
     expect(dashboardChartLabels(new Date('2026-05-29T00:00:00.000Z'))).toHaveLength(8)
     expect(listItems(['a', 'b'])).toEqual(['a', 'b'])

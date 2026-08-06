@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { AccessGrantsPanel } from '@/features/authorization/access-grants-panel'
 import { BanUserDialog, DangerConfirmDialog, ErrorState, LoadingState } from '@/features/management/dialogs'
 import { navigateConsoleTab } from '@/features/management/resource-components'
 import type { UserDetailSection } from '@/features/management/shared'
@@ -195,6 +196,7 @@ export function UserDetailPage({ userId, section = 'overview' }: { userId: strin
             <TabsTrigger value="overview">{tt('Overview')}</TabsTrigger>
             <TabsTrigger value="authentication">{tt('Authentication')}</TabsTrigger>
             <TabsTrigger value="sessions">{tt('Sessions')}</TabsTrigger>
+            <TabsTrigger value="access-grants">{tt('Access grants')}</TabsTrigger>
             <TabsTrigger value="agents">{tt('Agents')}</TabsTrigger>
             <TabsTrigger value="authorized-apps">{tt('Authorized apps')}</TabsTrigger>
             <TabsTrigger value="settings">{tt('Settings')}</TabsTrigger>
@@ -223,6 +225,9 @@ export function UserDetailPage({ userId, section = 'overview' }: { userId: strin
               onRevokeAll={() => setRevokeAllOpen(true)}
               sessions={sessions.data!.sessions}
             />
+          </TabsContent>
+          <TabsContent className="mt-5" value="access-grants">
+            <AccessGrantsPanel subject={{ type: 'user', id: userId, label: userDisplayName(user) }} />
           </TabsContent>
           <TabsContent className="mt-5" value="agents">
             <UserAgents agents={userAgents} />

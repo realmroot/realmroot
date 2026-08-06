@@ -205,6 +205,7 @@ export const zhFlatTranslationsExtraB: Record<string, string> = {
   'Use these values with any standards-compliant OIDC SDK.': '将这些值用于任何符合标准的 OIDC SDK。',
   'User ID': '用户 ID',
   'User detail sections': '用户详情分区',
+  'User authorizations': '用户授权',
   'User management': '用户管理',
   'Users created in the last 24 hours.': '过去 24 小时创建的用户。',
   'Users created in the past seven days.': '过去 7 天创建的用户。',

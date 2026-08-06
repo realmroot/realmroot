@@ -56,9 +56,7 @@ describe('admin console applications-detail-a', () => {
       applicationId: 'app-1',
       resourceServerId: null,
       user: { id: 'user-1', displayName: 'Jane Doe', email: 'jane@example.com' },
-      organization: null,
       scopes: ['openid', 'profile'],
-      permissions: [],
       grantedAt: '2026-07-01T12:00:00.000Z',
       expiresAt: null,
       revokedAt: null,
@@ -91,7 +89,7 @@ describe('admin console applications-detail-a', () => {
               ? [
                   {
                     ...authorization,
-                    organization: { id: 'org-1', name: 'Acme Inc.' },
+                    resourceServerId: 'resource-1',
                     expiresAt: '2027-07-01T12:00:00.000Z',
                   },
                 ]
@@ -121,11 +119,11 @@ describe('admin console applications-detail-a', () => {
     expect(screen.getByText('Does not expire')).toBeTruthy()
     expect(screen.queryByRole('columnheader', { name: 'Last used' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Next' }))
-    expect(await screen.findByText('Acme Inc.')).toBeTruthy()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Next' })).toHaveProperty('disabled', true))
     fireEvent.click(screen.getByRole('button', { name: 'Previous' }))
-    expect(await screen.findByText('Realm')).toBeTruthy()
+    expect(await screen.findByText('OIDC')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Next' }))
-    expect(await screen.findByText('Acme Inc.')).toBeTruthy()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Next' })).toHaveProperty('disabled', true))
     fireEvent.click(screen.getByRole('button', { name: 'Revoke' }))
     expect(await screen.findByText(/Jane Doe’s approval/)).toBeTruthy()
     fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Revoke authorization' }))
@@ -174,7 +172,7 @@ describe('admin console applications-detail-a', () => {
     expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
       'Overview',
       'OAuth',
-      'Authorizations',
+      'User authorizations',
       'Settings',
     ])
     fireEvent.mouseDown(screen.getByRole('tab', { name: 'OAuth' }), { button: 0, ctrlKey: false })

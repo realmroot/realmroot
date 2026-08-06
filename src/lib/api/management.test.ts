@@ -388,7 +388,6 @@ async function loadManagementApi(options: { userSecurity?: unknown } = {}) {
             },
           },
           requests: { $get: endpoint('agentAccessRequests.get') },
-          authorizations: { $get: endpoint('agentAccessGrants.get') },
           roles: {
             $get: endpoint('roles.get'),
             $post: endpoint('roles.post'),
@@ -499,7 +498,10 @@ async function loadManagementApi(options: { userSecurity?: unknown } = {}) {
         readiness: { $get: endpoint('readiness.get') },
         agents: {
           $get: endpoint('agentInventory.get'),
-          ':agentId': { retirement: { $put: endpoint('agent.delete') } },
+          ':agentId': {
+            retirement: { $put: endpoint('agent.delete') },
+            'access-grants': { $get: endpoint('agentAccessGrants.get') },
+          },
         },
         'audit-events': { $get: endpoint('agentAudit.get') },
         security: { policy: { $get: endpoint('security.get'), $patch: endpoint('security.patch') } },

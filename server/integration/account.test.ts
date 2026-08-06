@@ -227,16 +227,14 @@ describe('account self-service over real D1', () => {
     await expect(roles.json()).resolves.toMatchObject({
       roles: expect.arrayContaining([expect.objectContaining({ key: 'owner', predefined: true })]),
     })
-    const agentAccessGrants = await harness.request(
-      `/api/access/authorizations?organizationId=${organizationId}&status=active`,
-      {
-        headers: { cookie },
-      },
-    )
+    const agentAccessGrants = await harness.request('/api/agents/household-agent/access-grants?status=active', {
+      headers: { cookie },
+    })
     expect(agentAccessGrants.status, await agentAccessGrants.clone().text()).toBe(200)
     await expect(agentAccessGrants.json()).resolves.toMatchObject({
       items: [{ id: 'household-agent-grant', agentId: 'household-agent', scopes: ['household:read'] }],
     })
+    expect((await harness.request('/api/agents/missing-agent/access-grants', { headers: { cookie } })).status).toBe(404)
     const profile = await harness.request('/api/account/profile', { headers: { cookie } })
     await expect(profile.json()).resolves.toMatchObject({ user: { id: userId } })
     const developerAccess = await harness.request('/api/account/developer-console-access', {

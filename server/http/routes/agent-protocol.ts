@@ -220,19 +220,20 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
     return c.json(accessRequestSchema.parse(result))
   })
 
-  app.post('/access/authorizations/:authorizationId/credentials', async (c) => {
-    requireAgentScope(c, 'access-authorizations:issue')
+  app.post('/agents/:agentId/access-grants/:grantId/credentials', async (c) => {
+    requireAgentScope(c, 'access-grants:issue')
     if (!authApi.signJWT) throw unauthorized('Agent assertion signing is unavailable.')
     const principal = await resourcePrincipal(authApi, getDeps(c), c)
+    if (principal.identityId !== c.req.param('agentId')) throw forbidden('Agent access grant was not found.')
     const { proof } = await readJson(c, targetCredentialProofSchema)
     const dpopProof = proof.value
-    const grant = await getDeps(c).externalResources.findGrant(c.req.param('authorizationId'))
-    if (!grant || grant.agentIdentityId !== principal.identityId) {
-      throw forbidden('Agent authorization was not found.')
+    const grant = await getDeps(c).externalResources.findGrant(c.req.param('grantId'))
+    if (!grant || grant.status !== 'active' || grant.agentIdentityId !== principal.identityId) {
+      throw forbidden('Agent access grant was not found.')
     }
     const request = await getDeps(c).externalResources.findAccessRequestByGrant(grant.id)
-    if (!request) throw forbidden('Agent authorization has no approved request.')
-    const credentialUrl = `${new URL(requireOidcIssuer()).origin}/api/access/authorizations/${encodeURIComponent(grant.id)}/credentials`
+    if (!request) throw forbidden('Agent access grant has no approved request.')
+    const credentialUrl = `${new URL(requireOidcIssuer()).origin}/api/agents/${encodeURIComponent(principal.identityId)}/access-grants/${encodeURIComponent(grant.id)}/credentials`
     const result = await createAccessRequestCredential(getDeps(c), request.id, dpopProof, credentialUrl, principal, {
       issuer: requireOidcIssuer(),
       sign: (payload, type) =>
@@ -241,7 +242,7 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
         ),
     })
     c.header('Link', `<${credentialOfferProfile}>; rel="profile"`)
-    return c.json(targetTokenSchema.parse(result))
+    return c.json(targetTokenSchema.parse(result), 201)
   })
 
   return app

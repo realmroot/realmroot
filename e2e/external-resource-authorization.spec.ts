@@ -133,14 +133,14 @@ test.describe('external API resource authorization', () => {
       })
       expect(directBody.authorization.act).not.toHaveProperty('host')
 
-      const grantsResponse = await page.request.get(`/api/access/authorizations?agentId=${identity.agent.id}`)
+      const grantsResponse = await page.request.get(`/api/agents/${identity.agent.id}/access-grants`)
       expect(grantsResponse.status(), await grantsResponse.text()).toBe(200)
       const grants = (await grantsResponse.json()) as {
         items: Array<{ id: string; resource: { id: string } }>
       }
       const grant = grants.items.find((candidate) => candidate.resource.id === resource.id)
       expect(grant).toBeDefined()
-      const revoked = await page.request.delete(`/api/account/access-grants/${grant!.id}`)
+      const revoked = await page.request.delete(`/api/agents/${identity.agent.id}/access-grants/${grant!.id}`)
       expect(revoked.status()).toBe(204)
       const afterRevocation = plugin.listResources<{
         items: Array<{ links: { self: string }; agentAuthorization: { authorizedScopes: string[] } }>
