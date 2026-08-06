@@ -646,7 +646,7 @@ export interface ExternalResourceRepository {
     scope?: AgentAuthorityInventoryScope,
   ): Promise<PaginatedResult<AgentAccessRequestRecord>>
   listPendingAccessRequestsByAgent(agentIdentityId: string, now: Date): Promise<AgentAccessRequestRecord[]>
-  listPendingAccessRequests(): Promise<AgentAccessRequestRecord[]>
+  listPendingAccessRequests(now: Date): Promise<AgentAccessRequestRecord[]>
   decideAccessRequest(
     id: string,
     input: {

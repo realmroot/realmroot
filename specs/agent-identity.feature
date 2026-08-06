@@ -479,6 +479,7 @@ Feature: Agent identity and delegated API authorization
       When an authorized controller approves it
       Then the controller confirms the named Agent, named resource, displayed resource account, exact scopes, and one-time, limited, or persistent mode
       And the Account Center request queue identifies the named Agent and named resource before the controller opens the decision
+      And expired requests do not appear in the Account Center request queue
       And stable Agent and resource identifiers remain visible as supporting information
       And limited access accepts an exact future local date and time while rejecting empty or past values
       And no account-selection control is displayed

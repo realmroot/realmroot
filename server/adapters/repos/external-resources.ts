@@ -297,11 +297,11 @@ export function createExternalResourceRepository(db: Database): ExternalResource
         .orderBy(agentAccessRequest.createdAt)
     },
 
-    async listPendingAccessRequests() {
+    async listPendingAccessRequests(now) {
       return db
         .select()
         .from(agentAccessRequest)
-        .where(eq(agentAccessRequest.status, 'pending'))
+        .where(and(eq(agentAccessRequest.status, 'pending'), gt(agentAccessRequest.expiresAt, now)))
         .orderBy(agentAccessRequest.createdAt)
     },
 
