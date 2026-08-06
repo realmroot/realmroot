@@ -9,6 +9,7 @@ import {
   agentIdentityBinding,
   apiResource,
   externalTokenLease,
+  member,
   organizationRole,
   resourceAccountConnection,
   resourceConnectionIntent,
@@ -97,6 +98,42 @@ describe('authorization management over real D1', () => {
     }
   })
 
+  it('atomically assigns the authenticated creator as Organization Owner [spec: admin-console/admin-create-organization]', async () => {
+    const cookie = await signInAdmin(harness)
+    const [admin] = await harness.db.select({ id: user.id }).from(user).where(eq(user.role, 'admin')).limit(1)
+
+    const response = await postJson(harness, cookie, '/api/organizations', {
+      slug: 'owned-on-create',
+      name: 'Owned On Create',
+    })
+    const created = (await response.json()) as { id: string }
+    const memberships = await harness.db.select().from(member).where(eq(member.organizationId, created.id))
+
+    expect(memberships).toHaveLength(1)
+    expect(memberships[0]).toMatchObject({ userId: admin.id, role: 'owner' })
+
+    await expect(
+      harness.deps.authorization.createOrganization(
+        {
+          id: 'org-owner-rollback',
+          slug: 'owner-rollback',
+          name: 'Owner Rollback',
+          displayName: null,
+          logo: null,
+          disabled: false,
+          disabledReason: null,
+        },
+        {
+          id: 'member-owner-rollback',
+          userId: 'missing-user',
+          roles: ['owner'],
+          title: null,
+        },
+      ),
+    ).rejects.toThrow()
+    await expect(harness.deps.authorization.findOrganization('org-owner-rollback')).resolves.toBeNull()
+  })
+
   it('returns User-owned audit events without an Organization filter', async () => {
     const adminCookie = await signInAdmin(harness)
     const personalUser = await createUser(harness, adminCookie, {
@@ -147,15 +184,25 @@ describe('authorization management over real D1', () => {
   })
 
   it('rolls back a Role write when its audit insert fails', async () => {
-    const organization = await harness.deps.authorization.createOrganization({
-      id: 'org-audit',
-      slug: 'org-audit',
-      name: 'Audit Organization',
-      displayName: null,
-      logo: null,
-      disabled: false,
-      disabledReason: null,
-    })
+    await signInAdmin(harness)
+    const [admin] = await harness.db.select({ id: user.id }).from(user).where(eq(user.role, 'admin')).limit(1)
+    const organization = await harness.deps.authorization.createOrganization(
+      {
+        id: 'org-audit',
+        slug: 'org-audit',
+        name: 'Audit Organization',
+        displayName: null,
+        logo: null,
+        disabled: false,
+        disabledReason: null,
+      },
+      {
+        id: 'org-audit-owner',
+        userId: admin.id,
+        roles: ['owner'],
+        title: null,
+      },
+    )
     const occurredAt = new Date()
     await harness.db.insert(agentAuditEvent).values({
       id: 'duplicate-audit',
@@ -383,27 +430,20 @@ describe('authorization management over real D1', () => {
     const organization = (await (
       await postJson(harness, cookie, '/api/organizations', { slug: 'owner-race', name: 'Owner Race' })
     ).json()) as { id: string }
-    const userIds = await Promise.all(
-      ['one', 'two'].map((name) =>
-        createUser(harness, cookie, {
-          email: `${name}@example.com`,
-          username: `owner-${name}`,
-          displayName: `Owner ${name}`,
-          password: `owner-${name}-password-2026`,
-        }),
-      ),
-    )
-    const members = await Promise.all(
-      userIds.map(
-        async (userId) =>
-          (await (
-            await postJson(harness, cookie, `/api/organizations/${organization.id}/members`, {
-              userId,
-              roles: ['owner'],
-            })
-          ).json()) as { id: string },
-      ),
-    )
+    const creator = (await harness.deps.authorization.listMembers(organization.id, { limit: 10, offset: 0 })).items[0]
+    const userId = await createUser(harness, cookie, {
+      email: 'one@example.com',
+      username: 'owner-one',
+      displayName: 'Owner One',
+      password: 'owner-one-password-2026',
+    })
+    const addedOwner = (await (
+      await postJson(harness, cookie, `/api/organizations/${organization.id}/members`, {
+        userId,
+        roles: ['owner'],
+      })
+    ).json()) as { id: string }
+    const members = [creator, addedOwner]
 
     const responses = await Promise.all(
       members.map((member) =>
@@ -424,22 +464,20 @@ describe('authorization management over real D1', () => {
     const organization = (await (
       await postJson(harness, cookie, '/api/organizations', { slug: 'owner-delete-race', name: 'Owner Delete Race' })
     ).json()) as { id: string }
-    const members = await Promise.all(
-      ['delete-one', 'delete-two'].map(async (name) => {
-        const userId = await createUser(harness, cookie, {
-          email: `${name}@example.com`,
-          username: name,
-          displayName: name,
-          password: `${name}-password-2026`,
-        })
-        return (await (
-          await postJson(harness, cookie, `/api/organizations/${organization.id}/members`, {
-            userId,
-            roles: ['owner'],
-          })
-        ).json()) as { id: string }
-      }),
-    )
+    const creator = (await harness.deps.authorization.listMembers(organization.id, { limit: 10, offset: 0 })).items[0]
+    const userId = await createUser(harness, cookie, {
+      email: 'delete-one@example.com',
+      username: 'delete-one',
+      displayName: 'Delete One',
+      password: 'delete-one-password-2026',
+    })
+    const addedOwner = (await (
+      await postJson(harness, cookie, `/api/organizations/${organization.id}/members`, {
+        userId,
+        roles: ['owner'],
+      })
+    ).json()) as { id: string }
+    const members = [creator, addedOwner]
 
     const responses = await Promise.all(
       members.map((member) =>
@@ -1111,7 +1149,7 @@ describe('authorization management over real D1', () => {
     const members = await harness.request(`/api/organizations/${organization.id}/members`, {
       headers: { cookie },
     })
-    expect(((await members.json()) as { members: unknown[] }).members.length).toBe(1)
+    expect(((await members.json()) as { members: unknown[] }).members.length).toBe(2)
 
     const role = await postJson(harness, cookie, `/api/organizations/${organization.id}/roles`, {
       key: 'org-lead',

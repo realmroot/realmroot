@@ -54,16 +54,24 @@ import {
 } from '@shared/organization-access'
 import { realmrootScopeRegistry } from '@shared/scope-registry'
 
-export function createOrganization(deps: Deps, input: CreateOrganizationRequest) {
-  return deps.authorization.createOrganization({
-    id: createId('org'),
-    slug: input.slug,
-    name: input.name,
-    displayName: input.displayName ?? null,
-    logo: input.logo ?? null,
-    disabled: false,
-    disabledReason: null,
-  })
+export function createOrganization(deps: Deps, input: CreateOrganizationRequest, ownerUserId: string) {
+  return deps.authorization.createOrganization(
+    {
+      id: createId('org'),
+      slug: input.slug,
+      name: input.name,
+      displayName: input.displayName ?? null,
+      logo: input.logo ?? null,
+      disabled: false,
+      disabledReason: null,
+    },
+    {
+      id: createId('mem'),
+      userId: ownerUserId,
+      roles: ['owner'],
+      title: null,
+    },
+  )
 }
 
 export function listOrganizations(deps: Deps, pagination: PaginationQuery, organizationIds?: string[]) {

@@ -177,7 +177,7 @@ describe('authorization CRUD and assignment policy', () => {
     authorization.findInvitation.mockResolvedValue(invitation)
     const deps = { authorization } as unknown as Deps
 
-    await expect(createOrganization(deps, { slug: 'acme', name: 'Acme' })).resolves.toBe(organization)
+    await expect(createOrganization(deps, { slug: 'acme', name: 'Acme' }, 'creator-1')).resolves.toBe(organization)
     expect(authorization.createOrganization).toHaveBeenCalledWith(
       expect.objectContaining({
         id: expect.stringMatching(/^org_/),
@@ -185,6 +185,12 @@ describe('authorization CRUD and assignment policy', () => {
         logo: null,
         disabled: false,
         disabledReason: null,
+      }),
+      expect.objectContaining({
+        id: expect.stringMatching(/^mem_/),
+        userId: 'creator-1',
+        roles: ['owner'],
+        title: null,
       }),
     )
     await expect(listOrganizations(deps, { limit: 20, offset: 0 })).resolves.toEqual({

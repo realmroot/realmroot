@@ -175,6 +175,7 @@ Feature: Admin Console
   Scenario: Organizations page creates an organization
     When I create an organization
     Then it appears in authorization inventory
+    And the authenticated creator becomes its Owner without an owner field in the request
 
   @entrypoint:product-ui @journey:admin-govern-organization
   Scenario: Organization detail separates inventory from governance operations

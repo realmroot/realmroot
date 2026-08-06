@@ -32,9 +32,19 @@ import {
 
 export function createDrizzleAuthorizationRepository(db: Database): AuthorizationRepository {
   return {
-    async createOrganization(input) {
+    async createOrganization(input, owner) {
       const now = new Date()
-      await db.insert(organization).values({ ...input, createdAt: now, updatedAt: now })
+      const { roles, ...ownerRecord } = owner
+      await db.batch([
+        db.insert(organization).values({ ...input, createdAt: now, updatedAt: now }),
+        db.insert(member).values({
+          ...ownerRecord,
+          organizationId: input.id,
+          role: serializeRoles(roles),
+          createdAt: now,
+          updatedAt: now,
+        }),
+      ])
       return { ...input, createdAt: now.toISOString(), updatedAt: now.toISOString() }
     },
 

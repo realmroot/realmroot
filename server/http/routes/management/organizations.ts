@@ -69,8 +69,10 @@ managementOrganizationsRoute.get('/', async (c) =>
 
 managementOrganizationsRoute.post('/', async (c) => {
   requirePlatformAccess(c, 'organizations:write')
+  const ownerUserId = getActorUserId(c)
+  if (!ownerUserId) throw forbidden('Only authenticated users can create Organizations.')
   const organization = organizationResponseSchema.parse(
-    await createOrganization(getDeps(c), await readJson(c, createOrganizationRequestSchema)),
+    await createOrganization(getDeps(c), await readJson(c, createOrganizationRequestSchema), ownerUserId),
   )
   c.header('Location', `/api/organizations/${encodeURIComponent(organization.id)}`)
   return c.json(organization, 201)

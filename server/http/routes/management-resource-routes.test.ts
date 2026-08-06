@@ -69,6 +69,7 @@ describe('management resource routes', () => {
     await expectJson(app, '/organizations', 'GET', undefined, 200)
     const createdOrganization = await expectJson(app, '/organizations', 'POST', { slug: 'acme', name: 'Acme' }, 201)
     expect(createdOrganization.headers.get('location')).toBe('/api/organizations/org-1')
+    expect(authorizationService.createOrganization).toHaveBeenCalledWith({ slug: 'acme', name: 'Acme' }, 'admin-1')
     await expectJson(app, '/organizations/org-1', 'GET', undefined, 200)
     await expectJson(app, '/organizations/org-1', 'PATCH', { disabled: true }, 200)
     await expectStatus(app, '/organizations/org-1', 'DELETE', undefined, 204)
