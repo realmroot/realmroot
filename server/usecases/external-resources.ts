@@ -952,6 +952,7 @@ export async function getAccessRequest(
 }
 
 export async function listControllerAccessRequests(deps: Deps, actorUserId: string) {
+  const now = new Date()
   const memberships = await deps.authorization.listUserMemberships(actorUserId)
   const [userConnections, organizationConnections] = await Promise.all([
     deps.externalResources.listConnectionsByUser(actorUserId),
@@ -961,7 +962,7 @@ export async function listControllerAccessRequests(deps: Deps, actorUserId: stri
   ])
   const connections = [...userConnections, ...organizationConnections]
   const connectionIds = new Set(connections.map((connection) => connection.id))
-  const requests = (await deps.externalResources.listPendingAccessRequests()).filter(
+  const requests = (await deps.externalResources.listPendingAccessRequests(now)).filter(
     (request) => request.connectionId === null || connectionIds.has(request.connectionId),
   )
   const controlledRequests = []

@@ -1,9 +1,24 @@
 import { applyD1Migrations, env, reset } from 'cloudflare:test'
-import { agentAccessGrant, agentIdentity, verification } from '@server/db/schema'
+import {
+  agentAccessGrant,
+  agentAccessRequest,
+  agentIdentity,
+  agentIdentityBinding,
+  verification,
+} from '@server/db/schema'
 import { privateKeyToAccount } from 'viem/accounts'
 import { createSiweMessage } from 'viem/siwe'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { baseURL, bootstrapAdmin, createHarness, createUser, type Harness, signIn, signInAdmin } from './harness'
+import {
+  baseURL,
+  bootstrapAdmin,
+  createHarness,
+  createUser,
+  type Harness,
+  seedAgent,
+  signIn,
+  signInAdmin,
+} from './harness'
 
 afterEach(async () => {
   await reset()
@@ -87,6 +102,50 @@ describe('account self-service over real D1', () => {
     })
     expect(updated.status, await updated.clone().text()).toBe(200)
     expect(((await updated.json()) as { user: { displayName: string } }).user.displayName).toBe('Renamed Account')
+  })
+
+  it('excludes expired Agent access requests from the controller queue [spec: agent-identity/agent-resource-approval]', async () => {
+    const { cookie, userId } = await signedInUser(harness)
+    const seededAgent = await seedAgent(harness, userId, 'expired-access-request')
+    const now = new Date()
+    await harness.db.insert(agentIdentity).values({
+      id: 'expired-access-request-identity',
+      issuer: 'http://localhost/api/auth',
+      subject: 'expired-access-request-subject',
+      name: 'Expired request Agent',
+      ownerUserId: userId,
+      status: 'active',
+      createdAt: now,
+      updatedAt: now,
+    })
+    await harness.db.insert(agentIdentityBinding).values({
+      id: 'expired-access-request-binding',
+      agentIdentityId: 'expired-access-request-identity',
+      protocolAgentId: seededAgent.agentId,
+      status: 'active',
+      boundAt: now,
+      createdAt: now,
+      updatedAt: now,
+    })
+    await harness.db.insert(agentAccessRequest).values({
+      id: 'expired-access-request',
+      resourceId: 'res_realmroot',
+      agentIdentityId: 'expired-access-request-identity',
+      bindingId: 'expired-access-request-binding',
+      scopes: ['agents:read'],
+      authorizationDetails: [],
+      status: 'pending',
+      approvalTokenHash: 'expired-access-request-token-hash',
+      encryptedApprovalToken: 'expired-access-request-token',
+      expiresAt: new Date(now.getTime() - 60_000),
+      createdAt: new Date(now.getTime() - 120_000),
+      updatedAt: now,
+    })
+
+    const response = await harness.request('/api/account/access-requests', { headers: { cookie } })
+
+    expect(response.status, await response.clone().text()).toBe(200)
+    await expect(response.json()).resolves.toMatchObject({ items: [], pagination: { total: 0 } })
   })
 
   it('creates and manages a consumer Organization without Console access [spec: account-center/account-organization-management] [spec: account-center/consumer-organization-boundary]', async () => {
