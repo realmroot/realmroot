@@ -81,6 +81,48 @@ describe('authorization management over real D1', () => {
     }
   })
 
+  it('never exposes the Realm sentinel as an Organization aggregate', async () => {
+    const cookie = await signInAdmin(harness)
+    for (const request of [
+      harness.request('/api/organizations/org_platform', { headers: { cookie } }),
+      harness.request('/api/organizations/org_platform/members', { headers: { cookie } }),
+      harness.request('/api/organizations/org_platform/roles', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', cookie },
+        body: JSON.stringify({ key: 'invalid', displayName: 'Invalid', scopes: [] }),
+      }),
+    ]) {
+      const response = await request
+      expect(response.status).toBe(404)
+    }
+  })
+
+  it('returns User-owned audit events without an Organization filter', async () => {
+    const adminCookie = await signInAdmin(harness)
+    const personalUser = await createUser(harness, adminCookie, {
+      email: 'personal-audit@example.com',
+      username: 'personal-audit',
+      displayName: 'Personal Audit',
+      password: 'personal-audit-password-2026',
+    })
+    await harness.db.insert(agentAuditEvent).values({
+      id: 'personal-audit-event',
+      action: 'agent.identity_enrolled',
+      result: 'allowed',
+      realmOwned: false,
+      ownerUserId: personalUser,
+      occurredAt: new Date(),
+    })
+    const cookie = await signIn(harness, 'personal-audit@example.com', 'personal-audit-password-2026')
+
+    const response = await harness.request('/api/realm/audit-events', { headers: { cookie } })
+
+    expect(response.status).toBe(200)
+    expect(((await response.json()) as { items: { id: string }[] }).items.map((event) => event.id)).toContain(
+      'personal-audit-event',
+    )
+  })
+
   it('does not delete a dynamic Role referenced by a pending invitation', async () => {
     const cookie = await signInAdmin(harness)
     const organization = (await (
@@ -119,6 +161,8 @@ describe('authorization management over real D1', () => {
       id: 'duplicate-audit',
       action: 'seed',
       result: 'allowed',
+      realmOwned: false,
+      ownerOrganizationId: organization.id,
       occurredAt,
     })
 
@@ -131,6 +175,9 @@ describe('authorization management over real D1', () => {
           id: 'duplicate-audit',
           action: 'organization.role.created',
           result: 'allowed',
+          realmOwned: false,
+          ownerUserId: null,
+          ownerOrganizationId: organization.id,
           controllerUserId: null,
           subjectIssuer: null,
           subject: null,
@@ -149,6 +196,186 @@ describe('authorization management over real D1', () => {
     expect(
       await harness.db.select().from(organizationRole).where(eq(organizationRole.organizationId, organization.id)),
     ).toEqual([])
+  })
+
+  it('rolls back an Agent grant decision when its audit insert fails', async () => {
+    await signInAdmin(harness)
+    const [admin] = await harness.db.select({ id: user.id }).from(user).where(eq(user.email, 'admin@example.com'))
+    const now = new Date()
+    const resource = await createResource(harness.deps, {
+      identifier: 'atomic-agent-api',
+      name: 'Atomic Agent API',
+      resourceUrl: 'https://atomic-agent.example.com/api',
+    })
+    await harness.db.insert(agentHost).values({
+      id: 'atomic-host',
+      userId: admin.id,
+      status: 'active',
+      createdAt: now,
+      updatedAt: now,
+    })
+    await harness.db.insert(agent).values({
+      id: 'atomic-agent',
+      name: 'Atomic Agent',
+      userId: admin.id,
+      hostId: 'atomic-host',
+      status: 'active',
+      publicKey: '{}',
+      createdAt: now,
+      updatedAt: now,
+    })
+    await harness.db.insert(agentIdentity).values({
+      id: 'atomic-identity',
+      issuer: 'http://localhost/api/auth',
+      subject: 'atomic-subject',
+      name: 'Atomic identity',
+      ownerUserId: admin.id,
+      status: 'active',
+      createdAt: now,
+      updatedAt: now,
+    })
+    await harness.db.insert(agentIdentityBinding).values({
+      id: 'atomic-binding',
+      agentIdentityId: 'atomic-identity',
+      protocolAgentId: 'atomic-agent',
+      status: 'active',
+      boundAt: now,
+      createdAt: now,
+      updatedAt: now,
+    })
+    await harness.db.insert(agentAccessRequest).values({
+      id: 'atomic-request',
+      resourceId: resource.id,
+      connectionId: null,
+      agentIdentityId: 'atomic-identity',
+      bindingId: 'atomic-binding',
+      scopes: ['files:read'],
+      status: 'pending',
+      approvalTokenHash: 'atomic-approval-hash',
+      encryptedApprovalToken: 'encrypted-approval',
+      expiresAt: new Date(now.getTime() + 60_000),
+      createdAt: now,
+      updatedAt: now,
+    })
+    const audit = {
+      id: 'duplicate-agent-audit',
+      action: 'api_resource.access_decided',
+      result: 'allowed',
+      realmOwned: false,
+      ownerUserId: admin.id,
+      ownerOrganizationId: null,
+      controllerUserId: admin.id,
+      subjectIssuer: null,
+      subject: null,
+      agentIdentityId: 'atomic-identity',
+      hostId: 'atomic-host',
+      resourceId: resource.id,
+      resourceConnectionId: null,
+      accessGrantId: 'atomic-grant',
+      scopes: ['files:read'],
+      reasonCode: null,
+      metadata: null,
+      occurredAt: now,
+    }
+    await harness.db.insert(agentAuditEvent).values(audit)
+
+    await expect(
+      harness.deps.externalResources.approveAccessRequestWithAudit(
+        {
+          id: 'atomic-grant',
+          resourceId: resource.id,
+          connectionId: null,
+          agentIdentityId: 'atomic-identity',
+          scopes: ['files:read'],
+          authorizationDetails: [],
+          mode: 'ongoing',
+          status: 'active',
+          grantedByUserId: admin.id,
+          expiresAt: null,
+          revokedAt: null,
+          createdAt: now,
+          updatedAt: now,
+        },
+        'atomic-request',
+        {
+          status: 'approved',
+          grantId: 'atomic-grant',
+          connectionId: null,
+          decidedAt: now,
+          updatedAt: now,
+        },
+        audit,
+      ),
+    ).rejects.toThrow()
+    await expect(
+      harness.db
+        .select({ id: agentAccessGrant.id })
+        .from(agentAccessGrant)
+        .where(eq(agentAccessGrant.id, 'atomic-grant')),
+    ).resolves.toEqual([])
+    await expect(
+      harness.db
+        .select({ status: agentAccessRequest.status })
+        .from(agentAccessRequest)
+        .where(eq(agentAccessRequest.id, 'atomic-request')),
+    ).resolves.toEqual([{ status: 'pending' }])
+
+    const deniedAudit = { ...audit, id: 'atomic-denied-audit', result: 'denied', accessGrantId: null }
+    await expect(
+      harness.deps.externalResources.decideAccessRequestWithAudit(
+        'atomic-request',
+        { status: 'denied', grantId: null, decidedAt: now, updatedAt: now },
+        deniedAudit,
+      ),
+    ).resolves.not.toBeNull()
+    await expect(
+      harness.deps.externalResources.decideAccessRequestWithAudit(
+        'atomic-request',
+        { status: 'denied', grantId: null, decidedAt: new Date(), updatedAt: new Date() },
+        { ...deniedAudit, id: 'atomic-duplicate-denied-audit' },
+      ),
+    ).resolves.toBeNull()
+    await expect(
+      harness.db
+        .select({ id: agentAuditEvent.id })
+        .from(agentAuditEvent)
+        .where(eq(agentAuditEvent.id, 'atomic-duplicate-denied-audit')),
+    ).resolves.toEqual([])
+
+    await harness.db.insert(agentAccessGrant).values({
+      id: 'atomic-revoke-grant',
+      resourceId: resource.id,
+      connectionId: null,
+      agentIdentityId: 'atomic-identity',
+      scopes: ['files:read'],
+      authorizationDetails: [],
+      mode: 'ongoing',
+      status: 'active',
+      grantedByUserId: admin.id,
+      createdAt: now,
+      updatedAt: now,
+    })
+    const revokedAudit = {
+      ...audit,
+      id: 'atomic-revoked-audit',
+      action: 'api_resource.access_revoked',
+      accessGrantId: 'atomic-revoke-grant',
+    }
+    await expect(
+      harness.deps.externalResources.revokeGrantWithAudit('atomic-revoke-grant', [], now, revokedAudit),
+    ).resolves.toBe(true)
+    await expect(
+      harness.deps.externalResources.revokeGrantWithAudit('atomic-revoke-grant', [], new Date(), {
+        ...revokedAudit,
+        id: 'atomic-duplicate-revoked-audit',
+      }),
+    ).resolves.toBe(false)
+    await expect(
+      harness.db
+        .select({ id: agentAuditEvent.id })
+        .from(agentAuditEvent)
+        .where(eq(agentAuditEvent.id, 'atomic-duplicate-revoked-audit')),
+    ).resolves.toEqual([])
   })
 
   it('allows only one concurrent last-Owner demotion', async () => {
@@ -675,6 +902,7 @@ describe('authorization management over real D1', () => {
       stateHash: 'archive-state',
       resourceId: resource.id,
       ownerUserId: admin.id,
+      initiatedByUserId: admin.id,
       scopes: ['files:read'],
       encryptedPkceVerifier: 'encrypted-verifier',
       status: 'pending',
@@ -773,6 +1001,7 @@ describe('authorization management over real D1', () => {
         resourceId: resource.id,
         ownerUserId: admin.id,
         ownerOrganizationId: null,
+        initiatedByUserId: admin.id,
         scopes: ['files:read'],
         authorizationDetails: [],
         encryptedPkceVerifier: 'late-verifier',

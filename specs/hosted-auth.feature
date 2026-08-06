@@ -133,6 +133,7 @@ Feature: Hosted authentication
     Given a third-party OIDC application requests scopes
     When I switch accounts from the consent page
     Then Realmroot returns to the same consent request after sign-in
+    And consent granted by the previous account is not reused for the new account
 
   @entrypoint:product-ui @journey:oauth-consent-deny
   Scenario: OAuth consent denial returns safely to the client callback

@@ -8,7 +8,7 @@ const context: AuthorizationContext = {
 }
 
 describe('authorization context', () => {
-  it('requires both the target tenant and scope to match', () => {
+  it('requires both the target tenant and scope to match [spec: management-api/management-tenant-owner-enforcement]', () => {
     expect(() => authorize(context, { type: 'organization', id: 'org-1' }, 'applications:read')).not.toThrow()
     expect(() => authorize(context, { type: 'organization', id: 'org-2' }, 'applications:read')).toThrow(
       'cannot access the target tenant',
@@ -22,6 +22,16 @@ describe('authorization context', () => {
     expect(() => authorize(context, { type: 'user', id: 'org-1' }, 'applications:read')).toThrow(
       'cannot access the target tenant',
     )
+  })
+
+  it('does not treat the Realm boundary as the platform sentinel Organization', () => {
+    const realmContext: AuthorizationContext = {
+      subject: { type: 'user', id: 'admin-1' },
+      tenant: { type: 'realm' },
+      scopes: new Set(['applications:read']),
+    }
+    expect(() => authorize(realmContext, { type: 'realm' }, 'applications:read')).not.toThrow()
+    expect(() => authorize(realmContext, { type: 'organization', id: 'org_platform' }, 'applications:read')).toThrow()
   })
 
   it.each([

@@ -640,6 +640,21 @@ describe('Agent identity lifecycle', () => {
     )
 
     vi.mocked(deps.agentIdentities.findIntent).mockResolvedValue(
+      intent({ ownerUserId: null, ownerOrganizationId: 'org-1' }),
+    )
+    vi.mocked(deps.authorization.findMemberByOrganizationUser).mockResolvedValue(member('admin'))
+    vi.mocked(deps.agentIdentities.approveIntent).mockImplementation(async ({ identity, binding }) => ({
+      identity: identity!,
+      bindings: [{ ...binding, hostId: 'host-1' }],
+    }))
+    await expect(approveAgentEnrollment(deps, 'intent-1', 'https://auth.example.com', 'user-1')).resolves.toMatchObject(
+      { identity: { homeSpace: { type: 'organization', organizationId: 'org-1' } } },
+    )
+    expect(deps.agentAudit.append).toHaveBeenLastCalledWith(
+      expect.objectContaining({ ownerUserId: null, ownerOrganizationId: 'org-1' }),
+    )
+
+    vi.mocked(deps.agentIdentities.findIntent).mockResolvedValue(
       intent({ agentIdentityId: 'identity-1', requestedName: null }),
     )
     vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(aggregate())

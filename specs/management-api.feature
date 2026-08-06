@@ -162,6 +162,14 @@ Feature: Unified Realmroot resource API
     And the server limits each principal to the records that principal may inspect
     And Account Center does not publish duplicate Organization authority collection paths
 
+  @entrypoint:restish @journey:management-tenant-owner-enforcement
+  Scenario: Resource ownership is enforced consistently across the Management API
+    Given User, Organization, and Realm resources exist
+    When a Session or tenant-bound Agent lists, reads, updates, or deletes those resources
+    Then required scopes and the persisted resource boundary are checked by the same authorizer
+    And an owner selector can only narrow to a tenant the caller controls
+    And the Realm sentinel is never exposed as an Organization membership
+
 
   @entrypoint:restish @journey:management-restish-settings-update
   Scenario: An authorized Agent manages tenant settings

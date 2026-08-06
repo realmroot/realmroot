@@ -199,6 +199,7 @@ describe('external API resource authorization', () => {
     intent = {
       ...intent!,
       id: 'organization-connection',
+      ownerUserId: null,
       ownerOrganizationId: 'org-1',
     }
     vi.mocked(deps.externalHttp.fetch).mockImplementation(async (request) => {
@@ -227,7 +228,7 @@ describe('external API resource authorization', () => {
       credentialExpiresAt: null,
     })
 
-    intent = { ...intent!, id: 'subject-fallback-connection', ownerOrganizationId: null }
+    intent = { ...intent!, id: 'subject-fallback-connection', ownerUserId: 'user-1', ownerOrganizationId: null }
     vi.mocked(deps.externalHttp.fetch).mockImplementation(async (request) => {
       if (request.url.endsWith('/token')) {
         return Response.json({
@@ -267,6 +268,7 @@ describe('external API resource authorization', () => {
       resourceId: 'resource-1',
       ownerUserId: 'user-1',
       ownerOrganizationId: null,
+      initiatedByUserId: 'user-1',
       scopes: ['openid', 'offline_access', 'projects:read'],
       authorizationDetails: [],
       encryptedPkceVerifier: 'sealed:verifier',
@@ -517,6 +519,7 @@ describe('external API resource authorization', () => {
       resourceId: 'resource-1',
       ownerUserId: 'user-1',
       ownerOrganizationId: null,
+      initiatedByUserId: 'user-1',
       scopes: ['offline_access', 'openid', 'projects:read', 'projects:write'],
       authorizationDetails: [],
       encryptedPkceVerifier: 'sealed:pkce-verifier',
@@ -614,8 +617,9 @@ describe('external API resource authorization', () => {
       id: 'reauthorization-intent',
       stateHash: 'state-hash',
       resourceId: 'resource-1',
-      ownerUserId: 'user-1',
-      ownerOrganizationId: null,
+      ownerUserId: null,
+      ownerOrganizationId: 'org-1',
+      initiatedByUserId: 'user-1',
       scopes: ['offline_access', 'openid', 'projects:read'],
       authorizationDetails: template,
       encryptedPkceVerifier: 'sealed:pkce-verifier',
@@ -626,7 +630,12 @@ describe('external API resource authorization', () => {
       createdAt: now,
       updatedAt: now,
     }
-    const existing = { ...connectionRecord(), authorizationDetails: [...retained, ...removed] }
+    const existing = {
+      ...connectionRecord(),
+      ownerUserId: null,
+      ownerOrganizationId: 'org-1',
+      authorizationDetails: [...retained, ...removed],
+    }
     const staleGrant = { ...grantRecord(), authorizationDetails: removed }
     const staleScopeGrant = { ...grantRecord(), id: 'stale-scope-grant', scopes: ['projects:write'] }
     const missingContextGrant = { ...grantRecord(), id: 'missing-context-grant', authorizationDetails: [] }
@@ -670,6 +679,8 @@ describe('external API resource authorization', () => {
     expect(deps.agentAudit.append).toHaveBeenCalledWith(
       expect.objectContaining({
         action: 'api_resource.access_revoked',
+        ownerUserId: null,
+        ownerOrganizationId: 'org-1',
         reasonCode: 'connection_authorization_changed',
         metadata: { authorizationDetails: [{ type: 'project_access', identifier: 'project-2' }] },
       }),
@@ -685,6 +696,7 @@ describe('external API resource authorization', () => {
       resourceId: 'resource-1',
       ownerUserId: 'user-1',
       ownerOrganizationId: null,
+      initiatedByUserId: 'user-1',
       scopes: ['offline_access', 'openid', 'projects:read'],
       authorizationDetails: [],
       encryptedPkceVerifier: 'sealed:pkce-verifier',
@@ -1063,6 +1075,24 @@ describe('external API resource authorization', () => {
       'request-1',
       expect.objectContaining({ connectionId: 'connection-1' }),
     )
+    const mismatchedIdentity = identityAggregate()
+    mismatchedIdentity.identity.ownerUserId = null
+    mismatchedIdentity.identity.ownerOrganizationId = 'org-1'
+    vi.mocked(deps.authorization.findMemberByOrganizationUser).mockResolvedValue({
+      id: 'member-1',
+      organizationId: 'org-1',
+      userId: 'user-1',
+      roles: ['admin'],
+      title: null,
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+    })
+    vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(mismatchedIdentity)
+    await expect(
+      decideAgentAccessRequestByToken(deps, 'approval-token', { decision: 'approve', mode: 'once' }, 'user-1'),
+    ).rejects.toThrow('Resource account connection is outside the Agent home space.')
+
+    vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
     vi.mocked(deps.externalResources.createGrant).mockResolvedValueOnce(null)
     await expect(
       decideAgentAccessRequestByToken(deps, 'approval-token', { decision: 'approve', mode: 'once' }, 'user-1'),
@@ -3942,6 +3972,7 @@ describe('external API resource authorization', () => {
       resourceId: 'resource-1',
       ownerUserId: 'user-1',
       ownerOrganizationId: null,
+      initiatedByUserId: 'user-1',
       scopes: ['openid'],
       authorizationDetails: [],
       encryptedPkceVerifier: 'sealed:pkce-verifier',

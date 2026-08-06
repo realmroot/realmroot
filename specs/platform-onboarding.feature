@@ -42,7 +42,7 @@ Feature: Platform bootstrap and route access
     Given no users exist
     When I submit the onboarding form with admin profile and password details
     Then the first admin user is created
-    And a private platform Organization is created with the first admin as Owner
+    And a private Realm sentinel is created without Organization membership
     And the page confirms that Console setup can continue from sign-in
 
   @e2e @entrypoint:product-ui @journey:root-signed-out-redirect
