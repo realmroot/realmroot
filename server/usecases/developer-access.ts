@@ -19,18 +19,19 @@ export async function resolveDeveloperAccess(
   ])
   const memberships = await deps.authorization.listUserMemberships(user.id)
   const realmOperator = hasRole(user.role, 'admin')
-  const activeMemberships = (
-    await Promise.all(
-      memberships.map(async (membership) => ({
-        membership,
-        organization: await deps.authorization.findOrganization(membership.organizationId),
-      })),
-    )
-  ).filter(({ organization }) => organization && !organization.disabled)
+  const resolvedMemberships = await Promise.all(
+    memberships.map(async (membership) => ({
+      membership,
+      organization: await deps.authorization.findOrganization(membership.organizationId),
+    })),
+  )
+  const activeMemberships = resolvedMemberships.filter(
+    (entry): entry is typeof entry & { organization: NonNullable<typeof entry.organization> } =>
+      entry.organization !== null && !entry.organization.disabled,
+  )
   const selected = new Set(consoleAccessPolicy.selectedOrganizationIds)
   const eligibleLevels = new Set(consoleAccessPolicy.eligibleAccessLevels)
   const consoleOrganizations = activeMemberships.flatMap(({ membership, organization }) => {
-    if (!organization) return []
     const accessLevel = (['owner', 'admin', 'developer'] as const).find(
       (role) => membership.roles.includes(role) && eligibleLevels.has(role),
     )

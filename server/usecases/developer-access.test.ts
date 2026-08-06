@@ -54,7 +54,8 @@ describe('Developer Console access', () => {
       eligibleAccessLevels: ['owner'],
       selectedOrganizationIds: [],
     })
-    vi.mocked(deps.authorization.listUserMemberships).mockResolvedValue([])
+    vi.mocked(deps.authorization.listUserMemberships).mockResolvedValue([membership('org-1', 'owner')])
+    vi.mocked(deps.authorization.findOrganization).mockResolvedValue(organization('org-1', false))
     vi.mocked(deps.authorization.hasPendingInvitation).mockResolvedValue(true)
 
     await expect(
