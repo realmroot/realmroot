@@ -204,7 +204,6 @@ const agent: ManagementAgent = {
   status: 'active',
   retiredAt: null,
   installationCount: 2,
-  roleCount: 1,
   pendingRequestCount: 1,
   activeGrantCount: 3,
   createdAt: timestamp,

@@ -2,12 +2,14 @@ import { badRequest, notFound, OAuthError, oauthError } from '@server/domain/err
 import { hashProviderSecret } from '@server/usecases/applications-utils'
 import type { Deps } from '@server/usecases/deps'
 import type {
+  ApplicationAggregate,
   CreateFederatedCredentialInput,
   JwksGateway,
   ResolvedFederatedCredential,
   UpdateFederatedCredentialInput,
 } from '@server/usecases/ports'
-import { activeResourceEligibleForOrganization } from '@server/usecases/resource-eligibility'
+import { applicationEffectiveResourceScopes } from '@server/usecases/resource-scope-entitlements'
+import { activeResourceVisibleToOrganization } from '@server/usecases/resource-visibility'
 
 export const tokenExchangeGrantType = 'urn:ietf:params:oauth:grant-type:token-exchange'
 export const refreshTokenGrantType = 'refresh_token'
@@ -73,15 +75,12 @@ export async function exchangeToken(
   }
 
   const oauthClient = await authenticateClient(deps, client.clientId, client.clientSecret)
+  const application = await requireApplicationByClientId(deps, oauthClient.clientId)
   const allowedGrantTypes = parseList(oauthClient.grantTypes)
   if (!allowedGrantTypes.includes(tokenExchangeGrantType)) {
     throw oauthError('unauthorized_client', 'Client is not allowed to use token exchange.')
   }
 
-  const scopes = normalizeScopes(input.scope, parseList(oauthClient.scopes))
-  if (scopes.includes('offline_access') && !allowedGrantTypes.includes(refreshTokenGrantType)) {
-    throw oauthError('invalid_scope', 'Client is not allowed to issue refresh tokens.')
-  }
   const assertion = parseJwt(input.subjectToken)
   const issuerValue = readString(assertion.payload.iss)
   const subject = readString(assertion.payload.sub)
@@ -95,6 +94,10 @@ export async function exchangeToken(
     throw oauthError('invalid_target', 'Requested audience does not match the federated credential.')
   }
   await requireEligibleAudience(deps, credential.audience, credential.ownerOrganizationId)
+  const scopes = await resolveApplicationTokenScopes(deps, application, input.audience, input.scope)
+  if (scopes.includes('offline_access') && !allowedGrantTypes.includes(refreshTokenGrantType)) {
+    throw oauthError('invalid_scope', 'Client is not allowed to issue refresh tokens.')
+  }
 
   await verifySubjectToken(input.subjectToken, assertion, credential, deps.jwks)
 
@@ -157,6 +160,7 @@ export async function refreshToken(
     throw oauthError('unsupported_grant_type', 'Unsupported grant_type.')
   }
   const oauthClient = await authenticateClient(deps, client.clientId, client.clientSecret)
+  const application = await requireApplicationByClientId(deps, oauthClient.clientId)
   if (!parseList(oauthClient.grantTypes).includes(refreshTokenGrantType)) {
     throw oauthError('unauthorized_client', 'Client is not allowed to use refresh tokens.')
   }
@@ -190,7 +194,12 @@ export async function refreshToken(
     await deps.tokenExchange.revokeRefreshTokenFamily(row.familyId, now)
     throw oauthError('invalid_grant', 'The refresh token tenant or audience is no longer eligible.')
   }
-  const requestedScopes = input.scope ? normalizeScopes(input.scope, row.scopes) : row.scopes
+  const requestedScopes = await resolveApplicationTokenScopes(
+    deps,
+    application,
+    row.audience,
+    input.scope ?? row.scopes.join(' '),
+  )
   if (!(await deps.tokenExchange.consumeRefreshToken(row.id, now))) {
     await deps.tokenExchange.revokeRefreshTokenFamily(row.familyId, now)
     throw oauthError('invalid_grant', 'Refresh token reuse was detected.')
@@ -314,12 +323,37 @@ async function ensureApplication(deps: Deps, applicationId: string) {
   if (!application) throw notFound('Application not found.')
 }
 
+async function requireApplicationByClientId(deps: Deps, clientId: string) {
+  const application = await deps.applications.findByClientId(clientId)
+  if (!application || application.disabled) throw oauthError('unauthorized_client', 'Application is not active.')
+  return application
+}
+
+async function resolveApplicationTokenScopes(
+  deps: Deps,
+  application: ApplicationAggregate,
+  audience: string,
+  requestedScope: string | undefined,
+) {
+  const resource = await deps.authorization.findResourceByResourceUrl(audience)
+  if (!resource || !activeResourceVisibleToOrganization(resource, application.ownerOrganizationId)) {
+    throw oauthError('invalid_target', 'Requested audience is not visible to the Application tenant.')
+  }
+  const configuredScopes =
+    application.resourceScopes.find((configuration) => configuration.resourceServerId === resource.id)?.scopes ?? []
+  const allowedScopes = [...application.oidcScopes, ...configuredScopes]
+  const requestedScopes = normalizeScopes(requestedScope, allowedScopes)
+  const oidcScopes = new Set<string>(application.oidcScopes)
+  const effectiveScopes = new Set(await applicationEffectiveResourceScopes(deps, application, resource))
+  return requestedScopes.filter((scope) => oidcScopes.has(scope) || effectiveScopes.has(scope))
+}
+
 async function ensureAudienceResource(deps: Deps, applicationId: string, id: string) {
   const application = await deps.applications.findById(applicationId)
   if (!application) throw notFound('Application not found.')
   const resource = await deps.authorization.findResource(id)
-  if (!resource || !activeResourceEligibleForOrganization(resource, application.ownerOrganizationId)) {
-    throw badRequest('audienceResourceId must reference an API resource eligible for the Application tenant.')
+  if (!resource || !activeResourceVisibleToOrganization(resource, application.ownerOrganizationId)) {
+    throw badRequest('audienceResourceId must reference a Resource Server visible to the Application tenant.')
   }
 }
 
@@ -331,7 +365,7 @@ async function requireEligibleAudience(deps: Deps, audience: string, organizatio
 
 async function isEligibleAudience(deps: Deps, audience: string, organizationId: string) {
   const resource = await deps.authorization.findResourceByResourceUrl(audience)
-  return Boolean(resource && activeResourceEligibleForOrganization(resource, organizationId))
+  return Boolean(resource && activeResourceVisibleToOrganization(resource, organizationId))
 }
 
 async function authenticateClient(deps: Deps, clientId: string, clientSecret: string | null) {

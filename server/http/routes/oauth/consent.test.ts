@@ -74,7 +74,7 @@ describe('OAuth consent routes', () => {
     const response = await createTestApp(service).request('/api/oauth/consent', {
       method: 'POST',
       headers: { ...userHeaders(), 'content-type': 'application/json' },
-      body: JSON.stringify({ clientId: 'client-1', scopes: ['openid', 'profile'] }),
+      body: JSON.stringify({ clientId: 'client-1', resourceServerId: null, scopes: ['openid', 'profile'] }),
     })
 
     expect(response.status).toBe(201)
@@ -86,7 +86,7 @@ describe('OAuth consent routes', () => {
       },
     })
     expect(service.createConsent).toHaveBeenCalledWith(
-      { clientId: 'client-1', scopes: ['openid', 'profile'] },
+      { clientId: 'client-1', resourceServerId: null, scopes: ['openid', 'profile'] },
       'user-1',
     )
   })

@@ -217,7 +217,7 @@ export function ConsoleOnboardingPage() {
                 <>
                   <SettingRow label={tt('Client ID')} value={application.clientId} />
                   <SettingRow label={tt('Auth method')} value={application.tokenEndpointAuthMethod} />
-                  <SettingRow label={tt('Scopes')} value={application.allowedScopes.join(' ')} />
+                  <SettingRow label={tt('OIDC scopes')} value={application.oidcScopes.join(' ')} />
                 </>
               ) : null}
               <Button

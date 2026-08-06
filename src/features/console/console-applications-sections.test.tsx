@@ -69,9 +69,7 @@ describe('ApplicationsTableContent', () => {
     const onToggleDisabled = vi.fn()
     renderWithQuery(
       <ApplicationsTableContent
-        applications={[
-          { ...app, disabled: true, audience: { mode: 'users', organizationIds: [], userIds: ['user-1'] } },
-        ]}
+        applications={[{ ...app, disabled: true }]}
         emptyDescription="No matches"
         emptyTitle="No matching apps"
         hasApplications
@@ -79,7 +77,7 @@ describe('ApplicationsTableContent', () => {
         organizations={[]}
       />,
     )
-    expect(await screen.findByText('Assigned users')).toBeTruthy()
+    expect(await screen.findByText('0 Resource Servers')).toBeTruthy()
     fireEvent.pointerDown(screen.getByLabelText(`Actions for ${app.name}`), { button: 0, ctrlKey: false })
     expect(screen.getByText('Enable')).toBeTruthy()
   })

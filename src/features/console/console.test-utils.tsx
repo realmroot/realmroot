@@ -115,6 +115,9 @@ export function consoleSharedFetch(input: RequestInfo | URL, init?: RequestInit)
   if (url === '/api/organizations') {
     return Promise.resolve(jsonResponse({ organizations: [organization], pagination }))
   }
+  if (url === '/api/resource-servers') {
+    return Promise.resolve(jsonResponse({ items: [{ ...apiResource, authorization: null }], pagination }))
+  }
 
   return unexpectedConsoleRequest(input, init)
 }

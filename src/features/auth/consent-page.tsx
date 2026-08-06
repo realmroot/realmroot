@@ -50,6 +50,7 @@ export function ConsentPage() {
     try {
       await createConsent({
         clientId: consent.application.clientId,
+        resourceServerId: consent.resourceServerId,
         scopes: consent.requestedScopes,
       })
       const result = await completeOAuthConsent({

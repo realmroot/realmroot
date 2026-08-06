@@ -15,7 +15,7 @@ import type {
   ClientSecretRecord,
   ConsentRecord,
 } from '@server/usecases/ports'
-import { type ApplicationResponse, deviceCodeGrantType } from '@shared/api/applications'
+import { deviceCodeGrantType } from '@shared/api/applications'
 import { describe, expect, it, vi } from 'vitest'
 
 function createApplication(
@@ -81,7 +81,7 @@ describe('service.test 1', () => {
         postLogoutRedirectUris: ['https://app.example.com/signed-out', 'https://app.example.com/signed-out'],
         corsOrigins: ['https://app.example.com', 'http://localhost:4173'],
         allowedGrantTypes: ['authorization_code'],
-        allowedScopes: ['openid', 'profile'],
+        oidcScopes: ['openid', 'profile'],
         trusted: true,
       },
       'admin-1',
@@ -349,7 +349,7 @@ describe('service.test 1', () => {
         name: 'Partial Settings App',
         clientType: 'public_spa',
         redirectUris: ['https://spa.example.com/callback'],
-        allowedScopes: ['openid', 'profile'],
+        oidcScopes: ['openid', 'profile'],
       },
       'admin-1',
     )
@@ -358,7 +358,7 @@ describe('service.test 1', () => {
       updateApplication(deps, issuer, created.id, { allowedGrantTypes: ['authorization_code'] }),
     ).resolves.toMatchObject({
       allowedGrantTypes: ['authorization_code'],
-      allowedScopes: ['openid', 'profile', 'offline_access'],
+      oidcScopes: ['openid', 'profile', 'offline_access'],
       redirectUris: ['https://spa.example.com/callback'],
     })
     await expect(
@@ -532,11 +532,13 @@ class InMemoryApplicationRepository implements ApplicationRepository {
     applicationId: string
     clientId: string
     userId: string
-    scopes: ApplicationResponse['allowedScopes']
+    resourceServerId: string | null
+    scopes: string[]
     permissions: string[]
   }) {
     const consent = {
       id: `consent-${this.consents.size + 1}`,
+      resourceServerId: input.resourceServerId,
       scopes: input.scopes,
       grantedAt: new Date('2026-05-18T15:00:00.000Z'),
     }

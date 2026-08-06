@@ -262,7 +262,6 @@ describe('Agent identity lifecycle', () => {
         id: 'identity-1',
         owner: { id: 'user-1', type: 'user', displayName: 'user-1@example.com' },
         installationCount: 1,
-        roleCount: 0,
         pendingRequestCount: 0,
         activeGrantCount: 0,
       },
@@ -498,7 +497,7 @@ describe('Agent identity lifecycle', () => {
       new Map([['identity-1', { pendingRequestCount: 0, activeGrantCount: 0 }]]),
     )
     await expect(listAllAgents(deps, { limit: 20, offset: 0 })).resolves.toMatchObject({
-      items: [{ roleCount: 0 }],
+      items: [{ installationCount: 1 }],
     })
   })
 

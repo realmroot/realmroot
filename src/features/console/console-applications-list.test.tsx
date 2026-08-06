@@ -45,7 +45,7 @@ describe('admin console applications-list', () => {
     expect(applicationLink.getAttribute('href')).toBe('/organizations/org-1/applications/app-1')
     expect(screen.queryByLabelText('Filter owner')).toBeNull()
     expect(requests).toContain('/api/applications?ownerOrganizationId=org-1')
-    expect(requests).toContain('/api/users?limit=100&organizationId=org-1')
+    expect(requests).not.toContain('/api/users?limit=100&organizationId=org-1')
     fireEvent.click(screen.getByRole('button', { name: 'New application' }))
     expect(screen.queryByLabelText('Owner Organization')).toBeNull()
   })
@@ -71,7 +71,7 @@ describe('admin console applications-list', () => {
     expect(screen.getByLabelText('Search applications').closest('.consoleDataTablePanel')).toBe(dataPanel)
     expect(screen.getByRole('columnheader', { name: 'Application' })).toBeTruthy()
     expect(screen.getByRole('columnheader', { name: 'Type' })).toBeTruthy()
-    expect(screen.getByRole('columnheader', { name: 'Audience' })).toBeTruthy()
+    expect(screen.getByRole('columnheader', { name: 'Resource access' })).toBeTruthy()
     expect(screen.getByRole('columnheader', { name: 'Status' })).toBeTruthy()
     expect(screen.getByRole('columnheader', { name: 'Owner' })).toBeTruthy()
     expect(screen.getByRole('columnheader', { name: 'Updated' })).toBeTruthy()
@@ -83,18 +83,10 @@ describe('admin console applications-list', () => {
     fireEvent.change(screen.getByLabelText('Filter type'), { target: { value: 'confidential_web' } })
     expect(await screen.findByText('No applications found')).toBeTruthy()
     fireEvent.change(screen.getByLabelText('Filter type'), { target: { value: 'public_spa' } })
-    fireEvent.change(screen.getByLabelText('Filter audience'), { target: { value: 'users' } })
-    expect(await screen.findByText('No applications found')).toBeTruthy()
-    fireEvent.change(screen.getByLabelText('Filter audience'), { target: { value: 'realm' } })
     fireEvent.click(screen.getByRole('button', { name: 'New application' }))
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Admin console' } })
     fireEvent.change(screen.getByLabelText('Slug'), { target: { value: 'admin-console' } })
     fireEvent.click(screen.getByRole('button', { name: /Traditional web app/ }))
-    fireEvent.change(screen.getByLabelText('Audience'), { target: { value: 'organizations' } })
-    expect(screen.getByRole('combobox', { name: 'Allowed Organizations' })).toBeTruthy()
-    fireEvent.change(screen.getByLabelText('Audience'), { target: { value: 'users' } })
-    expect(screen.getByRole('combobox', { name: 'Allowed users' })).toBeTruthy()
-    fireEvent.change(screen.getByLabelText('Audience'), { target: { value: 'realm' } })
     fireEvent.change(screen.getByLabelText('Redirect URIs'), {
       target: { value: 'https://app.example.com/callback' },
     })
@@ -110,7 +102,6 @@ describe('admin console applications-list', () => {
             clientType: 'confidential_web',
             firstParty: true,
             ownerOrganizationId: 'org-1',
-            audience: { mode: 'realm', organizationIds: [], userIds: [] },
             allowedGrantTypes: ['authorization_code', 'refresh_token'],
             redirectUris: ['https://app.example.com/callback'],
           },
@@ -233,7 +224,6 @@ describe('admin console applications-list', () => {
           clientType: 'confidential_web',
           firstParty: true,
           ownerOrganizationId: 'org-1',
-          audience: { mode: 'realm', organizationIds: [], userIds: [] },
           allowedGrantTypes: ['authorization_code', 'refresh_token'],
           redirectUris: ['https://server.example.com/callback'],
         },

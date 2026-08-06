@@ -4,8 +4,6 @@ import type { BatchItem } from 'drizzle-orm/batch'
 import type { Database } from '../../db/client'
 import {
   application,
-  applicationAudienceOrganization,
-  applicationAudienceUser,
   applicationClientMetadata,
   applicationClientSecret,
   applicationConsent,
@@ -16,7 +14,6 @@ import {
   user,
 } from '../../db/schema'
 import {
-  isScope,
   serializeList,
   toAggregate,
   toApplicationInsert,
@@ -53,25 +50,6 @@ export function createDrizzleApplicationRepository(db: Database): ApplicationRep
           }),
         )
       }
-      if (input.application.audience.organizationIds.length > 0) {
-        statements.push(
-          db.insert(applicationAudienceOrganization).values(
-            input.application.audience.organizationIds.map((organizationId) => ({
-              applicationId: input.application.id,
-              organizationId,
-            })),
-          ),
-        )
-      }
-      if (input.application.audience.userIds.length > 0) {
-        statements.push(
-          db
-            .insert(applicationAudienceUser)
-            .values(
-              input.application.audience.userIds.map((userId) => ({ applicationId: input.application.id, userId })),
-            ),
-        )
-      }
       await db.batch(statements)
       return {
         ...input.application,
@@ -97,12 +75,8 @@ export function createDrizzleApplicationRepository(db: Database): ApplicationRep
         .offset(pagination.offset)
       const totalRows = await db.select({ total: count() }).from(application).where(ownerCondition)
       const total = totalRows[0]?.total ?? 0
-      const audiences = await loadApplicationAudiences(
-        db,
-        rows.map((row) => row.application.id),
-      )
       return {
-        items: rows.map((row) => toAggregate(row.application, row.oauthClient, audiences.get(row.application.id))),
+        items: rows.map((row) => toAggregate(row.application, row.oauthClient)),
         pagination: toPaginationMetadata(pagination, total),
       }
     },
@@ -116,8 +90,7 @@ export function createDrizzleApplicationRepository(db: Database): ApplicationRep
         .limit(1)
       const row = rows[0]
       if (!row) return null
-      const audiences = await loadApplicationAudiences(db, [row.application.id])
-      return toAggregate(row.application, row.oauthClient, audiences.get(row.application.id))
+      return toAggregate(row.application, row.oauthClient)
     },
 
     async findByClientId(clientId) {
@@ -129,8 +102,7 @@ export function createDrizzleApplicationRepository(db: Database): ApplicationRep
         .limit(1)
       const row = rows[0]
       if (!row) return null
-      const audiences = await loadApplicationAudiences(db, [row.application.id])
-      return toAggregate(row.application, row.oauthClient, audiences.get(row.application.id))
+      return toAggregate(row.application, row.oauthClient)
     },
 
     async update(id, patch) {
@@ -145,7 +117,8 @@ export function createDrizzleApplicationRepository(db: Database): ApplicationRep
         ...(patch.description !== undefined ? { description: patch.description } : {}),
         ...(patch.homepageUrl !== undefined ? { homepageUrl: patch.homepageUrl } : {}),
         ...(patch.ownerOrganizationId !== undefined ? { ownerOrganizationId: patch.ownerOrganizationId } : {}),
-        ...(patch.audience !== undefined ? { audienceMode: patch.audience.mode } : {}),
+        ...(patch.oidcScopes !== undefined ? { oidcScopes: patch.oidcScopes } : {}),
+        ...(patch.resourceScopes !== undefined ? { resourceScopes: patch.resourceScopes } : {}),
         ...(patch.iconUrl !== undefined ||
         patch.corsOrigins !== undefined ||
         patch.customData !== undefined ||
@@ -177,7 +150,14 @@ export function createDrizzleApplicationRepository(db: Database): ApplicationRep
           ? { postLogoutRedirectUris: serializeList(patch.postLogoutRedirectUris), enableEndSession: true }
           : {}),
         ...(patch.allowedGrantTypes !== undefined ? { grantTypes: serializeList(patch.allowedGrantTypes) } : {}),
-        ...(patch.allowedScopes !== undefined ? { scopes: serializeList(patch.allowedScopes) } : {}),
+        ...(patch.oidcScopes !== undefined || patch.resourceScopes !== undefined
+          ? {
+              scopes: serializeList([
+                ...(patch.oidcScopes ?? current.oidcScopes),
+                ...new Set((patch.resourceScopes ?? current.resourceScopes).flatMap((resource) => resource.scopes)),
+              ]),
+            }
+          : {}),
         ...(patch.oidcClaims !== undefined
           ? { metadata: JSON.stringify({ applicationId: id, oidcClaims: patch.oidcClaims }) }
           : {}),
@@ -187,26 +167,6 @@ export function createDrizzleApplicationRepository(db: Database): ApplicationRep
         db.update(application).set(applicationPatch).where(eq(application.id, id)),
         db.update(oauthClient).set(oauthPatch).where(eq(oauthClient.clientId, current.oauthClientId)),
       ]
-      if (patch.audience !== undefined) {
-        statements.push(
-          db.delete(applicationAudienceOrganization).where(eq(applicationAudienceOrganization.applicationId, id)),
-          db.delete(applicationAudienceUser).where(eq(applicationAudienceUser.applicationId, id)),
-        )
-        if (patch.audience.organizationIds.length > 0) {
-          statements.push(
-            db
-              .insert(applicationAudienceOrganization)
-              .values(patch.audience.organizationIds.map((organizationId) => ({ applicationId: id, organizationId }))),
-          )
-        }
-        if (patch.audience.userIds.length > 0) {
-          statements.push(
-            db
-              .insert(applicationAudienceUser)
-              .values(patch.audience.userIds.map((userId) => ({ applicationId: id, userId }))),
-          )
-        }
-      }
       await db.batch(statements)
     },
 
@@ -311,6 +271,7 @@ export function createDrizzleApplicationRepository(db: Database): ApplicationRep
           userDisplayName: user.name,
           userEmail: user.email,
           scopes: applicationConsent.scopes,
+          resourceServerId: applicationConsent.resourceServerId,
           permissions: applicationConsent.permissions,
           grantedAt: applicationConsent.grantedAt,
           expiresAt: applicationConsent.expiresAt,
@@ -332,7 +293,7 @@ export function createDrizzleApplicationRepository(db: Database): ApplicationRep
       return {
         items: rows.map((row) => ({
           ...row,
-          scopes: row.scopes.filter(isScope),
+          scopes: row.scopes,
           permissions: row.permissions ?? [],
         })),
         pagination: toPaginationMetadata(query, totalRows[0]?.total ?? 0),
@@ -348,6 +309,7 @@ export function createDrizzleApplicationRepository(db: Database): ApplicationRep
           userDisplayName: user.name,
           userEmail: user.email,
           scopes: applicationConsent.scopes,
+          resourceServerId: applicationConsent.resourceServerId,
           permissions: applicationConsent.permissions,
           grantedAt: applicationConsent.grantedAt,
           expiresAt: applicationConsent.expiresAt,
@@ -357,7 +319,7 @@ export function createDrizzleApplicationRepository(db: Database): ApplicationRep
         .innerJoin(user, eq(applicationConsent.userId, user.id))
         .where(eq(applicationConsent.id, authorizationId))
         .limit(1)
-      return row ? { ...row, scopes: row.scopes.filter(isScope), permissions: row.permissions ?? [] } : null
+      return row ? { ...row, permissions: row.permissions ?? [] } : null
     },
 
     async revokeAuthorization(authorizationId) {
@@ -367,7 +329,7 @@ export function createDrizzleApplicationRepository(db: Database): ApplicationRep
       return true
     },
 
-    async findConsent(applicationId, userId) {
+    async findConsent(applicationId, userId, resourceServerId) {
       const rows = await db
         .select()
         .from(applicationConsent)
@@ -375,6 +337,9 @@ export function createDrizzleApplicationRepository(db: Database): ApplicationRep
           and(
             eq(applicationConsent.applicationId, applicationId),
             eq(applicationConsent.userId, userId),
+            resourceServerId === null
+              ? isNull(applicationConsent.resourceServerId)
+              : eq(applicationConsent.resourceServerId, resourceServerId),
             isNull(applicationConsent.revokedAt),
           ),
         )
@@ -400,6 +365,9 @@ export function createDrizzleApplicationRepository(db: Database): ApplicationRep
             and(
               eq(applicationConsent.applicationId, input.applicationId),
               eq(applicationConsent.userId, input.userId),
+              input.resourceServerId === null
+                ? isNull(applicationConsent.resourceServerId)
+                : eq(applicationConsent.resourceServerId, input.resourceServerId),
               isNull(applicationConsent.revokedAt),
             ),
           )
@@ -411,7 +379,9 @@ export function createDrizzleApplicationRepository(db: Database): ApplicationRep
             and(
               eq(oauthConsent.clientId, input.clientId),
               eq(oauthConsent.userId, input.userId),
-              isNull(oauthConsent.referenceId),
+              input.resourceServerId === null
+                ? isNull(oauthConsent.referenceId)
+                : eq(oauthConsent.referenceId, input.resourceServerId),
             ),
           )
           .limit(1),
@@ -426,6 +396,7 @@ export function createDrizzleApplicationRepository(db: Database): ApplicationRep
             id,
             applicationId: input.applicationId,
             userId: input.userId,
+            resourceServerId: input.resourceServerId,
             scopes: input.scopes,
             permissions: input.permissions,
             grantedAt: now,
@@ -440,6 +411,7 @@ export function createDrizzleApplicationRepository(db: Database): ApplicationRep
             clientId: input.clientId,
             userId: input.userId,
             scopes: serializeList(input.scopes),
+            referenceId: input.resourceServerId,
             createdAt: now,
             updatedAt: now,
           })
@@ -452,6 +424,9 @@ export function createDrizzleApplicationRepository(db: Database): ApplicationRep
           and(
             eq(applicationConsent.applicationId, input.applicationId),
             eq(applicationConsent.userId, input.userId),
+            input.resourceServerId === null
+              ? isNull(applicationConsent.resourceServerId)
+              : eq(applicationConsent.resourceServerId, input.resourceServerId),
             isNull(applicationConsent.revokedAt),
           ),
         )
@@ -527,26 +502,4 @@ async function revokeAuthorizationGrant(
         ),
       ),
   ])
-}
-
-async function loadApplicationAudiences(db: Database, applicationIds: string[]) {
-  const audiences = new Map<string, { organizationIds: string[]; userIds: string[] }>()
-  for (const id of applicationIds) audiences.set(id, { organizationIds: [], userIds: [] })
-  if (applicationIds.length === 0) return audiences
-  const [organizations, users] = await Promise.all([
-    db
-      .select({
-        applicationId: applicationAudienceOrganization.applicationId,
-        id: applicationAudienceOrganization.organizationId,
-      })
-      .from(applicationAudienceOrganization)
-      .where(inArray(applicationAudienceOrganization.applicationId, applicationIds)),
-    db
-      .select({ applicationId: applicationAudienceUser.applicationId, id: applicationAudienceUser.userId })
-      .from(applicationAudienceUser)
-      .where(inArray(applicationAudienceUser.applicationId, applicationIds)),
-  ])
-  for (const selection of organizations) audiences.get(selection.applicationId)?.organizationIds.push(selection.id)
-  for (const selection of users) audiences.get(selection.applicationId)?.userIds.push(selection.id)
-  return audiences
 }

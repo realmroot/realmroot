@@ -165,6 +165,7 @@ export function toManagementOperationKey(route: HonoRoute) {
     return `${route.method} ${normalizeManagementPath(route.path.replace('/api', ''))}`
   }
   const tenantPaths = [
+    '/api/application-scope-grants',
     '/api/applications',
     '/api/agents',
     '/api/organizations',
@@ -172,6 +173,7 @@ export function toManagementOperationKey(route: HonoRoute) {
     '/api/realm',
     '/api/connectors',
     '/api/webhooks',
+    '/api/user-scope-grants',
   ]
   if (!tenantPaths.some((path) => route.path === path || route.path.startsWith(`${path}/`))) {
     return null
@@ -330,6 +332,7 @@ export const managementOpenApiOperationKey = 'GET /openapi.json'
 export const methodsWithJsonRequestBody = new Set(['POST', 'PUT', 'PATCH'])
 export const operationsWithoutRequestBody = new Set([
   'PUT /resource-servers/{param}/archival',
+  'PUT /resource-servers/{param}/scope-registry',
   'POST /applications/{param}/client-secrets',
   'POST /users/{param}/password-reset-requests',
   'POST /webhooks/{param}/secrets',

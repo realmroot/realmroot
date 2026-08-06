@@ -18,6 +18,7 @@ import type {
   InvitationResponse,
   MemberResponse,
   OrganizationResponse,
+  ResourceScopeRegistry,
   RoleResponse,
   RoleScope,
   UpdateApiResourceRequest,
@@ -996,13 +997,13 @@ export interface ApplicationAggregate {
   disabled: boolean
   disabledReason: string | null
   ownerOrganizationId: string
-  audience: ApplicationResponse['audience']
   redirectUris: string[]
   postLogoutRedirectUris: string[]
   corsOrigins: string[]
   customData: Record<string, unknown>
   allowedGrantTypes: ApplicationResponse['allowedGrantTypes']
-  allowedScopes: ApplicationResponse['allowedScopes']
+  oidcScopes: ApplicationResponse['oidcScopes']
+  resourceScopes: ApplicationResponse['resourceScopes']
   requirePkce: boolean
   tokenEndpointAuthMethod: ApplicationResponse['tokenEndpointAuthMethod']
   oidcClaims: ApplicationOidcClaims
@@ -1024,7 +1025,8 @@ export interface ClientSecretRecord {
 
 export interface ConsentRecord {
   id: string
-  scopes: ApplicationResponse['allowedScopes']
+  resourceServerId: string | null
+  scopes: string[]
   grantedAt: Date
 }
 
@@ -1034,7 +1036,8 @@ export interface ApplicationAuthorizationRecord {
   userId: string
   userDisplayName: string
   userEmail: string
-  scopes: ApplicationResponse['allowedScopes']
+  resourceServerId: string | null
+  scopes: string[]
   permissions: string[]
   grantedAt: Date
   expiresAt: Date | null
@@ -1076,13 +1079,14 @@ export interface ApplicationRepository {
   ): Promise<ApplicationPaginatedResult<ApplicationAuthorizationRecord>>
   findAuthorization(authorizationId: string): Promise<ApplicationAuthorizationRecord | null>
   revokeAuthorization(authorizationId: string): Promise<boolean>
-  findConsent(applicationId: string, userId: string): Promise<ConsentRecord | null>
+  findConsent(applicationId: string, userId: string, resourceServerId: string | null): Promise<ConsentRecord | null>
   revokeConsent(consentId: string, userId: string): Promise<boolean>
   createConsent(input: {
     applicationId: string
     clientId: string
     userId: string
-    scopes: ApplicationResponse['allowedScopes']
+    resourceServerId: string | null
+    scopes: string[]
     permissions: string[]
   }): Promise<ConsentRecord>
 }
@@ -1106,6 +1110,29 @@ export interface ApiResourceReferenceCounts {
   connectionIntents: number
   agentAccessRequests: number
   agentAccessGrants: number
+}
+
+export interface UserScopeGrantRecord {
+  id: string
+  userId: string
+  organizationId: string | null
+  resourceServerId: string
+  scopes: string[]
+  grantedByUserId: string
+  expiresAt: Date | null
+  revokedAt: Date | null
+  createdAt: Date
+}
+
+export interface ApplicationScopeGrantRecord {
+  id: string
+  applicationId: string
+  resourceServerId: string
+  scopes: string[]
+  grantedByUserId: string
+  expiresAt: Date | null
+  revokedAt: Date | null
+  createdAt: Date
 }
 
 export interface AuthorizationRepository {
@@ -1161,6 +1188,19 @@ export interface AuthorizationRepository {
   findResource(id: string): Promise<ApiResourceResponse | null>
   findResourceByResourceUrl(resourceUrl: string): Promise<ApiResourceResponse | null>
   updateResource(id: string, patch: UpdateApiResourceRequest): Promise<boolean>
+  replaceResourceScopeRegistry(id: string, registry: ResourceScopeRegistry): Promise<boolean>
+  createUserScopeGrant(input: UserScopeGrantRecord): Promise<UserScopeGrantRecord>
+  findUserScopeGrant(id: string): Promise<UserScopeGrantRecord | null>
+  listActiveUserScopeGrants(userId: string, resourceServerId: string, now: Date): Promise<UserScopeGrantRecord[]>
+  revokeUserScopeGrant(id: string, now: Date): Promise<boolean>
+  createApplicationScopeGrant(input: ApplicationScopeGrantRecord): Promise<ApplicationScopeGrantRecord>
+  findApplicationScopeGrant(id: string): Promise<ApplicationScopeGrantRecord | null>
+  listActiveApplicationScopeGrants(
+    applicationId: string,
+    resourceServerId: string,
+    now: Date,
+  ): Promise<ApplicationScopeGrantRecord[]>
+  revokeApplicationScopeGrant(id: string, now: Date): Promise<boolean>
   archiveResource(id: string, now: Date, audit: AgentAuditEventRecord): Promise<void>
   restoreResource(id: string, now: Date, audit: AgentAuditEventRecord): Promise<void>
   deleteResource(id: string): Promise<ApiResourceReferenceCounts | null>

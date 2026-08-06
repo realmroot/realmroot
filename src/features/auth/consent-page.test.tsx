@@ -57,7 +57,8 @@ const consentResponse = {
     disabledReason: null,
     redirectUris: ['https://client.example.com/callback'],
     allowedGrantTypes: ['authorization_code'],
-    allowedScopes: ['openid', 'profile', 'email'],
+    oidcScopes: ['openid', 'profile', 'email'],
+    resourceScopes: [],
     requirePkce: true,
     tokenEndpointAuthMethod: 'none',
     oidc: {

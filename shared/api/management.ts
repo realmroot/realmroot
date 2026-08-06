@@ -507,10 +507,12 @@ export const managementPasswordResetRequestSchema = adminPasswordResetSchema
 
 export const protectedResourceCollectionRoutes = [
   '/applications',
+  '/application-scope-grants',
   '/access/consents',
   '/users',
   '/organizations',
   '/resource-servers',
+  '/user-scope-grants',
   '/connectors',
   '/agents',
   '/access/requests',

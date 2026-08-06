@@ -3,6 +3,7 @@ import {
   createResource,
   deleteResource,
   getResourceContract,
+  refreshResourceScopeRegistry,
   restoreResource,
   updateResource,
 } from '@server/usecases/authorization'
@@ -101,6 +102,11 @@ export function createManagementApiResourcesRoute() {
   })
 
   return app
+    .put('/:resourceId/scope-registry', async (c) => {
+      await requireResourceAccess(c)
+      await refreshResourceScopeRegistry(getDeps(c), c.req.param('resourceId'))
+      return c.json(apiResourceSchema.parse(await getApiResource(getDeps(c), c.req.param('resourceId'))))
+    })
     .get('/:resourceId/archival', async (c) => {
       const resource = await requireResourceAccess(c)
       return c.json({ resourceServerId: resource.id, archivedAt: resource.archivedAt })

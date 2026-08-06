@@ -1,7 +1,7 @@
 import type { OrganizationResponse } from '@shared/api/authorization'
 import { Link } from '@tanstack/react-router'
 import { clientTypeLabel, MutationError, StatusBadge, SwitchRow } from '@/features/management/dialogs'
-import { applicationAudienceLabel, ownerLabel } from '@/features/management/ownership-controls'
+import { ownerLabel } from '@/features/management/ownership-controls'
 import {
   type ApplicationOidcClaims,
   type ApplicationResponse,
@@ -147,7 +147,7 @@ export function ApplicationsTableContent({
           <TableRow>
             <TableHead className="w-[27%]">{tt('Application')}</TableHead>
             <TableHead className="w-[19%]">{tt('Type')}</TableHead>
-            <TableHead className="w-[15%]">{tt('Audience')}</TableHead>
+            <TableHead className="w-[15%]">{tt('Resource access')}</TableHead>
             <TableHead className="w-[10%]">{tt('Status')}</TableHead>
             <TableHead className="w-[16%]">{tt('Owner')}</TableHead>
             <TableHead className="w-[11%]">{tt('Updated')}</TableHead>
@@ -166,7 +166,7 @@ export function ApplicationsTableContent({
         <TableRow>
           <TableHead className="w-[27%]">{tt('Application')}</TableHead>
           <TableHead className="w-[19%]">{tt('Type')}</TableHead>
-          <TableHead className="w-[15%]">{tt('Audience')}</TableHead>
+          <TableHead className="w-[15%]">{tt('Resource access')}</TableHead>
           <TableHead className="w-[10%]">{tt('Status')}</TableHead>
           <TableHead className="w-[16%]">{tt('Owner')}</TableHead>
           <TableHead className="w-[11%]">{tt('Updated')}</TableHead>
@@ -210,7 +210,7 @@ export function ApplicationsTableContent({
                   {application.allowedGrantTypes.join(', ')}
                 </div>
               </TableCell>
-              <TableCell>{applicationAudienceLabel(application.audience.mode)}</TableCell>
+              <TableCell>{tt('{{count}} Resource Servers', { count: application.resourceScopes.length })}</TableCell>
               <TableCell>
                 <StatusBadge active={!application.disabled} activeLabel="Enabled" inactiveLabel="Disabled" />
               </TableCell>

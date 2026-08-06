@@ -2,12 +2,15 @@ import { createTestDeps } from '@server/http/test-deps'
 import {
   extractProtectedOperations,
   extractResourceScopes,
-  readDeclaredScopes,
   readResourceContract,
   validateRequestedScopes,
   validateResourceUrl,
 } from '@server/usecases/resource-openapi'
 import { describe, expect, it, vi } from 'vitest'
+
+async function readScopes(deps: ReturnType<typeof createTestDeps>, resourceUrl: string) {
+  return (await readResourceContract(deps, resourceUrl))!.scopes
+}
 
 describe('business resource OpenAPI scope discovery', () => {
   it('returns protected operations and exact alternative scope sets [spec: admin-console/admin-create-api-resource]', async () => {
@@ -59,8 +62,10 @@ describe('business resource OpenAPI scope discovery', () => {
         }),
       )
 
-    await expect(readResourceContract(deps, 'https://orders.example.com/')).resolves.toEqual({
+    await expect(readResourceContract(deps, 'https://orders.example.com/')).resolves.toMatchObject({
       sourceUrl: 'https://orders.example.com/openapi.json',
+      etag: null,
+      documentHash: expect.any(String),
       scopes: [
         { value: 'orders:admin', description: 'Administer orders' },
         { value: 'orders:manage', description: 'Manage orders' },
@@ -87,7 +92,7 @@ describe('business resource OpenAPI scope discovery', () => {
     })
   })
 
-  it('derives native and external requestable scopes only from operation security [spec: agent-identity/native-api-resource-registration]', async () => {
+  it('derives native and external requestable scopes from OAuth flow declarations [spec: agent-identity/native-api-resource-registration]', async () => {
     const deps = createTestDeps()
     vi.mocked(deps.externalHttp.fetch).mockImplementation(async (request) => {
       if (request.url === 'https://orders.example.com/') {
@@ -129,11 +134,20 @@ paths:
       )
     })
 
-    await expect(
-      validateRequestedScopes(deps, 'https://orders.example.com/', ['orders:read', 'orders:write']),
-    ).resolves.toBeUndefined()
-    await expect(validateRequestedScopes(deps, 'https://orders.example.com/', ['orders:delete'])).rejects.toThrow(
-      'Requested scope is not declared by the business resource OpenAPI document.',
+    const contract = await readResourceContract(deps, 'https://orders.example.com/')
+    const registry = {
+      discovery: {
+        sourceUrl: contract!.sourceUrl,
+        etag: contract!.etag,
+        documentHash: contract!.documentHash,
+        syncedAt: new Date().toISOString(),
+        lastError: null,
+      },
+      scopes: contract!.scopes.map((scope) => ({ ...scope, grantMode: 'assigned' as const })),
+    }
+    expect(() => validateRequestedScopes(registry, ['orders:read', 'orders:write'])).not.toThrow()
+    expect(() => validateRequestedScopes(registry, ['orders:delete'])).toThrow(
+      'Requested scope is not declared by the Resource Server scope registry.',
     )
   })
 
@@ -158,15 +172,11 @@ paths:
           },
         },
       }),
-    ).toEqual([{ value: 'projects:read', description: null }])
+    ).toEqual([])
   })
 
   it('skips discovery when no scopes are requested', async () => {
-    const deps = createTestDeps()
-
-    await validateRequestedScopes(deps, 'https://orders.example.com/', [])
-
-    expect(deps.externalHttp.fetch).not.toHaveBeenCalled()
+    expect(() => validateRequestedScopes(null, [])).not.toThrow()
   })
 
   it.each([
@@ -176,7 +186,7 @@ paths:
     const deps = createTestDeps()
     vi.mocked(deps.externalHttp.fetch).mockResolvedValue(new Response(null, { headers: link ? { link } : undefined }))
 
-    await expect(readDeclaredScopes(deps, 'https://orders.example.com/api')).rejects.toThrow(message)
+    await expect(readScopes(deps, 'https://orders.example.com/api')).rejects.toThrow(message)
   })
 
   it('resolves an unquoted service-desc relation and relative document URL', async () => {
@@ -219,8 +229,9 @@ paths:
         ),
       )
 
-    await expect(readDeclaredScopes(deps, 'https://orders.example.com/api/')).resolves.toEqual([
-      { value: 'orders:read', description: '  Read orders  ' },
+    await expect(readScopes(deps, 'https://orders.example.com/api/')).resolves.toEqual([
+      { value: 'orders:empty', description: null },
+      { value: 'orders:read', description: 'Read orders' },
     ])
     expect(vi.mocked(deps.externalHttp.fetch).mock.calls[1]![0].url).toBe('https://orders.example.com/api/openapi.json')
   })
@@ -234,7 +245,7 @@ paths:
       }),
     )
 
-    await expect(readDeclaredScopes(deps, 'https://orders.example.com/api')).rejects.toThrow(
+    await expect(readScopes(deps, 'https://orders.example.com/api')).rejects.toThrow(
       'Business resource discovery failed.',
     )
     expect(deps.externalHttp.fetch).toHaveBeenCalledTimes(1)
@@ -244,7 +255,7 @@ paths:
     const deps = createTestDeps()
     vi.mocked(deps.externalHttp.fetch).mockRejectedValueOnce(new Error('Network connection lost.'))
 
-    await expect(readDeclaredScopes(deps, 'https://orders.example.com/api')).rejects.toMatchObject({
+    await expect(readScopes(deps, 'https://orders.example.com/api')).rejects.toMatchObject({
       status: 502,
       code: 'bad_gateway',
       message: 'Business resource could not be reached during OpenAPI discovery.',
@@ -262,7 +273,7 @@ paths:
       )
       .mockRejectedValueOnce(new Error('Network connection lost.'))
 
-    await expect(readDeclaredScopes(deps, 'https://orders.example.com/api')).rejects.toMatchObject({
+    await expect(readScopes(deps, 'https://orders.example.com/api')).rejects.toMatchObject({
       status: 502,
       code: 'bad_gateway',
       message: 'Business resource OpenAPI document could not be reached.',
@@ -279,7 +290,7 @@ paths:
       const deps = createTestDeps()
       vi.mocked(deps.externalHttp.fetch).mockReturnValue(new Promise<Response>(() => {}))
 
-      const result = readDeclaredScopes(deps, 'https://orders.example.com/api')
+      const result = readScopes(deps, 'https://orders.example.com/api')
       const rejection = expect(result).rejects.toMatchObject({
         status: 502,
         code: 'bad_gateway',
@@ -316,7 +327,7 @@ paths:
       )
       .mockResolvedValueOnce(new Response('unavailable', { status: 503 }))
 
-    await expect(readDeclaredScopes(deps, 'https://orders.example.com/')).rejects.toThrow(
+    await expect(readScopes(deps, 'https://orders.example.com/')).rejects.toThrow(
       'Business resource OpenAPI discovery failed.',
     )
 
@@ -324,7 +335,7 @@ paths:
       .mockResolvedValueOnce(new Response(null, { headers: { link: '</openapi.json>; rel="service-desc"' } }))
       .mockResolvedValueOnce(new Response('{', { headers: { 'content-type': 'application/json' } }))
 
-    await expect(readDeclaredScopes(deps, 'https://orders.example.com/')).rejects.toThrow(
+    await expect(readScopes(deps, 'https://orders.example.com/')).rejects.toThrow(
       'Business resource OpenAPI document is invalid.',
     )
   })
@@ -365,7 +376,10 @@ paths:
           },
         },
       }),
-    ).toEqual([{ value: 'valid', description: 'Valid' }])
+    ).toEqual([
+      { value: 'blank', description: null },
+      { value: 'valid', description: 'Valid' },
+    ])
   })
 
   it('ignores non-operation path item fields when extracting protected operations', () => {

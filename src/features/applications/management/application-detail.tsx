@@ -1,10 +1,9 @@
 import {
-  type ApplicationAudienceMode,
   type ApplicationOidcClaims,
   type ApplicationResponse,
   updateApplicationRequestSchema,
 } from '@shared/api/applications'
-import type { OrganizationResponse } from '@shared/api/authorization'
+import type { ApiResourceResponse, OrganizationResponse } from '@shared/api/authorization'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { ArrowLeft, RotateCw, Trash2 } from 'lucide-react'
@@ -31,15 +30,7 @@ import {
   MutationError,
   SecretDisclosureDialog,
 } from '@/features/management/dialogs'
-import {
-  applicationAudienceLabel,
-  IdentityMultiSelect,
-  OrganizationOwnerField,
-  organizationOptions,
-  ownerLabel,
-  selectionSummary,
-  userOptions,
-} from '@/features/management/ownership-controls'
+import { OrganizationOwnerField, ownerLabel } from '@/features/management/ownership-controls'
 import { navigateConsoleTab } from '@/features/management/resource-components'
 import type { ApplicationDetailSection } from '@/features/management/shared'
 import { formatDate, nullableString, parseForm, parseLineList, useAdminMutation } from '@/features/management/utils'
@@ -47,10 +38,10 @@ import { consoleQueryKeys } from '@/lib/api/console-query-keys'
 import {
   deleteApplication,
   getApplication,
+  listApiResources,
   listApplicationAuthorizations,
   listApplicationClientSecrets,
   listOrganizations,
-  listUsers,
   revokeApplicationAuthorization,
   rotateApplicationClientSecret,
   updateApplication,
@@ -58,7 +49,7 @@ import {
 import { tt } from '@/lib/i18n'
 import { ApplicationFederatedCredentialsPanel } from './application-federated-credentials'
 
-type Editor = 'details' | 'redirects' | 'authorization' | 'claims' | 'audience' | 'consent' | null
+type Editor = 'details' | 'redirects' | 'authorization' | 'claims' | 'ownership' | 'consent' | null
 
 export function ApplicationDetailPage({
   applicationId,
@@ -82,10 +73,7 @@ export function ApplicationDetailPage({
     queryFn: () => getApplication(applicationId),
   })
   const organizationsQuery = useQuery({ queryKey: consoleQueryKeys.organizations, queryFn: listOrganizations })
-  const usersQuery = useQuery({
-    queryKey: [...consoleQueryKeys.users, { limit: 100, organizationId, purpose: 'application-audience' }],
-    queryFn: () => listUsers({ limit: 100, organizationId }),
-  })
+  const resourcesQuery = useQuery({ queryKey: consoleQueryKeys.apiResources, queryFn: () => listApiResources() })
   const application = query.data
   const secretsQuery = useQuery({
     queryKey: [...consoleQueryKeys.applications, applicationId, 'client-secrets'],
@@ -129,14 +117,14 @@ export function ApplicationDetailPage({
     },
   })
 
-  if (query.isLoading || organizationsQuery.isLoading || usersQuery.isLoading)
+  if (query.isLoading || organizationsQuery.isLoading || resourcesQuery.isLoading)
     return <LoadingState label={tt('Loading application')} />
-  const loadError = query.error ?? organizationsQuery.error ?? usersQuery.error
+  const loadError = query.error ?? organizationsQuery.error ?? resourcesQuery.error
   if (loadError)
     return (
       <ErrorState
         error={loadError}
-        onRetry={() => Promise.all([query.refetch(), organizationsQuery.refetch(), usersQuery.refetch()])}
+        onRetry={() => Promise.all([query.refetch(), organizationsQuery.refetch(), resourcesQuery.refetch()])}
       />
     )
   if (!application) return <ErrorState error={new Error(tt('Application not found.'))} />
@@ -144,7 +132,6 @@ export function ApplicationDetailPage({
     return <ErrorState error={new Error(tt('Application does not belong to this Organization.'))} />
   }
   const organizations = organizationsQuery.data?.organizations ?? []
-  const users = usersQuery.data?.users ?? []
 
   return (
     <>
@@ -198,7 +185,7 @@ export function ApplicationDetailPage({
             <TabsTrigger value="settings">{tt('Settings')}</TabsTrigger>
           </TabsList>
           <TabsContent className="mt-5" value="overview">
-            <ApplicationOverview application={application} organizations={organizations} users={users} />
+            <ApplicationOverview application={application} organizations={organizations} />
           </TabsContent>
           <TabsContent className="mt-5" value="oauth">
             <ApplicationOAuth
@@ -219,9 +206,8 @@ export function ApplicationDetailPage({
             <ApplicationSettings
               application={application}
               organizations={organizations}
-              users={users}
               onDelete={() => setDeleteOpen(true)}
-              onEditAudience={() => setEditor('audience')}
+              onEditOwnership={() => setEditor('ownership')}
               onEditConsent={() => setEditor('consent')}
               onEditDetails={() => setEditor('details')}
               onToggle={() =>
@@ -244,7 +230,7 @@ export function ApplicationDetailPage({
         onSave={(input) => updateMutation.mutate(input)}
         organizations={organizations}
         pending={updateMutation.isPending}
-        users={users}
+        resources={resourcesQuery.data?.items ?? []}
       />
       <SecretDisclosureDialog
         clientId={application.clientId}
@@ -279,25 +265,14 @@ export function ApplicationDetailPage({
 function ApplicationOverview({
   application,
   organizations,
-  users,
 }: {
   application: ApplicationResponse
   organizations: OrganizationResponse[]
-  users: Parameters<typeof userOptions>[0]
 }) {
   return (
     <div className="detailFlatRows">
       <DetailRow label="Owner" value={ownerLabel(application.ownerOrganizationId, organizations)} />
-      <DetailRow label="Audience" value={applicationAudienceLabel(application.audience.mode)} />
-      {application.audience.mode === 'organizations' ? (
-        <DetailRow
-          label="Allowed Organizations"
-          value={selectionSummary(application.audience.organizationIds, organizationOptions(organizations))}
-        />
-      ) : null}
-      {application.audience.mode === 'users' ? (
-        <DetailRow label="Allowed users" value={selectionSummary(application.audience.userIds, userOptions(users))} />
-      ) : null}
+      <DetailRow label="Sign-in" value={tt('Any authenticated user')} />
       <DetailRow
         label="Publisher relationship"
         value={application.firstParty ? tt('Platform-owned') : tt('Third-party')}
@@ -354,7 +329,17 @@ function ApplicationOAuth({
         title="Authorization"
       >
         <DetailRow label="Grant types" value={application.allowedGrantTypes.join(' · ')} />
-        <DetailRow label="Allowed scopes" value={application.allowedScopes.join(' · ')} />
+        <DetailRow label="OIDC scopes" value={application.oidcScopes.join(' · ')} />
+        <DetailRow
+          label="Resource scope allowlists"
+          value={
+            application.resourceScopes.length
+              ? application.resourceScopes
+                  .map((resource) => `${resource.resourceServerId}: ${resource.scopes.join(', ')}`)
+                  .join(' · ')
+              : tt('None')
+          }
+        />
         <DetailRow label="PKCE" value={application.requirePkce ? tt('Required') : tt('Optional')} />
         <DetailRow label="Client authentication" value={application.tokenEndpointAuthMethod} />
         <DetailRow
@@ -539,9 +524,8 @@ function ApplicationAuthorizations({ applicationId }: { applicationId: string })
 function ApplicationSettings({
   application,
   organizations,
-  users,
   onDelete,
-  onEditAudience,
+  onEditOwnership,
   onEditConsent,
   onEditDetails,
   onToggle,
@@ -549,9 +533,8 @@ function ApplicationSettings({
 }: {
   application: ApplicationResponse
   organizations: OrganizationResponse[]
-  users: Parameters<typeof userOptions>[0]
   onDelete: () => void
-  onEditAudience: () => void
+  onEditOwnership: () => void
   onEditConsent: () => void
   onEditDetails: () => void
   onToggle: () => void
@@ -577,24 +560,15 @@ function ApplicationSettings({
       </DetailSection>
       <DetailSection
         action={
-          <Button onClick={onEditAudience} variant="outline">
+          <Button onClick={onEditOwnership} variant="outline">
             {tt('Edit')}
           </Button>
         }
-        description="Choose the Organization responsible for this client and the identities allowed to authorize it."
-        title="Ownership & audience"
+        description="Choose the Organization responsible for this client. Any authenticated user may sign in."
+        title="Ownership"
       >
         <DetailRow label="Owner" value={ownerLabel(application.ownerOrganizationId, organizations)} />
-        <DetailRow label="Who can sign in" value={applicationAudienceLabel(application.audience.mode)} />
-        {application.audience.mode === 'organizations' ? (
-          <DetailRow
-            label="Allowed Organizations"
-            value={selectionSummary(application.audience.organizationIds, organizationOptions(organizations))}
-          />
-        ) : null}
-        {application.audience.mode === 'users' ? (
-          <DetailRow label="Allowed users" value={selectionSummary(application.audience.userIds, userOptions(users))} />
-        ) : null}
+        <DetailRow label="Who can sign in" value={tt('Any authenticated user')} />
       </DetailSection>
       <DetailSection
         action={
@@ -659,7 +633,7 @@ function ApplicationEditor({
   onSave,
   organizations,
   pending,
-  users,
+  resources,
 }: {
   application: ApplicationResponse
   editor: Editor
@@ -669,7 +643,7 @@ function ApplicationEditor({
   onSave: (input: Parameters<typeof updateApplication>[1]) => void
   organizations: OrganizationResponse[]
   pending: boolean
-  users: Parameters<typeof userOptions>[0]
+  resources: ApiResourceResponse[]
 }) {
   const [claims, setClaims] = useState(application.oidcClaims)
   useEffect(() => setClaims(application.oidcClaims), [application.oidcClaims])
@@ -744,15 +718,16 @@ function ApplicationEditor({
               </Field>
             </EditorForm>
           ) : null}
-          {editor === 'authorization' ? <AuthorizationEditor application={application} onSave={onSave} /> : null}
+          {editor === 'authorization' ? (
+            <AuthorizationEditor application={application} onSave={onSave} resources={resources} />
+          ) : null}
           {editor === 'claims' ? <ClaimsEditor claims={claims} onChange={setClaims} /> : null}
-          {editor === 'audience' ? (
-            <AudienceEditor
+          {editor === 'ownership' ? (
+            <OwnershipEditor
               application={application}
               fixedOwnerOrganizationId={fixedOwnerOrganizationId}
               onSave={onSave}
               organizations={organizations}
-              users={users}
             />
           ) : null}
           {editor === 'consent' ? <ConsentEditor application={application} onSave={onSave} /> : null}
@@ -783,12 +758,15 @@ function ApplicationEditor({
 function AuthorizationEditor({
   application,
   onSave,
+  resources,
 }: {
   application: ApplicationResponse
   onSave: (input: Parameters<typeof updateApplication>[1]) => void
+  resources: ApiResourceResponse[]
 }) {
   const [grants, setGrants] = useState(application.allowedGrantTypes)
-  const [scopes, setScopes] = useState(application.allowedScopes)
+  const [scopes, setScopes] = useState(application.oidcScopes)
+  const [resourceScopes, setResourceScopes] = useState(application.resourceScopes)
   const refreshTokensEnabled = grants.includes('refresh_token')
   const grantOptions: Array<[ApplicationResponse['allowedGrantTypes'][number], string]> = [
     ['authorization_code', 'Authorization code'],
@@ -810,7 +788,7 @@ function AuthorizationEditor({
       id="application-authorization"
       onSubmit={(event) => {
         event.preventDefault()
-        onSave({ allowedGrantTypes: grants, allowedScopes: scopes })
+        onSave({ allowedGrantTypes: grants, oidcScopes: scopes, resourceScopes })
       }}
     >
       <CheckGroup
@@ -839,6 +817,31 @@ function AuthorizationEditor({
         ]}
         values={scopes}
       />
+      {resources.map((resource) => {
+        const values = resourceScopes.find((item) => item.resourceServerId === resource.id)?.scopes ?? []
+        const options = (resource.scopeRegistry?.scopes ?? []).map(
+          (scope) =>
+            [scope.value, scope.description ? `${scope.value} — ${scope.description}` : scope.value] as [
+              string,
+              string,
+            ],
+        )
+        return (
+          <CheckGroup
+            description={`${resource.visibility === 'private' ? 'Private' : 'Public'} Resource Server`}
+            key={resource.id}
+            label={resource.name}
+            onChange={(nextScopes) =>
+              setResourceScopes((current) => [
+                ...current.filter((item) => item.resourceServerId !== resource.id),
+                ...(nextScopes.length ? [{ resourceServerId: resource.id, scopes: nextScopes }] : []),
+              ])
+            }
+            options={options}
+            values={values}
+          />
+        )
+      })}
     </form>
   )
 }
@@ -875,30 +878,25 @@ function ClaimsEditor({
   )
 }
 
-function AudienceEditor({
+function OwnershipEditor({
   application,
   fixedOwnerOrganizationId,
   onSave,
   organizations,
-  users,
 }: {
   application: ApplicationResponse
   fixedOwnerOrganizationId?: string
   onSave: (input: Parameters<typeof updateApplication>[1]) => void
   organizations: OrganizationResponse[]
-  users: Parameters<typeof userOptions>[0]
 }) {
   const [ownerOrganizationId, setOwnerOrganizationId] = useState(application.ownerOrganizationId)
-  const [mode, setMode] = useState<ApplicationAudienceMode>(application.audience.mode)
-  const [organizationIds, setOrganizationIds] = useState(application.audience.organizationIds)
-  const [userIds, setUserIds] = useState(application.audience.userIds)
   return (
     <form
       className="grid gap-4 px-4 py-5"
-      id="application-audience"
+      id="application-ownership"
       onSubmit={(event) => {
         event.preventDefault()
-        onSave({ ownerOrganizationId, audience: { mode, organizationIds, userIds } })
+        onSave({ ownerOrganizationId })
       }}
     >
       {fixedOwnerOrganizationId ? null : (
@@ -908,38 +906,6 @@ function AudienceEditor({
           value={ownerOrganizationId}
         />
       )}
-      <Field
-        help={tt('Audience gates who may authorize the client; requested scopes still constrain access.')}
-        label={tt('Who can sign in')}
-      >
-        <SelectInput onChange={(event) => setMode(event.target.value as ApplicationAudienceMode)} value={mode}>
-          {(['realm', 'organizations', 'users', 'public'] as const).map((value) => (
-            <option key={value} value={value}>
-              {applicationAudienceLabel(value)}
-            </option>
-          ))}
-        </SelectInput>
-      </Field>
-      {mode === 'organizations' ? (
-        <IdentityMultiSelect
-          emptyLabel={tt('No Organizations found')}
-          label={tt('Allowed Organizations')}
-          onChange={setOrganizationIds}
-          options={organizationOptions(organizations)}
-          placeholder={tt('Select Organizations')}
-          value={organizationIds}
-        />
-      ) : null}
-      {mode === 'users' ? (
-        <IdentityMultiSelect
-          emptyLabel={tt('No users found')}
-          label={tt('Allowed users')}
-          onChange={setUserIds}
-          options={userOptions(users)}
-          placeholder={tt('Select users')}
-          value={userIds}
-        />
-      ) : null}
     </form>
   )
 }
@@ -1136,7 +1102,7 @@ function editorTitle(editor: Editor) {
       redirects: 'Edit redirects and origins',
       authorization: 'Edit OAuth authorization',
       claims: 'Edit token claims',
-      audience: 'Edit ownership & audience',
+      ownership: 'Edit ownership',
       consent: 'Edit consent policy',
     } as Record<Exclude<Editor, null>, string>
   )[editor ?? 'details']
@@ -1149,7 +1115,7 @@ function editorDescription(editor: Editor) {
       redirects: 'Set the exact callbacks and browser origins accepted by Realmroot.',
       authorization: 'Choose the grants and scopes this client may request.',
       claims: 'Choose the authorization claims emitted to each token destination.',
-      audience: 'Set the responsible Organization and the identities allowed to authorize this client.',
+      ownership: 'Set the Organization responsible for this client.',
       consent: 'Classify the publisher and decide when users must approve access.',
     } as Record<Exclude<Editor, null>, string>
   )[editor ?? 'details']

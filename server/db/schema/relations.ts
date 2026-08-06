@@ -13,16 +13,15 @@ import {
 } from './auth-tables'
 import {
   apiResource,
-  apiResourceEligibleOrganization,
   application,
-  applicationAudienceOrganization,
-  applicationAudienceUser,
   applicationClientSecret,
   applicationConsent,
+  applicationScopeGrant,
   invitation,
   member,
   organization,
   organizationRole,
+  userScopeGrant,
 } from './authorization-tables'
 
 export const userRelations = relations(user, ({ many }) => ({
@@ -173,30 +172,7 @@ export const applicationRelations = relations(application, ({ one, many }) => ({
   }),
   clientSecrets: many(applicationClientSecret),
   consents: many(applicationConsent),
-  audienceOrganizations: many(applicationAudienceOrganization),
-  audienceUsers: many(applicationAudienceUser),
-}))
-
-export const applicationAudienceOrganizationRelations = relations(applicationAudienceOrganization, ({ one }) => ({
-  application: one(application, {
-    fields: [applicationAudienceOrganization.applicationId],
-    references: [application.id],
-  }),
-  organization: one(organization, {
-    fields: [applicationAudienceOrganization.organizationId],
-    references: [organization.id],
-  }),
-}))
-
-export const applicationAudienceUserRelations = relations(applicationAudienceUser, ({ one }) => ({
-  application: one(application, {
-    fields: [applicationAudienceUser.applicationId],
-    references: [application.id],
-  }),
-  user: one(user, {
-    fields: [applicationAudienceUser.userId],
-    references: [user.id],
-  }),
+  scopeGrants: many(applicationScopeGrant),
 }))
 
 export const apiResourceRelations = relations(apiResource, ({ many, one }) => ({
@@ -204,18 +180,8 @@ export const apiResourceRelations = relations(apiResource, ({ many, one }) => ({
     fields: [apiResource.ownerOrganizationId],
     references: [organization.id],
   }),
-  eligibleOrganizations: many(apiResourceEligibleOrganization),
-}))
-
-export const apiResourceEligibleOrganizationRelations = relations(apiResourceEligibleOrganization, ({ one }) => ({
-  resource: one(apiResource, {
-    fields: [apiResourceEligibleOrganization.resourceId],
-    references: [apiResource.id],
-  }),
-  organization: one(organization, {
-    fields: [apiResourceEligibleOrganization.organizationId],
-    references: [organization.id],
-  }),
+  userScopeGrants: many(userScopeGrant),
+  applicationScopeGrants: many(applicationScopeGrant),
 }))
 
 export const organizationRoleRelations = relations(organizationRole, ({ one }) => ({

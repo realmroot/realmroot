@@ -15,7 +15,6 @@ import type {
   ClientSecretRecord,
   ConsentRecord,
 } from '@server/usecases/ports'
-import type { ApplicationResponse } from '@shared/api/applications'
 import { describe, expect, it } from 'vitest'
 
 function createApplication(
@@ -56,7 +55,11 @@ describe('service.test 3', () => {
       },
       'admin-1',
     )
-    const first = await createConsent(deps, { clientId: application.clientId, scopes: ['openid'] }, 'user-1')
+    const first = await createConsent(
+      deps,
+      { clientId: application.clientId, resourceServerId: null, scopes: ['openid'] },
+      'user-1',
+    )
 
     await expect(
       loadConsentRequest(
@@ -66,7 +69,11 @@ describe('service.test 3', () => {
         { id: 'user-2' },
       ),
     ).resolves.toMatchObject({ existingConsent: null })
-    const second = await createConsent(deps, { clientId: application.clientId, scopes: ['openid'] }, 'user-2')
+    const second = await createConsent(
+      deps,
+      { clientId: application.clientId, resourceServerId: null, scopes: ['openid'] },
+      'user-2',
+    )
     expect(second.id).not.toBe(first.id)
   })
 
@@ -84,7 +91,11 @@ describe('service.test 3', () => {
       },
       'admin-1',
     )
-    const consent = await createConsent(deps, { clientId: created.clientId, scopes: ['openid'] }, 'user-1')
+    const consent = await createConsent(
+      deps,
+      { clientId: created.clientId, resourceServerId: null, scopes: ['openid'] },
+      'user-1',
+    )
 
     await expect(revokeConsent(deps, consent.id, 'user-1')).resolves.toBeUndefined()
     await expect(revokeConsent(deps, consent.id, 'user-1')).rejects.toMatchObject({
@@ -106,7 +117,11 @@ describe('service.test 3', () => {
       },
       'admin-1',
     )
-    const consent = await createConsent(deps, { clientId: created.clientId, scopes: ['openid'] }, 'user-1')
+    const consent = await createConsent(
+      deps,
+      { clientId: created.clientId, resourceServerId: null, scopes: ['openid'] },
+      'user-1',
+    )
 
     await expect(
       listApplicationAuthorizations(deps, { applicationId: created.id, limit: 50, offset: 0 }),
@@ -128,36 +143,12 @@ describe('service.test 3', () => {
     })
 
     repository.failAuthorizationRevocation = true
-    const secondConsent = await createConsent(deps, { clientId: created.clientId, scopes: ['openid'] }, 'user-2')
-    await expect(putApplicationAuthorizationRevocation(deps, secondConsent.id)).rejects.toMatchObject({ status: 404 })
-  })
-
-  it('rejects a public audience when external registration is disabled', async () => {
-    const repository = new InMemoryApplicationRepository()
-    const deps = {
-      applications: repository,
-      configz: { getSettings: async () => ({ signupEnabled: false }) },
-    } as unknown as Deps
-    const issuer = 'https://auth.example.com'
-    const created = await createApplication(
+    const secondConsent = await createConsent(
       deps,
-      issuer,
-      {
-        name: 'Realm App',
-        clientType: 'public_spa',
-        redirectUris: ['https://spa.example.com/callback'],
-      },
-      'admin-1',
+      { clientId: created.clientId, resourceServerId: null, scopes: ['openid'] },
+      'user-2',
     )
-
-    await expect(
-      updateApplication(deps, issuer, created.id, {
-        audience: { mode: 'public', organizationIds: [], userIds: [] },
-      }),
-    ).rejects.toMatchObject({
-      status: 400,
-      message: 'Public application audience requires external registration to be enabled.',
-    })
+    await expect(putApplicationAuthorizationRevocation(deps, secondConsent.id)).rejects.toMatchObject({ status: 404 })
   })
 
   it('projects scoped and expired authorization resources and enforces revocation invariants', async () => {
@@ -242,7 +233,7 @@ describe('service.test 3', () => {
       ),
     ).rejects.toMatchObject({ status: 404, message: 'OAuth client was not found.' })
     await expect(
-      createConsent(deps, { clientId: created.clientId, scopes: ['openid'] }, 'user-1'),
+      createConsent(deps, { clientId: created.clientId, resourceServerId: null, scopes: ['openid'] }, 'user-1'),
     ).rejects.toMatchObject({ status: 404, message: 'OAuth client was not found.' })
     await expect(
       loadConsentRequest(
@@ -257,17 +248,12 @@ describe('service.test 3', () => {
     ).rejects.toMatchObject({ status: 404, message: 'OAuth client was not found.' })
   })
 
-  it('[spec: hosted-auth/application-audience-enforcement] gates authorization by assigned user and active Organization membership', async () => {
+  it('[spec: hosted-auth/application-login-without-resource-access] allows every authenticated user to authorize the application', async () => {
     const repository = new InMemoryApplicationRepository()
-    const members = new Set(['org-allowed:user-member'])
     const deps = {
       applications: repository,
-      users: { getUser: async (id: string) => ({ id }) },
       authorization: {
-        findOrganization: async (id: string) =>
-          id === 'org-allowed' ? { id, disabled: false } : id === 'org-disabled' ? { id, disabled: true } : null,
-        findMemberByOrganizationUser: async (organizationId: string, userId: string) =>
-          members.has(`${organizationId}:${userId}`) ? { id: `member-${userId}` } : null,
+        findOrganization: async (id: string) => ({ id, disabled: false }),
       },
     } as unknown as Deps
     const issuer = 'https://auth.example.com'
@@ -287,25 +273,12 @@ describe('service.test 3', () => {
       redirectUri: 'https://spa.example.com/callback',
     }
 
-    await updateApplication(deps, issuer, created.id, {
-      audience: { mode: 'users', organizationIds: [], userIds: ['user-assigned'] },
-    })
     await expect(loadConsentRequest(deps, issuer, request, { id: 'user-assigned' })).resolves.toBeDefined()
-    await expect(loadConsentRequest(deps, issuer, request, { id: 'user-other' })).rejects.toMatchObject({
-      status: 403,
-      message: 'This application is not available to the current user.',
-    })
+    await expect(loadConsentRequest(deps, issuer, request, { id: 'user-other' })).resolves.toBeDefined()
     await expect(
-      createConsent(deps, { clientId: created.clientId, scopes: ['openid'] }, 'user-other'),
-    ).rejects.toMatchObject({
-      status: 403,
-    })
-
-    await updateApplication(deps, issuer, created.id, {
-      audience: { mode: 'organizations', organizationIds: ['org-allowed'], userIds: [] },
-    })
+      createConsent(deps, { clientId: created.clientId, resourceServerId: null, scopes: ['openid'] }, 'user-other'),
+    ).resolves.toBeDefined()
     await expect(loadConsentRequest(deps, issuer, request, { id: 'user-member' })).resolves.toBeDefined()
-    await expect(loadConsentRequest(deps, issuer, request, { id: 'user-other' })).rejects.toMatchObject({ status: 403 })
   })
 })
 
@@ -459,11 +432,13 @@ class InMemoryApplicationRepository implements ApplicationRepository {
     applicationId: string
     clientId: string
     userId: string
-    scopes: ApplicationResponse['allowedScopes']
+    resourceServerId: string | null
+    scopes: string[]
     permissions: string[]
   }) {
     const consent = {
       id: `consent-${this.consents.size + 1}`,
+      resourceServerId: input.resourceServerId,
       scopes: input.scopes,
       grantedAt: new Date('2026-05-18T15:00:00.000Z'),
     }

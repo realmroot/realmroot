@@ -173,7 +173,7 @@ describe('applications management over real D1', () => {
     const created = await createApplication(harness, cookie, {
       slug: 'consent-app',
       name: 'Consent App',
-      allowedScopes: ['openid', 'profile'],
+      oidcScopes: ['openid', 'profile'],
     })
 
     // loadConsentRequest reads the client + existing consent (findByClientId + findConsent).
@@ -188,7 +188,7 @@ describe('applications management over real D1', () => {
     const granted = await harness.request('/api/oauth/consent', {
       method: 'POST',
       headers: { 'content-type': 'application/json', cookie },
-      body: JSON.stringify({ clientId: created.clientId, scopes: ['openid', 'profile'] }),
+      body: JSON.stringify({ clientId: created.clientId, resourceServerId: null, scopes: ['openid', 'profile'] }),
     })
     expect(granted.status, await granted.clone().text()).toBe(201)
     const grantedBody = (await granted.json()) as { consent: { id: string } }
@@ -197,7 +197,7 @@ describe('applications management over real D1', () => {
     const regranted = await harness.request('/api/oauth/consent', {
       method: 'POST',
       headers: { 'content-type': 'application/json', cookie },
-      body: JSON.stringify({ clientId: created.clientId, scopes: ['openid'] }),
+      body: JSON.stringify({ clientId: created.clientId, resourceServerId: null, scopes: ['openid'] }),
     })
     expect(regranted.status, await regranted.clone().text()).toBe(201)
     expect(((await regranted.json()) as { consent: { id: string } }).consent.id).toBe(consentId)
@@ -240,7 +240,7 @@ describe('applications management over real D1', () => {
     const grantedAgain = await harness.request('/api/oauth/consent', {
       method: 'POST',
       headers: { 'content-type': 'application/json', cookie },
-      body: JSON.stringify({ clientId: created.clientId, scopes: ['openid'] }),
+      body: JSON.stringify({ clientId: created.clientId, resourceServerId: null, scopes: ['openid'] }),
     })
     expect(grantedAgain.status, await grantedAgain.clone().text()).toBe(201)
     const managedConsentId = ((await grantedAgain.json()) as { consent: { id: string } }).consent.id

@@ -240,11 +240,14 @@ describe('schema.test 2', () => {
         'logoAsset',
         'clientSecrets',
         'consents',
-        'audienceOrganizations',
-        'audienceUsers',
+        'scopeGrants',
       ]),
     )
-    expect(relationKeys(apiResourceRelations)).toEqual(['ownerOrganization', 'eligibleOrganizations'])
+    expect(relationKeys(apiResourceRelations)).toEqual([
+      'ownerOrganization',
+      'userScopeGrants',
+      'applicationScopeGrants',
+    ])
     expect(relationKeys(organizationRoleRelations)).toEqual(['organization'])
   })
 

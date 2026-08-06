@@ -1,12 +1,11 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
-  applicationAudienceLabel,
   IdentityMultiSelect,
   OrganizationOwnerField,
   organizationOptions,
   ownerLabel,
-  resourceEligibilityLabel,
+  resourceVisibilityLabel,
   selectionSummary,
   userOptions,
 } from '@/features/management/ownership-controls'
@@ -47,13 +46,8 @@ describe('ownership and access controls', () => {
     expect(ownerLabel('org-1', [organization, nameOnly])).toBe('Acme Inc.')
     expect(ownerLabel('org-2', [organization, nameOnly])).toBe('Northwind')
     expect(ownerLabel('org-missing', [organization])).toBe('org-missing')
-    expect(applicationAudienceLabel('realm')).toBe('All Realm users')
-    expect(applicationAudienceLabel('organizations')).toBe('Selected Organizations')
-    expect(applicationAudienceLabel('users')).toBe('Assigned users')
-    expect(applicationAudienceLabel('public')).toBe('Anyone who can register')
-    expect(resourceEligibilityLabel('owner_organization')).toBe('Owning Organization')
-    expect(resourceEligibilityLabel('organizations')).toBe('Selected Organizations')
-    expect(resourceEligibilityLabel('realm')).toBe('All Realm actors')
+    expect(resourceVisibilityLabel('private')).toBe('Owner Organization only')
+    expect(resourceVisibilityLabel('public')).toBe('All authenticated users and Organizations')
 
     const options = [
       { id: 'one', label: 'One' },

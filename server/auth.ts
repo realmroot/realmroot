@@ -8,14 +8,12 @@ import { createDrizzleAgentRepository } from '@server/adapters/repos/agents'
 import { createDrizzleApplicationRepository } from '@server/adapters/repos/applications'
 import { createDrizzleAuthorizationRepository } from '@server/adapters/repos/authorization'
 import { createDrizzleConfigzRepository } from '@server/adapters/repos/configz'
-import { assertApplicationAudience } from '@server/usecases/applications'
 import type { AuthConnectorConfig } from '@server/usecases/connectors'
 import type { Deps } from '@server/usecases/deps'
 import { mayCreateOrganization } from '@server/usecases/developer-access'
 import type { ApplicationRepository } from '@server/usecases/ports'
 import { APIError, betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
-import { createAuthMiddleware, getSessionFromCtx } from 'better-auth/api'
 import {
   admin,
   deviceAuthorization,
@@ -191,23 +189,6 @@ export function createAuth(
           },
         }
       : undefined,
-    hooks: {
-      before: createAuthMiddleware(async (context) => {
-        if (context.path !== '/oauth2/authorize') return
-        const clientId = readString(context.query as Record<string, unknown> | undefined, 'client_id')
-        if (!clientId) return
-        const session = await getSessionFromCtx(context)
-        if (!session) return
-        const application = await applications.findByClientId(clientId)
-        if (!application || application.disabled) return
-        try {
-          await assertApplicationAudience(deps, application, session.user.id)
-        } catch (error) {
-          if (error instanceof Error) throw new APIError('FORBIDDEN', { message: error.message })
-          throw error
-        }
-      }),
-    },
     trustedOrigins,
     socialProviders: connectors.socialProviders,
     account: {
@@ -515,7 +496,11 @@ export function createDeviceAuthorizationOptions(applications: Pick<ApplicationR
 
       const requestedScopes = (scope || 'openid').split(/\s+/).filter(Boolean)
       for (const requestedScope of requestedScopes) {
-        if (!application.allowedScopes.includes(requestedScope as (typeof application.allowedScopes)[number])) {
+        const protocolScopes = [
+          ...application.oidcScopes,
+          ...application.resourceScopes.flatMap((resource) => resource.scopes),
+        ]
+        if (!protocolScopes.includes(requestedScope)) {
           throw new APIError('BAD_REQUEST', {
             error: 'invalid_request',
             error_description: `Scope is not allowed for this client: ${requestedScope}`,

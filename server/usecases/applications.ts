@@ -1,4 +1,4 @@
-import { badRequest, forbidden, notFound } from '@server/domain/errors'
+import { badRequest, notFound } from '@server/domain/errors'
 import {
   buildDeniedAuthorizationUrl,
   createClientSecret,
@@ -44,7 +44,7 @@ export async function createApplication(
     input.clientType,
     input.redirectUris,
     input.allowedGrantTypes,
-    input.allowedScopes,
+    input.oidcScopes,
   )
   const postLogoutRedirectUris = normalizePostLogoutRedirectUris(input.clientType, input.postLogoutRedirectUris ?? [])
   const corsOrigins = normalizeCorsOrigins(input.corsOrigins ?? [])
@@ -53,8 +53,8 @@ export async function createApplication(
   const secretPrefix = clientSecret ? clientSecret.slice(0, 12) : null
   const ownerOrganizationId = input.ownerOrganizationId
   await requireActiveOrganization(deps, ownerOrganizationId)
-  const audience = input.audience ?? { mode: 'realm' as const, organizationIds: [], userIds: [] }
-  await validateApplicationAudience(deps, audience)
+  const resourceScopes = input.resourceScopes ?? []
+  await validateApplicationResourceScopes(deps, ownerOrganizationId, resourceScopes)
 
   const application = await deps.applications.create({
     application: {
@@ -72,13 +72,13 @@ export async function createApplication(
       disabled: false,
       disabledReason: null,
       ownerOrganizationId,
-      audience,
       redirectUris: settings.redirectUris,
       postLogoutRedirectUris,
       corsOrigins,
       customData: {},
       allowedGrantTypes: settings.allowedGrantTypes,
-      allowedScopes: settings.allowedScopes,
+      oidcScopes: settings.oidcScopes,
+      resourceScopes,
       requirePkce: input.clientType !== 'confidential_web',
       tokenEndpointAuthMethod: input.clientType === 'confidential_web' ? 'client_secret_basic' : 'none',
       oidcClaims: input.oidcClaims ?? defaultApplicationOidcClaims,
@@ -136,12 +136,12 @@ export async function updateApplication(
 ): Promise<ApplicationResponse> {
   const application = await requireApplication(deps, id)
   const settings =
-    input.redirectUris || input.allowedGrantTypes || input.allowedScopes
+    input.redirectUris || input.allowedGrantTypes || input.oidcScopes
       ? normalizeClientSettings(
           application.clientType,
           input.redirectUris ?? application.redirectUris,
           input.allowedGrantTypes ?? application.allowedGrantTypes,
-          input.allowedScopes ?? application.allowedScopes,
+          input.oidcScopes ?? application.oidcScopes,
         )
       : null
   const postLogoutRedirectUris =
@@ -150,7 +150,8 @@ export async function updateApplication(
       : undefined
   const corsOrigins = input.corsOrigins !== undefined ? normalizeCorsOrigins(input.corsOrigins) : undefined
   if (input.ownerOrganizationId) await requireActiveOrganization(deps, input.ownerOrganizationId)
-  if (input.audience) await validateApplicationAudience(deps, input.audience)
+  const ownerOrganizationId = input.ownerOrganizationId ?? application.ownerOrganizationId
+  if (input.resourceScopes) await validateApplicationResourceScopes(deps, ownerOrganizationId, input.resourceScopes)
 
   await deps.applications.update(id, {
     slug: input.slug,
@@ -163,13 +164,13 @@ export async function updateApplication(
     disabled: input.disabled,
     disabledReason: input.disabledReason,
     ownerOrganizationId: input.ownerOrganizationId,
-    audience: input.audience,
     redirectUris: settings?.redirectUris,
     postLogoutRedirectUris,
     corsOrigins,
     customData: input.customData,
     allowedGrantTypes: settings?.allowedGrantTypes,
-    allowedScopes: settings?.allowedScopes,
+    oidcScopes: settings?.oidcScopes,
+    resourceScopes: input.resourceScopes,
     oidcClaims: input.oidcClaims,
   })
 
@@ -187,7 +188,7 @@ export async function replaceRedirectUris(
     application.clientType,
     input.redirectUris,
     application.allowedGrantTypes,
-    application.allowedScopes,
+    application.oidcScopes,
   )
   await deps.applications.update(id, { redirectUris: settings.redirectUris })
   return getApplication(deps, issuer, id)
@@ -253,6 +254,7 @@ function toApplicationAuthorization(authorization: ApplicationAuthorizationRecor
       email: authorization.userEmail,
     },
     organization: null,
+    resourceServerId: authorization.resourceServerId,
     scopes: authorization.scopes,
     permissions: authorization.permissions,
     grantedAt: authorization.grantedAt.toISOString(),
@@ -314,10 +316,15 @@ export async function loadConsentRequest(
   if (!application.redirectUris.includes(input.redirectUri)) {
     throw badRequest('redirect_uri is not registered for this client.')
   }
-  await assertApplicationAudience(deps, application, user.id)
-
-  const requestedScopes = normalizeRequestedScopes(input.scope, application.allowedScopes)
-  const existingConsent = await deps.applications.findConsent(application.id, user.id)
+  const resource = await resolveRequestedResource(deps, input.authorizationParams?.resource, user.id)
+  const allowedScopes = [
+    ...application.oidcScopes,
+    ...(resource
+      ? (application.resourceScopes.find((item) => item.resourceServerId === resource.id)?.scopes ?? [])
+      : []),
+  ]
+  const requestedScopes = normalizeRequestedScopes(input.scope, allowedScopes)
+  const existingConsent = await deps.applications.findConsent(application.id, user.id, resource?.id ?? null)
 
   const { secretMetadata: _secretMetadata, ...applicationResponse } = toResponse(issuer, application, [])
   const approveParams = new URLSearchParams(input.authorizationParams)
@@ -337,6 +344,7 @@ export async function loadConsentRequest(
       approveUrl: `/api/auth/oauth2/authorize?${approveParams.toString()}`,
       denyUrl: buildDeniedAuthorizationUrl(input.redirectUri, input.state),
     },
+    resourceServerId: resource?.id ?? null,
     requestedScopes,
     existingConsent: existingConsent
       ? {
@@ -354,12 +362,21 @@ export async function createConsent(deps: Deps, input: CreateConsentRequest, use
   if (!application || application.disabled) {
     throw notFound('OAuth client was not found.')
   }
-  await assertApplicationAudience(deps, application, userId)
-  const requestedScopes = normalizeRequestedScopes(input.scopes.join(' '), application.allowedScopes)
+  const resource = input.resourceServerId
+    ? await requireResourceVisibleToUser(deps, input.resourceServerId, userId)
+    : null
+  const allowedScopes = [
+    ...application.oidcScopes,
+    ...(resource
+      ? (application.resourceScopes.find((item) => item.resourceServerId === resource.id)?.scopes ?? [])
+      : []),
+  ]
+  const requestedScopes = normalizeRequestedScopes(input.scopes.join(' '), allowedScopes)
   const consent = await deps.applications.createConsent({
     applicationId: application.id,
     clientId: application.clientId,
     userId,
+    resourceServerId: resource?.id ?? null,
     scopes: requestedScopes,
     permissions: input.permissions ?? [],
   })
@@ -406,13 +423,13 @@ function toResponse(
     disabled: application.disabled,
     disabledReason: application.disabledReason,
     ownerOrganizationId: application.ownerOrganizationId,
-    audience: application.audience,
     redirectUris: application.redirectUris,
     postLogoutRedirectUris: application.postLogoutRedirectUris,
     corsOrigins: application.corsOrigins,
     customData: application.customData,
     allowedGrantTypes: application.allowedGrantTypes,
-    allowedScopes: application.allowedScopes,
+    oidcScopes: application.oidcScopes,
+    resourceScopes: application.resourceScopes,
     requirePkce: application.requirePkce,
     tokenEndpointAuthMethod: application.tokenEndpointAuthMethod,
     secretMetadata: secrets.map(toSecretMetadata),
@@ -437,35 +454,41 @@ async function requireActiveOrganization(deps: Deps, organizationId: string) {
   if (organization.disabled) throw badRequest('Owner Organization must be active.')
 }
 
-async function validateApplicationAudience(deps: Deps, audience: ApplicationResponse['audience']) {
-  if (audience.mode === 'organizations') {
-    for (const organizationId of audience.organizationIds) await requireActiveOrganization(deps, organizationId)
-    return
-  }
-  if (audience.mode === 'users') {
-    for (const userId of audience.userIds) await deps.users.getUser(userId)
-    return
-  }
-  if (audience.mode === 'public' && (await deps.configz.getSettings())?.signupEnabled === false) {
-    throw badRequest('Public application audience requires external registration to be enabled.')
+async function validateApplicationResourceScopes(
+  deps: Deps,
+  ownerOrganizationId: string,
+  configurations: ApplicationResponse['resourceScopes'],
+) {
+  const seen = new Set<string>()
+  for (const configuration of configurations) {
+    if (seen.has(configuration.resourceServerId)) {
+      throw badRequest('Each Resource Server can appear only once in an Application scope allowlist.')
+    }
+    seen.add(configuration.resourceServerId)
+    const resource = await deps.authorization.findResource(configuration.resourceServerId)
+    if (!resource?.enabled || resource.archivedAt) throw badRequest('Resource Server is not active.')
+    if (resource.visibility === 'private' && resource.ownerOrganizationId !== ownerOrganizationId) {
+      throw badRequest('Private Resource Server is not visible to the Application owner Organization.')
+    }
+    const declared = new Set(resource.scopeRegistry?.scopes.map((scope) => scope.value) ?? [])
+    if (configuration.scopes.some((scope) => !declared.has(scope))) {
+      throw badRequest('Application scope allowlist contains an undeclared Resource Server scope.')
+    }
   }
 }
 
-export async function assertApplicationAudience(
-  deps: Pick<Deps, 'authorization'>,
-  application: Pick<ApplicationAggregate, 'audience'>,
-  userId: string,
-) {
-  if (application.audience.mode === 'realm' || application.audience.mode === 'public') return
-  if (application.audience.mode === 'users') {
-    if (application.audience.userIds.includes(userId)) return
-    throw forbidden('This application is not available to the current user.')
-  }
+async function resolveRequestedResource(deps: Deps, resourceUrl: string | undefined, userId: string) {
+  if (!resourceUrl) return null
+  const resource = await deps.authorization.findResourceByResourceUrl(resourceUrl)
+  if (!resource) throw badRequest('Requested Resource Server is not active.')
+  return requireResourceVisibleToUser(deps, resource.id, userId)
+}
 
-  for (const organizationId of application.audience.organizationIds) {
-    const organization = await deps.authorization.findOrganization(organizationId)
-    if (!organization || organization.disabled) continue
-    if (await deps.authorization.findMemberByOrganizationUser(organizationId, userId)) return
-  }
-  throw forbidden('This application is not available to the current user.')
+async function requireResourceVisibleToUser(deps: Deps, resourceId: string, userId: string) {
+  const resource = await deps.authorization.findResource(resourceId)
+  if (!resource?.enabled || resource.archivedAt) throw badRequest('Requested Resource Server is not active.')
+  if (resource.visibility === 'public') return resource
+  const membership = await deps.authorization.findMemberByOrganizationUser(resource.ownerOrganizationId, userId)
+  if (!membership) throw badRequest('Requested Resource Server is not visible to the current user.')
+  return resource
 }

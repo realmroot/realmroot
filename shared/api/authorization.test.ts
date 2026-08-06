@@ -1,16 +1,11 @@
-import { apiResourceEligibilitySchema, replaceMemberRolesRequestSchema } from '@shared/api/authorization'
+import { apiResourceVisibilitySchema, replaceMemberRolesRequestSchema } from '@shared/api/authorization'
 import { describe, expect, it } from 'vitest'
 
 describe('authorization API schemas', () => {
-  it('requires and normalizes Organization eligibility', () => {
-    expect(apiResourceEligibilitySchema.safeParse({ mode: 'organizations' }).success).toBe(false)
-    expect(
-      apiResourceEligibilitySchema.parse({ mode: 'organizations', organizationIds: ['org-b', 'org-a', 'org-b'] }),
-    ).toEqual({ mode: 'organizations', organizationIds: ['org-a', 'org-b'] })
-    expect(apiResourceEligibilitySchema.parse({ mode: 'realm', organizationIds: ['ignored'] })).toEqual({
-      mode: 'realm',
-      organizationIds: [],
-    })
+  it('accepts only private and public Resource Server visibility', () => {
+    expect(apiResourceVisibilitySchema.parse('private')).toBe('private')
+    expect(apiResourceVisibilitySchema.parse('public')).toBe('public')
+    expect(apiResourceVisibilitySchema.safeParse('organizations').success).toBe(false)
   })
 
   it('deduplicates and deterministically orders member Roles', () => {

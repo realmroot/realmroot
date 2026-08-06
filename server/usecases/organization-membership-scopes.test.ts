@@ -18,7 +18,17 @@ const externalResource: ApiResourceResponse = {
   description: null,
   enabled: true,
   ownerOrganizationId: 'org-1',
-  accessEligibility: { mode: 'owner_organization', organizationIds: [] },
+  visibility: 'private',
+  scopeRegistry: {
+    discovery: {
+      sourceUrl: 'https://contacts.example.com/openapi.json',
+      etag: null,
+      documentHash: 'contacts-registry',
+      syncedAt: '2026-08-05T00:00:00.000Z',
+      lastError: null,
+    },
+    scopes: [{ value: 'contacts:read', description: 'Read contacts', grantMode: 'assigned' }],
+  },
   availableToAgents: true,
   archivedAt: null,
   createdAt: '2026-08-05T00:00:00.000Z',
@@ -62,35 +72,12 @@ describe('Organization membership scope resolution', () => {
         ],
       ]),
     )
-    deps.externalHttp.fetch = vi.fn().mockImplementation(async (request: Request) => {
-      if (new URL(request.url).pathname === '/openapi.json') {
-        return Response.json({
-          openapi: '3.1.0',
-          components: {
-            securitySchemes: {
-              oauth: {
-                type: 'oauth2',
-                flows: {
-                  clientCredentials: {
-                    tokenUrl: '/token',
-                    scopes: { 'contacts:read': 'Read contacts' },
-                  },
-                },
-              },
-            },
-          },
-          paths: { '/contacts': { get: { security: [{ oauth: ['contacts:read'] }] } } },
-        })
-      }
-      return new Response(null, { headers: { link: '</openapi.json>; rel="service-desc"' } })
-    })
-
     await expect(
       resolveOrganizationMembershipScopes(deps, 'org-1', ['contact-reader'], externalResource.id),
     ).resolves.toEqual(['contacts:read'])
   })
 
-  it('returns no scopes for missing, inactive, ineligible, or unassigned external resources', async () => {
+  it('returns no scopes for missing or inactive resources and allows public Role scopes', async () => {
     const deps = dependencies()
     const roleScopes = new Map([['contact-reader', [{ resourceId: externalResource.id, scope: 'contacts:read' }]]])
     deps.authorization.listOrganizationRoleScopes = vi.fn().mockResolvedValue(roleScopes)
@@ -112,11 +99,11 @@ describe('Organization membership scope resolution', () => {
 
     deps.authorization.findResource = vi.fn().mockResolvedValue({
       ...externalResource,
-      accessEligibility: { mode: 'organizations', organizationIds: ['org-2'] },
+      visibility: 'public',
     })
     await expect(
       resolveOrganizationMembershipScopes(deps, 'org-1', ['contact-reader'], externalResource.id),
-    ).resolves.toEqual([])
+    ).resolves.toEqual(['contacts:read'])
     expect(deps.externalHttp.fetch).not.toHaveBeenCalled()
   })
 
@@ -133,13 +120,13 @@ describe('Organization membership scope resolution', () => {
       resourceUrl: 'https://auth.example.com/api',
       enabled: true,
       archivedAt: null,
-      accessEligibility: { mode: 'realm', organizationIds: [] },
+      visibility: 'public',
     }
 
-    await expect(filterCurrentResourceScopes(deps, internalResource, 'org-1', [])).resolves.toEqual([])
-    await expect(
-      filterCurrentResourceScopes(deps, internalResource, 'org-1', ['organizations:read', 'removed:scope']),
-    ).resolves.toEqual(['organizations:read'])
+    expect(filterCurrentResourceScopes(internalResource, 'org-1', [])).toEqual([])
+    expect(filterCurrentResourceScopes(internalResource, 'org-1', ['organizations:read', 'removed:scope'])).toEqual([
+      'organizations:read',
+    ])
     expect(deps.externalHttp.fetch).not.toHaveBeenCalled()
   })
 })

@@ -1,3 +1,4 @@
+import type { ResourceScopeRegistry } from '@shared/api/authorization'
 import type { AuthorizationDetail } from '@shared/api/authorization-details'
 import { sql } from 'drizzle-orm'
 import { index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
@@ -96,7 +97,14 @@ export const application = sqliteTable(
     ownerOrganizationId: text('owner_organization_id')
       .notNull()
       .references(() => organization.id, { onDelete: 'restrict' }),
-    audienceMode: text('audience_mode').notNull().default('realm'),
+    oidcScopes: text('oidc_scopes', { mode: 'json' })
+      .$type<Array<'openid' | 'profile' | 'email' | 'offline_access'>>()
+      .notNull()
+      .default(sql`'["openid","profile","email"]'`),
+    resourceScopes: text('resource_scopes', { mode: 'json' })
+      .$type<Array<{ resourceServerId: string; scopes: string[] }>>()
+      .notNull()
+      .default(sql`'[]'`),
     firstParty: integer('first_party', { mode: 'boolean' }).default(false).notNull(),
     trusted: integer('trusted', { mode: 'boolean' }).default(false).notNull(),
     disabled: integer('disabled', { mode: 'boolean' }).default(false).notNull(),
@@ -116,44 +124,6 @@ export const application = sqliteTable(
     uniqueIndex('application_oauthClientId_unique').on(table.oauthClientId),
     index('application_ownerOrganizationId_idx').on(table.ownerOrganizationId),
     index('application_disabled_idx').on(table.disabled),
-  ],
-)
-
-export const applicationAudienceOrganization = sqliteTable(
-  'application_audience_organization',
-  {
-    applicationId: text('application_id')
-      .notNull()
-      .references(() => application.id, { onDelete: 'cascade' }),
-    organizationId: text('organization_id')
-      .notNull()
-      .references(() => organization.id, { onDelete: 'cascade' }),
-    createdAt: integer('created_at', { mode: 'timestamp_ms' })
-      .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
-      .notNull(),
-  },
-  (table) => [
-    uniqueIndex('applicationAudienceOrganization_unique').on(table.applicationId, table.organizationId),
-    index('applicationAudienceOrganization_organizationId_idx').on(table.organizationId),
-  ],
-)
-
-export const applicationAudienceUser = sqliteTable(
-  'application_audience_user',
-  {
-    applicationId: text('application_id')
-      .notNull()
-      .references(() => application.id, { onDelete: 'cascade' }),
-    userId: text('user_id')
-      .notNull()
-      .references(() => user.id, { onDelete: 'cascade' }),
-    createdAt: integer('created_at', { mode: 'timestamp_ms' })
-      .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
-      .notNull(),
-  },
-  (table) => [
-    uniqueIndex('applicationAudienceUser_unique').on(table.applicationId, table.userId),
-    index('applicationAudienceUser_userId_idx').on(table.userId),
   ],
 )
 
@@ -197,33 +167,6 @@ export const applicationClientSecret = sqliteTable(
   ],
 )
 
-export const applicationConsent = sqliteTable(
-  'application_consent',
-  {
-    id: text('id').primaryKey(),
-    applicationId: text('application_id')
-      .notNull()
-      .references(() => application.id, { onDelete: 'cascade' }),
-    userId: text('user_id')
-      .notNull()
-      .references(() => user.id, { onDelete: 'cascade' }),
-    scopes: text('scopes', { mode: 'json' }).$type<string[]>().notNull(),
-    permissions: text('permissions', { mode: 'json' }).$type<string[]>(),
-    grantedAt: integer('granted_at', { mode: 'timestamp_ms' })
-      .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
-      .notNull(),
-    expiresAt: integer('expires_at', { mode: 'timestamp_ms' }),
-    revokedAt: integer('revoked_at', { mode: 'timestamp_ms' }),
-  },
-  (table) => [
-    index('applicationConsent_applicationId_idx').on(table.applicationId),
-    index('applicationConsent_userId_idx').on(table.userId),
-    uniqueIndex('applicationConsent_activeApplicationUser_unique')
-      .on(table.applicationId, table.userId)
-      .where(sql`${table.revokedAt} is null`),
-  ],
-)
-
 export const apiResource = sqliteTable(
   'api_resource',
   {
@@ -243,7 +186,10 @@ export const apiResource = sqliteTable(
     ownerOrganizationId: text('owner_organization_id')
       .notNull()
       .references(() => organization.id, { onDelete: 'restrict' }),
-    accessEligibilityMode: text('access_eligibility_mode').notNull().default('realm'),
+    visibility: text('visibility', { enum: ['private', 'public'] })
+      .notNull()
+      .default('private'),
+    scopeRegistry: text('scope_registry', { mode: 'json' }).$type<ResourceScopeRegistry | null>(),
     availableToAgents: integer('available_to_agents', { mode: 'boolean' }).default(true).notNull(),
     archivedAt: integer('archived_at', { mode: 'timestamp_ms' }),
     createdAt: integer('created_at', { mode: 'timestamp_ms' })
@@ -262,22 +208,89 @@ export const apiResource = sqliteTable(
   ],
 )
 
-export const apiResourceEligibleOrganization = sqliteTable(
-  'api_resource_eligible_organization',
+export const applicationConsent = sqliteTable(
+  'application_consent',
   {
-    resourceId: text('resource_id')
+    id: text('id').primaryKey(),
+    applicationId: text('application_id')
+      .notNull()
+      .references(() => application.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    resourceServerId: text('resource_server_id').references(() => apiResource.id, { onDelete: 'cascade' }),
+    scopes: text('scopes', { mode: 'json' }).$type<string[]>().notNull(),
+    permissions: text('permissions', { mode: 'json' }).$type<string[]>(),
+    grantedAt: integer('granted_at', { mode: 'timestamp_ms' })
+      .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+      .notNull(),
+    expiresAt: integer('expires_at', { mode: 'timestamp_ms' }),
+    revokedAt: integer('revoked_at', { mode: 'timestamp_ms' }),
+  },
+  (table) => [
+    index('applicationConsent_applicationId_idx').on(table.applicationId),
+    index('applicationConsent_userId_idx').on(table.userId),
+    index('applicationConsent_resourceServerId_idx').on(table.resourceServerId),
+    uniqueIndex('applicationConsent_activePrincipalResource_unique')
+      .on(table.applicationId, table.userId, table.resourceServerId)
+      .where(sql`${table.revokedAt} is null and ${table.resourceServerId} is not null`),
+    uniqueIndex('applicationConsent_activeOidcPrincipal_unique')
+      .on(table.applicationId, table.userId)
+      .where(sql`${table.revokedAt} is null and ${table.resourceServerId} is null`),
+  ],
+)
+
+export const userScopeGrant = sqliteTable(
+  'user_scope_grant',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    organizationId: text('organization_id').references(() => organization.id, { onDelete: 'cascade' }),
+    resourceServerId: text('resource_server_id')
       .notNull()
       .references(() => apiResource.id, { onDelete: 'cascade' }),
-    organizationId: text('organization_id')
+    scopes: text('scopes', { mode: 'json' }).$type<string[]>().notNull(),
+    grantedByUserId: text('granted_by_user_id')
       .notNull()
-      .references(() => organization.id, { onDelete: 'cascade' }),
+      .references(() => user.id, { onDelete: 'restrict' }),
+    expiresAt: integer('expires_at', { mode: 'timestamp_ms' }),
+    revokedAt: integer('revoked_at', { mode: 'timestamp_ms' }),
     createdAt: integer('created_at', { mode: 'timestamp_ms' })
       .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
       .notNull(),
   },
   (table) => [
-    uniqueIndex('apiResourceEligibleOrganization_unique').on(table.resourceId, table.organizationId),
-    index('apiResourceEligibleOrganization_organizationId_idx').on(table.organizationId),
+    index('userScopeGrant_userId_idx').on(table.userId),
+    index('userScopeGrant_resourceServerId_idx').on(table.resourceServerId),
+    index('userScopeGrant_organizationId_idx').on(table.organizationId),
+  ],
+)
+
+export const applicationScopeGrant = sqliteTable(
+  'application_scope_grant',
+  {
+    id: text('id').primaryKey(),
+    applicationId: text('application_id')
+      .notNull()
+      .references(() => application.id, { onDelete: 'cascade' }),
+    resourceServerId: text('resource_server_id')
+      .notNull()
+      .references(() => apiResource.id, { onDelete: 'cascade' }),
+    scopes: text('scopes', { mode: 'json' }).$type<string[]>().notNull(),
+    grantedByUserId: text('granted_by_user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'restrict' }),
+    expiresAt: integer('expires_at', { mode: 'timestamp_ms' }),
+    revokedAt: integer('revoked_at', { mode: 'timestamp_ms' }),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' })
+      .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+      .notNull(),
+  },
+  (table) => [
+    index('applicationScopeGrant_applicationId_idx').on(table.applicationId),
+    index('applicationScopeGrant_resourceServerId_idx').on(table.resourceServerId),
   ],
 )
 

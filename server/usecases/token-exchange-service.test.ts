@@ -1300,24 +1300,58 @@ function credentialDeps(repository: InMemoryTokenExchangeRepository): Deps {
     applications: {
       findById: async (id: string) =>
         id === applicationId ? { id: applicationId, ownerOrganizationId: 'org_1' } : null,
+      findByClientId: async (clientId: string) =>
+        clientId === applicationClientId
+          ? {
+              id: applicationId,
+              clientId: applicationClientId,
+              ownerOrganizationId: 'org_1',
+              disabled: false,
+              oidcScopes: clientScopes(repository).filter((scope) => scope === 'offline_access'),
+              resourceScopes: [
+                {
+                  resourceServerId: audienceResourceId,
+                  scopes: clientScopes(repository).filter((scope) => scope !== 'offline_access'),
+                },
+              ],
+            }
+          : null,
     },
     authorization: {
       findResource: async (id: string) => (id === audienceResourceId ? eligibleAudienceResource() : null),
       findResourceByResourceUrl: async (resourceUrl: string) =>
-        resourceUrl === defaultAudience ? eligibleAudienceResource() : null,
+        resourceUrl === defaultAudience ? eligibleAudienceResource(clientScopes(repository)) : null,
+      listActiveApplicationScopeGrants: async () => [],
     },
   } as unknown as Deps
 }
 
-function eligibleAudienceResource() {
+function eligibleAudienceResource(scopes: string[] = ['runner:connect']) {
   return {
     id: audienceResourceId,
     resourceUrl: defaultAudience,
     enabled: true,
     archivedAt: null,
     ownerOrganizationId: 'org_1',
-    accessEligibility: { mode: 'owner_organization' as const, organizationIds: [] },
+    visibility: 'private' as const,
+    scopeRegistry: {
+      discovery: {
+        sourceUrl: 'https://ama.example.com/openapi.json',
+        etag: null,
+        documentHash: 'test-registry',
+        syncedAt: '2026-01-01T00:00:00.000Z',
+        lastError: null,
+      },
+      scopes: scopes
+        .filter((scope) => scope !== 'offline_access')
+        .map((value) => ({ value, description: null, grantMode: 'automatic' as const })),
+    },
   }
+}
+
+function clientScopes(repository: InMemoryTokenExchangeRepository) {
+  const scopes = repository.client?.scopes
+  return typeof scopes === 'string' ? (JSON.parse(scopes) as string[]) : []
 }
 
 async function tokenExchangeFixture(

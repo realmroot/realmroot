@@ -1,5 +1,6 @@
 import { badGateway, badRequest } from '@server/domain/errors'
 import type { Deps } from '@server/usecases/deps'
+import type { ResourceScopeRegistry } from '@shared/api/authorization'
 import { parse as parseYaml } from 'yaml'
 
 const operationMethods = ['get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace'] as const
@@ -21,6 +22,8 @@ export interface ResourceOperationDefinition {
 
 export interface ResourceContractDefinition {
   sourceUrl: string
+  etag: string | null
+  documentHash: string
   scopes: ResourceScopeDefinition[]
   operations: ResourceOperationDefinition[]
 }
@@ -36,22 +39,22 @@ export function validateResourceUrl(resourceUrl: string) {
 
 export async function validateResourceContract(deps: Deps, resourceUrl: string) {
   validateResourceUrl(resourceUrl)
-  await readDeclaredScopes(deps, resourceUrl)
+  await readResourceContract(deps, resourceUrl)
 }
 
-export async function validateRequestedScopes(deps: Deps, resourceUrl: string, requestedScopes: string[]) {
+export function validateRequestedScopes(registry: ResourceScopeRegistry | null, requestedScopes: string[]) {
   if (requestedScopes.length === 0) return
-  const declaredScopes = new Set((await readDeclaredScopes(deps, resourceUrl)).map((scope) => scope.value))
+  const declaredScopes = new Set(registry?.scopes.map((scope) => scope.value) ?? [])
   if (requestedScopes.some((scope) => !declaredScopes.has(scope))) {
-    throw badRequest('Requested scope is not declared by the business resource OpenAPI document.')
+    throw badRequest('Requested scope is not declared by the Resource Server scope registry.')
   }
 }
 
-export async function readDeclaredScopes(deps: Deps, resourceUrl: string): Promise<ResourceScopeDefinition[]> {
-  return (await readResourceContract(deps, resourceUrl)).scopes
-}
-
-export async function readResourceContract(deps: Deps, resourceUrl: string): Promise<ResourceContractDefinition> {
+export async function readResourceContract(
+  deps: Deps,
+  resourceUrl: string,
+  previousRegistry?: ResourceScopeRegistry | null,
+): Promise<ResourceContractDefinition | null> {
   const resourceResponse = await fetchForDiscovery(
     deps,
     new Request(resourceUrl, {
@@ -65,19 +68,59 @@ export async function readResourceContract(deps: Deps, resourceUrl: string): Pro
   const documentResponse = await fetchForDiscovery(
     deps,
     new Request(documentUrl, {
-      headers: { accept: 'application/openapi+json, application/json, application/yaml, text/yaml' },
+      headers: {
+        accept: 'application/openapi+json, application/json, application/yaml, text/yaml',
+        ...(previousRegistry?.discovery.etag && previousRegistry.discovery.sourceUrl === documentUrl
+          ? { 'if-none-match': previousRegistry.discovery.etag }
+          : {}),
+      },
     }),
     'openapi_document',
     'Business resource OpenAPI document could not be reached.',
   )
+  if (documentResponse.status === 304) return null
   if (!documentResponse.ok) throw badRequest('Business resource OpenAPI discovery failed.')
 
   const source = await documentResponse.text()
   const document = parseDocument(source, documentResponse.headers.get('content-type'))
+  const scopes = extractResourceScopes(document)
+  const operations = extractProtectedOperations(document)
   return {
     sourceUrl: documentUrl,
-    scopes: extractResourceScopes(document),
-    operations: extractProtectedOperations(document),
+    etag: documentResponse.headers.get('etag'),
+    documentHash: await hashDiscoveryData(scopes),
+    scopes,
+    operations,
+  }
+}
+
+export async function synchronizeResourceScopeRegistry(
+  deps: Deps,
+  resourceUrl: string,
+  previousRegistry: ResourceScopeRegistry | null,
+  now = new Date(),
+): Promise<ResourceScopeRegistry> {
+  const contract = await readResourceContract(deps, resourceUrl, previousRegistry)
+  if (!contract) {
+    if (!previousRegistry) throw badRequest('Resource Server scope registry has not been synchronized.')
+    return {
+      ...previousRegistry,
+      discovery: { ...previousRegistry.discovery, syncedAt: now.toISOString(), lastError: null },
+    }
+  }
+  const previousModes = new Map(previousRegistry?.scopes.map((scope) => [scope.value, scope.grantMode]))
+  return {
+    discovery: {
+      sourceUrl: contract.sourceUrl,
+      etag: contract.etag,
+      documentHash: contract.documentHash,
+      syncedAt: now.toISOString(),
+      lastError: null,
+    },
+    scopes: contract.scopes.map((scope) => ({
+      ...scope,
+      grantMode: previousModes.get(scope.value) ?? 'assigned',
+    })),
   }
 }
 
@@ -110,39 +153,31 @@ export function extractResourceScopes(document: unknown): ResourceScopeDefinitio
   }
 
   const securitySchemes = objectValueOrEmpty(objectValueOrEmpty(root.components).securitySchemes)
-  const scopeDescriptions = new Map<string, string>()
-  const scopeSchemeNames = new Set<string>()
+  const scopeDescriptions = new Map<string, string | null>()
   for (const [name, candidate] of Object.entries(securitySchemes)) {
     const scheme = resolveSecurityScheme(candidate, securitySchemes)
-    if (!scheme || (scheme.type !== 'oauth2' && scheme.type !== 'openIdConnect')) continue
-    scopeSchemeNames.add(name)
+    if (!scheme || scheme.type !== 'oauth2') continue
+    void name
     for (const flow of Object.values(objectValueOrEmpty(scheme.flows))) {
       for (const [scope, description] of Object.entries(objectValueOrEmpty(objectValueOrEmpty(flow).scopes))) {
-        if (typeof description === 'string' && description.trim()) scopeDescriptions.set(scope, description)
-      }
-    }
-  }
-
-  const documentSecurity = securityRequirements(root.security)
-  const scopes = new Set<string>()
-  for (const pathItem of Object.values(objectValueOrEmpty(root.paths))) {
-    const path = objectValueOrEmpty(pathItem)
-    for (const method of operationMethods) {
-      const operation = objectValueOrEmpty(path[method])
-      if (Object.keys(operation).length === 0) continue
-      const requirements = 'security' in operation ? securityRequirements(operation.security) : documentSecurity
-      for (const requirement of requirements) {
-        for (const [schemeName, values] of Object.entries(requirement)) {
-          if (!scopeSchemeNames.has(schemeName) || !Array.isArray(values)) continue
-          for (const value of values) {
-            if (typeof value === 'string' && value.trim()) scopes.add(value)
-          }
+        if (!scope.trim() || typeof description !== 'string') {
+          throw badRequest('OAuth scope declarations must use non-empty scope names and string descriptions.')
         }
+        const normalizedDescription = description.trim() || null
+        if (scopeDescriptions.has(scope) && scopeDescriptions.get(scope) !== normalizedDescription) {
+          throw badRequest(`OAuth scope "${scope}" has inconsistent descriptions across flows.`)
+        }
+        scopeDescriptions.set(scope, normalizedDescription)
       }
     }
   }
-
-  return [...scopes].sort().map((value) => ({ value, description: scopeDescriptions.get(value) ?? null }))
+  validateOperationScopeReferences(root, securitySchemes, new Set(scopeDescriptions.keys()))
+  return [...scopeDescriptions]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([value, description]) => ({
+      value,
+      description,
+    }))
 }
 
 export function extractProtectedOperations(document: unknown): ResourceOperationDefinition[] {
@@ -179,6 +214,42 @@ export function extractProtectedOperations(document: unknown): ResourceOperation
     }
   }
   return operations
+}
+
+function validateOperationScopeReferences(
+  root: Record<string, unknown>,
+  securitySchemes: Record<string, unknown>,
+  declaredScopes: Set<string>,
+) {
+  const oauthSchemeNames = new Set(
+    Object.entries(securitySchemes)
+      .filter(([, candidate]) => resolveSecurityScheme(candidate, securitySchemes)?.type === 'oauth2')
+      .map(([name]) => name),
+  )
+  const documentSecurity = securityRequirements(root.security)
+  for (const pathItem of Object.values(objectValueOrEmpty(root.paths))) {
+    const path = objectValueOrEmpty(pathItem)
+    for (const method of operationMethods) {
+      const operation = objectValueOrEmpty(path[method])
+      if (Object.keys(operation).length === 0) continue
+      const requirements = 'security' in operation ? securityRequirements(operation.security) : documentSecurity
+      for (const requirement of requirements) {
+        for (const [schemeName, values] of Object.entries(requirement)) {
+          if (!oauthSchemeNames.has(schemeName) || !Array.isArray(values)) continue
+          const undeclared = values.find(
+            (value) => typeof value === 'string' && value.trim() && !declaredScopes.has(value),
+          )
+          if (undeclared) throw badRequest(`Operation security references undeclared OAuth scope "${undeclared}".`)
+        }
+      }
+    }
+  }
+}
+
+async function hashDiscoveryData(scopes: ResourceScopeDefinition[]) {
+  const bytes = new TextEncoder().encode(JSON.stringify(scopes))
+  const digest = await crypto.subtle.digest('SHA-256', bytes)
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('')
 }
 
 function operationScopeSets(requirements: Record<string, unknown>[], schemeNames: Set<string>) {

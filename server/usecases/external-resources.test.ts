@@ -751,7 +751,7 @@ describe('external API resource authorization', () => {
         {
           id: 'resource-1',
           description: 'Manage private projects',
-          scopes: [{ value: 'projects:read', description: 'Read projects' }],
+          scopes: expect.arrayContaining([{ value: 'projects:read', description: 'Read projects' }]),
           connection: { status: 'not_connected', displayName: null, authorizedScopes: [] },
         },
       ],
@@ -828,7 +828,7 @@ describe('external API resource authorization', () => {
       ...connectionRecord(),
       credentialExpiresAt: new Date(Date.now() - 60_000),
     }
-    vi.mocked(deps.externalResources.listConnectionsByUser).mockResolvedValue([expiredConnection])
+    vi.mocked(deps.externalResources.listConnectionsByOrganizations).mockResolvedValue([expiredConnection])
     vi.mocked(deps.externalResources.revokeConnection).mockResolvedValue(true)
     const resourceFetch = vi.mocked(deps.externalHttp.fetch).getMockImplementation()!
     vi.mocked(deps.externalHttp.fetch).mockImplementation(async (request) => {
@@ -1087,12 +1087,18 @@ describe('external API resource authorization', () => {
       createdAt: now.toISOString(),
       updatedAt: now.toISOString(),
     })
+    vi.mocked(deps.externalResources.findConnection).mockResolvedValue({
+      ...connectionRecord(),
+      ownerUserId: 'user-1',
+      ownerOrganizationId: null,
+    })
     vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(mismatchedIdentity)
     await expect(
       decideAgentAccessRequestByToken(deps, 'approval-token', { decision: 'approve', mode: 'once' }, 'user-1'),
     ).rejects.toThrow('Resource account connection is outside the Agent home space.')
 
     vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
+    vi.mocked(deps.externalResources.findConnection).mockResolvedValue(connectionRecord())
     vi.mocked(deps.externalResources.createGrant).mockResolvedValueOnce(null)
     await expect(
       decideAgentAccessRequestByToken(deps, 'approval-token', { decision: 'approve', mode: 'once' }, 'user-1'),
@@ -2199,7 +2205,7 @@ describe('external API resource authorization', () => {
     authorizationDeps(deps)
     vi.mocked(deps.connectors.findById).mockResolvedValue(connectorRecord())
     vi.mocked(deps.externalResources.listConnectionsByUser).mockResolvedValue([
-      connectionRecord(),
+      { ...connectionRecord(), ownerUserId: 'user-1', ownerOrganizationId: null },
       {
         ...connectionRecord(),
         id: 'connection-2',
@@ -2330,20 +2336,21 @@ describe('external API resource authorization', () => {
       ),
     ).resolves.toMatchObject({
       apiResourceId: 'resource-1',
-      owner: { type: 'user', userId: 'user-1' },
+      owner: { type: 'organization', organizationId: 'org-1' },
       scopes: ['projects:read'],
       status: 'pending_authorization',
     })
     expect(deps.externalResources.createConnectionIntent).toHaveBeenCalledWith(
       expect.objectContaining({
         resourceId: 'resource-1',
-        ownerUserId: 'user-1',
+        ownerUserId: null,
+        ownerOrganizationId: 'org-1',
         scopes: ['offline_access', 'openid', 'projects:read'],
         returnTo: 'access-approval',
       }),
     )
 
-    vi.mocked(deps.externalResources.listConnectionsByUser).mockResolvedValue([
+    vi.mocked(deps.externalResources.listConnectionsByOrganizations).mockResolvedValue([
       {
         ...connectionRecord(),
         grantedScopes: ['openid', 'offline_access', 'projects:read', 'projects:write'],
@@ -2356,7 +2363,7 @@ describe('external API resource authorization', () => {
       pagination: { total: 1 },
     })
 
-    vi.mocked(deps.externalResources.listConnectionsByUser).mockResolvedValue([
+    vi.mocked(deps.externalResources.listConnectionsByOrganizations).mockResolvedValue([
       { ...connectionRecord(), grantedScopes: ['projects:read'] },
     ])
     await expect(
@@ -2366,7 +2373,7 @@ describe('external API resource authorization', () => {
       pagination: { total: 1 },
     })
 
-    vi.mocked(deps.externalResources.listConnectionsByUser).mockResolvedValue([
+    vi.mocked(deps.externalResources.listConnectionsByOrganizations).mockResolvedValue([
       connectionRecord(),
       { ...connectionRecord(), id: 'duplicate-connection' },
     ])
@@ -2479,8 +2486,8 @@ describe('external API resource authorization', () => {
     })
     expect(deps.externalResources.findConnectionByOwnerResource).toHaveBeenCalledWith({
       resourceId: 'resource-1',
-      ownerUserId: 'user-1',
-      ownerOrganizationId: null,
+      ownerUserId: null,
+      ownerOrganizationId: 'org-1',
     })
     expect(deps.externalResources.createConnectionIntent).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -2642,7 +2649,7 @@ describe('external API resource authorization', () => {
       items: [
         {
           id: 'resource-1',
-          scopes: [{ value: 'projects:read', description: 'Read projects' }],
+          scopes: expect.arrayContaining([{ value: 'projects:read', description: 'Read projects' }]),
           availability: { status: 'available' },
           connection: { status: 'not_required', displayName: null, authorizedScopes: [] },
         },
@@ -2746,14 +2753,11 @@ describe('external API resource authorization', () => {
       'https://auth.example.com',
     )
 
-    expect(result.pagination.total).toBe(2)
-    expect(result.items).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ type: 'realmroot_authority', name: 'Example Organization' }),
-        expect.objectContaining({ type: 'realmroot_authority', name: 'Example User' }),
-      ]),
-    )
-    expect(new Set(result.items.map((item) => item.links.self)).size).toBe(2)
+    expect(result.pagination.total).toBe(1)
+    expect(result.items).toEqual([
+      expect.objectContaining({ type: 'realmroot_authority', name: 'Example Organization' }),
+    ])
+    expect(new Set(result.items.map((item) => item.links.self)).size).toBe(1)
   })
 
   it('reads Realmroot Resource Servers and authority Resources without exposing protocol internals', async () => {
@@ -2776,8 +2780,14 @@ describe('external API resource authorization', () => {
       displayName: null,
       role: 'member',
     } as never)
+    vi.mocked(deps.authorization.findOrganization).mockResolvedValue({
+      id: 'org-1',
+      name: 'Example Organization',
+      displayName: 'Organization Display',
+      disabled: false,
+    } as never)
     vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
-    const accountAuthority = { type: 'realmroot_authority', authority: 'user', id: 'user-1' }
+    const accountAuthority = { type: 'realmroot_authority', authority: 'organization', id: 'org-1' }
     vi.mocked(deps.externalResources.listActiveGrantsByAgent).mockResolvedValue([
       {
         ...grantRecord(),
@@ -2818,7 +2828,7 @@ describe('external API resource authorization', () => {
     await expect(
       getAgentResourceServerResource(deps, builtIn.id, resources.items[0]!.id, principal(), 'https://auth.example.com'),
     ).resolves.toMatchObject({
-      name: 'user@example.com',
+      name: 'Organization Display',
       type: 'realmroot_authority',
       agentAuthorization: { authorizedScopes: ['users:read'] },
     })
@@ -2916,7 +2926,7 @@ describe('external API resource authorization', () => {
       name: 'Realmroot',
       resourceUrl: 'https://auth.example.com/api',
     }
-    const authority = { type: 'realmroot_authority', authority: 'user', id: 'user-1' }
+    const authority = { type: 'realmroot_authority', authority: 'organization', id: 'org-1' }
     const approved = {
       ...requestRecord(),
       resourceId: builtIn.id,
@@ -3048,7 +3058,7 @@ describe('external API resource authorization', () => {
       name: 'Realmroot',
       resourceUrl: 'https://auth.example.com/api',
     }
-    const authority = { type: 'realmroot_authority', authority: 'user', id: 'user-1' }
+    const authority = { type: 'realmroot_authority', authority: 'organization', id: 'org-1' }
     const approved = {
       ...requestRecord(),
       resourceId: builtIn.id,
@@ -3059,10 +3069,17 @@ describe('external API resource authorization', () => {
       grantId: 'grant-1',
     }
     vi.mocked(deps.authorization.findResource).mockResolvedValue(builtIn)
-    vi.mocked(deps.users.getUser).mockResolvedValue({
-      id: 'user-1',
-      email: 'user@example.com',
-      displayName: 'User Display',
+    vi.mocked(deps.authorization.findOrganization).mockResolvedValue({
+      id: 'org-1',
+      name: 'Organization',
+      displayName: 'Organization Display',
+      disabled: false,
+    } as never)
+    vi.mocked(deps.authorization.findMemberByOrganizationUser).mockResolvedValue({
+      id: 'member-1',
+      organizationId: 'org-1',
+      userId: 'user-1',
+      roles: ['owner'],
     } as never)
     vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
     const pending = { ...approved, status: 'pending' as const, grantId: null }
@@ -3071,7 +3088,7 @@ describe('external API resource authorization', () => {
 
     await expect(getAccountAccessRequestByToken(deps, 'approval-token', 'user-1')).resolves.toMatchObject({
       requiresAccountConnection: false,
-      resource: { name: 'User Display', type: 'realmroot_authority' },
+      resource: { name: 'Organization Display', type: 'realmroot_authority' },
     })
     await expect(getControllerAccessRequestByToken(deps, 'approval-token', 'user-1')).resolves.toMatchObject({
       id: approved.id,
@@ -3174,6 +3191,12 @@ describe('external API resource authorization', () => {
       authorizationDetails: [{ type: 'realmroot_authority', authority: 'unknown', id: 'bad' }],
     }
     vi.mocked(deps.authorization.findResource).mockResolvedValue(builtIn)
+    vi.mocked(deps.authorization.findMemberByOrganizationUser).mockResolvedValue({
+      id: 'member-1',
+      organizationId: 'org-1',
+      userId: 'user-1',
+      roles: ['owner'],
+    } as never)
     vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
     vi.mocked(deps.externalResources.findAccessRequest).mockResolvedValue(pending)
     vi.mocked(deps.externalResources.findAccessRequestByApprovalTokenHash).mockResolvedValue(pending)
@@ -3214,15 +3237,12 @@ describe('external API resource authorization', () => {
     const deps = createTestDeps()
     const builtIn = { ...nativeResource(), id: 'res_realmroot', resourceUrl: 'https://auth.example.com/api' }
     vi.mocked(deps.authorization.findResource).mockResolvedValue(builtIn)
-    vi.mocked(deps.authorization.listUserMemberships).mockResolvedValue([
-      { organizationId: 'disabled' } as never,
-      { organizationId: 'missing' } as never,
-      { organizationId: 'disabled' } as never,
-    ])
-    vi.mocked(deps.authorization.findOrganization).mockImplementation(async (id) =>
-      id === 'disabled' ? ({ id, name: 'Disabled', displayName: null, disabled: true } as never) : null,
-    )
-    vi.mocked(deps.users.getUser).mockResolvedValue({ id: 'user-1', email: 'user@example.com', role: null } as never)
+    vi.mocked(deps.authorization.findOrganization).mockResolvedValue({
+      id: 'org-1',
+      name: 'Organization',
+      displayName: null,
+      disabled: false,
+    } as never)
     vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
     const authorities = await listAgentAuthorizationDetailCatalog(
       deps,
@@ -3508,7 +3528,7 @@ describe('external API resource authorization', () => {
     const discoveryDeps = createTestDeps()
     authorizationDeps(discoveryDeps)
     vi.mocked(discoveryDeps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
-    vi.mocked(discoveryDeps.externalResources.listConnectionsByUser).mockResolvedValue([
+    vi.mocked(discoveryDeps.externalResources.listConnectionsByOrganizations).mockResolvedValue([
       { ...connectionRecord(), credentialExpiresAt: new Date(0) },
     ])
     vi.mocked(discoveryDeps.secrets.open).mockRejectedValueOnce(new Error('credential storage failed'))
@@ -3549,6 +3569,7 @@ describe('external API resource authorization', () => {
       id: 'resource-unavailable',
       identifier: 'unavailable',
       resourceUrl: 'https://unavailable.example.com/api',
+      scopeRegistry: null,
     }
     Object.assign(deps.authorization, {
       listResources: vi.fn().mockResolvedValue({
@@ -3567,15 +3588,13 @@ describe('external API resource authorization', () => {
     vi.mocked(deps.externalResources.listActiveGrantsByAgent).mockResolvedValue([])
     mockResourceOpenApi(deps, healthy.resourceUrl)
 
-    await expect(
-      listAgentApiResources(deps, principal(), { limit: 10, offset: 0 }, 'https://auth.example.com'),
-    ).resolves.toMatchObject({
-      items: [
-        { id: unavailable.id, availability: { status: 'unavailable' }, scopes: [] },
-        { id: healthy.id, availability: { status: 'available' }, scopes: [{ value: 'projects:read' }] },
-      ],
-      pagination: { total: 2 },
-    })
+    const result = await listAgentApiResources(deps, principal(), { limit: 10, offset: 0 }, 'https://auth.example.com')
+    expect(result).toMatchObject({ pagination: { total: 2 } })
+    expect(result.items[0]).toMatchObject({ id: unavailable.id, availability: { status: 'unavailable' }, scopes: [] })
+    expect(result.items[1]).toMatchObject({ id: healthy.id, availability: { status: 'available' } })
+    expect(result.items[1]?.scopes).toEqual(
+      expect.arrayContaining([{ value: 'projects:read', description: 'Read projects' }]),
+    )
   })
 
   it('lists, reads, denies, and approves controlled access requests', async () => {
@@ -3584,7 +3603,7 @@ describe('external API resource authorization', () => {
     vi.mocked(deps.connectors.findById).mockResolvedValue(connectorRecord())
     const pendingExternal = requestRecord()
     const pendingNative = { ...requestRecord(), id: 'request-2', connectionId: null }
-    vi.mocked(deps.externalResources.listConnectionsByUser).mockResolvedValue([connectionRecord()])
+    vi.mocked(deps.externalResources.listConnectionsByOrganizations).mockResolvedValue([connectionRecord()])
     vi.mocked(deps.externalResources.listPendingAccessRequests).mockResolvedValue([pendingExternal, pendingNative])
     vi.mocked(deps.externalResources.findConnection).mockResolvedValue(connectionRecord())
     vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
@@ -3742,7 +3761,6 @@ describe('external API resource authorization', () => {
       expect.objectContaining({
         sub: 'org-1',
         groups: ['org-1'],
-        roles: [],
         act: {
           iss: 'https://auth.example.com/api/auth',
           sub: 'agt_stable',
@@ -3897,6 +3915,7 @@ describe('external API resource authorization', () => {
     vi.mocked(deps.externalResources.findConnection).mockResolvedValue({
       ...connectionRecord(),
       ownerUserId: 'another-user',
+      ownerOrganizationId: null,
     })
     await expect(getAccountConnection(deps, 'connection-1', 'user-1')).rejects.toThrow(
       'Resource account controller access is required.',
@@ -4541,7 +4560,7 @@ describe('external API resource authorization', () => {
     ])
     vi.mocked(uncontrolled.agentIdentities.findIdentity).mockResolvedValue({
       ...identityAggregate(),
-      identity: { ...identityAggregate().identity, ownerUserId: 'another-user' },
+      identity: { ...identityAggregate().identity, ownerUserId: 'another-user', ownerOrganizationId: null },
     })
     await expect(listControllerAccessRequests(uncontrolled, 'user-1')).resolves.toEqual({ requests: [] })
 
@@ -4584,6 +4603,17 @@ function authorizationDeps(deps: ReturnType<typeof createTestDeps>) {
     findResource: vi.fn().mockResolvedValue(resource()),
     listResources: vi.fn().mockResolvedValue({ items: [resource()], total: 1, limit: 100, offset: 0 }),
     listEnabledResources: vi.fn().mockResolvedValue([resource()]),
+    listUserMemberships: vi.fn().mockResolvedValue([{ organizationId: 'org-1', roles: ['owner'] }]),
+    listActiveUserScopeGrants: vi
+      .fn()
+      .mockResolvedValue([{ scopes: resourceScopeValues, expiresAt: null, revokedAt: null }]),
+    listOrganizationRoleScopes: vi.fn().mockResolvedValue(new Map()),
+    findMemberByOrganizationUser: vi.fn().mockResolvedValue({
+      id: 'member-1',
+      organizationId: 'org-1',
+      userId: 'user-1',
+      roles: ['owner'],
+    }),
     updateResource: vi.fn().mockResolvedValue(true),
   })
   vi.mocked(deps.connectors.findById).mockResolvedValue(connectorRecord())
@@ -4601,13 +4631,39 @@ function resource(): ApiResourceResponse {
     description: 'Manage private projects',
     enabled: true,
     ownerOrganizationId: 'org-1',
-    accessEligibility: { mode: 'realm', organizationIds: [] },
+    visibility: 'public',
+    scopeRegistry: {
+      discovery: {
+        sourceUrl: 'https://projects.example.com/openapi.json',
+        etag: null,
+        documentHash: 'projects-registry',
+        syncedAt: now.toISOString(),
+        lastError: null,
+      },
+      scopes: resourceScopeValues.map((value) => ({
+        value,
+        description: value === 'projects:read' ? 'Read projects' : `Allows ${value}`,
+        grantMode: 'assigned' as const,
+      })),
+    },
     availableToAgents: true,
     archivedAt: null,
     createdAt: now.toISOString(),
     updatedAt: now.toISOString(),
   }
 }
+
+const resourceScopeValues = [
+  'authorization-details:read',
+  'objects:create',
+  'objects:purge',
+  'projects:create',
+  'projects:read',
+  'projects:write',
+  'quota:purchase',
+  'shares:create',
+  'teams:read',
+]
 
 function nativeResource(): ApiResourceResponse {
   return {
@@ -4760,8 +4816,8 @@ function connectionRecord(): ResourceAccountConnectionRecord {
   return {
     id: 'connection-1',
     resourceId: 'resource-1',
-    ownerUserId: 'user-1',
-    ownerOrganizationId: null,
+    ownerUserId: null,
+    ownerOrganizationId: 'org-1',
     externalSubject: 'target-user-1',
     displayName: 'Project Owner',
     encryptedTokens: 'sealed:{"accessToken":"subject","refreshToken":"refresh"}',
@@ -4782,8 +4838,8 @@ function identityAggregate(): AgentIdentityAggregate {
       issuer: 'https://auth.example.com/api/auth',
       subject: 'agt_stable',
       name: 'Project Agent',
-      ownerUserId: 'user-1',
-      ownerOrganizationId: null,
+      ownerUserId: null,
+      ownerOrganizationId: 'org-1',
       status: 'active',
       retiredAt: null,
       createdAt: now,

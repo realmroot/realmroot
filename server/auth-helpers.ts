@@ -1,9 +1,13 @@
 import type { TransactionalEmailSender } from '@server/adapters/gateways/email/sender'
 import { type AuthorizationTokenClaimInput, buildTokenClaims } from '@server/usecases/authorization'
 import type { Deps } from '@server/usecases/deps'
-import { filterCurrentResourceScopes } from '@server/usecases/organization-membership-scopes'
-import { activeResourceEligibleForOrganization } from '@server/usecases/resource-eligibility'
+import {
+  applicationEffectiveResourceScopes,
+  userEffectiveResourceScopes,
+} from '@server/usecases/resource-scope-entitlements'
+import { resourceVisibleToOrganization } from '@server/usecases/resource-visibility'
 import { userConfigurableApplicationScopes } from '@shared/api/applications'
+import { APIError } from 'better-auth'
 import { type ApplicationOidcClaims, defaultApplicationOidcClaims } from '../shared/api/applications'
 import type { ManagementSignInSettingsResponse } from '../shared/api/management'
 
@@ -176,37 +180,59 @@ export async function filterOAuthAccessTokenScopes(
   },
 ) {
   const requestedScopes = [...input.scopes]
-  if (!input.user) {
-    const applicationId = readString(input.metadata, 'applicationId')
-    if (!applicationId || !input.resource) return []
-    const [application, resource] = await Promise.all([
-      deps.applications.findById(applicationId),
-      deps.authorization.findResourceByResourceUrl(input.resource),
-    ])
-    if (!application || !resource) return []
-    const allowedScopes = new Set(application.allowedScopes)
-    return filterCurrentResourceScopes(
-      deps,
-      resource,
-      application.ownerOrganizationId,
-      requestedScopes.filter((scope) => allowedScopes.has(scope)),
-    )
+  const applicationId = readString(input.metadata, 'applicationId')
+  const application = applicationId ? await deps.applications.findById(applicationId) : null
+  if (!application || application.disabled) return []
+  const oidcScopeSet = new Set<string>(userConfigurableApplicationScopes)
+  const requestedOidcScopes = requestedScopes.filter((scope) => oidcScopeSet.has(scope))
+  if (requestedOidcScopes.some((scope) => !application.oidcScopes.includes(scope as never))) {
+    throw oauthProviderError('invalid_scope', 'Requested OIDC scope is not allowed for this client.')
   }
 
-  const identityScopes = new Set<string>(userConfigurableApplicationScopes)
-  if (!input.user.id || !input.resource) return requestedScopes.filter((scope) => identityScopes.has(scope))
+  if (!input.resource) {
+    if (requestedScopes.some((scope) => !oidcScopeSet.has(scope))) {
+      throw oauthProviderError('invalid_scope', 'Resource scopes require one registered Resource Server target.')
+    }
+    return input.user ? requestedOidcScopes : []
+  }
 
   const resource = await deps.authorization.findResourceByResourceUrl(input.resource)
-  if (!resource || !activeResourceEligibleForOrganization(resource, input.referenceId)) {
-    return requestedScopes.filter((scope) => identityScopes.has(scope))
+  if (!resource?.enabled || resource.archivedAt || !resource.scopeRegistry) {
+    throw oauthProviderError('invalid_target', 'Requested Resource Server is not active.')
   }
-  if (resource.accessEligibility.mode !== 'realm') {
-    const membership = input.referenceId
-      ? await deps.authorization.findMemberByOrganizationUser(input.referenceId, input.user.id)
-      : null
-    if (!membership) return requestedScopes.filter((scope) => identityScopes.has(scope))
+  const visible = input.user?.id
+    ? resource.visibility === 'public' ||
+      (await deps.authorization.listUserMemberships(input.user.id)).some(
+        (membership) => membership.organizationId === resource.ownerOrganizationId,
+      )
+    : resourceVisibleToOrganization(resource, application.ownerOrganizationId)
+  if (!visible)
+    throw oauthProviderError('invalid_target', 'Requested Resource Server is not visible to this principal.')
+  const configuration = application.resourceScopes.find((item) => item.resourceServerId === resource.id)
+  const requestedResourceScopes = requestedScopes.filter((scope) => !oidcScopeSet.has(scope))
+  const declaredScopes = new Set(resource.scopeRegistry.scopes.map((scope) => scope.value))
+  if (requestedResourceScopes.some((scope) => !configuration?.scopes.includes(scope) || !declaredScopes.has(scope))) {
+    throw oauthProviderError('invalid_scope', 'Requested Resource Server scope is not allowed for this client.')
   }
-  return requestedScopes
+
+  if (!input.user?.id) {
+    const effective = new Set(await applicationEffectiveResourceScopes(deps, application, resource))
+    return requestedResourceScopes.filter((scope) => effective.has(scope))
+  }
+
+  const effective = new Set(await userEffectiveResourceScopes(deps, input.user.id, resource))
+  const consent = application.trusted
+    ? null
+    : await deps.applications.findConsent(application.id, input.user.id, resource.id)
+  const consented = application.trusted ? new Set(requestedResourceScopes) : new Set(consent?.scopes ?? [])
+  return [
+    ...requestedOidcScopes,
+    ...requestedResourceScopes.filter((scope) => effective.has(scope) && consented.has(scope)),
+  ]
+}
+
+function oauthProviderError(error: string, description: string) {
+  return new APIError('BAD_REQUEST', { error, error_description: description })
 }
 
 export async function buildOAuthIdTokenClaims(

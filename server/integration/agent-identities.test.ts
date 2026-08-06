@@ -41,6 +41,12 @@ describe('Agent identity enrollment over real D1', () => {
       displayName: 'Identity Owner',
       password: 'identity-owner-password-2026',
     })
+    const membership = await harness.request('/api/organizations/org_platform/members', {
+      method: 'POST',
+      headers: jsonHeaders(adminCookie),
+      body: JSON.stringify({ userId, roles: ['owner'] }),
+    })
+    expect(membership.status, await membership.clone().text()).toBe(201)
     ownerCookie = await signIn(harness, 'identity-owner@example.com', 'identity-owner-password-2026')
   })
 
@@ -385,6 +391,7 @@ describe('Agent identity enrollment over real D1', () => {
     const intent = await createIntent(harness, userId, {
       name: 'Token Agent',
       protocolAgentId: seeded.agentId,
+      organizationId: 'org_platform',
     })
     const approved = await approveIntent(harness, ownerCookie, intent.id)
     harness.deps.externalHttp.fetch = resourceOpenApiFetch('https://api.example.com', 'repo:read')
@@ -395,6 +402,12 @@ describe('Agent identity enrollment over real D1', () => {
       description: 'Read private code repositories',
       ownerOrganizationId: 'org_platform',
     })
+    const automaticScope = await harness.request(`/api/resource-servers/${resource.id}`, {
+      method: 'PATCH',
+      headers: jsonHeaders(ownerCookie),
+      body: JSON.stringify({ scopeGrantModes: [{ scope: 'repo:read', grantMode: 'automatic' }] }),
+    })
+    expect(automaticScope.status, await automaticScope.clone().text()).toBe(200)
     const principal = {
       issuer: approved.agent.issuer,
       subject: approved.agent.subject,
@@ -492,7 +505,7 @@ describe('Agent identity enrollment over real D1', () => {
       audience: 'https://api.example.com',
     })
     expect(verified.payload).toMatchObject({
-      sub: userId,
+      sub: 'org_platform',
       scope: 'repo:read',
       cnf: { jkt: expect.any(String) },
       act: {
@@ -554,7 +567,7 @@ function resourceOpenApiFetch(resourceUrl: string, scope: string) {
 async function createIntent(
   harness: Harness,
   actorUserId: string,
-  input: { name?: string; agentIdentityId?: string; protocolAgentId: string },
+  input: { name?: string; agentIdentityId?: string; protocolAgentId: string; organizationId?: string },
 ) {
   if (input.agentIdentityId) {
     const result = await createAdditionalAgentEnrollmentIntent(
@@ -572,6 +585,7 @@ async function createIntent(
     {
       name: input.name,
       protocolAgentId: input.protocolAgentId,
+      organizationId: input.organizationId,
     },
     actorUserId,
   )

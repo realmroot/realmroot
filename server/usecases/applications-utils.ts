@@ -20,7 +20,7 @@ export function normalizeClientSettings(
   clientType: ApplicationResponse['clientType'],
   redirectUris: string[],
   grantTypes: ApplicationResponse['allowedGrantTypes'] = ['authorization_code', 'refresh_token'],
-  scopes: ApplicationResponse['allowedScopes'] = ['openid', 'profile', 'email'],
+  scopes: ApplicationResponse['oidcScopes'] = ['openid', 'profile', 'email'],
 ) {
   const normalizedGrantTypes = dedupe(grantTypes)
   const normalizedScopes = dedupe(scopes)
@@ -58,7 +58,7 @@ export function normalizeClientSettings(
   return {
     redirectUris: normalizedRedirectUris,
     allowedGrantTypes: normalizedGrantTypes,
-    allowedScopes: normalizedScopes,
+    oidcScopes: normalizedScopes,
   }
 }
 
@@ -82,13 +82,8 @@ export function defaultPagination(): PaginationQuery {
   return { limit: 50, offset: 0 }
 }
 
-export function normalizeRequestedScopes(
-  scope: string | undefined,
-  allowedScopes: ApplicationResponse['allowedScopes'],
-) {
-  const requestedScopes = dedupe(
-    (scope || 'openid').split(/\s+/).filter(Boolean) as ApplicationResponse['allowedScopes'],
-  )
+export function normalizeRequestedScopes(scope: string | undefined, allowedScopes: readonly string[]) {
+  const requestedScopes = dedupe((scope || 'openid').split(/\s+/).filter(Boolean))
   for (const requestedScope of requestedScopes) {
     if (!allowedScopes.includes(requestedScope)) {
       throw badRequest(`Scope is not allowed for this client: ${requestedScope}`)

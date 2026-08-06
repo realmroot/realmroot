@@ -1,4 +1,12 @@
-import { badRequest, conflict, forbidden, notFound, preconditionFailed, resourceInUse } from '@server/domain/errors'
+import {
+  ApiError,
+  badRequest,
+  conflict,
+  forbidden,
+  notFound,
+  preconditionFailed,
+  resourceInUse,
+} from '@server/domain/errors'
 import {
   isRealmrootResourceServer,
   realmrootResourceServer,
@@ -8,13 +16,13 @@ import { type AuthorizationTokenClaimInput, createId, toTokenClaims } from '@ser
 import type { Deps } from '@server/usecases/deps'
 import { resolveOrganizationMembershipScopes } from '@server/usecases/organization-membership-scopes'
 import { validateExternalResourceConnector } from '@server/usecases/resource-connectors'
-import { activeResourceEligibleForOrganization } from '@server/usecases/resource-eligibility'
 import {
   readResourceContract,
+  synchronizeResourceScopeRegistry,
   validateRequestedScopes,
-  validateResourceContract,
   validateResourceUrl,
 } from '@server/usecases/resource-openapi'
+import { activeResourceVisibleToOrganization } from '@server/usecases/resource-visibility'
 
 export type { AuthorizationTokenClaimInput } from '@server/usecases/authorization-utils'
 
@@ -33,9 +41,11 @@ import type {
   AddMemberRequest,
   ApiResourceResponse,
   CreateApiResourceRequest,
+  CreateApplicationScopeGrantRequest,
   CreateInvitationRequest,
   CreateOrganizationRequest,
   CreateRoleRequest,
+  CreateUserScopeGrantRequest,
   PaginationQuery,
   ReplaceMemberRolesRequest,
   RoleResponse,
@@ -45,7 +55,6 @@ import type {
   UpdateOrganizationRequest,
   UpdateRoleRequest,
 } from '@shared/api/authorization'
-import { apiResourceEligibilitySchema } from '@shared/api/authorization'
 import {
   encodeRoleScope,
   predefinedOrganizationRoleKeys,
@@ -210,10 +219,6 @@ export async function createResource(deps: Deps, input: CreateApiResourceRequest
   const enabled = input.enabled ?? true
   const ownerOrganizationId = input.ownerOrganizationId
   await requireActiveOrganization(deps, ownerOrganizationId)
-  const accessEligibility = apiResourceEligibilitySchema.parse(
-    input.accessEligibility ?? { mode: 'realm', organizationIds: [] },
-  )
-  await validateResourceEligibility(deps, accessEligibility)
   validateResourceUrl(input.resourceUrl)
   if (input.connectorId) {
     await validateExternalResourceConnector(
@@ -224,9 +229,8 @@ export async function createResource(deps: Deps, input: CreateApiResourceRequest
     )
   } else if ((input.authorizationDetails?.length ?? 0) > 0) {
     throw badRequest('Authorization details require an external API resource connector.')
-  } else if (enabled) {
-    await validateResourceContract(deps, input.resourceUrl)
   }
+  const scopeRegistry = enabled ? await synchronizeResourceScopeRegistry(deps, input.resourceUrl, null) : null
   return deps.authorization.createResource({
     id: createId('res'),
     identifier: input.identifier,
@@ -237,7 +241,8 @@ export async function createResource(deps: Deps, input: CreateApiResourceRequest
     description: input.description ?? null,
     enabled,
     ownerOrganizationId,
-    accessEligibility,
+    visibility: input.visibility ?? 'private',
+    scopeRegistry,
     availableToAgents: input.availableToAgents ?? true,
   })
 }
@@ -251,7 +256,8 @@ export async function ensureRealmrootResourceServer(deps: Deps, apiOrigin: strin
     connectorId: null,
     authorizationDetails: [],
     enabled: true,
-    accessEligibility: { mode: 'realm', organizationIds: [] },
+    visibility: 'public',
+    scopeRegistry: realmrootRegistry(apiOrigin),
     availableToAgents: true,
   })
 }
@@ -302,10 +308,54 @@ export async function getResource(deps: Deps, id: string) {
 export async function getResourceContract(deps: Deps, id: string) {
   const resource = await getResource(deps, id)
   const contract = await readResourceContract(deps, resource.resourceUrl)
+  if (!contract) throw new Error('Unconditional Resource Server contract read returned no document.')
+  const modes = new Map(resource.scopeRegistry?.scopes.map((scope) => [scope.value, scope.grantMode]))
   return {
     resourceId: resource.id,
     ...contract,
+    scopes: contract.scopes.map((scope) => ({ ...scope, grantMode: modes.get(scope.value) ?? 'assigned' })),
   }
+}
+
+export async function refreshResourceScopeRegistry(deps: Deps, id: string) {
+  const resource = await getResource(deps, id)
+  if (!resource.enabled || resource.archivedAt)
+    throw badRequest('Resource Server must be active before synchronizing scopes.')
+  if (isRealmrootResourceServer(id)) throw badRequest('The Realmroot Resource Server is system-managed.')
+  try {
+    const registry = await synchronizeResourceScopeRegistry(deps, resource.resourceUrl, resource.scopeRegistry)
+    if (!(await deps.authorization.replaceResourceScopeRegistry(id, registry))) {
+      throw badRequest('Resource Server is no longer active.')
+    }
+    return getResource(deps, id)
+  } catch (error) {
+    if (resource.scopeRegistry) {
+      await deps.authorization.replaceResourceScopeRegistry(id, {
+        ...resource.scopeRegistry,
+        discovery: { ...resource.scopeRegistry.discovery, lastError: synchronizationError(error) },
+      })
+    }
+    throw error
+  }
+}
+
+export async function synchronizeEnabledResourceScopeRegistries(deps: Deps) {
+  const resources = (await deps.authorization.listEnabledResources()).filter(
+    (resource) => !resource.archivedAt && !isRealmrootResourceServer(resource.id),
+  )
+  for (const resource of resources) {
+    try {
+      await refreshResourceScopeRegistry(deps, resource.id)
+    } catch {
+      // A failed registry records its boundary error while the remaining Resource Servers continue synchronizing.
+    }
+  }
+}
+
+function synchronizationError(error: unknown) {
+  return error instanceof ApiError
+    ? { code: error.code, message: error.message }
+    : { code: 'internal_error', message: error instanceof Error ? error.message : 'Scope synchronization failed.' }
 }
 
 export async function updateResource(deps: Deps, id: string, input: UpdateApiResourceRequest) {
@@ -314,7 +364,6 @@ export async function updateResource(deps: Deps, id: string, input: UpdateApiRes
   if (resource.archivedAt) throw badRequest('Archived API resources must be restored before updating.')
   if (input.resourceUrl !== undefined) validateResourceUrl(input.resourceUrl)
   if (input.ownerOrganizationId) await requireActiveOrganization(deps, input.ownerOrganizationId)
-  if (input.accessEligibility) await validateResourceEligibility(deps, input.accessEligibility)
   if (input.connectorId !== undefined && (input.connectorId === null) !== (resource.connectorId === null)) {
     throw badRequest('API resource authorization mode cannot change after creation.')
   }
@@ -328,10 +377,18 @@ export async function updateResource(deps: Deps, id: string, input: UpdateApiRes
     await validateExternalResourceConnector(deps, resourceUrl, connectorId, authorizationDetails)
   } else if (!connectorId && authorizationDetails.length > 0) {
     throw badRequest('Authorization details require an external API resource connector.')
-  } else if (!connectorId && enabled && (input.enabled === true || input.resourceUrl !== undefined)) {
-    await validateResourceContract(deps, resourceUrl)
   }
+  const shouldSynchronize = enabled && (input.enabled === true || input.resourceUrl !== undefined)
+  const synchronizedRegistry = shouldSynchronize
+    ? await synchronizeResourceScopeRegistry(deps, resourceUrl, input.resourceUrl ? null : resource.scopeRegistry)
+    : null
+  const scopeRegistry = input.scopeGrantModes
+    ? updateScopeGrantModes(synchronizedRegistry ?? resource.scopeRegistry, input.scopeGrantModes)
+    : synchronizedRegistry
   if (!(await deps.authorization.updateResource(id, input))) {
+    throw badRequest('Archived API resources must be restored before updating.')
+  }
+  if (scopeRegistry && !(await deps.authorization.replaceResourceScopeRegistry(id, scopeRegistry))) {
     throw badRequest('Archived API resources must be restored before updating.')
   }
   return getResource(deps, id)
@@ -341,11 +398,6 @@ async function requireActiveOrganization(deps: Deps, organizationId: string) {
   const organization = await getOrganization(deps, organizationId)
   if (organization.disabled) throw badRequest('Organization must be active.')
   return organization
-}
-
-async function validateResourceEligibility(deps: Deps, eligibility: ApiResourceResponse['accessEligibility']) {
-  if (eligibility.mode !== 'organizations') return
-  for (const organizationId of eligibility.organizationIds) await requireActiveOrganization(deps, organizationId)
 }
 
 export async function archiveResource(deps: Deps, id: string, actor: ResourceMutationActor) {
@@ -411,6 +463,122 @@ export async function deleteResource(deps: Deps, id: string) {
   const references = await deps.authorization.deleteResource(id)
   if (references) {
     throw resourceInUse('API resource has authorization history and cannot be permanently deleted.', { ...references })
+  }
+}
+
+export async function createUserScopeGrant(deps: Deps, input: CreateUserScopeGrantRequest, grantedByUserId: string) {
+  const resource = await getResource(deps, input.resourceServerId)
+  validateAssignedScopes(resource, input.scopes)
+  if (resource.visibility === 'private') {
+    const membership = await deps.authorization.findMemberByOrganizationUser(resource.ownerOrganizationId, input.userId)
+    if (!membership) throw badRequest('Private Resource Server grants require an owner Organization member.')
+  }
+  if (input.organizationId) {
+    const membership = await deps.authorization.findMemberByOrganizationUser(input.organizationId, input.userId)
+    if (!membership) throw badRequest('User scope grant Organization must contain the target user.')
+    if (!activeResourceVisibleToOrganization(resource, input.organizationId)) {
+      throw badRequest('Resource Server is not visible to the grant Organization.')
+    }
+  }
+  const expiresAt = input.expiresAt ? new Date(input.expiresAt) : null
+  if (expiresAt && expiresAt.getTime() <= Date.now()) throw badRequest('Scope grant expiry must be in the future.')
+  return toUserScopeGrantResponse(
+    await deps.authorization.createUserScopeGrant({
+      id: createId('usg'),
+      userId: input.userId,
+      organizationId: input.organizationId ?? null,
+      resourceServerId: resource.id,
+      scopes: [...new Set(input.scopes)].sort(),
+      grantedByUserId,
+      expiresAt,
+      revokedAt: null,
+      createdAt: new Date(),
+    }),
+  )
+}
+
+export async function getUserScopeGrant(deps: Deps, id: string) {
+  const grant = await deps.authorization.findUserScopeGrant(id)
+  if (!grant) throw notFound('User scope grant was not found.')
+  return toUserScopeGrantResponse(grant)
+}
+
+export async function revokeUserScopeGrant(deps: Deps, id: string) {
+  await getUserScopeGrant(deps, id)
+  if (!(await deps.authorization.revokeUserScopeGrant(id, new Date()))) {
+    throw conflict('User scope grant is already revoked.')
+  }
+}
+
+export async function createApplicationScopeGrant(
+  deps: Deps,
+  input: CreateApplicationScopeGrantRequest,
+  grantedByUserId: string,
+) {
+  const [resource, application] = await Promise.all([
+    getResource(deps, input.resourceServerId),
+    deps.applications.findById(input.applicationId),
+  ])
+  if (!application) throw notFound('Application was not found.')
+  if (!activeResourceVisibleToOrganization(resource, application.ownerOrganizationId)) {
+    throw badRequest('Resource Server is not visible to the Application owner Organization.')
+  }
+  validateAssignedScopes(resource, input.scopes)
+  const expiresAt = input.expiresAt ? new Date(input.expiresAt) : null
+  if (expiresAt && expiresAt.getTime() <= Date.now()) throw badRequest('Scope grant expiry must be in the future.')
+  return toApplicationScopeGrantResponse(
+    await deps.authorization.createApplicationScopeGrant({
+      id: createId('asg'),
+      applicationId: application.id,
+      resourceServerId: resource.id,
+      scopes: [...new Set(input.scopes)].sort(),
+      grantedByUserId,
+      expiresAt,
+      revokedAt: null,
+      createdAt: new Date(),
+    }),
+  )
+}
+
+export async function getApplicationScopeGrant(deps: Deps, id: string) {
+  const grant = await deps.authorization.findApplicationScopeGrant(id)
+  if (!grant) throw notFound('Application scope grant was not found.')
+  return toApplicationScopeGrantResponse(grant)
+}
+
+export async function revokeApplicationScopeGrant(deps: Deps, id: string) {
+  await getApplicationScopeGrant(deps, id)
+  if (!(await deps.authorization.revokeApplicationScopeGrant(id, new Date()))) {
+    throw conflict('Application scope grant is already revoked.')
+  }
+}
+
+function validateAssignedScopes(resource: ApiResourceResponse, scopes: string[]) {
+  const assigned = new Set(
+    resource.scopeRegistry?.scopes.filter((scope) => scope.grantMode === 'assigned').map((scope) => scope.value) ?? [],
+  )
+  if (scopes.some((scope) => !assigned.has(scope))) {
+    throw badRequest('Direct grants may reference only assigned scopes in the current Resource Server registry.')
+  }
+}
+
+function toUserScopeGrantResponse(grant: Awaited<ReturnType<Deps['authorization']['createUserScopeGrant']>>) {
+  return {
+    ...grant,
+    expiresAt: grant.expiresAt?.toISOString() ?? null,
+    revokedAt: grant.revokedAt?.toISOString() ?? null,
+    createdAt: grant.createdAt.toISOString(),
+  }
+}
+
+function toApplicationScopeGrantResponse(
+  grant: Awaited<ReturnType<Deps['authorization']['createApplicationScopeGrant']>>,
+) {
+  return {
+    ...grant,
+    expiresAt: grant.expiresAt?.toISOString() ?? null,
+    revokedAt: grant.revokedAt?.toISOString() ?? null,
+    createdAt: grant.createdAt.toISOString(),
   }
 }
 
@@ -528,8 +696,8 @@ async function validateRoleScopes(deps: Deps, organizationId: string, scopes: Ro
   for (const item of scopes) byResource.set(item.resourceId, [...(byResource.get(item.resourceId) ?? []), item.scope])
   for (const [resourceId, requestedScopes] of byResource) {
     const resource = await getResource(deps, resourceId)
-    if (!activeResourceEligibleForOrganization(resource, organizationId)) {
-      throw badRequest('Resource Server is not eligible for this Organization.')
+    if (!activeResourceVisibleToOrganization(resource, organizationId)) {
+      throw badRequest('Resource Server is not visible to this Organization.')
     }
     if (resourceId === internalResourceServer.id) {
       if (requestedScopes.some((scope) => !(scope in realmrootScopeRegistry))) {
@@ -537,26 +705,19 @@ async function validateRoleScopes(deps: Deps, organizationId: string, scopes: Ro
       }
       continue
     }
-    await validateRequestedScopes(deps, resource.resourceUrl, requestedScopes)
+    validateRequestedScopes(resource.scopeRegistry, requestedScopes)
+    const assigned = new Set(
+      resource.scopeRegistry?.scopes.filter((scope) => scope.grantMode === 'assigned').map((scope) => scope.value) ??
+        [],
+    )
+    if (requestedScopes.some((scope) => !assigned.has(scope))) {
+      throw badRequest('Organization Roles may reference only assigned scopes.')
+    }
   }
 }
 
 function toBetterAuthPermission(scopes: RoleScope[]) {
   return { scope: scopes.map(({ resourceId, scope }) => encodeRoleScope(resourceId, scope)) }
-}
-
-export async function getAgentRoleAuthorization(
-  deps: Deps,
-  agentIdentityId: string,
-  resourceId: string,
-  organizationId?: string,
-): Promise<{ roles: string[]; scopes: string[] }> {
-  const resource = await getResource(deps, resourceId)
-  if (!resource.availableToAgents || !activeResourceEligibleForOrganization(resource, organizationId)) {
-    throw forbidden('Resource Server is not eligible for this Agent tenant.')
-  }
-  void agentIdentityId
-  return { roles: [], scopes: [] }
 }
 
 export async function buildTokenClaims(deps: Deps, input: AuthorizationTokenClaimInput) {
@@ -580,10 +741,38 @@ export async function buildTokenClaims(deps: Deps, input: AuthorizationTokenClai
         : [],
     }
   }
-  if (resource && !activeResourceEligibleForOrganization(resource, input.organizationId)) {
+  if (resource && input.organizationId && !activeResourceVisibleToOrganization(resource, input.organizationId)) {
     return toTokenClaims({ ...input, scopes: [] }, roleAuthorization, resource, organization)
   }
   return toTokenClaims(input, roleAuthorization, resource, organization)
+}
+
+function updateScopeGrantModes(
+  registry: ApiResourceResponse['scopeRegistry'],
+  updates: NonNullable<UpdateApiResourceRequest['scopeGrantModes']>,
+) {
+  if (!registry) throw badRequest('Resource Server scopes must be synchronized before grant modes can be changed.')
+  const modes = new Map(updates.map((item) => [item.scope, item.grantMode]))
+  const declared = new Set(registry.scopes.map((scope) => scope.value))
+  const unknown = updates.find((item) => !declared.has(item.scope))
+  if (unknown) throw badRequest(`Scope "${unknown.scope}" is not declared by the Resource Server.`)
+  return {
+    ...registry,
+    scopes: registry.scopes.map((scope) => ({ ...scope, grantMode: modes.get(scope.value) ?? scope.grantMode })),
+  }
+}
+
+function realmrootRegistry(apiOrigin: string): NonNullable<ApiResourceResponse['scopeRegistry']> {
+  return {
+    discovery: {
+      sourceUrl: `${realmrootResourceUrl(apiOrigin)}/openapi.json`,
+      etag: null,
+      documentHash: 'system-managed',
+      syncedAt: new Date().toISOString(),
+      lastError: null,
+    },
+    scopes: Object.keys(realmrootScopeRegistry).map((value) => ({ value, description: null, grantMode: 'assigned' })),
+  }
 }
 
 async function requireMember(deps: Deps, id: string) {

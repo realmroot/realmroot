@@ -1,5 +1,4 @@
 import { z } from 'zod'
-import { isProtectedResourceScope } from '../authz'
 import { paginationMetadataSchema, paginationQuerySchema } from './pagination'
 
 export const applicationClientTypes = ['public_spa', 'public_native', 'confidential_web'] as const
@@ -14,49 +13,25 @@ export const applicationGrantTypes = [
 ] as const
 export const userConfigurableApplicationScopes = ['openid', 'profile', 'email', 'offline_access'] as const
 export const applicationScopes = userConfigurableApplicationScopes
-export const customApplicationScopeSchema = z
-  .string()
-  .trim()
-  .min(1)
-  .max(120)
-  .regex(/^[A-Za-z0-9._-]+:[A-Za-z0-9:._-]+$/)
-  .refine((value) => !isProtectedResourceScope(value), {
-    message: 'Realmroot resource scopes are reserved.',
-  })
 
 export const applicationClientTypeSchema = z.enum(applicationClientTypes)
 export const applicationGrantTypeSchema = z.enum(applicationGrantTypes)
-export const applicationScopeSchema = z.union([z.enum(applicationScopes), customApplicationScopeSchema])
-export const userConfigurableApplicationScopeSchema = z.union([
-  z.enum(userConfigurableApplicationScopes),
-  customApplicationScopeSchema,
-])
+export const applicationScopeSchema = z.enum(applicationScopes)
+export const userConfigurableApplicationScopeSchema = applicationScopeSchema
 
 const nonEmptyString = z.string().trim().min(1)
 const managedAssetUrlSchema = z.union([z.url(), z.string().regex(/^\/api\/assets\/[A-Za-z0-9_-]+$/)])
 const optionalUrl = managedAssetUrlSchema.optional()
 const customDataSchema = z.record(z.string(), z.unknown())
 
-export const applicationAudienceModeSchema = z.enum(['realm', 'organizations', 'users', 'public'])
-export const applicationAudienceSchema = z
-  .object({
-    mode: applicationAudienceModeSchema,
-    organizationIds: z.array(nonEmptyString).default([]),
-    userIds: z.array(nonEmptyString).default([]),
-  })
-  .superRefine((audience, context) => {
-    if (audience.mode === 'organizations' && audience.organizationIds.length === 0) {
-      context.addIssue({ code: 'custom', path: ['organizationIds'], message: 'Select at least one Organization.' })
-    }
-    if (audience.mode === 'users' && audience.userIds.length === 0) {
-      context.addIssue({ code: 'custom', path: ['userIds'], message: 'Select at least one user.' })
-    }
-  })
-  .transform((audience) => ({
-    mode: audience.mode,
-    organizationIds: audience.mode === 'organizations' ? [...new Set(audience.organizationIds)].sort() : [],
-    userIds: audience.mode === 'users' ? [...new Set(audience.userIds)].sort() : [],
-  }))
+export const applicationResourceScopesSchema = z.array(
+  z
+    .object({
+      resourceServerId: nonEmptyString,
+      scopes: z.array(nonEmptyString).transform((scopes) => [...new Set(scopes)].sort()),
+    })
+    .strict(),
+)
 
 // Re-exported from the canonical pagination module so existing
 // `@shared/api/applications` import sites keep working.
@@ -136,13 +111,13 @@ export const applicationResponseSchema = z
     disabled: z.boolean(),
     disabledReason: z.string().nullable(),
     ownerOrganizationId: z.string(),
-    audience: applicationAudienceSchema,
     redirectUris: z.array(z.string()),
     postLogoutRedirectUris: z.array(z.string()),
     corsOrigins: z.array(z.string()),
     customData: customDataSchema,
     allowedGrantTypes: z.array(applicationGrantTypeSchema),
-    allowedScopes: z.array(applicationScopeSchema),
+    oidcScopes: z.array(applicationScopeSchema),
+    resourceScopes: applicationResourceScopesSchema,
     requirePkce: z.boolean(),
     tokenEndpointAuthMethod: z.enum(['none', 'client_secret_basic', 'client_secret_post']),
     secretMetadata: z.array(applicationSecretMetadataSchema),
@@ -173,11 +148,11 @@ export const createApplicationRequestSchema = z.object({
   postLogoutRedirectUris: z.array(nonEmptyString).optional(),
   corsOrigins: z.array(nonEmptyString).optional(),
   allowedGrantTypes: z.array(applicationGrantTypeSchema).min(1).optional(),
-  allowedScopes: z.array(userConfigurableApplicationScopeSchema).min(1).optional(),
+  oidcScopes: z.array(userConfigurableApplicationScopeSchema).min(1).optional(),
+  resourceScopes: applicationResourceScopesSchema.optional(),
   firstParty: z.boolean().optional(),
   trusted: z.boolean().optional(),
   ownerOrganizationId: nonEmptyString,
-  audience: applicationAudienceSchema.optional(),
   oidcClaims: applicationOidcClaimsSchema.optional(),
 })
 
@@ -197,13 +172,13 @@ export const updateApplicationRequestSchema = z.object({
   corsOrigins: z.array(nonEmptyString).optional(),
   customData: customDataSchema.optional(),
   allowedGrantTypes: z.array(applicationGrantTypeSchema).min(1).optional(),
-  allowedScopes: z.array(userConfigurableApplicationScopeSchema).min(1).optional(),
+  oidcScopes: z.array(userConfigurableApplicationScopeSchema).min(1).optional(),
+  resourceScopes: applicationResourceScopesSchema.optional(),
   firstParty: z.boolean().optional(),
   trusted: z.boolean().optional(),
   disabled: z.boolean().optional(),
   disabledReason: z.string().trim().max(500).nullable().optional(),
   ownerOrganizationId: nonEmptyString.optional(),
-  audience: applicationAudienceSchema.optional(),
   oidcClaims: applicationOidcClaimsSchema.optional(),
 })
 
@@ -240,7 +215,8 @@ export const applicationAuthorizationSchema = z.object({
       name: z.string(),
     })
     .nullable(),
-  scopes: z.array(applicationScopeSchema),
+  resourceServerId: z.string().nullable(),
+  scopes: z.array(z.string()),
   permissions: z.array(z.string()),
   grantedAt: z.string(),
   expiresAt: z.string().nullable(),
@@ -286,11 +262,12 @@ export const consentRequestResponseSchema = z.object({
     approveUrl: z.string(),
     denyUrl: z.string(),
   }),
-  requestedScopes: z.array(applicationScopeSchema),
+  resourceServerId: z.string().nullable(),
+  requestedScopes: z.array(z.string()),
   existingConsent: z
     .object({
       id: z.string(),
-      scopes: z.array(applicationScopeSchema),
+      scopes: z.array(z.string()),
       grantedAt: z.string(),
     })
     .nullable(),
@@ -299,7 +276,8 @@ export const consentRequestResponseSchema = z.object({
 
 export const createConsentRequestSchema = z.object({
   clientId: nonEmptyString,
-  scopes: z.array(applicationScopeSchema).min(1),
+  resourceServerId: nonEmptyString.nullable(),
+  scopes: z.array(nonEmptyString).min(1),
   permissions: z.array(nonEmptyString).optional(),
 })
 
@@ -307,8 +285,6 @@ export const hostedConsentApprovalRequestSchema = createConsentRequestSchema.omi
 
 export type ApplicationResponse = z.infer<typeof applicationResponseSchema>
 export type ApplicationOidcClaims = z.infer<typeof applicationOidcClaimsSchema>
-export type ApplicationAudience = z.infer<typeof applicationAudienceSchema>
-export type ApplicationAudienceMode = z.infer<typeof applicationAudienceModeSchema>
 export type CreateApplicationResponse = z.infer<typeof createApplicationResponseSchema>
 export type PaginationQuery = z.infer<typeof paginationQuerySchema>
 export type ListApplicationsQuery = z.infer<typeof listApplicationsQuerySchema>

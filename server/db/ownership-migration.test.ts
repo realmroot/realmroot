@@ -4,13 +4,14 @@ import { describe, expect, it } from 'vitest'
 
 const migrationName = '20260806005241_same_mathemanic.sql'
 const platformOwnerMigrationName = '20260806040000_platform_organization_owner.sql'
+const resourceScopeMigrationName = '20260806155546_typical_demogoblin.sql'
 
 describe('tenant ownership migration', () => {
   it('rebuilds legacy ownership into the final schema and quarantines ambiguity', () => {
     const database = new DatabaseSync(':memory:')
     try {
       for (const name of migrationNames().filter(
-        (name) => ![migrationName, platformOwnerMigrationName].includes(name),
+        (name) => ![migrationName, platformOwnerMigrationName, resourceScopeMigrationName].includes(name),
       )) {
         database.exec(readFileSync(new URL(`../../migrations/${name}`, import.meta.url), 'utf8'))
       }
@@ -24,16 +25,17 @@ describe('tenant ownership migration', () => {
         database.exec('rollback')
         throw error
       }
+      database.exec(readFileSync(new URL(`../../migrations/${resourceScopeMigrationName}`, import.meta.url), 'utf8'))
 
       expect(columnNames(database, 'application')).not.toContain('owner_user_id')
+      expect(columnNames(database, 'application')).not.toContain('audience_mode')
+      expect(columnNames(database, 'application')).toEqual(expect.arrayContaining(['oidc_scopes', 'resource_scopes']))
       expect(columnNames(database, 'application_consent')).not.toContain('organization_id')
       expect(database.prepare("select id from application_consent where id = 'consent-1'").get()).toEqual({
         id: 'consent-1',
       })
       for (const table of [
         'account_center_setting',
-        'application_audience_organization',
-        'application_audience_user',
         'application_client_metadata',
         'application_client_secret',
         'branding_setting',
@@ -42,6 +44,11 @@ describe('tenant ownership migration', () => {
       ]) {
         expect(database.prepare(`select count(*) as count from ${table}`).get()).toEqual({ count: 1 })
       }
+      expect(
+        database
+          .prepare("select revoked_at is not null as revoked from application_consent where id = 'consent-1'")
+          .get(),
+      ).toEqual({ revoked: 1 })
       expect(
         database.prepare("select default_application_id from sign_in_experience where id = 'signin-1'").get(),
       ).toEqual({ default_application_id: 'app-1' })

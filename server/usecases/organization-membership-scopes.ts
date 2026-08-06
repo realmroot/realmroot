@@ -1,11 +1,10 @@
 import { type AuthorizationContext, canAuthorize } from '@server/domain/authorization-context'
 import { realmrootResourceServer } from '@server/domain/realmroot-resource-server'
 import type { Deps } from '@server/usecases/deps'
-import { readDeclaredScopes } from '@server/usecases/resource-openapi'
 import type { ApiResourceResponse } from '@shared/api/authorization'
 import { predefinedOrganizationRoleScopes } from '@shared/organization-access'
 import { type RealmrootOrganizationScope, realmrootScopeRegistry } from '@shared/scope-registry'
-import { activeResourceEligibleForOrganization } from './resource-eligibility'
+import { activeResourceVisibleToOrganization } from './resource-visibility'
 
 export async function resolveOrganizationMembershipScopes(
   deps: Deps,
@@ -37,23 +36,24 @@ export async function resolveOrganizationMembershipScopes(
   if (scopes.size === 0) return []
 
   const resource = await deps.authorization.findResource(resourceId)
-  return resource ? filterCurrentResourceScopes(deps, resource, organizationId, scopes) : []
+  return resource ? filterCurrentResourceScopes(resource, organizationId, scopes) : []
 }
 
-export async function filterCurrentResourceScopes(
-  deps: Deps,
+export function filterCurrentResourceScopes(
   resource: ApiResourceResponse,
   organizationId: string,
   scopes: Iterable<string>,
 ) {
   const candidates = [...scopes]
   if (candidates.length === 0) return []
-  if (!activeResourceEligibleForOrganization(resource, organizationId)) return []
+  if (!activeResourceVisibleToOrganization(resource, organizationId)) return []
   if (resource.id === realmrootResourceServer.id) {
     return candidates.filter((scope) => scope in realmrootScopeRegistry).sort()
   }
-  const declaredScopes = new Set((await readDeclaredScopes(deps, resource.resourceUrl)).map((scope) => scope.value))
-  return candidates.filter((scope) => declaredScopes.has(scope)).sort()
+  const assignedScopes = new Set(
+    resource.scopeRegistry?.scopes.filter((scope) => scope.grantMode === 'assigned').map((scope) => scope.value) ?? [],
+  )
+  return candidates.filter((scope) => assignedScopes.has(scope)).sort()
 }
 
 export async function organizationUserHasScope(

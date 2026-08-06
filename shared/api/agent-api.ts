@@ -64,7 +64,6 @@ export const managementAgentSchema = agentSchema.extend({
     displayName: z.string(),
   }),
   installationCount: z.number().int().nonnegative(),
-  roleCount: z.number().int().nonnegative(),
   pendingRequestCount: z.number().int().nonnegative(),
   activeGrantCount: z.number().int().nonnegative(),
 })

@@ -1,5 +1,5 @@
 import {
-  applicationAudienceSchema,
+  applicationResourceScopesSchema,
   createApplicationRequestSchema,
   createApplicationResponseSchema,
   deviceCodeGrantType,
@@ -11,25 +11,13 @@ import {
 } from '@shared/api/applications'
 import { describe, expect, it } from 'vitest'
 
-describe('application audience contracts', () => {
-  it('requires and normalizes audience targets', () => {
-    expect(applicationAudienceSchema.safeParse({ mode: 'organizations' }).success).toBe(false)
-    expect(applicationAudienceSchema.safeParse({ mode: 'users' }).success).toBe(false)
+describe('application Resource Server scope contracts', () => {
+  it('normalizes each resource-qualified scope allowlist', () => {
     expect(
-      applicationAudienceSchema.parse({
-        mode: 'organizations',
-        organizationIds: ['org-b', 'org-a', 'org-b'],
-        userIds: ['ignored-user'],
-      }),
-    ).toEqual({ mode: 'organizations', organizationIds: ['org-a', 'org-b'], userIds: [] })
-    expect(
-      applicationAudienceSchema.parse({ mode: 'users', organizationIds: ['ignored-org'], userIds: ['user-1'] }),
-    ).toEqual({ mode: 'users', organizationIds: [], userIds: ['user-1'] })
-    expect(applicationAudienceSchema.parse({ mode: 'realm' })).toEqual({
-      mode: 'realm',
-      organizationIds: [],
-      userIds: [],
-    })
+      applicationResourceScopesSchema.parse([
+        { resourceServerId: 'res_orders', scopes: ['orders:write', 'orders:read', 'orders:read'] },
+      ]),
+    ).toEqual([{ resourceServerId: 'res_orders', scopes: ['orders:read', 'orders:write'] }])
   })
 })
 
@@ -82,9 +70,9 @@ describe('application API pagination contracts', () => {
       corsOrigins: ['https://app.example.com'],
       customData: { tier: 'gold' },
       ownerOrganizationId: 'org_platform',
-      audience: { mode: 'realm', organizationIds: [], userIds: [] },
       allowedGrantTypes: ['authorization_code'],
-      allowedScopes: ['openid', 'profile'],
+      oidcScopes: ['openid', 'profile'],
+      resourceScopes: [],
       requirePkce: false,
       tokenEndpointAuthMethod: 'client_secret_basic',
       secretMetadata: [],
@@ -130,12 +118,12 @@ describe('application API pagination contracts', () => {
         name: 'Customer app',
         clientType: 'public_spa',
         redirectUris: ['http://localhost:5173/callback'],
-        allowedScopes: ['openid', 'applications:read'],
+        oidcScopes: ['openid', 'applications:read'],
       }),
     ).toThrow()
     expect(() =>
       updateApplicationRequestSchema.parse({
-        allowedScopes: ['openid', 'applications:write'],
+        oidcScopes: ['openid', 'applications:write'],
       }),
     ).toThrow()
   })

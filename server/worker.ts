@@ -7,7 +7,10 @@ import { createDeps } from '@server/composition'
 import { createDb } from '@server/db/client'
 import { type Env, type RuntimeConfig, validateEnv } from '@server/env'
 import { createApp, healthStatus } from '@server/http/app'
-import { reconcileRealmrootResourceServer } from '@server/usecases/authorization'
+import {
+  reconcileRealmrootResourceServer,
+  synchronizeEnabledResourceScopeRegistries,
+} from '@server/usecases/authorization'
 import { defaultBuiltInProviders } from '@server/usecases/configz'
 import { loadAuthConnectorConfig } from '@server/usecases/connectors'
 import { publishWebhookEvent } from '@server/usecases/webhooks'
@@ -33,6 +36,10 @@ export default {
       trustedOrigins: config.trustedOrigins,
       securityPolicy,
     }).fetch(request, env, ctx)
+  },
+  async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext) {
+    const config = validateEnv(env, env.BETTER_AUTH_URL ?? 'https://scheduled.realmroot.invalid')
+    ctx.waitUntil(synchronizeEnabledResourceScopeRegistries(createDeps(env, config)))
   },
 }
 

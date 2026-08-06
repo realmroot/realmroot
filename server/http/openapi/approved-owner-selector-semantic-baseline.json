@@ -1,14 +1,27 @@
 [
-  {
-    "method": "POST",
-    "path": "/applications",
-    "operationId": "createApplication",
-    "semanticHash": "78b3bff5e76518816bf4cf8a7f12f2d2a4ae4c40be7b824d797ed491608261a7"
-  },
-  {
-    "method": "POST",
-    "path": "/resource-servers",
-    "operationId": "createResourceServer",
-    "semanticHash": "e4327746448c292312fda9bf0925f2af8714bf47176faee98f3b5a9598b80c84"
-  }
+  {"method":"GET","path":"/access/consents","operationId":"listApplicationConsents","semanticHash":"d95ec6a5daacafccfa0101ce9f9ab3744f1691b2e365eb8e63d340a580a62d86"},
+  {"method":"GET","path":"/access/consents/{consentId}","operationId":"getApplicationConsent","semanticHash":"4b808d0a6d825de04f02c28240ed271ddab944e51bb2fbd3f9850cda9b20c46a"},
+  {"method":"GET","path":"/agents","operationId":"listAgents","semanticHash":"d84f4e369a855c8dfb0ebf3fe98c3f1747c8491df31a7b30e453ca06137b4ea0"},
+  {"method":"GET","path":"/agents/{agentId}","operationId":"getAgent","semanticHash":"fa098449fea5b5ab5009cd3a8d6cd3cbb1a6b4bee5441f5faca57027642e9aa0"},
+  {"method":"POST","path":"/application-scope-grants","operationId":"createApplicationScopeGrant","semanticHash":"4bfa4dd85439cb1b13c2143a9fed0c43cf1ee051317b66b76ce906ea7df00d45"},
+  {"method":"DELETE","path":"/application-scope-grants/{grantId}","operationId":"deleteApplicationScopeGrant","semanticHash":"7ed0262d11070d7d5710c663f2fdd9d5c486c63592d6a94b9b104e3df13909dc"},
+  {"method":"GET","path":"/application-scope-grants/{grantId}","operationId":"getApplicationScopeGrant","semanticHash":"612227c1fb1bfa98bc99adc50c78c303cf713e59aaf722e43bc95bea5be3f539"},
+  {"method":"GET","path":"/applications","operationId":"listApplications","semanticHash":"a2ca2bd1e09b7e3c2b8c6acfd8ef3797e0825fead387d8d0357b0146f4efab76"},
+  {"method":"POST","path":"/applications","operationId":"createApplication","semanticHash":"67f917ee941a6350e0872181fbd9a22285388f180297c3ac2203b5522f600a69"},
+  {"method":"DELETE","path":"/applications/{applicationId}","operationId":"deleteApplication","semanticHash":"52378931fd17c96bae63e209626b13c98ec0dd179f9cbd98b453a9723b227c72"},
+  {"method":"GET","path":"/applications/{applicationId}","operationId":"getApplication","semanticHash":"d57cfced97f435d370f4cd38464e39d56fe658fb38deb740f29717d919503e3a"},
+  {"method":"PATCH","path":"/applications/{applicationId}","operationId":"updateApplication","semanticHash":"48c53b740ea8a49d43db7e263c9daad5ca6f693a126e838576968809d64445e7"},
+  {"method":"GET","path":"/resource-servers","operationId":"listResourceServers","semanticHash":"251d2fde130af72933a508693106113177bfd7fb7aca01f8fbee5de170c729bd"},
+  {"method":"POST","path":"/resource-servers","operationId":"createResourceServer","semanticHash":"1561e2a0995c33a2c0cf59e14d851988f4201dc6ca38dcf00d23afbe464c006c"},
+  {"method":"DELETE","path":"/resource-servers/{resourceServerId}","operationId":"deleteResourceServer","semanticHash":"250a13f115b2030a34b638d11ffbfd02db629c2131e6627a13babd021a327843"},
+  {"method":"GET","path":"/resource-servers/{resourceServerId}","operationId":"getResourceServer","semanticHash":"e543e2c5ffc144ee1a80d3e943cd727bd60518717dc476c93cb87840ae0c3d80"},
+  {"method":"PATCH","path":"/resource-servers/{resourceServerId}","operationId":"updateResourceServer","semanticHash":"00242cef87ab9799a83f1fcbfb25b451e99ac6181b49632e635f4a99a65169dd"},
+  {"method":"DELETE","path":"/resource-servers/{resourceServerId}/archival","operationId":"deleteResourceServerArchival","semanticHash":"e2433569c2624c8af4caa4435ada52f833c62d63b9ca59546c28c8b17896da46"},
+  {"method":"GET","path":"/resource-servers/{resourceServerId}/archival","operationId":"getResourceServerArchival","semanticHash":"c9419c0a638c2c3c285adab808713f69715973cb232d61213cb9fa6924d2c025"},
+  {"method":"PUT","path":"/resource-servers/{resourceServerId}/archival","operationId":"replaceResourceServerArchival","semanticHash":"fe0942720d5b41f75ebbe96a5a8ad8b776361855f2174dc28d7ed80a8384f7f2"},
+  {"method":"GET","path":"/resource-servers/{resourceServerId}/contract","operationId":"getResourceServerContract","semanticHash":"f089ad1b817a2fa5ba6288907013b8a28e12df7202570820b5f51537899fa179"},
+  {"method":"PUT","path":"/resource-servers/{resourceServerId}/scope-registry","operationId":"replaceResourceServerScopeRegistry","semanticHash":"010a5caaf994361af3112c64bfbbc77bf59c03b851bdefec1bdccda081455479"},
+  {"method":"POST","path":"/user-scope-grants","operationId":"createUserScopeGrant","semanticHash":"748bba653fab0cbc8753f8842007bc8cb543e7789fd89644a00586427481f084"},
+  {"method":"DELETE","path":"/user-scope-grants/{grantId}","operationId":"deleteUserScopeGrant","semanticHash":"4b86347a936b4a08178a5cf44b53308f3e0dc806c00e4f413670e562b39e63fb"},
+  {"method":"GET","path":"/user-scope-grants/{grantId}","operationId":"getUserScopeGrant","semanticHash":"9eb2a240c94826ca8cfc5be3cb295c14a26910b27d0f288c5b52d0c0307239e8"}
 ]

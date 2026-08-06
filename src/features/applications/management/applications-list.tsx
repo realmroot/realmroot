@@ -19,7 +19,6 @@ import {
   createApplication,
   listApplications,
   listOrganizations,
-  listUsers,
   updateApplication,
 } from '@/lib/api/management'
 import { ApplicationsTableContent } from './application-detail-sections'
@@ -34,15 +33,10 @@ export function ApplicationsPage({ organizationId }: { organizationId?: string }
     queryKey: consoleQueryKeys.organizations,
     queryFn: listOrganizations,
   })
-  const usersQuery = useQuery({
-    queryKey: [...consoleQueryKeys.users, { limit: 100, organizationId, purpose: 'application-audience' }],
-    queryFn: () => listUsers({ limit: 100, organizationId }),
-  })
   const queryClient = useQueryClient()
   const [dialogOpen, setDialogOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [type, setType] = useState('')
-  const [audience, setAudience] = useState('')
   useEffect(() => setOwner(organizationId ?? ''), [organizationId])
   const createMutation = useAdminMutation({
     mutationFn: createApplication,
@@ -71,12 +65,10 @@ export function ApplicationsPage({ organizationId }: { organizationId?: string }
     return (
       matchesSearch &&
       (!owner || application.ownerOrganizationId === owner) &&
-      (!type || application.clientType === type) &&
-      (!audience || application.audience.mode === audience)
+      (!type || application.clientType === type)
     )
   })
   const organizations = organizationsQuery.data?.organizations ?? []
-  const users = usersQuery.data?.users ?? []
   const owners = organizationOptions(organizations).sort((left, right) => left.label.localeCompare(right.label))
   return (
     <ResourcePage
@@ -97,7 +89,6 @@ export function ApplicationsPage({ organizationId }: { organizationId?: string }
           fixedOwnerOrganizationId={organizationId}
           key={organizationId ?? 'realm'}
           organizations={organizations}
-          users={users}
           createdApplication={createMutation.data ?? null}
           error={createMutation.errorMessage}
           onClose={() => {
@@ -109,12 +100,12 @@ export function ApplicationsPage({ organizationId }: { organizationId?: string }
           pending={createMutation.isPending}
         />
       }
-      error={query.error ?? organizationsQuery.error ?? usersQuery.error}
+      error={query.error ?? organizationsQuery.error}
       empty={applications.length === 0}
       emptyDescription="Create your first OIDC client to connect an application to hosted authentication."
       emptyTitle="No applications yet"
-      loading={query.isLoading || organizationsQuery.isLoading || usersQuery.isLoading}
-      onRetry={() => Promise.all([query.refetch(), organizationsQuery.refetch(), usersQuery.refetch()])}
+      loading={query.isLoading || organizationsQuery.isLoading}
+      onRetry={() => Promise.all([query.refetch(), organizationsQuery.refetch()])}
       tableToolbar={
         <ListToolbar>
           <TextInput
@@ -143,17 +134,6 @@ export function ApplicationsPage({ organizationId }: { organizationId?: string }
             <option value="public_spa">{tt('Single-page app')}</option>
             <option value="public_native">{tt('Native application')}</option>
           </SelectInput>
-          <SelectInput
-            aria-label={tt('Filter audience')}
-            onChange={(event) => setAudience(event.target.value)}
-            value={audience}
-          >
-            <option value="">{tt('Any audience')}</option>
-            <option value="realm">{tt('All Realm users')}</option>
-            <option value="organizations">{tt('Selected Organizations')}</option>
-            <option value="users">{tt('Assigned users')}</option>
-            <option value="public">{tt('Anyone who can register')}</option>
-          </SelectInput>
         </ListToolbar>
       }
     >
@@ -163,11 +143,11 @@ export function ApplicationsPage({ organizationId }: { organizationId?: string }
         organizationId={organizationId}
         organizations={organizations}
         emptyDescription={
-          search || owner || type || audience
+          search || owner || type
             ? 'No applications match the current filters.'
             : 'Create an OIDC client to connect an application.'
         }
-        emptyTitle={search || owner || type || audience ? 'No applications found' : 'No applications yet'}
+        emptyTitle={search || owner || type ? 'No applications found' : 'No applications yet'}
         hasApplications={applications.length > 0}
         onToggleDisabled={(application) =>
           toggleMutation.mutate({ id: application.id, disabled: !application.disabled })

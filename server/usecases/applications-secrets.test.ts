@@ -12,7 +12,6 @@ import type {
   ClientSecretRecord,
   ConsentRecord,
 } from '@server/usecases/ports'
-import type { ApplicationResponse } from '@shared/api/applications'
 import { describe, expect, it } from 'vitest'
 
 function createApplication(
@@ -196,7 +195,7 @@ describe('service.test 2', () => {
           name: 'Unsupported Scope',
           clientType: 'public_spa',
           redirectUris: ['http://localhost:5173/callback'],
-          allowedScopes: ['openid', 'bad-scope' as 'openid'],
+          oidcScopes: ['openid', 'bad-scope' as 'openid'],
         },
         'admin-1',
       ),
@@ -209,7 +208,7 @@ describe('service.test 2', () => {
           name: 'Reserved Management Scope',
           clientType: 'public_spa',
           redirectUris: ['http://localhost:5173/callback'],
-          allowedScopes: ['openid', 'applications:read' as 'openid'],
+          oidcScopes: ['openid', 'applications:read' as 'openid'],
         },
         'admin-1',
       ),
@@ -312,12 +311,12 @@ describe('service.test 2', () => {
         name: 'Consent App',
         clientType: 'public_spa',
         redirectUris: ['https://spa.example.com/callback'],
-        allowedScopes: ['openid', 'profile'],
+        oidcScopes: ['openid', 'profile'],
       },
       'admin-1',
     )
 
-    await createConsent(deps, { clientId: created.clientId, scopes: ['openid'] }, 'user-1')
+    await createConsent(deps, { clientId: created.clientId, resourceServerId: null, scopes: ['openid'] }, 'user-1')
     const consent = await loadConsentRequest(
       deps,
       issuer,
@@ -375,7 +374,11 @@ describe('service.test 2', () => {
       ),
     ).rejects.toMatchObject({ status: 400, message: 'redirect_uri is not registered for this client.' })
     await expect(
-      createConsent(deps, { clientId: created.clientId, scopes: ['bad-scope' as 'openid'] }, 'user-1'),
+      createConsent(
+        deps,
+        { clientId: created.clientId, resourceServerId: null, scopes: ['bad-scope' as 'openid'] },
+        'user-1',
+      ),
     ).rejects.toMatchObject({ status: 400, message: 'Scope is not allowed for this client: bad-scope' })
   })
 })
@@ -532,11 +535,13 @@ class InMemoryApplicationRepository implements ApplicationRepository {
     applicationId: string
     clientId: string
     userId: string
-    scopes: ApplicationResponse['allowedScopes']
+    resourceServerId: string | null
+    scopes: string[]
     permissions: string[]
   }) {
     const consent = {
       id: `consent-${this.consents.size + 1}`,
+      resourceServerId: input.resourceServerId,
       scopes: input.scopes,
       grantedAt: new Date('2026-05-18T15:00:00.000Z'),
     }

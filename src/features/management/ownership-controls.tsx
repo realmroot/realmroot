@@ -1,5 +1,4 @@
-import type { ApplicationAudienceMode } from '@shared/api/applications'
-import type { ApiResourceEligibilityMode, OrganizationResponse } from '@shared/api/authorization'
+import type { ApiResourceVisibility, OrganizationResponse } from '@shared/api/authorization'
 import type { ManagementUserResponse } from '@shared/api/management'
 import { ChevronsUpDown } from 'lucide-react'
 import { useState } from 'react'
@@ -36,20 +35,10 @@ export function ownerLabel(ownerOrganizationId: string, organizations: Organizat
   return organization?.displayName ?? organization?.name ?? ownerOrganizationId
 }
 
-export function applicationAudienceLabel(mode: ApplicationAudienceMode) {
+export function resourceVisibilityLabel(mode: ApiResourceVisibility) {
   return {
-    realm: tt('All Realm users'),
-    organizations: tt('Selected Organizations'),
-    users: tt('Assigned users'),
-    public: tt('Anyone who can register'),
-  }[mode]
-}
-
-export function resourceEligibilityLabel(mode: ApiResourceEligibilityMode) {
-  return {
-    owner_organization: tt('Owning Organization'),
-    organizations: tt('Selected Organizations'),
-    realm: tt('All Realm actors'),
+    private: tt('Owner Organization only'),
+    public: tt('All authenticated users and Organizations'),
   }[mode]
 }
 

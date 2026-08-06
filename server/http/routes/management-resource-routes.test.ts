@@ -235,7 +235,8 @@ async function loadAuthorizationRoutes() {
     authorizationDetails: [],
     enabled: true,
     ownerOrganizationId: 'org-1',
-    accessEligibility: { mode: 'realm' as const, organizationIds: [] },
+    visibility: 'public' as const,
+    scopeRegistry: null,
     availableToAgents: true,
     archivedAt: null,
     createdAt: '2026-01-01T00:00:00.000Z',
@@ -250,7 +251,9 @@ async function loadAuthorizationRoutes() {
   vi.spyOn(authorizationUsecase, 'getResourceContract').mockResolvedValue({
     resourceId: apiResource.id,
     sourceUrl: 'https://api.example.com/openapi.json',
-    scopes: [{ value: 'contacts:read', description: 'Read contacts' }],
+    etag: null,
+    documentHash: 'contract',
+    scopes: [{ value: 'contacts:read', description: 'Read contacts', grantMode: 'assigned' }],
     operations: [
       {
         method: 'GET',
@@ -360,6 +363,7 @@ function applicationServiceMock() {
     getAuthorization: vi.fn().mockResolvedValue({
       id: 'authorization-1',
       applicationId: 'app-1',
+      resourceServerId: null,
       user: { id: 'user-1', displayName: 'User', email: 'user@example.com' },
       organization: null,
       scopes: ['openid'],

@@ -7,12 +7,21 @@ Feature: Hosted authentication
     Given a first admin exists
     And hosted auth reads runtime settings from /api/configz
 
-  @entrypoint:product-ui @journey:application-audience-enforcement
-  Scenario: Application audience gates authorization
+  @entrypoint:product-ui @journey:application-login-without-resource-access
+  Scenario: Application login is independent from resource authorization
     Given I am signed in
-    And an application is limited to assigned users or selected Organizations
+    And an application requests a Resource Server I cannot access
     When I begin authorization for that application
-    Then authorization continues only when I am directly assigned or belong to an allowed active Organization
+    Then authentication and OIDC authorization continue
+    And the inaccessible Resource Server contributes no scopes to the access token
+
+  @entrypoint:product-ui @journey:resource-scope-consent-boundary
+  Scenario: Consent delegates only scopes the user already holds
+    Given an application requests one automatic scope and one assigned scope from a visible Resource Server
+    And I hold the assigned scope through a direct grant or Organization Role
+    When I approve both scopes for that application and Resource Server
+    Then the access token contains both scopes
+    But consent does not create a direct grant or Role assignment
 
   @entrypoint:product-ui @journey:public-sign-in
   Scenario: Hosted sign-in renders enabled methods

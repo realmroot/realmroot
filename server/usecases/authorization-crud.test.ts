@@ -11,7 +11,6 @@ import {
   deleteResource,
   deleteRole,
   ensureRealmrootResourceServer,
-  getAgentRoleAuthorization,
   getOrganization,
   getResource,
   getResourceContract,
@@ -84,26 +83,14 @@ const resource: ApiResourceResponse = {
   description: null,
   enabled: true,
   ownerOrganizationId: organization.id,
-  accessEligibility: { mode: 'realm', organizationIds: [] },
+  visibility: 'public',
+  scopeRegistry: null,
   availableToAgents: true,
   archivedAt: null,
   createdAt: timestamp,
   updatedAt: timestamp,
 }
 describe('authorization CRUD and assignment policy', () => {
-  it('fails closed when an Agent tenant is ineligible for a Resource Server', async () => {
-    const authorization = repository()
-    authorization.findResource.mockResolvedValue({
-      ...resource,
-      accessEligibility: { mode: 'organizations', organizationIds: ['org-2'] },
-    })
-    const deps = { authorization } as unknown as Deps
-
-    await expect(getAgentRoleAuthorization(deps, 'agent-1', resource.id, organization.id)).rejects.toMatchObject({
-      status: 403,
-    })
-  })
-
   it(`persists one immutable built-in Realmroot Resource Server and reconciles its deployment URL
       [spec: management-api/management-realmroot-resource-server-origin]`, async () => {
     const authorization = repository()
@@ -452,9 +439,15 @@ describe('authorization CRUD and assignment policy', () => {
     authorization.findOrganization.mockResolvedValue(organization)
     authorization.findResource.mockImplementation(async (id) =>
       id === 'res_realmroot'
-        ? { ...resource, id, identifier: 'realmroot', resourceUrl: 'https://auth.example.com/api' }
+        ? {
+            ...resource,
+            id,
+            identifier: 'realmroot',
+            resourceUrl: 'https://auth.example.com/api',
+            scopeRegistry: scopeRegistry(['applications:read']),
+          }
         : id === resource.id
-          ? resource
+          ? { ...resource, scopeRegistry: scopeRegistry(['projects:read']) }
           : null,
     )
     authorization.findOrganizationRole.mockResolvedValue({
@@ -511,7 +504,7 @@ describe('authorization CRUD and assignment policy', () => {
 
     authorization.findResource.mockResolvedValue({
       ...resource,
-      accessEligibility: { mode: 'organizations', organizationIds: ['org-2'] },
+      visibility: 'public',
     })
     await expect(
       updateRole(
@@ -574,7 +567,7 @@ describe('authorization CRUD and assignment policy', () => {
 
     authorization.findResourceByResourceUrl.mockResolvedValue({
       ...resource,
-      accessEligibility: { mode: 'owner_organization', organizationIds: [] },
+      visibility: 'private',
     })
     await expect(
       buildTokenClaims(deps, { organizationId: 'org-2', resource: resource.resourceUrl, scopes: ['projects:read'] }),
@@ -887,7 +880,7 @@ describe('authorization CRUD and assignment policy', () => {
         name: 'Organization API',
         resourceUrl: resource.resourceUrl,
         ownerOrganizationId: organization.id,
-        accessEligibility: { mode: 'organizations', organizationIds: [organization.id] },
+        visibility: 'public',
         enabled: false,
       }),
     ).resolves.toBe(resource)
@@ -956,6 +949,7 @@ function repository() {
     findResource: vi.fn().mockResolvedValue(null),
     findResourceByResourceUrl: vi.fn().mockResolvedValue(null),
     updateResource: vi.fn().mockResolvedValue(true),
+    replaceResourceScopeRegistry: vi.fn().mockResolvedValue(true),
     archiveResource: vi.fn(),
     restoreResource: vi.fn(),
     deleteResource: vi.fn(),
@@ -965,6 +959,19 @@ function repository() {
     updateOrganizationRole: vi.fn(),
     deleteOrganizationRole: vi.fn(),
     listOrganizationRoleScopes: vi.fn().mockResolvedValue(new Map()),
+  }
+}
+
+function scopeRegistry(scopes: string[]) {
+  return {
+    discovery: {
+      sourceUrl: 'https://api.example.com/openapi.json',
+      etag: null,
+      documentHash: 'test-registry',
+      syncedAt: timestamp,
+      lastError: null,
+    },
+    scopes: scopes.map((value) => ({ value, description: null, grantMode: 'assigned' as const })),
   }
 }
 

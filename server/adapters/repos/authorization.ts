@@ -1,14 +1,18 @@
 import { conflict } from '@server/domain/errors'
 import type { AuthorizationRepository } from '@server/usecases/ports'
-import { and, count, desc, eq, gt, inArray, isNotNull, isNull, notExists, sql } from 'drizzle-orm'
+import { decodeRoleScope, encodeRoleScope } from '@shared/organization-access'
+import { and, count, desc, eq, gt, inArray, isNotNull, isNull, notExists, or, sql } from 'drizzle-orm'
 import type { BatchItem } from 'drizzle-orm/batch'
 import type { Database } from '../../db/client'
 import {
   agentAccessGrant,
   agentAccessRequest,
   agentAuditEvent,
+  agentIdentity,
   apiResource,
-  apiResourceEligibleOrganization,
+  application,
+  applicationConsent,
+  applicationScopeGrant,
   externalTokenLease,
   federatedCredential,
   invitation,
@@ -17,6 +21,7 @@ import {
   organizationRole,
   resourceAccountConnection,
   resourceConnectionIntent,
+  userScopeGrant,
 } from '../../db/schema'
 import {
   serializeRoles,
@@ -254,26 +259,7 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
 
     async createResource(input) {
       const now = new Date()
-      const { accessEligibility, ...resource } = input
-      const statements: [BatchItem<'sqlite'>, ...BatchItem<'sqlite'>[]] = [
-        db.insert(apiResource).values({
-          ...resource,
-          accessEligibilityMode: accessEligibility.mode,
-          createdAt: now,
-          updatedAt: now,
-        }),
-      ]
-      if (accessEligibility.organizationIds.length > 0) {
-        statements.push(
-          db.insert(apiResourceEligibleOrganization).values(
-            accessEligibility.organizationIds.map((organizationId) => ({
-              resourceId: input.id,
-              organizationId,
-            })),
-          ),
-        )
-      }
-      await db.batch(statements)
+      await db.insert(apiResource).values({ ...input, createdAt: now, updatedAt: now })
       return { ...input, archivedAt: null, createdAt: now.toISOString(), updatedAt: now.toISOString() }
     },
 
@@ -293,12 +279,8 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
         .offset(pagination.offset)
       const totalResult = await db.select({ total: count() }).from(apiResource).where(ownerCondition)
       const total = totalResult[0]?.total ?? 0
-      const eligibility = await loadResourceEligibility(
-        db,
-        rows.map((row) => row.id),
-      )
       return {
-        items: rows.map((row) => toResource(row, eligibility.get(row.id))),
+        items: rows.map(toResource),
         pagination: toPagination(pagination, total),
       }
     },
@@ -309,19 +291,14 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
         .from(apiResource)
         .where(and(eq(apiResource.enabled, true), isNull(apiResource.archivedAt)))
         .orderBy(desc(apiResource.createdAt), desc(apiResource.id))
-      const eligibility = await loadResourceEligibility(
-        db,
-        rows.map((row) => row.id),
-      )
-      return rows.map((row) => toResource(row, eligibility.get(row.id)))
+      return rows.map(toResource)
     },
 
     async findResource(id) {
       const rows = await db.select().from(apiResource).where(eq(apiResource.id, id)).limit(1)
       const row = rows[0]
       if (!row) return null
-      const eligibility = await loadResourceEligibility(db, [row.id])
-      return toResource(row, eligibility.get(row.id))
+      return toResource(row)
     },
 
     async findResourceByResourceUrl(resourceUrl) {
@@ -332,36 +309,246 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
         .limit(1)
       const row = rows[0]
       if (!row) return null
-      const eligibility = await loadResourceEligibility(db, [row.id])
-      return toResource(row, eligibility.get(row.id))
+      return toResource(row)
     },
 
     async updateResource(id, patch) {
-      const { accessEligibility, ...resourcePatch } = patch
-      const statements: [BatchItem<'sqlite'>, ...BatchItem<'sqlite'>[]] = [
-        db
-          .update(apiResource)
-          .set({
-            ...withoutUndefined(resourcePatch),
-            ...(accessEligibility ? { accessEligibilityMode: accessEligibility.mode } : {}),
-            updatedAt: new Date(),
-          })
-          .where(and(eq(apiResource.id, id), isNull(apiResource.archivedAt)))
-          .returning({ id: apiResource.id }),
-      ]
-      if (accessEligibility) {
-        statements.push(
-          db.delete(apiResourceEligibleOrganization).where(eq(apiResourceEligibleOrganization.resourceId, id)),
-        )
-        if (accessEligibility.organizationIds.length > 0) {
+      const { scopeGrantModes: _, ...storedPatch } = patch
+      const now = new Date()
+      const update = db
+        .update(apiResource)
+        .set({ ...withoutUndefined(storedPatch), updatedAt: now })
+        .where(and(eq(apiResource.id, id), isNull(apiResource.archivedAt)))
+        .returning({ id: apiResource.id })
+      if (patch.visibility !== 'private') return (await update).length > 0
+
+      const [resource] = await db.select().from(apiResource).where(eq(apiResource.id, id)).limit(1)
+      if (!resource) return false
+      const ownerOrganizationId = patch.ownerOrganizationId ?? resource.ownerOrganizationId
+      const [members, applications, userGrants, applicationGrants, roles, consents, identities, agentGrants] =
+        await Promise.all([
+          db.select().from(member).where(eq(member.organizationId, ownerOrganizationId)),
+          db.select().from(application),
+          db.select().from(userScopeGrant).where(eq(userScopeGrant.resourceServerId, id)),
+          db.select().from(applicationScopeGrant).where(eq(applicationScopeGrant.resourceServerId, id)),
+          db.select().from(organizationRole),
+          db.select().from(applicationConsent).where(eq(applicationConsent.resourceServerId, id)),
+          db.select().from(agentIdentity),
+          db.select().from(agentAccessGrant).where(eq(agentAccessGrant.resourceId, id)),
+        ])
+      const ownerUsers = new Set(members.map((membership) => membership.userId))
+      const applicationOwners = new Map(applications.map((app) => [app.id, app.ownerOrganizationId]))
+      const identityOwners = new Map(identities.map((identity) => [identity.id, identity.ownerOrganizationId]))
+      const statements: [BatchItem<'sqlite'>, ...BatchItem<'sqlite'>[]] = [update]
+      for (const app of applications) {
+        if (app.ownerOrganizationId === ownerOrganizationId) continue
+        const resourceScopes = app.resourceScopes.filter((configuration) => configuration.resourceServerId !== id)
+        if (resourceScopes.length !== app.resourceScopes.length) {
+          statements.push(
+            db.update(application).set({ resourceScopes, updatedAt: now }).where(eq(application.id, app.id)),
+          )
+        }
+      }
+      for (const grant of userGrants) {
+        if (!ownerUsers.has(grant.userId) && !grant.revokedAt) {
+          statements.push(db.update(userScopeGrant).set({ revokedAt: now }).where(eq(userScopeGrant.id, grant.id)))
+        }
+      }
+      for (const grant of applicationGrants) {
+        if (applicationOwners.get(grant.applicationId) !== ownerOrganizationId && !grant.revokedAt) {
+          statements.push(
+            db.update(applicationScopeGrant).set({ revokedAt: now }).where(eq(applicationScopeGrant.id, grant.id)),
+          )
+        }
+      }
+      for (const role of roles) {
+        if (role.organizationId === ownerOrganizationId) continue
+        const encodedScopes = role.permission.scope ?? []
+        const scopes = encodedScopes.filter((value) => decodeRoleScope(value)?.resourceId !== id)
+        if (scopes.length !== encodedScopes.length) {
           statements.push(
             db
-              .insert(apiResourceEligibleOrganization)
-              .values(accessEligibility.organizationIds.map((organizationId) => ({ resourceId: id, organizationId }))),
+              .update(organizationRole)
+              .set({ permission: { ...role.permission, scope: scopes }, updatedAt: now })
+              .where(eq(organizationRole.id, role.id)),
+          )
+        }
+      }
+      for (const consent of consents) {
+        if (!ownerUsers.has(consent.userId) && !consent.revokedAt) {
+          statements.push(
+            db.update(applicationConsent).set({ revokedAt: now }).where(eq(applicationConsent.id, consent.id)),
+          )
+        }
+      }
+      for (const grant of agentGrants) {
+        if (identityOwners.get(grant.agentIdentityId) !== ownerOrganizationId && grant.status === 'active') {
+          statements.push(
+            db
+              .update(agentAccessGrant)
+              .set({ status: 'revoked', revokedAt: now, updatedAt: now })
+              .where(eq(agentAccessGrant.id, grant.id)),
           )
         }
       }
       const [rows] = await db.batch(statements)
+      return rows.length > 0
+    },
+
+    async replaceResourceScopeRegistry(id, registry) {
+      const now = new Date()
+      const declared = new Set(registry.scopes.map((scope) => scope.value))
+      const assigned = new Set(
+        registry.scopes.filter((scope) => scope.grantMode === 'assigned').map((scope) => scope.value),
+      )
+      const oidcScopes = new Set(['openid', 'profile', 'email', 'offline_access'])
+      const [applications, userGrants, applicationGrants, roles, consents, agentGrants] = await Promise.all([
+        db.select().from(application),
+        db.select().from(userScopeGrant).where(eq(userScopeGrant.resourceServerId, id)),
+        db.select().from(applicationScopeGrant).where(eq(applicationScopeGrant.resourceServerId, id)),
+        db.select().from(organizationRole),
+        db.select().from(applicationConsent).where(eq(applicationConsent.resourceServerId, id)),
+        db.select().from(agentAccessGrant).where(eq(agentAccessGrant.resourceId, id)),
+      ])
+      const statements: [BatchItem<'sqlite'>, ...BatchItem<'sqlite'>[]] = [
+        db
+          .update(apiResource)
+          .set({ scopeRegistry: registry, updatedAt: now })
+          .where(and(eq(apiResource.id, id), isNull(apiResource.archivedAt))),
+      ]
+      for (const app of applications) {
+        const resourceScopes = app.resourceScopes
+          .map((configuration) =>
+            configuration.resourceServerId === id
+              ? { ...configuration, scopes: configuration.scopes.filter((scope) => declared.has(scope)) }
+              : configuration,
+          )
+          .filter((configuration) => configuration.resourceServerId !== id || configuration.scopes.length > 0)
+        if (JSON.stringify(resourceScopes) !== JSON.stringify(app.resourceScopes)) {
+          statements.push(
+            db.update(application).set({ resourceScopes, updatedAt: now }).where(eq(application.id, app.id)),
+          )
+        }
+      }
+      for (const grant of userGrants) {
+        const scopes = grant.scopes.filter((scope) => assigned.has(scope))
+        statements.push(
+          db
+            .update(userScopeGrant)
+            .set(scopes.length > 0 ? { scopes } : { revokedAt: now })
+            .where(eq(userScopeGrant.id, grant.id)),
+        )
+      }
+      for (const grant of applicationGrants) {
+        const scopes = grant.scopes.filter((scope) => assigned.has(scope))
+        statements.push(
+          db
+            .update(applicationScopeGrant)
+            .set(scopes.length > 0 ? { scopes } : { revokedAt: now })
+            .where(eq(applicationScopeGrant.id, grant.id)),
+        )
+      }
+      for (const role of roles) {
+        const encodedScopes = role.permission.scope ?? []
+        const scopes = encodedScopes.flatMap((value) => {
+          const decoded = decodeRoleScope(value)
+          if (!decoded || decoded.resourceId !== id) return [value]
+          return assigned.has(decoded.scope) ? [encodeRoleScope(id, decoded.scope)] : []
+        })
+        if (scopes.length !== encodedScopes.length) {
+          statements.push(
+            db
+              .update(organizationRole)
+              .set({ permission: { ...role.permission, scope: scopes }, updatedAt: now })
+              .where(eq(organizationRole.id, role.id)),
+          )
+        }
+      }
+      for (const consent of consents) {
+        const scopes = consent.scopes.filter((scope) => oidcScopes.has(scope) || declared.has(scope))
+        statements.push(
+          db
+            .update(applicationConsent)
+            .set(scopes.length > 0 ? { scopes } : { revokedAt: now })
+            .where(eq(applicationConsent.id, consent.id)),
+        )
+      }
+      for (const grant of agentGrants) {
+        const scopes = grant.scopes.filter((scope) => declared.has(scope))
+        statements.push(
+          db
+            .update(agentAccessGrant)
+            .set(scopes.length > 0 ? { scopes, updatedAt: now } : { status: 'revoked', revokedAt: now, updatedAt: now })
+            .where(eq(agentAccessGrant.id, grant.id)),
+        )
+      }
+      await db.batch(statements)
+      return true
+    },
+
+    async createUserScopeGrant(input) {
+      await db.insert(userScopeGrant).values(input)
+      return input
+    },
+
+    async findUserScopeGrant(id) {
+      const [row] = await db.select().from(userScopeGrant).where(eq(userScopeGrant.id, id)).limit(1)
+      return row ?? null
+    },
+
+    async listActiveUserScopeGrants(userId, resourceServerId, now) {
+      return db
+        .select()
+        .from(userScopeGrant)
+        .where(
+          and(
+            eq(userScopeGrant.userId, userId),
+            eq(userScopeGrant.resourceServerId, resourceServerId),
+            isNull(userScopeGrant.revokedAt),
+            or(isNull(userScopeGrant.expiresAt), gt(userScopeGrant.expiresAt, now)),
+          ),
+        )
+    },
+
+    async revokeUserScopeGrant(id, now) {
+      const rows = await db
+        .update(userScopeGrant)
+        .set({ revokedAt: now })
+        .where(and(eq(userScopeGrant.id, id), isNull(userScopeGrant.revokedAt)))
+        .returning({ id: userScopeGrant.id })
+      return rows.length > 0
+    },
+
+    async createApplicationScopeGrant(input) {
+      await db.insert(applicationScopeGrant).values(input)
+      return input
+    },
+
+    async findApplicationScopeGrant(id) {
+      const [row] = await db.select().from(applicationScopeGrant).where(eq(applicationScopeGrant.id, id)).limit(1)
+      return row ?? null
+    },
+
+    async listActiveApplicationScopeGrants(applicationId, resourceServerId, now) {
+      return db
+        .select()
+        .from(applicationScopeGrant)
+        .where(
+          and(
+            eq(applicationScopeGrant.applicationId, applicationId),
+            eq(applicationScopeGrant.resourceServerId, resourceServerId),
+            isNull(applicationScopeGrant.revokedAt),
+            or(isNull(applicationScopeGrant.expiresAt), gt(applicationScopeGrant.expiresAt, now)),
+          ),
+        )
+    },
+
+    async revokeApplicationScopeGrant(id, now) {
+      const rows = await db
+        .update(applicationScopeGrant)
+        .set({ revokedAt: now })
+        .where(and(eq(applicationScopeGrant.id, id), isNull(applicationScopeGrant.revokedAt)))
+        .returning({ id: applicationScopeGrant.id })
       return rows.length > 0
     },
 
@@ -668,21 +855,6 @@ function isUniqueConstraint(error: unknown) {
     current = current.cause
   }
   return false
-}
-
-async function loadResourceEligibility(db: Database, resourceIds: string[]) {
-  const eligibility = new Map<string, string[]>()
-  for (const id of resourceIds) eligibility.set(id, [])
-  if (resourceIds.length === 0) return eligibility
-  const rows = await db
-    .select({
-      resourceId: apiResourceEligibleOrganization.resourceId,
-      organizationId: apiResourceEligibleOrganization.organizationId,
-    })
-    .from(apiResourceEligibleOrganization)
-    .where(inArray(apiResourceEligibleOrganization.resourceId, resourceIds))
-  for (const row of rows) eligibility.get(row.resourceId)?.push(row.organizationId)
-  return eligibility
 }
 
 function decodePermissionScopes(permission: Record<string, string[]>) {

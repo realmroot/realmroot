@@ -42,7 +42,7 @@ describe('admin console applications-detail-a', () => {
     expect(screen.getByText('client-1')).toBeTruthy()
     expect(screen.getByText('Partner app')).toBeTruthy()
     expect(screen.getByText('partner-client')).toBeTruthy()
-    expect(screen.getByRole('columnheader', { name: 'Audience' })).toBeTruthy()
+    expect(screen.getByRole('columnheader', { name: 'Resource access' })).toBeTruthy()
     expect(screen.getByRole('columnheader', { name: 'Owner' })).toBeTruthy()
     expect(screen.queryByRole('tab', { name: 'My apps' })).toBeNull()
     expect(screen.queryByLabelText('Upload logo for Customer portal')).toBeNull()
@@ -54,6 +54,7 @@ describe('admin console applications-detail-a', () => {
     const authorization = {
       id: 'authorization-1',
       applicationId: 'app-1',
+      resourceServerId: null,
       user: { id: 'user-1', displayName: 'Jane Doe', email: 'jane@example.com' },
       organization: null,
       scopes: ['openid', 'profile'],
@@ -167,7 +168,7 @@ describe('admin console applications-detail-a', () => {
 
     expect(await screen.findByRole('heading', { name: 'Customer portal' })).toBeTruthy()
     expect(screen.getByText('Public SPA · client-1')).toBeTruthy()
-    expect(screen.getByText('All Realm users')).toBeTruthy()
+    expect(screen.getByText('Any authenticated user')).toBeTruthy()
     expect(screen.getByText('Platform-owned')).toBeTruthy()
     expect(screen.getByText('Skipped for this trusted application')).toBeTruthy()
     expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
@@ -220,7 +221,8 @@ describe('admin console applications-detail-a', () => {
         method: 'PATCH',
         body: {
           allowedGrantTypes: ['authorization_code', 'refresh_token'],
-          allowedScopes: ['openid', 'profile', 'offline_access'],
+          oidcScopes: ['openid', 'profile', 'offline_access'],
+          resourceScopes: [],
         },
       }),
     )
@@ -263,16 +265,9 @@ describe('admin console applications-detail-a', () => {
       }),
     )
 
-    const audience = screen.getByRole('heading', { name: 'Ownership & audience' }).closest('section') as HTMLElement
-    fireEvent.click(within(audience).getByRole('button', { name: 'Edit' }))
+    const ownership = screen.getByRole('heading', { name: 'Ownership' }).closest('section') as HTMLElement
+    fireEvent.click(within(ownership).getByRole('button', { name: 'Edit' }))
     fireEvent.change(await screen.findByLabelText('Owner'), { target: { value: 'org-1' } })
-    fireEvent.change(screen.getByLabelText('Who can sign in'), { target: { value: 'organizations' } })
-    fireEvent.click(await screen.findByRole('combobox', { name: 'Allowed Organizations' }))
-    fireEvent.click(screen.getAllByRole('option', { name: /Acme Inc/ }).find((option) => option.tagName === 'DIV')!)
-    fireEvent.change(screen.getByLabelText('Who can sign in'), { target: { value: 'users' } })
-    fireEvent.click(await screen.findByRole('combobox', { name: 'Allowed users' }))
-    fireEvent.click(await screen.findByRole('option', { name: /Jane Doe/ }))
-    fireEvent.change(screen.getByLabelText('Who can sign in'), { target: { value: 'public' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
     await waitFor(() =>
       expect(requests).toContainEqual({
@@ -280,7 +275,6 @@ describe('admin console applications-detail-a', () => {
         method: 'PATCH',
         body: {
           ownerOrganizationId: 'org-1',
-          audience: { mode: 'public', organizationIds: ['org-1'], userIds: ['user-1'] },
         },
       }),
     )

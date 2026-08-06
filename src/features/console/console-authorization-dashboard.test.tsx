@@ -193,7 +193,6 @@ describe('console authorization dashboard', () => {
             clientType: 'public_native',
             firstParty: true,
             ownerOrganizationId: 'org-1',
-            audience: { mode: 'realm', organizationIds: [], userIds: [] },
             allowedGrantTypes: ['authorization_code', 'refresh_token', deviceCodeGrantType],
             redirectUris: ['com.example.runner:/callback'],
           },

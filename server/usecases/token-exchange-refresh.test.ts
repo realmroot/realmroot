@@ -233,7 +233,8 @@ describe('token exchange refresh and assertion boundaries', () => {
         enabled: true,
         archivedAt: null,
         ownerOrganizationId: 'org_2',
-        accessEligibility: { mode: 'owner_organization', organizationIds: [] },
+        visibility: 'private',
+        scopeRegistry: null,
       }) as never
     await expect(
       refreshToken(transferred.deps, {
@@ -543,19 +544,52 @@ function validClaims() {
 
 async function fixture(options: { grantTypes?: string[]; scopes?: string[] } = {}) {
   const repository = new InMemoryRepository()
+  const configuredScopes = options.scopes ?? ['runner:connect']
   const deps = {
     tokenExchange: repository,
     jwks: createJwksGateway(),
+    applications: {
+      findByClientId: async (clientId: string) =>
+        clientId === applicationClientId
+          ? {
+              id: 'app_1',
+              clientId: applicationClientId,
+              ownerOrganizationId: 'org_1',
+              disabled: false,
+              oidcScopes: configuredScopes.filter((scope) => scope === 'offline_access'),
+              resourceScopes: [
+                {
+                  resourceServerId: 'res_1',
+                  scopes: configuredScopes.filter((scope) => scope !== 'offline_access'),
+                },
+              ],
+            }
+          : null,
+    },
     authorization: {
       findResourceByResourceUrl: async (resourceUrl: string) =>
         resourceUrl === defaultAudience
           ? {
+              id: 'res_1',
               enabled: true,
               archivedAt: null,
               ownerOrganizationId: 'org_1',
-              accessEligibility: { mode: 'owner_organization', organizationIds: [] },
+              visibility: 'private',
+              scopeRegistry: {
+                discovery: {
+                  sourceUrl: 'https://ama.example.com/openapi.json',
+                  etag: null,
+                  documentHash: 'test-registry',
+                  syncedAt: '2026-01-01T00:00:00.000Z',
+                  lastError: null,
+                },
+                scopes: configuredScopes
+                  .filter((scope) => scope !== 'offline_access')
+                  .map((value) => ({ value, description: null, grantMode: 'automatic' as const })),
+              },
             }
           : null,
+      listActiveApplicationScopeGrants: async () => [],
     },
   } as unknown as Deps
   const clientSecret = 'runner-client-secret'
@@ -564,7 +598,7 @@ async function fixture(options: { grantTypes?: string[]; scopes?: string[] } = {
     clientSecret: await hashProviderSecret(clientSecret),
     disabled: false,
     grantTypes: JSON.stringify(options.grantTypes ?? [tokenExchangeGrantType]),
-    scopes: JSON.stringify(options.scopes ?? ['runner:connect']),
+    scopes: JSON.stringify(configuredScopes),
   }
   await repository.seedCredential('https://platform.example.com')
   return { repository, deps, clientSecret }

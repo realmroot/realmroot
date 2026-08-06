@@ -1,6 +1,6 @@
 import { applyD1Migrations, env, reset } from 'cloudflare:test'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { baseURL, createHarness, type Harness, signInAdmin } from './harness'
+import { baseURL, createHarness, type Harness, resourceOpenApiFetch, signInAdmin } from './harness'
 
 afterEach(async () => {
   await reset()
@@ -60,10 +60,23 @@ describe('OIDC authorization over real D1', () => {
       )
       .run()
 
+    const resource = 'https://resource.example.com'
+    harness = await createHarness({ validAudiences: [baseURL, resource] })
     const cookie = await signInAdmin(harness)
     const redirectUri = 'http://localhost/callback'
     const verifier = 'resource-flow-pkce-verifier-0123456789abcdefghijklmnop'
-    const resource = `${baseURL}/api/auth`
+    harness.deps.externalHttp.fetch = resourceOpenApiFetch
+    const createResource = await harness.request('/api/resource-servers', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({
+        identifier: 'oidc-resource',
+        name: 'OIDC Resource',
+        resourceUrl: resource,
+        ownerOrganizationId: 'org_platform',
+      }),
+    })
+    expect(createResource.status, await createResource.clone().text()).toBe(201)
 
     const createApp = await harness.request('/api/applications', {
       method: 'POST',
@@ -116,6 +129,7 @@ describe('OIDC authorization over real D1', () => {
         redirect_uri: redirectUri,
         code: code ?? '',
         code_verifier: verifier,
+        resource,
       }),
     })
     expect(token.status, await token.clone().text()).toBe(200)

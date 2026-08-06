@@ -611,7 +611,6 @@ function toManagementAgent(
     ...toAgent(aggregate),
     owner,
     installationCount: aggregate.bindings.filter((binding) => binding.status === 'active').length,
-    roleCount: 0,
     pendingRequestCount: access.pendingRequestCount,
     activeGrantCount: access.activeGrantCount,
   }

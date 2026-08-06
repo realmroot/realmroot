@@ -147,6 +147,11 @@ describe('OAuth token claim building over real D1', () => {
       }
       return new Response(null, { headers: { link: '</openapi.json>; rel="service-desc"' } })
     }
+    const refresh = await harness.request(`/api/resource-servers/${resource.id}/scope-registry`, {
+      method: 'PUT',
+      headers: { cookie },
+    })
+    expect(refresh.status, await refresh.clone().text()).toBe(200)
 
     const claimsAfterScopeRemoval = (await buildTokenClaims(harness.deps, {
       userId,
@@ -179,7 +184,7 @@ describe('OAuth token claim building over real D1', () => {
         response_type: 'code',
         client_id: application.clientId,
         redirect_uri: 'https://app.example.com/callback',
-        scope: 'openid contacts:read',
+        scope: 'openid',
         resource: audience,
         code_challenge: await pkceChallenge(verifier),
         code_challenge_method: 'S256',
@@ -236,6 +241,7 @@ describe('OAuth token claim building over real D1', () => {
   })
 
   it('attenuates client credentials scopes at the Application owner Organization boundary [spec: admin-console/oidc-claim-emission]', async () => {
+    harness.deps.externalHttp.fetch = contactsScopeOpenApiFetch
     const cookie = await signInAdmin(harness)
     const ownerOrganization = (await (
       await postJson(harness, cookie, '/api/organizations', { slug: 'workload-owner', name: 'Workload Owner' })
@@ -250,15 +256,25 @@ describe('OAuth token claim building over real D1', () => {
       name: 'Foreign Contacts API',
       resourceUrl: audience,
       ownerOrganizationId: foreignOrganization.id,
-      accessEligibility: { mode: 'owner_organization' },
+      visibility: 'private',
     })
-    await postJson(harness, cookie, '/api/resource-servers', {
-      identifier: 'owner-contacts-api',
-      name: 'Owner Contacts API',
-      resourceUrl: ownerAudience,
-      ownerOrganizationId: ownerOrganization.id,
-      accessEligibility: { mode: 'owner_organization' },
-    })
+    const ownerResource = (await (
+      await postJson(harness, cookie, '/api/resource-servers', {
+        identifier: 'owner-contacts-api',
+        name: 'Owner Contacts API',
+        resourceUrl: ownerAudience,
+        ownerOrganizationId: ownerOrganization.id,
+        visibility: 'private',
+      })
+    ).json()) as { id: string }
+    await postJson(
+      harness,
+      cookie,
+      `/api/resource-servers/${ownerResource.id}`,
+      { scopeGrantModes: [{ scope: 'contacts:read', grantMode: 'automatic' }] },
+      200,
+      'PATCH',
+    )
     const application = (await (
       await postJson(harness, cookie, '/api/applications', {
         name: 'Workload Client',
@@ -266,7 +282,7 @@ describe('OAuth token claim building over real D1', () => {
         redirectUris: ['https://workload.example.com/callback'],
         ownerOrganizationId: ownerOrganization.id,
         allowedGrantTypes: ['client_credentials'],
-        allowedScopes: ['contacts:read'],
+        resourceScopes: [{ resourceServerId: ownerResource.id, scopes: ['contacts:read'] }],
       })
     ).json()) as { clientId: string; clientSecret: string }
 
@@ -279,12 +295,9 @@ describe('OAuth token claim building over real D1', () => {
       authorization: { organization_id: ownerOrganization.id, scopes: ['contacts:read'] },
     })
 
-    const token = await issueClientCredentials(harness, application, audience)
-    expect(token.scope).toBe('')
-    expect(decodeJwtPayload(token.access_token)).toMatchObject({
-      scope: '',
-      authorization: { organization_id: ownerOrganization.id, scopes: [] },
-    })
+    const token = await clientCredentialsResponse(harness, application, audience)
+    expect(token.status).toBe(400)
+    await expect(token.json()).resolves.toMatchObject({ error: 'invalid_target' })
   })
 })
 
@@ -320,7 +333,17 @@ async function issueClientCredentials(
   application: { clientId: string; clientSecret: string },
   resource: string,
 ) {
-  const response = await harness.request('/api/auth/oauth2/token', {
+  const response = await clientCredentialsResponse(harness, application, resource)
+  expect(response.status, await response.clone().text()).toBe(200)
+  return (await response.json()) as { access_token: string; scope: string }
+}
+
+function clientCredentialsResponse(
+  harness: Harness,
+  application: { clientId: string; clientSecret: string },
+  resource: string,
+) {
+  return harness.request('/api/auth/oauth2/token', {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
@@ -331,8 +354,6 @@ async function issueClientCredentials(
       resource,
     }),
   })
-  expect(response.status, await response.clone().text()).toBe(200)
-  return (await response.json()) as { access_token: string; scope: string }
 }
 
 function mergeResponseCookies(currentCookie: string, response: Response) {

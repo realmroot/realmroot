@@ -132,14 +132,13 @@ describe('admin console applications-detail-b', () => {
     expect((await screen.findAllByText('Redirect URI is not allowed.')).length).toBeGreaterThan(0)
   })
 
-  it('renders audience, consent, and native-client variants across detail sections', async () => {
+  it('renders ownership, consent, and native-client variants across detail sections', async () => {
     let currentApplication = {
       ...application,
       description: null,
       homepageUrl: null,
       firstParty: false,
       trusted: false,
-      audience: { mode: 'organizations' as const, organizationIds: ['org-1'], userIds: [] },
     } as ApplicationResponse
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
@@ -154,20 +153,17 @@ describe('admin console applications-detail-b', () => {
     })
 
     renderWithQuery(<ApplicationDetailPage applicationId="app-1" organizationId="org-1" />)
-    expect(await screen.findByText('Allowed Organizations')).toBeTruthy()
+    expect(await screen.findByText('Any authenticated user')).toBeTruthy()
     expect(screen.getByText('Third-party')).toBeTruthy()
     expect(screen.getByText('Required')).toBeTruthy()
     fireEvent.mouseDown(screen.getByRole('tab', { name: 'Settings' }), { button: 0, ctrlKey: false })
-    expect(await screen.findByText('Allowed Organizations')).toBeTruthy()
+    expect(await screen.findByText('Any authenticated user')).toBeTruthy()
 
     cleanup()
     queryClient.clear()
-    currentApplication = {
-      ...currentApplication,
-      audience: { mode: 'users' as const, organizationIds: [], userIds: ['user-1'] },
-    }
+    currentApplication = { ...currentApplication }
     renderWithQuery(<ApplicationDetailPage applicationId="app-1" />)
-    expect(await screen.findByText('Allowed users')).toBeTruthy()
+    expect(await screen.findByText('Any authenticated user')).toBeTruthy()
     fireEvent.mouseDown(screen.getByRole('tab', { name: 'Settings' }), { button: 0, ctrlKey: false })
     expect(await screen.findByRole('heading', { name: 'Application details' })).toBeTruthy()
     const details = screen.getByRole('heading', { name: 'Application details' }).closest('section') as HTMLElement
@@ -186,7 +182,7 @@ describe('admin console applications-detail-b', () => {
       ...currentApplication,
       clientType: 'public_native',
       allowedGrantTypes: ['authorization_code', 'refresh_token'],
-      allowedScopes: ['openid', 'profile', 'offline_access'],
+      oidcScopes: ['openid', 'profile', 'offline_access'],
     }
     renderWithQuery(<ApplicationDetailPage applicationId="app-1" section="oauth" />)
     const authorization = (await screen.findByRole('heading', { name: 'Authorization' })).closest(
@@ -217,6 +213,7 @@ describe('admin console applications-detail-b', () => {
                   {
                     id: 'authorization-1',
                     applicationId: 'app-1',
+                    resourceServerId: null,
                     user: { id: 'user-1', displayName: 'Jane Doe', email: 'jane@example.com' },
                     organization: null,
                     scopes: ['openid'],

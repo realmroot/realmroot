@@ -280,7 +280,7 @@ export function clientConfig(application: ApplicationResponse, clientSecret: str
       redirectUris: listItems(application.redirectUris),
       postLogoutRedirectUris: listItems(application.postLogoutRedirectUris),
       corsOrigins: listItems(application.corsOrigins),
-      scopes: application.allowedScopes.join(' '),
+      scopes: application.oidcScopes.join(' '),
       tokenEndpointAuthMethod: application.tokenEndpointAuthMethod,
       customData: application.customData,
       ...(clientSecret

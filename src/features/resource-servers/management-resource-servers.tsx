@@ -1,7 +1,7 @@
 import type { ApiResource } from '@shared/api/agent-api'
 import {
   type ApiResourceContractResponse,
-  type ApiResourceEligibilityMode,
+  type ApiResourceVisibility,
   createApiResourceRequestSchema,
   type OrganizationResponse,
   updateApiResourceRequestSchema,
@@ -10,7 +10,7 @@ import { authorizationDetailsSchema } from '@shared/api/authorization-details'
 import type { ConnectorResponse } from '@shared/api/connectors'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
-import { ArrowLeft, Plus } from 'lucide-react'
+import { ArrowLeft, Plus, RotateCw } from 'lucide-react'
 import { type FormEvent, type ReactNode, useEffect, useState } from 'react'
 import { Field, SelectInput, TextArea, TextInput } from '@/components/product-form'
 import { TableEmptyRow } from '@/components/table-empty-row'
@@ -24,12 +24,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { FormDialog } from '@/features/management/create-dialogs'
 import { DangerConfirmDialog, ErrorState, LoadingState, StatusBadge } from '@/features/management/dialogs'
 import {
-  IdentityMultiSelect,
   OrganizationOwnerField,
   organizationOptions,
   ownerLabel,
-  resourceEligibilityLabel,
-  selectionSummary,
+  resourceVisibilityLabel,
 } from '@/features/management/ownership-controls'
 import { ListToolbar, navigateConsoleTab, ResourcePage } from '@/features/management/resource-components'
 import type { ApiResourceDetailSection, FormState } from '@/features/management/shared'
@@ -45,12 +43,13 @@ import {
   listConnectors,
   listOrganizations,
   listRoles,
+  refreshApiResourceScopeRegistry,
   restoreApiResource,
   updateApiResource,
 } from '@/lib/api/management'
 import { tt } from '@/lib/i18n'
 
-type ResourceEditor = 'details' | 'eligibility' | 'connector' | null
+type ResourceEditor = 'details' | 'visibility' | 'connector' | null
 
 export function ApiResourcesPage({ organizationId }: { organizationId?: string } = {}) {
   const [owner, setOwner] = useState(organizationId ?? '')
@@ -285,8 +284,7 @@ function ApiResourceCreateDialog({
 }) {
   const [form, setForm] = useState<FormState>(emptyForm)
   const [ownerOrganizationId, setOwnerOrganizationId] = useState('')
-  const [eligibilityMode, setEligibilityMode] = useState<ApiResourceEligibilityMode>('realm')
-  const [eligibleOrganizationIds, setEligibleOrganizationIds] = useState<string[]>([])
+  const [visibility, setVisibility] = useState<ApiResourceVisibility>('private')
   const [availableToAgents, setAvailableToAgents] = useState(true)
   const [authorizationDetails, setAuthorizationDetails] = useState('[]')
   const [validationError, setValidationError] = useState<string | null>(null)
@@ -309,7 +307,7 @@ function ApiResourceCreateDialog({
                 ...form,
                 authorizationDetails: form.connectorId ? parseAuthorizationDetails(authorizationDetails) : [],
                 ownerOrganizationId,
-                accessEligibility: { mode: eligibilityMode, organizationIds: eligibleOrganizationIds },
+                visibility,
                 availableToAgents,
               }),
             )
@@ -382,30 +380,19 @@ function ApiResourceCreateDialog({
         ) : null}
         <Field
           help={tt(
-            'Eligibility controls who may request permissions from this server; roles still decide which scopes they receive.',
+            'Visibility controls whether only the owner Organization or all authenticated users and Organizations may access this server.',
           )}
-          label={tt('Access eligibility')}
+          label={tt('Visibility')}
         >
           <SelectInput
-            name="eligibilityMode"
-            onChange={(event) => setEligibilityMode(event.target.value as ApiResourceEligibilityMode)}
-            value={eligibilityMode}
+            name="visibility"
+            onChange={(event) => setVisibility(event.target.value as ApiResourceVisibility)}
+            value={visibility}
           >
-            <option value="realm">{tt('All Realm actors')}</option>
-            <option value="owner_organization">{tt('Owning Organization only')}</option>
-            <option value="organizations">{tt('Selected Organizations')}</option>
+            <option value="private">{tt('Owner Organization only')}</option>
+            <option value="public">{tt('All authenticated users and Organizations')}</option>
           </SelectInput>
         </Field>
-        {eligibilityMode === 'organizations' ? (
-          <IdentityMultiSelect
-            emptyLabel={tt('No Organizations found')}
-            label={tt('Eligible Organizations')}
-            onChange={setEligibleOrganizationIds}
-            options={organizationOptions(organizations)}
-            placeholder={tt('Select Organizations')}
-            value={eligibleOrganizationIds}
-          />
-        ) : null}
         <div className="flex items-start justify-between gap-4">
           <span>
             <strong className="block text-sm">{tt('Available to Agents')}</strong>
@@ -463,6 +450,16 @@ export function ApiResourceDetailPage({
       queryClient.setQueryData([...consoleQueryKeys.apiResources, resourceId], updated)
       setEditor(null)
       return queryClient.invalidateQueries({ queryKey: consoleQueryKeys.apiResources })
+    },
+  })
+  const refreshScopesMutation = useAdminMutation({
+    mutationFn: () => refreshApiResourceScopeRegistry(resourceId),
+    onSuccess: (updated) => {
+      queryClient.setQueryData([...consoleQueryKeys.apiResources, resourceId], updated)
+      return Promise.all([
+        queryClient.invalidateQueries({ queryKey: consoleQueryKeys.apiResources }),
+        queryClient.invalidateQueries({ queryKey: [...consoleQueryKeys.apiResources, resourceId, 'contract'] }),
+      ])
     },
   })
   const archivalMutation = useMutation({
@@ -550,7 +547,13 @@ export function ApiResourceDetailPage({
               contract={contractQuery.data}
               error={contractQuery.error}
               loading={contractQuery.isLoading}
+              onGrantModeChange={(scope, grantMode) =>
+                updateMutation.mutate({ scopeGrantModes: [{ scope, grantMode }] })
+              }
+              onRefresh={() => refreshScopesMutation.mutate(undefined)}
               onRetry={() => contractQuery.refetch()}
+              pending={updateMutation.isPending || refreshScopesMutation.isPending}
+              resource={resource}
             />
           </TabsContent>
           <TabsContent className="mt-5" value="authority">
@@ -563,7 +566,7 @@ export function ApiResourceDetailPage({
               onArchive={() => setArchiveOpen(true)}
               onEditConnector={() => setEditor('connector')}
               onEditDetails={() => setEditor('details')}
-              onEditEligibility={() => setEditor('eligibility')}
+              onEditVisibility={() => setEditor('visibility')}
               onRestore={() => archivalMutation.mutate('restore')}
               onToggle={() => updateMutation.mutate({ enabled: !resource.enabled })}
               organizations={organizations}
@@ -617,13 +620,7 @@ function ResourceOverview({
         label="Authorization"
         value={mode === 'native' ? tt('Native · Realmroot') : tt('External OIDC provider')}
       />
-      <DetailRow label="Access eligibility" value={resourceEligibilityLabel(resource.accessEligibility.mode)} />
-      {resource.accessEligibility.mode === 'organizations' ? (
-        <DetailRow
-          label="Eligible Organizations"
-          value={selectionSummary(resource.accessEligibility.organizationIds, organizationOptions(organizations))}
-        />
-      ) : null}
+      <DetailRow label="Visibility" value={resourceVisibilityLabel(resource.visibility)} />
       <DetailRow label="Available to Agents" value={resource.availableToAgents ? tt('Yes') : tt('No')} />
       <DetailRow label="Protected resource URL" value={<code>{resource.resourceUrl}</code>} />
       <DetailRow label="Identifier" value={<code>{resource.identifier}</code>} />
@@ -637,62 +634,129 @@ function ProtectedResources({
   contract,
   error,
   loading,
+  onGrantModeChange,
+  onRefresh,
   onRetry,
+  pending,
+  resource,
 }: {
   contract?: ApiResourceContractResponse
   error: Error | null
   loading: boolean
+  onGrantModeChange: (scope: string, grantMode: 'automatic' | 'assigned') => void
+  onRefresh: () => void
   onRetry: () => void
+  pending: boolean
+  resource: ApiResource
 }) {
-  if (loading) return <LoadingState label={tt('Reading protected resources')} />
-  if (error) return <ErrorState error={error} onRetry={onRetry} />
   const operations = contract?.operations ?? []
   return (
-    <div className="overflow-hidden rounded-xl border">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>{tt('Resource')}</TableHead>
-            <TableHead>{tt('Path')}</TableHead>
-            <TableHead>{tt('Required scope')}</TableHead>
-            <TableHead>{tt('Description')}</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {operations.length ? (
-            operations.map((operation) => (
-              <TableRow key={`${operation.method}:${operation.path}:${operation.operationId ?? ''}`}>
-                <TableCell>
-                  <span className="font-medium">
-                    {operation.summary ?? operation.operationId ?? tt('Protected operation')}
-                  </span>
-                  {operation.summary && operation.operationId ? (
-                    <code className="mt-0.5 block text-xs text-muted-foreground">{operation.operationId}</code>
-                  ) : null}
-                </TableCell>
-                <TableCell>
-                  <span className="inline-flex items-center gap-2">
-                    <Badge variant="outline">{operation.method}</Badge>
-                    <code className="text-xs">{operation.path}</code>
-                  </span>
-                </TableCell>
-                <TableCell>
-                  <ScopeRequirements scopeSets={operation.requiredScopeSets} />
-                </TableCell>
-                <TableCell className="max-w-80 text-sm text-muted-foreground">
-                  {operation.description ?? tt('—')}
-                </TableCell>
+    <div className="grid gap-5">
+      <div className="overflow-hidden rounded-xl border">
+        <div className="flex items-center justify-between gap-4 border-b p-4">
+          <div>
+            <h2 className="font-medium">{tt('Scope registry')}</h2>
+            <p className="text-sm text-muted-foreground">
+              {tt(
+                'Automatic scopes are requestable by visible principals. Assigned scopes require an explicit grant or Role.',
+              )}
+            </p>
+          </div>
+          <Button disabled={pending || !resource.enabled} onClick={onRefresh} variant="outline">
+            <RotateCw /> {tt('Refresh scopes')}
+          </Button>
+        </div>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>{tt('Scope')}</TableHead>
+              <TableHead>{tt('Description')}</TableHead>
+              <TableHead>{tt('Grant mode')}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {resource.scopeRegistry?.scopes.length ? (
+              resource.scopeRegistry.scopes.map((scope) => (
+                <TableRow key={scope.value}>
+                  <TableCell>
+                    <code>{scope.value}</code>
+                  </TableCell>
+                  <TableCell>{scope.description ?? tt('—')}</TableCell>
+                  <TableCell>
+                    <SelectInput
+                      aria-label={tt('Grant mode for {{scope}}', { scope: scope.value })}
+                      disabled={pending}
+                      onChange={(event) =>
+                        onGrantModeChange(scope.value, event.target.value as 'automatic' | 'assigned')
+                      }
+                      value={scope.grantMode}
+                    >
+                      <option value="assigned">{tt('Assigned')}</option>
+                      <option value="automatic">{tt('Automatic')}</option>
+                    </SelectInput>
+                  </TableCell>
+                </TableRow>
+              ))
+            ) : (
+              <TableEmptyRow
+                colSpan={3}
+                description={tt('Refresh this Resource Server to discover its OAuth scopes.')}
+                title={tt('No synchronized scopes')}
+              />
+            )}
+          </TableBody>
+        </Table>
+      </div>
+      {loading ? <LoadingState label={tt('Reading protected resources')} /> : null}
+      {error ? <ErrorState error={error} onRetry={onRetry} /> : null}
+      {!loading && !error ? (
+        <div className="overflow-hidden rounded-xl border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{tt('Resource')}</TableHead>
+                <TableHead>{tt('Path')}</TableHead>
+                <TableHead>{tt('Required scope')}</TableHead>
+                <TableHead>{tt('Description')}</TableHead>
               </TableRow>
-            ))
-          ) : (
-            <TableEmptyRow
-              colSpan={4}
-              description={tt('The published OpenAPI contract does not declare any OAuth-protected operations.')}
-              title={tt('No protected resources')}
-            />
-          )}
-        </TableBody>
-      </Table>
+            </TableHeader>
+            <TableBody>
+              {operations.length ? (
+                operations.map((operation) => (
+                  <TableRow key={`${operation.method}:${operation.path}:${operation.operationId ?? ''}`}>
+                    <TableCell>
+                      <span className="font-medium">
+                        {operation.summary ?? operation.operationId ?? tt('Protected operation')}
+                      </span>
+                      {operation.summary && operation.operationId ? (
+                        <code className="mt-0.5 block text-xs text-muted-foreground">{operation.operationId}</code>
+                      ) : null}
+                    </TableCell>
+                    <TableCell>
+                      <span className="inline-flex items-center gap-2">
+                        <Badge variant="outline">{operation.method}</Badge>
+                        <code className="text-xs">{operation.path}</code>
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <ScopeRequirements scopeSets={operation.requiredScopeSets} />
+                    </TableCell>
+                    <TableCell className="max-w-80 text-sm text-muted-foreground">
+                      {operation.description ?? tt('—')}
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : (
+                <TableEmptyRow
+                  colSpan={4}
+                  description={tt('The published OpenAPI contract does not declare any OAuth-protected operations.')}
+                  title={tt('No protected resources')}
+                />
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -830,7 +894,7 @@ function ResourceSettings({
   onArchive,
   onEditConnector,
   onEditDetails,
-  onEditEligibility,
+  onEditVisibility,
   onRestore,
   onToggle,
   organizations,
@@ -841,7 +905,7 @@ function ResourceSettings({
   onArchive: () => void
   onEditConnector: () => void
   onEditDetails: () => void
-  onEditEligibility: () => void
+  onEditVisibility: () => void
   onRestore: () => void
   onToggle: () => void
   organizations: OrganizationResponse[]
@@ -917,21 +981,15 @@ function ResourceSettings({
       ) : null}
       <DetailSection
         action={
-          <Button onClick={onEditEligibility} variant="outline">
+          <Button onClick={onEditVisibility} variant="outline">
             {tt('Edit')}
           </Button>
         }
-        description="Choose the responsible Organization and who may request this server’s scopes; roles still determine what they may do."
+        description="Choose the responsible Organization and whether this server is private or public. Visibility never grants scopes."
         title="Ownership & access"
       >
         <DetailRow label="Owner" value={ownerLabel(resource.ownerOrganizationId, organizations)} />
-        <DetailRow label="Eligible actors" value={resourceEligibilityLabel(resource.accessEligibility.mode)} />
-        {resource.accessEligibility.mode === 'organizations' ? (
-          <DetailRow
-            label="Eligible Organizations"
-            value={selectionSummary(resource.accessEligibility.organizationIds, organizationOptions(organizations))}
-          />
-        ) : null}
+        <DetailRow label="Visibility" value={resourceVisibilityLabel(resource.visibility)} />
         <DetailRow
           label="Available to Agents"
           value={<Switch checked={resource.availableToAgents} disabled aria-label={tt('Available to Agents')} />}
@@ -992,8 +1050,7 @@ function ResourceEditorSheet({
   resource: ApiResource
 }) {
   const [ownerOrganizationId, setOwnerOrganizationId] = useState(resource.ownerOrganizationId)
-  const [eligibilityMode, setEligibilityMode] = useState<ApiResourceEligibilityMode>(resource.accessEligibility.mode)
-  const [organizationIds, setOrganizationIds] = useState(resource.accessEligibility.organizationIds)
+  const [visibility, setVisibility] = useState<ApiResourceVisibility>(resource.visibility)
   const [agents, setAgents] = useState(resource.availableToAgents)
   const [authorizationDetails, setAuthorizationDetails] = useState(
     JSON.stringify(resource.authorizationDetails, null, 2),
@@ -1002,10 +1059,9 @@ function ResourceEditorSheet({
   useEffect(() => {
     setValidationError(null)
     setAuthorizationDetails(JSON.stringify(resource.authorizationDetails, null, 2))
-    if (editor !== 'eligibility') return
+    if (editor !== 'visibility') return
     setOwnerOrganizationId(resource.ownerOrganizationId)
-    setEligibilityMode(resource.accessEligibility.mode)
-    setOrganizationIds(resource.accessEligibility.organizationIds)
+    setVisibility(resource.visibility)
     setAgents(resource.availableToAgents)
   }, [editor, resource])
   const formId = editor ? `resource-${editor}` : undefined
@@ -1110,7 +1166,7 @@ function ResourceEditorSheet({
             </Field>
           </form>
         ) : null}
-        {editor === 'eligibility' ? (
+        {editor === 'visibility' ? (
           <form
             className="grid min-h-0 flex-1 content-start gap-4 overflow-y-auto px-4 py-5"
             id={formId}
@@ -1118,7 +1174,7 @@ function ResourceEditorSheet({
               event.preventDefault()
               onSave({
                 ownerOrganizationId,
-                accessEligibility: { mode: eligibilityMode, organizationIds },
+                visibility,
                 availableToAgents: agents,
               })
             }}
@@ -1131,28 +1187,19 @@ function ResourceEditorSheet({
               />
             )}
             <Field
-              help={tt('Roles and grants still determine the scopes an eligible actor receives.')}
-              label={tt('Eligible actors')}
+              help={tt(
+                'Visibility never grants scopes; grant modes, direct grants, and optional Roles determine authority.',
+              )}
+              label={tt('Visibility')}
             >
               <SelectInput
-                onChange={(event) => setEligibilityMode(event.target.value as ApiResourceEligibilityMode)}
-                value={eligibilityMode}
+                onChange={(event) => setVisibility(event.target.value as ApiResourceVisibility)}
+                value={visibility}
               >
-                <option value="realm">{tt('All Realm actors')}</option>
-                <option value="owner_organization">{tt('Owning Organization only')}</option>
-                <option value="organizations">{tt('Selected Organizations')}</option>
+                <option value="private">{tt('Owner Organization only')}</option>
+                <option value="public">{tt('All authenticated users and Organizations')}</option>
               </SelectInput>
             </Field>
-            {eligibilityMode === 'organizations' ? (
-              <IdentityMultiSelect
-                emptyLabel={tt('No Organizations found')}
-                label={tt('Eligible Organizations')}
-                onChange={setOrganizationIds}
-                options={organizationOptions(organizations)}
-                placeholder={tt('Select Organizations')}
-                value={organizationIds}
-              />
-            ) : null}
             <div className="flex items-start justify-between gap-4">
               <span>
                 <strong className="block text-sm">{tt('Available to Agents')}</strong>

@@ -1,4 +1,3 @@
-import type { ApiResourceResponse } from '@shared/api/authorization'
 import type { apiResource, invitation, member, organization, organizationRole } from '../../db/schema'
 
 export function deserializeRoles(value: string) {
@@ -57,7 +56,7 @@ export function toInvitation(row: typeof invitation.$inferSelect) {
   }
 }
 
-export function toResource(row: typeof apiResource.$inferSelect, organizationIds: string[] = []) {
+export function toResource(row: typeof apiResource.$inferSelect) {
   return {
     id: row.id,
     identifier: row.identifier,
@@ -68,20 +67,13 @@ export function toResource(row: typeof apiResource.$inferSelect, organizationIds
     description: row.description,
     enabled: row.enabled,
     ownerOrganizationId: row.ownerOrganizationId,
-    accessEligibility: {
-      mode: toResourceEligibilityMode(row.accessEligibilityMode),
-      organizationIds,
-    },
+    visibility: row.visibility,
+    scopeRegistry: row.scopeRegistry,
     availableToAgents: row.availableToAgents,
     archivedAt: row.archivedAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   }
-}
-
-function toResourceEligibilityMode(value: string): ApiResourceResponse['accessEligibility']['mode'] {
-  if (value === 'owner_organization' || value === 'organizations') return value
-  return 'realm'
 }
 
 export function toOrganizationRole(row: typeof organizationRole.$inferSelect) {

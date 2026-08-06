@@ -87,7 +87,7 @@ describe('admin console authorization creation and Organization detail', () => {
     })
     fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Billing resource' } })
     expect(screen.getByLabelText('Authorization model')).toHaveProperty('value', '')
-    expect(screen.getByLabelText('Access eligibility')).toHaveProperty('value', 'realm')
+    expect(screen.getByLabelText('Visibility')).toHaveProperty('value', 'private')
     expect(screen.getByRole('switch', { name: 'Available to Agents' }).getAttribute('aria-checked')).toBe('true')
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
@@ -107,7 +107,7 @@ describe('admin console authorization creation and Organization detail', () => {
             authorizationDetails: [],
             description: 'Billing resource',
             ownerOrganizationId: 'org-1',
-            accessEligibility: { mode: 'realm', organizationIds: [] },
+            visibility: 'private',
             availableToAgents: true,
           },
         },

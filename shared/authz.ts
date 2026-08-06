@@ -2,7 +2,7 @@ import { realmrootManagementScopes } from './scope-registry'
 
 export const resourceAccess = {
   applications: {
-    routePrefixes: ['applications'],
+    routePrefixes: ['applications', 'application-scope-grants'],
     scopes: { read: 'applications:read', write: 'applications:write' },
   },
   users: {
@@ -14,7 +14,7 @@ export const resourceAccess = {
     scopes: { read: 'organizations:read', write: 'organizations:write' },
   },
   roles: {
-    routePrefixes: [],
+    routePrefixes: ['user-scope-grants'],
     scopes: { read: 'roles:read', write: 'roles:write' },
   },
   apiResources: {

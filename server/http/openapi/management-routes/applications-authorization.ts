@@ -6,7 +6,13 @@ import {
   resourceServersResponseSchema,
   updateApiResourceSchema,
 } from '@shared/api/agent-api'
-import { apiResourceContractResponseSchema } from '@shared/api/authorization'
+import {
+  apiResourceContractResponseSchema,
+  applicationScopeGrantResponseEnvelopeSchema,
+  createApplicationScopeGrantRequestSchema,
+  createUserScopeGrantRequestSchema,
+  userScopeGrantResponseEnvelopeSchema,
+} from '@shared/api/authorization'
 import {
   addMemberRequestSchema,
   applicationAuthorizationRevocationSchema,
@@ -252,6 +258,19 @@ export const applicationAuthorizationRoutes: ManagementRouteConfig[] = [
     },
   },
   {
+    method: 'put',
+    path: '/resource-servers/{resourceServerId}/scope-registry',
+    operationId: 'replaceResourceServerScopeRegistry',
+    summary: 'Synchronize a Resource Server scope registry',
+    request: { params: resourceServerIdParam },
+    response: apiResourceSchema,
+    noBody: true,
+    errors: {
+      400: 'The Resource Server is inactive or system-managed.',
+      502: 'The Resource Server scope registry could not be synchronized.',
+    },
+  },
+  {
     method: 'patch',
     path: '/resource-servers/{resourceServerId}',
     operationId: 'updateResourceServer',
@@ -293,6 +312,59 @@ export const applicationAuthorizationRoutes: ManagementRouteConfig[] = [
     summary: 'Delete a Resource Server archival',
     request: { params: resourceServerIdParam },
     response: apiResourceSchema,
+  },
+
+  {
+    method: 'post',
+    path: '/user-scope-grants',
+    operationId: 'createUserScopeGrant',
+    summary: 'Create a direct User scope grant',
+    request: { body: jsonBody(createUserScopeGrantRequestSchema) },
+    response: userScopeGrantResponseEnvelopeSchema,
+    status: 201,
+    responseHeaders: locationResponseHeader,
+  },
+  {
+    method: 'get',
+    path: '/user-scope-grants/{grantId}',
+    operationId: 'getUserScopeGrant',
+    summary: 'Get a direct User scope grant',
+    request: { params: z.object({ grantId: z.string() }) },
+    response: userScopeGrantResponseEnvelopeSchema,
+  },
+  {
+    method: 'delete',
+    path: '/user-scope-grants/{grantId}',
+    operationId: 'deleteUserScopeGrant',
+    summary: 'Revoke a direct User scope grant',
+    request: { params: z.object({ grantId: z.string() }) },
+    noBody: true,
+  },
+  {
+    method: 'post',
+    path: '/application-scope-grants',
+    operationId: 'createApplicationScopeGrant',
+    summary: 'Create a direct Application scope grant',
+    request: { body: jsonBody(createApplicationScopeGrantRequestSchema) },
+    response: applicationScopeGrantResponseEnvelopeSchema,
+    status: 201,
+    responseHeaders: locationResponseHeader,
+  },
+  {
+    method: 'get',
+    path: '/application-scope-grants/{grantId}',
+    operationId: 'getApplicationScopeGrant',
+    summary: 'Get a direct Application scope grant',
+    request: { params: z.object({ grantId: z.string() }) },
+    response: applicationScopeGrantResponseEnvelopeSchema,
+  },
+  {
+    method: 'delete',
+    path: '/application-scope-grants/{grantId}',
+    operationId: 'deleteApplicationScopeGrant',
+    summary: 'Revoke a direct Application scope grant',
+    request: { params: z.object({ grantId: z.string() }) },
+    noBody: true,
   },
 
   {

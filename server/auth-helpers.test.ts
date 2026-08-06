@@ -1,153 +1,130 @@
 import type { Deps } from '@server/usecases/deps'
+import type { ApplicationAggregate } from '@server/usecases/ports'
 import type { ApiResourceResponse } from '@shared/api/authorization'
 import { describe, expect, it, vi } from 'vitest'
 import { filterOAuthAccessTokenScopes } from './auth-helpers'
 
-function createMockDeps(overrides: Partial<Deps> = {}): Deps {
+const resource: ApiResourceResponse = {
+  id: 'res_orders',
+  identifier: 'orders',
+  name: 'Orders',
+  resourceUrl: 'https://api.example.com/orders',
+  connectorId: null,
+  authorizationDetails: [],
+  description: null,
+  enabled: true,
+  ownerOrganizationId: 'org_owner',
+  visibility: 'public',
+  scopeRegistry: {
+    discovery: {
+      sourceUrl: 'https://api.example.com/openapi.json',
+      etag: null,
+      documentHash: 'registry',
+      syncedAt: '2026-08-01T00:00:00.000Z',
+      lastError: null,
+    },
+    scopes: [
+      { value: 'orders:read', description: null, grantMode: 'automatic' },
+      { value: 'orders:admin', description: null, grantMode: 'assigned' },
+    ],
+  },
+  availableToAgents: true,
+  archivedAt: null,
+  createdAt: '2026-08-01T00:00:00.000Z',
+  updatedAt: '2026-08-01T00:00:00.000Z',
+}
+
+const application = {
+  id: 'app_orders',
+  disabled: false,
+  trusted: false,
+  ownerOrganizationId: 'org_client',
+  oidcScopes: ['openid'],
+  resourceScopes: [{ resourceServerId: resource.id, scopes: ['orders:admin', 'orders:read'] }],
+} as ApplicationAggregate
+
+function createDeps(input?: {
+  memberships?: Array<{ organizationId: string; roles: string[] }>
+  directScopes?: string[]
+}) {
   return {
     applications: {
-      findById: vi.fn(),
-      findByClientId: vi.fn(),
+      findById: vi.fn().mockResolvedValue(application),
+      findConsent: vi.fn().mockResolvedValue({
+        id: 'consent_1',
+        resourceServerId: resource.id,
+        scopes: ['orders:admin', 'orders:read'],
+        grantedAt: new Date(),
+      }),
     },
     authorization: {
-      findResourceByResourceUrl: vi.fn(),
-      findMemberByOrganizationUser: vi.fn(),
-      findResource: vi.fn(),
+      findResourceByResourceUrl: vi.fn().mockResolvedValue(resource),
+      listUserMemberships: vi.fn().mockResolvedValue(
+        (input?.memberships ?? []).map((membership, index) => ({
+          id: `mem_${index}`,
+          userId: 'user_1',
+          title: null,
+          createdAt: '',
+          updatedAt: '',
+          ...membership,
+        })),
+      ),
+      listActiveUserScopeGrants: vi
+        .fn()
+        .mockResolvedValue(
+          input?.directScopes ? [{ id: 'grant_1', scopes: input.directScopes, expiresAt: null, revokedAt: null }] : [],
+        ),
       listOrganizationRoleScopes: vi.fn().mockResolvedValue(new Map()),
+      findResource: vi.fn().mockResolvedValue(resource),
     },
-    ...overrides,
   } as unknown as Deps
 }
 
 describe('filterOAuthAccessTokenScopes', () => {
-  const realmResource: ApiResourceResponse = {
-    id: 'res_realm',
-    identifier: 'realm-api',
-    name: 'Realm API',
-    resourceUrl: 'https://api.example.com/realm',
-    connectorId: null,
-    authorizationDetails: [],
-    description: null,
-    enabled: true,
-    ownerOrganizationId: 'org_platform',
-    accessEligibility: { mode: 'realm', organizationIds: [] },
-    availableToAgents: true,
-    archivedAt: null,
-    createdAt: '2026-08-01T00:00:00.000Z',
-    updatedAt: '2026-08-01T00:00:00.000Z',
-  }
-
-  const orgPrivateResource: ApiResourceResponse = {
-    id: 'res_org_private',
-    identifier: 'private-api',
-    name: 'Private Org API',
-    resourceUrl: 'https://api.example.com/private',
-    connectorId: null,
-    authorizationDetails: [],
-    description: null,
-    enabled: true,
-    ownerOrganizationId: 'org_1',
-    accessEligibility: { mode: 'owner_organization', organizationIds: [] },
-    availableToAgents: true,
-    archivedAt: null,
-    createdAt: '2026-08-01T00:00:00.000Z',
-    updatedAt: '2026-08-01T00:00:00.000Z',
-  }
-
-  it('preserves approved Realm-wide scopes without Organization membership [spec: hosted-auth/oauth-consent]', async () => {
-    const deps = createMockDeps({
-      authorization: {
-        findResourceByResourceUrl: vi.fn().mockImplementation(async (url: string) => {
-          if (url === realmResource.resourceUrl) return realmResource
-          return null
-        }),
-        findMemberByOrganizationUser: vi.fn().mockResolvedValue(null),
-        findResource: vi.fn(),
-        listOrganizationRoleScopes: vi.fn().mockResolvedValue(new Map()),
-      } as unknown as Deps['authorization'],
-    })
-
-    const scopes = await filterOAuthAccessTokenScopes(deps, {
-      user: { id: 'user_non_member', role: 'user' },
-      scopes: ['openid', 'users:read'],
-      resource: realmResource.resourceUrl,
-    })
-
-    expect(scopes).toEqual(['openid', 'users:read'])
-    expect(deps.authorization.listOrganizationRoleScopes).not.toHaveBeenCalled()
+  it('issues a consented automatic scope to any eligible authenticated user [spec: hosted-auth/resource-scope-consent-boundary]', async () => {
+    await expect(
+      filterOAuthAccessTokenScopes(createDeps(), {
+        user: { id: 'user_1' },
+        scopes: ['openid', 'orders:read'],
+        resource: resource.resourceUrl,
+        metadata: { applicationId: application.id },
+      }),
+    ).resolves.toEqual(['openid', 'orders:read'])
   })
 
-  it('filters out private organization resource scopes if user is not an organization member', async () => {
-    const deps = createMockDeps({
-      authorization: {
-        findResourceByResourceUrl: vi.fn().mockImplementation(async (url: string) => {
-          if (url === orgPrivateResource.resourceUrl) return orgPrivateResource
-          return null
-        }),
-        findMemberByOrganizationUser: vi.fn().mockResolvedValue(null),
-        findResource: vi.fn(),
-        listOrganizationRoleScopes: vi.fn().mockResolvedValue(new Map()),
-      } as unknown as Deps['authorization'],
-    })
-
-    const scopes = await filterOAuthAccessTokenScopes(deps, {
-      user: { id: 'user_non_member', role: 'user' },
-      scopes: ['openid', 'users:read'],
-      resource: orgPrivateResource.resourceUrl,
-      referenceId: 'org_1',
-    })
-
-    expect(scopes).toEqual(['openid'])
+  it('attenuates an assigned scope when the user has no direct grant or Role', async () => {
+    await expect(
+      filterOAuthAccessTokenScopes(createDeps(), {
+        user: { id: 'user_1' },
+        scopes: ['openid', 'orders:admin'],
+        resource: resource.resourceUrl,
+        metadata: { applicationId: application.id },
+      }),
+    ).resolves.toEqual(['openid'])
   })
 
-  it('does not require a dynamic Organization Role for approved eligible resource scopes', async () => {
-    const deps = createMockDeps({
-      authorization: {
-        findResourceByResourceUrl: vi.fn().mockImplementation(async (url: string) => {
-          if (url === orgPrivateResource.resourceUrl) return orgPrivateResource
-          return null
-        }),
-        findMemberByOrganizationUser: vi.fn().mockResolvedValue({
-          id: 'mem_1',
-          organizationId: 'org_1',
-          userId: 'user_1',
-          roles: [], // empty roles list
-        }),
-        findResource: vi.fn(),
-        listOrganizationRoleScopes: vi.fn().mockResolvedValue(new Map()),
-      } as unknown as Deps['authorization'],
-    })
-
-    const scopes = await filterOAuthAccessTokenScopes(deps, {
-      user: { id: 'user_1', role: 'user' },
-      scopes: ['openid', 'users:read'],
-      resource: orgPrivateResource.resourceUrl,
-      referenceId: 'org_1',
-    })
-
-    expect(scopes).toEqual(['openid', 'users:read'])
-    expect(deps.authorization.listOrganizationRoleScopes).not.toHaveBeenCalled()
+  it('combines direct grants with effective scopes without treating public visibility as authority [spec: admin-console/admin-resource-scope-grants]', async () => {
+    await expect(
+      filterOAuthAccessTokenScopes(createDeps({ directScopes: ['orders:admin'] }), {
+        user: { id: 'user_1' },
+        scopes: ['openid', 'orders:admin', 'orders:read'],
+        resource: resource.resourceUrl,
+        metadata: { applicationId: application.id },
+      }),
+    ).resolves.toEqual(['openid', 'orders:admin', 'orders:read'])
   })
 
-  it('filters organization-private resource scopes without active Organization context', async () => {
-    const deps = createMockDeps({
-      authorization: {
-        findResourceByResourceUrl: vi.fn().mockImplementation(async (url: string) => {
-          if (url === orgPrivateResource.resourceUrl) return orgPrivateResource
-          return null
-        }),
-        findMemberByOrganizationUser: vi.fn().mockResolvedValue(null),
-        findResource: vi.fn(),
-        listOrganizationRoleScopes: vi.fn().mockResolvedValue(new Map()),
-      } as unknown as Deps['authorization'],
-    })
-
-    const scopes = await filterOAuthAccessTokenScopes(deps, {
-      user: { id: 'user_non_member', role: 'user' },
-      scopes: ['openid', 'users:read'],
-      resource: orgPrivateResource.resourceUrl,
-    })
-
-    expect(scopes).toEqual(['openid'])
+  it('rejects a private Resource Server target for a non-member', async () => {
+    const privateResource = { ...resource, visibility: 'private' as const }
+    const deps = createDeps({ directScopes: ['orders:admin'] })
+    vi.mocked(deps.authorization.findResourceByResourceUrl).mockResolvedValue(privateResource)
+    await expect(
+      filterOAuthAccessTokenScopes(deps, {
+        user: { id: 'user_1' },
+        scopes: ['openid', 'orders:admin', 'orders:read'],
+        resource: resource.resourceUrl,
+        metadata: { applicationId: application.id },
+      }),
+    ).rejects.toMatchObject({ body: { error: 'invalid_target' } })
   })
 })

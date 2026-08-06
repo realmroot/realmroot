@@ -161,7 +161,7 @@ describe('console API resources and roles', () => {
     expect(screen.getByText('No resource servers found')).toBeTruthy()
   })
 
-  it('creates an externally authorized Resource server with explicit ownership and eligibility [spec: agent-identity/external-api-resource-registration]', async () => {
+  it('creates an externally authorized Resource server with explicit ownership and visibility [spec: agent-identity/external-api-resource-registration]', async () => {
     const requests: Array<{ url: string; method: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
       const request = requestParts(input, init)
@@ -214,7 +214,7 @@ describe('console API resources and roles', () => {
             authorizationDetails: [{ type: 'project_access', actions: ['read'], project_id: 'project-1' }],
             description: 'Projects',
             ownerOrganizationId: 'org-1',
-            accessEligibility: { mode: 'realm', organizationIds: [] },
+            visibility: 'private',
             availableToAgents: true,
           },
         },
@@ -281,17 +281,8 @@ describe('console API resources and roles', () => {
     fireEvent.change(screen.getByLabelText('Protected resource URL'), {
       target: { value: 'https://selected.example.com/api' },
     })
-    fireEvent.change(screen.getByLabelText('Access eligibility'), { target: { value: 'organizations' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
-    expect(await screen.findByText('Select at least one Organization.')).toBeTruthy()
-
     fireEvent.change(screen.getByLabelText('Owner'), { target: { value: betaOrganization.id } })
-    fireEvent.click(screen.getByRole('combobox', { name: 'Eligible Organizations' }))
-    const betaOption = (await screen.findAllByRole('option', { name: /Beta LLC/ })).find(
-      (option) => option.tagName === 'DIV',
-    )
-    expect(betaOption).toBeTruthy()
-    fireEvent.click(betaOption as HTMLElement)
+    fireEvent.change(screen.getByLabelText('Visibility'), { target: { value: 'public' } })
     fireEvent.click(screen.getByRole('switch', { name: 'Available to Agents' }))
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
@@ -303,7 +294,7 @@ describe('console API resources and roles', () => {
           resourceUrl: 'https://selected.example.com/api',
           authorizationDetails: [],
           ownerOrganizationId: betaOrganization.id,
-          accessEligibility: { mode: 'organizations', organizationIds: [betaOrganization.id] },
+          visibility: 'public',
           availableToAgents: false,
         },
       ]),
@@ -397,7 +388,7 @@ describe('console API resources and roles', () => {
     expect(screen.getAllByText('—')).toHaveLength(2)
   })
 
-  it('edits Resource server ownership and actor eligibility from its settings section', async () => {
+  it('edits Resource server ownership and visibility from its settings section', async () => {
     const betaOrganization = {
       ...organization,
       id: 'org-2',
@@ -411,7 +402,7 @@ describe('console API resources and roles', () => {
       description: null,
       enabled: false,
       availableToAgents: false,
-      accessEligibility: { mode: 'organizations', organizationIds: [betaOrganization.id] },
+      visibility: 'public',
     }
     vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
       const request = requestParts(input, init)
@@ -432,7 +423,7 @@ describe('console API resources and roles', () => {
     })
 
     renderWithQuery(<ApiResourceDetailPage resourceId="resource-1" />)
-    expect(await screen.findByText('Beta LLC')).toBeTruthy()
+    expect(await screen.findByText('All authenticated users and Organizations')).toBeTruthy()
     expect(screen.getByText('No')).toBeTruthy()
     fireEvent.mouseDown(screen.getByRole('tab', { name: 'Settings' }), { button: 0, ctrlKey: false })
     expect(await screen.findByText('Not configured')).toBeTruthy()
@@ -440,26 +431,26 @@ describe('console API resources and roles', () => {
     const access = screen.getByRole('heading', { name: 'Ownership & access' }).closest('section') as HTMLElement
     fireEvent.click(within(access).getByRole('button', { name: 'Edit' }))
     fireEvent.change(await screen.findByLabelText('Owner'), { target: { value: betaOrganization.id } })
-    fireEvent.click(screen.getByRole('combobox', { name: 'Eligible Organizations' }))
-    const acmeOption = (await screen.findAllByRole('option', { name: /Acme Inc\./ })).find(
-      (option) => option.tagName === 'DIV',
-    )
-    expect(acmeOption).toBeTruthy()
-    fireEvent.click(acmeOption as HTMLElement)
     fireEvent.click(screen.getByRole('switch', { name: 'Available to Agents' }))
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
 
     await waitFor(() =>
       expect(requests).toContainEqual({
         ownerOrganizationId: betaOrganization.id,
-        accessEligibility: { mode: 'organizations', organizationIds: [betaOrganization.id, organization.id] },
+        visibility: 'public',
         availableToAgents: true,
       }),
     )
     fireEvent.click(within(access).getByRole('button', { name: 'Edit' }))
-    fireEvent.change(await screen.findByLabelText('Eligible actors'), { target: { value: 'owner_organization' } })
-    expect(screen.queryByRole('combobox', { name: 'Eligible Organizations' })).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    fireEvent.change(await screen.findByLabelText('Visibility'), { target: { value: 'private' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    await waitFor(() =>
+      expect(requests).toContainEqual({
+        ownerOrganizationId: betaOrganization.id,
+        visibility: 'private',
+        availableToAgents: true,
+      }),
+    )
     fireEvent.click(screen.getByRole('button', { name: 'Enable' }))
     await waitFor(() => expect(requests).toContainEqual({ enabled: true }))
     fireEvent.click(screen.getByRole('button', { name: 'Archive' }))
@@ -486,7 +477,7 @@ describe('console API resources and roles', () => {
     expect(screen.getAllByText('Not configured')).toHaveLength(3)
     const overviewTab = screen.getByRole('tab', { name: 'Overview' })
     fireEvent.mouseDown(overviewTab, { button: 0, ctrlKey: false })
-    expect(await screen.findByText('Access eligibility')).toBeTruthy()
+    expect(await screen.findByText('Visibility')).toBeTruthy()
     expect(overviewTab.getAttribute('aria-selected')).toBe('true')
     fireEvent.mouseDown(screen.getByRole('tab', { name: 'Settings' }), { button: 0, ctrlKey: false })
     expect(await screen.findByRole('heading', { name: 'Authorization provider' })).toBeTruthy()

@@ -23,7 +23,8 @@ export function toApplicationInsert(input: Omit<ApplicationAggregate, 'createdAt
     description: input.description,
     homepageUrl: input.homepageUrl,
     ownerOrganizationId: input.ownerOrganizationId,
-    audienceMode: input.audience.mode,
+    oidcScopes: input.oidcScopes,
+    resourceScopes: input.resourceScopes,
     firstParty: input.firstParty,
     trusted: input.trusted,
     disabled: input.disabled,
@@ -62,18 +63,17 @@ export function toOAuthClientInsert(
     public: input.public,
     type: input.clientType,
     requirePKCE: input.requirePkce,
-    scopes: serializeList(input.allowedScopes),
+    scopes: serializeList([
+      ...input.oidcScopes,
+      ...new Set(input.resourceScopes.flatMap((resource) => resource.scopes)),
+    ]),
     metadata: JSON.stringify({ applicationId: input.id, oidcClaims: input.oidcClaims }),
     createdAt: now,
     updatedAt: now,
   }
 }
 
-export function toAggregate(
-  app: ApplicationRow,
-  client: OAuthClientRow,
-  audience: { organizationIds: string[]; userIds: string[] } = { organizationIds: [], userIds: [] },
-): ApplicationAggregate {
+export function toAggregate(app: ApplicationRow, client: OAuthClientRow): ApplicationAggregate {
   return {
     id: app.id,
     slug: app.slug,
@@ -89,18 +89,14 @@ export function toAggregate(
     disabled: app.disabled || !!client.disabled,
     disabledReason: app.disabledReason,
     ownerOrganizationId: app.ownerOrganizationId,
-    audience: {
-      mode: toAudienceMode(app.audienceMode),
-      organizationIds: audience.organizationIds,
-      userIds: audience.userIds,
-    },
     redirectUris: parseList(client.redirectUris),
     postLogoutRedirectUris: parseList(client.postLogoutRedirectUris),
     corsOrigins: readCorsOrigins(app.metadata),
     customData: readCustomData(app.metadata),
     oidcClaims: readOidcClaims(app.metadata),
     allowedGrantTypes: parseList(client.grantTypes).filter(isGrantType),
-    allowedScopes: parseList(client.scopes).filter(isScope),
+    oidcScopes: app.oidcScopes,
+    resourceScopes: app.resourceScopes,
     requirePkce: client.requirePKCE ?? false,
     tokenEndpointAuthMethod: toTokenEndpointAuthMethod(client.tokenEndpointAuthMethod),
     createdAt: app.createdAt,
@@ -108,15 +104,11 @@ export function toAggregate(
   }
 }
 
-function toAudienceMode(value: string): ApplicationAggregate['audience']['mode'] {
-  if (value === 'organizations' || value === 'users' || value === 'public') return value
-  return 'realm'
-}
-
 export function toConsent(row: typeof applicationConsent.$inferSelect): ConsentRecord {
   return {
     id: row.id,
-    scopes: row.scopes.filter(isScope),
+    resourceServerId: row.resourceServerId,
+    scopes: row.scopes,
     grantedAt: row.grantedAt,
   }
 }
@@ -245,15 +237,5 @@ export function isGrantType(value: string): value is ApplicationAggregate['allow
     value === 'client_credentials' ||
     value === deviceCodeGrantType ||
     value === tokenExchangeGrantType
-  )
-}
-
-export function isScope(value: string): value is ApplicationAggregate['allowedScopes'][number] {
-  return (
-    value === 'openid' ||
-    value === 'profile' ||
-    value === 'email' ||
-    value === 'offline_access' ||
-    /^[A-Za-z0-9._-]+:[A-Za-z0-9:._-]{1,119}$/.test(value)
   )
 }

@@ -172,7 +172,7 @@ function applicationResponse(overrides: Record<string, unknown> = {}) {
     corsOrigins: [],
     customData: {},
     allowedGrantTypes: ['authorization_code'],
-    allowedScopes: ['openid'],
+    oidcScopes: ['openid'],
     requirePkce: true,
     tokenEndpointAuthMethod: 'none',
     secretMetadata: [],

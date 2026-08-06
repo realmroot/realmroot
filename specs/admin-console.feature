@@ -75,7 +75,7 @@ Feature: Admin Console
     When I create an application from Console
     Then the new OIDC client appears in inventory
     And it records an explicit owner Organization
-    And its audience independently supports all Realm users, selected Organizations, assigned users, or public registration
+    And it records OIDC scopes separately from Resource-server-qualified scope allowlists
     And native clients can be created with device login enabled
 
   @entrypoint:product-ui @journey:admin-application-detail
@@ -194,7 +194,7 @@ Feature: Admin Console
     Given I selected an Organization where my membership grants roles:write
     When I create a dynamic role
     Then it appears in authorization inventory
-    And the Organization Role can include Resource-server-qualified scopes from multiple eligible contracts
+    And the Organization Role can include only assigned scopes from visible Resource Servers
     And its stable Role key cannot be changed after creation
     And another Role in the same Organization cannot reuse its key
     And predefined Roles remain readable but cannot be modified or deleted
@@ -205,13 +205,13 @@ Feature: Admin Console
     When I create a Resource server
     Then it appears in authorization inventory
     And it records an explicit owner Organization
-    And its access eligibility independently supports the owner Organization, selected Organizations, or the Realm
+    And its visibility is private by default and can be changed to public
     And selecting an OIDC connector during creation makes it externally authorized
     And omitting a connector makes it natively authorized
     And its authorization mode cannot change after creation
     And its protected resource URL is the OAuth resource identifier and access-token audience
-    And the business resource server OpenAPI contract remains the scope authority
-    And the Console does not provide scope creation or editing
+    And OAuth scopes declared by the business resource server OpenAPI contract remain the scope authority
+    And the Console can change only each discovered scope's automatic or assigned grant mode
     And its Resources tab lists protected operations and required scope sets derived from that contract
 
   @entrypoint:product-ui @journey:admin-archive-api-resource
@@ -232,7 +232,15 @@ Feature: Admin Console
     And each Organization member exposes its sorted Role keys
     And replacing member Roles rejects unknown and cross-Organization Role keys
     And the last Owner cannot be removed by a Role replacement
-    And each dynamic Role references only scopes from eligible Resource servers
+    And each dynamic Role references only assigned scopes from visible Resource servers
+
+  @entrypoint:product-ui @journey:admin-resource-scope-grants
+  Scenario: Resource scope grants are explicit authorization resources
+    Given a visible Resource Server has assigned scopes
+    When an authorized administrator grants scopes directly to a User or Application
+    Then the grant has an independent lifetime and audit identity
+    And direct grants combine with optional Organization Role scopes
+    But public visibility does not automatically grant any assigned scope
 
   @entrypoint:product-ui @journey:admin-branding-settings
   Scenario: Color schemes and brand assets update hosted auth
@@ -325,7 +333,7 @@ Feature: Admin Console
 
   @entrypoint:product-ui @journey:oidc-claim-emission
   Scenario: Applications apply configured OIDC claim emission per token destination
-    Given an application has organization membership, resource roles, and approved resource scopes
+    Given a user has organization membership, optional resource roles, and approved resource scopes
     When OIDC claims are configured for access tokens, ID tokens, and userinfo
     Then issued tokens identify relevant organizations in groups
     And identify effective resource roles in roles

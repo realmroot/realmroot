@@ -1,15 +1,8 @@
-import { type ApplicationAudienceMode, deviceCodeGrantType } from '@shared/api/applications'
+import { deviceCodeGrantType } from '@shared/api/applications'
 import type { OrganizationResponse } from '@shared/api/authorization'
-import type { ManagementUserResponse } from '@shared/api/management'
 import { DestructiveConfirmation } from '@/components/destructive-confirmation'
 import { CopyButton, listValue, SwitchRow } from './dialogs'
-import {
-  applicationAudienceLabel,
-  IdentityMultiSelect,
-  OrganizationOwnerField,
-  organizationOptions,
-  userOptions,
-} from './ownership-controls'
+import { OrganizationOwnerField } from './ownership-controls'
 import {
   type ApplicationResponse,
   applicationTypeOptions,
@@ -30,7 +23,6 @@ import {
   LinkButton,
   managementCreateUserRequestSchema,
   type ReactNode,
-  SelectInput,
   SettingRow,
   TextArea,
   TextInput,
@@ -58,7 +50,6 @@ export function CreateApplicationDialog({
   open,
   organizations,
   pending,
-  users,
 }: {
   createdApplication:
     | (ApplicationResponse & {
@@ -73,7 +64,6 @@ export function CreateApplicationDialog({
   open: boolean
   organizations: OrganizationResponse[]
   pending: boolean
-  users: ManagementUserResponse[]
 }) {
   const [form, setForm] = useState<FormState>({
     clientType: 'public_spa',
@@ -81,9 +71,6 @@ export function CreateApplicationDialog({
   })
   const [deviceLoginEnabled, setDeviceLoginEnabled] = useState(false)
   const [ownerOrganizationId, setOwnerOrganizationId] = useState('')
-  const [audienceMode, setAudienceMode] = useState<ApplicationAudienceMode>('realm')
-  const [audienceOrganizationIds, setAudienceOrganizationIds] = useState<string[]>([])
-  const [audienceUserIds, setAudienceUserIds] = useState<string[]>([])
   const [validationError, setValidationError] = useState<string | null>(null)
   useEffect(() => {
     if (!open || ownerOrganizationId) return
@@ -168,11 +155,6 @@ export function CreateApplicationDialog({
                   ...form,
                   firstParty: true,
                   ownerOrganizationId,
-                  audience: {
-                    mode: audienceMode,
-                    organizationIds: audienceOrganizationIds,
-                    userIds: audienceUserIds,
-                  },
                   allowedGrantTypes: createApplicationGrantTypes(form.clientType, deviceLoginEnabled),
                   redirectUris: form.redirectUris.split('\n').filter(Boolean),
                 }),
@@ -213,44 +195,6 @@ export function CreateApplicationDialog({
               checked={deviceLoginEnabled}
               label={tt('Device login')}
               onCheckedChange={setDeviceLoginEnabled}
-            />
-          ) : null}
-          <Field
-            help={tt(
-              'Audience determines who may begin authorization; OAuth scopes still control what the application can access.',
-            )}
-            label={tt('Audience')}
-          >
-            <SelectInput
-              name="audience"
-              onChange={(event) => setAudienceMode(event.target.value as ApplicationAudienceMode)}
-              value={audienceMode}
-            >
-              {(['realm', 'organizations', 'users', 'public'] as const).map((mode) => (
-                <option key={mode} value={mode}>
-                  {applicationAudienceLabel(mode)}
-                </option>
-              ))}
-            </SelectInput>
-          </Field>
-          {audienceMode === 'organizations' ? (
-            <IdentityMultiSelect
-              emptyLabel={tt('No Organizations found')}
-              label={tt('Allowed Organizations')}
-              onChange={setAudienceOrganizationIds}
-              options={organizationOptions(organizations)}
-              placeholder={tt('Select Organizations')}
-              value={audienceOrganizationIds}
-            />
-          ) : null}
-          {audienceMode === 'users' ? (
-            <IdentityMultiSelect
-              emptyLabel={tt('No users found')}
-              label={tt('Allowed users')}
-              onChange={setAudienceUserIds}
-              options={userOptions(users)}
-              placeholder={tt('Select users')}
-              value={audienceUserIds}
             />
           ) : null}
           <Field label={tt('Redirect URIs')} help={tt('One URI per line.')}>

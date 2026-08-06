@@ -178,9 +178,9 @@ function applicationWebhookData(application: ApplicationResponse) {
     trusted: application.trusted,
     disabled: application.disabled,
     ownerOrganizationId: application.ownerOrganizationId,
-    audience: application.audience,
     allowedGrantTypes: application.allowedGrantTypes,
-    allowedScopes: application.allowedScopes,
+    oidcScopes: application.oidcScopes,
+    resourceScopes: application.resourceScopes,
     createdAt: application.createdAt,
     updatedAt: application.updatedAt,
   }

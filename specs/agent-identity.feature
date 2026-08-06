@@ -30,7 +30,7 @@ Feature: Agent identity and delegated API authorization
       And the adapter creates a personal stable identity through the approved Agent session
       Then Realmroot creates an Agent with a stable issuer and subject
       And the Agent belongs to exactly one home space
-      And users govern the Agent through roles in that space
+      And users govern the Agent through explicit access grants in that space
       And the host registration is bound to that Agent identity
       And the original whoami operation resumes and returns the stable issuer and subject
       And the hosted approval page replaces the request with a clear completion state that says it can be closed
@@ -173,8 +173,9 @@ Feature: Agent identity and delegated API authorization
       And no external authorization server, OAuth client, or account connection is configured
       And the product API validates Realmroot access tokens with the published issuer and JWKS
       And the protected resource advertises its OpenAPI contract with a standard service-desc link
-      And Realmroot derives every requestable scope from the OpenAPI security requirements
-      And Realmroot does not store or administer a separate scope catalog
+      And Realmroot derives its local scope registry from OAuth flow scope declarations in that OpenAPI contract
+      And declared scopes remain valid even when no public operation references them
+      And Realmroot stores only discovered scope metadata and local grant modes, never the OpenAPI document
 
     @entrypoint:product-ui @journey:api-resource-contract-validation
     Scenario: Enabled API resources require a discoverable OpenAPI contract
@@ -192,9 +193,8 @@ Feature: Agent identity and delegated API authorization
       When the Agent lists available resources
       Then Realmroot returns that resource and its protected resource URL without requiring an account connection
       When Restish reads the target OpenAPI operation and the Agent requests its exact scope set
-      Then Realmroot validates that scope set against the current target OpenAPI contract
-      And assigned resource roles make every requested scope eligible when the Agent has such roles
-      And the absence of a resource role does not block the request
+      Then Realmroot validates that scope set against the local target scope registry
+      And Realmroot verifies the controller currently holds every requested scope
       And Realmroot creates the same pending access-request resource used for external APIs
       And it does not require a user-created authority grant or grant identifier
       When an authorized controller approves the request
@@ -209,13 +209,13 @@ Feature: Agent identity and delegated API authorization
       Then Realmroot returns the resource with unavailable status and no requestable scopes
       And returns every available resource with available status and its current requestable scopes
 
-    @entrypoint:agent-protocol @journey:agent-resource-access-without-role
-    Scenario: An Agent requests resource access without a role
-      Given an enabled API resource publishes the requested scope in its OpenAPI contract
-      And the Agent has no assigned role for that resource
+  @entrypoint:agent-protocol @journey:agent-resource-access-without-role
+    Scenario: An Agent requests resource access without a Role model
+      Given an enabled API resource publishes the requested assigned scope in its local registry
       When the Agent requests that exact scope
       Then Realmroot allows the access request to proceed to controller approval
-      And an approved native token carries an empty roles claim
+      And the controller may approve only scopes within the controller's effective scope set
+      And an approved Agent grant stores that exact scope snapshot without a roles claim
 
     @e2e @entrypoint:agent-protocol @journey:native-api-resource-token
     Scenario: An Agent calls a native API directly
@@ -230,7 +230,7 @@ Feature: Agent identity and delegated API authorization
       And the Host remains internal credential, binding, revocation, and audit context
       And the token carries only the approved scopes
       And groups identifies the Agent's organization home space
-      And roles identifies the Agent's effective roles for that API resource
+      And the token does not contain Agent roles
       And the token is bound to the Agent's DPoP key
       And Restish stores but does not print the raw access token
       When the Agent connects Restish to the discovered protected resource URL
@@ -311,7 +311,7 @@ Feature: Agent identity and delegated API authorization
       When an administrator creates the API resource and selects that connector
       Then Realmroot validates the resource issuer, token exchange, DPoP, and revocation against the connector
       And the resource URL advertises its OpenAPI contract with a standard service-desc link
-      And Realmroot derives every requestable scope only from that OpenAPI contract
+      And Realmroot derives every requestable scope only from OAuth flow declarations in that OpenAPI contract
       And authorization-server scopes_supported is not a scope catalog
       And the resource stores only its connector association rather than another OAuth client
       And the resource cannot be enabled for Agents when a required capability is absent
@@ -447,8 +447,8 @@ Feature: Agent identity and delegated API authorization
       And Realmroot does not expose Connector, account connection, grant, or token identifiers
       When Restish connects directly to a candidate resource and reads the target OpenAPI operation
       And the Agent requests an account and its exact scope set without an applicable grant
-      Then Realmroot validates that scope set against the current target OpenAPI contract
-      And assigned resource roles restrict the request when present
+      Then Realmroot validates that scope set against the local target scope registry
+      And automatic scopes do not apply to Agents
       And the connected account permits every requested scope
       Then Realmroot creates one pending access request and returns a hosted approval URL
       And it does not require a pre-existing Agent resource grant

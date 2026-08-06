@@ -793,6 +793,7 @@ export {
   deleteApiResource,
   getApiResource,
   listApiResources,
+  refreshApiResourceScopeRegistry,
   restoreApiResource,
   updateApiResource,
 } from './management-api-resources'

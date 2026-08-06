@@ -87,21 +87,35 @@ export const createInvitationRequestSchema = z.object({
   expiresAt: z.iso.datetime().optional(),
 })
 
-export const apiResourceEligibilityModeSchema = z.enum(['owner_organization', 'organizations', 'realm'])
-export const apiResourceEligibilitySchema = z
+export const apiResourceVisibilitySchema = z.enum(['private', 'public'])
+export const resourceScopeGrantModeSchema = z.enum(['automatic', 'assigned'])
+export const resourceScopeSchema = z
   .object({
-    mode: apiResourceEligibilityModeSchema,
-    organizationIds: z.array(nonEmptyString).default([]),
+    value: nonEmptyString,
+    description: z.string().nullable(),
+    grantMode: resourceScopeGrantModeSchema,
   })
-  .superRefine((eligibility, context) => {
-    if (eligibility.mode === 'organizations' && eligibility.organizationIds.length === 0) {
-      context.addIssue({ code: 'custom', path: ['organizationIds'], message: 'Select at least one Organization.' })
-    }
+  .strict()
+export const resourceScopeRegistrySchema = z
+  .object({
+    discovery: z
+      .object({
+        sourceUrl: z.url(),
+        etag: z.string().nullable(),
+        documentHash: nonEmptyString,
+        syncedAt: z.iso.datetime(),
+        lastError: z
+          .object({
+            code: nonEmptyString,
+            message: nonEmptyString,
+          })
+          .strict()
+          .nullable(),
+      })
+      .strict(),
+    scopes: z.array(resourceScopeSchema),
   })
-  .transform((eligibility) => ({
-    mode: eligibility.mode,
-    organizationIds: eligibility.mode === 'organizations' ? [...new Set(eligibility.organizationIds)].sort() : [],
-  }))
+  .strict()
 
 export const apiResourceResponseSchema = z.object({
   id: z.string(),
@@ -113,7 +127,8 @@ export const apiResourceResponseSchema = z.object({
   description: z.string().nullable(),
   enabled: z.boolean(),
   ownerOrganizationId: z.string(),
-  accessEligibility: apiResourceEligibilitySchema,
+  visibility: apiResourceVisibilitySchema,
+  scopeRegistry: resourceScopeRegistrySchema.nullable(),
   availableToAgents: z.boolean(),
   archivedAt: z.iso.datetime().nullable(),
   createdAt: z.string(),
@@ -129,7 +144,7 @@ export const createApiResourceRequestSchema = z.object({
   description: optionalText,
   enabled: z.boolean().optional(),
   ownerOrganizationId: nonEmptyString,
-  accessEligibility: apiResourceEligibilitySchema.optional(),
+  visibility: apiResourceVisibilitySchema.optional(),
   availableToAgents: z.boolean().optional(),
 })
 
@@ -142,7 +157,10 @@ export const updateApiResourceRequestSchema = z.object({
   description: optionalText,
   enabled: z.boolean().optional(),
   ownerOrganizationId: nonEmptyString.optional(),
-  accessEligibility: apiResourceEligibilitySchema.optional(),
+  visibility: apiResourceVisibilitySchema.optional(),
+  scopeGrantModes: z
+    .array(z.object({ scope: nonEmptyString, grantMode: resourceScopeGrantModeSchema }).strict())
+    .optional(),
   availableToAgents: z.boolean().optional(),
 })
 
@@ -211,6 +229,7 @@ export const apiResourceContractResponseSchema = z.object({
     z.object({
       value: z.string(),
       description: z.string().nullable(),
+      grantMode: resourceScopeGrantModeSchema,
     }),
   ),
   operations: z.array(
@@ -224,6 +243,39 @@ export const apiResourceContractResponseSchema = z.object({
     }),
   ),
 })
+
+const scopeGrantFieldsSchema = z.object({
+  id: z.string(),
+  resourceServerId: z.string(),
+  scopes: z.array(nonEmptyString),
+  grantedByUserId: z.string(),
+  expiresAt: z.iso.datetime().nullable(),
+  revokedAt: z.iso.datetime().nullable(),
+  createdAt: z.string(),
+})
+
+export const userScopeGrantResponseSchema = scopeGrantFieldsSchema.extend({
+  userId: z.string(),
+  organizationId: z.string().nullable(),
+})
+export const applicationScopeGrantResponseSchema = scopeGrantFieldsSchema.extend({
+  applicationId: z.string(),
+})
+export const createUserScopeGrantRequestSchema = z.object({
+  userId: nonEmptyString,
+  organizationId: nonEmptyString.nullable().optional(),
+  resourceServerId: nonEmptyString,
+  scopes: z.array(nonEmptyString).min(1),
+  expiresAt: z.iso.datetime().nullable().optional(),
+})
+export const createApplicationScopeGrantRequestSchema = z.object({
+  applicationId: nonEmptyString,
+  resourceServerId: nonEmptyString,
+  scopes: z.array(nonEmptyString).min(1),
+  expiresAt: z.iso.datetime().nullable().optional(),
+})
+export const userScopeGrantResponseEnvelopeSchema = z.object({ grant: userScopeGrantResponseSchema })
+export const applicationScopeGrantResponseEnvelopeSchema = z.object({ grant: applicationScopeGrantResponseSchema })
 
 export const listRolesResponseSchema = z.object({
   roles: z.array(roleResponseSchema),
@@ -244,8 +296,9 @@ export type CreateInvitationRequest = z.infer<typeof createInvitationRequestSche
 export type ListMembersResponse = z.infer<typeof listMembersResponseSchema>
 export type ListInvitationsResponse = z.infer<typeof listInvitationsResponseSchema>
 export type ApiResourceResponse = z.infer<typeof apiResourceResponseSchema>
-export type ApiResourceEligibility = z.infer<typeof apiResourceEligibilitySchema>
-export type ApiResourceEligibilityMode = z.infer<typeof apiResourceEligibilityModeSchema>
+export type ApiResourceVisibility = z.infer<typeof apiResourceVisibilitySchema>
+export type ResourceScope = z.infer<typeof resourceScopeSchema>
+export type ResourceScopeRegistry = z.infer<typeof resourceScopeRegistrySchema>
 export type ListApiResourcesResponse = z.infer<typeof listApiResourcesResponseSchema>
 export type ListApiResourcesQuery = z.infer<typeof listApiResourcesQuerySchema>
 export type ApiResourceContractResponse = z.infer<typeof apiResourceContractResponseSchema>
@@ -259,3 +312,7 @@ export type UpdateRoleRequest = z.infer<typeof updateRoleRequestSchema>
 export type RoleScope = z.infer<typeof roleScopeSchema>
 export type MemberRolesResponse = z.infer<typeof memberRolesResponseSchema>
 export type ReplaceMemberRolesRequest = z.infer<typeof replaceMemberRolesRequestSchema>
+export type UserScopeGrantResponse = z.infer<typeof userScopeGrantResponseSchema>
+export type ApplicationScopeGrantResponse = z.infer<typeof applicationScopeGrantResponseSchema>
+export type CreateUserScopeGrantRequest = z.infer<typeof createUserScopeGrantRequestSchema>
+export type CreateApplicationScopeGrantRequest = z.infer<typeof createApplicationScopeGrantRequestSchema>
