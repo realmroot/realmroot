@@ -1,6 +1,6 @@
 import { badRequest, forbidden, notFound } from '@server/domain/errors'
 import type { AgentRepository } from '@server/usecases/ports'
-import { and, count, desc, eq, gt, inArray, sql } from 'drizzle-orm'
+import { and, count, desc, eq, exists, gt, inArray, isNull, or, sql } from 'drizzle-orm'
 import type { PaginatedResult, PaginationInput } from '../../../shared/api/pagination'
 import type { Database } from '../../db/client'
 import { agent, agentAuditEvent, agentCapabilityGrant, agentHost, approvalRequest } from '../../db/schema'
@@ -109,6 +109,27 @@ export function createDrizzleAgentRepository(db: Database): AgentRepository {
       if (requestedCapabilities.some((capability) => !pendingGrants.some((grant) => grant.capability === capability))) {
         throw badRequest('Agent approval includes a capability that is not pending.')
       }
+      const controllerClaim = and(
+        exists(
+          db
+            .select({ id: agent.id })
+            .from(agent)
+            .where(and(eq(agent.id, input.agentId), or(isNull(agent.userId), eq(agent.userId, input.userId)))),
+        ),
+        request.hostId
+          ? exists(
+              db
+                .select({ id: agentHost.id })
+                .from(agentHost)
+                .where(
+                  and(
+                    eq(agentHost.id, request.hostId),
+                    or(isNull(agentHost.userId), eq(agentHost.userId, input.userId)),
+                  ),
+                ),
+            )
+          : undefined,
+      )
 
       if (input.action === 'deny') {
         const statements = [
@@ -116,12 +137,12 @@ export function createDrizzleAgentRepository(db: Database): AgentRepository {
             db
               .select(agentAuditProjection(audit))
               .from(approvalRequest)
-              .where(and(eq(approvalRequest.id, request.id), eq(approvalRequest.status, 'pending'))),
+              .where(and(eq(approvalRequest.id, request.id), eq(approvalRequest.status, 'pending'), controllerClaim)),
           ),
           db
             .update(approvalRequest)
             .set({ status: 'denied', updatedAt: input.now })
-            .where(and(eq(approvalRequest.id, request.id), eq(approvalRequest.status, 'pending')))
+            .where(and(eq(approvalRequest.id, request.id), eq(approvalRequest.status, 'pending'), controllerClaim))
             .returning({ id: approvalRequest.id }),
           ...(pendingGrants.length > 0
             ? [
@@ -153,12 +174,12 @@ export function createDrizzleAgentRepository(db: Database): AgentRepository {
           db
             .select(agentAuditProjection(audit))
             .from(approvalRequest)
-            .where(and(eq(approvalRequest.id, request.id), eq(approvalRequest.status, 'pending'))),
+            .where(and(eq(approvalRequest.id, request.id), eq(approvalRequest.status, 'pending'), controllerClaim)),
         ),
         db
           .update(approvalRequest)
           .set({ status: 'approved', updatedAt: input.now })
-          .where(and(eq(approvalRequest.id, request.id), eq(approvalRequest.status, 'pending')))
+          .where(and(eq(approvalRequest.id, request.id), eq(approvalRequest.status, 'pending'), controllerClaim))
           .returning({ id: approvalRequest.id }),
         ...pendingGrants.map((grant) =>
           db

@@ -1,12 +1,14 @@
 import { applyD1Migrations, env, reset } from 'cloudflare:test'
 import {
   agent,
+  agentAuditEvent,
   agentCapabilityGrant,
   agentHost,
   agentIdentity,
   agentIdentityBinding,
   approvalRequest,
 } from '@server/db/schema'
+import { agentGovernanceAuditRecord } from '@server/usecases/agent-audit'
 import { createAdditionalAgentEnrollmentIntent, createAgentEnrollmentIntent } from '@server/usecases/agent-identities'
 import { createResource } from '@server/usecases/authorization'
 import {
@@ -136,6 +138,139 @@ describe('Agent identity enrollment over real D1', () => {
     ])
     expect(grant).toMatchObject({ status: 'active', grantedBy: userId })
     expect(capabilityRequest.status).toBe('approved')
+
+    await harness.db.insert(approvalRequest).values({
+      id: 'approval-concurrent',
+      method: 'device_authorization',
+      agentId: 'approval-agent',
+      hostId: 'approval-host',
+      status: 'pending',
+      userCodeHash: await hashApprovalCode('CONC-1234'),
+      interval: 5,
+      expiresAt,
+      createdAt,
+      updatedAt: createdAt,
+    })
+    const decision = {
+      agentId: 'approval-agent',
+      userCodeHash: await hashApprovalCode('CONC-1234'),
+      userId,
+      now: new Date(),
+    }
+    const audit = (result: 'allowed' | 'denied') =>
+      agentGovernanceAuditRecord({
+        action: 'agent.capability_decided',
+        result,
+        tenant: { type: 'user', id: userId },
+        controllerUserId: userId,
+      })
+    const [approved, denied] = await Promise.allSettled([
+      harness.deps.agents.decideApproval(
+        { ...decision, action: 'approve' },
+        { ...audit('allowed'), id: 'approval-concurrent-audit-approve' },
+      ),
+      harness.deps.agents.decideApproval(
+        { ...decision, action: 'deny' },
+        { ...audit('denied'), id: 'approval-concurrent-audit-deny' },
+      ),
+    ])
+    expect([approved.status, denied.status].sort()).toEqual(['fulfilled', 'rejected'])
+    const concurrentAudits = (await harness.db.select({ id: agentAuditEvent.id }).from(agentAuditEvent)).filter((row) =>
+      row.id.startsWith('approval-concurrent-audit-'),
+    )
+    expect(concurrentAudits).toHaveLength(1)
+  })
+
+  it('allows only one controller to claim an unowned Agent through concurrent approval requests [spec: agent-identity/agent-management-authority]', async () => {
+    const competingUserId = await createUser(harness, adminCookie, {
+      email: 'competing-owner@example.com',
+      username: 'competingowner',
+      displayName: 'Competing Owner',
+      password: 'competing-owner-password-2026',
+    })
+    const createdAt = new Date('2026-07-29T00:00:00.000Z')
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000)
+    await harness.db.insert(agentHost).values({
+      id: 'controller-claim-host',
+      name: 'Controller Claim Host',
+      status: 'pending',
+      createdAt,
+      updatedAt: createdAt,
+    })
+    await harness.db.insert(agent).values({
+      id: 'controller-claim-agent',
+      name: 'Controller Claim Agent',
+      hostId: 'controller-claim-host',
+      status: 'pending',
+      mode: 'delegated',
+      publicKey: '{"kty":"OKP","crv":"Ed25519","x":"controller-claim"}',
+      createdAt,
+      updatedAt: createdAt,
+    })
+    await harness.db.insert(approvalRequest).values([
+      {
+        id: 'controller-claim-first',
+        method: 'device_authorization',
+        agentId: 'controller-claim-agent',
+        hostId: 'controller-claim-host',
+        status: 'pending',
+        userCodeHash: await hashApprovalCode('CLAIM-1111'),
+        interval: 5,
+        expiresAt,
+        createdAt,
+        updatedAt: createdAt,
+      },
+      {
+        id: 'controller-claim-second',
+        method: 'device_authorization',
+        agentId: 'controller-claim-agent',
+        hostId: 'controller-claim-host',
+        status: 'pending',
+        userCodeHash: await hashApprovalCode('CLAIM-2222'),
+        interval: 5,
+        expiresAt,
+        createdAt,
+        updatedAt: createdAt,
+      },
+    ])
+
+    const decide = (claimUserId: string, userCodeHash: string, auditId: string) =>
+      harness.deps.agents.decideApproval(
+        {
+          agentId: 'controller-claim-agent',
+          userCodeHash,
+          userId: claimUserId,
+          action: 'approve',
+          now: new Date(),
+        },
+        {
+          ...agentGovernanceAuditRecord({
+            action: 'agent.capability_decided',
+            result: 'allowed',
+            tenant: { type: 'user', id: claimUserId },
+            controllerUserId: claimUserId,
+          }),
+          id: auditId,
+        },
+      )
+    const outcomes = await Promise.allSettled([
+      decide(userId, await hashApprovalCode('CLAIM-1111'), 'controller-claim-audit-first'),
+      decide(competingUserId, await hashApprovalCode('CLAIM-2222'), 'controller-claim-audit-second'),
+    ])
+    expect(outcomes.map((outcome) => outcome.status).sort()).toEqual(['fulfilled', 'rejected'])
+
+    const [[claimedAgent], [claimedHost], requests, audits] = await Promise.all([
+      harness.db.select().from(agent).where(eq(agent.id, 'controller-claim-agent')),
+      harness.db.select().from(agentHost).where(eq(agentHost.id, 'controller-claim-host')),
+      harness.db.select().from(approvalRequest),
+      harness.db.select({ id: agentAuditEvent.id }).from(agentAuditEvent),
+    ])
+    expect([userId, competingUserId]).toContain(claimedAgent.userId)
+    expect(claimedHost.userId).toBe(claimedAgent.userId)
+    expect(
+      requests.filter((request) => request.id.startsWith('controller-claim-') && request.status === 'approved'),
+    ).toHaveLength(1)
+    expect(audits.filter((row) => row.id.startsWith('controller-claim-audit-'))).toHaveLength(1)
   })
 
   it(`enrolls a stable identity, adds and revokes hosts, recovers, and permanently retires it
