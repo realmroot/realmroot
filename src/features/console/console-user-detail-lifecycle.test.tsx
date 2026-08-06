@@ -75,6 +75,20 @@ describe('admin console user detail lifecycle', () => {
       },
     ]
     let passkeys = [consolePasskey]
+    let accessGrants = [
+      {
+        id: 'usg-1',
+        userId: 'user-1',
+        organizationId: null,
+        resourceServerId: 'resource-1',
+        scopes: ['projects:admin'],
+        status: 'active',
+        grantedByUserId: 'admin-1',
+        expiresAt: null,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        links: { self: '/api/users/user-1/scope-grants/usg-1', resourceServer: '/api/resource-servers/resource-1' },
+      },
+    ]
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input).split('?')[0]!
       const method = init?.method ?? 'GET'
@@ -112,7 +126,6 @@ describe('admin console user detail lifecycle', () => {
                 applicationId: 'app-1',
                 user: { id: 'user-1', email: profile.email, displayName: profile.displayName },
                 scopes: ['openid', 'profile'],
-                permissions: [],
                 grantedAt: '2026-01-01T00:00:00.000Z',
                 expiresAt: null,
                 revokedAt: null,
@@ -123,7 +136,6 @@ describe('admin console user detail lifecycle', () => {
                 applicationId: 'app-2',
                 user: { id: 'user-1', email: profile.email, displayName: profile.displayName },
                 scopes: ['openid'],
-                permissions: [],
                 grantedAt: '2026-01-02T00:00:00.000Z',
                 expiresAt: '2027-01-01T00:00:00.000Z',
                 revokedAt: null,
@@ -182,6 +194,39 @@ describe('admin console user detail lifecycle', () => {
           }),
         )
       }
+      if (url === '/api/resource-servers') {
+        return Promise.resolve(jsonResponse({ items: [assignedResource], pagination }))
+      }
+      if (url === '/api/users/user-1/scope-grants' && method === 'GET') {
+        return Promise.resolve(
+          jsonResponse({ items: accessGrants, pagination: { ...pagination, total: accessGrants.length } }),
+        )
+      }
+      if (url === '/api/users/user-1/scope-grants' && method === 'POST') {
+        const body = JSON.parse(String(init?.body))
+        accessGrants = [
+          {
+            id: 'usg-2',
+            userId: 'user-1',
+            organizationId: null,
+            resourceServerId: body.resourceServerId,
+            scopes: body.scopes,
+            status: 'active',
+            grantedByUserId: 'admin-1',
+            expiresAt: body.expiresAt,
+            createdAt: '2026-01-02T00:00:00.000Z',
+            links: {
+              self: '/api/users/user-1/scope-grants/usg-2',
+              resourceServer: '/api/resource-servers/resource-1',
+            },
+          },
+        ]
+        return Promise.resolve(jsonResponse(accessGrants[0], 201))
+      }
+      if (url === '/api/users/user-1/scope-grants/usg-1' && method === 'DELETE') {
+        accessGrants = []
+        return Promise.resolve(new Response(null, { status: 204 }))
+      }
       if (url === '/api/users/user-1/password-reset-requests' && method === 'POST') {
         requests.push({ method, url })
         return Promise.resolve(jsonResponse({ status: true }))
@@ -221,6 +266,18 @@ describe('admin console user detail lifecycle', () => {
     fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Revoke sessions' }))
     expect(await screen.findByText('No active sessions')).toBeTruthy()
 
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Access grants' }), { button: 0, ctrlKey: false })
+    expect(await screen.findByText('Projects API')).toBeTruthy()
+    expect(screen.getByText('projects:admin')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Revoke' }))
+    fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Revoke access grant' }))
+    expect(await screen.findByText('No access grants')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Add access grant' }))
+    const grantDialog = await screen.findByRole('dialog')
+    fireEvent.click(within(grantDialog).getByRole('checkbox', { name: /projects:admin/ }))
+    fireEvent.click(within(grantDialog).getByRole('button', { name: 'Add access grant' }))
+    expect(await screen.findByText('projects:admin')).toBeTruthy()
+
     fireEvent.mouseDown(screen.getByRole('tab', { name: 'Agents' }), { button: 0, ctrlKey: false })
     expect(await screen.findByText('Personal Agent')).toBeTruthy()
     expect(screen.queryByText('Organization Agent')).toBeNull()
@@ -248,3 +305,30 @@ describe('admin console user detail lifecycle', () => {
     )
   })
 })
+
+const assignedResource = {
+  id: 'resource-1',
+  identifier: 'projects',
+  name: 'Projects API',
+  resourceUrl: 'https://api.example.com',
+  connectorId: null,
+  authorizationDetails: [],
+  description: null,
+  enabled: true,
+  ownerOrganizationId: 'org-1',
+  visibility: 'public',
+  scopeRegistry: {
+    discovery: {
+      sourceUrl: 'https://api.example.com/openapi.json',
+      etag: null,
+      documentHash: 'hash',
+      syncedAt: '2026-01-01T00:00:00.000Z',
+      lastError: null,
+    },
+    scopes: [{ value: 'projects:admin', description: 'Manage projects', grantMode: 'assigned' }],
+  },
+  availableToAgents: true,
+  archivedAt: null,
+  createdAt: '2026-01-01T00:00:00.000Z',
+  updatedAt: '2026-01-01T00:00:00.000Z',
+}

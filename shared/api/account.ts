@@ -74,20 +74,6 @@ export type AccountOrganizationAgentsResponse = {
   pagination: PaginationMetadata
 }
 
-export type AccountOrganizationAgentAccessGrantsResponse = {
-  grants: Array<{
-    id: string
-    agentId: string
-    agentName: string
-    resourceId: string
-    scopes: string[]
-    mode: string
-    expiresAt: string | null
-    createdAt: string
-  }>
-  pagination: PaginationMetadata
-}
-
 export type LinkedAccountsResponse = {
   accounts: Array<{
     id: string

@@ -2,7 +2,7 @@ import { realmrootManagementScopes } from './scope-registry'
 
 export const resourceAccess = {
   applications: {
-    routePrefixes: ['applications', 'application-scope-grants'],
+    routePrefixes: ['applications'],
     scopes: { read: 'applications:read', write: 'applications:write' },
   },
   users: {
@@ -14,7 +14,7 @@ export const resourceAccess = {
     scopes: { read: 'organizations:read', write: 'organizations:write' },
   },
   roles: {
-    routePrefixes: ['user-scope-grants'],
+    routePrefixes: [],
     scopes: { read: 'roles:read', write: 'roles:write' },
   },
   apiResources: {
@@ -71,7 +71,7 @@ export function protectedResourceForPath(path: string): ProtectedResource | null
   const [prefix, child] = path.replace(/^\/+/, '').split('/')
   if (prefix === 'access') {
     if (child === 'consents') return 'applications'
-    if (child === 'requests' || child === 'authorizations') return 'agents'
+    if (child === 'requests') return 'agents'
   }
   if (prefix === 'realm') {
     if (child === 'security-policy') return 'security'
@@ -110,8 +110,8 @@ export const agentBootstrapScopes = [
   'connection-requests:write',
   'access-requests:read',
   'access-requests:write',
-  'access-authorizations:read',
-  'access-authorizations:issue',
+  'access-grants:read',
+  'access-grants:issue',
 ] as const
 
 export type AgentBootstrapScope = (typeof agentBootstrapScopes)[number]

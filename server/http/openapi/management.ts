@@ -65,10 +65,9 @@ export const unifiedOpenApiLinkHeader = [
 const managementOpenApiTags = [
   { name: 'Assets', description: 'Uploaded assets used by Realmroot resources.' },
   { name: 'Agents', description: 'Agent identities, installations, and lifecycle.' },
-  { name: 'Agent Access', description: 'Agent access requests, authorizations, and credentials.' },
+  { name: 'Agent Access', description: 'Agent access requests and approval decisions.' },
   { name: 'Applications', description: 'OIDC and machine-to-machine client applications.' },
   { name: 'Consents', description: 'User consent records for delegated Application access.' },
-  { name: 'Scope Grants', description: 'Direct User and Application Resource Server scope grants.' },
   { name: 'Resource Servers', description: 'Protected Resource Servers, contracts, and connections.' },
   { name: 'Organizations', description: 'Organizations, memberships, invitations, and roles.' },
   { name: 'Users', description: 'Realmroot users and account security resources.' },
@@ -77,7 +76,6 @@ const managementOpenApiTags = [
   { name: 'Security', description: 'Realm-wide authentication and security policy.' },
   { name: 'Webhooks', description: 'Webhook endpoints, deliveries, attempts, and secrets.' },
   { name: 'Audit Events', description: 'Immutable Realmroot governance audit events.' },
-  { name: 'Agent', description: 'Operations performed by the current Agent principal.' },
 ] as const
 
 const managementRoutes: ManagementRouteConfig[] = [
@@ -116,7 +114,7 @@ const managementRoutes: ManagementRouteConfig[] = [
     path: '/agent/status',
     operationId: 'getAgentStatus',
     summary: 'Read the current Agent status',
-    cli: { group: 'Agent', name: 'whoami' },
+    cli: { group: 'Agents', name: 'whoami' },
     security: [{ dpop: ['agent:read'] }],
     response: agentStatusSchema,
   },
@@ -277,10 +275,9 @@ function createManagementRoute(routeConfig: ManagementRouteConfig) {
 function managementTagForPath(path: string): (typeof managementOpenApiTags)[number]['name'] {
   if (path.startsWith('/assets')) return 'Assets'
   if (path === '/agent/status' || path.startsWith('/agents')) return 'Agents'
-  if (path.startsWith('/access/requests') || path.startsWith('/access/authorizations')) return 'Agent Access'
+  if (path.startsWith('/access/requests')) return 'Agent Access'
   if (path.startsWith('/access/consents')) return 'Consents'
   if (path.startsWith('/applications')) return 'Applications'
-  if (path.startsWith('/application-scope-grants') || path.startsWith('/user-scope-grants')) return 'Scope Grants'
   if (path.startsWith('/resource-servers')) return 'Resource Servers'
   if (path.startsWith('/organizations')) return 'Organizations'
   if (path.startsWith('/users')) return 'Users'

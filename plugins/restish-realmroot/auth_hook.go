@@ -433,7 +433,7 @@ func requestPlatformToken(
 		"grant_type": {"urn:ietf:params:oauth:grant-type:jwt-bearer"},
 		"assertion":  {mustAgentJWT(state, configuration.Issuer)},
 		"resource":   {credential.ResourceIndicator},
-		"scope":      {"agent:read resource-servers:read resources:read connection-requests:read connection-requests:write access-requests:read access-requests:write access-authorizations:read access-authorizations:issue"},
+		"scope":      {"agent:read resource-servers:read resources:read connection-requests:read connection-requests:write access-requests:read access-requests:write access-grants:read access-grants:issue"},
 	}, &response); err != nil {
 		return credential, fmt.Errorf("obtain Realmroot OAuth access token: %w", err)
 	}

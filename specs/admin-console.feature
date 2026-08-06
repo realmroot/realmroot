@@ -83,6 +83,8 @@ Feature: Admin Console
     Given an application exists
     When I open its detail page
     Then settings, branding, redirect URIs, integration details, and secret rotation are available
+    And Access grants are visible only when the Application can act as a machine principal
+    And User authorizations remain separate from Application Access grants
     And active user authorizations are read from the canonical Application authorization collection
     And revoking one creates its durable revocation state without deleting its authorization history
     And rotating a client secret requires confirmation because the current secret stops working
@@ -105,6 +107,7 @@ Feature: Admin Console
     Given a user exists
     When I open user detail
     Then profile update, password reset, and session revocation controls work
+    And direct Resource Server assignments are managed from Access grants
 
   @entrypoint:product-ui @journey:admin-create-connector
   Scenario: Connectors page creates a draft social connector
@@ -211,8 +214,10 @@ Feature: Admin Console
     And its authorization mode cannot change after creation
     And its protected resource URL is the OAuth resource identifier and access-token audience
     And OAuth scopes declared by the business resource server OpenAPI contract remain the scope authority
-    And the Console can change only each discovered scope's automatic or assigned grant mode
-    And its Resources tab lists protected operations and required scope sets derived from that contract
+    And its Scopes tab manages each discovered scope's automatic or assigned grant mode
+    And its Endpoints tab lists protected operations and required scope sets derived from that contract
+    And external authorization connection details are included in Overview
+    And Organization Roles and direct Access grants remain managed from their owning resources
 
   @entrypoint:product-ui @journey:admin-archive-api-resource
   Scenario: API resource settings archive and restore a resource
@@ -238,7 +243,10 @@ Feature: Admin Console
   Scenario: Resource scope grants are explicit authorization resources
     Given a visible Resource Server has assigned scopes
     When an authorized administrator grants scopes directly to a User or Application
-    Then the grant has an independent lifetime and audit identity
+    Then User Scope Grants are managed only below the target User
+    And Application Scope Grants are managed only below the target Application
+    And only Applications configured as machine principals accept Application Scope Grants
+    And each grant has an independent lifetime, canonical URI, and audit identity
     And direct grants combine with optional Organization Role scopes
     But public visibility does not automatically grant any assigned scope
 

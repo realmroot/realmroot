@@ -530,6 +530,128 @@ describe('authorization management over real D1', () => {
     expect(response.status).toBe(400)
   })
 
+  it('[spec: admin-console/admin-resource-scope-grants] manages direct grants below each subject', async () => {
+    const cookie = await signInAdmin(harness)
+    const targetUserId = await createUser(harness, cookie, {
+      email: 'grant-target@example.com',
+      username: 'granttarget',
+      displayName: 'Grant Target',
+      password: 'grant-target-password-2026',
+    })
+    const application = (await (
+      await postJson(harness, cookie, '/api/applications', {
+        name: 'Grant Client',
+        slug: 'grant-client',
+        clientType: 'confidential_web',
+        redirectUris: ['http://localhost/callback'],
+        allowedGrantTypes: ['client_credentials'],
+        ownerOrganizationId: 'org_platform',
+      })
+    ).json()) as { id: string }
+    const resource = (await (
+      await postJson(harness, cookie, '/api/resource-servers', {
+        identifier: 'grant-api',
+        name: 'Grant API',
+        resourceUrl: 'https://grant.example.com/api',
+        ownerOrganizationId: 'org_platform',
+        visibility: 'public',
+      })
+    ).json()) as { id: string }
+    await harness.deps.authorization.replaceResourceScopeRegistry(resource.id, {
+      discovery: {
+        sourceUrl: 'https://grant.example.com/openapi.json',
+        etag: null,
+        documentHash: 'grant-registry',
+        syncedAt: new Date().toISOString(),
+        lastError: null,
+      },
+      scopes: [{ value: 'projects:read', description: 'Read projects', grantMode: 'assigned' }],
+    })
+
+    const userGrant = (await (
+      await postJson(harness, cookie, `/api/users/${targetUserId}/scope-grants`, {
+        resourceServerId: resource.id,
+        scopes: ['projects:read'],
+      })
+    ).json()) as { id: string; userId: string; links: { self: string } }
+    expect(userGrant).toMatchObject({ userId: targetUserId })
+    expect(userGrant.links.self).toBe(`/api/users/${targetUserId}/scope-grants/${userGrant.id}`)
+    const userGrants = await harness.request(`/api/users/${targetUserId}/scope-grants`, { headers: { cookie } })
+    await expect(userGrants.json()).resolves.toMatchObject({ items: [{ id: userGrant.id }] })
+
+    const applicationGrant = (await (
+      await postJson(harness, cookie, `/api/applications/${application.id}/scope-grants`, {
+        resourceServerId: resource.id,
+        scopes: ['projects:read'],
+      })
+    ).json()) as { id: string; applicationId: string; links: { self: string } }
+    expect(applicationGrant).toMatchObject({ applicationId: application.id })
+    expect(applicationGrant.links.self).toBe(`/api/applications/${application.id}/scope-grants/${applicationGrant.id}`)
+    const applicationGrants = await harness.request(`/api/applications/${application.id}/scope-grants`, {
+      headers: { cookie },
+    })
+    await expect(applicationGrants.json()).resolves.toMatchObject({ items: [{ id: applicationGrant.id }] })
+
+    expect((await harness.request('/api/users/missing-user/scope-grants', { headers: { cookie } })).status).toBe(404)
+    const userFlowApplication = (await (
+      await postJson(harness, cookie, '/api/applications', {
+        name: 'User Flow Client',
+        slug: 'user-flow-client',
+        clientType: 'confidential_web',
+        redirectUris: ['http://localhost/user-flow-callback'],
+        allowedGrantTypes: ['authorization_code'],
+        ownerOrganizationId: 'org_platform',
+      })
+    ).json()) as { id: string }
+    expect(
+      (
+        await postJson(
+          harness,
+          cookie,
+          `/api/applications/${userFlowApplication.id}/scope-grants`,
+          {
+            resourceServerId: resource.id,
+            scopes: ['projects:read'],
+          },
+          400,
+        )
+      ).status,
+    ).toBe(400)
+
+    const disabledResource = await harness.request(`/api/resource-servers/${resource.id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ enabled: false }),
+    })
+    expect(disabledResource.status).toBe(200)
+    expect(
+      (
+        await postJson(
+          harness,
+          cookie,
+          `/api/users/${targetUserId}/scope-grants`,
+          {
+            resourceServerId: resource.id,
+            scopes: ['projects:read'],
+          },
+          400,
+        )
+      ).status,
+    ).toBe(400)
+
+    expect(
+      (
+        await harness.request(userGrant.links.self, {
+          method: 'DELETE',
+          headers: { cookie },
+        })
+      ).status,
+    ).toBe(204)
+    expect((await harness.request(userGrant.links.self, { headers: { cookie } })).status).toBe(404)
+    expect((await harness.request('/api/user-scope-grants', { headers: { cookie } })).status).toBe(404)
+    expect((await harness.request('/api/application-scope-grants', { headers: { cookie } })).status).toBe(404)
+  })
+
   it('[spec: agent-identity/external-resource-rich-authorization-connection] persists opaque authorization detail templates through the management API', async () => {
     const cookie = await signInAdmin(harness)
     const now = new Date()

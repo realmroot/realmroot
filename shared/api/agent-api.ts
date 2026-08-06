@@ -142,26 +142,31 @@ export const listManagementAgentAccessRequestsQuerySchema = paginationQuerySchem
   status: agentAccessRequestStatusSchema.optional(),
 })
 
-export const managementAgentAccessGrantSchema = z.object({
+export const agentAccessGrantSchema = z.object({
   id: z.string(),
   agentId: z.string(),
+  target: z.object({
+    type: z.literal('api-resource'),
+    apiResourceId: z.string(),
+    accountConnectionId: z.string().optional(),
+  }),
   resource: managementAgentResourceSchema,
   scopes: z.array(z.string()),
   authorizationDetails: authorizationDetailsSchema,
   mode: agentAccessGrantModeSchema,
-  status: z.enum(['active', 'revoked', 'consumed', 'expired']),
+  status: z.enum(['active', 'consumed', 'expired']),
   expiresAt: z.iso.datetime().nullable(),
   createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
+  links: z.object({ self: z.string() }),
 })
-export const managementAgentAccessGrantsResponseSchema = z.object({
-  items: z.array(managementAgentAccessGrantSchema),
+export const agentAccessGrantsResponseSchema = z.object({
+  items: z.array(agentAccessGrantSchema),
   pagination: paginationMetadataSchema,
 })
-export const listManagementAgentAccessGrantsQuerySchema = paginationQuerySchema.extend({
-  agentId: nonEmptyString.optional(),
-  organizationId: nonEmptyString.optional(),
+export const listAgentAccessGrantsQuerySchema = paginationQuerySchema.extend({
   resourceId: nonEmptyString.optional(),
-  status: z.enum(['active', 'revoked', 'consumed', 'expired']).optional(),
+  status: z.enum(['active', 'consumed', 'expired']).optional(),
 })
 
 export const agentEnrollmentStatusSchema = z.enum(['pending', 'approved', 'denied', 'expired', 'cancelled'])
@@ -513,29 +518,6 @@ export const decideAccessRequestSchema = z
     }
   })
 
-export const accessGrantSchema = z.object({
-  id: z.string(),
-  agentId: z.string(),
-  target: z.object({
-    type: z.literal('api-resource'),
-    apiResourceId: z.string(),
-    accountConnectionId: z.string().optional(),
-  }),
-  scopes: z.array(z.string()),
-  authorizationDetails: authorizationDetailsSchema,
-  mode: agentAccessGrantModeSchema,
-  status: z.enum(['active', 'revoked', 'consumed', 'expired']),
-  expiresAt: z.iso.datetime().nullable(),
-  revokedAt: z.iso.datetime().nullable(),
-  createdAt: z.iso.datetime(),
-  updatedAt: z.iso.datetime(),
-})
-
-export const accessGrantsResponseSchema = z.object({
-  items: z.array(accessGrantSchema),
-  pagination: paginationMetadataSchema,
-})
-
 export const targetTokenSchema = z.object({
   accessToken: z.string(),
   tokenType: z.literal('DPoP'),
@@ -551,9 +533,8 @@ export type Agent = z.infer<typeof agentSchema>
 export type ManagementAgent = z.infer<typeof managementAgentSchema>
 export type ManagementAgentInstallation = z.infer<typeof managementAgentInstallationSchema>
 export type ManagementAgentAccessRequest = z.infer<typeof managementAgentAccessRequestSchema>
-export type ManagementAgentAccessGrant = z.infer<typeof managementAgentAccessGrantSchema>
 export type ListManagementAgentAccessRequestsQuery = z.infer<typeof listManagementAgentAccessRequestsQuerySchema>
-export type ListManagementAgentAccessGrantsQuery = z.infer<typeof listManagementAgentAccessGrantsQuerySchema>
+export type ListAgentAccessGrantsQuery = z.infer<typeof listAgentAccessGrantsQuerySchema>
 export type AgentInfo = z.infer<typeof agentInfoSchema>
 export type AgentEnrollment = z.infer<typeof agentEnrollmentSchema>
 export type ApiResource = z.infer<typeof apiResourceSchema>
@@ -569,6 +550,6 @@ export type CreateAccessRequest = z.input<typeof createAccessRequestSchema>
 export type AccessRequest = z.infer<typeof accessRequestSchema>
 export type AccessRequestApproval = z.infer<typeof accessRequestApprovalSchema>
 export type DecideAccessRequest = z.input<typeof decideAccessRequestSchema>
-export type AccessGrant = z.infer<typeof accessGrantSchema>
+export type AgentAccessGrant = z.infer<typeof agentAccessGrantSchema>
 export type ResourceServer = z.infer<typeof resourceServerSchema>
 export type ResourceServerResource = z.infer<typeof resourceServerResourceSchema>

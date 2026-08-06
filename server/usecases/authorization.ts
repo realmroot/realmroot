@@ -37,6 +37,7 @@ export interface ResourceMutationActor {
 }
 
 import { realmrootResourceServer as internalResourceServer } from '@server/domain/realmroot-resource-server'
+import { tokenExchangeGrantType } from '@shared/api/applications'
 import type {
   AddMemberRequest,
   ApiResourceResponse,
@@ -46,6 +47,7 @@ import type {
   CreateOrganizationRequest,
   CreateRoleRequest,
   CreateUserScopeGrantRequest,
+  ListScopeGrantsQuery,
   PaginationQuery,
   ReplaceMemberRolesRequest,
   RoleResponse,
@@ -466,15 +468,22 @@ export async function deleteResource(deps: Deps, id: string) {
   }
 }
 
-export async function createUserScopeGrant(deps: Deps, input: CreateUserScopeGrantRequest, grantedByUserId: string) {
+export async function createUserScopeGrant(
+  deps: Deps,
+  userId: string,
+  input: CreateUserScopeGrantRequest,
+  grantedByUserId: string,
+) {
+  await deps.users.getUser(userId)
   const resource = await getResource(deps, input.resourceServerId)
+  if (!resource.enabled || resource.archivedAt) throw badRequest('Resource Server must be active.')
   validateAssignedScopes(resource, input.scopes)
   if (resource.visibility === 'private') {
-    const membership = await deps.authorization.findMemberByOrganizationUser(resource.ownerOrganizationId, input.userId)
+    const membership = await deps.authorization.findMemberByOrganizationUser(resource.ownerOrganizationId, userId)
     if (!membership) throw badRequest('Private Resource Server grants require an owner Organization member.')
   }
   if (input.organizationId) {
-    const membership = await deps.authorization.findMemberByOrganizationUser(input.organizationId, input.userId)
+    const membership = await deps.authorization.findMemberByOrganizationUser(input.organizationId, userId)
     if (!membership) throw badRequest('User scope grant Organization must contain the target user.')
     if (!activeResourceVisibleToOrganization(resource, input.organizationId)) {
       throw badRequest('Resource Server is not visible to the grant Organization.')
@@ -485,7 +494,7 @@ export async function createUserScopeGrant(deps: Deps, input: CreateUserScopeGra
   return toUserScopeGrantResponse(
     await deps.authorization.createUserScopeGrant({
       id: createId('usg'),
-      userId: input.userId,
+      userId,
       organizationId: input.organizationId ?? null,
       resourceServerId: resource.id,
       scopes: [...new Set(input.scopes)].sort(),
@@ -499,8 +508,19 @@ export async function createUserScopeGrant(deps: Deps, input: CreateUserScopeGra
 
 export async function getUserScopeGrant(deps: Deps, id: string) {
   const grant = await deps.authorization.findUserScopeGrant(id)
-  if (!grant) throw notFound('User scope grant was not found.')
+  if (!grant || grant.revokedAt) throw notFound('User scope grant was not found.')
   return toUserScopeGrantResponse(grant)
+}
+
+export async function listUserScopeGrants(
+  deps: Deps,
+  userId: string,
+  query: ListScopeGrantsQuery,
+  ownerOrganizationIds?: string[],
+) {
+  await deps.users.getUser(userId)
+  const result = await deps.authorization.listUserScopeGrants(userId, query, ownerOrganizationIds)
+  return { items: result.items.map(toUserScopeGrantResponse), pagination: result.pagination }
 }
 
 export async function revokeUserScopeGrant(deps: Deps, id: string) {
@@ -512,14 +532,22 @@ export async function revokeUserScopeGrant(deps: Deps, id: string) {
 
 export async function createApplicationScopeGrant(
   deps: Deps,
+  applicationId: string,
   input: CreateApplicationScopeGrantRequest,
   grantedByUserId: string,
 ) {
   const [resource, application] = await Promise.all([
     getResource(deps, input.resourceServerId),
-    deps.applications.findById(input.applicationId),
+    deps.applications.findById(applicationId),
   ])
   if (!application) throw notFound('Application was not found.')
+  if (
+    !application.allowedGrantTypes.some(
+      (grantType) => grantType === 'client_credentials' || grantType === tokenExchangeGrantType,
+    )
+  ) {
+    throw badRequest('Application Scope Grants require a machine-principal grant type.')
+  }
   if (!activeResourceVisibleToOrganization(resource, application.ownerOrganizationId)) {
     throw badRequest('Resource Server is not visible to the Application owner Organization.')
   }
@@ -542,8 +570,13 @@ export async function createApplicationScopeGrant(
 
 export async function getApplicationScopeGrant(deps: Deps, id: string) {
   const grant = await deps.authorization.findApplicationScopeGrant(id)
-  if (!grant) throw notFound('Application scope grant was not found.')
+  if (!grant || grant.revokedAt) throw notFound('Application scope grant was not found.')
   return toApplicationScopeGrantResponse(grant)
+}
+
+export async function listApplicationScopeGrants(deps: Deps, applicationId: string, query: ListScopeGrantsQuery) {
+  const result = await deps.authorization.listApplicationScopeGrants(applicationId, query)
+  return { items: result.items.map(toApplicationScopeGrantResponse), pagination: result.pagination }
 }
 
 export async function revokeApplicationScopeGrant(deps: Deps, id: string) {
@@ -564,10 +597,19 @@ function validateAssignedScopes(resource: ApiResourceResponse, scopes: string[])
 
 function toUserScopeGrantResponse(grant: Awaited<ReturnType<Deps['authorization']['createUserScopeGrant']>>) {
   return {
-    ...grant,
+    id: grant.id,
+    userId: grant.userId,
+    organizationId: grant.organizationId,
+    resourceServerId: grant.resourceServerId,
+    scopes: grant.scopes,
+    status: grant.expiresAt && grant.expiresAt.getTime() <= Date.now() ? ('expired' as const) : ('active' as const),
+    grantedByUserId: grant.grantedByUserId,
     expiresAt: grant.expiresAt?.toISOString() ?? null,
-    revokedAt: grant.revokedAt?.toISOString() ?? null,
     createdAt: grant.createdAt.toISOString(),
+    links: {
+      self: `/api/users/${encodeURIComponent(grant.userId)}/scope-grants/${encodeURIComponent(grant.id)}`,
+      resourceServer: `/api/resource-servers/${encodeURIComponent(grant.resourceServerId)}`,
+    },
   }
 }
 
@@ -575,10 +617,18 @@ function toApplicationScopeGrantResponse(
   grant: Awaited<ReturnType<Deps['authorization']['createApplicationScopeGrant']>>,
 ) {
   return {
-    ...grant,
+    id: grant.id,
+    applicationId: grant.applicationId,
+    resourceServerId: grant.resourceServerId,
+    scopes: grant.scopes,
+    status: grant.expiresAt && grant.expiresAt.getTime() <= Date.now() ? ('expired' as const) : ('active' as const),
+    grantedByUserId: grant.grantedByUserId,
     expiresAt: grant.expiresAt?.toISOString() ?? null,
-    revokedAt: grant.revokedAt?.toISOString() ?? null,
     createdAt: grant.createdAt.toISOString(),
+    links: {
+      self: `/api/applications/${encodeURIComponent(grant.applicationId)}/scope-grants/${encodeURIComponent(grant.id)}`,
+      resourceServer: `/api/resource-servers/${encodeURIComponent(grant.resourceServerId)}`,
+    },
   }
 }
 

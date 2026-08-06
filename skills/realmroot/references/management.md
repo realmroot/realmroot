@@ -38,7 +38,7 @@ the OAuth token endpoint and manages DPoP access tokens locally.
 | Resource Servers | `/resource-servers` | `resource-servers` |
 | Organizations | `/organizations` | `organizations` |
 | Users and security state | `/users` | `users` |
-| Agents and Resource access | `/agents`, `/access/requests`, `/access/authorizations` | `agents` |
+| Agents and Resource access | `/agents`, `/agents/{agentId}/access-grants`, `/access/requests` | `agents` |
 | Connectors | `/connectors` | `connectors` |
 | Realm settings | `/realm` | `settings` |
 | Realm security policy | `/realm/security-policy` | `security` |

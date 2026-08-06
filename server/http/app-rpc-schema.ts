@@ -15,14 +15,14 @@ import type {
 } from '@shared/api/account'
 import type {
   Agent,
+  AgentAccessGrant,
   ApiResource,
   createApiResourceSchema,
+  ListAgentAccessGrantsQuery,
   ListAgentAuditEventsQuery,
   ListAgentsQuery,
-  ListManagementAgentAccessGrantsQuery,
   ListManagementAgentAccessRequestsQuery,
   ManagementAgent,
-  ManagementAgentAccessGrant,
   ManagementAgentAccessRequest,
   ManagementAgentInstallation,
   updateApiResourceSchema,
@@ -51,17 +51,22 @@ import type {
 import type { UploadedAssetResponse } from '@shared/api/assets'
 import type {
   ApiResourceContractResponse,
+  ApplicationScopeGrantResponse,
+  CreateApplicationScopeGrantRequest,
   CreateOrganizationRequest,
   CreateRoleRequest,
+  CreateUserScopeGrantRequest,
   ListApiResourcesQuery,
   ListOrganizationsResponse,
   ListRolesResponse,
+  ListScopeGrantsQuery,
   MemberRolesResponse,
   OrganizationResponse,
   ReplaceMemberRolesRequest,
   RoleResponse,
   UpdateOrganizationRequest,
   UpdateRoleRequest,
+  UserScopeGrantResponse,
 } from '@shared/api/authorization'
 import type { ConfigzConfigResponse } from '@shared/api/configz'
 import type {
@@ -264,6 +269,21 @@ export type RpcSchema = {
     $patch: RpcEndpoint<{ param: { id: string }; json: UpdateApplicationRequest }, ApplicationResponse>
     $delete: RpcEndpoint<{ param: { id: string } }, EmptyResponse>
   }
+  '/api/applications/:applicationId/scope-grants': {
+    $get: RpcEndpoint<
+      { param: { applicationId: string }; query?: Partial<Record<keyof ListScopeGrantsQuery, string>> },
+      { items: ApplicationScopeGrantResponse[]; pagination: PaginationMetadata }
+    >
+    $post: RpcEndpoint<
+      { param: { applicationId: string }; json: CreateApplicationScopeGrantRequest },
+      ApplicationScopeGrantResponse,
+      201
+    >
+  }
+  '/api/applications/:applicationId/scope-grants/:grantId': {
+    $get: RpcEndpoint<{ param: { applicationId: string; grantId: string } }, ApplicationScopeGrantResponse>
+    $delete: RpcEndpoint<{ param: { applicationId: string; grantId: string } }, EmptyResponse, 204>
+  }
   '/api/applications/:id/redirect-uris': {
     $get: RpcEndpoint<
       { param: { id: string }; query?: Partial<Record<keyof PaginationQuery, string>> },
@@ -315,6 +335,17 @@ export type RpcSchema = {
     $get: RpcEndpoint<{ param: { id: string } }, ManagementUserDetailResponse>
     $patch: RpcEndpoint<{ param: { id: string }; json: ManagementUpdateUserRequest }, { user: ManagementUserResponse }>
     $delete: RpcEndpoint<{ param: { id: string } }, EmptyResponse>
+  }
+  '/api/users/:userId/scope-grants': {
+    $get: RpcEndpoint<
+      { param: { userId: string }; query?: Partial<Record<keyof ListScopeGrantsQuery, string>> },
+      { items: UserScopeGrantResponse[]; pagination: PaginationMetadata }
+    >
+    $post: RpcEndpoint<{ param: { userId: string }; json: CreateUserScopeGrantRequest }, UserScopeGrantResponse, 201>
+  }
+  '/api/users/:userId/scope-grants/:grantId': {
+    $get: RpcEndpoint<{ param: { userId: string; grantId: string } }, UserScopeGrantResponse>
+    $delete: RpcEndpoint<{ param: { userId: string; grantId: string } }, EmptyResponse, 204>
   }
   '/api/users/:id/password-reset-requests': {
     $post: RpcEndpoint<{ param: { id: string }; json: { redirectTo?: string } }, EmptyResponse>
@@ -459,6 +490,19 @@ export type RpcSchema = {
       { items: ManagementAgentInstallation[]; pagination: PaginationMetadata }
     >
   }
+  '/api/agents/:agentId/access-grants': {
+    $get: RpcEndpoint<
+      {
+        param: { agentId: string }
+        query?: Partial<Record<keyof ListAgentAccessGrantsQuery, string>>
+      },
+      { items: AgentAccessGrant[]; pagination: PaginationMetadata }
+    >
+  }
+  '/api/agents/:agentId/access-grants/:grantId': {
+    $get: RpcEndpoint<{ param: { agentId: string; grantId: string } }, AgentAccessGrant>
+    $delete: RpcEndpoint<{ param: { agentId: string; grantId: string } }, EmptyResponse, 204>
+  }
   '/api/access/requests': {
     $get: RpcEndpoint<
       { query?: Partial<Record<keyof ListManagementAgentAccessRequestsQuery, string>> },
@@ -467,15 +511,6 @@ export type RpcSchema = {
   }
   '/api/access/requests/:requestId': {
     $get: RpcEndpoint<{ param: { requestId: string } }, ManagementAgentAccessRequest>
-  }
-  '/api/access/authorizations': {
-    $get: RpcEndpoint<
-      { query?: Partial<Record<keyof ListManagementAgentAccessGrantsQuery, string>> },
-      { items: ManagementAgentAccessGrant[]; pagination: PaginationMetadata }
-    >
-  }
-  '/api/access/authorizations/:authorizationId': {
-    $get: RpcEndpoint<{ param: { authorizationId: string } }, ManagementAgentAccessGrant>
   }
   '/api/realm/audit-events': {
     $get: RpcEndpoint<

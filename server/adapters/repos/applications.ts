@@ -272,7 +272,6 @@ export function createDrizzleApplicationRepository(db: Database): ApplicationRep
           userEmail: user.email,
           scopes: applicationConsent.scopes,
           resourceServerId: applicationConsent.resourceServerId,
-          permissions: applicationConsent.permissions,
           grantedAt: applicationConsent.grantedAt,
           expiresAt: applicationConsent.expiresAt,
           revokedAt: applicationConsent.revokedAt,
@@ -291,11 +290,7 @@ export function createDrizzleApplicationRepository(db: Database): ApplicationRep
         .where(where)
 
       return {
-        items: rows.map((row) => ({
-          ...row,
-          scopes: row.scopes,
-          permissions: row.permissions ?? [],
-        })),
+        items: rows,
         pagination: toPaginationMetadata(query, totalRows[0]?.total ?? 0),
       }
     },
@@ -310,7 +305,6 @@ export function createDrizzleApplicationRepository(db: Database): ApplicationRep
           userEmail: user.email,
           scopes: applicationConsent.scopes,
           resourceServerId: applicationConsent.resourceServerId,
-          permissions: applicationConsent.permissions,
           grantedAt: applicationConsent.grantedAt,
           expiresAt: applicationConsent.expiresAt,
           revokedAt: applicationConsent.revokedAt,
@@ -319,7 +313,7 @@ export function createDrizzleApplicationRepository(db: Database): ApplicationRep
         .innerJoin(user, eq(applicationConsent.userId, user.id))
         .where(eq(applicationConsent.id, authorizationId))
         .limit(1)
-      return row ? { ...row, permissions: row.permissions ?? [] } : null
+      return row ?? null
     },
 
     async revokeAuthorization(authorizationId) {
@@ -390,7 +384,7 @@ export function createDrizzleApplicationRepository(db: Database): ApplicationRep
       const applicationStatement = existingApplicationConsent[0]
         ? db
             .update(applicationConsent)
-            .set({ scopes: input.scopes, permissions: input.permissions, grantedAt: now, expiresAt: null })
+            .set({ scopes: input.scopes, grantedAt: now, expiresAt: null })
             .where(eq(applicationConsent.id, id))
         : db.insert(applicationConsent).values({
             id,
@@ -398,7 +392,6 @@ export function createDrizzleApplicationRepository(db: Database): ApplicationRep
             userId: input.userId,
             resourceServerId: input.resourceServerId,
             scopes: input.scopes,
-            permissions: input.permissions,
             grantedAt: now,
           })
       const oauthStatement = existingOAuthConsent[0]

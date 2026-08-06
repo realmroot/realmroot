@@ -3660,6 +3660,12 @@ describe('external API resource authorization', () => {
     const deps = createTestDeps()
     authorizationDeps(deps)
     vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
+    vi.mocked(deps.externalResources.listGrants).mockResolvedValue({
+      items: [grantRecord()],
+      total: 1,
+      limit: 10,
+      offset: 0,
+    })
     vi.mocked(deps.externalResources.listActiveGrantsByAgent).mockResolvedValue([grantRecord()])
     vi.mocked(deps.externalResources.findGrant).mockResolvedValue(grantRecord())
     vi.mocked(deps.externalResources.findAccessRequestByGrant).mockResolvedValue({
@@ -3670,8 +3676,22 @@ describe('external API resource authorization', () => {
     vi.mocked(deps.externalResources.findConnection).mockResolvedValue(connectionRecord())
     vi.mocked(deps.externalResources.revokeGrant).mockResolvedValue(true)
 
-    await expect(listAgentAccessGrants(deps, principal(), { limit: 10, offset: 0 })).resolves.toMatchObject({
+    await expect(
+      listAgentAccessGrants(deps, principal(), {
+        limit: 10,
+        offset: 0,
+        resourceId: 'resource-1',
+        status: 'active',
+      }),
+    ).resolves.toMatchObject({
       items: [{ id: 'grant-1', target: { accountConnectionId: 'connection-1' } }],
+    })
+    expect(deps.externalResources.listGrants).toHaveBeenCalledWith({
+      agentId: 'identity-1',
+      limit: 10,
+      offset: 0,
+      resourceId: 'resource-1',
+      status: 'active',
     })
     await expect(getAgentAccessGrant(deps, 'grant-1', principal())).resolves.toMatchObject({ id: 'grant-1' })
     await revokeAgentResourceAccess(deps, 'identity-1')
@@ -4432,7 +4452,7 @@ describe('external API resource authorization', () => {
       status: 'approved',
     })
     const signer = { issuer: principal().issuer, sign: vi.fn().mockResolvedValue('realmroot-token') }
-    const tokenUrl = 'https://auth.example.com/api/access/authorizations/grant-1/credentials'
+    const tokenUrl = 'https://auth.example.com/api/agents/identity-1/access-grants/grant-1/credentials'
 
     const result = await issueTargetAccessToken(
       deps,

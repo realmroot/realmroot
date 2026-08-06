@@ -65,6 +65,8 @@ describe('admin console applications-detail-b', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
 
     expect(await screen.findByRole('heading', { name: 'Customer portal' })).toBeTruthy()
+    expect(screen.queryByRole('tab', { name: 'Access grants' })).toBeNull()
+    expect(screen.getByRole('tab', { name: 'User authorizations' })).toBeTruthy()
     expect(requests.filter((url) => url === '/api/applications/app-1')).toHaveLength(2)
   })
 
@@ -215,9 +217,7 @@ describe('admin console applications-detail-b', () => {
                     applicationId: 'app-1',
                     resourceServerId: null,
                     user: { id: 'user-1', displayName: 'Jane Doe', email: 'jane@example.com' },
-                    organization: null,
                     scopes: ['openid'],
-                    permissions: [],
                     grantedAt: '2026-07-01T12:00:00.000Z',
                     expiresAt: null,
                     revokedAt: null,
@@ -245,6 +245,57 @@ describe('admin console applications-detail-b', () => {
       within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Revoke authorization' }),
     )
     expect(await screen.findByText('No active authorizations')).toBeTruthy()
+  })
+
+  it('shows Access grants only for an Application machine principal', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input).split('?')[0]!
+      if (url === '/api/applications/app-1') {
+        return Promise.resolve(
+          jsonResponse({
+            ...application,
+            clientType: 'confidential_web',
+            public: false,
+            allowedGrantTypes: ['client_credentials'],
+            tokenEndpointAuthMethod: 'client_secret_basic',
+          }),
+        )
+      }
+      if (url === '/api/resource-servers') {
+        return Promise.resolve(jsonResponse({ items: [assignedResource], pagination }))
+      }
+      if (url === '/api/applications/app-1/scope-grants') {
+        return Promise.resolve(
+          jsonResponse({
+            items: [
+              {
+                id: 'asg-1',
+                applicationId: 'app-1',
+                resourceServerId: 'resource-1',
+                scopes: ['projects:admin'],
+                status: 'active',
+                grantedByUserId: 'admin-1',
+                expiresAt: null,
+                createdAt: '2026-01-01T00:00:00.000Z',
+                links: {
+                  self: '/api/applications/app-1/scope-grants/asg-1',
+                  resourceServer: '/api/resource-servers/resource-1',
+                },
+              },
+            ],
+            pagination,
+          }),
+        )
+      }
+      return consoleSharedFetch(input, init)
+    })
+
+    renderWithQuery(<ApplicationDetailPage applicationId="app-1" section="access-grants" />)
+
+    expect(await screen.findByRole('tab', { name: 'Access grants' })).toBeTruthy()
+    expect(screen.queryByRole('tab', { name: 'User authorizations' })).toBeNull()
+    expect(await screen.findByText('Projects API')).toBeTruthy()
+    expect(screen.getByText('projects:admin')).toBeTruthy()
   })
 
   it('renders users and displays management API errors from create flow', async () => {
@@ -286,3 +337,30 @@ describe('admin console applications-detail-b', () => {
     expect(await screen.findByText('Application does not belong to this Organization.')).toBeTruthy()
   })
 })
+
+const assignedResource = {
+  id: 'resource-1',
+  identifier: 'projects',
+  name: 'Projects API',
+  resourceUrl: 'https://api.example.com',
+  connectorId: null,
+  authorizationDetails: [],
+  description: null,
+  enabled: true,
+  ownerOrganizationId: 'org-1',
+  visibility: 'public',
+  scopeRegistry: {
+    discovery: {
+      sourceUrl: 'https://api.example.com/openapi.json',
+      etag: null,
+      documentHash: 'hash',
+      syncedAt: '2026-01-01T00:00:00.000Z',
+      lastError: null,
+    },
+    scopes: [{ value: 'projects:admin', description: null, grantMode: 'assigned' }],
+  },
+  availableToAgents: true,
+  archivedAt: null,
+  createdAt: '2026-01-01T00:00:00.000Z',
+  updatedAt: '2026-01-01T00:00:00.000Z',
+}

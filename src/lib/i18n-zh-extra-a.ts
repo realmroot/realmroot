@@ -8,8 +8,11 @@ export const zhFlatTranslationsExtraA: Record<string, string> = {
   '; expires': '；过期时间',
   'API resource detail sections': 'API 资源详情分区',
   'Access token': '访问令牌',
+  'Access grants': '访问授权',
   'Account status': '账户状态',
   'Add passkey': '添加通行密钥',
+  'Add access grant': '添加访问授权',
+  'Adding…': '正在添加…',
   'Advanced options': '高级选项',
   'Allow email verification codes as a second factor when email delivery is configured.':
     '配置邮件投递后，允许邮箱验证码作为第二因素。',
@@ -25,6 +28,13 @@ export const zhFlatTranslationsExtraA: Record<string, string> = {
     '允许用户注册认证器应用并验证基于时间的验证码。',
   'Allow users to receive a one-time sign-in code by email.': '允许用户通过邮箱接收一次性登录验证码。',
   'Allow users without an email': '允许无邮箱用户',
+  'Leave empty for a grant that lasts until revoked.': '留空表示授权持续有效，直到被撤销。',
+  'Loading access grants': '正在加载访问授权',
+  'No access grants': '暂无访问授权',
+  'Revoke access grant': '撤销访问授权',
+  'Revoke access grant?': '撤销访问授权？',
+  'The assigned scopes stop applying immediately. Existing audit history is preserved.':
+    '已分配的范围将立即停止生效，现有审计历史会被保留。',
   'Allow wallets to participate in the registration path. If a new user has no account information, they will be asked to sign in with another method first and then bind a wallet.':
     '允许钱包参与注册流程。如果新用户没有账户信息，将要求先用其他方式登录，再绑定钱包。',
   'Already have an account?': '已有账户？',
@@ -42,6 +52,10 @@ export const zhFlatTranslationsExtraA: Record<string, string> = {
   'Applications with consent to access this account.': '已获授权访问此账户的应用。',
   'Approve only the scopes this application should use with your account.': '仅批准此应用应在你的账户中使用的范围。',
   'Assign role': '分配角色',
+  'Assign scopes that require an explicit grant.': '分配需要显式授权的范围。',
+  'Assigned Resource Server scopes held directly by {{subject}}.': '{{subject}} 直接持有的资源服务器范围。',
+  'Assigned Resource Server scopes will appear here.': '已分配的资源服务器范围会显示在这里。',
+  'Assigned scopes': '已分配范围',
   'Assign this role to a user, an application, or an organization member record.':
     '将此角色分配给用户、应用或组织成员记录。',
   'Assignment saved.': '分配已保存。',

@@ -1,6 +1,8 @@
 import {
   type ApplicationOidcClaims,
   type ApplicationResponse,
+  deviceCodeGrantType,
+  tokenExchangeGrantType,
   updateApplicationRequestSchema,
 } from '@shared/api/applications'
 import type { ApiResourceResponse, OrganizationResponse } from '@shared/api/authorization'
@@ -19,6 +21,7 @@ import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetT
 import { Switch } from '@/components/ui/switch'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { AccessGrantsPanel } from '@/features/authorization/access-grants-panel'
 import {
   CopyButton,
   clientConfig,
@@ -132,6 +135,17 @@ export function ApplicationDetailPage({
     return <ErrorState error={new Error(tt('Application does not belong to this Organization.'))} />
   }
   const organizations = organizationsQuery.data?.organizations ?? []
+  const machinePrincipalEnabled = application.allowedGrantTypes.some(
+    (grantType) => grantType === 'client_credentials' || grantType === tokenExchangeGrantType,
+  )
+  const userAuthorizationEnabled = application.allowedGrantTypes.some(
+    (grantType) => grantType === 'authorization_code' || grantType === deviceCodeGrantType,
+  )
+  const visibleTab =
+    (selectedTab === 'access-grants' && !machinePrincipalEnabled) ||
+    (selectedTab === 'authorizations' && !userAuthorizationEnabled)
+      ? 'overview'
+      : selectedTab
 
   return (
     <>
@@ -176,12 +190,15 @@ export function ApplicationDetailPage({
                 : `/console/applications/${applicationId}/${next}`,
             )
           }}
-          value={selectedTab}
+          value={visibleTab}
         >
           <TabsList aria-label={tt('Application detail sections')} className="w-full" variant="navigation">
             <TabsTrigger value="overview">{tt('Overview')}</TabsTrigger>
             <TabsTrigger value="oauth">{tt('OAuth')}</TabsTrigger>
-            <TabsTrigger value="authorizations">{tt('Authorizations')}</TabsTrigger>
+            {machinePrincipalEnabled ? <TabsTrigger value="access-grants">{tt('Access grants')}</TabsTrigger> : null}
+            {userAuthorizationEnabled ? (
+              <TabsTrigger value="authorizations">{tt('User authorizations')}</TabsTrigger>
+            ) : null}
             <TabsTrigger value="settings">{tt('Settings')}</TabsTrigger>
           </TabsList>
           <TabsContent className="mt-5" value="overview">
@@ -199,9 +216,16 @@ export function ApplicationDetailPage({
             />
             <ApplicationFederatedCredentialsPanel applicationId={applicationId} />
           </TabsContent>
-          <TabsContent className="mt-5" value="authorizations">
-            <ApplicationAuthorizations applicationId={applicationId} />
-          </TabsContent>
+          {machinePrincipalEnabled ? (
+            <TabsContent className="mt-5" value="access-grants">
+              <AccessGrantsPanel subject={{ type: 'application', id: applicationId, label: application.name }} />
+            </TabsContent>
+          ) : null}
+          {userAuthorizationEnabled ? (
+            <TabsContent className="mt-5" value="authorizations">
+              <ApplicationAuthorizations applicationId={applicationId} resources={resourcesQuery.data?.items ?? []} />
+            </TabsContent>
+          ) : null}
           <TabsContent className="mt-5" value="settings">
             <ApplicationSettings
               application={application}
@@ -387,7 +411,13 @@ function ApplicationOAuth({
   )
 }
 
-function ApplicationAuthorizations({ applicationId }: { applicationId: string }) {
+function ApplicationAuthorizations({
+  applicationId,
+  resources,
+}: {
+  applicationId: string
+  resources: ApiResourceResponse[]
+}) {
   const pageSize = 50
   const queryClient = useQueryClient()
   const [offset, setOffset] = useState(0)
@@ -418,6 +448,7 @@ function ApplicationAuthorizations({ applicationId }: { applicationId: string })
 
   const authorizations = query.data?.authorizations ?? []
   const pagination = query.data?.pagination
+  const resourceById = new Map(resources.map((resource) => [resource.id, resource]))
   return (
     <>
       <div className="overflow-hidden rounded-xl border">
@@ -425,7 +456,7 @@ function ApplicationAuthorizations({ applicationId }: { applicationId: string })
           <TableHeader>
             <TableRow>
               <TableHead>{tt('User')}</TableHead>
-              <TableHead>{tt('Context')}</TableHead>
+              <TableHead>{tt('Resource Server')}</TableHead>
               <TableHead>{tt('Granted access')}</TableHead>
               <TableHead>{tt('Granted')}</TableHead>
               <TableHead>{tt('Expires')}</TableHead>
@@ -450,10 +481,14 @@ function ApplicationAuthorizations({ applicationId }: { applicationId: string })
                       <span className="text-xs text-muted-foreground">{authorization.user.email}</span>
                     </div>
                   </TableCell>
-                  <TableCell>{authorization.organization?.name ?? tt('Realm')}</TableCell>
+                  <TableCell>
+                    {authorization.resourceServerId
+                      ? (resourceById.get(authorization.resourceServerId)?.name ?? authorization.resourceServerId)
+                      : tt('OIDC')}
+                  </TableCell>
                   <TableCell>
                     <div className="flex max-w-md flex-wrap gap-1 whitespace-normal">
-                      {[...authorization.scopes, ...authorization.permissions].map((access) => (
+                      {authorization.scopes.map((access) => (
                         <Badge key={access} variant="outline">
                           {access}
                         </Badge>

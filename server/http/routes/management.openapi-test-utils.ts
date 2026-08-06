@@ -165,7 +165,6 @@ export function toManagementOperationKey(route: HonoRoute) {
     return `${route.method} ${normalizeManagementPath(route.path.replace('/api', ''))}`
   }
   const tenantPaths = [
-    '/api/application-scope-grants',
     '/api/applications',
     '/api/agents',
     '/api/organizations',
@@ -173,7 +172,6 @@ export function toManagementOperationKey(route: HonoRoute) {
     '/api/realm',
     '/api/connectors',
     '/api/webhooks',
-    '/api/user-scope-grants',
   ]
   if (!tenantPaths.some((path) => route.path === path || route.path.startsWith(`${path}/`))) {
     return null
@@ -339,7 +337,6 @@ export const operationsWithoutRequestBody = new Set([
   'POST /webhooks/{param}/deliveries/{param}/attempts',
   'PUT /access/consents/{param}/revocation',
   'PUT /access/assignments/{param}/revocation',
-  'PUT /access/authorizations/{param}/revocation',
   'PUT /agents/{param}/retirement',
 ])
 

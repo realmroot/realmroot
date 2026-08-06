@@ -25,6 +25,20 @@ import {
   userHeaders,
 } from './management.test-utils'
 
+const operationsWithExplicitSecurity = new Set([
+  'GET /agents/{param}/access-grants',
+  'GET /agents/{param}/access-grants/{param}',
+  'DELETE /agents/{param}/access-grants/{param}',
+  'GET /users/{param}/scope-grants',
+  'POST /users/{param}/scope-grants',
+  'GET /users/{param}/scope-grants/{param}',
+  'DELETE /users/{param}/scope-grants/{param}',
+  'GET /applications/{param}/scope-grants',
+  'POST /applications/{param}/scope-grants',
+  'GET /applications/{param}/scope-grants/{param}',
+  'DELETE /applications/{param}/scope-grants/{param}',
+])
+
 describe('management routes 1', () => {
   beforeEach(() => {
     vi.spyOn(console, 'info').mockImplementation(() => undefined)
@@ -84,7 +98,11 @@ describe('management routes 1', () => {
       }
       expect(operation.declaredPathParameters, operation.key).toEqual(operation.pathParameters)
       const requiredScope = requiredProtectedScope(operation.method, operation.key.slice(operation.method.length + 1))
-      if (requiredScope && JSON.stringify(operation.security).includes('sessionCookie')) {
+      if (
+        requiredScope &&
+        JSON.stringify(operation.security).includes('sessionCookie') &&
+        !operationsWithExplicitSecurity.has(operation.key)
+      ) {
         expect(operation.security, operation.key).toEqual([
           { dpop: [requiredScope] },
           { sessionCookie: [requiredScope] },
@@ -165,7 +183,7 @@ describe('management routes 1', () => {
       }))
 
     expect(generatedCommands).toEqual([
-      { group: 'Agent', name: 'whoami', operationId: 'getAgentStatus' },
+      { group: 'Agents', name: 'whoami', operationId: 'getAgentStatus' },
       { group: 'Resource Servers', name: 'connect', operationId: 'createConnectionRequest' },
       { group: 'Agent Access', name: 'access', operationId: 'createAgentAuthorizationRequest' },
     ])

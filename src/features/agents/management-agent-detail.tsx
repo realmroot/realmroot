@@ -47,7 +47,7 @@ export function AgentDetailPage({
   })
   const grants = useQuery({
     queryKey: [...consoleQueryKeys.agents, agentId, 'grants'],
-    queryFn: () => listAgentAccessGrants({ agentId, limit: 100 }),
+    queryFn: () => listAgentAccessGrants(agentId, { limit: 100 }),
   })
   const audit = useQuery({
     queryKey: [...consoleQueryKeys.agents, agentId, 'audit', { organizationId }],

@@ -78,7 +78,7 @@ An approved access request may include:
     "type": "dpop",
     "resource": {"href": "https://id.realmroot.dev/api/resource-servers/zpan/resources/workspace-1"},
     "resourceIndicator": "https://drive.zpan.space/api",
-    "endpoint": "https://id.realmroot.dev/api/access/authorizations/grant-1/credentials",
+    "endpoint": "https://id.realmroot.dev/api/agents/agent-1/access-grants/grant-1/credentials",
     "proof": {
       "algorithm": "ES256",
       "method": "POST",

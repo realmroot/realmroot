@@ -447,7 +447,6 @@ export const managementUserApplicationSchema = z.object({
   applicationName: z.string(),
   applicationSlug: z.string(),
   scopes: z.array(z.string()),
-  permissions: z.array(z.string()).nullable().optional(),
   grantedAt: z.union([z.string(), z.date()]),
   expiresAt: z.union([z.string(), z.date()]).nullable(),
 })
@@ -507,16 +506,13 @@ export const managementPasswordResetRequestSchema = adminPasswordResetSchema
 
 export const protectedResourceCollectionRoutes = [
   '/applications',
-  '/application-scope-grants',
   '/access/consents',
   '/users',
   '/organizations',
   '/resource-servers',
-  '/user-scope-grants',
   '/connectors',
   '/agents',
   '/access/requests',
-  '/access/authorizations',
 ] as const
 
 export { paginationQuerySchema }

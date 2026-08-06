@@ -483,7 +483,6 @@ class InMemoryApplicationRepository implements ApplicationRepository {
         userEmail: 'user@example.com',
         organizationId: null,
         organizationName: null,
-        permissions: [],
         expiresAt: null,
         revokedAt: this.authorizationRevocations.get(consent.id) ?? null,
       }))
@@ -506,7 +505,6 @@ class InMemoryApplicationRepository implements ApplicationRepository {
       userEmail: 'user@example.com',
       organizationId: null,
       organizationName: null,
-      permissions: [],
       expiresAt: null,
       revokedAt: this.authorizationRevocations.get(consent.id) ?? null,
     }
@@ -534,7 +532,6 @@ class InMemoryApplicationRepository implements ApplicationRepository {
     userId: string
     resourceServerId: string | null
     scopes: string[]
-    permissions: string[]
   }) {
     const consent = {
       id: `consent-${this.consents.size + 1}`,

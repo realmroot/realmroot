@@ -171,6 +171,10 @@ export function userDetailTabs(): DetailTab[] {
       label: 'Sessions',
     },
     {
+      value: 'access-grants',
+      label: 'Access grants',
+    },
+    {
       value: 'agents',
       label: 'Agents',
     },
@@ -235,8 +239,8 @@ export function roleDetailTabs(): DetailTab[] {
 export function apiResourceDetailTabs(): DetailTab[] {
   return [
     { value: 'overview', label: 'Overview' },
-    { value: 'resources', label: 'Resources' },
-    { value: 'authority', label: 'Roles & grants' },
+    { value: 'scopes', label: 'Scopes' },
+    { value: 'endpoints', label: 'Endpoints' },
     { value: 'settings', label: 'Settings' },
   ]
 }

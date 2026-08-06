@@ -301,7 +301,7 @@ describe('console API resources and roles', () => {
     )
   })
 
-  it('shows protected resources and their required scopes as a dedicated detail tab', async () => {
+  it('shows protected endpoints and their required scopes as a dedicated detail tab', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input) => {
       const { url } = requestParts(input)
       if (url === '/api/resource-servers/resource-1') return Promise.resolve(jsonResponse(apiResource))
@@ -314,7 +314,7 @@ describe('console API resources and roles', () => {
       throw new Error(`Unexpected request: ${url}`)
     })
 
-    renderWithQuery(<ApiResourceDetailPage resourceId="resource-1" section="resources" />)
+    renderWithQuery(<ApiResourceDetailPage resourceId="resource-1" section="endpoints" />)
 
     expect(await screen.findByRole('heading', { name: 'Management API' })).toBeTruthy()
     expect(screen.getByText('List projects')).toBeTruthy()
@@ -322,6 +322,42 @@ describe('console API resources and roles', () => {
     expect(screen.getByText('projects:read')).toBeTruthy()
     expect(screen.getByText('Returns visible projects.')).toBeTruthy()
     expect(screen.queryByText(contract.sourceUrl)).toBeNull()
+  })
+
+  it('manages the synchronized scope registry from its own detail tab', async () => {
+    const resourceWithScopes = {
+      ...apiResource,
+      scopeRegistry: {
+        ...apiResource.scopeRegistry,
+        scopes: [{ value: 'projects:read', description: 'Read projects', grantMode: 'assigned' as const }],
+      },
+    }
+    const updates: unknown[] = []
+    vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
+      const request = requestParts(input, init)
+      if (request.url === '/api/resource-servers/resource-1' && request.method === 'GET') {
+        return jsonResponse(resourceWithScopes)
+      }
+      if (request.url === '/api/resource-servers/resource-1' && request.method === 'PATCH') {
+        updates.push(await request.body)
+        return jsonResponse(resourceWithScopes)
+      }
+      if (request.url === '/api/connectors') return jsonResponse({ connectors: [], pagination: emptyPagination })
+      if (request.url === '/api/organizations') {
+        return jsonResponse({ organizations: [organization], pagination })
+      }
+      throw new Error(`Unexpected request: ${request.method} ${request.url}`)
+    })
+
+    renderWithQuery(<ApiResourceDetailPage resourceId="resource-1" section="scopes" />)
+
+    expect(await screen.findByRole('heading', { name: 'Scope registry' })).toBeTruthy()
+    expect(screen.getByText('Read projects')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Grant mode for projects:read'), { target: { value: 'automatic' } })
+
+    await waitFor(() => {
+      expect(updates).toEqual([{ scopeGrantModes: [{ scope: 'projects:read', grantMode: 'automatic' }] }])
+    })
   })
 
   it('recovers the protected-resource contract and renders every scope requirement shape', async () => {
@@ -375,7 +411,7 @@ describe('console API resources and roles', () => {
 
     renderWithQuery(<ApiResourceDetailPage resourceId="resource-1" />)
     expect(await screen.findByText('Native authorization · resource-1')).toBeTruthy()
-    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Resources' }), { button: 0, ctrlKey: false })
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Endpoints' }), { button: 0, ctrlKey: false })
     fireEvent.click(await screen.findByRole('button', { name: 'Retry' }))
 
     expect(await screen.findByText('Get summary')).toBeTruthy()
@@ -472,98 +508,14 @@ describe('console API resources and roles', () => {
       throw new Error(`Unexpected request: ${url}`)
     })
 
-    renderWithQuery(<ApiResourceDetailPage resourceId="resource-1" section="authority" />)
+    renderWithQuery(<ApiResourceDetailPage resourceId="resource-1" />)
     expect(await screen.findByText('External OIDC provider')).toBeTruthy()
     expect(screen.getAllByText('Not configured')).toHaveLength(3)
-    const overviewTab = screen.getByRole('tab', { name: 'Overview' })
-    fireEvent.mouseDown(overviewTab, { button: 0, ctrlKey: false })
     expect(await screen.findByText('Visibility')).toBeTruthy()
-    expect(overviewTab.getAttribute('aria-selected')).toBe('true')
     fireEvent.mouseDown(screen.getByRole('tab', { name: 'Settings' }), { button: 0, ctrlKey: false })
     expect(await screen.findByRole('heading', { name: 'Authorization provider' })).toBeTruthy()
     expect(screen.getByText('connector-1')).toBeTruthy()
     expect(screen.getByText('Pending validation')).toBeTruthy()
-  })
-
-  it('shows Organization Roles that grant scopes from a native Resource Server', async () => {
-    vi.spyOn(window, 'fetch').mockImplementation((input) => {
-      const { url } = requestParts(input)
-      if (url === '/api/resource-servers/resource-1') return Promise.resolve(jsonResponse(apiResource))
-      if (url === '/api/connectors') {
-        return Promise.resolve(jsonResponse({ connectors: [], pagination: emptyPagination }))
-      }
-      if (url === '/api/organizations') {
-        return Promise.resolve(jsonResponse({ organizations: [organization], pagination }))
-      }
-      if (url === `/api/organizations/${organization.id}/roles`) {
-        return Promise.resolve(
-          jsonResponse({
-            roles: [
-              {
-                key: 'operator',
-                displayName: 'Operator',
-                description: null,
-                predefined: false,
-                scopes: [
-                  { resourceId: apiResource.id, scope: 'projects:read' },
-                  { resourceId: 'resource-2', scope: 'other:read' },
-                ],
-                createdAt: apiResource.createdAt,
-                updatedAt: apiResource.updatedAt,
-              },
-              {
-                key: 'unrelated',
-                displayName: 'Unrelated',
-                description: null,
-                predefined: false,
-                scopes: [{ resourceId: 'resource-2', scope: 'other:read' }],
-                createdAt: apiResource.createdAt,
-                updatedAt: apiResource.updatedAt,
-              },
-            ],
-            pagination,
-          }),
-        )
-      }
-      throw new Error(`Unexpected request: ${url}`)
-    })
-
-    renderWithQuery(
-      <ApiResourceDetailPage organizationId={organization.id} resourceId="resource-1" section="authority" />,
-    )
-    expect(await screen.findByText('Human members only')).toBeTruthy()
-    expect(screen.getByText('Operator')).toBeTruthy()
-    expect(screen.getByText('projects:read')).toBeTruthy()
-    expect(screen.queryByText('Unrelated')).toBeNull()
-  })
-
-  it('retries Organization Role loading and renders an empty native authority', async () => {
-    let attempts = 0
-    vi.spyOn(window, 'fetch').mockImplementation((input) => {
-      const { url } = requestParts(input)
-      if (url === '/api/resource-servers/resource-1') return Promise.resolve(jsonResponse(apiResource))
-      if (url === '/api/connectors') {
-        return Promise.resolve(jsonResponse({ connectors: [], pagination: emptyPagination }))
-      }
-      if (url === '/api/organizations') {
-        return Promise.resolve(jsonResponse({ organizations: [organization], pagination }))
-      }
-      if (url === `/api/organizations/${organization.id}/roles`) {
-        attempts += 1
-        return Promise.resolve(
-          attempts === 1
-            ? jsonResponse({ message: 'Roles unavailable.' }, 503)
-            : jsonResponse({ roles: [], pagination: emptyPagination }),
-        )
-      }
-      throw new Error(`Unexpected request: ${url}`)
-    })
-
-    renderWithQuery(
-      <ApiResourceDetailPage organizationId={organization.id} resourceId="resource-1" section="authority" />,
-    )
-    fireEvent.click(await screen.findByRole('button', { name: 'Retry' }))
-    expect(await screen.findByText('No Roles use this server')).toBeTruthy()
   })
 
   it('uses section-level editors and preserves native/external authorization differences', async () => {
@@ -669,7 +621,7 @@ describe('console API resources and roles', () => {
         },
       }),
     )
-    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Authorization' }), { button: 0, ctrlKey: false })
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Overview' }), { button: 0, ctrlKey: false })
     expect(await screen.findByText('https://projects.example.com')).toBeTruthy()
     expect(screen.getByText('active')).toBeTruthy()
     expect(screen.getByText('manual')).toBeTruthy()

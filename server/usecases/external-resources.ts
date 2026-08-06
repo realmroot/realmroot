@@ -9,14 +9,15 @@ import type {
   ResourceAccountConnectionRecord,
 } from '@server/usecases/ports'
 import type {
-  AccessGrant,
   AccessRequest,
   AccessRequestApproval,
   AccountConnection,
+  AgentAccessGrant,
   ApiResource,
   CreateAccessRequest,
   CreateAccountConnection,
   CreateResourceConnectionRequest,
+  ListAgentAccessGrantsQuery,
   ResourceConnectionApproval,
   ResourceConnectionRequest,
 } from '@shared/api/agent-api'
@@ -1552,13 +1553,14 @@ async function issueNativeAccessToken(
 export async function listAgentAccessGrants(
   deps: Deps,
   principal: AgentResourcePrincipal,
-  pagination: PaginationInput,
+  query: ListAgentAccessGrantsQuery,
 ) {
   await requireActiveIdentityAndBinding(deps, principal)
-  const grants = (await deps.externalResources.listActiveGrantsByAgent(principal.identityId)).map(toAccessGrant)
+  const result = await deps.externalResources.listGrants({ ...query, agentId: principal.identityId })
+  const grants = await Promise.all(result.items.map((grant) => toAccessGrant(deps, grant)))
   return {
-    items: grants.slice(pagination.offset, pagination.offset + pagination.limit),
-    pagination: paginationMetadata({ ...pagination, total: grants.length }),
+    items: grants,
+    pagination: paginationMetadata(result),
   }
 }
 
@@ -1566,16 +1568,18 @@ export async function getAgentAccessGrant(
   deps: Deps,
   grantId: string,
   principal: AgentResourcePrincipal,
-): Promise<AccessGrant> {
+): Promise<AgentAccessGrant> {
   await requireActiveIdentityAndBinding(deps, principal)
   const grant = await deps.externalResources.findGrant(grantId)
-  if (!grant || grant.agentIdentityId !== principal.identityId) throw notFound('Agent access grant was not found.')
-  return toAccessGrant(grant)
+  if (!grant || grant.status === 'revoked' || grant.agentIdentityId !== principal.identityId) {
+    throw notFound('Agent access grant was not found.')
+  }
+  return toAccessGrant(deps, grant)
 }
 
 export async function revokeAgentAccessGrant(deps: Deps, grantId: string, actorUserId: string) {
   const grant = await deps.externalResources.findGrant(grantId)
-  if (!grant) throw notFound('Agent access grant was not found.')
+  if (!grant || grant.status === 'revoked') throw notFound('Agent access grant was not found.')
   const request = await deps.externalResources.findAccessRequestByGrant(grant.id)
   if (!request) throw notFound('Approved Agent access request was not found.')
   const connection = await requireControlledRequestTarget(deps, request, actorUserId)
@@ -3004,7 +3008,7 @@ function toAccessRequest(
     links: {
       self,
       credentials: request.grantId
-        ? `${origin}/api/access/authorizations/${encodeURIComponent(request.grantId)}/credentials`
+        ? `${origin}/api/agents/${encodeURIComponent(request.agentIdentityId)}/access-grants/${encodeURIComponent(request.grantId)}/credentials`
         : null,
     },
     credentialOffer: null,
@@ -3050,7 +3054,9 @@ async function agentAccessRequestRepresentation(
   }
 }
 
-function toAccessGrant(record: AgentAccessGrantRecord): AccessGrant {
+async function toAccessGrant(deps: Deps, record: AgentAccessGrantRecord): Promise<AgentAccessGrant> {
+  const resource = await deps.authorization.findResource(record.resourceId)
+  if (!resource) throw notFound('Agent access grant Resource Server was not found.')
   return {
     id: record.id,
     agentId: record.agentIdentityId,
@@ -3059,14 +3065,17 @@ function toAccessGrant(record: AgentAccessGrantRecord): AccessGrant {
       apiResourceId: record.resourceId,
       ...(record.connectionId ? { accountConnectionId: record.connectionId } : {}),
     },
+    resource: { id: resource.id, identifier: resource.identifier, name: resource.name },
     scopes: record.scopes,
     authorizationDetails: record.authorizationDetails,
-    mode: record.mode as AccessGrant['mode'],
-    status: record.status as AccessGrant['status'],
+    mode: record.mode as AgentAccessGrant['mode'],
+    status: record.status as AgentAccessGrant['status'],
     expiresAt: record.expiresAt?.toISOString() ?? null,
-    revokedAt: record.revokedAt?.toISOString() ?? null,
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
+    links: {
+      self: `/api/agents/${encodeURIComponent(record.agentIdentityId)}/access-grants/${encodeURIComponent(record.id)}`,
+    },
   }
 }
 

@@ -220,7 +220,6 @@ export const applicationConsent = sqliteTable(
       .references(() => user.id, { onDelete: 'cascade' }),
     resourceServerId: text('resource_server_id').references(() => apiResource.id, { onDelete: 'cascade' }),
     scopes: text('scopes', { mode: 'json' }).$type<string[]>().notNull(),
-    permissions: text('permissions', { mode: 'json' }).$type<string[]>(),
     grantedAt: integer('granted_at', { mode: 'timestamp_ms' })
       .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
       .notNull(),

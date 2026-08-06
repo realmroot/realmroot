@@ -105,23 +105,6 @@ describe('Account Organization detail', () => {
           pagination: { limit: 100, offset: 0, total: 4, hasMore: false, nextOffset: null },
         }),
       ),
-      http.get(`${base}/api/access/authorizations`, () =>
-        json({
-          items: [
-            {
-              id: 'grant-family',
-              agentId: 'agent-family',
-              resource: { id: 'household-api', identifier: 'household', name: 'Household API' },
-              scopes: ['household:read'],
-              mode: 'persistent',
-              status: 'active',
-              expiresAt: null,
-              createdAt: '2026-08-01T00:00:00.000Z',
-            },
-          ],
-          pagination: { limit: 50, offset: 0, total: 1, hasMore: false, nextOffset: null },
-        }),
-      ),
     )
 
     renderWithClient(<AccountOrganizationDetailPage organizationId="org-family" />)
@@ -140,6 +123,5 @@ describe('Account Organization detail', () => {
     fireEvent.mouseDown(screen.getByRole('tab', { name: 'Roles' }), { button: 0, ctrlKey: false })
     expect(await screen.findByText('Your Organization Roles')).toBeTruthy()
     expect(screen.getByText('Assigned Roles')).toBeTruthy()
-    expect(screen.getByText('household:read')).toBeTruthy()
   })
 })

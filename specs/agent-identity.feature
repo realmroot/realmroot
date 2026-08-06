@@ -220,7 +220,7 @@ Feature: Agent identity and delegated API authorization
     @e2e @entrypoint:agent-protocol @journey:native-api-resource-token
     Scenario: An Agent calls a native API directly
       Given a controller approved an exact native API resource request
-      When Restish requests a token from the Agent's access grant
+      When Restish creates a credential below that Agent's access grant
       Then the Realmroot plugin creates and retains a separate DPoP key
       And the plugin sends the DPoP proof in the standard DPoP header
       Then Realmroot issues a short-lived audience-bound JWT access token

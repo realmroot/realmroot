@@ -1,36 +1,6 @@
 [
   {
     "method": "GET",
-    "path": "/access/authorizations",
-    "operationId": "listAgentAuthorizations",
-    "semanticHash": "9f3b81cc72f18e8e4042e2f9f48f9177889cb41fb3a995ffaac0baea5b747901"
-  },
-  {
-    "method": "GET",
-    "path": "/access/authorizations/{authorizationId}",
-    "operationId": "getAgentAuthorization",
-    "semanticHash": "829cb42a8b1e63185c4ba1d6a2c03214d16f65f121ed88edae1503f052de6b5d"
-  },
-  {
-    "method": "POST",
-    "path": "/access/authorizations/{authorizationId}/credentials",
-    "operationId": "createAgentAuthorizationCredential",
-    "semanticHash": "5644e7946f1f5162a7a351b2ab104ef9b0c3cca7d8fefc813eb6a30776cc2012"
-  },
-  {
-    "method": "GET",
-    "path": "/access/authorizations/{authorizationId}/revocation",
-    "operationId": "getAgentAuthorizationRevocation",
-    "semanticHash": "294c87640bc2f036beb92180ecb30fa334c630ad9effb5701ec67679f5e7808f"
-  },
-  {
-    "method": "PUT",
-    "path": "/access/authorizations/{authorizationId}/revocation",
-    "operationId": "replaceAgentAuthorizationRevocation",
-    "semanticHash": "aad72f44631de4b680756ccc4e6c6656c555b02885445f780f6ebc8a6de6e6c6"
-  },
-  {
-    "method": "GET",
     "path": "/access/consents",
     "operationId": "listApplicationConsents",
     "semanticHash": "e6841d7bde9d3e9ee691131424dad9cfa7c2b608eebe97a18285cfee3253cc06"

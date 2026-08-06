@@ -140,11 +140,18 @@ type DetailTab = {
   value: string
   label: string
 }
-type ApplicationDetailSection = 'overview' | 'oauth' | 'authorizations' | 'settings'
-type UserDetailSection = 'overview' | 'authentication' | 'sessions' | 'agents' | 'authorized-apps' | 'settings'
+type ApplicationDetailSection = 'overview' | 'oauth' | 'access-grants' | 'authorizations' | 'settings'
+type UserDetailSection =
+  | 'overview'
+  | 'authentication'
+  | 'sessions'
+  | 'access-grants'
+  | 'agents'
+  | 'authorized-apps'
+  | 'settings'
 type OrganizationDetailSection = 'overview' | 'members' | 'agents' | 'activity' | 'settings'
 type RoleDetailSection = 'overview' | 'permissions' | 'settings'
-type ApiResourceDetailSection = 'overview' | 'resources' | 'authority' | 'settings'
+type ApiResourceDetailSection = 'overview' | 'scopes' | 'endpoints' | 'settings'
 type WebhooksSection = 'endpoints' | 'requests'
 type SignInMode = 'password' | 'otp'
 type HostedAuthPreviewFlow = 'sign-in' | 'email' | 'sign-up'

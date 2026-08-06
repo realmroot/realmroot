@@ -1,7 +1,6 @@
 import type {
   AccountEmailChangeConfirmInput,
   AccountEmailChangeInput,
-  AccountOrganizationAgentAccessGrantsResponse,
   AccountOrganizationAgentsResponse,
   AccountPasswordChangeInput,
   AccountProfileUpdateInput,
@@ -27,7 +26,6 @@ import type {
   SecurityTotpVerificationInput,
 } from '@shared/api/security'
 import { ApiRequestError, apiClient, readJsonResponse, readRpcResponse, uploadApiFile } from '@/lib/api'
-import { listAgentAccessGrants } from '@/lib/api/management'
 import { authClient, nativeAuth } from '@/lib/auth-client'
 
 export function getAccountProfile() {
@@ -207,29 +205,6 @@ export function listAccountOrganizationAgents(organizationId: string): Promise<A
   return readRpcResponse(
     apiClient.api.account.organizations[':organizationId'].agents.$get({ param: { organizationId }, query: {} }),
   )
-}
-
-export async function listAccountOrganizationAgentAccessGrants(
-  organizationId: string,
-): Promise<AccountOrganizationAgentAccessGrantsResponse> {
-  const [result, agents] = await Promise.all([
-    listAgentAccessGrants({ organizationId, status: 'active', limit: 100 }),
-    listAccountOrganizationAgents(organizationId),
-  ])
-  const names = new Map(agents.items.map((agent) => [agent.id, agent.name]))
-  return {
-    grants: result.items.map((grant) => ({
-      id: grant.id,
-      agentId: grant.agentId,
-      agentName: names.get(grant.agentId) ?? grant.agentId,
-      resourceId: grant.resource.id,
-      scopes: grant.scopes,
-      mode: grant.mode,
-      expiresAt: grant.expiresAt,
-      createdAt: grant.createdAt,
-    })),
-    pagination: result.pagination,
-  }
 }
 
 export function getAgentEnrollment(enrollmentId: string): Promise<AgentEnrollment> {
