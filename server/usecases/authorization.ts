@@ -1,5 +1,4 @@
 import { badRequest, conflict, forbidden, notFound, preconditionFailed, resourceInUse } from '@server/domain/errors'
-import { platformOrganization } from '@server/domain/platform-organization'
 import {
   isRealmrootResourceServer,
   realmrootResourceServer,
@@ -54,16 +53,24 @@ import {
 } from '@shared/organization-access'
 import { realmrootScopeRegistry } from '@shared/scope-registry'
 
-export function createOrganization(deps: Deps, input: CreateOrganizationRequest) {
-  return deps.authorization.createOrganization({
-    id: createId('org'),
-    slug: input.slug,
-    name: input.name,
-    displayName: input.displayName ?? null,
-    logo: input.logo ?? null,
-    disabled: false,
-    disabledReason: null,
-  })
+export function createOrganization(deps: Deps, input: CreateOrganizationRequest, ownerUserId: string) {
+  return deps.authorization.createOrganization(
+    {
+      id: createId('org'),
+      slug: input.slug,
+      name: input.name,
+      displayName: input.displayName ?? null,
+      logo: input.logo ?? null,
+      disabled: false,
+      disabledReason: null,
+    },
+    {
+      id: createId('mem'),
+      userId: ownerUserId,
+      roles: ['owner'],
+      title: null,
+    },
+  )
 }
 
 export function listOrganizations(deps: Deps, pagination: PaginationQuery, organizationIds?: string[]) {
@@ -201,8 +208,8 @@ export async function cancelInvitation(deps: Deps, organizationId: string, id: s
 
 export async function createResource(deps: Deps, input: CreateApiResourceRequest) {
   const enabled = input.enabled ?? true
-  const ownerOrganizationId = input.ownerOrganizationId ?? platformOrganization.id
-  if (input.ownerOrganizationId) await requireActiveOrganization(deps, input.ownerOrganizationId)
+  const ownerOrganizationId = input.ownerOrganizationId
+  await requireActiveOrganization(deps, ownerOrganizationId)
   const accessEligibility = apiResourceEligibilitySchema.parse(
     input.accessEligibility ?? { mode: 'realm', organizationIds: [] },
   )
@@ -380,9 +387,9 @@ function resourceMutationAudit(
     id: createId('agaudit'),
     action,
     result: 'allowed',
-    realmOwned: ownerOrganizationId === platformOrganization.id,
+    realmOwned: false,
     ownerUserId: null,
-    ownerOrganizationId: ownerOrganizationId === platformOrganization.id ? null : ownerOrganizationId,
+    ownerOrganizationId,
     controllerUserId: actor.controllerUserId,
     subjectIssuer: actor.agent?.issuer ?? null,
     subject: actor.agent?.subject ?? null,

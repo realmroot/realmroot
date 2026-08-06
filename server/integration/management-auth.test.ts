@@ -113,6 +113,7 @@ describe('resource access over real D1 and real Better Auth sessions', () => {
         slug: 'customer-portal',
         clientType: 'public_spa',
         redirectUris: ['http://localhost/callback'],
+        ownerOrganizationId: 'org_platform',
         firstParty: true,
         trusted: true,
       }),

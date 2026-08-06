@@ -1,7 +1,6 @@
 import { conflict } from '@server/domain/errors'
-import { platformOrganization } from '@server/domain/platform-organization'
 import type { AuthorizationRepository } from '@server/usecases/ports'
-import { and, count, desc, eq, gt, inArray, isNotNull, isNull, ne, notExists, sql } from 'drizzle-orm'
+import { and, count, desc, eq, gt, inArray, isNotNull, isNull, notExists, sql } from 'drizzle-orm'
 import type { BatchItem } from 'drizzle-orm/batch'
 import type { Database } from '../../db/client'
 import {
@@ -32,9 +31,19 @@ import {
 
 export function createDrizzleAuthorizationRepository(db: Database): AuthorizationRepository {
   return {
-    async createOrganization(input) {
+    async createOrganization(input, owner) {
       const now = new Date()
-      await db.insert(organization).values({ ...input, createdAt: now, updatedAt: now })
+      const { roles, ...ownerRecord } = owner
+      await db.batch([
+        db.insert(organization).values({ ...input, createdAt: now, updatedAt: now }),
+        db.insert(member).values({
+          ...ownerRecord,
+          organizationId: input.id,
+          role: serializeRoles(roles),
+          createdAt: now,
+          updatedAt: now,
+        }),
+      ])
       return { ...input, createdAt: now.toISOString(), updatedAt: now.toISOString() }
     },
 
@@ -42,10 +51,7 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
       if (organizationIds?.length === 0) {
         return { items: [], pagination: toPagination(pagination, 0) }
       }
-      const organizationCondition = and(
-        ne(organization.id, platformOrganization.id),
-        organizationIds ? inArray(organization.id, organizationIds) : undefined,
-      )
+      const organizationCondition = organizationIds ? inArray(organization.id, organizationIds) : undefined
       const rows = await db
         .select()
         .from(organization)
@@ -113,7 +119,7 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
       const rows = await db
         .select()
         .from(member)
-        .where(and(eq(member.userId, userId), ne(member.organizationId, platformOrganization.id)))
+        .where(eq(member.userId, userId))
         .orderBy(desc(member.createdAt), desc(member.id))
       return rows.map(toMember)
     },

@@ -1109,7 +1109,10 @@ export interface ApiResourceReferenceCounts {
 }
 
 export interface AuthorizationRepository {
-  createOrganization(input: OrganizationRecordInput): Promise<OrganizationResponse>
+  createOrganization(
+    input: OrganizationRecordInput,
+    owner: Omit<MemberRecordInput, 'organizationId'>,
+  ): Promise<OrganizationResponse>
   listOrganizations(
     pagination: PaginationQuery,
     organizationIds?: string[],

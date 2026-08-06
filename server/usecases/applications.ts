@@ -1,5 +1,4 @@
 import { badRequest, forbidden, notFound } from '@server/domain/errors'
-import { platformOrganization } from '@server/domain/platform-organization'
 import {
   buildDeniedAuthorizationUrl,
   createClientSecret,
@@ -52,8 +51,8 @@ export async function createApplication(
   const clientSecret = input.clientType === 'confidential_web' ? createClientSecret() : null
   const secretHash = clientSecret ? await hashProviderSecret(clientSecret) : null
   const secretPrefix = clientSecret ? clientSecret.slice(0, 12) : null
-  const ownerOrganizationId = input.ownerOrganizationId ?? platformOrganization.id
-  if (input.ownerOrganizationId) await requireActiveOrganization(deps, input.ownerOrganizationId)
+  const ownerOrganizationId = input.ownerOrganizationId
+  await requireActiveOrganization(deps, ownerOrganizationId)
   const audience = input.audience ?? { mode: 'realm' as const, organizationIds: [], userIds: [] }
   await validateApplicationAudience(deps, audience)
 

@@ -128,7 +128,7 @@ export const createApiResourceRequestSchema = z.object({
   authorizationDetails: authorizationDetailsSchema.default([]),
   description: optionalText,
   enabled: z.boolean().optional(),
-  ownerOrganizationId: nonEmptyString.optional(),
+  ownerOrganizationId: nonEmptyString,
   accessEligibility: apiResourceEligibilitySchema.optional(),
   availableToAgents: z.boolean().optional(),
 })

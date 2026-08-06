@@ -1,5 +1,4 @@
 import { badRequest, notFound } from '@server/domain/errors'
-import { platformOrganization } from '@server/domain/platform-organization'
 import {
   createWebhookDeliveryAttempt,
   createWebhookEndpoint,
@@ -151,10 +150,7 @@ export function createManagementWebhookRoutes() {
 
 async function authorizedWebhookOrganizationId(c: Context, organizationId: string | null) {
   if (organizationId) {
-    const authorizedId = authorizedOrganizationOwnerId(
-      await authorizeOrganizationOwner(c, organizationId, 'webhooks:write'),
-    )
-    return authorizedId === platformOrganization.id ? null : authorizedId
+    return authorizedOrganizationOwnerId(await authorizeOrganizationOwner(c, organizationId, 'webhooks:write'))
   }
   requirePlatformAccess(c, 'webhooks:write')
   return null

@@ -1,5 +1,5 @@
 import {
-  createApplication,
+  createApplication as createApplicationUsecase,
   createConsent,
   getApplicationAuthorization,
   listApplicationAuthorizations,
@@ -17,6 +17,29 @@ import type {
 } from '@server/usecases/ports'
 import type { ApplicationResponse } from '@shared/api/applications'
 import { describe, expect, it } from 'vitest'
+
+function createApplication(
+  deps: Deps,
+  issuer: string,
+  input: Omit<Parameters<typeof createApplicationUsecase>[2], 'ownerOrganizationId'> & {
+    ownerOrganizationId?: string
+  },
+  actorUserId: string,
+) {
+  const ownerOrganizationId = input.ownerOrganizationId ?? 'org_platform'
+  return createApplicationUsecase(
+    {
+      ...deps,
+      authorization: {
+        ...deps.authorization,
+        findOrganization: deps.authorization?.findOrganization ?? (async () => ({ disabled: false })),
+      },
+    } as Deps,
+    issuer,
+    { ...input, ownerOrganizationId },
+    actorUserId,
+  )
+}
 
 describe('service.test 3', () => {
   it('keeps consent bound to the authenticated account after account switching [spec: hosted-auth/oauth-consent-account-switch]', async () => {
@@ -255,6 +278,7 @@ describe('service.test 3', () => {
         name: 'Limited App',
         clientType: 'public_spa',
         redirectUris: ['https://spa.example.com/callback'],
+        ownerOrganizationId: 'org-allowed',
       },
       'admin-1',
     )

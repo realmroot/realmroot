@@ -18,7 +18,7 @@ export const resourceOwnershipInventory = {
   },
   applications: {
     boundary: 'organization',
-    persistedBy: 'application.owner_organization_id; org_platform means realm',
+    persistedBy: 'application.owner_organization_id',
     children: ['application_client_metadata', 'application_client_secret', 'federated_credential'],
   },
   applicationConsents: {
@@ -28,7 +28,7 @@ export const resourceOwnershipInventory = {
   },
   resourceServers: {
     boundary: 'organization',
-    persistedBy: 'api_resource.owner_organization_id; org_platform means realm',
+    persistedBy: 'api_resource.owner_organization_id',
     children: ['api_resource_eligible_organization'],
   },
   agents: {

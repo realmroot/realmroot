@@ -73,6 +73,7 @@ describe('OIDC authorization over real D1', () => {
         slug: 'resource-spa',
         clientType: 'public_spa',
         redirectUris: [redirectUri],
+        ownerOrganizationId: 'org_platform',
         firstParty: true,
         trusted: true,
       }),

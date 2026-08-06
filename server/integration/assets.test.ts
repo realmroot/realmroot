@@ -97,6 +97,7 @@ describe('asset upload + read over real D1 and an in-memory bucket', () => {
           slug: 'logo-app',
           clientType: 'confidential_web',
           redirectUris: ['http://localhost/callback'],
+          ownerOrganizationId: 'org_platform',
         }),
       })
     ).json()) as { id: string }

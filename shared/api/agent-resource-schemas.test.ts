@@ -13,6 +13,7 @@ describe('Agent resource schemas', () => {
       name: 'Projects',
       resourceUrl: 'https://projects.example.com',
       connectorId: 'connector-1',
+      ownerOrganizationId: 'org-1',
     }
 
     expect(createApiResourceSchema.safeParse(input).success).toBe(true)
@@ -26,6 +27,7 @@ describe('Agent resource schemas', () => {
       name: 'Projects',
       resourceUrl: 'https://projects.example.com',
       connectorId: 'connector-1',
+      ownerOrganizationId: 'org-1',
       authorizationDetails: [
         {
           type: 'project_access',

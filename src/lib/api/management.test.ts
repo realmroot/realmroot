@@ -38,7 +38,12 @@ describe('management API client', () => {
     const { calls, management } = await loadManagementApi()
 
     await management.listApplications()
-    await management.createApplication({ name: 'Portal', clientType: 'public_spa', redirectUris: [] })
+    await management.createApplication({
+      name: 'Portal',
+      clientType: 'public_spa',
+      redirectUris: [],
+      ownerOrganizationId: 'org-1',
+    })
     await management.getApplication('app-1')
     await management.updateApplication('app-1', {
       disabled: true,
@@ -128,6 +133,7 @@ describe('management API client', () => {
       identifier: 'management-api',
       name: 'Management API',
       resourceUrl: 'https://auth.example.com/api',
+      ownerOrganizationId: 'org-1',
     })
     await management.updateApiResource('resource-1', { enabled: false })
     await management.deleteApiResource('resource-1')
@@ -147,7 +153,17 @@ describe('management API client', () => {
 
     expect(calls).toEqual([
       ['applications.get'],
-      ['applications.post', { json: { name: 'Portal', clientType: 'public_spa', redirectUris: [] } }],
+      [
+        'applications.post',
+        {
+          json: {
+            name: 'Portal',
+            clientType: 'public_spa',
+            redirectUris: [],
+            ownerOrganizationId: 'org-1',
+          },
+        },
+      ],
       ['application.get', { param: { id: 'app-1' } }],
       [
         'applications.patch',
@@ -290,6 +306,7 @@ describe('management API client', () => {
             identifier: 'management-api',
             name: 'Management API',
             resourceUrl: 'https://auth.example.com/api',
+            ownerOrganizationId: 'org-1',
           },
         },
       ],

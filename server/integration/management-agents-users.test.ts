@@ -294,6 +294,7 @@ describe('federated credential management over real D1', () => {
         slug: 'federation-client',
         clientType: 'confidential_web',
         redirectUris: ['http://localhost/callback'],
+        ownerOrganizationId: 'org_platform',
         allowedGrantTypes: ['urn:ietf:params:oauth:grant-type:token-exchange'],
       }),
     })
@@ -305,6 +306,7 @@ describe('federated credential management over real D1', () => {
         identifier: 'https://api.example.com',
         name: 'Example API',
         resourceUrl: 'https://api.example.com',
+        ownerOrganizationId: 'org_platform',
       }),
     })
     const resource = (await createResource.json()) as { id: string }

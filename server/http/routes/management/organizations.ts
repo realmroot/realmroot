@@ -1,5 +1,4 @@
-import { forbidden, notFound } from '@server/domain/errors'
-import { platformOrganization } from '@server/domain/platform-organization'
+import { forbidden } from '@server/domain/errors'
 import {
   addMember,
   cancelInvitation,
@@ -36,7 +35,7 @@ import {
   updateOrganizationRequestSchema,
   updateRoleRequestSchema,
 } from '@shared/api/authorization'
-import { Hono, type MiddlewareHandler } from 'hono'
+import { Hono } from 'hono'
 import { getActorUserId } from '../../middleware/authn'
 import {
   authorizedOrganizationIds,
@@ -48,14 +47,6 @@ import { getDeps } from '../../middleware/deps'
 import { readJson, readQuery } from '../validation'
 
 export const managementOrganizationsRoute = new Hono()
-
-const rejectRealmSentinel: MiddlewareHandler = async (c, next) => {
-  if (c.req.param('organizationId') === platformOrganization.id) throw notFound('Organization was not found.')
-  await next()
-}
-
-managementOrganizationsRoute.use('/:organizationId', rejectRealmSentinel)
-managementOrganizationsRoute.use('/:organizationId/*', rejectRealmSentinel)
 
 managementOrganizationsRoute.get('/', async (c) =>
   c.json(
@@ -69,8 +60,10 @@ managementOrganizationsRoute.get('/', async (c) =>
 
 managementOrganizationsRoute.post('/', async (c) => {
   requirePlatformAccess(c, 'organizations:write')
+  const ownerUserId = getActorUserId(c)
+  if (!ownerUserId) throw forbidden('Only authenticated users can create Organizations.')
   const organization = organizationResponseSchema.parse(
-    await createOrganization(getDeps(c), await readJson(c, createOrganizationRequestSchema)),
+    await createOrganization(getDeps(c), await readJson(c, createOrganizationRequestSchema), ownerUserId),
   )
   c.header('Location', `/api/organizations/${encodeURIComponent(organization.id)}`)
   return c.json(organization, 201)

@@ -12,6 +12,7 @@ export function createOnboardingRepository(db: D1Database): OnboardingRepository
     async createBootstrapAdmin(input) {
       const userId = crypto.randomUUID()
       const accountId = crypto.randomUUID()
+      const memberId = crypto.randomUUID()
       const statements = [
         db
           .prepare(
@@ -45,6 +46,16 @@ on conflict(id) do nothing
             platformOrganization.name,
             JSON.stringify(platformOrganization.metadata),
           ),
+        db
+          .prepare(
+            `
+insert into member (id, organization_id, user_id, role)
+select ?1, ?2, ?3, 'owner'
+where exists (select 1 from user where id = ?3 and role = 'admin')
+  and not exists (select 1 from member where organization_id = ?2 and user_id = ?3)
+`.trim(),
+          )
+          .bind(memberId, platformOrganization.id, userId),
       ]
 
       const [userInsert, accountInsert] = await db.batch(statements)

@@ -223,7 +223,7 @@ describe('console Organization lifecycle', () => {
             organizations: [
               organization,
               { ...organization, id: 'org-2', name: 'Northwind', displayName: null },
-              { ...organization, id: 'org_platform' },
+              { ...organization, id: 'org_platform', name: 'Realmroot Platform', displayName: null },
             ],
             pagination: page(3),
           }),
@@ -238,7 +238,7 @@ describe('console Organization lifecycle', () => {
     expect(await screen.findByText('Acme Engineering')).toBeTruthy()
     expect(screen.getByText('Northwind')).toBeTruthy()
     expect(await screen.findByText('Unavailable')).toBeTruthy()
-    expect(screen.queryByText('org_platform')).toBeNull()
+    expect(screen.getByText('Realmroot Platform')).toBeTruthy()
   })
 })
 

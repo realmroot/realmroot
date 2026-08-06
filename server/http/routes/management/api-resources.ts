@@ -1,4 +1,3 @@
-import { platformOrganization } from '@server/domain/platform-organization'
 import {
   archiveResource,
   createResource,
@@ -56,11 +55,7 @@ export function createManagementApiResourcesRoute() {
 
   app.post('/', async (c) => {
     const input = await readJson(c, createApiResourceSchema)
-    const owner = await authorizeOrganizationOwner(
-      c,
-      input.ownerOrganizationId ?? platformOrganization.id,
-      'resource-servers:write',
-    )
+    const owner = await authorizeOrganizationOwner(c, input.ownerOrganizationId, 'resource-servers:write')
     const resource = await createResource(getDeps(c), {
       ...input,
       ownerOrganizationId: authorizedOrganizationOwnerId(owner),

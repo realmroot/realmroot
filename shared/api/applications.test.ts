@@ -116,6 +116,7 @@ describe('application API pagination contracts', () => {
     expect(
       createApplicationRequestSchema.parse({
         name: 'Native app',
+        ownerOrganizationId: 'org-1',
         clientType: 'public_native',
         redirectUris: ['com.example.native:/callback'],
         allowedGrantTypes: [deviceCodeGrantType],
@@ -142,6 +143,7 @@ describe('application API pagination contracts', () => {
   it('accepts setup-time post sign-out and CORS origin lists without caller-provided credentials', () => {
     const request = createApplicationRequestSchema.parse({
       name: 'Customer app',
+      ownerOrganizationId: 'org-1',
       clientType: 'public_spa',
       redirectUris: ['http://localhost:5173/callback'],
       postLogoutRedirectUris: ['http://localhost:5173/signed-out'],
@@ -156,6 +158,7 @@ describe('application API pagination contracts', () => {
       redirectUris: ['http://localhost:5173/callback'],
       postLogoutRedirectUris: ['http://localhost:5173/signed-out'],
       corsOrigins: ['http://localhost:5173'],
+      ownerOrganizationId: 'org-1',
     })
   })
 
@@ -163,6 +166,7 @@ describe('application API pagination contracts', () => {
     expect(
       createApplicationRequestSchema.parse({
         name: 'Customer app',
+        ownerOrganizationId: 'org-1',
         clientType: 'public_spa',
         redirectUris: ['http://localhost:5173/callback'],
         oidcClaims: {

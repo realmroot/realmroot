@@ -72,6 +72,7 @@ describe('OAuth token claim building over real D1', () => {
         name: 'Claims App',
         clientType: 'confidential_web',
         redirectUris: ['https://app.example.com/callback'],
+        ownerOrganizationId: 'org_platform',
         firstParty: true,
         trusted: true,
       })

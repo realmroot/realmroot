@@ -177,7 +177,7 @@ describe('authorization CRUD and assignment policy', () => {
     authorization.findInvitation.mockResolvedValue(invitation)
     const deps = { authorization } as unknown as Deps
 
-    await expect(createOrganization(deps, { slug: 'acme', name: 'Acme' })).resolves.toBe(organization)
+    await expect(createOrganization(deps, { slug: 'acme', name: 'Acme' }, 'creator-1')).resolves.toBe(organization)
     expect(authorization.createOrganization).toHaveBeenCalledWith(
       expect.objectContaining({
         id: expect.stringMatching(/^org_/),
@@ -185,6 +185,12 @@ describe('authorization CRUD and assignment policy', () => {
         logo: null,
         disabled: false,
         disabledReason: null,
+      }),
+      expect.objectContaining({
+        id: expect.stringMatching(/^mem_/),
+        userId: 'creator-1',
+        roles: ['owner'],
+        title: null,
       }),
     )
     await expect(listOrganizations(deps, { limit: 20, offset: 0 })).resolves.toEqual({
@@ -605,6 +611,7 @@ describe('authorization CRUD and assignment policy', () => {
 
   it('manages native and external API resources', async () => {
     const authorization = repository()
+    authorization.findOrganization.mockResolvedValue(organization)
     authorization.createResource.mockResolvedValue(resource)
     authorization.listResources.mockResolvedValue({ items: [resource], pagination })
     authorization.findResource.mockResolvedValue(resource)
@@ -659,6 +666,7 @@ describe('authorization CRUD and assignment policy', () => {
       identifier: 'native',
       name: 'Native',
       resourceUrl: resource.resourceUrl,
+      ownerOrganizationId: organization.id,
     })
     expect(authorization.createResource).toHaveBeenLastCalledWith(
       expect.objectContaining({
@@ -672,6 +680,7 @@ describe('authorization CRUD and assignment policy', () => {
       name: 'External without RAR',
       resourceUrl: resource.resourceUrl,
       connectorId: 'connector-1',
+      ownerOrganizationId: organization.id,
     })
     expect(authorization.createResource).toHaveBeenLastCalledWith(
       expect.objectContaining({ authorizationDetails: [], connectorId: 'connector-1' }),
@@ -681,6 +690,7 @@ describe('authorization CRUD and assignment policy', () => {
         identifier: 'invalid-native-rar',
         name: 'Invalid native RAR',
         resourceUrl: resource.resourceUrl,
+        ownerOrganizationId: organization.id,
         authorizationDetails: [{ type: 'project_access', project_id: 'project-1' }],
       }),
     ).rejects.toThrow('Authorization details require an external API resource connector.')
@@ -689,6 +699,7 @@ describe('authorization CRUD and assignment policy', () => {
       name: 'External',
       resourceUrl: resource.resourceUrl,
       connectorId: 'connector-1',
+      ownerOrganizationId: organization.id,
       authorizationDetails: [
         { type: 'payment_initiation', actions: ['initiate'], locations: ['https://merchant.example.com'] },
       ],
@@ -884,6 +895,7 @@ describe('authorization CRUD and assignment policy', () => {
 
   it('validates the resource contract before enabling it [spec: agent-identity/api-resource-contract-validation]', async () => {
     const authorization = repository()
+    authorization.findOrganization.mockResolvedValue(organization)
     authorization.createResource.mockResolvedValue(resource)
     authorization.findResource.mockResolvedValue(resource)
     const externalHttp = { fetch: vi.fn().mockResolvedValue(new Response('<html></html>')) }
@@ -896,6 +908,7 @@ describe('authorization CRUD and assignment policy', () => {
       identifier: 'projects',
       name: 'Projects',
       resourceUrl: resource.resourceUrl,
+      ownerOrganizationId: organization.id,
     }
 
     await expect(createResource(deps, input)).rejects.toThrow('Business resource must advertise its OpenAPI document')
