@@ -75,8 +75,16 @@ describe('console Agent detail', () => {
 
   it('rejects cross-owner routes and shows empty Agent collections', async () => {
     let organizationOwned = false
+    const requests: Array<{ method: string; path: string }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const request = requestDetails(input, init)
+      requests.push({ method: request.method, path: request.url.pathname })
+      if (request.method === 'PUT' && request.url.pathname === '/api/agents/agent-1/activation') {
+        return Promise.resolve(new Response(null, { status: 204 }))
+      }
+      if (request.method === 'DELETE' && request.url.pathname === '/api/agents/agent-1') {
+        return Promise.resolve(new Response(null, { status: 204 }))
+      }
       return Promise.resolve(
         agentDetailResponse(request.url, {
           ...emptyCollections,
@@ -103,6 +111,8 @@ describe('console Agent detail', () => {
     expect(await screen.findByRole('heading', { name: 'Build Agent' })).toBeTruthy()
     expect(screen.getByRole('tab', { name: 'Settings' })).toBeTruthy()
     expect(screen.getByText('Inactive')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Activate' }))
+    await waitFor(() => expect(requests).toContainEqual({ method: 'PUT', path: '/api/agents/agent-1/activation' }))
 
     const emptyTabs: Array<[string, string]> = [
       ['Installations', 'No installations'],
@@ -114,6 +124,10 @@ describe('console Agent detail', () => {
       openTab(tab)
       expect(await screen.findByText(emptyTitle)).toBeTruthy()
     }
+    openTab('Settings')
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Agent' }))
+    await waitFor(() => expect(requests).toContainEqual({ method: 'DELETE', path: '/api/agents/agent-1' }))
     scoped.unmount()
 
     renderWithQuery(<AgentDetailPage agentId="agent-1" section="settings" />)

@@ -531,7 +531,7 @@ describe('console API resources and roles', () => {
       throw new Error(`Unexpected request: ${request.method} ${request.url}`)
     })
 
-    renderWithQuery(<ApiResourceDetailPage resourceId="resource-1" section="settings" />)
+    renderWithQuery(<ApiResourceDetailPage organizationId="org-1" resourceId="resource-1" section="settings" />)
     expect(await screen.findByText('Native authorization · resource-1')).toBeTruthy()
     expect(screen.queryByRole('heading', { name: 'Authorization provider' })).toBeNull()
     const details = screen.getByRole('heading', { name: 'Resource server details' }).closest('section') as HTMLElement
@@ -633,7 +633,9 @@ describe('console API resources and roles', () => {
       throw new Error(`Unexpected request: ${request.method} ${request.url}`)
     })
 
-    renderWithQuery(<ApiResourceDetailPage resourceId="resource-1" section="settings" />)
+    const scoped = renderWithQuery(
+      <ApiResourceDetailPage organizationId="org-1" resourceId="resource-1" section="settings" />,
+    )
     fireEvent.click(await screen.findByRole('button', { name: 'Delete' }))
     const dialog = screen.getByRole('alertdialog')
     expect(within(dialog).getByText(/revokes active connections, grants, pending requests/)).toBeTruthy()
@@ -641,6 +643,12 @@ describe('console API resources and roles', () => {
 
     await waitFor(() => expect(requests).toEqual([{ url: '/api/resource-servers/resource-1', method: 'DELETE' }]))
     expect(navigate).toHaveBeenCalled()
+
+    scoped.unmount()
+    renderWithQuery(<ApiResourceDetailPage resourceId="resource-1" section="settings" />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete' }))
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete resource server' }))
+    await waitFor(() => expect(requests).toHaveLength(2))
   })
 
   it('rejects a Resource Server detail route under a different Organization', async () => {

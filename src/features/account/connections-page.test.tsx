@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import {
@@ -185,13 +185,25 @@ describe('AccountConnectionsPage', () => {
       },
     ]
     Object.assign(store, withIdentity)
-    server.use(http.delete(`${base}/api/account/agents/:agentId`, () => new HttpResponse(null, { status: 204 })))
+    server.use(
+      http.put(`${base}/api/account/agents/:agentId/activation`, () => new HttpResponse(null, { status: 204 })),
+      http.delete(`${base}/api/account/agents/:agentId/activation`, () => new HttpResponse(null, { status: 204 })),
+      http.delete(`${base}/api/account/agents/:agentId`, () => new HttpResponse(null, { status: 204 })),
+    )
 
     renderWithClient(<AccountConnectionsPage />)
 
     expect(await screen.findByText('Personal Build Agent')).toBeTruthy()
     expect(screen.getByText('Inactive Agent')).toBeTruthy()
     expect(screen.getByText(/https:\/\/auth\.example\.com · agt_stable/)).toBeTruthy()
+    const activeAgent = screen.getByText('Personal Build Agent').closest('article') as HTMLElement
+    fireEvent.click(within(activeAgent).getByRole('button', { name: 'Deactivate' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Deactivate' }))
+    await waitFor(() => expect(success).toHaveBeenCalledWith('Agent deactivated.'))
+    const inactiveAgent = screen.getByText('Inactive Agent').closest('article') as HTMLElement
+    fireEvent.click(within(inactiveAgent).getByRole('button', { name: 'Activate' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Activate' }))
+    await waitFor(() => expect(success).toHaveBeenCalledWith('Agent activated.'))
     fireEvent.click(screen.getAllByRole('button', { name: 'Delete' })[0]!)
     fireEvent.click(await screen.findByRole('button', { name: 'Delete identity' }))
     await waitFor(() => expect(success).toHaveBeenCalledWith('Agent deleted.'))
