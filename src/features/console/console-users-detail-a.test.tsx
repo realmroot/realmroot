@@ -252,7 +252,7 @@ describe('admin console users-detail-a', () => {
     render(<AppRouter />)
 
     expect(await screen.findByRole('heading', { name: 'user-1' })).toBeTruthy()
-    expect(screen.getByText('Realm administrator')).toBeTruthy()
+    expect(screen.queryByText('Realm administrator')).toBeNull()
     await ui.click(screen.getByRole('tab', { name: 'Authentication' }))
     expect(await screen.findByText('Enrolled factors')).toBeTruthy()
     expect(screen.getByText('Not enabled')).toBeTruthy()
@@ -269,8 +269,9 @@ describe('admin console users-detail-a', () => {
     })
   })
 
-  it('updates profile fields while preserving non-admin roles [spec: admin-console/admin-user-detail]', async () => {
+  it('updates profile fields without mutating Organization roles [spec: admin-console/admin-user-detail]', async () => {
     const requests: Array<{ method: string; url: string; body: unknown }> = []
+    let patchAttempts = 0
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
       const method = init?.method ?? 'GET'
@@ -287,6 +288,10 @@ describe('admin console users-detail-a', () => {
         return Promise.resolve(jsonResponse({ user: { ...profile, role: ['admin', 'viewer'], banned: false } }))
       }
       if (url === '/api/users/user-1' && method === 'PATCH') {
+        patchAttempts += 1
+        if (patchAttempts === 1) {
+          return Promise.resolve(jsonResponse({ error: { message: 'User update failed.' } }, 400))
+        }
         requests.push({ method, url, body: JSON.parse(String(init?.body)) })
         return Promise.resolve(jsonResponse({ user: { ...profile, role: ['admin', 'viewer'], banned: false } }))
       }
@@ -313,10 +318,12 @@ describe('admin console users-detail-a', () => {
 
     expect(await screen.findByRole('heading', { name: 'Jane Stone' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Edit user' }))
-    expect(screen.getByLabelText('Realm access')).toHaveProperty('value', 'admin')
+    expect(screen.queryByLabelText('Realm access')).toBeNull()
     fireEvent.keyDown(document, { key: 'Escape' })
-    await waitFor(() => expect(screen.queryByLabelText('Realm access')).toBeNull())
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Edit user' })).toBeNull())
     fireEvent.click(screen.getByRole('button', { name: 'Edit user' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    expect(await screen.findByText('User update failed.')).toBeTruthy()
     fireEvent.change(screen.getByLabelText('Primary email'), { target: { value: 'roles@example.com' } })
     fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'Jane Roles' } })
     fireEvent.change(screen.getByLabelText('Username'), { target: { value: 'janeroles' } })
@@ -331,7 +338,6 @@ describe('admin console users-detail-a', () => {
             email: 'roles@example.com',
             displayName: 'Jane Roles',
             username: 'janeroles',
-            role: ['admin', 'viewer'],
           },
         },
       ])

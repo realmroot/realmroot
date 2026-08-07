@@ -1,0 +1,14 @@
+[
+  {
+    "method": "POST",
+    "path": "/resource-servers",
+    "operationId": "createResourceServer",
+    "semanticHash": "e6beab86b270fa8b6292bcc7010dbc10e3e42ac7a551c25ec251c7a612cffd34"
+  },
+  {
+    "method": "PATCH",
+    "path": "/resource-servers/{resourceServerId}",
+    "operationId": "updateResourceServer",
+    "semanticHash": "69f00ae6e30f4c73125d7554f7aa770388351c2b6f553e04bf5c3570c0ee60de"
+  }
+]

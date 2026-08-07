@@ -83,7 +83,7 @@ describe('admin console users-list', () => {
     expect(screen.queryByRole('heading', { name: 'Create user' })).toBeNull()
   })
 
-  it('promotes a non-admin user to admin from the list menu', async () => {
+  it('keeps Realm role assignment out of the user list actions', async () => {
     const requests: Array<{ url: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
@@ -101,11 +101,10 @@ describe('admin console users-list', () => {
 
     expect(await screen.findByText('jane@example.com')).toBeTruthy()
     fireEvent.pointerDown(screen.getByLabelText('Actions for jane@example.com'), { button: 0, ctrlKey: false })
-    fireEvent.click(await screen.findByText('Make Realm administrator'))
-
-    await waitFor(() => {
-      expect(requests.at(-1)).toEqual({ url: '/api/users/user-1', body: { role: ['user', 'admin'] } })
-    })
+    expect(await screen.findByText('Send password reset')).toBeTruthy()
+    expect(screen.queryByText('Make Realm administrator')).toBeNull()
+    expect(screen.queryByText('Remove Realm administrator')).toBeNull()
+    expect(requests).toEqual([])
   })
 
   it('paginates forward through a multi-page user list', async () => {
@@ -208,7 +207,6 @@ describe('admin console users-list', () => {
     fireEvent.change(screen.getByLabelText('Search users'), { target: { value: 'jane' } })
     expect(await screen.findByLabelText('Actions for jane@example.com')).toBeTruthy()
     fireEvent.pointerDown(screen.getByLabelText('Actions for jane@example.com'), { button: 0, ctrlKey: false })
-    expect(await screen.findByText('Remove Realm administrator')).toBeTruthy()
     fireEvent.click(await screen.findByText('Send password reset'))
 
     await waitFor(() => {
@@ -241,8 +239,6 @@ describe('admin console users-list', () => {
     renderWithQuery(<UsersPage />)
 
     expect(await screen.findByText('user-1')).toBeTruthy()
-    expect(screen.getAllByText('User').length).toBeGreaterThanOrEqual(2)
-    fireEvent.change(screen.getByLabelText('Filter role'), { target: { value: 'admin' } })
     fireEvent.change(screen.getByLabelText('Filter status'), { target: { value: 'true' } })
     expect(await screen.findByRole('button', { name: 'Previous' })).toHaveProperty('disabled', true)
     expect(await screen.findByRole('button', { name: 'Next' })).toHaveProperty('disabled', false)
@@ -250,15 +246,12 @@ describe('admin console users-list', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Previous' })).toHaveProperty('disabled', false))
     fireEvent.click(screen.getByRole('button', { name: 'Previous' }))
     await waitFor(() => {
-      expect(requests.at(-1)).toContain('role=admin')
       expect(requests.at(-1)).toContain('banned=true')
       expect(requests.at(-1)).toContain('offset=0')
     })
 
     await waitFor(() => {
-      expect(
-        requests.some((url) => url.includes('role=admin') && url.includes('banned=true') && url.includes('offset=10')),
-      ).toBe(true)
+      expect(requests.some((url) => url.includes('banned=true') && url.includes('offset=10'))).toBe(true)
     })
     fireEvent.pointerDown(screen.getByLabelText('Actions for user-1'), { button: 0, ctrlKey: false })
     expect(screen.queryByText('Send password reset')).toBeNull()

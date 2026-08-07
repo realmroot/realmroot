@@ -249,7 +249,7 @@
     "method": "DELETE",
     "path": "/organizations/{organizationId}",
     "operationId": "deleteOrganization",
-    "semanticHash": "8abcd56e1e371c718491a0d4c9133ca51220336fb5f2c481c51cbacf15d3de66"
+    "semanticHash": "17685113b8ce5badbcecc31790a913d429c1c96e189cb05370a56ace4b6bebfc"
   },
   {
     "method": "GET",

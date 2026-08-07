@@ -4,6 +4,7 @@ import {
   agentAccessGrantsResponseSchema,
   auditEventsResponseSchema,
   decideAccessRequestSchema,
+  dpopNonceErrorResponseSchema,
   listAgentAccessGrantsQuerySchema,
   listAgentAuditEventsQuerySchema,
   listAgentsQuerySchema,
@@ -16,6 +17,7 @@ import {
   targetCredentialProofSchema,
   targetTokenSchema,
 } from '@shared/api/agent-api'
+import { managementErrorResponseSchema } from '@shared/api/management'
 import { paginationQuerySchema } from '@shared/api/pagination'
 import { jsonBody, type ManagementRouteConfig, z } from './helpers'
 
@@ -114,16 +116,34 @@ export const agentGovernanceRoutes: ManagementRouteConfig[] = [
   },
   {
     method: 'post',
-    path: '/agents/{agentId}/access-grants/{grantId}/credentials',
-    operationId: 'createAgentAccessGrantCredential',
-    summary: 'Create a temporary credential for an Agent access grant',
-    security: [{ dpop: ['access-grants:issue'] }],
+    path: '/access/requests/{requestId}/credentials',
+    operationId: 'createAgentAccessRequestCredential',
+    summary: 'Create a temporary credential for an approved Agent access request',
+    security: [{ dpop: ['access-requests:write'] }],
     request: {
-      params: z.object({ agentId: z.string(), grantId: z.string() }),
+      params: z.object({ requestId: z.string() }),
       body: jsonBody(targetCredentialProofSchema),
     },
     response: targetTokenSchema,
     status: 201,
+    responseHeaders: {
+      'DPoP-Nonce': {
+        description: 'Opaque authorization-server nonce to include in the next credential DPoP proof.',
+        schema: { type: 'string' },
+      },
+    },
+    errors: {
+      400: {
+        description: 'The request is invalid or the authorization server requires a nonce in a fresh DPoP proof.',
+        schema: z.union([managementErrorResponseSchema, dpopNonceErrorResponseSchema]),
+        headers: {
+          'DPoP-Nonce': {
+            description: 'Opaque authorization-server nonce required in the retry proof.',
+            schema: { type: 'string' },
+          },
+        },
+      },
+    },
   },
   {
     method: 'get',

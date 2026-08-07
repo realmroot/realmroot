@@ -7,7 +7,7 @@ import { type RealmrootOrganizationScope, realmrootScopeRegistry } from '@shared
 import { activeResourceVisibleToOrganization } from './resource-visibility'
 
 export async function resolveOrganizationMembershipScopes(
-  deps: Deps,
+  deps: Pick<Deps, 'authorization'>,
   organizationId: string,
   roles: string[],
   resourceId: string,
@@ -33,9 +33,14 @@ export async function resolveOrganizationMembershipScopes(
   if (resourceId === realmrootResourceServer.id) {
     return [...scopes].filter((scope) => scope in realmrootScopeRegistry).sort()
   }
-  if (scopes.size === 0) return []
+  if (scopes.size === 0 && !roles.includes('owner')) return []
 
   const resource = await deps.authorization.findResource(resourceId)
+  if (resource?.ownerOrganizationId === organizationId && roles.includes('owner')) {
+    for (const scope of resource.scopeRegistry?.scopes ?? []) {
+      if (scope.grantMode === 'assigned') scopes.add(scope.value)
+    }
+  }
   return resource ? filterCurrentResourceScopes(resource, organizationId, scopes) : []
 }
 
@@ -57,7 +62,7 @@ export function filterCurrentResourceScopes(
 }
 
 export async function organizationUserHasScope(
-  deps: Deps,
+  deps: Pick<Deps, 'authorization'>,
   organizationId: string,
   userId: string,
   requiredScope: RealmrootOrganizationScope,
@@ -71,7 +76,7 @@ export async function organizationUserHasScope(
 }
 
 export async function resolveOrganizationUserAuthorizationContext(
-  deps: Deps,
+  deps: Pick<Deps, 'authorization'>,
   organizationId: string,
   userId: string,
 ): Promise<AuthorizationContext> {

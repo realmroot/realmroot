@@ -9,7 +9,7 @@ import {
   resourceServerResourcesResponseSchema,
 } from '@shared/api/agent-api'
 import { paginationQuerySchema } from '@shared/api/pagination'
-import { realmrootOAuthScopes, requiredProtectedScope } from '@shared/authz'
+import { requiredProtectedScope } from '@shared/authz'
 import { z } from 'zod'
 import { agentGovernanceRoutes } from './management-routes/agent-governance'
 import { applicationAuthorizationRoutes } from './management-routes/applications-authorization'
@@ -42,18 +42,6 @@ interface UnifiedOpenApiDocument {
 }
 interface RestishCliConfig {
   command_layout: 'tags'
-  profiles: Record<'default', RestishAgentProfile>
-}
-interface RestishAgentProfile {
-  credentials: {
-    dpop: {
-      auth: {
-        type: string
-        params: Record<string, string>
-      }
-      satisfies: string[]
-    }
-  }
 }
 
 export const unifiedOpenApiPath = '/api/openapi.json'
@@ -224,28 +212,8 @@ function buildUnifiedOpenApi(): UnifiedOpenApiDocument {
     ...document,
     'x-cli-config': {
       command_layout: 'tags',
-      profiles: {
-        default: restishAgentProfile(),
-      },
     },
   } as UnifiedOpenApiDocument
-}
-
-function restishAgentProfile(): RestishAgentProfile {
-  return {
-    credentials: {
-      dpop: {
-        auth: {
-          type: 'bearer',
-          params: {
-            token: 'realmroot-plugin-managed',
-            provider: 'realmroot-agent',
-          },
-        },
-        satisfies: realmrootOAuthScopes,
-      },
-    },
-  }
 }
 
 function createManagementRoute(routeConfig: ManagementRouteConfig) {
@@ -302,7 +270,12 @@ function routeResponses(routeConfig: ManagementRouteConfig) {
   return {
     ...responses,
     ...Object.fromEntries(
-      Object.entries(routeConfig.errors ?? {}).map(([status, description]) => [status, errorResponse(description)]),
+      Object.entries(routeConfig.errors ?? {}).map(([status, error]) => [
+        status,
+        typeof error === 'string'
+          ? errorResponse(error)
+          : errorResponse(error.description, error.schema, error.headers),
+      ]),
     ),
     401: errorResponse('Authentication is required.'),
     403: errorResponse('Administrator access is required.'),

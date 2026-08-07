@@ -1,5 +1,5 @@
 import { createTestDeps } from '@server/http/test-deps'
-import { readProtectedResourceMetadata, synchronizeResourceScopeRegistry } from '@server/usecases/resource-metadata'
+import { readProtectedResourceMetadata, synchronizeResourceDiscovery } from '@server/usecases/resource-metadata'
 import { describe, expect, it, vi } from 'vitest'
 
 const resourceUrl = 'https://orders.example.com/api'
@@ -18,17 +18,21 @@ describe('protected resource scope discovery', () => {
       }),
     )
 
-    await expect(synchronizeResourceScopeRegistry(deps, resourceUrl, null)).resolves.toMatchObject({
-      discovery: {
-        sourceUrl: metadataUrl,
-        etag: '"metadata-v1"',
-        documentHash: expect.any(String),
-        lastError: null,
+    await expect(synchronizeResourceDiscovery(deps, resourceUrl, null)).resolves.toMatchObject({
+      name: 'Orders API',
+      description: 'Manage orders',
+      scopeRegistry: {
+        discovery: {
+          sourceUrl: metadataUrl,
+          etag: '"metadata-v1"',
+          documentHash: expect.any(String),
+          lastError: null,
+        },
+        scopes: [
+          { value: 'orders:archive', description: null, grantMode: 'assigned' },
+          { value: 'orders:read', description: 'Read orders', grantMode: 'assigned' },
+        ],
       },
-      scopes: [
-        { value: 'orders:archive', description: null, grantMode: 'assigned' },
-        { value: 'orders:read', description: 'Read orders', grantMode: 'assigned' },
-      ],
     })
   })
 
@@ -51,11 +55,13 @@ describe('protected resource scope discovery', () => {
       ],
     }
 
-    await expect(synchronizeResourceScopeRegistry(deps, resourceUrl, previous)).resolves.toMatchObject({
-      scopes: [
-        { value: 'orders:read', grantMode: 'automatic' },
-        { value: 'orders:write', grantMode: 'assigned' },
-      ],
+    await expect(synchronizeResourceDiscovery(deps, resourceUrl, previous)).resolves.toMatchObject({
+      scopeRegistry: {
+        scopes: [
+          { value: 'orders:read', grantMode: 'automatic' },
+          { value: 'orders:write', grantMode: 'assigned' },
+        ],
+      },
     })
   })
 
@@ -65,8 +71,8 @@ describe('protected resource scope discovery', () => {
       resourceDiscoveryFetch({ advertisedScopes: ['orders:read'], operationScopes: ['orders:read'] }),
     )
 
-    await expect(synchronizeResourceScopeRegistry(deps, resourceUrl, null)).resolves.toMatchObject({
-      scopes: [{ value: 'orders:read', description: null }],
+    await expect(synchronizeResourceDiscovery(deps, resourceUrl, null)).resolves.toMatchObject({
+      scopeRegistry: { scopes: [{ value: 'orders:read', description: null }] },
     })
   })
 
@@ -132,7 +138,7 @@ describe('protected resource scope discovery', () => {
       }),
     )
 
-    await expect(synchronizeResourceScopeRegistry(deps, resourceUrl, null)).rejects.toThrow(
+    await expect(synchronizeResourceDiscovery(deps, resourceUrl, null)).rejects.toThrow(
       'OpenAPI operation references a scope not advertised by protected-resource metadata.',
     )
   })
@@ -160,6 +166,7 @@ function resourceDiscoveryFetch({
     if (request.url === 'https://orders.example.com/openapi.json') {
       return Response.json({
         openapi: '3.1.0',
+        info: { title: ' Orders API ', description: ' Manage orders ', version: '1.0.0' },
         components: {
           securitySchemes: {
             oauth: {

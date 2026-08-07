@@ -29,10 +29,14 @@ export function ResourceConnectionApprovalPage() {
   const [error, setError] = useState<string | null>(callbackError)
   const completedConnectionId = callback.get('account_connection_id')
   const callbackCompleted = callback.get('resource_connection') === 'connected'
-  const connected = callbackCompleted && approval?.accountConnection?.id === completedConnectionId
+  const connected =
+    callbackCompleted &&
+    Boolean(completedConnectionId) &&
+    (approval === null || approval.accountConnection?.id === completedConnectionId)
   const callbackMismatch = callbackCompleted && approval !== null && !connected
 
   useEffect(() => {
+    if (!token && callbackCompleted && completedConnectionId) return
     if (!token) {
       setError('This resource connection request is incomplete. Start again from the requesting Agent.')
       return
@@ -42,7 +46,7 @@ export function ResourceConnectionApprovalPage() {
       .catch((cause: unknown) => {
         setError(cause instanceof Error ? cause.message : 'Unable to load the resource connection request.')
       })
-  }, [token])
+  }, [callbackCompleted, completedConnectionId, token])
 
   async function connect() {
     setSubmitting(true)

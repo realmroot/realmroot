@@ -19,6 +19,7 @@ const db = new DatabaseSync(process.env.DATABASE_PATH ?? ':memory:')
 const { publicKey, privateKey } = await generateKeyPair('ES256', { extractable: true })
 const publicJwk = { ...(await exportJWK(publicKey)), kid: 'target-signing-key', use: 'sig', alg: 'ES256' }
 const usedDpopProofs = new Map<string, number>()
+const projects = [{ id: 'project-1', name: 'Agent-ready project' }]
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS oauth_client (
@@ -194,9 +195,15 @@ app.get('/userinfo', async (request, response) => {
 
 app.get('/api/projects', requireDpopAccess, (request, response) => {
   response.json({
-    projects: [{ id: 'project-1', name: 'Agent-ready project' }],
+    projects,
     authorization: response.locals.authorization,
   })
+})
+
+app.post('/api/projects', requireDpopAccess, (_request, response) => {
+  const project = { id: `project-${projects.length + 1}`, name: 'Agent-created project' }
+  projects.push(project)
+  response.location(`/api/projects/${project.id}`).status(201).end()
 })
 
 app.use((error: unknown, _request: Request, response: Response, _next: NextFunction) => {
@@ -220,6 +227,7 @@ function projectsOpenAPI(title: string, serverUrl: string, openIdConnectUrl: str
         resourceOidc: {
           type: 'openIdConnect',
           openIdConnectUrl,
+          'x-dpop-required': true,
         },
       },
     },
@@ -391,11 +399,15 @@ async function requireDpopAccess(request: Request, response: Response, next: Nex
       | { revoked_at: number | null }
       | undefined
     if (!row || row.revoked_at) throw oauthError('invalid_token', 'Access token is revoked.', 401)
-    const proof = await verifyDpop(request, `${origin}${request.originalUrl}`, 'GET')
+    const proof = await verifyDpop(request, `${origin}${request.originalUrl}`, request.method)
     if (verified.payload.cnf && (verified.payload.cnf as { jkt?: string }).jkt !== proof.jkt) {
       throw oauthError('invalid_token', 'DPoP key does not match the access token.', 401)
     }
     if (proof.payload.ath !== sha256Base64Url(token)) throw oauthError('invalid_dpop_proof', 'DPoP ath is invalid.', 401)
+    const requiredScope = request.method === 'POST' ? 'projects:write' : 'projects:read'
+    if (!normalizeScopes(String(verified.payload.scope ?? '')).includes(requiredScope)) {
+      throw oauthError('insufficient_scope', `OAuth scope "${requiredScope}" is required.`, 403)
+    }
     response.locals.authorization = { sub: verified.payload.sub, act: verified.payload.act, scope: verified.payload.scope }
     next()
   } catch (error) {

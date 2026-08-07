@@ -15,6 +15,7 @@ import {
   createHarness,
   createUser,
   type Harness,
+  resourceOpenApiFetch,
   seedAgent,
   signIn,
   signInAdmin,
@@ -204,14 +205,14 @@ describe('account self-service over real D1', () => {
     })
     await expect(
       (await harness.request('/api/account/developer-console-access', { headers: { cookie } })).json(),
-    ).resolves.toMatchObject({ realmOperator: false, consoleOrganizations: [] })
+    ).resolves.toMatchObject({ platformOperator: false, consoleOrganizations: [] })
 
+    harness.deps.externalHttp.fetch = resourceOpenApiFetch
     const resourceResponse = await harness.request('/api/resource-servers', {
       method: 'POST',
       headers: { 'content-type': 'application/json', cookie: adminCookie },
       body: JSON.stringify({
         identifier: 'household-api',
-        name: 'Household API',
         resourceUrl: 'https://household.example.com/api',
         enabled: false,
         ownerOrganizationId: organizationId,
@@ -300,7 +301,7 @@ describe('account self-service over real D1', () => {
       headers: { cookie },
     })
     await expect(developerAccess.json()).resolves.toMatchObject({
-      realmOperator: false,
+      platformOperator: false,
       consoleOrganizations: [],
     })
     expect((await harness.request('/api/applications', { headers: { cookie } })).status).toBe(200)

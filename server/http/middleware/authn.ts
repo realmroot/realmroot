@@ -1,4 +1,5 @@
 import { forbidden, unauthorized } from '@server/domain/errors'
+import type { MutationActor } from '@server/domain/mutation-actor'
 import type { ProtocolAgentSession } from '@server/usecases/agent-session'
 import type { Deps } from '@server/usecases/deps'
 import { validateDpopResourceProof } from '@server/usecases/dpop'
@@ -60,6 +61,7 @@ interface AuthnOptions {
   oauth?: {
     issuer(requestUrl: string): string
     audience(requestUrl: string): string
+    resourceRequestUrl(requestUrl: string): string
   }
   required?: boolean
 }
@@ -124,7 +126,7 @@ async function authenticateOAuthAgent(
     proof,
     accessToken,
     method: c.req.method,
-    url: c.req.url,
+    url: oauth.resourceRequestUrl(c.req.url),
     confirmationJkt,
   }).catch((error: unknown) => {
     throw unauthorized(error instanceof Error ? error.message : 'DPoP proof is invalid.')
@@ -210,6 +212,21 @@ export function getPrincipal(c: Context): PrincipalContext {
 
 export function getActorUserId(c: Context): string | null {
   return getPrincipal(c).user?.id ?? null
+}
+
+export function getMutationActor(c: Context): MutationActor {
+  const principal = getPrincipal(c)
+  return {
+    controllerUserId: principal.user?.id ?? null,
+    agent: principal.agent
+      ? {
+          issuer: principal.agent.issuer,
+          subject: principal.agent.subject,
+          identityId: principal.agent.identityId,
+          hostId: principal.agent.hostId,
+        }
+      : null,
+  }
 }
 
 export function isAutomationPrincipal(c: Context) {

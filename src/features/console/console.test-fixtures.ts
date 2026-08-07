@@ -113,7 +113,7 @@ export const consoleAccountProfile = {
 export const consoleAccountAccess = {
   canCreateOrganization: true,
   showOrganizations: true,
-  realmOperator: true,
+  platformOperator: true,
   consoleOrganizations: [],
 }
 
@@ -258,4 +258,12 @@ export const apiResource = {
   authorization: null,
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
+  availability: { status: 'available' as const, checkedAt: '2026-01-01T00:00:00.000Z' },
+  scopes: [],
+  connection: null,
+  links: {
+    self: 'https://auth.example.com/api/resource-servers/resource-1',
+    resources: 'https://auth.example.com/api/resource-servers/resource-1/resources',
+    connectionRequests: null,
+  },
 }

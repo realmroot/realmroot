@@ -14,14 +14,13 @@ or asking for a manually provisioned API key.
 
 - Be **discovery-driven**: select exact IDs, URLs, scopes, accounts, and
   operations from API responses or published metadata.
-- Use one Restish API name per logical service and profiles for deployments,
-  accounts, tenants, and credential contexts.
+- Use one Restish API name per logical service and profiles for deployments.
 - Apply **least privilege**: request only the OAuth scopes required by the
   user's task and bind them to exactly one Resource.
 - Hand every approval decision to the controller. The Agent may open or report
   the approval URL and wait for the original command to finish.
-- Keep keys, DPoP proofs, approval tokens, access tokens, and target credentials
-  in adapter custody.
+- Keep Agent protocol secrets in the Realmroot adapter and target DPoP keys,
+  proofs, access tokens, and token cache in Restish custody.
 - Treat a successful target operation as completion; discovery, approval, and
   credential readiness are intermediate states.
 
@@ -50,6 +49,18 @@ challenge.
 When a matching resource exists, this branch is complete only when the target's
 generated Restish operation succeeds. When exhaustive discovery finds no match,
 report the missing capability with the original task still open.
+
+### Integrate A Resource Server
+
+Read [references/management.md](references/management.md) for management
+authority, then read
+[references/resource-server-integration.md](references/resource-server-integration.md)
+when the user asks to register, configure, or validate a native or external
+Resource Server.
+
+This branch is complete only when metadata and command discovery succeed, the
+controller can connect any required external account, and at least one real
+target operation succeeds with the requested authority.
 
 ### Administer A Realmroot Tenant
 

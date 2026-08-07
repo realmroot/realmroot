@@ -31,7 +31,7 @@ func TestProfiledResponseOpensAndPollsAnyInteractiveResource(t *testing.T) {
 	t.Run("[spec: agent-identity/restish-generic-interactive-resource]", func(t *testing.T) {
 		t.Log("[spec: agent-identity/restish-generic-interactive-resource]")
 		states := newCredentialState(t, testCredential(t, "cached", time.Now().Add(time.Minute)))
-		states.state.DPoPCredentials = nil
+		states.state.DPoPCredentialOffers = nil
 		states.state.ActiveDPoPCredentials = nil
 		browser := &browserRecorder{}
 		client := roundTripFunc(func(request *http.Request) (*http.Response, error) {
@@ -68,26 +68,15 @@ func TestProfiledResponseAcceptsCredentialOfferWithoutGrantKnowledge(t *testing.
 		t.Log("[spec: agent-identity/restish-generic-resource-credential-offer]")
 		credential := testCredential(t, "old", time.Now().Add(-time.Minute))
 		states := newCredentialState(t, credential)
-		states.state.DPoPCredentials = nil
+		states.state.DPoPCredentialOffers = nil
 		states.state.ActiveDPoPCredentials = nil
 		browser := &browserRecorder{}
 		client := roundTripFunc(func(request *http.Request) (*http.Response, error) {
-			switch request.URL.String() {
-			case "https://auth.example.com/api/access-requests/request-1":
-				return jsonResponse(200, completedInteractionWithOffer(credential)), nil
-			case credential.CredentialEndpoint:
-				if request.Header.Get("Authorization") != "DPoP platform-token" || request.Header.Get("DPoP") == "" {
-					t.Fatal("credential request omitted Realmroot OAuth or target DPoP proof")
-				}
-				return jsonResponse(200, map[string]any{
-					"accessToken": "short-lived-token", "tokenType": "DPoP", "expiresAt": time.Now().Add(time.Minute),
-					"resourceIndicator": credential.ResourceIndicator,
-					"resource":          map[string]any{"href": credential.ResourceHref},
-				}), nil
-			default:
+			if request.URL.String() != "https://auth.example.com/api/access-requests/request-1" {
 				t.Fatalf("unexpected request %s", request.URL)
 				return nil, nil
 			}
+			return jsonResponse(http.StatusOK, completedInteractionWithOffer(credential)), nil
 		})
 		input := profiledInput("https://auth.example.com/api/access-requests", pendingAccessInteraction("https://auth.example.com"))
 
@@ -96,12 +85,16 @@ func TestProfiledResponseAcceptsCredentialOfferWithoutGrantKnowledge(t *testing.
 			t.Fatal(err)
 		}
 		body := output.Response.Body.(map[string]any)
-		if body["status"] != "ready" || body["tokenExpiresAt"] == nil {
+		if body["status"] != "ready" {
 			t.Fatalf("safe result = %#v", body)
 		}
-		stored := states.state.DPoPCredentials[credential.ResourceHref]
-		if stored.AccessToken != "short-lived-token" || stored.PrivateKey == "" {
-			t.Fatalf("credential was not stored: %#v", stored)
+		source, ok := body["credentialSource"].(map[string]any)
+		if !ok || source["name"] != "realmroot" || source["reference"] != credential.ResourceHref {
+			t.Fatalf("credential source receipt = %#v", body)
+		}
+		stored := states.state.DPoPCredentialOffers[credential.ResourceHref][0]
+		if stored.AccessToken != "" || stored.PrivateKey != "" || stored.ExpiresAt != nil {
+			t.Fatalf("plugin retained target credential material: %#v", stored)
 		}
 	})
 }
@@ -123,47 +116,6 @@ func TestProfiledResponseRejectsCrossOriginInteractionLinks(t *testing.T) {
 	}
 	if browser.uri != "" {
 		t.Fatalf("opened unsafe URL %q", browser.uri)
-	}
-}
-
-func TestTargetUnauthorizedResponseRemovesCachedCredential(t *testing.T) {
-	credential := testCredential(t, "cached", time.Now().Add(time.Minute))
-	states := newCredentialState(t, credential)
-	_, err := handleProfiledResponse(plugin.ResponseMiddlewareInput{
-		Request: plugin.HookRequest{
-			Method: http.MethodGet,
-			URI:    "https://api.example.com/v1/files",
-			Headers: map[string][]string{
-				"Authorization": {"DPoP cached"},
-				"DPoP":          {"proof"},
-			},
-		},
-		Response: plugin.HookResponse{Status: http.StatusUnauthorized},
-	}, &browserRecorder{}, states, roundTripFunc(nil))
-	if err == nil || !strings.Contains(err.Error(), "credential was removed") {
-		t.Fatalf("unauthorized error = %v", err)
-	}
-	if len(states.state.DPoPCredentials) != 0 {
-		t.Fatal("rejected credential remains cached")
-	}
-}
-
-func TestTargetUnauthorizedResponsePreservesCredentialWhenDPoPWasNotSent(t *testing.T) {
-	credential := testCredential(t, "cached", time.Now().Add(time.Minute))
-	states := newCredentialState(t, credential)
-	_, err := handleProfiledResponse(plugin.ResponseMiddlewareInput{
-		Request: plugin.HookRequest{
-			Method:  http.MethodGet,
-			URI:     "https://api.example.com/v1/files",
-			Headers: map[string][]string{"Authorization": {"DPoP"}},
-		},
-		Response: plugin.HookResponse{Status: http.StatusUnauthorized},
-	}, &browserRecorder{}, states, roundTripFunc(nil))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(states.state.DPoPCredentials) != 1 {
-		t.Fatal("credential was removed even though no DPoP proof was sent")
 	}
 }
 

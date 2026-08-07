@@ -1,7 +1,7 @@
 import { createApp } from '@server/http/app'
 import { unifiedOpenApi } from '@server/http/openapi/management'
 import { protectedResourceCollectionRoutes } from '@shared/api/management'
-import { realmrootOAuthScopes, requiredProtectedScope } from '@shared/authz'
+import { requiredProtectedScope } from '@shared/authz'
 import { calculateJwkThumbprint, exportJWK, generateKeyPair, SignJWT } from 'jose'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -66,25 +66,7 @@ describe('management routes 1', () => {
     })
     expect(unifiedOpenApi.components.securitySchemes.sessionCookie).toMatchObject({ type: 'apiKey', in: 'cookie' })
     expect(unifiedOpenApi.components.securitySchemes).not.toHaveProperty('agentAuth')
-    expect(unifiedOpenApi['x-cli-config']).toEqual({
-      command_layout: 'tags',
-      profiles: {
-        default: {
-          credentials: {
-            dpop: {
-              auth: {
-                type: 'bearer',
-                params: {
-                  token: 'realmroot-plugin-managed',
-                  provider: 'realmroot-agent',
-                },
-              },
-              satisfies: realmrootOAuthScopes,
-            },
-          },
-        },
-      },
-    })
+    expect(unifiedOpenApi['x-cli-config']).toEqual({ command_layout: 'tags' })
 
     for (const operation of openApiOperationObjects()) {
       if (operation.key === managementOpenApiOperationKey) {
@@ -171,6 +153,21 @@ describe('management routes 1', () => {
 
     expect(protectedResponse.status).toBe(401)
     expect(protectedResponse.headers.get('link')).toContain('</api/openapi.json>; rel="service-desc"')
+  })
+
+  it('publishes the runtime Organization authorization scopes in OpenAPI', () => {
+    const expectedScopes = new Map([
+      ['DELETE /organizations/{param}', 'organizations:delete'],
+      ['GET /organizations/{param}/roles', 'roles:read'],
+      ['POST /organizations/{param}/roles', 'roles:write'],
+      ['GET /organizations/{param}/members/{param}/roles', 'role-assignments:read'],
+      ['PUT /organizations/{param}/members/{param}/roles', 'role-assignments:write'],
+    ])
+
+    for (const [key, scope] of expectedScopes) {
+      const operation = openApiOperationObjects().find((candidate) => candidate.key === key)
+      expect(operation?.security, key).toEqual([{ dpop: [scope] }, { sessionCookie: [scope] }])
+    }
   })
 
   it('limits generated Restish commands to discovery, approval, and credential workflows [spec: management-api/management-restish-command-surface]', () => {
@@ -262,7 +259,7 @@ describe('management routes 1', () => {
           host_id: 'host-1',
           scope: scopes.join(' '),
           cnf: { jkt: dpop.thumbprint },
-          realmroot_authority: { type: 'realmroot_authority', authority: 'realm', id: 'realm' },
+          realmroot_authority: { type: 'realmroot_authority', authority: 'organization', id: 'org_platform' },
         },
       })),
     })
@@ -348,12 +345,12 @@ describe('management routes 1', () => {
       headers: await headers('DELETE', '/api/users/user-1'),
     })
 
-    expect(created.status).toBe(403)
-    expect(updated.status).toBe(403)
-    expect(removed.status).toBe(403)
-    expect(users.createManagedUser).not.toHaveBeenCalled()
-    expect(users.updateManagedUser).not.toHaveBeenCalled()
-    expect(users.deleteManagedUser).not.toHaveBeenCalled()
+    expect(created.status).toBe(201)
+    expect(updated.status).toBe(200)
+    expect(removed.status).toBe(204)
+    expect(users.createManagedUser).toHaveBeenCalled()
+    expect(users.updateManagedUser).toHaveBeenCalledWith('user-1', { displayName: 'Updated User' })
+    expect(users.deleteManagedUser).toHaveBeenCalledWith('user-1')
   })
 
   it('does not expose the removed capability request resource', async () => {

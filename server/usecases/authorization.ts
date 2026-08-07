@@ -1,32 +1,31 @@
 import { ApiError, badRequest, conflict, forbidden, notFound, preconditionFailed } from '@server/domain/errors'
+import type { MutationActor } from '@server/domain/mutation-actor'
+import { platformOrganization } from '@server/domain/platform-organization'
 import {
   isRealmrootResourceServer,
   realmrootResourceServer,
   realmrootResourceUrl,
 } from '@server/domain/realmroot-resource-server'
 import { type AuthorizationTokenClaimInput, createId, toTokenClaims } from '@server/usecases/authorization-utils'
+import { refreshDynamicConnectorMetadata } from '@server/usecases/connectors'
 import type { Deps } from '@server/usecases/deps'
 import { resolveOrganizationMembershipScopes } from '@server/usecases/organization-membership-scopes'
 import { validateExternalResourceConnector } from '@server/usecases/resource-connectors'
 import {
   assertOperationScopesAdvertised,
   readProtectedResourceMetadata,
-  synchronizeResourceScopeRegistry,
+  synchronizeResourceDiscovery,
 } from '@server/usecases/resource-metadata'
-import { readResourceContract, validateRequestedScopes, validateResourceUrl } from '@server/usecases/resource-openapi'
+import {
+  type ResourceOperationDefinition,
+  readResourceContract,
+  readResourceContractDocument,
+  validateRequestedScopes,
+  validateResourceUrl,
+} from '@server/usecases/resource-openapi'
 import { activeResourceVisibleToOrganization } from '@server/usecases/resource-visibility'
 
 export type { AuthorizationTokenClaimInput } from '@server/usecases/authorization-utils'
-
-export interface ResourceMutationActor {
-  controllerUserId: string | null
-  agent: {
-    issuer: string
-    subject: string
-    identityId: string
-    hostId: string
-  } | null
-}
 
 import { realmrootResourceServer as internalResourceServer } from '@server/domain/realmroot-resource-server'
 import { tokenExchangeGrantType } from '@shared/api/applications'
@@ -91,25 +90,22 @@ export async function getOrganization(deps: Deps, id: string) {
 
 export async function updateOrganization(deps: Deps, id: string, input: UpdateOrganizationRequest) {
   await getOrganization(deps, id)
+  if (id === platformOrganization.id && input.disabled === true) {
+    throw conflict('The built-in platform Organization cannot be disabled.')
+  }
   await deps.authorization.updateOrganization(id, input)
   return getOrganization(deps, id)
 }
 
 export async function deleteOrganization(deps: Deps, id: string) {
   await getOrganization(deps, id)
+  if (id === platformOrganization.id) throw conflict('The built-in platform Organization cannot be deleted.')
   await deps.authorization.deleteOrganization(id)
 }
 
-export async function addMember(
-  deps: Deps,
-  organizationId: string,
-  input: AddMemberRequest,
-  actorUserId: string,
-  platformAdministrator: boolean,
-) {
+export async function addMember(deps: Deps, organizationId: string, input: AddMemberRequest) {
   await getOrganization(deps, organizationId)
   await validateOrganizationRoleKeys(deps, organizationId, input.roles)
-  await rejectOwnerAssignmentByNonOwner(deps, organizationId, actorUserId, input.roles, platformAdministrator)
   return deps.authorization.addMember(organizationId, {
     id: createId('mem'),
     organizationId,
@@ -131,13 +127,13 @@ export async function updateMember(deps: Deps, organizationId: string, memberId:
   return requireMember(deps, memberId)
 }
 
-export async function removeMember(deps: Deps, organizationId: string, memberId: string, actorUserId: string) {
+export async function removeMember(deps: Deps, organizationId: string, memberId: string, actor: MutationActor) {
   const member = await requireMemberForOrganization(deps, memberId, organizationId)
   const removed = await deps.authorization.removeMember(
     organizationId,
     memberId,
     member.updatedAt,
-    authorizationAudit('organization.member.removed', organizationId, actorUserId, new Date(), {
+    authorizationAudit('organization.member.removed', organizationId, actor, new Date(), {
       organizationId,
       memberId,
     }),
@@ -150,12 +146,10 @@ export async function replaceMemberRoles(
   organizationId: string,
   memberId: string,
   input: ReplaceMemberRolesRequest,
-  actorUserId: string,
-  platformAdministrator: boolean,
+  actor: MutationActor,
 ) {
   const target = await requireMemberForOrganization(deps, memberId, organizationId)
   await validateOrganizationRoleKeys(deps, organizationId, input.roles)
-  await rejectOwnerAssignmentByNonOwner(deps, organizationId, actorUserId, input.roles, platformAdministrator)
   if (target.roles.includes('owner') && !input.roles.includes('owner')) await rejectLastOwnerMutation(deps, target)
   const now = new Date()
   const updated = await deps.authorization.replaceMemberRoles(
@@ -163,7 +157,7 @@ export async function replaceMemberRoles(
     memberId,
     input.roles,
     target.updatedAt,
-    authorizationAudit('organization.member.roles-replaced', organizationId, actorUserId, now, {
+    authorizationAudit('organization.member.roles-replaced', organizationId, actor, now, {
       organizationId,
       memberId,
       previousRoles: target.roles,
@@ -178,18 +172,16 @@ export async function createInvitation(
   deps: Deps,
   organizationId: string,
   input: CreateInvitationRequest,
-  inviterId: string,
-  platformAdministrator: boolean,
+  actor: MutationActor,
 ) {
   await getOrganization(deps, organizationId)
   await validateOrganizationRoleKeys(deps, organizationId, input.roles)
-  await rejectOwnerAssignmentByNonOwner(deps, organizationId, inviterId, input.roles, platformAdministrator)
   return deps.authorization.createInvitation({
     id: createId('inv'),
     organizationId,
     email: input.email,
     roles: input.roles,
-    inviterId,
+    inviterId: actor.controllerUserId,
     status: 'pending',
     expiresAt: input.expiresAt ?? new Date(Date.now() + 1000 * 60 * 60 * 48).toISOString(),
   })
@@ -212,6 +204,9 @@ export async function cancelInvitation(deps: Deps, organizationId: string, id: s
 export async function createResource(deps: Deps, input: CreateApiResourceRequest) {
   const enabled = input.enabled ?? true
   const ownerOrganizationId = input.ownerOrganizationId
+  if (input.connectorId && ownerOrganizationId !== platformOrganization.id) {
+    throw badRequest('External Resource Servers must be owned by the built-in platform Organization.')
+  }
   await requireActiveOrganization(deps, ownerOrganizationId)
   validateResourceUrl(input.resourceUrl)
   const protectedMetadata = input.connectorId
@@ -225,26 +220,28 @@ export async function createResource(deps: Deps, input: CreateApiResourceRequest
   if (!input.connectorId && (input.authorizationDetails?.length ?? 0) > 0) {
     throw badRequest('Authorization details require an external API resource connector.')
   }
-  const scopeRegistry = enabled
-    ? await synchronizeResourceScopeRegistry(
+  const synchronized = enabled
+    ? await synchronizeResourceDiscovery(
         deps,
         input.resourceUrl,
         null,
         protectedMetadata ?? (await readProtectedResourceMetadata(deps, input.resourceUrl)),
       )
     : null
+  const contract = synchronized ?? (await readResourceContract(deps, input.resourceUrl))
+  if (!contract) throw new Error('Unconditional Resource Server contract read returned no document.')
   return deps.authorization.createResource({
     id: createId('res'),
     identifier: input.identifier,
-    name: input.name,
+    name: contract.name,
     resourceUrl: input.resourceUrl,
     connectorId: input.connectorId ?? null,
     authorizationDetails: input.authorizationDetails ?? [],
-    description: input.description ?? null,
+    description: contract.description,
     enabled,
     ownerOrganizationId,
     visibility: input.visibility ?? 'private',
-    scopeRegistry,
+    scopeRegistry: synchronized?.scopeRegistry ?? null,
     availableToAgents: input.availableToAgents ?? true,
   })
 }
@@ -269,15 +266,29 @@ export async function reconcileRealmrootResourceServer(deps: Deps, apiOrigin: st
   const existing = await deps.authorization.findResource(realmrootResourceServer.id)
   if (existing) {
     assertRealmrootResourceServerIdentity(existing)
-    if (existing.resourceUrl === resourceUrl) return existing
-    const updated = await deps.authorization.updateResource(existing.id, { resourceUrl })
-    if (!updated) throw new Error('The persisted Realmroot Resource Server could not be reconciled.')
+    const registry = realmrootRegistry(apiOrigin)
+    const resourceUrlChanged = existing.resourceUrl !== resourceUrl
+    const registryChanged = !isCurrentRealmrootRegistry(existing.scopeRegistry, registry)
+    if (!resourceUrlChanged && !registryChanged) return existing
+    if (resourceUrlChanged && !(await deps.authorization.updateResource(existing.id, { resourceUrl }))) {
+      throw new Error('The persisted Realmroot Resource Server could not be reconciled.')
+    }
+    if (
+      registryChanged &&
+      !(await deps.authorization.replaceResourceDiscovery(existing.id, {
+        name: existing.name,
+        description: existing.description,
+        scopeRegistry: registry,
+      }))
+    ) {
+      throw new Error('The persisted Realmroot Resource Server could not be reconciled.')
+    }
     const reconciled = await deps.authorization.findResource(existing.id)
     if (!reconciled) {
       throw new Error('The persisted Realmroot Resource Server could not be reconciled.')
     }
     assertRealmrootResourceServerIdentity(reconciled)
-    if (reconciled.resourceUrl !== resourceUrl) {
+    if (reconciled.resourceUrl !== resourceUrl || !isCurrentRealmrootRegistry(reconciled.scopeRegistry, registry)) {
       throw new Error('The persisted Realmroot Resource Server could not be reconciled.')
     }
     return reconciled
@@ -309,16 +320,26 @@ export async function getResource(deps: Deps, id: string) {
 
 export async function getResourceContract(deps: Deps, id: string) {
   const resource = await getResource(deps, id)
-  const contract = await readResourceContract(deps, resource.resourceUrl)
+  const contract = isRealmrootResourceServer(id)
+    ? await readResourceContractDocument(
+        deps,
+        resource.scopeRegistry?.discovery.sourceUrl ?? `${resource.resourceUrl}/openapi.json`,
+      )
+    : await readResourceContract(deps, resource.resourceUrl)
   if (!contract) throw new Error('Unconditional Resource Server contract read returned no document.')
   const scopes = resource.scopeRegistry?.scopes ?? []
+  const operations = isRealmrootResourceServer(id)
+    ? contract.operations.filter((operation) => operationUsesAdvertisedScopes(operation, scopes))
+    : contract.operations
   assertOperationScopesAdvertised(
-    contract.operations,
+    operations,
     scopes.map((scope) => scope.value),
   )
+  const { name: _name, description: _description, ...publishedContract } = contract
   return {
     resourceId: resource.id,
-    ...contract,
+    ...publishedContract,
+    operations,
     scopes,
   }
 }
@@ -326,10 +347,23 @@ export async function getResourceContract(deps: Deps, id: string) {
 export async function refreshResourceScopeRegistry(deps: Deps, id: string) {
   const resource = await getResource(deps, id)
   if (!resource.enabled) throw badRequest('Resource Server must be active before synchronizing scopes.')
-  if (isRealmrootResourceServer(id)) throw badRequest('The Realmroot Resource Server is system-managed.')
+  if (isRealmrootResourceServer(id)) {
+    const registry = realmrootRegistry(new URL(resource.resourceUrl).origin)
+    if (
+      !(await deps.authorization.replaceResourceDiscovery(id, {
+        name: resource.name,
+        description: resource.description,
+        scopeRegistry: registry,
+      }))
+    ) {
+      throw badRequest('Resource Server is no longer active.')
+    }
+    return getResource(deps, id)
+  }
   try {
     const metadata = await readProtectedResourceMetadata(deps, resource.resourceUrl)
     if (resource.connectorId) {
+      await refreshDynamicConnectorMetadata(deps, resource.connectorId)
       await validateExternalResourceConnector(
         deps,
         resource.resourceUrl,
@@ -338,21 +372,20 @@ export async function refreshResourceScopeRegistry(deps: Deps, id: string) {
         metadata,
       )
     }
-    const registry = await synchronizeResourceScopeRegistry(
-      deps,
-      resource.resourceUrl,
-      resource.scopeRegistry,
-      metadata,
-    )
-    if (!(await deps.authorization.replaceResourceScopeRegistry(id, registry))) {
+    const discovery = await synchronizeResourceDiscovery(deps, resource.resourceUrl, resource.scopeRegistry, metadata)
+    if (!(await deps.authorization.replaceResourceDiscovery(id, discovery))) {
       throw badRequest('Resource Server is no longer active.')
     }
     return getResource(deps, id)
   } catch (error) {
     if (resource.scopeRegistry) {
-      await deps.authorization.replaceResourceScopeRegistry(id, {
-        ...resource.scopeRegistry,
-        discovery: { ...resource.scopeRegistry.discovery, lastError: synchronizationError(error) },
+      await deps.authorization.replaceResourceDiscovery(id, {
+        name: resource.name,
+        description: resource.description,
+        scopeRegistry: {
+          ...resource.scopeRegistry,
+          discovery: { ...resource.scopeRegistry.discovery, lastError: synchronizationError(error) },
+        },
       })
     }
     throw error
@@ -387,6 +420,10 @@ export async function updateResource(deps: Deps, id: string, input: UpdateApiRes
     throw badRequest('API resource authorization mode cannot change after creation.')
   }
   const connectorId = input.connectorId ?? resource.connectorId
+  const ownerOrganizationId = input.ownerOrganizationId ?? resource.ownerOrganizationId
+  if (connectorId && ownerOrganizationId !== platformOrganization.id) {
+    throw badRequest('External Resource Servers must be owned by the built-in platform Organization.')
+  }
   const resourceUrl = input.resourceUrl ?? resource.resourceUrl
   const authorizationDetails = input.authorizationDetails ?? resource.authorizationDetails
   const enabled = input.enabled ?? resource.enabled
@@ -400,8 +437,8 @@ export async function updateResource(deps: Deps, id: string, input: UpdateApiRes
     throw badRequest('Authorization details require an external API resource connector.')
   }
   const shouldSynchronize = enabled && (input.enabled === true || input.resourceUrl !== undefined)
-  const synchronizedRegistry = shouldSynchronize
-    ? await synchronizeResourceScopeRegistry(
+  const synchronized = shouldSynchronize
+    ? await synchronizeResourceDiscovery(
         deps,
         resourceUrl,
         input.resourceUrl ? null : resource.scopeRegistry,
@@ -409,12 +446,22 @@ export async function updateResource(deps: Deps, id: string, input: UpdateApiRes
       )
     : null
   const scopeRegistry = input.scopeGrantModes
-    ? updateScopeGrantModes(synchronizedRegistry ?? resource.scopeRegistry, input.scopeGrantModes)
-    : synchronizedRegistry
-  if (!(await deps.authorization.updateResource(id, input))) {
+    ? updateScopeGrantModes(synchronized?.scopeRegistry ?? resource.scopeRegistry, input.scopeGrantModes)
+    : (synchronized?.scopeRegistry ?? null)
+  const resourcePatch = synchronized
+    ? { ...input, name: synchronized.name, description: synchronized.description }
+    : input
+  if (!(await deps.authorization.updateResource(id, resourcePatch))) {
     throw notFound('API resource was not found.')
   }
-  if (scopeRegistry && !(await deps.authorization.replaceResourceScopeRegistry(id, scopeRegistry))) {
+  if (
+    scopeRegistry &&
+    !(await deps.authorization.replaceResourceDiscovery(id, {
+      name: synchronized?.name ?? resource.name,
+      description: synchronized?.description ?? resource.description,
+      scopeRegistry,
+    }))
+  ) {
     throw notFound('API resource was not found.')
   }
   return getResource(deps, id)
@@ -430,7 +477,7 @@ function resourceMutationAudit(
   resourceId: string,
   ownerOrganizationId: string,
   occurredAt: Date,
-  actor: ResourceMutationActor,
+  actor: MutationActor,
 ) {
   return {
     id: createId('agaudit'),
@@ -454,7 +501,7 @@ function resourceMutationAudit(
   }
 }
 
-export async function deleteResource(deps: Deps, id: string, actor: ResourceMutationActor) {
+export async function deleteResource(deps: Deps, id: string, actor: MutationActor) {
   const resource = await getResource(deps, id)
   if (isRealmrootResourceServer(id)) throw badRequest('The Realmroot Resource Server is system-managed.')
   const now = new Date()
@@ -633,7 +680,7 @@ function toApplicationScopeGrantResponse(
   }
 }
 
-export async function createRole(deps: Deps, organizationId: string, input: CreateRoleRequest, actorUserId: string) {
+export async function createRole(deps: Deps, organizationId: string, input: CreateRoleRequest, actor: MutationActor) {
   await getOrganization(deps, organizationId)
   if (predefinedOrganizationRoleKeys.includes(input.key as never)) {
     throw conflict(`Role key "${input.key}" is reserved for a predefined Role.`)
@@ -645,7 +692,7 @@ export async function createRole(deps: Deps, organizationId: string, input: Crea
     organizationId,
     { key: input.key, displayName: input.displayName, description: input.description ?? null, scopes },
     toBetterAuthPermission(scopes),
-    authorizationAudit('organization.role.created', organizationId, actorUserId, now, {
+    authorizationAudit('organization.role.created', organizationId, actor, now, {
       organizationId,
       roleKey: input.key,
     }),
@@ -688,7 +735,7 @@ export async function updateRole(
   organizationId: string,
   roleKey: string,
   input: UpdateRoleRequest,
-  actorUserId: string,
+  actor: MutationActor,
 ) {
   const role = await getRole(deps, organizationId, roleKey)
   if (role.predefined) throw conflict('Predefined Organization Roles cannot be modified.')
@@ -701,13 +748,13 @@ export async function updateRole(
     input,
     scopes ? toBetterAuthPermission(scopes) : undefined,
     role.updatedAt!,
-    authorizationAudit('organization.role.updated', organizationId, actorUserId, now, { organizationId, roleKey }),
+    authorizationAudit('organization.role.updated', organizationId, actor, now, { organizationId, roleKey }),
   )
   if (!updated) throw preconditionFailed('The Organization Role changed after it was read.')
   return getRole(deps, organizationId, roleKey)
 }
 
-export async function deleteRole(deps: Deps, organizationId: string, roleKey: string, actorUserId: string) {
+export async function deleteRole(deps: Deps, organizationId: string, roleKey: string, actor: MutationActor) {
   const role = await getRole(deps, organizationId, roleKey)
   if (role.predefined) throw conflict('Predefined Organization Roles cannot be deleted.')
   const now = new Date()
@@ -715,7 +762,7 @@ export async function deleteRole(deps: Deps, organizationId: string, roleKey: st
     organizationId,
     roleKey,
     role.updatedAt!,
-    authorizationAudit('organization.role.deleted', organizationId, actorUserId, now, { organizationId, roleKey }),
+    authorizationAudit('organization.role.deleted', organizationId, actor, now, { organizationId, roleKey }),
   )
   if (result === 'assigned') throw conflict('Assigned Organization Roles cannot be deleted.')
   if (result === 'not_found') throw preconditionFailed('The Organization Role changed after it was read.')
@@ -826,6 +873,35 @@ function realmrootRegistry(apiOrigin: string): NonNullable<ApiResourceResponse['
   }
 }
 
+function isCurrentRealmrootRegistry(
+  actual: ApiResourceResponse['scopeRegistry'],
+  expected: NonNullable<ApiResourceResponse['scopeRegistry']>,
+) {
+  if (
+    !actual ||
+    actual.discovery.sourceUrl !== expected.discovery.sourceUrl ||
+    actual.discovery.documentHash !== expected.discovery.documentHash ||
+    actual.discovery.etag !== null ||
+    actual.discovery.lastError !== null ||
+    actual.scopes.length !== expected.scopes.length
+  ) {
+    return false
+  }
+  const actualScopes = new Map(actual.scopes.map((scope) => [scope.value, scope]))
+  return expected.scopes.every((scope) => {
+    const candidate = actualScopes.get(scope.value)
+    return candidate?.description === scope.description && candidate.grantMode === scope.grantMode
+  })
+}
+
+function operationUsesAdvertisedScopes(
+  operation: ResourceOperationDefinition,
+  scopes: NonNullable<ApiResourceResponse['scopeRegistry']>['scopes'],
+) {
+  const advertised = new Set(scopes.map((scope) => scope.value))
+  return operation.requiredScopeSets.some((scopeSet) => scopeSet.every((scope) => advertised.has(scope)))
+}
+
 async function requireMember(deps: Deps, id: string) {
   const member = await deps.authorization.findMember(id)
   if (!member) throw notFound('Organization member was not found.')
@@ -854,22 +930,10 @@ async function validateOrganizationRoleKeys(deps: Deps, organizationId: string, 
   if (unknown) throw badRequest(`Organization Role "${unknown}" was not found.`)
 }
 
-async function rejectOwnerAssignmentByNonOwner(
-  deps: Deps,
-  organizationId: string,
-  actorUserId: string,
-  roles: string[],
-  platformAdministrator: boolean,
-) {
-  if (!roles.includes('owner') || platformAdministrator) return
-  const actor = await deps.authorization.findMemberByOrganizationUser(organizationId, actorUserId)
-  if (!actor?.roles.includes('owner')) throw forbidden('Only an Organization Owner can assign the Owner Role.')
-}
-
 function authorizationAudit(
   action: string,
   ownerOrganizationId: string,
-  controllerUserId: string,
+  actor: MutationActor,
   occurredAt: Date,
   metadata: Record<string, unknown>,
 ) {
@@ -880,11 +944,11 @@ function authorizationAudit(
     realmOwned: false,
     ownerUserId: null,
     ownerOrganizationId,
-    controllerUserId,
-    subjectIssuer: null,
-    subject: controllerUserId,
-    agentIdentityId: null,
-    hostId: null,
+    controllerUserId: actor.controllerUserId,
+    subjectIssuer: actor.agent?.issuer ?? null,
+    subject: actor.agent?.subject ?? actor.controllerUserId,
+    agentIdentityId: actor.agent?.identityId ?? null,
+    hostId: actor.agent?.hostId ?? null,
     resourceId: null,
     resourceConnectionId: null,
     accessGrantId: null,

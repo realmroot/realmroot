@@ -42,7 +42,7 @@ afterEach(() => {
   store.access = {
     canCreateOrganization: true,
     showOrganizations: false,
-    realmOperator: false,
+    platformOperator: false,
     consoleOrganizations: [],
   }
   store.security.mfa.enabled = false
@@ -544,7 +544,7 @@ describe('planned Account Center journeys', () => {
 
   it('manages Organization members, invitations, profile, and deletion', async () => {
     const actions: Array<{ path: string; body: unknown }> = []
-    store.access.realmOperator = true
+    store.access.platformOperator = true
     server.use(
       ...organizationDetailHandlers('owner'),
       http.put(`${base}/api/organizations/org-family/members/:memberId/roles`, async ({ request }) => {
@@ -651,7 +651,7 @@ describe('planned Account Center journeys', () => {
   })
 
   it('keeps Organization management editors open when server mutations fail', async () => {
-    store.access.realmOperator = true
+    store.access.platformOperator = true
     server.use(
       ...organizationDetailHandlers('owner'),
       http.get(`${base}/api/organizations/org-family/roles`, () =>

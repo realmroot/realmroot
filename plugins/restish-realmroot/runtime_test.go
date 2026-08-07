@@ -77,23 +77,6 @@ func TestDetectAgentSessionIsolatesConcurrentSessionsWithoutPersistingRawIdentif
 	}
 }
 
-func TestCredentialSelectionUsesOnlyTheCurrentAgentSession(t *testing.T) {
-	resourceURL := "https://api.example.com/v1"
-	t.Setenv("AGENT_SESSION_ID", "")
-	t.Setenv("HERMES_SESSION_KEY", "")
-	t.Setenv("CODEX_THREAD_ID", "thread-1")
-	firstKey := credentialSelectionKey(resourceURL)
-	t.Setenv("CODEX_THREAD_ID", "thread-2")
-	secondKey := credentialSelectionKey(resourceURL)
-	if _, _, selected := selectedResourceURL(firstKey); selected {
-		t.Fatal("credential from another Agent session was selected")
-	}
-	selectedURL, _, selected := selectedResourceURL(secondKey)
-	if !selected || selectedURL != resourceURL {
-		t.Fatalf("current session selection = %q, %v", selectedURL, selected)
-	}
-}
-
 func testEnvironment(values map[string]string) environmentLookup {
 	return func(name string) (string, bool) {
 		value, ok := values[name]

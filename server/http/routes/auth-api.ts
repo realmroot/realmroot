@@ -4,20 +4,10 @@ export type AuthEndpoint<TInput, TOutput> = (input: TInput) => Promise<TOutput>
 export type AuthResponseEndpoint<TInput> = (input: TInput & { asResponse: true }) => Promise<Response>
 
 export interface ManagementAuthApi {
-  listUsers: AuthEndpoint<{ query: Record<string, unknown>; headers: Headers }, unknown>
-  getUser: AuthEndpoint<{ query: { id: string }; headers: Headers }, unknown>
-  createUser: AuthEndpoint<{ body: Record<string, unknown>; headers: Headers }, unknown>
-  adminUpdateUser: AuthEndpoint<{ body: Record<string, unknown>; headers: Headers }, unknown>
-  banUser: AuthEndpoint<{ body: Record<string, unknown>; headers: Headers }, unknown>
-  unbanUser: AuthEndpoint<{ body: { userId: string }; headers: Headers }, unknown>
-  removeUser: AuthEndpoint<{ body: { userId: string }; headers: Headers }, unknown>
-  listUserSessions: AuthEndpoint<{ body: { userId: string }; headers: Headers }, unknown>
   listSessions: AuthEndpoint<{ headers: Headers }, unknown>
   revokeSession: AuthEndpoint<{ body: { token: string }; headers: Headers }, unknown>
   revokeSessions: AuthEndpoint<{ headers: Headers }, unknown>
   revokeOtherSessions: AuthEndpoint<{ headers: Headers }, unknown>
-  revokeUserSession: AuthEndpoint<{ body: { sessionToken: string }; headers: Headers }, unknown>
-  revokeUserSessions: AuthEndpoint<{ body: { userId: string }; headers: Headers }, unknown>
   requestPasswordReset: AuthEndpoint<{ body: Record<string, unknown>; headers: Headers }, unknown>
   sendVerificationEmail: AuthEndpoint<{ body: Record<string, unknown>; headers: Headers }, unknown>
   changeEmail: AuthEndpoint<{ body: Record<string, unknown>; headers: Headers }, unknown>

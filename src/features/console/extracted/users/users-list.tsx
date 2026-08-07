@@ -25,19 +25,11 @@ import {
   useQueryClient,
   useState,
 } from '@/features/management/shared'
-import {
-  formatDate,
-  formatRealmAccess,
-  hasRealmAdminAccess,
-  setRealmAdminAccess,
-  useAdminMutation,
-  userDisplayName,
-} from '@/features/management/utils'
-import { consoleQueryKeys, createUser, listUsers, requestUserPasswordReset, updateUser } from '@/lib/api/management'
+import { formatDate, useAdminMutation, userDisplayName } from '@/features/management/utils'
+import { consoleQueryKeys, createUser, listUsers, requestUserPasswordReset } from '@/lib/api/management'
 
 export function UsersPage() {
   const [search, setSearch] = useState('')
-  const [role, setRole] = useState('')
   const [banned, setBanned] = useState('')
   const [offset, setOffset] = useState(0)
   const query = useQuery({
@@ -45,7 +37,6 @@ export function UsersPage() {
       ...consoleQueryKeys.users,
       {
         search,
-        role,
         banned,
         offset,
       },
@@ -55,11 +46,6 @@ export function UsersPage() {
         ...(search
           ? {
               search,
-            }
-          : {}),
-        ...(role
-          ? {
-              role,
             }
           : {}),
         ...(banned
@@ -121,18 +107,6 @@ export function UsersPage() {
             value={search}
           />
           <SelectInput
-            aria-label={tt('Filter role')}
-            onChange={(event) => {
-              setRole(event.target.value)
-              setOffset(0)
-            }}
-            value={role}
-          >
-            <option value="">{tt('Any role')}</option>
-            <option value="admin">{tt('Admin')}</option>
-            <option value="user">{tt('User')}</option>
-          </SelectInput>
-          <SelectInput
             aria-label={tt('Filter status')}
             onChange={(event) => {
               setBanned(event.target.value)
@@ -152,7 +126,6 @@ export function UsersPage() {
           <TableHeader>
             <TableRow>
               <TableHead>{tt('User')}</TableHead>
-              <TableHead>{tt('Realm access')}</TableHead>
               <TableHead>{tt('Email')}</TableHead>
               <TableHead>{tt('Status')}</TableHead>
               <TableHead>{tt('Created')}</TableHead>
@@ -173,7 +146,6 @@ export function UsersPage() {
                     </Link>
                     <div className="text-xs text-muted-foreground">{user.id}</div>
                   </TableCell>
-                  <TableCell>{formatRealmAccess(user.role)}</TableCell>
                   <TableCell>
                     <div>{user.email ?? 'Unknown'}</div>
                     <div className="text-xs text-muted-foreground">
@@ -199,22 +171,6 @@ export function UsersPage() {
                               {tt('Send password reset')}{' '}
                             </DropdownMenuItem>
                           ) : null}
-                          <DropdownMenuItem
-                            onClick={() =>
-                              updateUser(user.id, {
-                                role: setRealmAdminAccess(user.role, !hasRealmAdminAccess(user.role)),
-                              }).then(() =>
-                                queryClient.invalidateQueries({
-                                  queryKey: consoleQueryKeys.users,
-                                }),
-                              )
-                            }
-                          >
-                            {' '}
-                            {hasRealmAdminAccess(user.role)
-                              ? tt('Remove Realm administrator')
-                              : tt('Make Realm administrator')}{' '}
-                          </DropdownMenuItem>
                         </DropdownMenuGroup>
                       </DropdownMenuContent>
                     </DropdownMenu>
@@ -223,7 +179,7 @@ export function UsersPage() {
               ))
             ) : (
               <TableEmptyRow
-                colSpan={6}
+                colSpan={5}
                 description={
                   search
                     ? tt('No users match the current search.')

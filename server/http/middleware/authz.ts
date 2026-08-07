@@ -4,11 +4,12 @@ import {
   type AuthorizedOwner,
   authorize,
   authorizeOwner,
+  canAuthorize,
 } from '@server/domain/authorization-context'
 import { forbidden, unauthorized } from '@server/domain/errors'
+import { platformOrganization } from '@server/domain/platform-organization'
 import { resolveOrganizationUserAuthorizationContext } from '@server/usecases/organization-membership-scopes'
 import { type ProtectedResource, requiredResourceScope } from '@shared/authz'
-import { predefinedOrganizationRoleScopes } from '@shared/organization-access'
 import type { RealmrootOrganizationScope } from '@shared/scope-registry'
 import type { Context, MiddlewareHandler } from 'hono'
 import { getPrincipal } from './authn'
@@ -72,7 +73,7 @@ export async function authorizedTenantInventory(
   requiredScope: RealmrootOrganizationScope,
 ): Promise<AuthorizationTenant[] | undefined> {
   const principal = getPrincipal(c)
-  if (principal.user && hasRealmAdminRole(principal.user.role)) return undefined
+  if (canAuthorize(await resolvePlatformOrganizationContext(c), platformBoundary(), requiredScope)) return undefined
   if (principal.user) {
     const memberships = await getDeps(c).authorization.listUserMemberships(principal.user.id)
     const userTenant = { type: 'user' as const, id: principal.user.id }
@@ -96,14 +97,13 @@ export async function authorizedTenantInventory(
   return []
 }
 
-export function requirePlatformAccess(c: Context, requiredScope: string) {
-  if (hasPlatformAccess(c, requiredScope)) return
-  throw forbidden('Platform administrator access is required.')
+export async function authorizePlatformOrganization(c: Context, requiredScope: RealmrootOrganizationScope) {
+  await authorizeOrganization(c, platformOrganization.id, requiredScope)
 }
 
-export function hasPlatformAccess(c: Context, _requiredScope: string) {
-  const principal = getPrincipal(c)
-  return Boolean(principal.user && hasRealmAdminRole(principal.user.role))
+export async function hasPlatformOrganizationAccess(c: Context, requiredScope: RealmrootOrganizationScope) {
+  const target = platformBoundary()
+  return canAuthorize(await resolvePlatformOrganizationContext(c), target, requiredScope)
 }
 
 export async function authorizeUser(c: Context, userId: string, requiredScope: string) {
@@ -117,39 +117,33 @@ export async function resolveAuthorizationContext(
 ): Promise<AuthorizationContext> {
   const principal = getPrincipal(c)
   if (principal.user) {
-    if (targetTenant.type === 'realm') {
-      return {
-        subject: { type: 'user', id: principal.user.id },
-        tenant: hasRealmAdminRole(principal.user.role) ? targetTenant : { type: 'user', id: principal.user.id },
-        scopes: new Set(
-          hasRealmAdminRole(principal.user.role) ? Object.values(predefinedOrganizationRoleScopes).flat() : [],
-        ),
-      }
-    }
+    const platformContext = await resolvePlatformOrganizationContext(c)
     if (targetTenant.type === 'user') {
-      const platformAdministrator = hasRealmAdminRole(principal.user.role)
+      const scopes = new Set(platformContext.scopes)
+      if (principal.user.id === targetTenant.id) {
+        for (const scope of ['self:read', 'self:write', 'agents:read', 'agents:write', 'audit-events:read']) {
+          scopes.add(scope)
+        }
+      }
       return {
         subject: { type: 'user', id: principal.user.id },
-        tenant: platformAdministrator ? targetTenant : { type: 'user', id: principal.user.id },
-        scopes: new Set(
-          platformAdministrator || principal.user.id === targetTenant.id
-            ? ['self:read', 'self:write', 'agents:read', 'agents:write', 'audit-events:read']
-            : [],
-        ),
+        tenant: platformContext.scopes.size > 0 ? targetTenant : { type: 'user', id: principal.user.id },
+        scopes,
       }
     }
-    if (hasRealmAdminRole(principal.user.role)) {
-      return {
-        subject: { type: 'user', id: principal.user.id },
-        tenant: targetTenant,
-        scopes: new Set(Object.values(predefinedOrganizationRoleScopes).flat()),
-      }
-    }
+    if (platformContext.scopes.size > 0) return { ...platformContext, tenant: targetTenant }
     return resolveOrganizationUserAuthorizationContext(getDeps(c), targetTenant.id, principal.user.id)
   }
   const agent = principal.agent
   if (!agent) throw unauthorized()
   const authority = agent.authority
+  if (authority?.kind === 'organization' && authority.organizationId === platformOrganization.id) {
+    return {
+      subject: { type: 'agent', id: agent.identityId },
+      tenant: targetTenant,
+      scopes: new Set(agent.scopes),
+    }
+  }
   const tenant: AuthorizationTenant =
     authority?.kind === 'organization'
       ? { type: 'organization', id: authority.organizationId }
@@ -167,16 +161,34 @@ function organizationBoundary(organizationId: string): AuthorizationTenant {
   return { type: 'organization', id: organizationId }
 }
 
+function platformBoundary(): AuthorizationTenant {
+  return organizationBoundary(platformOrganization.id)
+}
+
+async function resolvePlatformOrganizationContext(c: Context): Promise<AuthorizationContext> {
+  const principal = getPrincipal(c)
+  if (principal.user) {
+    return resolveOrganizationUserAuthorizationContext(getDeps(c), platformOrganization.id, principal.user.id)
+  }
+  const agent = principal.agent
+  if (agent?.authority?.kind === 'organization' && agent.authority.organizationId === platformOrganization.id) {
+    return {
+      subject: { type: 'agent', id: agent.identityId },
+      tenant: platformBoundary(),
+      scopes: new Set(agent.scopes),
+    }
+  }
+  if (!agent) throw unauthorized()
+  return {
+    subject: { type: 'agent', id: agent.identityId },
+    tenant: platformBoundary(),
+    scopes: new Set(),
+  }
+}
+
 export function authenticatedUser(): MiddlewareHandler {
   return async (c, next) => {
     if (!getPrincipal(c).user) throw unauthorized()
     await next()
   }
-}
-
-function hasRealmAdminRole(value: string | null | undefined) {
-  return (value ?? '')
-    .split(',')
-    .map((role) => role.trim())
-    .includes('admin')
 }

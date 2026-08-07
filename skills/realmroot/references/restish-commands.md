@@ -28,7 +28,7 @@ declared `scopes`. Use only a server whose `availability.status` is
 The selected representation supplies all navigation values:
 
 - `id` identifies the Resource Server in Realmroot commands;
-- `serviceUrl` is the target API to call directly;
+- `resourceUrl` is the target API and OAuth resource indicator;
 - `connection.status` is `connected`, `not_connected`, or `not_required`;
 - `connection.authorizedScopes` is the authority already held by the linked
   account;
@@ -49,7 +49,7 @@ Skip this step when `connection.status` is `connected` or `not_required`.
 Otherwise request only the scopes needed to discover or use the target:
 
 ```bash
-restish "$API_NAME" connect "$RESOURCE_SERVER_ID" --rsh-validate -o json <<'JSON'
+restish "$API_NAME" resource-servers connect "$RESOURCE_SERVER_ID" --rsh-validate -o json <<'JSON'
 {
   "scopes": ["<required-scope>"],
   "reason": "Use the requested capability for the controller"
@@ -66,7 +66,7 @@ To expand an existing connection for a Resource whose
 command with that Resource href:
 
 ```bash
-restish "$API_NAME" connect "$RESOURCE_SERVER_ID" --rsh-validate -o json <<JSON
+restish "$API_NAME" resource-servers connect "$RESOURCE_SERVER_ID" --rsh-validate -o json <<JSON
 {
   "resources": [{"href": "$RESOURCE_HREF"}],
   "scopes": ["$REQUIRED_SCOPE"],
@@ -102,7 +102,7 @@ Resource matches, report that result. A native service normally exposes one
 
 ## 4. Inspect And Connect The Target API
 
-Use the selected Resource Server's `serviceUrl`. Reuse one semantic Restish API
+Use the selected Resource Server's `resourceUrl`. Reuse one semantic Restish API
 name for the logical target service; use profiles for local, staging, account,
 or tenant contexts. An environment is never a separate API.
 
@@ -132,28 +132,11 @@ export RSH_PROFILE="$TARGET_PROFILE"
 
 The `default` profile remains production. Do not pre-create non-production
 profiles for external users; profiles are local configuration added only when
-that environment is actually selected. Explicit cleanroom validation must use
-the isolated `RSH_CONFIG_DIR` from the setup reference so temporary target
-connections never appear in the operator's normal `restish api list`.
+that environment is actually selected.
 
-The target's OpenAPI security requirements define the exact operation and
-scope. Bind its declared OIDC security scheme to the generic Realmroot target
-provider in the selected profile. Read the scheme ID and issuer from the
-target's OpenAPI document:
-
-```bash
-PROFILE=default
-SECURITY_SCHEME=realmrootOidc
-REALMROOT_ISSUER=https://id.realmroot.dev/api/auth
-restish api set "$TARGET_API" \
-  "profiles.${PROFILE}.credentials.${SECURITY_SCHEME}.auth.type: bearer" \
-  "profiles.${PROFILE}.credentials.${SECURITY_SCHEME}.auth.params.token: realmroot-plugin-managed" \
-  "profiles.${PROFILE}.credentials.${SECURITY_SCHEME}.auth.params.provider: realmroot-target" \
-  "profiles.${PROFILE}.credentials.${SECURITY_SCHEME}.auth.params.issuer: ${REALMROOT_ISSUER}"
-```
-
-The issuer selects the correct local identity when more than one Realmroot
-deployment can authorize the same target URL.
+The target's OpenAPI security requirements define the exact operation, scope,
+and credential ID. Do not invent a credential ID or auth scheme; use the one
+shown by `restish api auth inspect "$TARGET_API"`.
 
 ## 5. Request Exact Resource Access
 
@@ -165,7 +148,7 @@ the selected Resource Server's published contract; do not assume scope names
 from another service.
 
 ```bash
-restish "$API_NAME" access --rsh-validate -o json <<JSON
+restish "$API_NAME" agent-access access --rsh-validate -o json <<JSON
 {
   "resource": {"href": "$RESOURCE_HREF"},
   "scopes": ["$REQUIRED_SCOPE"],
@@ -177,8 +160,8 @@ JSON
 Realmroot decides whether existing controller authority can be reused. If a
 decision is needed, the generic interaction handler opens the hosted approval
 page and waits. When access is approved, Realmroot returns a generic credential
-offer; the plugin creates a local DPoP key, obtains a short-lived credential,
-stores it with the Resource href, and returns a safe receipt:
+offer. The plugin stores only that offer and returns the opaque source
+reference Restish needs:
 
 ```json
 {
@@ -186,17 +169,35 @@ stores it with the Resource href, and returns a safe receipt:
   "resource": {"href": "https://id.realmroot.dev/api/resource-servers/service-id/resources/resource-id"},
   "resourceIndicator": "https://api.example.com",
   "scopes": ["<required-scope>"],
-  "tokenExpiresAt": "2026-08-03T16:30:00Z"
+  "credentialSource": {
+    "name": "realmroot",
+    "reference": "https://id.realmroot.dev/api/resource-servers/service-id/resources/resource-id"
+  }
 }
 ```
 
-The plugin owns grant selection and token custody. If the command is
-interrupted, repeat the same access request; Realmroot resumes pending work or
-reuses matching approved authority. Reuse the resulting cached credential for
-every operation in that task. Request access again when switching Resources,
-when the credential expires or is rejected, or when the task needs additional
-scopes. Controller authority may persist, while every issued credential remains
-short-lived and bound to one Resource.
+Register that source against the credential ID published by the target's
+OpenAPI contract:
+
+```bash
+restish api auth add "$TARGET_API" "$CREDENTIAL_ID" \
+  --source realmroot \
+  --reference "$RESOURCE_HREF"
+restish api auth inspect "$TARGET_API" --redact
+```
+
+This is explicit local Restish configuration, not dynamic request injection.
+Restish owns the target DPoP private key, short-lived token cache, request
+proofs, renewal, and one forced renewal after a `401`. The plugin owns only the
+Realmroot Agent protocol credential and redeems the stored offer when Restish
+asks it to issue or renew a target credential. Neither component exposes a
+grant to the Agent.
+
+If the access command is interrupted, repeat the same request; Realmroot
+resumes pending work or reuses matching approved authority. Reuse the Restish
+credential binding for that Resource and scope set. Request access again when
+switching Resources, when Realmroot rejects renewal, or when the task needs
+additional scopes.
 
 ## 6. Invoke The Target
 
@@ -207,9 +208,10 @@ contract:
 restish "$TARGET_API" <generated-operation> -o json
 ```
 
-The plugin matches the request URL to the active Resource credential and adds
-`Authorization: DPoP ...` plus a fresh DPoP proof. Business traffic goes
-directly to the Resource Server, not through Realmroot.
+Restish selects the configured OpenAPI credential, obtains or reuses its
+short-lived token, and adds `Authorization: DPoP ...` plus a fresh proof bound
+to the exact request. Business traffic goes directly to the Resource Server,
+not through Realmroot.
 
 When an operation's OpenAPI response declares a header that must be forwarded
 to a later request, capture that header explicitly. Restish changes its default
@@ -224,8 +226,8 @@ Read the declared header from `RESPONSE_HEADERS` and forward its exact value.
 Use `--rsh-print b` separately when the response body is also needed. Replay an
 operation only when its contract guarantees idempotency.
 
-On `401`, the plugin removes the rejected cached credential. Rediscover the
-Resource, repeat the access request, and retry only after it succeeds. On
+On `401`, Restish forces one credential renewal and retries once. If Realmroot
+rejects renewal, rediscover the Resource and repeat the access request. On
 `403`, surface the target's authority error. Request additional scopes only
 when the user's task requires them.
 

@@ -132,13 +132,31 @@ export interface ManagementRouteConfig {
   response?: ZodType
   noBody?: boolean
   responseHeaders?: Record<string, { description: string; schema: Record<string, unknown> }>
-  errors?: Partial<Record<400 | 404 | 409 | 412 | 422 | 428 | 429 | 502, string>>
+  errors?: Partial<
+    Record<
+      400 | 404 | 409 | 412 | 422 | 428 | 429 | 502,
+      | string
+      | {
+          description: string
+          schema?: ZodType
+          headers?: Record<string, { description: string; schema: Record<string, unknown> }>
+        }
+    >
+  >
   security?: Array<Record<string, string[]>>
 }
 export const jsonContentType = 'application/json'
 export const multipartContentType = 'multipart/form-data'
-export function errorResponse(description: string) {
-  return { description, content: { [jsonContentType]: { schema: managementErrorResponseSchema } } }
+export function errorResponse(
+  description: string,
+  schema: ZodType = managementErrorResponseSchema,
+  headers?: Record<string, { description: string; schema: Record<string, unknown> }>,
+) {
+  return {
+    description,
+    ...(headers ? { headers } : {}),
+    content: { [jsonContentType]: { schema } },
+  }
 }
 export function jsonBody(schema: ZodType) {
   return { content: { [jsonContentType]: { schema } }, required: true }

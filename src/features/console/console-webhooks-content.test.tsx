@@ -80,12 +80,10 @@ describe('admin console authorization creation and Organization detail', () => {
     renderWithQuery(<ApiResourcesPage />)
     expect(await screen.findByText('Management API')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'New resource server' }))
-    fireEvent.change(await screen.findByLabelText('Name'), { target: { value: 'Billing API' } })
-    fireEvent.change(screen.getByLabelText('Identifier'), { target: { value: 'billing-api' } })
+    fireEvent.change(await screen.findByLabelText('Identifier'), { target: { value: 'billing-api' } })
     fireEvent.change(screen.getByLabelText('Protected resource URL'), {
       target: { value: 'https://billing.example.com' },
     })
-    fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Billing resource' } })
     expect(screen.getByLabelText('Authorization model')).toHaveProperty('value', '')
     expect(screen.getByLabelText('Visibility')).toHaveProperty('value', 'private')
     expect(screen.getByRole('switch', { name: 'Available to Agents' }).getAttribute('aria-checked')).toBe('true')
@@ -102,10 +100,8 @@ describe('admin console authorization creation and Organization detail', () => {
           url: '/api/resource-servers',
           body: {
             identifier: 'billing-api',
-            name: 'Billing API',
             resourceUrl: 'https://billing.example.com',
             authorizationDetails: [],
-            description: 'Billing resource',
             ownerOrganizationId: 'org-1',
             visibility: 'private',
             availableToAgents: true,

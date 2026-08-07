@@ -50,7 +50,7 @@ export function createUserRepository(db: Database): UserRepository {
           username: input.username ?? null,
           email: input.email.toLowerCase(),
           emailVerified: false,
-          role: roleValue(input.role),
+          role: 'user',
           createdAt: now,
           updatedAt: now,
         }),
@@ -85,6 +85,26 @@ export function createUserRepository(db: Database): UserRepository {
         throw notFound('User not found.')
       }
 
+      return mapUser(updated)
+    },
+
+    async suspendManagedUser(userId, reason, expiresAt) {
+      const [updated] = await db
+        .update(user)
+        .set({ banned: true, banReason: reason, banExpires: expiresAt })
+        .where(eq(user.id, userId))
+        .returning()
+      if (!updated) throw notFound('User not found.')
+      return mapUser(updated)
+    },
+
+    async restoreManagedUser(userId) {
+      const [updated] = await db
+        .update(user)
+        .set({ banned: false, banReason: null, banExpires: null })
+        .where(eq(user.id, userId))
+        .returning()
+      if (!updated) throw notFound('User not found.')
       return mapUser(updated)
     },
 
@@ -204,6 +224,21 @@ export function createUserRepository(db: Database): UserRepository {
       return row.token
     },
 
+    async deleteSessions(userId, sessionId) {
+      const where = sessionId ? and(eq(session.userId, userId), eq(session.id, sessionId)) : eq(session.userId, userId)
+      const deleted = await db.delete(session).where(where).returning()
+      return deleted.map((item) => ({
+        id: item.id,
+        expiresAt: item.expiresAt,
+        createdAt: item.createdAt,
+        updatedAt: item.updatedAt,
+        ipAddress: item.ipAddress,
+        userAgent: item.userAgent,
+        activeOrganizationId: item.activeOrganizationId,
+        impersonatedBy: item.impersonatedBy,
+      }))
+    },
+
     async createPasswordResetRequest(input) {
       await db.insert(passwordResetRequest).values(input)
       return input
@@ -247,10 +282,6 @@ function managedUserWhere(query: AdminUserListQuery) {
     conditions.push(like(column, `%${query.search}%`))
   }
 
-  if (query.role !== undefined) {
-    conditions.push(eq(user.role, query.role))
-  }
-
   if (query.banned !== undefined) {
     conditions.push(eq(user.banned, query.banned))
   }
@@ -279,13 +310,7 @@ function managedUserUpdate(input: AdminUpdateUserInput) {
     ...(input.displayName !== undefined ? { name: input.displayName } : {}),
     ...(input.username !== undefined ? { username: input.username } : {}),
     ...(input.avatarAssetId !== undefined ? { avatarAssetId: input.avatarAssetId } : {}),
-    ...(input.role !== undefined ? { role: roleValue(input.role) } : {}),
   }
-}
-
-function roleValue(role: string | string[] | undefined) {
-  if (Array.isArray(role)) return role.join(',')
-  return role
 }
 
 async function assertAccountAvatarReference(

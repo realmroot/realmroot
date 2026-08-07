@@ -15,7 +15,7 @@ import {
   refreshTokenGrantType,
   tokenExchangeGrantType,
 } from '@server/usecases/token-exchange'
-import { realmrootOAuthScopes, resourceByRoutePrefix } from '@shared/authz'
+import { agentBootstrapScopes, realmrootOAuthScopes, resourceByRoutePrefix } from '@shared/authz'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
 import {
@@ -30,7 +30,7 @@ import type { RpcSchema } from './app-rpc-schema'
 import type { AgentConfiguration, AppConfig } from './app-types'
 import { accessLog } from './middleware/access-log'
 import { authn, getPrincipal, type SessionReader } from './middleware/authn'
-import { authz, requirePlatformAccess } from './middleware/authz'
+import { authorizePlatformOrganization, authz } from './middleware/authz'
 import { trustedOriginCors } from './middleware/cors'
 import { depsMiddleware } from './middleware/deps'
 import { requestContext } from './middleware/request-context'
@@ -46,6 +46,7 @@ import { createProtectedResourceRoutes } from './routes/management'
 import { oauthConsentRoute } from './routes/oauth/consent'
 import { onboardingRoutes } from './routes/onboarding'
 import { createResourceConnectionRoutes } from './routes/resource-connections'
+import { trustedRequestUrl } from './trusted-request-origin'
 
 type AuthHandler = Pick<Auth, 'handler'> & {
   api: {
@@ -128,6 +129,7 @@ export function createApp(auth: AuthHandler, deps: Deps, config: AppConfig = {})
         agentinfo_endpoint: `${issuer}/agentinfo`,
         agentinfo_claims_supported: agentInfoClaimsSupported,
         agent_token_endpoint: `${issuer}/oauth2/token`,
+        agent_bootstrap_scopes_supported: agentBootstrapScopes,
         agent_jwks_uri: `${issuer}/jwks`,
       })
     })
@@ -221,6 +223,7 @@ function mountApiRoutes(app: Hono, auth: AuthHandler, config: AppConfig) {
       createProtectedResourceRoutes({
         authApi: managementApi,
         canonicalOrigin: config.baseURL,
+        trustedOrigins: config.trustedOrigins,
         securityPolicy: config.securityPolicy,
       }),
     )
@@ -228,7 +231,7 @@ function mountApiRoutes(app: Hono, auth: AuthHandler, config: AppConfig) {
     .route('/api/account', accountRoutes(managementApi, config.securityPolicy, canonicalOrigin || undefined))
     .route('/api/account', createAccountAssetRoutes(config.securityPolicy))
     .route('/api/account-connections', createResourceConnectionRoutes(canonicalOrigin || undefined))
-    .route('/api', createAgentProtocolRoutes(auth.api, issuer || undefined))
+    .route('/api', createAgentProtocolRoutes(auth.api, issuer || undefined, config.trustedOrigins))
 }
 
 export function protectResourceRoutes(app: Hono, auth: SessionReader, config: AppConfig = {}) {
@@ -243,7 +246,7 @@ export function protectResourceRoutes(app: Hono, auth: SessionReader, config: Ap
     }
     await authn(auth, { allowAgent: true, required: true, oauth: agentOAuth(config) })(c, async () => {
       if (getPrincipal(c).user) {
-        requirePlatformAccess(c, 'applications:write')
+        await authorizePlatformOrganization(c, 'applications:write')
         await next()
         return
       }
@@ -258,6 +261,7 @@ function agentOAuth(config: AppConfig) {
   return {
     issuer: (requestUrl: string) => oauthIssuer(config, requestUrl),
     audience: (requestUrl: string) => `${(config.baseURL ?? new URL(requestUrl).origin).replace(/\/$/, '')}/api`,
+    resourceRequestUrl: (requestUrl: string) => trustedRequestUrl(config, requestUrl).toString(),
   }
 }
 

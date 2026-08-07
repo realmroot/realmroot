@@ -32,7 +32,7 @@ export interface RestishAgentPlugin {
   listResources<T>(resourceServerId: string): T
   connectResource<T>(resourceId: string, input: unknown): PendingResourceAccess<T>
   requestResourceAccess<T>(input: unknown): PendingResourceAccess<T>
-  connectTarget(apiName: string, resourceUrl: string): void
+  connectTarget(apiName: string, resourceUrl: string, credentialId: string, reference: string): void
   targetRequest<T>(apiName: string, path: string): T
   dispose(): void
 }
@@ -45,7 +45,7 @@ export function createRestishAgentPlugin(origin: string): RestishAgentPlugin {
   const configDir = join(root, 'config')
   const stateDir = join(root, 'state')
   const binary = join(root, 'restish-realmroot')
-  const apiName = 'realmroot-e2e-plugin'
+  const apiName = 'realmroot'
   const approvalFile = join(root, 'approval-url')
   const targetURLs = new Map<string, string>()
   mkdirSync(configDir)
@@ -171,30 +171,29 @@ export function createRestishAgentPlugin(origin: string): RestishAgentPlugin {
   }
 
   return {
-    firstWhoami: (name) => invokePending<PluginIdentityResult>(['whoami'], undefined, { REALMROOT_AGENT_NAME: name }),
-    whoami: () => invoke<PluginIdentityResult>(['whoami']),
+    firstWhoami: (name) =>
+      invokePending<PluginIdentityResult>(['agents', 'whoami'], undefined, { REALMROOT_AGENT_NAME: name }),
+    whoami: () => invoke<PluginIdentityResult>(['agents', 'whoami']),
     listResourceServers: <T>() => get<T>(`${origin}/api/resource-servers?limit=100&offset=0`),
     listResources: <T>(resourceServerId: string) =>
       get<T>(`${origin}/api/resource-servers/${encodeURIComponent(resourceServerId)}/resources?limit=100&offset=0`),
-    connectResource: <T>(resourceId: string, input: unknown) => invokePending<T>(['connect', resourceId], input),
-    requestResourceAccess: <T>(input: unknown) => invokePending<T>(['access'], input),
-    connectTarget: (targetAPIName, resourceUrl) => {
+    connectResource: <T>(resourceId: string, input: unknown) =>
+      invokePending<T>(['resource-servers', 'connect', resourceId], input),
+    requestResourceAccess: <T>(input: unknown) => invokePending<T>(['agent-access', 'access'], input),
+    connectTarget: (targetAPIName, resourceUrl, credentialId, reference) => {
       execFileSync('restish', ['api', 'connect', targetAPIName, resourceUrl, '--no-discover', '--replace', '--yes'], {
+        cwd: repoRoot,
+        env: environment,
+        encoding: 'utf8',
+      })
+      execFileSync('restish', ['api', 'sync', targetAPIName, '--yes'], {
         cwd: repoRoot,
         env: environment,
         encoding: 'utf8',
       })
       execFileSync(
         'restish',
-        [
-          'api',
-          'set',
-          targetAPIName,
-          'profiles.default.auth.type: bearer',
-          'profiles.default.auth.params.token: realmroot-plugin-managed',
-          'profiles.default.auth.params.provider: realmroot-target',
-          `profiles.default.auth.params.issuer: ${origin}/api/auth`,
-        ],
+        ['api', 'auth', 'add', targetAPIName, credentialId, '--source', 'realmroot', '--reference', reference],
         { cwd: repoRoot, env: environment, encoding: 'utf8' },
       )
       targetURLs.set(targetAPIName, resourceUrl.replace(/\/$/, ''))

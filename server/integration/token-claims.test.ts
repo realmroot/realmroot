@@ -43,6 +43,7 @@ describe('OAuth token claim building over real D1', () => {
       if (new URL(request.url).pathname.endsWith('/openapi.json')) {
         return Response.json({
           openapi: '3.1.0',
+          info: { title: 'Contacts API', version: '1.0.0' },
           components: {
             securitySchemes: {
               oauth: {
@@ -88,7 +89,6 @@ describe('OAuth token claim building over real D1', () => {
     const resource = (await (
       await postJson(harness, cookie, '/api/resource-servers', {
         identifier: 'contacts-api',
-        name: 'Contacts API',
         resourceUrl: audience,
         ownerOrganizationId: organization.id,
       })
@@ -147,6 +147,7 @@ describe('OAuth token claim building over real D1', () => {
       if (new URL(request.url).pathname.endsWith('/openapi.json')) {
         return Response.json({
           openapi: '3.1.0',
+          info: { title: 'Contacts API', version: '1.0.0' },
           components: { securitySchemes: {} },
           paths: {},
         })
@@ -259,7 +260,6 @@ describe('OAuth token claim building over real D1', () => {
     const ownerAudience = 'https://api.example.com/owner-contacts'
     await postJson(harness, cookie, '/api/resource-servers', {
       identifier: 'foreign-contacts-api',
-      name: 'Foreign Contacts API',
       resourceUrl: audience,
       ownerOrganizationId: foreignOrganization.id,
       visibility: 'private',
@@ -267,7 +267,6 @@ describe('OAuth token claim building over real D1', () => {
     const ownerResource = (await (
       await postJson(harness, cookie, '/api/resource-servers', {
         identifier: 'owner-contacts-api',
-        name: 'Owner Contacts API',
         resourceUrl: ownerAudience,
         ownerOrganizationId: ownerOrganization.id,
         visibility: 'private',
@@ -312,7 +311,12 @@ async function removedScopeOpenApiFetch(request: Request) {
     return Response.json({ resource: resourceUrlFromMetadataUrl(request.url), scopes_supported: ['contacts:other'] })
   }
   if (new URL(request.url).pathname.endsWith('/openapi.json')) {
-    return Response.json({ openapi: '3.1.0', components: { securitySchemes: {} }, paths: {} })
+    return Response.json({
+      openapi: '3.1.0',
+      info: { title: 'Contacts API', version: '1.0.0' },
+      components: { securitySchemes: {} },
+      paths: {},
+    })
   }
   return new Response(null, { headers: { link: '</openapi.json>; rel="service-desc"' } })
 }
@@ -324,6 +328,7 @@ async function contactsScopeOpenApiFetch(request: Request) {
   if (new URL(request.url).pathname.endsWith('/openapi.json')) {
     return Response.json({
       openapi: '3.1.0',
+      info: { title: 'Contacts API', version: '1.0.0' },
       components: {
         securitySchemes: {
           oauth: {

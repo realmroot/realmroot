@@ -71,7 +71,6 @@ describe('OIDC authorization over real D1', () => {
       headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({
         identifier: 'oidc-resource',
-        name: 'OIDC Resource',
         resourceUrl: resource,
         ownerOrganizationId: 'org_platform',
       }),

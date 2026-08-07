@@ -134,34 +134,34 @@ export const apiResourceResponseSchema = z.object({
   updatedAt: z.string(),
 })
 
-export const createApiResourceRequestSchema = z.object({
-  identifier: nonEmptyString,
-  name: nonEmptyString,
-  resourceUrl: z.url(),
-  connectorId: nonEmptyString.optional(),
-  authorizationDetails: authorizationDetailsSchema.default([]),
-  description: optionalText,
-  enabled: z.boolean().optional(),
-  ownerOrganizationId: nonEmptyString,
-  visibility: apiResourceVisibilitySchema.optional(),
-  availableToAgents: z.boolean().optional(),
-})
+export const createApiResourceRequestSchema = z
+  .object({
+    identifier: nonEmptyString,
+    resourceUrl: z.url(),
+    connectorId: nonEmptyString.optional(),
+    authorizationDetails: authorizationDetailsSchema.default([]),
+    enabled: z.boolean().optional(),
+    ownerOrganizationId: nonEmptyString,
+    visibility: apiResourceVisibilitySchema.optional(),
+    availableToAgents: z.boolean().optional(),
+  })
+  .strict()
 
-export const updateApiResourceRequestSchema = z.object({
-  identifier: nonEmptyString.optional(),
-  name: nonEmptyString.optional(),
-  resourceUrl: z.url().optional(),
-  connectorId: nonEmptyString.nullable().optional(),
-  authorizationDetails: authorizationDetailsSchema.optional(),
-  description: optionalText,
-  enabled: z.boolean().optional(),
-  ownerOrganizationId: nonEmptyString.optional(),
-  visibility: apiResourceVisibilitySchema.optional(),
-  scopeGrantModes: z
-    .array(z.object({ scope: nonEmptyString, grantMode: resourceScopeGrantModeSchema }).strict())
-    .optional(),
-  availableToAgents: z.boolean().optional(),
-})
+export const updateApiResourceRequestSchema = z
+  .object({
+    identifier: nonEmptyString.optional(),
+    resourceUrl: z.url().optional(),
+    connectorId: nonEmptyString.nullable().optional(),
+    authorizationDetails: authorizationDetailsSchema.optional(),
+    enabled: z.boolean().optional(),
+    ownerOrganizationId: nonEmptyString.optional(),
+    visibility: apiResourceVisibilitySchema.optional(),
+    scopeGrantModes: z
+      .array(z.object({ scope: nonEmptyString, grantMode: resourceScopeGrantModeSchema }).strict())
+      .optional(),
+    availableToAgents: z.boolean().optional(),
+  })
+  .strict()
 
 export const roleScopeSchema = z.object({
   resourceId: nonEmptyString,

@@ -234,7 +234,7 @@ describe('console dashboard guards', () => {
           jsonResponse({
             canCreateOrganization: true,
             showOrganizations: false,
-            realmOperator: false,
+            platformOperator: false,
             consoleOrganizations: [],
           }),
         )

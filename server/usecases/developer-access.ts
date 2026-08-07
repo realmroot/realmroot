@@ -1,4 +1,7 @@
+import { platformOrganization } from '@server/domain/platform-organization'
+import { realmrootResourceServer } from '@server/domain/realmroot-resource-server'
 import type { Deps } from '@server/usecases/deps'
+import { resolveOrganizationMembershipScopes } from '@server/usecases/organization-membership-scopes'
 import type { DeveloperConsoleAccessResponse } from '@shared/api/account'
 import type { OrganizationCreationPolicyResponse } from '@shared/api/management'
 
@@ -6,7 +9,6 @@ type DeveloperAccessUser = {
   id: string
   email: string
   emailVerified: boolean
-  role: string | null
 }
 
 export async function resolveDeveloperAccess(
@@ -18,7 +20,18 @@ export async function resolveDeveloperAccess(
     deps.configz.getDeveloperConsoleAccessPolicy(),
   ])
   const memberships = await deps.authorization.listUserMemberships(user.id)
-  const realmOperator = hasRole(user.role, 'admin')
+  const platformMembership = memberships.find((membership) => membership.organizationId === platformOrganization.id)
+  const platformScopes = new Set(
+    platformMembership
+      ? await resolveOrganizationMembershipScopes(
+          deps,
+          platformOrganization.id,
+          platformMembership.roles,
+          realmrootResourceServer.id,
+        )
+      : [],
+  )
+  const platformOperator = platformScopes.size > 0
   const resolvedMemberships = await Promise.all(
     memberships.map(async (membership) => ({
       membership,
@@ -45,7 +58,11 @@ export async function resolveDeveloperAccess(
       },
     ]
   })
-  const canCreateOrganization = mayCreateOrganization(organizationCreationPolicy, user)
+  const canCreateOrganization = mayCreateOrganization(
+    organizationCreationPolicy,
+    user,
+    platformScopes.has('organizations:write'),
+  )
   const showOrganizations =
     canCreateOrganization ||
     memberships.length > 0 ||
@@ -54,25 +71,19 @@ export async function resolveDeveloperAccess(
   return {
     canCreateOrganization,
     showOrganizations,
-    realmOperator,
+    platformOperator,
     consoleOrganizations,
   }
 }
 
 export function mayCreateOrganization(
   policy: OrganizationCreationPolicyResponse,
-  user: Pick<DeveloperAccessUser, 'id' | 'emailVerified' | 'role'>,
+  user: Pick<DeveloperAccessUser, 'id' | 'emailVerified'>,
+  platformCanCreateOrganization = false,
 ) {
   return (
-    hasRole(user.role, 'admin') ||
+    platformCanCreateOrganization ||
     (policy.mode === 'approved_users' && policy.approvedUserIds.includes(user.id)) ||
     (policy.mode === 'verified_users' && user.emailVerified)
   )
-}
-
-export function hasRole(value: string | null | undefined, required: string) {
-  return (value ?? '')
-    .split(',')
-    .map((role) => role.trim())
-    .includes(required)
 }

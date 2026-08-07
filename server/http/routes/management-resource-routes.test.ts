@@ -99,10 +99,12 @@ describe('management resource routes', () => {
     expect(authorizationService.createInvitation).toHaveBeenCalledWith(
       'org-1',
       { email: 'new@example.com', roles: ['member'] },
-      'admin-1',
-      true,
+      { agent: null, controllerUserId: 'admin-1' },
     )
-    expect(authorizationService.removeMember).toHaveBeenCalledWith('org-1', 'member-1', 'admin-1')
+    expect(authorizationService.removeMember).toHaveBeenCalledWith('org-1', 'member-1', {
+      agent: null,
+      controllerUserId: 'admin-1',
+    })
   })
 
   it('routes API resource and Organization Role requests', async () => {
@@ -115,7 +117,6 @@ describe('management resource routes', () => {
       'POST',
       {
         identifier: 'contacts',
-        name: 'Contacts',
         resourceUrl: 'https://api.example.com',
         ownerOrganizationId: 'org-1',
       },
@@ -143,6 +144,39 @@ describe('management resource routes', () => {
     await expectJson(app, '/organizations/org-1/roles/operator', 'GET', undefined, 200)
     await expectJson(app, '/organizations/org-1/roles/operator', 'PATCH', { displayName: 'Operator 2' }, 200)
     await expectStatus(app, '/organizations/org-1/roles/operator', 'DELETE', undefined, 204)
+  })
+
+  it('returns the canonical Resource Server representation for an Agent credential bound to Organization authority [spec: agent-identity/realmroot-built-in-resource-server]', async () => {
+    const { app } = await loadAuthorizationRoutes('authority')
+
+    await expectJson(app, '/resource-servers', 'GET', undefined, 200)
+    await expectJson(app, '/resource-servers/resource-1', 'GET', undefined, 200)
+
+    expect(externalResourcesUsecase.listApiResources).toHaveBeenCalled()
+    expect(externalResourcesUsecase.getApiResource).toHaveBeenCalledWith(
+      expect.anything(),
+      'resource-1',
+      'http://localhost',
+    )
+    expect(externalResourcesUsecase.listAgentResourceServers).not.toHaveBeenCalled()
+    expect(externalResourcesUsecase.getAgentResourceServer).not.toHaveBeenCalled()
+  })
+
+  it('returns that same canonical representation for Agent bootstrap discovery [spec: agent-identity/realmroot-built-in-resource-server]', async () => {
+    const { app } = await loadAuthorizationRoutes('bootstrap')
+
+    const list = await request(app, '/resource-servers', 'GET', undefined)
+    expect(list.status).toBe(200)
+    const item = ((await list.json()) as { items: Array<Record<string, unknown>> }).items[0]
+    expect(item).toMatchObject({
+      resourceUrl: 'https://api.example.com',
+      ownerOrganizationId: 'org-1',
+      availability: { status: 'unavailable' },
+      links: { resources: 'https://auth.example.com/api/resource-servers/resource-1/resources' },
+    })
+    expect(item).not.toHaveProperty('serviceUrl')
+    expect(item).not.toHaveProperty('resourceIndicator')
+    expect(externalResourcesUsecase.listAgentResourceServers).toHaveBeenCalled()
   })
 
   it('routes management connector requests to the connector service', async () => {
@@ -220,7 +254,7 @@ async function loadAppRoutes() {
   return { app, applicationService }
 }
 
-async function loadAuthorizationRoutes() {
+async function loadAuthorizationRoutes(agentMode: 'authority' | 'bootstrap' | null = null) {
   const authorizationService = authorizationServiceMock()
   const apiResource = {
     id: 'resource-1',
@@ -238,12 +272,28 @@ async function loadAuthorizationRoutes() {
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
     authorization: null,
+    availability: { status: 'unavailable' as const, checkedAt: '2026-01-01T00:00:00.000Z' },
+    scopes: [],
+    connection: null,
+    links: {
+      self: 'https://auth.example.com/api/resource-servers/resource-1',
+      resources: 'https://auth.example.com/api/resource-servers/resource-1/resources',
+      connectionRequests: null,
+    },
   }
   vi.spyOn(externalResourcesUsecase, 'listApiResources').mockResolvedValue({
     items: [apiResource],
     pagination: { limit: 50, offset: 0, total: 1, hasMore: false, nextOffset: null },
   })
   vi.spyOn(externalResourcesUsecase, 'getApiResource').mockResolvedValue(apiResource)
+  vi.spyOn(externalResourcesUsecase, 'listAgentResourceServers').mockResolvedValue({
+    items: [{ ...apiResource, connection: { status: 'not_required', displayName: null, authorizedScopes: [] } }],
+    pagination: { limit: 50, offset: 0, total: 1, hasMore: false, nextOffset: null },
+  })
+  vi.spyOn(externalResourcesUsecase, 'getAgentResourceServer').mockResolvedValue({
+    ...apiResource,
+    connection: { status: 'not_required', displayName: null, authorizedScopes: [] },
+  })
   vi.spyOn(authorizationUsecase, 'getResourceContract').mockResolvedValue({
     resourceId: apiResource.id,
     sourceUrl: 'https://api.example.com/openapi.json',
@@ -270,11 +320,34 @@ async function loadAuthorizationRoutes() {
   const { createManagementApiResourcesRoute } = await import('@server/http/routes/management/api-resources')
   const { managementOrganizationsRoute } = await import('@server/http/routes/management/organizations')
   const { createProtectedResourceRoutes } = await import('@server/http/routes/management')
-  const app = withAdminContext()
+  const app = agentMode ? withAgentContext(agentMode === 'authority') : withAdminContext()
   app.route('/resource-servers', createManagementApiResourcesRoute())
   app.route('/organizations', managementOrganizationsRoute)
   app.route('/', createProtectedResourceRoutes({ authApi: {} as never, canonicalOrigin: 'https://auth.example.com' }))
   return { app, authorizationService }
+}
+
+function withAgentContext(hasAuthority: boolean) {
+  const app = new Hono()
+  const deps = createTestDeps()
+  app.use('*', async (c, next) => {
+    c.set('principal', {
+      session: null,
+      user: null,
+      agent: {
+        issuer: 'https://auth.example.com/api/auth',
+        subject: 'agt_1',
+        identityId: 'identity-1',
+        protocolAgentId: 'agent-1',
+        hostId: 'host-1',
+        scopes: ['resource-servers:read'],
+        authority: hasAuthority ? { kind: 'organization', organizationId: 'org-1' } : null,
+      },
+    })
+    c.set('deps', deps)
+    await next()
+  })
+  return app
 }
 
 async function loadConnectorRoutes() {

@@ -36,13 +36,8 @@ import {
   updateRoleRequestSchema,
 } from '@shared/api/authorization'
 import { Hono } from 'hono'
-import { getActorUserId } from '../../middleware/authn'
-import {
-  authorizedOrganizationIds,
-  authorizeOrganization,
-  hasPlatformAccess,
-  requirePlatformAccess,
-} from '../../middleware/authz'
+import { getActorUserId, getMutationActor } from '../../middleware/authn'
+import { authorizedOrganizationIds, authorizeOrganization, authorizePlatformOrganization } from '../../middleware/authz'
 import { getDeps } from '../../middleware/deps'
 import { readJson, readQuery } from '../validation'
 
@@ -59,7 +54,7 @@ managementOrganizationsRoute.get('/', async (c) =>
 )
 
 managementOrganizationsRoute.post('/', async (c) => {
-  requirePlatformAccess(c, 'organizations:write')
+  await authorizePlatformOrganization(c, 'organizations:write')
   const ownerUserId = getActorUserId(c)
   if (!ownerUserId) throw forbidden('Only authenticated users can create Organizations.')
   const organization = organizationResponseSchema.parse(
@@ -99,16 +94,8 @@ managementOrganizationsRoute.get('/:organizationId/members', async (c) => {
 managementOrganizationsRoute.post('/:organizationId/members', async (c) => {
   const organizationId = c.req.param('organizationId')
   await authorizeOrganization(c, organizationId, 'role-assignments:write')
-  const actorUserId = getActorUserId(c)
-  if (!actorUserId) throw forbidden('Only Organization users can assign Roles.')
   const member = memberResponseSchema.parse(
-    await addMember(
-      getDeps(c),
-      organizationId,
-      await readJson(c, addMemberRequestSchema),
-      actorUserId,
-      hasPlatformAccess(c, 'organizations:write'),
-    ),
+    await addMember(getDeps(c), organizationId, await readJson(c, addMemberRequestSchema)),
   )
   c.header(
     'Location',
@@ -139,9 +126,7 @@ managementOrganizationsRoute.patch('/:organizationId/members/:memberId', async (
 
 managementOrganizationsRoute.delete('/:organizationId/members/:memberId', async (c) => {
   await authorizeOrganization(c, c.req.param('organizationId'), 'role-assignments:write')
-  const actorUserId = getActorUserId(c)
-  if (!actorUserId) throw forbidden('Only Organization users can remove members.')
-  await removeMember(getDeps(c), c.req.param('organizationId'), c.req.param('memberId'), actorUserId)
+  await removeMember(getDeps(c), c.req.param('organizationId'), c.req.param('memberId'), getMutationActor(c))
   return c.body(null, 204)
 })
 
@@ -155,8 +140,6 @@ managementOrganizationsRoute.get('/:organizationId/members/:memberId/roles', asy
 
 managementOrganizationsRoute.put('/:organizationId/members/:memberId/roles', async (c) => {
   await authorizeOrganization(c, c.req.param('organizationId'), 'role-assignments:write')
-  const actorUserId = getActorUserId(c)
-  if (!actorUserId) throw forbidden('Only Organization users can assign Roles.')
   return c.json(
     memberRolesResponseSchema.parse(
       await replaceMemberRoles(
@@ -164,8 +147,7 @@ managementOrganizationsRoute.put('/:organizationId/members/:memberId/roles', asy
         c.req.param('organizationId'),
         c.req.param('memberId'),
         await readJson(c, replaceMemberRolesRequestSchema),
-        actorUserId,
-        hasPlatformAccess(c, 'role-assignments:write'),
+        getMutationActor(c),
       ),
     ),
   )
@@ -178,11 +160,9 @@ managementOrganizationsRoute.get('/:organizationId/roles', async (c) => {
 
 managementOrganizationsRoute.post('/:organizationId/roles', async (c) => {
   await authorizeOrganization(c, c.req.param('organizationId'), 'roles:write')
-  const actorUserId = getActorUserId(c)
-  if (!actorUserId) throw forbidden('Only Organization users can define Roles.')
   const organizationId = c.req.param('organizationId')
   const role = roleResponseSchema.parse(
-    await createRole(getDeps(c), organizationId, await readJson(c, createRoleRequestSchema), actorUserId),
+    await createRole(getDeps(c), organizationId, await readJson(c, createRoleRequestSchema), getMutationActor(c)),
   )
   c.header('Location', `/api/organizations/${encodeURIComponent(organizationId)}/roles/${encodeURIComponent(role.key)}`)
   return c.json(role, 201)
@@ -197,8 +177,6 @@ managementOrganizationsRoute.get('/:organizationId/roles/:roleKey', async (c) =>
 
 managementOrganizationsRoute.patch('/:organizationId/roles/:roleKey', async (c) => {
   await authorizeOrganization(c, c.req.param('organizationId'), 'roles:write')
-  const actorUserId = getActorUserId(c)
-  if (!actorUserId) throw forbidden('Only Organization users can define Roles.')
   return c.json(
     roleResponseSchema.parse(
       await updateRole(
@@ -206,7 +184,7 @@ managementOrganizationsRoute.patch('/:organizationId/roles/:roleKey', async (c) 
         c.req.param('organizationId'),
         c.req.param('roleKey'),
         await readJson(c, updateRoleRequestSchema),
-        actorUserId,
+        getMutationActor(c),
       ),
     ),
   )
@@ -214,9 +192,7 @@ managementOrganizationsRoute.patch('/:organizationId/roles/:roleKey', async (c) 
 
 managementOrganizationsRoute.delete('/:organizationId/roles/:roleKey', async (c) => {
   await authorizeOrganization(c, c.req.param('organizationId'), 'roles:write')
-  const actorUserId = getActorUserId(c)
-  if (!actorUserId) throw forbidden('Only Organization users can define Roles.')
-  await deleteRole(getDeps(c), c.req.param('organizationId'), c.req.param('roleKey'), actorUserId)
+  await deleteRole(getDeps(c), c.req.param('organizationId'), c.req.param('roleKey'), getMutationActor(c))
   return c.body(null, 204)
 })
 
@@ -228,15 +204,12 @@ managementOrganizationsRoute.get('/:organizationId/invitations', async (c) => {
 managementOrganizationsRoute.post('/:organizationId/invitations', async (c) => {
   const organizationId = c.req.param('organizationId')
   await authorizeOrganization(c, organizationId, 'role-assignments:write')
-  const actorUserId = getActorUserId(c)
-  if (!actorUserId) throw forbidden('Only Organization users can assign Roles.')
   const invitation = invitationResponseSchema.parse(
     await createInvitation(
       getDeps(c),
       organizationId,
       await readJson(c, createInvitationRequestSchema),
-      actorUserId,
-      hasPlatformAccess(c, 'role-assignments:write'),
+      getMutationActor(c),
     ),
   )
   c.header(

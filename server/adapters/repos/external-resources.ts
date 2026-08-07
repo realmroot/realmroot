@@ -782,7 +782,7 @@ export function createExternalResourceRepository(db: Database): ExternalResource
             and(
               eq(agentAccessRequest.id, input.requestId),
               eq(agentAccessRequest.grantId, agentAccessGrant.id),
-              eq(agentAccessRequest.status, 'approved'),
+              inArray(agentAccessRequest.status, ['approved', 'consumed']),
             ),
           )
           .where(

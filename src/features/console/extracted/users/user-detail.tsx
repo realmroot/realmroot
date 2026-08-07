@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { ArrowLeft, Pencil, Trash2 } from 'lucide-react'
 import { type FormEvent, type ReactNode, useEffect, useState } from 'react'
-import { Field, SelectInput, TextInput } from '@/components/product-form'
+import { Field, TextInput } from '@/components/product-form'
 import { TableEmptyRow } from '@/components/table-empty-row'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -14,16 +14,7 @@ import { AccessGrantsPanel } from '@/features/authorization/access-grants-panel'
 import { BanUserDialog, DangerConfirmDialog, ErrorState, LoadingState } from '@/features/management/dialogs'
 import { navigateConsoleTab } from '@/features/management/resource-components'
 import type { UserDetailSection } from '@/features/management/shared'
-import {
-  formatDate,
-  formatRealmAccess,
-  hasRealmAdminAccess,
-  nullableString,
-  parseForm,
-  setRealmAdminAccess,
-  useAdminMutation,
-  userDisplayName,
-} from '@/features/management/utils'
+import { formatDate, nullableString, parseForm, useAdminMutation, userDisplayName } from '@/features/management/utils'
 import { consoleQueryKeys } from '@/lib/api/console-query-keys'
 import {
   banUser,
@@ -340,7 +331,6 @@ function UserOverview({
     <div className="detailFlatRows">
       <DetailRow label="Primary email" value={user.email ?? '—'} />
       <DetailRow label="Email verification" value={user.emailVerified ? tt('Verified') : tt('Not verified')} />
-      <DetailRow label="Realm access" value={formatRealmAccess(user.role)} />
       {realmDetails ? (
         <>
           <DetailRow label="Active sessions" value={String(sessions)} />
@@ -722,13 +712,11 @@ function UserEditSheet({
           onSubmit={(event: FormEvent<HTMLFormElement>) => {
             event.preventDefault()
             const form = new FormData(event.currentTarget)
-            const realmAccess = form.get('realmAccess') === 'admin'
             onSave(
               parseForm(managementUpdateUserRequestSchema, {
                 displayName: form.get('displayName'),
                 email: form.get('email'),
                 username: nullableString(String(form.get('username') ?? '')),
-                role: setRealmAdminAccess(user.role, realmAccess),
               }),
             )
           }}
@@ -741,12 +729,6 @@ function UserEditSheet({
           </Field>
           <Field label={tt('Username')}>
             <TextInput defaultValue={user.username ?? ''} name="username" />
-          </Field>
-          <Field label={tt('Realm access')}>
-            <SelectInput defaultValue={hasRealmAdminAccess(user.role) ? 'admin' : 'user'} name="realmAccess">
-              <option value="user">{tt('User')}</option>
-              <option value="admin">{tt('Realm administrator')}</option>
-            </SelectInput>
           </Field>
           {error ? (
             <p className="text-sm text-destructive" role="alert">

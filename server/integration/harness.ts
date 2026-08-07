@@ -256,7 +256,11 @@ export async function resourceOpenApiFetch(request: Request) {
     })
   }
   if (new URL(request.url).pathname.endsWith('/openapi.json')) {
-    return Response.json({ openapi: '3.1.0', paths: {} })
+    return Response.json({
+      openapi: '3.1.0',
+      info: { title: 'Test Resource API', description: 'Integration test resource', version: '1.0.0' },
+      paths: {},
+    })
   }
   return new Response(null, { headers: { link: '</openapi.json>; rel="service-desc"' } })
 }

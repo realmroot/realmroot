@@ -7,6 +7,7 @@ const roleCleanupMigration = migration('20260801121526_worthless_ultragirl.sql')
 const ownershipMigration = migration('20260801123349_next_tattoo.sql')
 const organizationRbacMigration = migration('20260805160616_round_wither.sql')
 const rfc9728ScopeRegistryMigration = migration('20260806214840_rfc9728_scope_registry.sql')
+const platformAuthorityMigration = migration('20260807000000_platform_authority.sql')
 
 describe('D1 migration upgrades', () => {
   it('preserves populated Application and Resource server dependents [spec: platform-onboarding/existing-d1-upgrade]', () => {
@@ -95,6 +96,52 @@ describe('D1 migration upgrades', () => {
           scope_registry: null,
         },
         { id: 'resource-2', scope_registry: null },
+      ])
+    } finally {
+      database.close()
+    }
+  })
+
+  it('preserves legacy administrator authority for existing and new platform members', () => {
+    const database = new DatabaseSync(':memory:')
+
+    try {
+      database.exec(`
+        CREATE TABLE organization (id TEXT PRIMARY KEY NOT NULL);
+        CREATE TABLE user (id TEXT PRIMARY KEY NOT NULL, role TEXT);
+        CREATE TABLE member (
+          id TEXT PRIMARY KEY NOT NULL,
+          organization_id TEXT NOT NULL,
+          user_id TEXT NOT NULL,
+          role TEXT NOT NULL,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        );
+        CREATE TABLE api_resource (
+          id TEXT PRIMARY KEY NOT NULL,
+          connector_id TEXT,
+          owner_organization_id TEXT NOT NULL
+        );
+        INSERT INTO organization (id) VALUES ('org_platform');
+        INSERT INTO user (id, role) VALUES
+          ('existing-admin', 'user,admin'),
+          ('new-admin', 'admin'),
+          ('ordinary-user', 'user');
+        INSERT INTO member (id, organization_id, user_id, role, created_at, updated_at) VALUES
+          ('existing-member', 'org_platform', 'existing-admin', 'developer', 1, 1),
+          ('ordinary-member', 'org_platform', 'ordinary-user', 'member', 1, 1);
+      `)
+
+      applyMigration(database, platformAuthorityMigration)
+
+      expect(
+        database
+          .prepare("SELECT user_id, role FROM member WHERE organization_id = 'org_platform' ORDER BY user_id")
+          .all(),
+      ).toEqual([
+        { role: 'developer,owner', user_id: 'existing-admin' },
+        { role: 'owner', user_id: 'new-admin' },
+        { role: 'member', user_id: 'ordinary-user' },
       ])
     } finally {
       database.close()

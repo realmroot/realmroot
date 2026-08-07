@@ -8,22 +8,15 @@ import { createDrizzleAgentRepository } from '@server/adapters/repos/agents'
 import { createDrizzleApplicationRepository } from '@server/adapters/repos/applications'
 import { createDrizzleAuthorizationRepository } from '@server/adapters/repos/authorization'
 import { createDrizzleConfigzRepository } from '@server/adapters/repos/configz'
+import { platformOrganization } from '@server/domain/platform-organization'
 import type { AuthConnectorConfig } from '@server/usecases/connectors'
 import type { Deps } from '@server/usecases/deps'
 import { mayCreateOrganization } from '@server/usecases/developer-access'
+import { organizationUserHasScope } from '@server/usecases/organization-membership-scopes'
 import type { ApplicationRepository } from '@server/usecases/ports'
 import { APIError, betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
-import {
-  admin,
-  deviceAuthorization,
-  genericOAuth,
-  jwt,
-  oneTap,
-  phoneNumber,
-  siwe,
-  twoFactor,
-} from 'better-auth/plugins'
+import { deviceAuthorization, genericOAuth, jwt, oneTap, phoneNumber, siwe, twoFactor } from 'better-auth/plugins'
 import { emailOTP } from 'better-auth/plugins/email-otp'
 import { organization } from 'better-auth/plugins/organization'
 import { username } from 'better-auth/plugins/username'
@@ -271,7 +264,6 @@ export function createAuth(
           gracePeriod: 60 * 60 * 24 * 30,
         },
       }),
-      admin(),
       twoFactor({
         issuer: 'Realmroot',
         allowPasswordless: true,
@@ -404,11 +396,11 @@ export function createAuth(
       }),
       organization({
         allowUserToCreateOrganization: async (user) =>
-          mayCreateOrganization(await configz.getOrganizationCreationPolicy(), {
-            id: user.id,
-            emailVerified: user.emailVerified,
-            role: typeof user.role === 'string' ? user.role : null,
-          }),
+          mayCreateOrganization(
+            await configz.getOrganizationCreationPolicy(),
+            { id: user.id, emailVerified: user.emailVerified },
+            await organizationUserHasScope(deps, platformOrganization.id, user.id, 'organizations:write'),
+          ),
         teams: {
           enabled: false,
         },

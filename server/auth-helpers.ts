@@ -300,7 +300,3 @@ export function readString(metadata: Record<string, unknown> | undefined, key: s
 export function readUserId(user: unknown) {
   return typeof user === 'object' && user !== null && 'id' in user && typeof user.id === 'string' ? user.id : undefined
 }
-
-export function readUserRole(user: unknown) {
-  return typeof user === 'object' && user !== null && 'role' in user && typeof user.role === 'string' ? user.role : null
-}

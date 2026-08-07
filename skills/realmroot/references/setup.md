@@ -7,7 +7,6 @@ deployment selection, Restish setup, profiles, and stable Agent identity.
 
 - [Resolve the deployment](#resolve-the-deployment)
 - [Prepare Restish](#prepare-restish)
-- [Isolate concurrent Agent runtimes](#isolate-concurrent-agent-runtimes)
 - [Connect the API](#connect-the-api)
 - [Add a profile](#add-a-profile)
 - [Establish identity](#establish-identity)
@@ -18,12 +17,14 @@ Use an origin explicitly supplied for the task, then an existing `AUTH_ORIGIN`,
 then `REALMROOT_ORIGIN`; otherwise use the hosted production origin
 `https://id.realmroot.dev`.
 
-Normalize it into `AUTH_ORIGIN`. Use `realmroot` as the stable API name:
+Normalize it into `AUTH_ORIGIN`. Use the stable Restish API name `realmroot`;
+the adapter scopes automatic Agent protocol authentication to that name so it
+does not claim unrelated Resource Server security requirements:
 
 ```bash
 AUTH_ORIGIN="${AUTH_ORIGIN:-${REALMROOT_ORIGIN:-https://id.realmroot.dev}}"
 AUTH_ORIGIN="${AUTH_ORIGIN%/}"
-API_NAME="${API_NAME:-realmroot}"
+API_NAME=realmroot
 ```
 
 `API_NAME` identifies the service. Profiles under that name identify
@@ -39,12 +40,13 @@ origin and `API_NAME` is the stable service alias.
 
 ## Prepare Restish
 
-Require Restish 2.3 or newer, Go 1.25.3 or newer, and the `realmroot` adapter
-0.9.0 or newer:
+Require a Restish build supporting `auth.operation_security` and
+`auth.dpop_credential_source`, plus the corresponding Realmroot adapter build.
+The adapter declares both required features, so an incompatible Restish build
+rejects it explicitly:
 
 ```bash
 restish --version
-go version
 restish plugin list
 ```
 
@@ -63,36 +65,8 @@ Optionally name a new Agent before its first protected operation:
 export REALMROOT_AGENT_NAME="Build Agent"
 ```
 
-Preparation is complete when all three required versions are confirmed.
-
-## Isolate Concurrent Agent Runtimes
-
-The adapter keeps the Realmroot identity stable per Agent runtime and isolates
-the current target credential by Agent session when the runtime exposes a
-session identifier. Normally use its default state directory. For an explicit
-cleanroom run, isolate both the Restish registry and the adapter state before
-the first command. This prevents temporary API connections, profiles, tokens,
-and plugin state from polluting the operator's normal Restish configuration:
-
-```bash
-RESTISH_CONFIG_DIR="$(mktemp -d "${TMPDIR:-/tmp}/realmroot-restish.XXXXXX")"
-AGENT_STATE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/realmroot-agent.XXXXXX")"
-chmod 700 "$RESTISH_CONFIG_DIR"
-chmod 700 "$AGENT_STATE_DIR"
-export RSH_CONFIG_DIR="$RESTISH_CONFIG_DIR"
-export REALMROOT_PLUGIN_STATE_DIR="$AGENT_STATE_DIR"
-```
-
-Export both variables once for the whole cleanroom workflow. Every Realmroot
-and target Restish command must inherit them. Keep both directories for the
-duration of the workflow. Do not use an isolated Restish registry for an
-ordinary persistent setup: its stable service connections belong in the
-normal config.
-
-Isolation is complete when `RSH_CONFIG_DIR` and
-`REALMROOT_PLUGIN_STATE_DIR` are exported once and the connect, identity,
-access, token, and target-operation commands all run in that same shell
-environment.
+Preparation is complete when Restish lists the adapter without a compatibility
+error.
 
 ## Hand Off Controller Approval In Non-Interactive Runtimes
 
@@ -102,8 +76,8 @@ page, configure a protected handoff file before starting an approval-bearing
 foreground command:
 
 ```bash
-APPROVAL_HANDOFF="$REALMROOT_PLUGIN_STATE_DIR/controller-approval.url"
-rm -f "$APPROVAL_HANDOFF"
+APPROVAL_HANDOFF="$(mktemp "${TMPDIR:-/tmp}/realmroot-approval.XXXXXX")"
+rm "$APPROVAL_HANDOFF"
 export REALMROOT_PLUGIN_APPROVAL_FILE="$APPROVAL_HANDOFF"
 ```
 
@@ -156,7 +130,7 @@ PROFILE_ORIGIN="${PROFILE_ORIGIN%/}"
 restish api set "$API_NAME" \
   "profiles.${PROFILE_NAME}.base_url: ${PROFILE_ORIGIN}/api"
 restish api inspect "$API_NAME"
-restish -p "$PROFILE_NAME" "$API_NAME" whoami -o json
+restish -p "$PROFILE_NAME" "$API_NAME" agents whoami -o json
 AUTH_ORIGIN="$PROFILE_ORIGIN"
 export RSH_PROFILE="$PROFILE_NAME"
 ```
@@ -175,7 +149,7 @@ matching `AUTH_ORIGIN` for every later branch command.
 Invoke the generated identity operation in the selected profile:
 
 ```bash
-restish "$API_NAME" whoami -o json
+restish "$API_NAME" agents whoami -o json
 ```
 
 On first use, the adapter registers a stable Agent, opens the controller's

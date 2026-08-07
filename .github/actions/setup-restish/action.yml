@@ -1,11 +1,15 @@
 name: Setup Restish
-description: Install the pinned Restish v2 release with checksum verification
+description: Build and install the pinned Restish revision required by the Realmroot plugin
 
 inputs:
-  version:
-    description: Restish version
+  repository:
+    description: Restish Git repository
     required: false
-    default: 2.3.0
+    default: https://github.com/saltbo/restish.git
+  revision:
+    description: Full Restish commit SHA
+    required: false
+    default: fe437b1af526228eb1993c032341222efe3152fb
 
 runs:
   using: composite
@@ -13,16 +17,16 @@ runs:
     - name: Install Restish
       shell: bash
       env:
-        RESTISH_VERSION: ${{ inputs.version }}
+        RESTISH_REPOSITORY: ${{ inputs.repository }}
+        RESTISH_REVISION: ${{ inputs.revision }}
       run: |
         set -euo pipefail
-        archive="restish-${RESTISH_VERSION}-linux-amd64.tar.gz"
         install_dir="${RUNNER_TEMP}/restish-setup"
-        mkdir -p "$install_dir"
-        cd "$install_dir"
-        curl -fsSL "https://github.com/rest-sh/restish/releases/download/v${RESTISH_VERSION}/${archive}" -o "$archive"
-        curl -fsSL "https://github.com/rest-sh/restish/releases/download/v${RESTISH_VERSION}/checksums.txt" -o checksums.txt
-        grep "  ${archive}$" checksums.txt | sha256sum --check -
-        tar -xzf "$archive"
-        sudo install restish /usr/local/bin/restish
+        git init "$install_dir"
+        git -C "$install_dir" remote add origin "$RESTISH_REPOSITORY"
+        git -C "$install_dir" fetch --depth 1 origin "$RESTISH_REVISION"
+        git -C "$install_dir" checkout --detach FETCH_HEAD
+        test "$(git -C "$install_dir" rev-parse HEAD)" = "$RESTISH_REVISION"
+        go -C "$install_dir" build -trimpath -o "$install_dir/restish" ./cmd/restish
+        sudo install "$install_dir/restish" /usr/local/bin/restish
         restish --version

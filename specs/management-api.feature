@@ -25,9 +25,12 @@ Feature: Unified Realmroot resource API
 
   @entrypoint:restish @journey:management-realmroot-resource-server-origin
   Scenario: The built-in Realmroot Resource Server follows deployment configuration
-    Given the deployment canonical origin changed since the Resource Server was persisted
+    Given the deployment canonical origin or Realmroot scope catalog changed since the Resource Server was persisted
     When an authorized caller lists Resource Servers
     Then the built-in Realmroot Resource Server uses the current deployment API URL
+    And its persisted scope registry matches the current system-managed Realmroot catalog
+    When an administrator refreshes that scope registry
+    Then Realmroot returns the same current catalog without fetching its own public endpoint
     And its system identifier, platform owner, and native authorization model remain immutable
 
 
@@ -86,7 +89,11 @@ Feature: Unified Realmroot resource API
 
 
   @entrypoint:restish @journey:management-restish-user-crud
-  Scenario: Workload scopes cannot become Realm administrator permission
+  Scenario: Platform administration follows the built-in Organization authority
+    Given the bootstrap administrator is an Owner of the built-in platform Organization
+    And no runtime authorization rule treats the administrator role as a permission bypass
+    When a platform Organization member or Agent presents platform-bound users:read and users:write scopes
+    Then Realm-wide user management follows those Organization scopes
     Given an Agent has direct users:read and users:write scopes bound to a User or Organization tenant
     When it attempts Realm-wide user management with Restish
     Then collection reads are tenant-filtered
@@ -98,7 +105,8 @@ Feature: Unified Realmroot resource API
     Given an Agent has organizations:read and organizations:write scopes bound to one Organization
     When it lists, reads, or updates organizations with Restish
     Then the unified API exposes only that Organization
-    And Organization creation and deletion remain human Realm and Owner operations
+    And Organization creation requires platform Organization authority
+    And Organization deletion requires authority over the owning Organization
     And Organization, member, and invitation creation return their canonical locations
 
 
@@ -114,13 +122,16 @@ Feature: Unified Realmroot resource API
 
 
   @entrypoint:restish @journey:management-restish-api-resource-crud
-  Scenario: An authorized Agent manages API resources without duplicating business authorization definitions
-    Given the Agent has approved resource-servers:read and resource-servers:write scopes
+  Scenario: An authorized Agent manages Resource Servers without duplicating business authorization definitions
+    Given the Agent has approved resource-servers:read and resource-servers:write scopes for the owning Organization
     When I create, update, list, and delete an API resource with Restish
     Then the unified API applies each API authorization change
     And API resource creation returns its canonical location
     And no permission catalog, scope catalog, or scope mutation operation exists
     And requestable scopes come only from each business resource server's protected-resource metadata
+    And every external Resource Server is owned by the built-in platform Organization
+    And an ordinary Organization cannot create, adopt, or update an external Resource Server
+    And only platform Organization authority can use a platform Connector
 
   @entrypoint:restish @journey:management-api-resource-soft-delete
   Scenario: API resources are soft-deleted without losing authorization history
@@ -155,12 +166,14 @@ Feature: Unified Realmroot resource API
 
   @entrypoint:restish @journey:management-tenant-owner-enforcement
   Scenario: Resource ownership is enforced consistently across the Management API
-    Given User, Organization, and Realm resources exist
+    Given User, Organization, and platform Organization resources exist
     When a Session or tenant-bound Agent lists, reads, updates, or deletes those resources
     Then required scopes and the persisted resource boundary are checked by the same authorizer
     And creating an Organization-owned Application or Resource server requires an explicit owner selector
     And an owner selector can only narrow to a tenant the caller controls
     And every persisted Organization is exposed and authorized through ordinary Organization membership
+    And platform-wide operations are authorized through membership and scopes in the built-in platform Organization
+    And no administrator role, principal type, or Realm authority bypasses that Organization boundary
 
 
   @entrypoint:restish @journey:management-restish-settings-update

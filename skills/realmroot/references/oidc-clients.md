@@ -42,14 +42,14 @@ user intent.
 Select these authorization dimensions before creation:
 
 - `ownerOrganizationId`: the Organization responsible for the Application;
-- `audience.mode`: `realm`, `organizations`, `users`, or `public`;
-- `audience.organizationIds` or `audience.userIds` for a constrained audience;
+- `resourceScopes`: optional Resource Server IDs and scopes the client may
+  request, selected from current Resource Server responses and contracts;
 - `oidcClaims`: optional access-token, ID-token, and UserInfo claim selection.
 
 Client selection is complete when its runtime, redirects, grants, scopes,
 consent policy, and secret-handling capability are explicit.
 
-Treat every name, slug, owner, audience, origin, and redirect in the examples
+Treat every name, slug, owner, Resource Server, origin, and redirect in the examples
 as a template. Replace it with an exact user-confirmed value before mutation.
 
 List applications before mutation. When a discovered application overlaps the
@@ -69,12 +69,11 @@ restish post "$API_NAME/applications" -o json <<JSON
   "slug": "customer-portal",
   "clientType": "public_spa",
   "ownerOrganizationId": "${OWNER_ORGANIZATION_ID}",
-  "audience": {"mode": "public"},
   "redirectUris": ["${APP_ORIGIN}/oidc/callback"],
   "postLogoutRedirectUris": ["${APP_ORIGIN}/signed-out"],
   "corsOrigins": ["${APP_ORIGIN}"],
   "allowedGrantTypes": ["authorization_code", "refresh_token"],
-  "allowedScopes": ["openid", "profile", "email", "offline_access"]
+  "oidcScopes": ["openid", "profile", "email", "offline_access"]
 }
 JSON
 ```
@@ -93,10 +92,9 @@ restish post "$API_NAME/applications" -o json <<'JSON'
   "slug": "desktop-app",
   "clientType": "public_native",
   "ownerOrganizationId": "org_123",
-  "audience": {"mode": "realm"},
   "redirectUris": ["com.example.desktop:/callback", "http://127.0.0.1:8484/callback"],
   "allowedGrantTypes": ["authorization_code", "refresh_token"],
-  "allowedScopes": ["openid", "profile", "email", "offline_access"]
+  "oidcScopes": ["openid", "profile", "email", "offline_access"]
 }
 JSON
 ```
@@ -110,10 +108,9 @@ restish post "$API_NAME/applications" -o json <<'JSON'
   "slug": "runner-cli",
   "clientType": "public_native",
   "ownerOrganizationId": "org_123",
-  "audience": {"mode": "organizations", "organizationIds": ["org_123"]},
   "redirectUris": ["com.example.runner:/callback"],
   "allowedGrantTypes": ["urn:ietf:params:oauth:grant-type:device_code"],
-  "allowedScopes": ["openid", "profile", "email", "offline_access"]
+  "oidcScopes": ["openid", "profile", "email", "offline_access"]
 }
 JSON
 ```
@@ -136,11 +133,10 @@ CLIENT_OUTPUT_FILE=/protected/path/client.json
   "slug": "admin-backend",
   "clientType": "confidential_web",
   "ownerOrganizationId": "${OWNER_ORGANIZATION_ID}",
-  "audience": {"mode": "organizations", "organizationIds": ["${OWNER_ORGANIZATION_ID}"]},
   "redirectUris": ["${APP_ORIGIN}/oidc/callback"],
   "postLogoutRedirectUris": ["${APP_ORIGIN}/signed-out"],
   "allowedGrantTypes": ["authorization_code", "refresh_token"],
-  "allowedScopes": ["openid", "profile", "email", "offline_access"]
+  "oidcScopes": ["openid", "profile", "email", "offline_access"]
 }
 JSON
 )

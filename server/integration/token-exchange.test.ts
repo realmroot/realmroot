@@ -89,7 +89,6 @@ describe('OAuth token exchange over real D1', () => {
       headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({
         identifier: audience,
-        name: 'Example API',
         resourceUrl: audience,
         ownerOrganizationId: 'org_platform',
       }),

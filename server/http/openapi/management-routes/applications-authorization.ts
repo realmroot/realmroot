@@ -1,6 +1,4 @@
 import {
-  apiResourceSchema,
-  apiResourcesResponseSchema,
   createApiResourceSchema,
   resourceServerSchema,
   resourceServersResponseSchema,
@@ -228,7 +226,7 @@ export const applicationAuthorizationRoutes: ManagementRouteConfig[] = [
     operationId: 'listResourceServers',
     summary: 'List Resource Servers',
     request: { query: listApiResourcesQuerySchema },
-    response: z.union([apiResourcesResponseSchema, resourceServersResponseSchema]),
+    response: resourceServersResponseSchema,
   },
   {
     method: 'post',
@@ -236,7 +234,7 @@ export const applicationAuthorizationRoutes: ManagementRouteConfig[] = [
     operationId: 'createResourceServer',
     summary: 'Create a Resource Server',
     request: { body: jsonBody(createApiResourceSchema) },
-    response: apiResourceSchema,
+    response: resourceServerSchema,
     status: 201,
     responseHeaders: locationResponseHeader,
   },
@@ -246,7 +244,7 @@ export const applicationAuthorizationRoutes: ManagementRouteConfig[] = [
     operationId: 'getResourceServer',
     summary: 'Get a Resource Server',
     request: { params: resourceServerIdParam },
-    response: z.union([apiResourceSchema, resourceServerSchema]),
+    response: resourceServerSchema,
   },
   {
     method: 'get',
@@ -266,7 +264,7 @@ export const applicationAuthorizationRoutes: ManagementRouteConfig[] = [
     operationId: 'replaceResourceServerScopeRegistry',
     summary: 'Synchronize a Resource Server scope registry',
     request: { params: resourceServerIdParam },
-    response: apiResourceSchema,
+    response: resourceServerSchema,
     noBody: true,
     errors: {
       400: 'The Resource Server is inactive or system-managed.',
@@ -279,7 +277,7 @@ export const applicationAuthorizationRoutes: ManagementRouteConfig[] = [
     operationId: 'updateResourceServer',
     summary: 'Update a Resource Server',
     request: { params: resourceServerIdParam, body: jsonBody(updateApiResourceSchema) },
-    response: apiResourceSchema,
+    response: resourceServerSchema,
   },
   {
     method: 'delete',

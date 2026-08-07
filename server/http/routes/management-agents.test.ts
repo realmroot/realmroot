@@ -2,6 +2,7 @@ import { managementAgentsRoute } from '@server/http/routes/management/agents'
 import * as agentIdentitiesUsecase from '@server/usecases/agent-identities'
 import { Hono } from 'hono'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { createTestDeps } from '../test-deps'
 
 afterEach(() => {
   vi.restoreAllMocks()
@@ -69,7 +70,7 @@ function withAdminContext() {
       session: { session: { id: 'session-1' }, user },
       user,
     })
-    c.set('deps', {} as never)
+    c.set('deps', createTestDeps())
     await next()
   })
   return app

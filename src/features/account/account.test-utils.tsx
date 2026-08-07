@@ -14,7 +14,7 @@ export function createAccountStore() {
     access: {
       canCreateOrganization: true,
       showOrganizations: false,
-      realmOperator: false,
+      platformOperator: false,
       consoleOrganizations: [] as Array<{ organizationId: string; level: string }>,
     },
     profile: {

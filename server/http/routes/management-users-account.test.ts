@@ -36,7 +36,7 @@ describe('management users and account routes', () => {
     expect(accountResponse.status).toBe(401)
   })
 
-  it('delegates admin user CRUD and password reset to Better Auth admin APIs', async () => {
+  it('delegates managed user CRUD to the repository and password reset delivery to Better Auth', async () => {
     const auth = createAuthMock()
     const users = createUserRepositoryMock()
     const app = createApp(auth, createTestDeps({ users }))
@@ -79,48 +79,26 @@ describe('management users and account routes', () => {
       body: JSON.stringify({}),
     })
 
-    expect(auth.api.listUsers).toHaveBeenCalledWith({
-      query: expect.objectContaining({
-        searchValue: 'ada',
-        searchField: 'email',
-        limit: 10,
-        filterField: 'role',
-        filterValue: 'user',
-      }),
-      headers: expect.any(Headers),
-    })
+    expect(users.listManagedUsers).toHaveBeenCalledWith(
+      expect.objectContaining({ search: 'ada', searchField: 'email', limit: 10 }),
+      undefined,
+    )
     expect(users.assertAdminAvatarReference).toHaveBeenCalledWith('asset-1')
-    expect(auth.api.createUser).toHaveBeenCalledWith({
-      body: expect.objectContaining({
+    expect(users.createManagedUser).toHaveBeenCalledWith(
+      expect.objectContaining({
         email: 'ada@example.com',
-        name: 'Ada Lovelace',
-        data: {
-          username: 'ada',
-          avatarAssetId: 'asset-1',
-        },
+        displayName: 'Ada Lovelace',
+        username: 'ada',
+        avatarAssetId: 'asset-1',
       }),
-      headers: expect.any(Headers),
+    )
+    expect(users.updateManagedUser).toHaveBeenCalledWith('user-1', {
+      displayName: 'Ada',
+      emailVerified: true,
     })
-    expect(auth.api.adminUpdateUser).toHaveBeenCalledWith({
-      body: {
-        userId: 'user-1',
-        data: {
-          emailVerified: true,
-          name: 'Ada',
-        },
-      },
-      headers: expect.any(Headers),
-    })
-    expect(auth.api.banUser).toHaveBeenCalledWith({
-      body: {
-        userId: 'user-1',
-        banReason: 'abuse',
-        banExpiresIn: 3600,
-      },
-      headers: expect.any(Headers),
-    })
-    expect(auth.api.unbanUser).toHaveBeenCalledWith({ body: { userId: 'user-1' }, headers: expect.any(Headers) })
-    expect(auth.api.removeUser).toHaveBeenCalledWith({ body: { userId: 'user-1' }, headers: expect.any(Headers) })
+    expect(users.suspendManagedUser).toHaveBeenCalledWith('user-1', 'abuse', expect.any(Date))
+    expect(users.restoreManagedUser).toHaveBeenCalledWith('user-1')
+    expect(users.deleteManagedUser).toHaveBeenCalledWith('user-1')
     expect(auth.api.requestPasswordReset).toHaveBeenCalledWith({
       body: {
         email: 'ada@example.com',
@@ -132,18 +110,13 @@ describe('management users and account routes', () => {
 
   it('parses banned=false as a false admin list filter', async () => {
     const auth = createAuthMock()
+    const users = createUserRepositoryMock()
 
-    await createApp(auth, createTestDeps({ users: createUserRepositoryMock() })).request('/api/users?banned=false', {
+    await createApp(auth, createTestDeps({ users })).request('/api/users?banned=false', {
       headers: adminHeaders(),
     })
 
-    expect(auth.api.listUsers).toHaveBeenCalledWith({
-      query: expect.objectContaining({
-        filterField: 'banned',
-        filterValue: false,
-      }),
-      headers: expect.any(Headers),
-    })
+    expect(users.listManagedUsers).toHaveBeenCalledWith(expect.objectContaining({ banned: false }), undefined)
   })
 
   it('aggregates admin user detail resources', async () => {
@@ -197,7 +170,7 @@ describe('management users and account routes', () => {
     expect(users.listSessions).toHaveBeenCalledWith('user-1', { limit: 4, offset: 8 })
   })
 
-  it('lists and revokes admin-visible user sessions without exposing token lookup in the route', async () => {
+  it('lists and revokes admin-visible user sessions through the repository', async () => {
     const auth = createAuthMock()
     const users = createUserRepositoryMock()
     const app = createApp(auth, createTestDeps({ users }))
@@ -206,17 +179,9 @@ describe('management users and account routes', () => {
     await app.request('/api/users/user-1/sessions', { method: 'DELETE', headers: adminHeaders() })
     await app.request('/api/users/user-1/sessions/session-1', { method: 'DELETE', headers: adminHeaders() })
 
-    expect(auth.api.listUserSessions).not.toHaveBeenCalled()
     expect(users.listSessions).toHaveBeenCalledWith('user-1', { limit: 50, offset: 0 })
-    expect(users.getSessionToken).toHaveBeenCalledWith('user-1', 'session-1')
-    expect(auth.api.revokeUserSession).toHaveBeenCalledWith({
-      body: { sessionToken: 'session-token-1' },
-      headers: expect.any(Headers),
-    })
-    expect(auth.api.revokeUserSessions).toHaveBeenCalledWith({
-      body: { userId: 'user-1' },
-      headers: expect.any(Headers),
-    })
+    expect(users.deleteSessions).toHaveBeenCalledWith('user-1')
+    expect(users.deleteSessions).toHaveBeenCalledWith('user-1', 'session-1')
   })
 
   it('updates account profile at the request boundary and delegates email and password flows [spec: account-center/email-update] [spec: account-center/password-update] [spec: account-center/linked-account-unlink]', async () => {
@@ -392,6 +357,8 @@ function createUserRepositoryMock(): UserRepository {
     listManagedUsers: vi.fn().mockImplementation((page) => Promise.resolve(createPage(page))),
     createManagedUser: vi.fn().mockResolvedValue({ id: 'user-1' }),
     updateManagedUser: vi.fn().mockResolvedValue({ id: 'user-1' }),
+    suspendManagedUser: vi.fn().mockResolvedValue({ id: 'user-1' }),
+    restoreManagedUser: vi.fn().mockResolvedValue({ id: 'user-1' }),
     deleteManagedUser: vi.fn().mockResolvedValue(undefined),
     updateProfile: vi.fn().mockResolvedValue({ id: 'user-1' }),
     assertAccountAvatarReference: vi.fn().mockResolvedValue(undefined),
@@ -400,6 +367,7 @@ function createUserRepositoryMock(): UserRepository {
     listConsentedApplications: vi.fn().mockImplementation((_userId, page) => Promise.resolve(createPage(page))),
     listSessions: vi.fn().mockImplementation((_userId, page) => Promise.resolve(createPage(page))),
     getSessionToken: vi.fn().mockResolvedValue('session-token-1'),
+    deleteSessions: vi.fn().mockResolvedValue([{ id: 'session-1' }]),
     createPasswordResetRequest: vi.fn().mockImplementation(async (input) => input),
     findPasswordResetRequest: vi.fn().mockResolvedValue(null),
   }

@@ -73,7 +73,7 @@ describe('management API client', () => {
     await management.uploadApplicationLogo('app-1', new File(['logo'], 'logo.png'))
     await management.listUsers({ search: 'jane', limit: 50, offset: undefined })
     await management.createUser({ email: 'jane@example.com', displayName: 'Jane Doe' })
-    await management.updateUser('user-1', { role: 'admin' })
+    await management.updateUser('user-1', { displayName: 'Jane Admin' })
     await management.getUser('user-1')
     await management.deleteUser('user-1')
     await management.requestUserPasswordReset('user-1')
@@ -131,7 +131,6 @@ describe('management API client', () => {
     await management.getApiResource('resource-1')
     await management.createApiResource({
       identifier: 'management-api',
-      name: 'Management API',
       resourceUrl: 'https://auth.example.com/api',
       ownerOrganizationId: 'org-1',
     })
@@ -209,7 +208,7 @@ describe('management API client', () => {
       ['applications.patch', { param: { id: 'app-1' }, json: { iconUrl: '/api/assets/asset-1' } }],
       ['users.get', { query: { search: 'jane', limit: '50' } }],
       ['users.post', { json: { email: 'jane@example.com', displayName: 'Jane Doe' } }],
-      ['users.patch', { param: { id: 'user-1' }, json: { role: 'admin' } }],
+      ['users.patch', { param: { id: 'user-1' }, json: { displayName: 'Jane Admin' } }],
       ['user.get', { param: { id: 'user-1' } }],
       ['users.delete', { param: { id: 'user-1' } }],
       ['userPasswordReset.post', { param: { id: 'user-1' }, json: {} }],
@@ -304,7 +303,6 @@ describe('management API client', () => {
         {
           json: {
             identifier: 'management-api',
-            name: 'Management API',
             resourceUrl: 'https://auth.example.com/api',
             ownerOrganizationId: 'org-1',
           },

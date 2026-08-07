@@ -24,6 +24,8 @@ export interface ResourceContractDefinition {
   sourceUrl: string
   etag: string | null
   documentHash: string
+  name: string
+  description: string | null
   scopes: ResourceScopeDefinition[]
   operations: ResourceOperationDefinition[]
 }
@@ -67,6 +69,14 @@ export async function readResourceContract(
   )
   if (!resourceResponse.ok) throw badRequest('Business resource discovery failed.')
   const documentUrl = serviceDescriptionUrl(resourceResponse.headers.get('link'), resourceUrl)
+  return readResourceContractDocument(deps, documentUrl, previousRegistry)
+}
+
+export async function readResourceContractDocument(
+  deps: Deps,
+  documentUrl: string,
+  previousRegistry?: ResourceScopeRegistry | null,
+): Promise<ResourceContractDefinition | null> {
   const documentResponse = await fetchForDiscovery(
     deps,
     new Request(documentUrl, {
@@ -85,14 +95,40 @@ export async function readResourceContract(
 
   const source = await documentResponse.text()
   const document = parseDocument(source, documentResponse.headers.get('content-type'))
+  const info = extractResourceInfo(document)
   const scopes = extractResourceScopes(document)
   const operations = extractProtectedOperations(document)
   return {
     sourceUrl: documentUrl,
     etag: documentResponse.headers.get('etag'),
     documentHash: await hashDiscoveryData(scopes),
+    ...info,
     scopes,
     operations,
+  }
+}
+
+export function extractResourceInfo(document: unknown) {
+  const root = objectValue(document, 'Business resource OpenAPI document is invalid.')
+  if (typeof root.openapi !== 'string' || !root.openapi.startsWith('3.')) {
+    throw badRequest('Business resource must publish an OpenAPI 3.x document.')
+  }
+  const info = objectValue(root.info, 'Business resource OpenAPI info is invalid.')
+  if (typeof info.title !== 'string' || !info.title.trim()) {
+    throw badRequest('Business resource OpenAPI info must declare a non-empty title.')
+  }
+  if (info.title.trim().length > 200) {
+    throw badRequest('Business resource OpenAPI info title must not exceed 200 characters.')
+  }
+  if (info.description !== undefined && typeof info.description !== 'string') {
+    throw badRequest('Business resource OpenAPI info description must be a string.')
+  }
+  if (typeof info.description === 'string' && info.description.trim().length > 1_000) {
+    throw badRequest('Business resource OpenAPI info description must not exceed 1000 characters.')
+  }
+  return {
+    name: info.title.trim(),
+    description: typeof info.description === 'string' ? info.description.trim() || null : null,
   }
 }
 
@@ -161,7 +197,7 @@ export function extractProtectedOperations(document: unknown): ResourceOperation
   const scopeSchemeNames = new Set<string>()
   for (const [name, candidate] of Object.entries(securitySchemes)) {
     const scheme = resolveSecurityScheme(candidate, securitySchemes)
-    if (scheme && (scheme.type === 'oauth2' || scheme.type === 'openIdConnect')) scopeSchemeNames.add(name)
+    if (scheme && isScopeBearingSecurityScheme(scheme)) scopeSchemeNames.add(name)
   }
 
   const documentSecurity = securityRequirements(root.security)
@@ -185,6 +221,14 @@ export function extractProtectedOperations(document: unknown): ResourceOperation
     }
   }
   return operations
+}
+
+function isScopeBearingSecurityScheme(scheme: Record<string, unknown>) {
+  return (
+    scheme.type === 'oauth2' ||
+    scheme.type === 'openIdConnect' ||
+    (scheme.type === 'http' && typeof scheme.scheme === 'string' && scheme.scheme.toLowerCase() === 'dpop')
+  )
 }
 
 async function hashDiscoveryData(scopes: ResourceScopeDefinition[]) {

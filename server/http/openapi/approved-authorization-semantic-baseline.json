@@ -8,11 +8,11 @@
   {"method":"DELETE","path":"/organizations/{organizationId}/members/{memberId}","operationId":"deleteOrganizationMember","semanticHash":"5754e74225cb2b3b5e36859d67801d1c99f552e743eb387e9e71faf4642ba342"},
   {"method":"GET","path":"/organizations/{organizationId}/members/{memberId}","operationId":"getOrganizationMember","semanticHash":"909d567695e9f12b09ec0d15a3c2feda0b14dac12cc517d13020515622ee6885"},
   {"method":"PATCH","path":"/organizations/{organizationId}/members/{memberId}","operationId":"updateOrganizationMember","semanticHash":"9441a9824c93a1b0eaf8c36e452dc3b7e925f66565c121f4ea966bbca02c792d"},
-  {"method":"GET","path":"/organizations/{organizationId}/members/{memberId}/roles","operationId":"getOrganizationMemberRoles","semanticHash":"ef1bd823941c3e2f1cdc4ec55372b55d1f26460de3f7d8ba8b451dc3b17f2df1"},
-  {"method":"PUT","path":"/organizations/{organizationId}/members/{memberId}/roles","operationId":"replaceOrganizationMemberRoles","semanticHash":"85c512b8c391389f9fc3c21f7ad77eda6341715128d0bb2986703374abf6f75a"},
-  {"method":"GET","path":"/organizations/{organizationId}/roles","operationId":"listOrganizationRoles","semanticHash":"33c91c43a75c7c0d21282af07da48e14c484ff879fd7465537f516b66e3df60a"},
-  {"method":"POST","path":"/organizations/{organizationId}/roles","operationId":"createOrganizationRole","semanticHash":"8bf202e385dce2a775ed5fb47793c0f12102cfabcdaaba178dca4bf4a6c2f873"},
-  {"method":"DELETE","path":"/organizations/{organizationId}/roles/{roleKey}","operationId":"deleteOrganizationRole","semanticHash":"8b0135ff9d82cda651cf835cf3975c0ede5c7aa6fe48cfdfb0114e1b542313a3"},
-  {"method":"GET","path":"/organizations/{organizationId}/roles/{roleKey}","operationId":"getOrganizationRole","semanticHash":"076a5f97b1e289cb6352c40a9f0b4090185fd8b4fc3902a7209e8eb8afe566bb"},
-  {"method":"PATCH","path":"/organizations/{organizationId}/roles/{roleKey}","operationId":"updateOrganizationRole","semanticHash":"e3d817f8867bd9ae8ce708a7984093f33284a220793d21b59cd85ae836e6df9e"}
+  {"method":"GET","path":"/organizations/{organizationId}/members/{memberId}/roles","operationId":"getOrganizationMemberRoles","semanticHash":"eac091c8fe8819c75f337969d847dcd396793473e32e7a41c014f362ed782134"},
+  {"method":"PUT","path":"/organizations/{organizationId}/members/{memberId}/roles","operationId":"replaceOrganizationMemberRoles","semanticHash":"a6ca09d72cb9f96960179887dc114b6548005101f1ae48f3f8156d589281c1ce"},
+  {"method":"GET","path":"/organizations/{organizationId}/roles","operationId":"listOrganizationRoles","semanticHash":"dfb1ef717ca5a57a43bdcca13ebc5b7b9f2ee58904e161724b6e09acadaa51d4"},
+  {"method":"POST","path":"/organizations/{organizationId}/roles","operationId":"createOrganizationRole","semanticHash":"778e981cb1d7ecf51e3192eb0d6ac3e780d5a20e75830b5f219a44fa1e527721"},
+  {"method":"DELETE","path":"/organizations/{organizationId}/roles/{roleKey}","operationId":"deleteOrganizationRole","semanticHash":"f2b455c738ea760b61e33bb91e60c38cca1ca8be22348f3801fc02ce165516b1"},
+  {"method":"GET","path":"/organizations/{organizationId}/roles/{roleKey}","operationId":"getOrganizationRole","semanticHash":"e77c2b0d8ea036317b347ec38a12d17ad85f7093f6296658efea196f1834f8ea"},
+  {"method":"PATCH","path":"/organizations/{organizationId}/roles/{roleKey}","operationId":"updateOrganizationRole","semanticHash":"ad6fee6b7f46006ed8c0acee41aef851d7b60848a84bc91e7301131f142bccdd"}
 ]

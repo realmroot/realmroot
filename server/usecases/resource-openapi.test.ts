@@ -1,8 +1,10 @@
 import { createTestDeps } from '@server/http/test-deps'
 import {
   extractProtectedOperations,
+  extractResourceInfo,
   extractResourceScopes,
   readResourceContract,
+  readResourceContractDocument,
   validateRequestedScopes,
   validateResourceUrl,
 } from '@server/usecases/resource-openapi'
@@ -13,6 +15,39 @@ async function readScopes(deps: ReturnType<typeof createTestDeps>, resourceUrl: 
 }
 
 describe('business resource OpenAPI scope annotations', () => {
+  it('reads a known OpenAPI document without repeating service discovery', async () => {
+    const deps = createTestDeps()
+    vi.mocked(deps.externalHttp.fetch).mockResolvedValueOnce(
+      Response.json({
+        openapi: '3.1.0',
+        info: { title: 'Realmroot API', description: 'Realm administration', version: '1.0.0' },
+        components: { securitySchemes: { dpop: { type: 'http', scheme: 'DPoP' } } },
+        paths: {
+          '/organizations': {
+            get: { operationId: 'listOrganizations', security: [{ dpop: ['organizations:read'] }] },
+          },
+        },
+      }),
+    )
+
+    await expect(
+      readResourceContractDocument(deps, 'https://auth.example.com/api/openapi.json'),
+    ).resolves.toMatchObject({
+      sourceUrl: 'https://auth.example.com/api/openapi.json',
+      scopes: [],
+      operations: [
+        {
+          method: 'GET',
+          path: '/organizations',
+          operationId: 'listOrganizations',
+          requiredScopeSets: [['organizations:read']],
+        },
+      ],
+    })
+    expect(deps.externalHttp.fetch).toHaveBeenCalledOnce()
+    expect(vi.mocked(deps.externalHttp.fetch).mock.calls[0]![0].url).toBe('https://auth.example.com/api/openapi.json')
+  })
+
   it('returns protected operations and exact alternative scope sets [spec: admin-console/admin-create-api-resource]', async () => {
     const deps = createTestDeps()
     vi.mocked(deps.externalHttp.fetch)
@@ -24,6 +59,7 @@ describe('business resource OpenAPI scope annotations', () => {
       .mockResolvedValueOnce(
         Response.json({
           openapi: '3.1.0',
+          info: { title: ' Orders API ', description: ' Returns orders. ', version: '1.0.0' },
           components: {
             securitySchemes: {
               oauth: {
@@ -66,6 +102,8 @@ describe('business resource OpenAPI scope annotations', () => {
       sourceUrl: 'https://orders.example.com/openapi.json',
       etag: null,
       documentHash: expect.any(String),
+      name: 'Orders API',
+      description: 'Returns orders.',
       scopes: [
         { value: 'orders:admin', description: 'Administer orders' },
         { value: 'orders:manage', description: 'Manage orders' },
@@ -163,6 +201,7 @@ describe('business resource OpenAPI scope annotations', () => {
         new Response(
           JSON.stringify({
             openapi: '3.0.3',
+            info: { title: 'Orders API', version: '1.0.0' },
             components: {
               securitySchemes: {
                 oauth: {
@@ -301,6 +340,27 @@ describe('business resource OpenAPI scope annotations', () => {
     await expect(readScopes(deps, 'https://orders.example.com/')).rejects.toThrow(
       'Business resource OpenAPI document is invalid.',
     )
+  })
+
+  it('requires OpenAPI info title and normalizes discovered display metadata', () => {
+    expect(
+      extractResourceInfo({
+        openapi: '3.1.0',
+        info: { title: ' Orders API ', description: ' Manage orders ', version: '1.0.0' },
+      }),
+    ).toEqual({ name: 'Orders API', description: 'Manage orders' })
+    expect(() => extractResourceInfo({ openapi: '3.1.0', info: { version: '1.0.0' } })).toThrow(
+      'must declare a non-empty title',
+    )
+    expect(() => extractResourceInfo({ openapi: '3.1.0', info: { title: 'Orders API', description: 42 } })).toThrow(
+      'description must be a string',
+    )
+    expect(() => extractResourceInfo({ openapi: '3.1.0', info: { title: 'x'.repeat(201) } })).toThrow(
+      'title must not exceed 200 characters',
+    )
+    expect(() =>
+      extractResourceInfo({ openapi: '3.1.0', info: { title: 'Orders API', description: 'x'.repeat(1_001) } }),
+    ).toThrow('description must not exceed 1000 characters')
   })
 
   it.each([
@@ -446,7 +506,9 @@ describe('business resource OpenAPI scope annotations', () => {
     vi.mocked(deps.externalHttp.fetch)
       .mockResolvedValueOnce(new Response(null, { headers: { link: '</openapi.yaml>; rel=service-desc' } }))
       .mockResolvedValueOnce(
-        new Response('openapi: 3.1.0\npaths: {}\n', { headers: { 'content-type': 'application/yaml' } }),
+        new Response('openapi: 3.1.0\ninfo:\n  title: Orders API\n  version: 1.0.0\npaths: {}\n', {
+          headers: { 'content-type': 'application/yaml' },
+        }),
       )
     await expect(readResourceContract(deps, 'https://orders.example.com/')).resolves.toMatchObject({ operations: [] })
   })
@@ -512,7 +574,9 @@ describe('business resource OpenAPI scope annotations', () => {
     vi.mocked(deps.externalHttp.fetch)
       .mockResolvedValueOnce(new Response(null, { headers: { link: '</openapi.yaml>; rel=service-desc' } }))
       .mockResolvedValueOnce(
-        new Response('openapi: 3.1.0\npaths: {}\n', { headers: { 'content-type': 'application/yaml' } }),
+        new Response('openapi: 3.1.0\ninfo:\n  title: Orders API\n  version: 1.0.0\npaths: {}\n', {
+          headers: { 'content-type': 'application/yaml' },
+        }),
       )
     await expect(readResourceContract(deps, 'https://orders.example.com/')).resolves.toMatchObject({ operations: [] })
   })
