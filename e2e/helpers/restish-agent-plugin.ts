@@ -72,6 +72,11 @@ export function createRestishAgentPlugin(origin: string): RestishAgentPlugin {
     env: environment,
     encoding: 'utf8',
   })
+  execFileSync('restish', ['api', 'set', apiName, 'command_layout: tags'], {
+    cwd: repoRoot,
+    env: environment,
+    encoding: 'utf8',
+  })
   const invoke = <T>(command: string[], input?: unknown): T => {
     const options: ExecFileSyncOptionsWithStringEncoding = {
       cwd: repoRoot,
