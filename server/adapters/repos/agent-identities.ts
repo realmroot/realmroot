@@ -3,7 +3,7 @@ import type {
   AgentIdentityAggregate,
   AgentIdentityRepository,
 } from '@server/usecases/ports'
-import { and, count, desc, eq, inArray, or } from 'drizzle-orm'
+import { and, count, desc, eq, inArray, isNull, or } from 'drizzle-orm'
 import type { BatchItem } from 'drizzle-orm/batch'
 import type { Database } from '../../db/client'
 import {
@@ -21,7 +21,7 @@ export function createDrizzleAgentIdentityRepository(db: Database): AgentIdentit
       const identities = await db
         .select()
         .from(agentIdentity)
-        .where(eq(agentIdentity.ownerUserId, userId))
+        .where(and(eq(agentIdentity.ownerUserId, userId), isNull(agentIdentity.deletedAt)))
         .orderBy(agentIdentity.createdAt, agentIdentity.id)
       return aggregates(db, identities)
     },
@@ -30,7 +30,7 @@ export function createDrizzleAgentIdentityRepository(db: Database): AgentIdentit
       const identities = await db
         .select()
         .from(agentIdentity)
-        .where(eq(agentIdentity.ownerOrganizationId, organizationId))
+        .where(and(eq(agentIdentity.ownerOrganizationId, organizationId), isNull(agentIdentity.deletedAt)))
         .orderBy(agentIdentity.createdAt, agentIdentity.id)
       return aggregates(db, identities)
     },
@@ -46,15 +46,16 @@ export function createDrizzleAgentIdentityRepository(db: Database): AgentIdentit
           ? or(userCondition, organizationCondition)
           : (userCondition ?? organizationCondition)
       if (!ownerCondition) return { items: [], total: 0, ...page }
+      const visibleCondition = and(ownerCondition, isNull(agentIdentity.deletedAt))
       const [identities, totals] = await Promise.all([
         db
           .select()
           .from(agentIdentity)
-          .where(ownerCondition)
+          .where(visibleCondition)
           .orderBy(desc(agentIdentity.createdAt), desc(agentIdentity.id))
           .limit(page.limit)
           .offset(page.offset),
-        db.select({ value: count() }).from(agentIdentity).where(ownerCondition),
+        db.select({ value: count() }).from(agentIdentity).where(visibleCondition),
       ])
       return { items: await aggregates(db, identities), total: totals[0]?.value ?? 0, ...page }
     },
@@ -64,10 +65,11 @@ export function createDrizzleAgentIdentityRepository(db: Database): AgentIdentit
         db
           .select()
           .from(agentIdentity)
+          .where(isNull(agentIdentity.deletedAt))
           .orderBy(desc(agentIdentity.createdAt), desc(agentIdentity.id))
           .limit(page.limit)
           .offset(page.offset),
-        db.select({ value: count() }).from(agentIdentity),
+        db.select({ value: count() }).from(agentIdentity).where(isNull(agentIdentity.deletedAt)),
       ])
       return {
         items: await aggregates(db, identities),
@@ -78,7 +80,11 @@ export function createDrizzleAgentIdentityRepository(db: Database): AgentIdentit
     },
 
     async findIdentity(id) {
-      const [identity] = await db.select().from(agentIdentity).where(eq(agentIdentity.id, id)).limit(1)
+      const [identity] = await db
+        .select()
+        .from(agentIdentity)
+        .where(and(eq(agentIdentity.id, id), isNull(agentIdentity.deletedAt)))
+        .limit(1)
       if (!identity) return null
       return aggregate(db, identity)
     },
@@ -87,7 +93,9 @@ export function createDrizzleAgentIdentityRepository(db: Database): AgentIdentit
       const [identity] = await db
         .select()
         .from(agentIdentity)
-        .where(and(eq(agentIdentity.issuer, issuer), eq(agentIdentity.subject, subject)))
+        .where(
+          and(eq(agentIdentity.issuer, issuer), eq(agentIdentity.subject, subject), isNull(agentIdentity.deletedAt)),
+        )
         .limit(1)
       return identity ?? null
     },
@@ -131,6 +139,7 @@ export function createDrizzleAgentIdentityRepository(db: Database): AgentIdentit
             eq(agentIdentityBinding.protocolAgentId, id),
             eq(agentIdentityBinding.status, 'active'),
             eq(agentIdentity.status, 'active'),
+            isNull(agentIdentity.deletedAt),
           ),
         )
         .limit(1)
@@ -163,14 +172,6 @@ export function createDrizzleAgentIdentityRepository(db: Database): AgentIdentit
     async approveIntent(input) {
       const statements: BatchItem<'sqlite'>[] = []
       if (input.identity) statements.push(db.insert(agentIdentity).values(input.identity))
-      else {
-        statements.push(
-          db
-            .update(agentIdentity)
-            .set({ status: 'active', updatedAt: input.approvedAt })
-            .where(and(eq(agentIdentity.id, input.binding.agentIdentityId), eq(agentIdentity.status, 'recovering'))),
-        )
-      }
       statements.push(
         db.insert(agentIdentityBinding).values(input.binding),
         db
@@ -206,39 +207,47 @@ export function createDrizzleAgentIdentityRepository(db: Database): AgentIdentit
       return true
     },
 
-    async recoverIdentity(identityId, now) {
+    async deactivateIdentity(identityId, now, revokeBindings) {
       const [identity] = await db
-        .select({ id: agentIdentity.id })
+        .select({ id: agentIdentity.id, status: agentIdentity.status })
         .from(agentIdentity)
-        .where(and(eq(agentIdentity.id, identityId), eq(agentIdentity.status, 'active')))
+        .where(and(eq(agentIdentity.id, identityId), isNull(agentIdentity.deletedAt)))
         .limit(1)
       if (!identity) return false
+      if (identity.status === 'inactive' && !revokeBindings) return true
       const protocolAgentIds = await activeProtocolAgentIds(db, identityId)
-      const statements = revokeProtocolAgentStatements(db, identityId, protocolAgentIds, now)
+      const statements = revokeBindings ? revokeProtocolAgentStatements(db, identityId, protocolAgentIds, now) : []
       statements.unshift(
-        db.update(agentIdentity).set({ status: 'recovering', updatedAt: now }).where(eq(agentIdentity.id, identityId)),
+        db.update(agentIdentity).set({ status: 'inactive', updatedAt: now }).where(eq(agentIdentity.id, identityId)),
       )
       await db.batch(statements as [BatchItem<'sqlite'>, ...BatchItem<'sqlite'>[]])
       return true
     },
 
-    async retireIdentity(identityId, now) {
-      const [identity] = await db
-        .select({ id: agentIdentity.id })
-        .from(agentIdentity)
-        .where(and(eq(agentIdentity.id, identityId), inArray(agentIdentity.status, ['active', 'recovering'])))
-        .limit(1)
-      if (!identity) return false
+    async activateIdentity(identityId, now) {
+      if ((await activeProtocolAgentIds(db, identityId)).length === 0) return false
+      const rows = await db
+        .update(agentIdentity)
+        .set({ status: 'active', updatedAt: now })
+        .where(
+          and(eq(agentIdentity.id, identityId), eq(agentIdentity.status, 'inactive'), isNull(agentIdentity.deletedAt)),
+        )
+        .returning({ id: agentIdentity.id })
+      return rows.length > 0
+    },
+
+    async deleteIdentity(identityId, now) {
       const protocolAgentIds = await activeProtocolAgentIds(db, identityId)
       const statements = revokeProtocolAgentStatements(db, identityId, protocolAgentIds, now)
       statements.unshift(
         db
           .update(agentIdentity)
-          .set({ status: 'retired', retiredAt: now, updatedAt: now })
-          .where(eq(agentIdentity.id, identityId)),
+          .set({ status: 'inactive', deletedAt: now, updatedAt: now })
+          .where(and(eq(agentIdentity.id, identityId), isNull(agentIdentity.deletedAt)))
+          .returning({ id: agentIdentity.id }),
       )
-      await db.batch(statements as [BatchItem<'sqlite'>, ...BatchItem<'sqlite'>[]])
-      return true
+      const results = await db.batch(statements as [BatchItem<'sqlite'>, ...BatchItem<'sqlite'>[]])
+      return results[0].length > 0
     },
   }
 }

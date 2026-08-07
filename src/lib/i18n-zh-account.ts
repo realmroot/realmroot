@@ -135,11 +135,6 @@ export const zhAccountTranslations: Record<string, string> = {
   'Requests · {{count}}': '请求 · {{count}}',
   'Resource server': '资源服务器',
   'Resource {{resource}} · {{mode}}': '资源 {{resource}} · {{mode}}',
-  Retire: '停用',
-  'Retire Agent': '停用 Agent',
-  'Retire Agent identity': '停用 Agent 身份',
-  'Retire identity': '停用身份',
-  'Retire {{agent}}?': '停用 {{agent}}？',
   Review: '审核',
   'Review Agent access request': '审核 Agent 访问请求',
   'Review Agent identities you control and approve new resource access requests.':

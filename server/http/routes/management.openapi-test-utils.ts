@@ -329,7 +329,7 @@ export type ManagementOpenApiMethod = (typeof managementOpenApiMethods)[number]
 export const managementOpenApiOperationKey = 'GET /openapi.json'
 export const methodsWithJsonRequestBody = new Set(['POST', 'PUT', 'PATCH'])
 export const operationsWithoutRequestBody = new Set([
-  'PUT /resource-servers/{param}/archival',
+  'PUT /agents/{param}/activation',
   'PUT /resource-servers/{param}/scope-registry',
   'POST /applications/{param}/client-secrets',
   'POST /users/{param}/password-reset-requests',
@@ -337,7 +337,6 @@ export const operationsWithoutRequestBody = new Set([
   'POST /webhooks/{param}/deliveries/{param}/attempts',
   'PUT /access/consents/{param}/revocation',
   'PUT /access/assignments/{param}/revocation',
-  'PUT /agents/{param}/retirement',
 ])
 
 export interface HonoRoute {

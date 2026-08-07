@@ -192,7 +192,7 @@ describe('app.test 1', () => {
     })
   })
 
-  it('serves cacheable public AgentInfo for active and retired identities [spec: agent-identity/agent-info-resolution]', async () => {
+  it('serves cacheable public AgentInfo for active and inactive identities [spec: agent-identity/agent-info-resolution]', async () => {
     const deps = createTestDeps()
     vi.mocked(deps.agentIdentities.findByIssuerSubject).mockResolvedValue({
       id: 'identity-1',
@@ -201,8 +201,8 @@ describe('app.test 1', () => {
       name: 'Build Agent',
       ownerUserId: 'user-1',
       ownerOrganizationId: null,
-      status: 'retired',
-      retiredAt: new Date('2026-08-02T00:00:00.000Z'),
+      status: 'inactive',
+      deletedAt: null,
       createdAt: new Date('2026-08-01T00:00:00.000Z'),
       updatedAt: new Date('2026-08-02T00:00:00.000Z'),
     })

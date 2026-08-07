@@ -390,7 +390,7 @@ describe('planned Account Center journeys', () => {
         json({ items: [accessRequest()], pagination: pagination(1) }),
       ),
       http.delete(`${base}/api/account/agents/agent-active`, () =>
-        json({ message: 'Retirement failed.' }, { status: 500 }),
+        json({ message: 'Deletion failed.' }, { status: 500 }),
       ),
       http.put(`${base}/api/account/access-requests/request-1/decision`, () =>
         json({ message: 'Decision failed.' }, { status: 500 }),
@@ -398,8 +398,8 @@ describe('planned Account Center journeys', () => {
     )
     renderWithClient(<AccountAgentsPage />)
     fireEvent.click(await screen.findByRole('button', { name: 'Manage' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Retire Agent' }))
-    fireEvent.click(screen.getAllByRole('button', { name: 'Retire Agent' }).at(-1)!)
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Agent' }))
+    fireEvent.click(screen.getAllByRole('button', { name: 'Delete Agent' }).at(-1)!)
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Build Agent' })).toBeTruthy())
     fireEvent.click(screen.getAllByRole('button', { name: 'Close' })[0]!)
 
@@ -412,16 +412,16 @@ describe('planned Account Center journeys', () => {
   it('manages Agent identities and denies pending access requests', async () => {
     store.agentIdentities = [
       agent('agent-active', 'Build Agent', 'active'),
-      agent('agent-retired', 'Old Agent', 'retired'),
+      agent('agent-inactive', 'Old Agent', 'inactive'),
     ]
-    let retired = false
+    let deleted = false
     let decision: unknown = null
     server.use(
       http.get(`${base}/api/account/access-requests`, () =>
         json({ items: [accessRequest()], pagination: pagination(1) }),
       ),
       http.delete(`${base}/api/account/agents/agent-active`, () => {
-        retired = true
+        deleted = true
         return new Response(null, { status: 204 })
       }),
       http.put(`${base}/api/account/access-requests/request-1/decision`, async ({ request }) => {
@@ -435,12 +435,12 @@ describe('planned Account Center journeys', () => {
     expect(await screen.findByRole('heading', { name: 'Build Agent' })).toBeTruthy()
     closeDialogWithEscape()
     fireEvent.click((await screen.findAllByRole('button', { name: 'Manage' }))[1]!)
-    expect((screen.getByRole('button', { name: 'Retire Agent' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getByRole('button', { name: 'Activate Agent' })).toBeTruthy()
     fireEvent.click(screen.getAllByRole('button', { name: 'Close' })[0]!)
     fireEvent.click((await screen.findAllByRole('button', { name: 'Manage' }))[0]!)
-    fireEvent.click(screen.getByRole('button', { name: 'Retire Agent' }))
-    fireEvent.click(screen.getAllByRole('button', { name: 'Retire Agent' }).at(-1)!)
-    await waitFor(() => expect(retired).toBe(true))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Agent' }))
+    fireEvent.click(screen.getAllByRole('button', { name: 'Delete Agent' }).at(-1)!)
+    await waitFor(() => expect(deleted).toBe(true))
 
     fireEvent.mouseDown(screen.getByRole('tab', { name: 'Requests · 1' }), { button: 0, ctrlKey: false })
     fireEvent.click(await screen.findByRole('button', { name: 'Review request' }))
@@ -753,7 +753,7 @@ function closeDialogWithEscape() {
   fireEvent.keyDown(document, { key: 'Escape' })
 }
 
-function agent(id: string, name: string, status: 'active' | 'recovering' | 'retired') {
+function agent(id: string, name: string, status: 'active' | 'inactive') {
   return {
     id,
     issuer: 'https://identity.example.com/api/auth',
@@ -761,7 +761,6 @@ function agent(id: string, name: string, status: 'active' | 'recovering' | 'reti
     name,
     homeSpace: { type: 'personal' as const, userId: store.profile.id },
     status,
-    retiredAt: status === 'retired' ? '2026-08-01T00:00:00.000Z' : null,
     createdAt: '2026-08-01T00:00:00.000Z',
     updatedAt: '2026-08-02T00:00:00.000Z',
     bindings: [],

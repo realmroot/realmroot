@@ -75,7 +75,7 @@ export function AgentsPage({ organizationId }: { organizationId?: string } = {})
           >
             <option value="any">{tt('Any status')}</option>
             <option value="active">{tt('Active')}</option>
-            <option value="retired">{tt('Retired')}</option>
+            <option value="inactive">{tt('Inactive')}</option>
           </SelectInput>
         </ListToolbar>
       }

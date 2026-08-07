@@ -610,7 +610,7 @@ function renderAgents() {
   const rows = [
     { owner: 'Payments Team', route: 'agent-detail', cells: [cell('Billing Reconciler', 'did:rr:agent:01J7…K8'), 'Finance operator', '1', status('Active'), 'Organization', 'Payments Team', '6 min ago', icon('arrow')] },
     { owner: 'Jane Stone', cells: [cell('Sales Copilot', 'did:rr:agent:01J8…A2'), '—', '3', status('Active'), 'User', 'Jane Stone', '12 min ago', icon('more')] },
-    { owner: 'Payments Team', cells: [cell('Legacy Billing Bot', 'did:rr:agent:01J5…Q3'), '—', '0', status('Retired', 'neutral'), 'Organization', 'Payments Team', 'Jul 12, 2026', icon('more')] },
+    { owner: 'Payments Team', cells: [cell('Legacy Billing Bot', 'did:rr:agent:01J5…Q3'), '—', '0', status('Inactive', 'neutral'), 'Organization', 'Payments Team', 'Jul 12, 2026', icon('more')] },
   ]
   const visibleRows = selectedOwner === 'Any owner' ? rows : rows.filter((row) => row.owner === selectedOwner)
   return pageFrame({
@@ -1004,7 +1004,7 @@ function renderAgentDetail() {
         { cells: [cell('resource.access.denied', 'evt_01J7'), 'CRM API', 'Jane Stone', 'Jul 27, 2026', status('Denied', 'danger')] },
       ],
     )}`,
-    settings: detailRows([settingRow('Retire Agent', 'Revokes active grants and prevents this Agent from acting again.', '', button('Retire Agent', { variant: 'danger', drawer: 'Retire Agent' }))]),
+    settings: detailRows([settingRow('Delete Agent', 'Hides this Agent and revokes active grants. It cannot be restored.', '', button('Delete Agent', { variant: 'danger', drawer: 'Delete Agent' }))]),
   }
   return detailPageFrame({ section: 'Identity / Agents', back: 'agents', title: 'Billing Reconciler', description: 'Stable Agent identity belonging to Payments Team.', meta: 'did:rr:agent:01J7…K8', badge: 'Active', badgeTone: 'success', typeLabel: 'Agent identity', tabs: detailTabs('agent', active, [['overview', 'Overview'], ['access', 'Requests & grants'], ['hosts', 'Hosts'], ['activity', 'Activity'], ['settings', 'Settings']]), content: bodies[active], action: button('Edit agent', { drawer: 'Edit agent' }) })
 }
@@ -1120,7 +1120,7 @@ function renderNativeApiResourceDetail() {
         { cells: [cell('Billing Reconciler', 'did:rr:agent:01J7…P8'), '<span class="mono">invoices.read · payments.write</span>', 'Until Aug 31', 'Jane Stone', status('Active')] },
       ],
     ))}</div>`,
-    settings: `<div class="detail-sections">${detailSection('Access eligibility', 'Choose which Realm actors may request this Resource server’s scopes. Roles and grants still determine what they may do.', [settingRow('Eligible actors', 'Allow all Realm actors, only the owning Organization, or selected Organizations.', 'All Realm actors', button('Edit eligibility')), settingRow('Eligible Agents', 'Allow eligible Agent identities to discover and request access.', '', switchControl(true))])}${detailSection('Danger zone', 'Actions that revoke active authorization while preserving audit history.', [settingRow('Archive resource server', 'Existing grants, requests, and token leases will be revoked.', '', button('Archive resource server', { variant: 'danger', drawer: 'Archive resource server' }))])}</div>`,
+    settings: `<div class="detail-sections">${detailSection('Access eligibility', 'Choose which Realm actors may request this Resource server’s scopes. Roles and grants still determine what they may do.', [settingRow('Eligible actors', 'Allow all Realm actors, only the owning Organization, or selected Organizations.', 'All Realm actors', button('Edit eligibility')), settingRow('Eligible Agents', 'Allow eligible Agent identities to discover and request access.', '', switchControl(true))])}${detailSection('Danger zone', 'Actions that revoke active authorization while preserving audit history.', [settingRow('Delete resource server', 'Existing grants, requests, and token leases will be revoked. It cannot be restored.', '', button('Delete resource server', { variant: 'danger', drawer: 'Delete resource server' }))])}</div>`,
   }
   return detailPageFrame({ section: 'Develop / Resource servers', back: 'api-resources', title: 'Billing API', description: 'Protected authorization boundary owned by Payments Team and available across the Realm.', meta: 'billing · api_01J8B2', badge: 'Enabled', badgeTone: 'success', typeLabel: 'Native resource server', tabs: detailTabs('resource', active, [['overview', 'Overview'], ['resources', 'Resources'], ['access', 'Roles & grants'], ['settings', 'Settings']]), content: bodies[active], action: button('Edit resource server', { drawer: 'Edit resource server' }) })
 }
@@ -1162,7 +1162,7 @@ function renderExternalApiResourceDetail() {
         { cells: [cell('Support Triage', 'did:rr:agent:01J6…F4'), 'support@crm.example.dev', '<span class="mono">contacts.read</span>', 'Persistent', status('Active')] },
       ],
     ))}</div>`,
-    settings: `<div class="detail-sections">${detailSection('Access eligibility', 'Choose which Realm actors may request this Resource server’s scopes. Roles and grants still determine what they may do.', [settingRow('Eligible actors', 'Allow all Realm actors, only the owning Organization, or selected Organizations.', 'Payments Team only', button('Edit eligibility')), settingRow('Eligible Agents', 'Allow eligible Agent identities to discover and request access.', '', switchControl(true))])}${detailSection('Danger zone', 'Actions that revoke Realmroot grants and connected authority while preserving audit history.', [settingRow('Archive resource server', 'Connections, grants, requests, and active token leases will be revoked.', '', button('Archive resource server', { variant: 'danger', drawer: 'Archive external resource server' }))])}</div>`,
+    settings: `<div class="detail-sections">${detailSection('Access eligibility', 'Choose which Realm actors may request this Resource server’s scopes. Roles and grants still determine what they may do.', [settingRow('Eligible actors', 'Allow all Realm actors, only the owning Organization, or selected Organizations.', 'Payments Team only', button('Edit eligibility')), settingRow('Eligible Agents', 'Allow eligible Agent identities to discover and request access.', '', switchControl(true))])}${detailSection('Danger zone', 'Actions that revoke Realmroot grants and connected authority while preserving audit history.', [settingRow('Delete resource server', 'Connections, grants, requests, and active token leases will be revoked. It cannot be restored.', '', button('Delete resource server', { variant: 'danger', drawer: 'Delete external resource server' }))])}</div>`,
   }
   return detailPageFrame({ section: 'Develop / Resource servers', back: 'api-resources', title: 'CRM API', description: 'External CRM authorization boundary owned and used inside Payments Team.', meta: 'crm · api_01J7C4', badge: 'Enabled', badgeTone: 'success', typeLabel: 'External resource server', tabs: detailTabs('resource', active, [['overview', 'Overview'], ['resources', 'Resources'], ['connections', 'Connections'], ['access', 'Roles & grants'], ['settings', 'Settings']]), content: bodies[active], action: button('Edit resource server', { drawer: 'Edit external resource server' }) })
 }
@@ -1228,9 +1228,9 @@ function openDrawer(title) {
     'Invite organization member': [['Email', 'new.member@acme.dev'], ['Access level', 'Member']],
     'Choose organizations': [['Included organizations', 'Payments Team']],
     'Edit resource server': [['Name', 'Billing API'], ['Identifier', 'billing'], ['Description', 'Invoices, payments, and billing customer records.'], ['Protected resource URL', 'https://api.acme.dev/billing']],
-    'Archive resource server': [['Resource server', 'Billing API'], ['Confirmation', 'Type ARCHIVE']],
+    'Delete resource server': [['Resource server', 'Billing API'], ['Confirmation', 'Type DELETE']],
+    'Delete external resource server': [['Resource server', 'Projects API'], ['Confirmation', 'Type DELETE']],
     'Edit external resource server': [['Name', 'CRM API'], ['Identifier', 'crm'], ['Description', 'Contacts, companies, deals, and CRM activity.'], ['Protected resource URL', 'https://crm.example.dev'], ['OIDC connector', 'CRM Cloud']],
-    'Archive external resource server': [['Resource server', 'CRM API'], ['Confirmation', 'Type ARCHIVE']],
     'Edit agent': [['Display name', 'Billing Reconciler'], ['Picture URL', '/agent-picture-v1.svg']],
     'Edit user': [['Display name', 'Jane Stone'], ['Username', 'jane'], ['Primary email', 'jane@acme.dev'], ['Realm access', 'Realm administrator']],
     'Send password reset': [['User', 'Jane Stone'], ['Email', 'jane@acme.dev']],
@@ -1259,7 +1259,7 @@ function openDrawer(title) {
     'Change email': [['New email', 'jane@acme.dev'], ['Current password', '••••••••••']],
     'Change password': [['Current password', '••••••••••'], ['New password', '••••••••••'], ['Confirm new password', '••••••••••']],
     'Add passkey': [['Passkey name', 'MacBook Pro']],
-    'Retire Agent': [['Agent', 'Billing Reconciler'], ['Confirmation', 'Type RETIRE']],
+    'Delete Agent': [['Agent', 'Billing Reconciler'], ['Confirmation', 'Type DELETE']],
     'Manage blocked domains': [['Blocked domains', 'example.org, mailinator.com, disposable.test']],
     'Manage trusted origins': [['Trusted origins', 'https://app.acme.dev, https://admin.acme.dev']],
     'Configure Passkey': [['Relying party name', 'Acme Identity'], ['Relying party ID', 'identity.acme.dev'], ['Allowed origins', 'https://identity.acme.dev, https://login.acme.dev']],
@@ -1268,23 +1268,21 @@ function openDrawer(title) {
     'Configure reCAPTCHA Enterprise': [['Project ID', ''], ['Site key', ''], ['API key', '']],
   }
   const fields = definitions[title] ?? [['Name', ''], ['Description', '']]
-  const destructive = title.startsWith('Retire') || title.startsWith('Archive') || title.startsWith('Delete') || title.startsWith('Ban') || title.startsWith('Disable') || title.startsWith('Revoke')
+  const destructive = title.startsWith('Delete') || title.startsWith('Ban') || title.startsWith('Disable') || title.startsWith('Revoke')
   let submitLabel = 'Create'
   if (title.startsWith('Edit') || title.startsWith('Change') || title.startsWith('Manage') || title.startsWith('Configure')) submitLabel = 'Save changes'
   if (title.startsWith('Send')) submitLabel = 'Send reset email'
   if (title.startsWith('Rotate')) submitLabel = 'Rotate secret'
   if (title.startsWith('Revoke')) submitLabel = 'Revoke authorization'
   if (title.startsWith('Disable')) submitLabel = 'Disable application'
-  if (title.startsWith('Archive')) submitLabel = 'Archive resource'
-  if (title.startsWith('Retire')) submitLabel = 'Retire Agent'
+  if (title.startsWith('Delete resource') || title.startsWith('Delete external')) submitLabel = 'Delete resource'
+  if (title === 'Delete Agent') submitLabel = 'Delete Agent'
   if (title.startsWith('Delete') || title.startsWith('Ban')) submitLabel = title
   if (title === 'Invite organization member') submitLabel = 'Send invitation'
 
   let drawerDescription = 'Complete the required details.'
   if (title.startsWith('Send')) drawerDescription = 'Send a new hosted recovery link to this user.'
   if (title.startsWith('Rotate')) drawerDescription = 'Create a replacement secret and invalidate the current credential.'
-  if (title.startsWith('Archive')) drawerDescription = 'This revokes active authorization while preserving history.'
-  if (title.startsWith('Retire')) drawerDescription = 'This revokes active grants and cannot be undone.'
   if (title.startsWith('Ban')) drawerDescription = 'This blocks future sign-ins until an administrator reverses it.'
   if (title.startsWith('Revoke')) drawerDescription = 'This user will need to authorize the application again before it can access their data.'
   if (title.startsWith('Disable')) drawerDescription = 'This prevents new sign-ins and token requests while preserving configuration and history.'

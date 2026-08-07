@@ -157,9 +157,10 @@ updates use `PATCH`. Secret material is returned only at creation or rotation
 boundaries and is absent from later reads.
 
 Successful collection creates return `201 Created` with a `Location` header for
-the canonical member URI. Durable revocation and archival state is represented
-as a subordinate resource and changed idempotently with `PUT` or `DELETE`, not
-with action endpoints.
+the canonical member URI. Revocable authority is represented as a subordinate
+resource and changed idempotently with `PUT` or `DELETE`. Top-level resources
+use `DELETE`; implementations may retain an inaccessible database record for
+diagnostics, but no restore contract is exposed.
 
 Representations that can be replaced concurrently expose a strong `ETag`.
 Clients send that value in `If-Match`; missing and stale preconditions return

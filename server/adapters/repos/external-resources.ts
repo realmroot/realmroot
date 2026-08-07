@@ -319,7 +319,7 @@ export function createExternalResourceRepository(db: Database): ExternalResource
                   eq(agentAccessGrant.id, input.grantId),
                   eq(agentAccessGrant.status, 'active'),
                   eq(apiResource.enabled, true),
-                  isNull(apiResource.archivedAt),
+                  isNull(apiResource.deletedAt),
                 ),
               ),
           ),
@@ -615,7 +615,7 @@ export function createExternalResourceRepository(db: Database): ExternalResource
   }
 
   function activeResource(resourceId: string) {
-    return and(eq(apiResource.id, resourceId), eq(apiResource.enabled, true), isNull(apiResource.archivedAt))
+    return and(eq(apiResource.id, resourceId), eq(apiResource.enabled, true), isNull(apiResource.deletedAt))
   }
 
   function insertAccessRequest(input: Parameters<ExternalResourceRepository['createAccessRequest']>[0]) {
@@ -666,7 +666,7 @@ export function createExternalResourceRepository(db: Database): ExternalResource
                 eq(agentAccessGrant.id, input.grantId),
                 eq(agentAccessGrant.status, 'active'),
                 eq(apiResource.enabled, true),
-                isNull(apiResource.archivedAt),
+                isNull(apiResource.deletedAt),
               ),
             ),
         ),
@@ -768,7 +768,7 @@ export function createExternalResourceRepository(db: Database): ExternalResource
               eq(agentAccessGrant.id, input.grantId),
               eq(agentAccessGrant.status, 'active'),
               eq(apiResource.enabled, true),
-              isNull(apiResource.archivedAt),
+              isNull(apiResource.deletedAt),
             ),
           ),
       )

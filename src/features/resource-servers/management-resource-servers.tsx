@@ -34,16 +34,15 @@ import type { ApiResourceDetailSection, FormState } from '@/features/management/
 import { emptyForm } from '@/features/management/shared'
 import { formatDate, nullableString, parseForm, setValue, useAdminMutation } from '@/features/management/utils'
 import {
-  archiveApiResource,
   consoleQueryKeys,
   createApiResource,
+  deleteApiResource,
   getApiResource,
   getApiResourceContract,
   listApiResources,
   listConnectors,
   listOrganizations,
   refreshApiResourceScopeRegistry,
-  restoreApiResource,
   updateApiResource,
 } from '@/lib/api/management'
 import { tt } from '@/lib/i18n'
@@ -80,7 +79,7 @@ export function ApiResourcesPage({ organizationId }: { organizationId?: string }
     const matchesSearch = [resource.name, resource.identifier, resource.resourceUrl, resource.description ?? ''].some(
       (value) => value.toLowerCase().includes(search.trim().toLowerCase()),
     )
-    const resourceStatus = resource.archivedAt ? 'archived' : resource.enabled ? 'enabled' : 'disabled'
+    const resourceStatus = resource.enabled ? 'enabled' : 'disabled'
     return (
       matchesSearch &&
       (!authorization || (resource.connectorId ? 'external' : 'native') === authorization) &&
@@ -147,7 +146,6 @@ export function ApiResourcesPage({ organizationId }: { organizationId?: string }
             <option value="">{tt('Any status')}</option>
             <option value="enabled">{tt('Enabled')}</option>
             <option value="disabled">{tt('Disabled')}</option>
-            <option value="archived">{tt('Archived')}</option>
           </SelectInput>
           {organizationId ? null : (
             <SelectInput
@@ -211,11 +209,7 @@ export function ApiResourcesPage({ organizationId }: { organizationId?: string }
                   {resource.resourceUrl}
                 </TableCell>
                 <TableCell>
-                  <StatusBadge
-                    active={resource.enabled && !resource.archivedAt}
-                    activeLabel={tt('Enabled')}
-                    inactiveLabel={tt(resource.archivedAt ? 'Archived' : 'Disabled')}
-                  />
+                  <StatusBadge active={resource.enabled} activeLabel={tt('Enabled')} inactiveLabel={tt('Disabled')} />
                 </TableCell>
                 <TableCell className="truncate" title={ownerLabel(resource.ownerOrganizationId, organizations)}>
                   {ownerLabel(resource.ownerOrganizationId, organizations)}
@@ -430,7 +424,7 @@ export function ApiResourceDetailPage({
   const navigate = useNavigate()
   const [selectedTab, setSelectedTab] = useState<ApiResourceDetailSection>(section)
   const [editor, setEditor] = useState<ResourceEditor>(null)
-  const [archiveOpen, setArchiveOpen] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
   const resourceQuery = useQuery({
     queryKey: [...consoleQueryKeys.apiResources, resourceId],
     queryFn: () => getApiResource(resourceId),
@@ -461,13 +455,17 @@ export function ApiResourceDetailPage({
       ])
     },
   })
-  const archivalMutation = useMutation({
-    mutationFn: (action: 'archive' | 'restore') =>
-      action === 'archive' ? archiveApiResource(resourceId) : restoreApiResource(resourceId),
-    onSuccess: (updated) => {
-      setArchiveOpen(false)
-      queryClient.setQueryData([...consoleQueryKeys.apiResources, resourceId], updated)
-      return queryClient.invalidateQueries({ queryKey: consoleQueryKeys.apiResources })
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteApiResource(resourceId),
+    onSuccess: async () => {
+      setDeleteOpen(false)
+      queryClient.removeQueries({ queryKey: [...consoleQueryKeys.apiResources, resourceId] })
+      await queryClient.invalidateQueries({ queryKey: consoleQueryKeys.apiResources })
+      if (organizationId) {
+        await navigate({ params: { organizationId }, to: '/organizations/$organizationId/resource-servers' })
+      } else {
+        await navigate({ to: '/console/api-resources' })
+      }
     },
   })
   useEffect(() => setSelectedTab(section), [section])
@@ -509,8 +507,8 @@ export function ApiResourceDetailPage({
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <h1>{resource.name}</h1>
-              <Badge variant={resource.archivedAt ? 'outline' : resource.enabled ? 'secondary' : 'outline'}>
-                {tt(resource.archivedAt ? 'Archived' : resource.enabled ? 'Enabled' : 'Disabled')}
+              <Badge variant={resource.enabled ? 'secondary' : 'outline'}>
+                {tt(resource.enabled ? 'Enabled' : 'Disabled')}
               </Badge>
             </div>
             <p>{resource.description ?? tt('Protected API registered in this Realm.')}</p>
@@ -563,11 +561,10 @@ export function ApiResourceDetailPage({
             <ResourceSettings
               connectors={connectorsQuery.data?.connectors ?? []}
               mode={mode}
-              onArchive={() => setArchiveOpen(true)}
+              onDelete={() => setDeleteOpen(true)}
               onEditConnector={() => setEditor('connector')}
               onEditDetails={() => setEditor('details')}
               onEditVisibility={() => setEditor('visibility')}
-              onRestore={() => archivalMutation.mutate('restore')}
               onToggle={() => updateMutation.mutate({ enabled: !resource.enabled })}
               organizations={organizations}
               resource={resource}
@@ -589,16 +586,16 @@ export function ApiResourceDetailPage({
         resource={resource}
       />
       <DangerConfirmDialog
-        actionLabel={tt('Archive resource server')}
+        actionLabel={tt('Delete resource server')}
         description={tt(
-          'Archiving revokes active connections, grants, pending requests, and token leases. Restoring does not restore that authority.',
+          'Deleting removes this resource server from every interface and revokes active connections, grants, pending requests, and token leases. It cannot be restored.',
         )}
-        error={archivalMutation.error}
-        onClose={() => setArchiveOpen(false)}
-        onConfirm={() => archivalMutation.mutate('archive')}
-        open={archiveOpen}
-        pending={archivalMutation.isPending}
-        title={tt('Archive {{name}}?', { name: resource.name })}
+        error={deleteMutation.error}
+        onClose={() => setDeleteOpen(false)}
+        onConfirm={() => deleteMutation.mutate()}
+        open={deleteOpen}
+        pending={deleteMutation.isPending}
+        title={tt('Delete {{name}}?', { name: resource.name })}
       />
     </>
   )
@@ -808,39 +805,26 @@ function ScopeRequirements({ scopeSets }: { scopeSets: string[][] }) {
 function ResourceSettings({
   connectors,
   mode,
-  onArchive,
+  onDelete,
   onEditConnector,
   onEditDetails,
   onEditVisibility,
-  onRestore,
   onToggle,
   organizations,
   resource,
 }: {
   connectors: ConnectorResponse[]
   mode: 'native' | 'external'
-  onArchive: () => void
+  onDelete: () => void
   onEditConnector: () => void
   onEditDetails: () => void
   onEditVisibility: () => void
-  onRestore: () => void
   onToggle: () => void
   organizations: OrganizationResponse[]
   resource: ApiResource
 }) {
   const connectorId = resource.authorization?.connectorId ?? resource.connectorId
   const connector = connectors.find((candidate) => candidate.id === connectorId)
-  if (resource.archivedAt)
-    return (
-      <div className="detailFlatRows">
-        <DetailRow
-          action={<Button onClick={onRestore}>{tt('Restore resource server')}</Button>}
-          description="Restoring returns this server as a disabled draft; previous authority is not restored."
-          label="Archived resource server"
-          value={formatDate(resource.archivedAt)}
-        />
-      </div>
-    )
   return (
     <div className="detailSections">
       <DetailSection
@@ -932,13 +916,13 @@ function ResourceSettings({
         />
         <DetailRow
           action={
-            <Button onClick={onArchive} variant="destructive">
-              {tt('Archive')}
+            <Button onClick={onDelete} variant="destructive">
+              {tt('Delete')}
             </Button>
           }
-          description="Revokes connections, grants, requests, and token leases while preserving audit history."
-          label="Archive resource server"
-          value={tt('Permanent revocation')}
+          description="Removes the resource from every interface and revokes active authority while preserving database history."
+          label="Delete resource server"
+          value={tt('Cannot be restored')}
         />
       </DetailSection>
     </div>

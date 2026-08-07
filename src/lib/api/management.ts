@@ -607,8 +607,16 @@ export function getAgentAuditEvents(
   return readRpcResponse(apiClient.api.realm['audit-events'].$get({ query: stringifyQuery(query) }))
 }
 
-export function emergencyRetireAgent(agentId: string) {
-  return readRpcResponse(apiClient.api.agents[':agentId'].retirement.$put({ param: { agentId } }))
+export function activateAgent(agentId: string) {
+  return readRpcResponse(apiClient.api.agents[':agentId'].activation.$put({ param: { agentId } }))
+}
+
+export function deactivateAgent(agentId: string) {
+  return readRpcResponse(apiClient.api.agents[':agentId'].activation.$delete({ param: { agentId } }))
+}
+
+export function deleteAgent(agentId: string) {
+  return readRpcResponse(apiClient.api.agents[':agentId'].$delete({ param: { agentId } }))
 }
 
 export function listWebhookEndpoints(
@@ -841,13 +849,11 @@ export function getApiResourceContract(id: string): Promise<ApiResourceContractR
 }
 
 export {
-  archiveApiResource,
   createApiResource,
   deleteApiResource,
   getApiResource,
   listApiResources,
   refreshApiResourceScopeRegistry,
-  restoreApiResource,
   updateApiResource,
 } from './management-api-resources'
 

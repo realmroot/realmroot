@@ -121,7 +121,7 @@ describe('console Organization lifecycle', () => {
 
     openTab('Agents')
     expect(await screen.findByText('Organization Agent')).toBeTruthy()
-    expect(screen.getByText('Retired Organization Agent')).toBeTruthy()
+    expect(screen.getByText('Inactive Organization Agent')).toBeTruthy()
     expect(screen.queryByText('Other Agent')).toBeNull()
     openTab('Activity')
     expect(await screen.findByText('agent.identity_enrolled')).toBeTruthy()
@@ -412,7 +412,6 @@ const agents = [
     homeSpace: { type: 'organization', organizationId: 'org-1' },
     owner: { id: 'org-1', type: 'organization', displayName: 'Acme Engineering' },
     status: 'active',
-    retiredAt: null,
     installationCount: 1,
     pendingRequestCount: 0,
     activeGrantCount: 0,
@@ -426,8 +425,7 @@ const agents = [
     name: 'Other Agent',
     homeSpace: { type: 'organization', organizationId: 'org-2' },
     owner: { id: 'org-2', type: 'organization', displayName: 'Other' },
-    status: 'retired',
-    retiredAt: timestamp,
+    status: 'inactive',
     installationCount: 0,
     pendingRequestCount: 0,
     activeGrantCount: 0,
@@ -435,14 +433,13 @@ const agents = [
     updatedAt: timestamp,
   },
   {
-    id: 'agent-org-retired',
+    id: 'agent-org-inactive',
     issuer: 'https://identity.example.com',
-    subject: 'agt_org_retired',
-    name: 'Retired Organization Agent',
+    subject: 'agt_org_inactive',
+    name: 'Inactive Organization Agent',
     homeSpace: { type: 'organization', organizationId: 'org-1' },
     owner: { id: 'org-1', type: 'organization', displayName: 'Acme Engineering' },
-    status: 'retired',
-    retiredAt: timestamp,
+    status: 'inactive',
     installationCount: 0,
     pendingRequestCount: 0,
     activeGrantCount: 0,
@@ -470,7 +467,7 @@ const events = [
   },
   {
     id: 'event-other',
-    action: 'agent.identity_retired',
+    action: 'agent.identity_deleted',
     result: 'denied',
     controllerUserId: 'user-owner',
     subjectIssuer: null,

@@ -2,8 +2,10 @@ import { AppWindow, Bot, KeyRound, Link2, Wallet } from 'lucide-react'
 import { ProviderIcon } from '@/components/provider-icon'
 import { Button } from '@/components/ui/button'
 import {
+  activateAgent,
+  deactivateAgent,
+  deleteAgent,
   linkAccount,
-  retireAgent,
   revokeAccountConnection,
   revokeApplicationConsent,
   unlinkAccount,
@@ -204,26 +206,53 @@ function AgentIdentitiesPanel({
             title: identity.name,
             meta: `${identity.issuer} · ${identity.subject}`,
             status: identity.status,
-            action:
-              identity.status === 'retired' ? undefined : (
+            action: (
+              <span className="flex gap-2">
                 <Button
                   onClick={() =>
                     confirm({
-                      title: tt('Retire Agent identity'),
-                      description: tt('This subject will remain reserved and can never be reused.'),
-                      actionLabel: tt('Retire identity'),
+                      title: tt(identity.status === 'active' ? 'Deactivate Agent identity' : 'Activate Agent identity'),
+                      description: tt(
+                        identity.status === 'active'
+                          ? 'The Agent remains visible but cannot be used until it is activated again.'
+                          : 'The Agent can authenticate and use its retained authority again.',
+                      ),
+                      actionLabel: tt(identity.status === 'active' ? 'Deactivate' : 'Activate'),
                       onConfirm: () =>
-                        mutate('Agent retired.', () => retireAgent(identity.id), {
+                        mutate(
+                          identity.status === 'active' ? 'Agent deactivated.' : 'Agent activated.',
+                          () =>
+                            identity.status === 'active' ? deactivateAgent(identity.id) : activateAgent(identity.id),
+                          {
+                            invalidate: [accountQueryKeys.agents],
+                          },
+                        ),
+                    })
+                  }
+                  type="button"
+                  variant="outline"
+                >
+                  {tt(identity.status === 'active' ? 'Deactivate' : 'Activate')}
+                </Button>
+                <Button
+                  onClick={() =>
+                    confirm({
+                      title: tt('Delete Agent identity'),
+                      description: tt('This Agent disappears from every interface and cannot be restored.'),
+                      actionLabel: tt('Delete identity'),
+                      onConfirm: () =>
+                        mutate('Agent deleted.', () => deleteAgent(identity.id), {
                           invalidate: [accountQueryKeys.agents],
                         }),
                     })
                   }
                   type="button"
-                  variant="ghost"
+                  variant="destructive"
                 >
-                  {tt('Retire')}
+                  {tt('Delete')}
                 </Button>
-              ),
+              </span>
+            ),
           }))}
         />
       </section>

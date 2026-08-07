@@ -72,8 +72,7 @@ export function createAccountStore() {
       subject: string
       name: string
       homeSpace: { type: 'personal'; userId: string }
-      status: 'active' | 'recovering' | 'retired'
-      retiredAt: string | null
+      status: 'active' | 'inactive'
       createdAt: string
       updatedAt: string
       bindings: Array<{

@@ -480,9 +480,12 @@ export type RpcSchema = {
   }
   '/api/agents/:agentId': {
     $get: RpcEndpoint<{ param: { agentId: string } }, { agent: ManagementAgent }>
+    $delete: RpcEndpoint<{ param: { agentId: string } }, EmptyResponse, 204>
   }
-  '/api/agents/:agentId/retirement': {
+  '/api/agents/:agentId/activation': {
+    $get: RpcEndpoint<{ param: { agentId: string } }, { agentId: string; active: boolean }>
     $put: RpcEndpoint<{ param: { agentId: string } }, EmptyResponse, 204>
+    $delete: RpcEndpoint<{ param: { agentId: string } }, EmptyResponse, 204>
   }
   '/api/agents/:agentId/installations': {
     $get: RpcEndpoint<
@@ -560,9 +563,5 @@ export type RpcSchema = {
   }
   '/api/resource-servers/:id/contract': {
     $get: RpcEndpoint<{ param: { id: string } }, ApiResourceContractResponse>
-  }
-  '/api/resource-servers/:id/archival': {
-    $put: RpcEndpoint<{ param: { id: string } }, ApiResource>
-    $delete: RpcEndpoint<{ param: { id: string } }, ApiResource>
   }
 }

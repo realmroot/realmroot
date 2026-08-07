@@ -12,7 +12,13 @@ vi.mock('@/lib/api', () => ({
 }))
 vi.mock('@/lib/auth-client', () => ({ nativeAuth: vi.fn() }))
 
-import { approveAgentEnrollment, getAgentEnrollment, retireAgent } from '@/lib/api/account'
+import {
+  activateAgent,
+  approveAgentEnrollment,
+  deactivateAgent,
+  deleteAgent,
+  getAgentEnrollment,
+} from '@/lib/api/account'
 
 afterEach(() => {
   vi.restoreAllMocks()
@@ -50,17 +56,39 @@ describe('Agent identity account API', () => {
     ])
   })
 
-  it('retires successfully and delegates error parsing for a failed response', async () => {
+  it('deletes successfully and delegates error parsing for a failed response', async () => {
     vi.spyOn(window, 'fetch')
       .mockResolvedValueOnce(new Response(null, { status: 204 }))
-      .mockResolvedValueOnce(Response.json({ error: 'already retired' }, { status: 400 }))
+      .mockResolvedValueOnce(Response.json({ error: 'already deleted' }, { status: 400 }))
 
-    await expect(retireAgent('agent/1')).resolves.toBeUndefined()
-    await expect(retireAgent('agent/1')).resolves.toEqual({ error: 'already retired' })
+    await expect(deleteAgent('agent/1')).resolves.toBeUndefined()
+    await expect(deleteAgent('agent/1')).resolves.toEqual({ error: 'already deleted' })
     expect(window.fetch).toHaveBeenCalledWith('/api/account/agents/agent%2F1', {
       method: 'DELETE',
       credentials: 'same-origin',
     })
     expect(api.readJsonResponse).toHaveBeenCalledTimes(1)
+  })
+
+  it('activates and deactivates Agents and delegates failed responses', async () => {
+    vi.spyOn(window, 'fetch')
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(Response.json({ error: 'activation failed' }, { status: 400 }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(Response.json({ error: 'deactivation failed' }, { status: 400 }))
+
+    await expect(activateAgent('agent/1')).resolves.toBeUndefined()
+    await expect(activateAgent('agent/1')).resolves.toEqual({ error: 'activation failed' })
+    await expect(deactivateAgent('agent/1')).resolves.toBeUndefined()
+    await expect(deactivateAgent('agent/1')).resolves.toEqual({ error: 'deactivation failed' })
+    expect(window.fetch).toHaveBeenNthCalledWith(1, '/api/account/agents/agent%2F1/activation', {
+      method: 'PUT',
+      credentials: 'same-origin',
+    })
+    expect(window.fetch).toHaveBeenNthCalledWith(3, '/api/account/agents/agent%2F1/activation', {
+      method: 'DELETE',
+      credentials: 'same-origin',
+    })
+    expect(api.readJsonResponse).toHaveBeenCalledTimes(2)
   })
 })

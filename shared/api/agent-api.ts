@@ -26,7 +26,6 @@ export const agentSchema = z.object({
   name: z.string(),
   homeSpace: agentHomeSpaceSchema,
   status: agentIdentityStatusSchema,
-  retiredAt: z.iso.datetime().nullable(),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
 })

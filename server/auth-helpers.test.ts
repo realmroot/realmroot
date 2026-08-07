@@ -29,7 +29,6 @@ const resource: ApiResourceResponse = {
     ],
   },
   availableToAgents: true,
-  archivedAt: null,
   createdAt: '2026-08-01T00:00:00.000Z',
   updatedAt: '2026-08-01T00:00:00.000Z',
 }

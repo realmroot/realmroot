@@ -1,10 +1,8 @@
 import {
-  archiveResource,
   createResource,
   deleteResource,
   getResourceContract,
   refreshResourceScopeRegistry,
-  restoreResource,
   updateResource,
 } from '@server/usecases/authorization'
 import {
@@ -97,30 +95,15 @@ export function createManagementApiResourcesRoute() {
 
   app.delete('/:resourceId', async (c) => {
     await requireResourceAccess(c)
-    await deleteResource(getDeps(c), c.req.param('resourceId'))
+    await deleteResource(getDeps(c), c.req.param('resourceId'), resourceMutationActor(c))
     return c.body(null, 204)
   })
 
-  return app
-    .put('/:resourceId/scope-registry', async (c) => {
-      await requireResourceAccess(c)
-      await refreshResourceScopeRegistry(getDeps(c), c.req.param('resourceId'))
-      return c.json(apiResourceSchema.parse(await getApiResource(getDeps(c), c.req.param('resourceId'))))
-    })
-    .get('/:resourceId/archival', async (c) => {
-      const resource = await requireResourceAccess(c)
-      return c.json({ resourceServerId: resource.id, archivedAt: resource.archivedAt })
-    })
-    .put('/:resourceId/archival', async (c) => {
-      await requireResourceAccess(c)
-      await archiveResource(getDeps(c), c.req.param('resourceId'), resourceMutationActor(c))
-      return c.json(apiResourceSchema.parse(await getApiResource(getDeps(c), c.req.param('resourceId'))))
-    })
-    .delete('/:resourceId/archival', async (c) => {
-      await requireResourceAccess(c)
-      await restoreResource(getDeps(c), c.req.param('resourceId'), resourceMutationActor(c))
-      return c.json(apiResourceSchema.parse(await getApiResource(getDeps(c), c.req.param('resourceId'))))
-    })
+  return app.put('/:resourceId/scope-registry', async (c) => {
+    await requireResourceAccess(c)
+    await refreshResourceScopeRegistry(getDeps(c), c.req.param('resourceId'))
+    return c.json(apiResourceSchema.parse(await getApiResource(getDeps(c), c.req.param('resourceId'))))
+  })
 }
 
 async function requireResourceAccess(c: Parameters<typeof getPrincipal>[0]) {

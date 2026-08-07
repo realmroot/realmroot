@@ -122,27 +122,16 @@ Feature: Unified Realmroot resource API
     And no permission catalog, scope catalog, or scope mutation operation exists
     And requestable scopes come only from each business resource server's protected-resource metadata
 
-  @entrypoint:restish @journey:management-api-resource-delete-conflict
-  Scenario: API resources with authorization history cannot be permanently deleted
+  @entrypoint:restish @journey:management-api-resource-soft-delete
+  Scenario: API resources are soft-deleted without losing authorization history
     Given the Agent has approved resource-servers:write scope
     And an API resource has authorization history
     When I delete the API resource with Restish
-    Then the unified API returns a conflict with the blocking reference counts
-    And the API resource and its authorization history remain
-
-  @entrypoint:restish @journey:management-api-resource-archival
-  Scenario: An authorized Agent archives and restores an API resource without reviving authorization
-    Given the Agent has approved resource-servers:write scope
-    And an enabled API resource has active connections, grants, requests, and token leases
-    When I archive the API resource with Restish
-    Then the resource is disabled and hidden from Agent discovery
+    Then the resource disappears from every Management and discovery interface
     And its active authorization records are revoked while history remains
-    And the archive and its actor are recorded in the Agent audit log
-    And concurrent requests cannot create new active authorization for the archived resource
-    When I restore the API resource with Restish
-    Then the resource remains disabled
-    And its previous authorization records remain inactive
-    And the restoration is recorded in the Agent audit log
+    And the deletion and its actor are recorded in the Agent audit log
+    And concurrent requests cannot create new active authorization for the deleted resource
+    And no API can restore the resource
 
 
   @entrypoint:restish @journey:management-restish-webhook-crud

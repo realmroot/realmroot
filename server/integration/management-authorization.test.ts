@@ -8,6 +8,7 @@ import {
   agentIdentity,
   agentIdentityBinding,
   apiResource,
+  application,
   externalTokenLease,
   member,
   organizationRole,
@@ -878,7 +879,7 @@ describe('authorization management over real D1', () => {
     ).toBe(204)
   })
 
-  it('[spec: management-api/management-api-resource-delete-conflict] preserves resources with authorization history', async () => {
+  it('[spec: management-api/management-api-resource-soft-delete] soft-deletes resources while preserving history', async () => {
     const cookie = await signInAdmin(harness)
     const resource = (await (
       await postJson(harness, cookie, '/api/resource-servers', {
@@ -886,6 +887,16 @@ describe('authorization management over real D1', () => {
         name: 'History API',
         resourceUrl: 'https://history.example.com/api',
         ownerOrganizationId: 'org_platform',
+      })
+    ).json()) as { id: string }
+    const configuredApplication = (await (
+      await postJson(harness, cookie, '/api/applications', {
+        name: 'Deleted Resource Client',
+        slug: 'deleted-resource-client',
+        clientType: 'confidential_web',
+        redirectUris: ['http://localhost/deleted-resource-callback'],
+        ownerOrganizationId: 'org_platform',
+        resourceScopes: [{ resourceServerId: resource.id, scopes: ['resource:read'] }],
       })
     ).json()) as { id: string }
     const [admin] = await harness.db.select({ id: user.id }).from(user).where(eq(user.email, 'admin@example.com'))
@@ -907,33 +918,29 @@ describe('authorization management over real D1', () => {
       headers: { cookie },
     })
 
-    expect(response.status).toBe(409)
-    await expect(response.json()).resolves.toEqual({
-      error: {
-        code: 'resource_in_use',
-        message: 'API resource has authorization history and cannot be permanently deleted.',
-        requestId: expect.any(String),
-        details: {
-          federatedCredentials: 0,
-          accountConnections: 1,
-          connectionIntents: 0,
-          agentAccessRequests: 0,
-          agentAccessGrants: 0,
-        },
-      },
-    })
-    await expect(
-      harness.db.select({ id: apiResource.id }).from(apiResource).where(eq(apiResource.id, resource.id)),
-    ).resolves.toEqual([{ id: resource.id }])
+    expect(response.status).toBe(204)
     await expect(
       harness.db
-        .select({ id: resourceAccountConnection.id })
+        .select({ id: apiResource.id, deletedAt: apiResource.deletedAt })
+        .from(apiResource)
+        .where(eq(apiResource.id, resource.id)),
+    ).resolves.toEqual([{ id: resource.id, deletedAt: expect.any(Date) }])
+    await expect(
+      harness.db
+        .select({ id: resourceAccountConnection.id, status: resourceAccountConnection.status })
         .from(resourceAccountConnection)
         .where(eq(resourceAccountConnection.id, 'connection-history')),
-    ).resolves.toEqual([{ id: 'connection-history' }])
+    ).resolves.toEqual([{ id: 'connection-history', status: 'revoked' }])
+    await expect(
+      harness.db
+        .select({ resourceScopes: application.resourceScopes })
+        .from(application)
+        .where(eq(application.id, configuredApplication.id)),
+    ).resolves.toEqual([{ resourceScopes: [] }])
+    expect((await harness.request(`/api/resource-servers/${resource.id}`, { headers: { cookie } })).status).toBe(404)
   })
 
-  it('changes an OIDC connector only while the resource is unarchived [spec: management-api/management-api-resource-archival]', async () => {
+  it('does not expose a deleted Resource Server for updates [spec: management-api/management-api-resource-soft-delete]', async () => {
     const cookie = await signInAdmin(harness)
     const now = new Date()
     const connector = await harness.deps.connectors.create({
@@ -989,30 +996,27 @@ describe('authorization management over real D1', () => {
       ownerOrganizationId: 'org_platform',
     })
 
-    const archived = await harness.request(`/api/resource-servers/${resource.id}/archival`, {
-      method: 'PUT',
+    const deleted = await harness.request(`/api/resource-servers/${resource.id}`, {
+      method: 'DELETE',
       headers: { cookie },
     })
-    expect(archived.status).toBe(200)
+    expect(deleted.status).toBe(204)
     const lateAssociation = await harness.request(`/api/resource-servers/${resource.id}`, {
       method: 'PATCH',
       headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({ connectorId: connector.id }),
     })
-    expect(lateAssociation.status).toBe(400)
-    await expect(harness.deps.authorization.findResource(resource.id)).resolves.toMatchObject({
-      connectorId: connector.id,
-      archivedAt: expect.any(String),
-    })
+    expect(lateAssociation.status).toBe(404)
+    await expect(harness.deps.authorization.findResource(resource.id)).resolves.toBeNull()
   })
 
-  it('[spec: management-api/management-api-resource-archival] archives and restores without reviving authorization', async () => {
+  it('[spec: management-api/management-api-resource-soft-delete] deletes without losing authorization history', async () => {
     const cookie = await signInAdmin(harness)
     const resource = (await (
       await postJson(harness, cookie, '/api/resource-servers', {
-        identifier: 'archived-api',
-        name: 'Archived API',
-        resourceUrl: 'https://archived.example.com/api',
+        identifier: 'deleted-api',
+        name: 'Deleted API',
+        resourceUrl: 'https://deleted.example.com/api',
         ownerOrganizationId: 'org_platform',
       })
     ).json()) as { id: string }
@@ -1020,28 +1024,28 @@ describe('authorization management over real D1', () => {
     const now = new Date()
     const expiresAt = new Date(now.getTime() + 60_000)
     await harness.db.insert(agentHost).values({
-      id: 'archive-host',
-      name: 'Archive host',
+      id: 'deleted-host',
+      name: 'Deleted host',
       userId: admin.id,
       status: 'active',
       createdAt: now,
       updatedAt: now,
     })
     await harness.db.insert(agent).values({
-      id: 'archive-agent',
-      name: 'Archive Agent',
+      id: 'deleted-agent',
+      name: 'Deleted Agent',
       userId: admin.id,
-      hostId: 'archive-host',
+      hostId: 'deleted-host',
       status: 'active',
       publicKey: '{}',
       createdAt: now,
       updatedAt: now,
     })
     await harness.db.insert(agentIdentity).values({
-      id: 'archive-identity',
+      id: 'deleted-identity',
       issuer: 'http://localhost/api/auth',
-      subject: 'archive-subject',
-      name: 'Archive identity',
+      subject: 'deleted-subject',
+      name: 'Deleted identity',
       ownerUserId: null,
       ownerOrganizationId: 'org_platform',
       status: 'active',
@@ -1049,20 +1053,20 @@ describe('authorization management over real D1', () => {
       updatedAt: now,
     })
     await harness.db.insert(agentIdentityBinding).values({
-      id: 'archive-binding',
-      agentIdentityId: 'archive-identity',
-      protocolAgentId: 'archive-agent',
+      id: 'deleted-binding',
+      agentIdentityId: 'deleted-identity',
+      protocolAgentId: 'deleted-agent',
       status: 'active',
       boundAt: now,
       createdAt: now,
       updatedAt: now,
     })
     await harness.db.insert(resourceAccountConnection).values({
-      id: 'archive-connection',
+      id: 'deleted-connection',
       resourceId: resource.id,
       ownerUserId: admin.id,
       externalSubject: 'admin@example.com',
-      displayName: 'Archive connection',
+      displayName: 'Deleted connection',
       encryptedTokens: 'encrypted-tokens',
       grantedScopes: ['files:read'],
       status: 'active',
@@ -1070,8 +1074,8 @@ describe('authorization management over real D1', () => {
       updatedAt: now,
     })
     await harness.db.insert(resourceConnectionIntent).values({
-      id: 'archive-intent',
-      stateHash: 'archive-state',
+      id: 'deleted-intent',
+      stateHash: 'deleted-state',
       resourceId: resource.id,
       ownerUserId: admin.id,
       initiatedByUserId: admin.id,
@@ -1083,24 +1087,24 @@ describe('authorization management over real D1', () => {
       updatedAt: now,
     })
     await harness.db.insert(agentAccessRequest).values({
-      id: 'archive-request',
+      id: 'deleted-request',
       resourceId: resource.id,
-      connectionId: 'archive-connection',
-      agentIdentityId: 'archive-identity',
-      bindingId: 'archive-binding',
+      connectionId: 'deleted-connection',
+      agentIdentityId: 'deleted-identity',
+      bindingId: 'deleted-binding',
       scopes: ['files:read'],
       status: 'pending',
-      approvalTokenHash: 'archive-approval-hash',
+      approvalTokenHash: 'deleted-approval-hash',
       encryptedApprovalToken: 'encrypted-approval',
       expiresAt,
       createdAt: now,
       updatedAt: now,
     })
     await harness.db.insert(agentAccessGrant).values({
-      id: 'archive-grant',
+      id: 'deleted-grant',
       resourceId: resource.id,
-      connectionId: 'archive-connection',
-      agentIdentityId: 'archive-identity',
+      connectionId: 'deleted-connection',
+      agentIdentityId: 'deleted-identity',
       scopes: ['files:read'],
       mode: 'ongoing',
       status: 'active',
@@ -1109,59 +1113,56 @@ describe('authorization management over real D1', () => {
       updatedAt: now,
     })
     await harness.db.insert(externalTokenLease).values({
-      id: 'archive-lease',
-      grantId: 'archive-grant',
-      requestId: 'archive-request',
-      bindingId: 'archive-binding',
+      id: 'deleted-lease',
+      grantId: 'deleted-grant',
+      requestId: 'deleted-request',
+      bindingId: 'deleted-binding',
       encryptedAccessToken: 'encrypted-access-token',
-      tokenHash: 'archive-token-hash',
-      confirmationJkt: 'archive-jkt',
+      tokenHash: 'deleted-token-hash',
+      confirmationJkt: 'deleted-jkt',
       scopes: ['files:read'],
       expiresAt,
       createdAt: now,
     })
 
-    const archived = await harness.request(`/api/resource-servers/${resource.id}/archival`, {
-      method: 'PUT',
+    const deleted = await harness.request(`/api/resource-servers/${resource.id}`, {
+      method: 'DELETE',
       headers: { cookie },
     })
 
-    expect(archived.status).toBe(200)
-    await expect(archived.json()).resolves.toMatchObject({
-      id: resource.id,
-      enabled: false,
-      archivedAt: expect.any(String),
-    })
+    expect(deleted.status).toBe(204)
     await expect(
       discoverAgentResources(harness.deps, {
         issuer: 'http://localhost/api/auth',
-        subject: 'archive-subject',
-        identityId: 'archive-identity',
-        protocolAgentId: 'archive-agent',
-        hostId: 'archive-host',
+        subject: 'deleted-subject',
+        identityId: 'deleted-identity',
+        protocolAgentId: 'deleted-agent',
+        hostId: 'deleted-host',
       }),
     ).resolves.toMatchObject({
       resources: [expect.objectContaining({ id: 'res_realmroot', identifier: 'realmroot' })],
     })
 
-    const [[connection], [intent], [request], [grant], [lease]] = await Promise.all([
-      harness.db.select().from(resourceAccountConnection).where(eq(resourceAccountConnection.id, 'archive-connection')),
-      harness.db.select().from(resourceConnectionIntent).where(eq(resourceConnectionIntent.id, 'archive-intent')),
-      harness.db.select().from(agentAccessRequest).where(eq(agentAccessRequest.id, 'archive-request')),
-      harness.db.select().from(agentAccessGrant).where(eq(agentAccessGrant.id, 'archive-grant')),
-      harness.db.select().from(externalTokenLease).where(eq(externalTokenLease.id, 'archive-lease')),
+    const [[resourceRow], [connection], [intent], [request], [grant], [lease]] = await Promise.all([
+      harness.db.select().from(apiResource).where(eq(apiResource.id, resource.id)),
+      harness.db.select().from(resourceAccountConnection).where(eq(resourceAccountConnection.id, 'deleted-connection')),
+      harness.db.select().from(resourceConnectionIntent).where(eq(resourceConnectionIntent.id, 'deleted-intent')),
+      harness.db.select().from(agentAccessRequest).where(eq(agentAccessRequest.id, 'deleted-request')),
+      harness.db.select().from(agentAccessGrant).where(eq(agentAccessGrant.id, 'deleted-grant')),
+      harness.db.select().from(externalTokenLease).where(eq(externalTokenLease.id, 'deleted-lease')),
     ])
+    expect(resourceRow).toMatchObject({ id: resource.id, enabled: false, deletedAt: expect.any(Date) })
     expect(connection).toMatchObject({ status: 'revoked', revokedAt: expect.any(Date) })
     expect(intent).toMatchObject({ status: 'cancelled', completedAt: expect.any(Date) })
     expect(request).toMatchObject({ status: 'denied', decidedAt: expect.any(Date) })
     expect(grant).toMatchObject({ status: 'revoked', revokedAt: expect.any(Date) })
     expect(lease).toMatchObject({ revokedAt: expect.any(Date) })
-    const [archiveAudit] = await harness.db
+    const [deletionAudit] = await harness.db
       .select()
       .from(agentAuditEvent)
       .where(eq(agentAuditEvent.resourceId, resource.id))
-    expect(archiveAudit).toMatchObject({
-      action: 'api_resource.archived',
+    expect(deletionAudit).toMatchObject({
+      action: 'api_resource.deleted',
       controllerUserId: admin.id,
       metadata: { authorizationRecordsRevoked: true },
     })
@@ -1190,8 +1191,8 @@ describe('authorization management over real D1', () => {
         id: 'late-request',
         resourceId: resource.id,
         connectionId: null,
-        agentIdentityId: 'archive-identity',
-        bindingId: 'archive-binding',
+        agentIdentityId: 'deleted-identity',
+        bindingId: 'deleted-binding',
         scopes: ['files:read'],
         authorizationDetails: [],
         reason: null,
@@ -1208,9 +1209,9 @@ describe('authorization management over real D1', () => {
     await expect(
       harness.deps.externalResources.createTokenLease({
         id: 'late-lease',
-        grantId: 'archive-grant',
-        requestId: 'archive-request',
-        bindingId: 'archive-binding',
+        grantId: 'deleted-grant',
+        requestId: 'deleted-request',
+        bindingId: 'deleted-binding',
         encryptedAccessToken: 'late-access-token',
         tokenHash: 'late-token-hash',
         confirmationJkt: 'late-jkt',
@@ -1222,29 +1223,18 @@ describe('authorization management over real D1', () => {
       }),
     ).resolves.toBeNull()
 
-    const restored = await harness.request(`/api/resource-servers/${resource.id}/archival`, {
-      method: 'DELETE',
-      headers: { cookie },
-    })
-
-    expect(restored.status).toBe(200)
-    await expect(restored.json()).resolves.toMatchObject({
-      id: resource.id,
-      enabled: false,
-      archivedAt: null,
-    })
-    const [restoredConnection] = await harness.db
+    const [preservedConnection] = await harness.db
       .select()
       .from(resourceAccountConnection)
-      .where(eq(resourceAccountConnection.id, 'archive-connection'))
-    const [restoredGrant] = await harness.db
+      .where(eq(resourceAccountConnection.id, 'deleted-connection'))
+    const [preservedGrant] = await harness.db
       .select()
       .from(agentAccessGrant)
-      .where(eq(agentAccessGrant.id, 'archive-grant'))
-    expect(restoredConnection.status).toBe('revoked')
-    expect(restoredGrant.status).toBe('revoked')
+      .where(eq(agentAccessGrant.id, 'deleted-grant'))
+    expect(preservedConnection.status).toBe('revoked')
+    expect(preservedGrant.status).toBe('revoked')
     const audits = await harness.db.select().from(agentAuditEvent).where(eq(agentAuditEvent.resourceId, resource.id))
-    expect(audits.map((event) => event.action)).toEqual(['api_resource.archived', 'api_resource.restored'])
+    expect(audits.map((event) => event.action)).toEqual(['api_resource.deleted'])
   })
 
   it('runs the organization / member / invitation lifecycle through real SQL [spec: management-api/management-restish-organization-crud]', async () => {

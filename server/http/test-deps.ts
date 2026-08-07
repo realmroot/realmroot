@@ -80,8 +80,9 @@ export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> =
       createIntentIdempotently: vi.fn(),
       approveIntent: vi.fn(),
       revokeBinding: vi.fn().mockResolvedValue(false),
-      recoverIdentity: vi.fn().mockResolvedValue(false),
-      retireIdentity: vi.fn().mockResolvedValue(false),
+      deactivateIdentity: vi.fn().mockResolvedValue(false),
+      activateIdentity: vi.fn().mockResolvedValue(false),
+      deleteIdentity: vi.fn().mockResolvedValue(false),
     },
     agentTokens: {
       consumeAgentAuthJti: vi.fn().mockResolvedValue(true),

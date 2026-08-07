@@ -261,7 +261,7 @@ export async function createAgentLoginIdentity(
       ownerUserId: controllerUserId,
       ownerOrganizationId: null,
       status: 'active',
-      retiredAt: null,
+      deletedAt: null,
       createdAt: now,
       updatedAt: now,
     },
@@ -312,13 +312,30 @@ export async function getProtocolAgentEnrollment(
   return toAgentEnrollment(enrollmentIntent, await enrollmentAgentName(deps, enrollmentIntent))
 }
 
-export async function emergencyRetireAgentIdentity(deps: Deps, identityId: string, actorUserId: string | null) {
+export async function emergencyDeleteAgentIdentity(deps: Deps, identityId: string, actorUserId: string | null) {
   const identity = await requireIdentity(deps, identityId)
-  if (!(await deps.agentIdentities.retireIdentity(identityId, new Date()))) {
-    throw badRequest('Agent identity is already retired.')
+  if (!(await deps.agentIdentities.deleteIdentity(identityId, new Date()))) {
+    throw notFound('Agent identity was not found.')
   }
   await revokeAgentResourceAccess(deps, identityId)
-  await appendIdentityAudit(deps, 'agent.identity_retired', identity, actorUserId, { emergency: true })
+  await appendIdentityAudit(deps, 'agent.identity_deleted', identity, actorUserId, { emergency: true })
+}
+
+export async function emergencyDeactivateAgentIdentity(deps: Deps, identityId: string, actorUserId: string | null) {
+  const identity = await requireIdentity(deps, identityId)
+  if (!(await deps.agentIdentities.deactivateIdentity(identityId, new Date(), false))) {
+    throw notFound('Agent identity was not found.')
+  }
+  await appendIdentityAudit(deps, 'agent.identity_deactivated', identity, actorUserId, { emergency: true })
+}
+
+export async function emergencyActivateAgentIdentity(deps: Deps, identityId: string, actorUserId: string | null) {
+  const identity = await requireIdentity(deps, identityId)
+  if (identity.identity.status === 'active') return
+  if (!(await deps.agentIdentities.activateIdentity(identityId, new Date()))) {
+    throw badRequest('Agent identity requires a new installation before it can be activated.')
+  }
+  await appendIdentityAudit(deps, 'agent.identity_activated', identity, actorUserId, { emergency: true })
 }
 
 export async function createAgentEnrollmentIntent(
@@ -365,7 +382,6 @@ export async function createAdditionalAgentEnrollmentIntent(
     return { intent: toIntent(existing), replayed: true }
   }
   const aggregate = await requireIdentity(deps, identityId)
-  if (aggregate.identity.status === 'retired') throw badRequest('Retired Agent identities cannot enroll hosts.')
   const homeSpace = homeSpaceOf(aggregate.identity)
   await assertController(deps, homeSpace, actorUserId)
   await assertProtocolAgentCanEnroll(deps, protocolAgentId, actorUserId)
@@ -421,7 +437,6 @@ export async function approveAgentEnrollment(
   let identityId = intent.agentIdentityId
   if (identityId) {
     const existing = await requireIdentity(deps, identityId)
-    if (existing.identity.status === 'retired') throw badRequest('Retired Agent identities cannot enroll hosts.')
     assertSameHomeSpace(homeSpace, homeSpaceOf(existing.identity))
   } else {
     identityId = createId('agid')
@@ -432,7 +447,7 @@ export async function approveAgentEnrollment(
       name: intent.requestedName!,
       ...ownerColumns(homeSpace),
       status: 'active',
-      retiredAt: null,
+      deletedAt: null,
       createdAt: now,
       updatedAt: now,
     }
@@ -465,7 +480,6 @@ export async function revokeAgentIdentityHost(
   actorUserId: string,
 ) {
   const identity = await requireControlledIdentity(deps, identityId, actorUserId)
-  if (identity.identity.status === 'retired') throw badRequest('Agent identity is retired.')
   if (!(await deps.agentIdentities.revokeBinding(identityId, protocolAgentId, new Date()))) {
     throw notFound('Active Agent host binding was not found.')
   }
@@ -479,20 +493,38 @@ export async function revokeAgentIdentityHost(
 
 export async function recoverAgentIdentity(deps: Deps, identityId: string, actorUserId: string) {
   const identity = await requireControlledIdentity(deps, identityId, actorUserId)
-  if (!(await deps.agentIdentities.recoverIdentity(identityId, new Date()))) {
+  if (identity.identity.status !== 'active') throw badRequest('Only an active Agent identity can be recovered.')
+  if (!(await deps.agentIdentities.deactivateIdentity(identityId, new Date(), true))) {
     throw badRequest('Only an active Agent identity can be recovered.')
   }
   await revokeAgentResourceAccess(deps, identityId)
   await appendIdentityAudit(deps, 'agent.identity_recovered', identity, actorUserId)
 }
 
-export async function retireAgentIdentity(deps: Deps, identityId: string, actorUserId: string) {
+export async function deactivateAgentIdentity(deps: Deps, identityId: string, actorUserId: string) {
   const identity = await requireControlledIdentity(deps, identityId, actorUserId)
-  if (!(await deps.agentIdentities.retireIdentity(identityId, new Date()))) {
-    throw badRequest('Agent identity is already retired.')
+  if (!(await deps.agentIdentities.deactivateIdentity(identityId, new Date(), false))) {
+    throw notFound('Agent identity was not found.')
+  }
+  await appendIdentityAudit(deps, 'agent.identity_deactivated', identity, actorUserId)
+}
+
+export async function activateAgentIdentity(deps: Deps, identityId: string, actorUserId: string) {
+  const identity = await requireControlledIdentity(deps, identityId, actorUserId)
+  if (identity.identity.status === 'active') return
+  if (!(await deps.agentIdentities.activateIdentity(identityId, new Date()))) {
+    throw badRequest('Agent identity requires a new installation before it can be activated.')
+  }
+  await appendIdentityAudit(deps, 'agent.identity_activated', identity, actorUserId)
+}
+
+export async function deleteAgentIdentity(deps: Deps, identityId: string, actorUserId: string) {
+  const identity = await requireControlledIdentity(deps, identityId, actorUserId)
+  if (!(await deps.agentIdentities.deleteIdentity(identityId, new Date()))) {
+    throw notFound('Agent identity was not found.')
   }
   await revokeAgentResourceAccess(deps, identityId)
-  await appendIdentityAudit(deps, 'agent.identity_retired', identity, actorUserId)
+  await appendIdentityAudit(deps, 'agent.identity_deleted', identity, actorUserId)
 }
 
 export async function requireActiveAgentIdentity(deps: Deps, protocolAgentId: string) {
@@ -679,7 +711,6 @@ function toIdentity(aggregate: AgentIdentityAggregate): AgentIdentity {
     name: record.name,
     homeSpace: homeSpaceOf(record),
     status: record.status as AgentIdentity['status'],
-    retiredAt: record.retiredAt,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
     bindings: aggregate.bindings.map((binding) => ({
@@ -702,7 +733,6 @@ export function toAgent(identity: AgentIdentityAggregate | AgentIdentity): Agent
     name: value.name,
     homeSpace: value.homeSpace,
     status: value.status,
-    retiredAt: iso(value.retiredAt),
     createdAt: iso(value.createdAt)!,
     updatedAt: iso(value.updatedAt)!,
   }

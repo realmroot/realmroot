@@ -22,7 +22,6 @@ const resource: ApiResourceResponse = {
   visibility: 'public',
   scopeRegistry: null,
   availableToAgents: true,
-  archivedAt: null,
   createdAt: timestamp,
   updatedAt: timestamp,
 }

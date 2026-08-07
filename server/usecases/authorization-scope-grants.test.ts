@@ -7,7 +7,6 @@ const pagination = { limit: 20, offset: 0, total: 1, hasMore: false, nextOffset:
 const resource: any = {
   id: 'resource-1',
   enabled: true,
-  archivedAt: null,
   visibility: 'public',
   ownerOrganizationId: 'org-1',
   scopeRegistry: {

@@ -463,7 +463,7 @@ async function validateApplicationResourceScopes(
     }
     seen.add(configuration.resourceServerId)
     const resource = await deps.authorization.findResource(configuration.resourceServerId)
-    if (!resource?.enabled || resource.archivedAt) throw badRequest('Resource Server is not active.')
+    if (!resource?.enabled) throw badRequest('Resource Server is not active.')
     if (resource.visibility === 'private' && resource.ownerOrganizationId !== ownerOrganizationId) {
       throw badRequest('Private Resource Server is not visible to the Application owner Organization.')
     }
@@ -483,7 +483,7 @@ async function resolveRequestedResource(deps: Deps, resourceUrl: string | undefi
 
 async function requireResourceVisibleToUser(deps: Deps, resourceId: string, userId: string) {
   const resource = await deps.authorization.findResource(resourceId)
-  if (!resource?.enabled || resource.archivedAt) throw badRequest('Requested Resource Server is not active.')
+  if (!resource?.enabled) throw badRequest('Requested Resource Server is not active.')
   if (resource.visibility === 'public') return resource
   const membership = await deps.authorization.findMemberByOrganizationUser(resource.ownerOrganizationId, userId)
   if (!membership) throw badRequest('Requested Resource Server is not visible to the current user.')

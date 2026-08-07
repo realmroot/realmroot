@@ -222,8 +222,26 @@ export function approveAgentEnrollment(enrollmentId: string): Promise<{ agent: A
   }).then((response) => readJsonResponse<{ agent: Agent }>(response))
 }
 
-export function retireAgent(agentId: string) {
+export function deleteAgent(agentId: string) {
   return fetch(`/api/account/agents/${encodeURIComponent(agentId)}`, {
+    method: 'DELETE',
+    credentials: 'same-origin',
+  }).then((response) => {
+    if (!response.ok) return readJsonResponse<never>(response)
+  })
+}
+
+export function activateAgent(agentId: string) {
+  return fetch(`/api/account/agents/${encodeURIComponent(agentId)}/activation`, {
+    method: 'PUT',
+    credentials: 'same-origin',
+  }).then((response) => {
+    if (!response.ok) return readJsonResponse<never>(response)
+  })
+}
+
+export function deactivateAgent(agentId: string) {
+  return fetch(`/api/account/agents/${encodeURIComponent(agentId)}/activation`, {
     method: 'DELETE',
     credentials: 'same-origin',
   }).then((response) => {

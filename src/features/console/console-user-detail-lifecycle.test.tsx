@@ -30,7 +30,6 @@ const personalAgent = {
   homeSpace: { type: 'personal', userId: 'user-1' },
   owner: { id: 'user-1', type: 'user', displayName: 'Jane Stone' },
   status: 'active',
-  retiredAt: null,
   installationCount: 1,
   pendingRequestCount: 0,
   activeGrantCount: 1,
@@ -328,7 +327,6 @@ const assignedResource = {
     scopes: [{ value: 'projects:admin', description: 'Manage projects', grantMode: 'assigned' }],
   },
   availableToAgents: true,
-  archivedAt: null,
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
 }

@@ -288,33 +288,6 @@ export const applicationAuthorizationRoutes: ManagementRouteConfig[] = [
     summary: 'Delete a Resource Server',
     request: { params: resourceServerIdParam },
     noBody: true,
-    errors: {
-      409: 'The API resource has authorization history and cannot be permanently deleted.',
-    },
-  },
-  {
-    method: 'put',
-    path: '/resource-servers/{resourceServerId}/archival',
-    operationId: 'replaceResourceServerArchival',
-    summary: 'Create or replace a Resource Server archival',
-    request: { params: resourceServerIdParam },
-    response: apiResourceSchema,
-  },
-  {
-    method: 'get',
-    path: '/resource-servers/{resourceServerId}/archival',
-    operationId: 'getResourceServerArchival',
-    summary: 'Get a Resource Server archival',
-    request: { params: resourceServerIdParam },
-    response: z.object({ resourceServerId: z.string(), archivedAt: z.iso.datetime().nullable() }),
-  },
-  {
-    method: 'delete',
-    path: '/resource-servers/{resourceServerId}/archival',
-    operationId: 'deleteResourceServerArchival',
-    summary: 'Delete a Resource Server archival',
-    request: { params: resourceServerIdParam },
-    response: apiResourceSchema,
   },
 
   {

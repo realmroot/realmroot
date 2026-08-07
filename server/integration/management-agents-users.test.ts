@@ -29,7 +29,7 @@ describe('agent protocol management over real D1', () => {
     expect((await harness.request('/api/agents')).status).toBe(401)
   })
 
-  it('lists and retires stable Agents through real SQL', async () => {
+  it('lists, deactivates, activates, and soft-deletes stable Agents through real SQL', async () => {
     const cookie = await signInAdmin(harness)
     const userId = await createUser(harness, cookie, {
       email: 'agent-owner@example.com',
@@ -51,9 +51,17 @@ describe('agent protocol management over real D1', () => {
     expect(body.items).toEqual([expect.objectContaining({ id: stableAgent.id })])
 
     expect(
-      (await harness.request(`/api/agents/${stableAgent.id}/retirement`, { method: 'PUT', headers: { cookie } }))
+      (await harness.request(`/api/agents/${stableAgent.id}/activation`, { method: 'DELETE', headers: { cookie } }))
         .status,
     ).toBe(204)
+    expect(
+      (await harness.request(`/api/agents/${stableAgent.id}/activation`, { method: 'PUT', headers: { cookie } }))
+        .status,
+    ).toBe(204)
+    expect(
+      (await harness.request(`/api/agents/${stableAgent.id}`, { method: 'DELETE', headers: { cookie } })).status,
+    ).toBe(204)
+    expect((await harness.request(`/api/agents/${stableAgent.id}`, { headers: { cookie } })).status).toBe(404)
   })
 
   it('lists and revokes an account agent through real SQL', async () => {
@@ -94,7 +102,7 @@ describe('agent protocol management over real D1', () => {
         ownerUserId: null,
         ownerOrganizationId: authorizedOrganization,
         status: 'active',
-        retiredAt: null,
+        deletedAt: null,
         createdAt: now,
         updatedAt: now,
       },
@@ -106,7 +114,7 @@ describe('agent protocol management over real D1', () => {
         ownerUserId: null,
         ownerOrganizationId: unauthorizedOrganization,
         status: 'active',
-        retiredAt: null,
+        deletedAt: null,
         createdAt: now,
         updatedAt: now,
       },

@@ -345,6 +345,39 @@ describe('business resource OpenAPI scope annotations', () => {
     ])
   })
 
+  it('rejects malformed and inconsistent OAuth scope declarations', () => {
+    const document = (scopes: Record<string, unknown>) => ({
+      openapi: '3.1.0',
+      components: {
+        securitySchemes: {
+          oauth: {
+            type: 'oauth2',
+            flows: { authorizationCode: { scopes }, clientCredentials: { scopes } },
+          },
+        },
+      },
+    })
+
+    expect(() => extractResourceScopes(document({ '': 'Empty' }))).toThrow('non-empty scope names')
+    expect(() => extractResourceScopes(document({ 'items:read': 42 }))).toThrow('string descriptions')
+    expect(() =>
+      extractResourceScopes({
+        openapi: '3.1.0',
+        components: {
+          securitySchemes: {
+            oauth: {
+              type: 'oauth2',
+              flows: {
+                authorizationCode: { scopes: { 'items:read': 'Read items' } },
+                clientCredentials: { scopes: { 'items:read': 'Read all items' } },
+              },
+            },
+          },
+        },
+      }),
+    ).toThrow('inconsistent descriptions')
+  })
+
   it('ignores non-operation path item fields when extracting protected operations', () => {
     expect(
       extractProtectedOperations({
@@ -436,5 +469,51 @@ describe('business resource OpenAPI scope annotations', () => {
     ).toEqual([
       { method: 'GET', path: '/items', operationId: null, summary: null, description: null, requiredScopeSets: [[]] },
     ])
+  })
+
+  it('supports OpenID Connect operations and conditional YAML discovery', async () => {
+    expect(
+      extractProtectedOperations({
+        openapi: '3.1.0',
+        components: { securitySchemes: { oidc: { type: 'openIdConnect' } } },
+        paths: { '/items': { get: { security: [{ oidc: ['items:read'] }], responses: {} } } },
+      }),
+    ).toEqual([
+      {
+        method: 'GET',
+        path: '/items',
+        operationId: null,
+        summary: null,
+        description: null,
+        requiredScopeSets: [['items:read']],
+      },
+    ])
+
+    const deps = createTestDeps()
+    vi.mocked(deps.externalHttp.fetch)
+      .mockResolvedValueOnce(new Response(null, { headers: { link: '</openapi.yaml>; rel=service-desc alternate' } }))
+      .mockImplementationOnce(async (request) => {
+        expect(request.headers.get('if-none-match')).toBe('"v1"')
+        return new Response(null, { status: 304 })
+      })
+    await expect(
+      readResourceContract(deps, 'https://orders.example.com/', {
+        discovery: {
+          sourceUrl: 'https://orders.example.com/openapi.yaml',
+          etag: '"v1"',
+          documentHash: 'hash',
+          syncedAt: '2026-08-01T00:00:00.000Z',
+          lastError: null,
+        },
+        scopes: [],
+      }),
+    ).resolves.toBeNull()
+
+    vi.mocked(deps.externalHttp.fetch)
+      .mockResolvedValueOnce(new Response(null, { headers: { link: '</openapi.yaml>; rel=service-desc' } }))
+      .mockResolvedValueOnce(
+        new Response('openapi: 3.1.0\npaths: {}\n', { headers: { 'content-type': 'application/yaml' } }),
+      )
+    await expect(readResourceContract(deps, 'https://orders.example.com/')).resolves.toMatchObject({ operations: [] })
   })
 })

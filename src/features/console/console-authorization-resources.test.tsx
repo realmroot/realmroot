@@ -1,4 +1,3 @@
-import type { ApiResource } from '@shared/api/agent-api'
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ApiResourceDetailPage, ApiResourcesPage } from '@/features/resource-servers/management-resource-servers'
@@ -222,7 +221,7 @@ describe('console API resources and roles', () => {
     )
   })
 
-  it('filters lifecycle states and creates a Resource server for selected Organizations', async () => {
+  it('filters active lifecycle states and creates a Resource server for selected Organizations', async () => {
     const betaOrganization = {
       ...organization,
       id: 'org-2',
@@ -237,13 +236,6 @@ describe('console API resources and roles', () => {
       enabled: false,
       ownerOrganizationId: betaOrganization.id,
     }
-    const archivedResource = {
-      ...apiResource,
-      id: 'resource-archived',
-      name: 'Archived API',
-      archivedAt: '2026-07-30T19:00:00.000Z',
-      ownerOrganizationId: betaOrganization.id,
-    }
     const requests: unknown[] = []
     vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
       const request = requestParts(input, init)
@@ -252,7 +244,7 @@ describe('console API resources and roles', () => {
         return jsonResponse({ ...apiResource, id: 'resource-created', name: 'Selected API' }, 201)
       }
       if (request.url === '/api/resource-servers') {
-        return jsonResponse({ items: [apiResource, disabledResource, archivedResource], pagination })
+        return jsonResponse({ items: [apiResource, disabledResource], pagination })
       }
       if (request.url === '/api/connectors') {
         return jsonResponse({ connectors: [genericConnector], pagination })
@@ -267,11 +259,8 @@ describe('console API resources and roles', () => {
     expect(await screen.findByText('Disabled API')).toBeTruthy()
     fireEvent.change(screen.getByLabelText('Filter status'), { target: { value: 'disabled' } })
     expect(screen.getByText('Disabled API')).toBeTruthy()
-    expect(screen.queryByText('Archived API')).toBeNull()
-    fireEvent.change(screen.getByLabelText('Filter status'), { target: { value: 'archived' } })
-    expect(screen.getByText('Archived API')).toBeTruthy()
     fireEvent.change(screen.getByLabelText('Filter owner'), { target: { value: betaOrganization.id } })
-    expect(await screen.findByText('Archived API')).toBeTruthy()
+    expect(await screen.findByText('Disabled API')).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: 'New resource server' }))
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
@@ -489,7 +478,7 @@ describe('console API resources and roles', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: 'Enable' }))
     await waitFor(() => expect(requests).toContainEqual({ enabled: true }))
-    fireEvent.click(screen.getByRole('button', { name: 'Archive' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
   })
 
@@ -542,7 +531,7 @@ describe('console API resources and roles', () => {
       throw new Error(`Unexpected request: ${request.method} ${request.url}`)
     })
 
-    renderWithQuery(<ApiResourceDetailPage resourceId="resource-1" section="settings" />)
+    renderWithQuery(<ApiResourceDetailPage organizationId="org-1" resourceId="resource-1" section="settings" />)
     expect(await screen.findByText('Native authorization · resource-1')).toBeTruthy()
     expect(screen.queryByRole('heading', { name: 'Authorization provider' })).toBeNull()
     const details = screen.getByRole('heading', { name: 'Resource server details' }).closest('section') as HTMLElement
@@ -627,22 +616,15 @@ describe('console API resources and roles', () => {
     expect(screen.getByText('manual')).toBeTruthy()
   })
 
-  it('[spec: admin-console/admin-archive-api-resource] archives and restores a Resource server as a disabled draft', async () => {
+  it('[spec: admin-console/admin-delete-api-resource] soft-deletes a Resource server without a restore path', async () => {
     const requests: Array<{ url: string; method: string }> = []
-    let selected: ApiResource = apiResource
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const request = requestParts(input, init)
-      if (request.url === '/api/resource-servers/resource-1/archival' && request.method === 'PUT') {
+      if (request.url === '/api/resource-servers/resource-1' && request.method === 'DELETE') {
         requests.push({ url: request.url, method: request.method })
-        selected = { ...selected, enabled: false, archivedAt: '2026-07-30T19:00:00.000Z' }
-        return Promise.resolve(jsonResponse(selected))
+        return Promise.resolve(new Response(null, { status: 204 }))
       }
-      if (request.url === '/api/resource-servers/resource-1/archival' && request.method === 'DELETE') {
-        requests.push({ url: request.url, method: request.method })
-        selected = { ...selected, enabled: false, archivedAt: null }
-        return Promise.resolve(jsonResponse(selected))
-      }
-      if (request.url === '/api/resource-servers/resource-1') return Promise.resolve(jsonResponse(selected))
+      if (request.url === '/api/resource-servers/resource-1') return Promise.resolve(jsonResponse(apiResource))
       if (request.url === '/api/connectors')
         return Promise.resolve(jsonResponse({ connectors: [], pagination: emptyPagination }))
       if (request.url === '/api/organizations') {
@@ -651,19 +633,22 @@ describe('console API resources and roles', () => {
       throw new Error(`Unexpected request: ${request.method} ${request.url}`)
     })
 
-    renderWithQuery(<ApiResourceDetailPage resourceId="resource-1" section="settings" />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Archive' }))
+    const scoped = renderWithQuery(
+      <ApiResourceDetailPage organizationId="org-1" resourceId="resource-1" section="settings" />,
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete' }))
     const dialog = screen.getByRole('alertdialog')
     expect(within(dialog).getByText(/revokes active connections, grants, pending requests/)).toBeTruthy()
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Archive resource server' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete resource server' }))
 
-    expect(await screen.findByText('Archived')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Restore resource server' }))
-    expect((await screen.findAllByText('Disabled')).length).toBeGreaterThan(0)
-    expect(requests).toEqual([
-      { url: '/api/resource-servers/resource-1/archival', method: 'PUT' },
-      { url: '/api/resource-servers/resource-1/archival', method: 'DELETE' },
-    ])
+    await waitFor(() => expect(requests).toEqual([{ url: '/api/resource-servers/resource-1', method: 'DELETE' }]))
+    expect(navigate).toHaveBeenCalled()
+
+    scoped.unmount()
+    renderWithQuery(<ApiResourceDetailPage resourceId="resource-1" section="settings" />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete' }))
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete resource server' }))
+    await waitFor(() => expect(requests).toHaveLength(2))
   })
 
   it('rejects a Resource Server detail route under a different Organization', async () => {
@@ -684,3 +669,5 @@ describe('console API resources and roles', () => {
     expect(await screen.findByText('Resource server does not belong to this Organization.')).toBeTruthy()
   })
 })
+
+import type { ApiResource } from '@shared/api/agent-api'

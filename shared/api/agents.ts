@@ -4,7 +4,7 @@ import { type PaginationInput, paginationMetadataSchema } from './pagination'
 
 const dateValueSchema = z.union([z.string(), z.date()])
 
-export const agentIdentityStatusSchema = z.enum(['active', 'recovering', 'retired'])
+export const agentIdentityStatusSchema = z.enum(['active', 'inactive'])
 export const agentIdentityBindingStatusSchema = z.enum(['active', 'revoked'])
 export const agentEnrollmentIntentStatusSchema = z.enum(['pending', 'approved', 'expired', 'cancelled'])
 
@@ -29,7 +29,6 @@ export const agentIdentitySchema = z.object({
   name: z.string(),
   homeSpace: agentHomeSpaceSchema,
   status: agentIdentityStatusSchema,
-  retiredAt: dateValueSchema.nullable(),
   createdAt: dateValueSchema,
   updatedAt: dateValueSchema,
   bindings: z.array(agentIdentityBindingSchema),

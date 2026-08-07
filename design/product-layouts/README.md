@@ -102,7 +102,7 @@ the protected OpenAPI operation inventory and required scope sets. Roles and dir
 grants remain below their owning Organization, User, Application, or Agent instead
 of being aggregated on the Resource server. External authorization details appear
 in Overview. Resource metadata is edited from the detail-page action; Settings
-contains only visibility and archival.
+contains only visibility, availability, and deletion.
 
 Ownership, access eligibility, and authority are deliberately separate. A
 developer-enabled Organization can own an application or API while making it

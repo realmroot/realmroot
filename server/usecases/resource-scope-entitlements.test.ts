@@ -8,7 +8,6 @@ const now = new Date('2026-08-06T00:00:00.000Z')
 const resource = {
   id: 'resource-1',
   enabled: true,
-  archivedAt: null,
   visibility: 'public',
   ownerOrganizationId: 'org-1',
   scopeRegistry: {

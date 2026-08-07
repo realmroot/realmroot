@@ -30,7 +30,6 @@ const externalResource: ApiResourceResponse = {
     scopes: [{ value: 'contacts:read', description: 'Read contacts', grantMode: 'assigned' }],
   },
   availableToAgents: true,
-  archivedAt: null,
   createdAt: '2026-08-05T00:00:00.000Z',
   updatedAt: '2026-08-05T00:00:00.000Z',
 }
@@ -119,7 +118,6 @@ describe('Organization membership scope resolution', () => {
       ...realmrootResourceServer,
       resourceUrl: 'https://auth.example.com/api',
       enabled: true,
-      archivedAt: null,
       visibility: 'public',
     }
 

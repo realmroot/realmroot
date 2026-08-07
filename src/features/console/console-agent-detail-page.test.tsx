@@ -10,12 +10,15 @@ afterEach(() => {
 })
 
 describe('console Agent detail', () => {
-  it('reviews every Agent resource and retires an active identity', async () => {
+  it('reviews every Agent resource, deactivates it, and soft-deletes it', async () => {
     const requests: Array<{ method: string; path: string }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const request = requestDetails(input, init)
       requests.push({ method: request.method, path: request.url.pathname })
-      if (request.method === 'PUT' && request.url.pathname === '/api/agents/agent-1/retirement') {
+      if (request.method === 'DELETE' && request.url.pathname === '/api/agents/agent-1/activation') {
+        return Promise.resolve(new Response(null, { status: 204 }))
+      }
+      if (request.method === 'DELETE' && request.url.pathname === '/api/agents/agent-1') {
         return Promise.resolve(new Response(null, { status: 204 }))
       }
       return Promise.resolve(agentDetailResponse(request.url, populatedCollections))
@@ -46,7 +49,7 @@ describe('console Agent detail', () => {
     for (const label of [
       'Agent enrolled',
       'Agent recovered',
-      'Agent retired',
+      'Agent deleted',
       'Host revoked',
       'Agent permissions denied',
       'Agent permissions approved',
@@ -63,15 +66,25 @@ describe('console Agent detail', () => {
     expect(screen.getByText('resource-missing')).toBeTruthy()
 
     openTab('Settings')
-    fireEvent.click(screen.getByRole('button', { name: 'Retire' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Retire Agent' }))
-    await waitFor(() => expect(requests).toContainEqual({ method: 'PUT', path: '/api/agents/agent-1/retirement' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Deactivate' }))
+    await waitFor(() => expect(requests).toContainEqual({ method: 'DELETE', path: '/api/agents/agent-1/activation' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Agent' }))
+    await waitFor(() => expect(requests).toContainEqual({ method: 'DELETE', path: '/api/agents/agent-1' }))
   })
 
   it('rejects cross-owner routes and shows empty Agent collections', async () => {
     let organizationOwned = false
+    const requests: Array<{ method: string; path: string }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const request = requestDetails(input, init)
+      requests.push({ method: request.method, path: request.url.pathname })
+      if (request.method === 'PUT' && request.url.pathname === '/api/agents/agent-1/activation') {
+        return Promise.resolve(new Response(null, { status: 204 }))
+      }
+      if (request.method === 'DELETE' && request.url.pathname === '/api/agents/agent-1') {
+        return Promise.resolve(new Response(null, { status: 204 }))
+      }
       return Promise.resolve(
         agentDetailResponse(request.url, {
           ...emptyCollections,
@@ -83,7 +96,7 @@ describe('console Agent detail', () => {
             owner: organizationOwned
               ? { id: 'org-1', type: 'organization', displayName: 'Acme Engineering' }
               : { id: 'user-1', type: 'user', displayName: 'Jane Doe' },
-            status: 'retired',
+            status: 'inactive',
           },
         }),
       )
@@ -97,7 +110,9 @@ describe('console Agent detail', () => {
     const scoped = renderWithQuery(<AgentDetailPage agentId="agent-1" organizationId="org-1" section="settings" />)
     expect(await screen.findByRole('heading', { name: 'Build Agent' })).toBeTruthy()
     expect(screen.getByRole('tab', { name: 'Settings' })).toBeTruthy()
-    expect(screen.getByText('Already retired')).toBeTruthy()
+    expect(screen.getByText('Inactive')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Activate' }))
+    await waitFor(() => expect(requests).toContainEqual({ method: 'PUT', path: '/api/agents/agent-1/activation' }))
 
     const emptyTabs: Array<[string, string]> = [
       ['Installations', 'No installations'],
@@ -109,22 +124,26 @@ describe('console Agent detail', () => {
       openTab(tab)
       expect(await screen.findByText(emptyTitle)).toBeTruthy()
     }
+    openTab('Settings')
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Agent' }))
+    await waitFor(() => expect(requests).toContainEqual({ method: 'DELETE', path: '/api/agents/agent-1' }))
     scoped.unmount()
 
     renderWithQuery(<AgentDetailPage agentId="agent-1" section="settings" />)
-    expect(await screen.findByText('Already retired')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Retire' })).toHaveProperty('disabled', true)
+    expect(await screen.findByText('Inactive')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Activate' })).toBeTruthy()
   })
 
-  it('recovers from load failures, reports missing identities, and keeps failed retirement open', async () => {
+  it('recovers from load failures, reports missing identities, and keeps failed deletion open', async () => {
     let failLoad = true
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const request = requestDetails(input, init)
       if (failLoad && request.url.pathname === '/api/agents/agent-1') {
         return Promise.resolve(jsonResponse({ message: 'Agent inventory unavailable.' }, 500))
       }
-      if (request.method === 'PUT' && request.url.pathname.endsWith('/retirement')) {
-        return Promise.resolve(jsonResponse({ message: 'Retirement unavailable.' }, 500))
+      if (request.method === 'DELETE' && request.url.pathname === '/api/agents/agent-1') {
+        return Promise.resolve(jsonResponse({ message: 'Deletion unavailable.' }, 500))
       }
       return Promise.resolve(agentDetailResponse(request.url, populatedCollections))
     })
@@ -147,16 +166,16 @@ describe('console Agent detail', () => {
 
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const request = requestDetails(input, init)
-      if (request.method === 'PUT' && request.url.pathname.endsWith('/retirement')) {
-        return Promise.resolve(jsonResponse({ message: 'Retirement unavailable.' }, 500))
+      if (request.method === 'DELETE' && request.url.pathname === '/api/agents/agent-1') {
+        return Promise.resolve(jsonResponse({ message: 'Deletion unavailable.' }, 500))
       }
       return Promise.resolve(agentDetailResponse(request.url, populatedCollections))
     })
     renderWithQuery(<AgentDetailPage agentId="agent-1" section="settings" />)
-    expect(await screen.findByText('Retire Agent')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Retire' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Retire Agent' }))
-    expect(await screen.findByText('Retirement unavailable.')).toBeTruthy()
+    expect(await screen.findByText('Delete Agent')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Agent' }))
+    expect(await screen.findByText('Deletion unavailable.')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
   })
 })
@@ -202,7 +221,6 @@ const agent: ManagementAgent = {
   homeSpace: { type: 'organization', organizationId: 'org-1' },
   owner: { id: 'org-1', type: 'organization', displayName: 'Acme Engineering' },
   status: 'active',
-  retiredAt: null,
   installationCount: 2,
   pendingRequestCount: 1,
   activeGrantCount: 3,
@@ -313,7 +331,7 @@ const populatedCollections = {
   events: [
     auditEvent('event-1', 'agent.identity_enrolled', 'allowed', null),
     auditEvent('event-2', 'agent.identity_recovered', 'allowed', 'resource-1'),
-    auditEvent('event-3', 'agent.identity_retired', 'allowed', 'resource-missing'),
+    auditEvent('event-3', 'agent.identity_deleted', 'allowed', 'resource-missing'),
     auditEvent('event-4', 'agent.host_revoked', 'denied', null),
     auditEvent('event-5', 'agent.capability_decided', 'denied', null),
     auditEvent('event-6', 'agent.capability_decided', 'allowed', null),

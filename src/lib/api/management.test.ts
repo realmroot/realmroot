@@ -104,7 +104,7 @@ describe('management API client', () => {
     await management.updateBrandingSettings({ branding: { primaryColor: '#2563eb' } })
     await management.getAdminReadiness()
     await management.getAgentInventory()
-    await management.emergencyRetireAgent('agent-1')
+    await management.deleteAgent('agent-1')
     await management.getSecurityPolicy()
     await management.updateSecurityPolicy({ policy: { mfa: { mode: 'required' } } })
     await management.listOrganizations()
@@ -499,7 +499,11 @@ async function loadManagementApi(options: { userSecurity?: unknown } = {}) {
         agents: {
           $get: endpoint('agentInventory.get'),
           ':agentId': {
-            retirement: { $put: endpoint('agent.delete') },
+            $delete: endpoint('agent.delete'),
+            activation: {
+              $put: endpoint('agentActivation.put'),
+              $delete: endpoint('agentActivation.delete'),
+            },
             'access-grants': { $get: endpoint('agentAccessGrants.get') },
           },
         },
@@ -537,10 +541,6 @@ async function loadManagementApi(options: { userSecurity?: unknown } = {}) {
             $patch: endpoint('apiResources.patch'),
             $delete: endpoint('apiResources.delete'),
             contract: { $get: endpoint('apiResourceContract.get') },
-            archival: {
-              $put: endpoint('apiResourceArchival.put'),
-              $delete: endpoint('apiResourceArchival.delete'),
-            },
           },
         },
         webhooks: {

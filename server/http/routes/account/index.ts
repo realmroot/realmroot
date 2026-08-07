@@ -2,12 +2,14 @@ import { badRequest, forbidden } from '@server/domain/errors'
 import { validateEmailPolicy, validatePasswordPolicy } from '@server/domain/security/policy'
 import { listAccountOrganizationAgents } from '@server/usecases/account-organizations'
 import {
+  activateAgentIdentity,
   approveAgentEnrollment,
+  deactivateAgentIdentity,
+  deleteAgentIdentity,
   getPersonalAgent,
   getPublicAgentEnrollment,
   listPersonalAgents,
   recoverAgentIdentity,
-  retireAgentIdentity,
   toAgent,
 } from '@server/usecases/agent-identities'
 import { decideAgentApproval } from '@server/usecases/agents'
@@ -384,7 +386,17 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
   })
 
   app.delete('/agents/:agentId', async (c) => {
-    await retireAgentIdentity(getDeps(c), c.req.param('agentId'), getPrincipal(c).user!.id)
+    await deleteAgentIdentity(getDeps(c), c.req.param('agentId'), getPrincipal(c).user!.id)
+    return c.body(null, 204)
+  })
+
+  app.put('/agents/:agentId/activation', async (c) => {
+    await activateAgentIdentity(getDeps(c), c.req.param('agentId'), getPrincipal(c).user!.id)
+    return c.body(null, 204)
+  })
+
+  app.delete('/agents/:agentId/activation', async (c) => {
+    await deactivateAgentIdentity(getDeps(c), c.req.param('agentId'), getPrincipal(c).user!.id)
     return c.body(null, 204)
   })
 

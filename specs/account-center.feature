@@ -162,5 +162,5 @@ Feature: Account Center
     When I open Account Center
     Then I can inspect each stable Agent, its granted access, and its activity
     And protocol registrations, hosts, and identity bindings remain internal
-    When I retire an Agent or revoke a selected access grant
+    When I delete an Agent or revoke a selected access grant
     Then that delegated access is no longer active for my account

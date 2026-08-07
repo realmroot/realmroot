@@ -378,6 +378,64 @@ describe('service.test 1', () => {
       customData: { plan: 'enterprise' },
     })
   })
+  it('validates Application Resource Server scope allowlists', async () => {
+    const repository = new InMemoryApplicationRepository()
+    const resource = {
+      id: 'resource-1',
+      enabled: true,
+      visibility: 'private',
+      ownerOrganizationId: 'org-1',
+      scopeRegistry: { scopes: [{ value: 'items:read', description: null, grantMode: 'assigned' }] },
+    }
+    const findResource = vi.fn().mockResolvedValue(resource)
+    const deps = {
+      applications: repository,
+      authorization: {
+        findOrganization: vi.fn().mockResolvedValue({ id: 'org-1', disabled: false }),
+        findResource,
+      },
+    } as unknown as Deps
+    const base = {
+      name: 'Resource Client',
+      clientType: 'public_spa' as const,
+      redirectUris: ['https://spa.example.com/callback'],
+      ownerOrganizationId: 'org-1',
+    }
+    const allowed = { resourceServerId: resource.id, scopes: ['items:read'] }
+    const created = await createApplication(
+      deps,
+      'https://auth.example.com',
+      { ...base, resourceScopes: [allowed] },
+      'admin-1',
+    )
+
+    await expect(
+      updateApplication(deps, 'https://auth.example.com', created.id, { resourceScopes: [allowed] }),
+    ).resolves.toMatchObject({ resourceScopes: [allowed] })
+    await expect(
+      createApplication(deps, 'https://auth.example.com', { ...base, resourceScopes: [allowed, allowed] }, 'admin-1'),
+    ).rejects.toMatchObject({ status: 400, message: expect.stringContaining('only once') })
+    findResource.mockResolvedValueOnce(null)
+    await expect(
+      createApplication(deps, 'https://auth.example.com', { ...base, resourceScopes: [allowed] }, 'admin-1'),
+    ).rejects.toMatchObject({ status: 400, message: 'Resource Server is not active.' })
+    findResource.mockResolvedValueOnce({ ...resource, ownerOrganizationId: 'org-other' })
+    await expect(
+      createApplication(deps, 'https://auth.example.com', { ...base, resourceScopes: [allowed] }, 'admin-1'),
+    ).rejects.toMatchObject({ status: 400, message: expect.stringContaining('not visible') })
+    findResource.mockResolvedValueOnce(resource)
+    await expect(
+      createApplication(
+        deps,
+        'https://auth.example.com',
+        {
+          ...base,
+          resourceScopes: [{ ...allowed, scopes: ['items:write'] }],
+        },
+        'admin-1',
+      ),
+    ).rejects.toMatchObject({ status: 400, message: expect.stringContaining('undeclared') })
+  })
 })
 
 class InMemoryApplicationRepository implements ApplicationRepository {

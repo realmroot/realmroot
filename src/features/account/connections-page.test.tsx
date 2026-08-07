@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import {
@@ -168,35 +168,45 @@ describe('AccountConnectionsPage', () => {
         name: 'Personal Build Agent',
         homeSpace: { type: 'personal', userId: 'user-1' },
         status: 'active',
-        retiredAt: null,
         createdAt: '2026-01-01T00:00:00.000Z',
         updatedAt: '2026-01-01T00:00:00.000Z',
         bindings: [],
       },
       {
-        id: 'identity-retired',
+        id: 'identity-inactive',
         issuer: 'https://auth.example.com',
-        subject: 'agt_retired',
-        name: 'Retired Agent',
+        subject: 'agt_inactive',
+        name: 'Inactive Agent',
         homeSpace: { type: 'personal', userId: 'user-1' },
-        status: 'retired',
-        retiredAt: '2026-02-01T00:00:00.000Z',
+        status: 'inactive',
         createdAt: '2026-01-01T00:00:00.000Z',
         updatedAt: '2026-02-01T00:00:00.000Z',
         bindings: [],
       },
     ]
     Object.assign(store, withIdentity)
-    server.use(http.delete(`${base}/api/account/agents/:agentId`, () => new HttpResponse(null, { status: 204 })))
+    server.use(
+      http.put(`${base}/api/account/agents/:agentId/activation`, () => new HttpResponse(null, { status: 204 })),
+      http.delete(`${base}/api/account/agents/:agentId/activation`, () => new HttpResponse(null, { status: 204 })),
+      http.delete(`${base}/api/account/agents/:agentId`, () => new HttpResponse(null, { status: 204 })),
+    )
 
     renderWithClient(<AccountConnectionsPage />)
 
     expect(await screen.findByText('Personal Build Agent')).toBeTruthy()
-    expect(screen.getByText('Retired Agent')).toBeTruthy()
+    expect(screen.getByText('Inactive Agent')).toBeTruthy()
     expect(screen.getByText(/https:\/\/auth\.example\.com · agt_stable/)).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Retire' }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Retire identity' }))
-    await waitFor(() => expect(success).toHaveBeenCalledWith('Agent retired.'))
+    const activeAgent = screen.getByText('Personal Build Agent').closest('article') as HTMLElement
+    fireEvent.click(within(activeAgent).getByRole('button', { name: 'Deactivate' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Deactivate' }))
+    await waitFor(() => expect(success).toHaveBeenCalledWith('Agent deactivated.'))
+    const inactiveAgent = screen.getByText('Inactive Agent').closest('article') as HTMLElement
+    fireEvent.click(within(inactiveAgent).getByRole('button', { name: 'Activate' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Activate' }))
+    await waitFor(() => expect(success).toHaveBeenCalledWith('Agent activated.'))
+    fireEvent.click(screen.getAllByRole('button', { name: 'Delete' })[0]!)
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete identity' }))
+    await waitFor(() => expect(success).toHaveBeenCalledWith('Agent deleted.'))
   })
 
   it('renders an error state when a connections request fails', async () => {

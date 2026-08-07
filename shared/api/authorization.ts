@@ -130,7 +130,6 @@ export const apiResourceResponseSchema = z.object({
   visibility: apiResourceVisibilitySchema,
   scopeRegistry: resourceScopeRegistrySchema.nullable(),
   availableToAgents: z.boolean(),
-  archivedAt: z.iso.datetime().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
 })
