@@ -9,7 +9,7 @@ inputs:
   revision:
     description: Full Restish commit SHA
     required: false
-    default: fe437b1af526228eb1993c032341222efe3152fb
+    default: dd52ecc03cdd0fcc7bd4b44aee30efc6c67ff84b
 
 runs:
   using: composite
