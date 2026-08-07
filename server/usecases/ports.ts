@@ -567,6 +567,22 @@ export interface AgentAccessGrantRecord {
   updatedAt: Date
 }
 
+export interface AgentGovernanceResourceRecord {
+  id: string
+  identifier: string
+  name: string
+}
+
+export interface AgentAccessRequestProjection {
+  request: AgentAccessRequestRecord
+  resource: AgentGovernanceResourceRecord
+}
+
+export interface AgentAccessGrantProjection {
+  grant: AgentAccessGrantRecord
+  resource: AgentGovernanceResourceRecord
+}
+
 export interface AgentAccessSummary {
   pendingRequestCount: number
   activeGrantCount: number
@@ -644,7 +660,7 @@ export interface ExternalResourceRepository {
       status?: 'pending' | 'approved' | 'denied' | 'consumed' | 'expired'
     },
     scope?: AgentAuthorityInventoryScope,
-  ): Promise<PaginatedResult<AgentAccessRequestRecord>>
+  ): Promise<PaginatedResult<AgentAccessRequestProjection>>
   listPendingAccessRequestsByAgent(agentIdentityId: string, now: Date): Promise<AgentAccessRequestRecord[]>
   listPendingAccessRequests(now: Date): Promise<AgentAccessRequestRecord[]>
   decideAccessRequest(
@@ -695,7 +711,7 @@ export interface ExternalResourceRepository {
       status?: 'active' | 'consumed' | 'expired'
     },
     scope?: AgentAuthorityInventoryScope,
-  ): Promise<PaginatedResult<AgentAccessGrantRecord>>
+  ): Promise<PaginatedResult<AgentAccessGrantProjection>>
   summarizeAgentAccess(agentIdentityIds: string[], now: Date): Promise<Map<string, AgentAccessSummary>>
   listActiveGrantsByConnection(connectionId: string): Promise<AgentAccessGrantRecord[]>
   revokeGrant(id: string, now: Date): Promise<boolean>
@@ -1049,6 +1065,8 @@ export interface ApplicationPaginatedResult<T> {
   pagination: PaginationMetadata
 }
 
+export type ApplicationUpdateResult = 'updated' | 'application_not_found' | 'resource_inactive'
+
 export interface ApplicationRepository {
   create(input: {
     application: Omit<ApplicationAggregate, 'createdAt' | 'updatedAt'>
@@ -1063,7 +1081,7 @@ export interface ApplicationRepository {
   update(
     id: string,
     patch: Partial<Omit<ApplicationAggregate, 'id' | 'clientId' | 'createdAt' | 'updatedAt'>>,
-  ): Promise<void>
+  ): Promise<ApplicationUpdateResult>
   delete(id: string): Promise<void>
   listSecrets(
     applicationId: string,
@@ -1176,6 +1194,7 @@ export interface AuthorizationRepository {
     ownerOrganizationIds?: string[],
   ): Promise<AuthorizationPaginatedResult<ApiResourceResponse>>
   listEnabledResources(): Promise<ApiResourceResponse[]>
+  findResources(ids: string[]): Promise<ApiResourceResponse[]>
   findResource(id: string): Promise<ApiResourceResponse | null>
   findResourceByResourceUrl(resourceUrl: string): Promise<ApiResourceResponse | null>
   updateResource(id: string, patch: UpdateApiResourceRequest): Promise<boolean>

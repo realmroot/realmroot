@@ -19,6 +19,25 @@ describe('application Resource Server scope contracts', () => {
       ]),
     ).toEqual([{ resourceServerId: 'res_orders', scopes: ['orders:read', 'orders:write'] }])
   })
+
+  it('bounds Resource Server allowlists at the HTTP boundary [spec: admin-console/admin-create-application]', () => {
+    expect(
+      applicationResourceScopesSchema.safeParse(
+        Array.from({ length: 101 }, (_, index) => ({
+          resourceServerId: `resource-${index}`,
+          scopes: ['resource:read'],
+        })),
+      ).success,
+    ).toBe(false)
+    expect(
+      applicationResourceScopesSchema.safeParse([
+        {
+          resourceServerId: 'resource-1',
+          scopes: Array.from({ length: 101 }, (_, index) => `scope:${index}`),
+        },
+      ]).success,
+    ).toBe(false)
+  })
 })
 
 describe('application API pagination contracts', () => {

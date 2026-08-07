@@ -24,14 +24,19 @@ const managedAssetUrlSchema = z.union([z.url(), z.string().regex(/^\/api\/assets
 const optionalUrl = managedAssetUrlSchema.optional()
 const customDataSchema = z.record(z.string(), z.unknown())
 
-export const applicationResourceScopesSchema = z.array(
-  z
-    .object({
-      resourceServerId: nonEmptyString,
-      scopes: z.array(nonEmptyString).transform((scopes) => [...new Set(scopes)].sort()),
-    })
-    .strict(),
-)
+export const applicationResourceScopesSchema = z
+  .array(
+    z
+      .object({
+        resourceServerId: nonEmptyString.max(200),
+        scopes: z
+          .array(nonEmptyString.max(200))
+          .max(100)
+          .transform((scopes) => [...new Set(scopes)].sort()),
+      })
+      .strict(),
+  )
+  .max(100)
 
 // Re-exported from the canonical pagination module so existing
 // `@shared/api/applications` import sites keep working.

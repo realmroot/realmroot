@@ -76,6 +76,7 @@ Feature: Admin Console
     Then the new OIDC client appears in inventory
     And it records an explicit owner Organization
     And it records OIDC scopes separately from Resource-server-qualified scope allowlists
+    And Resource Server and scope allowlists are bounded at the request boundary
     And native clients can be created with device login enabled
 
   @entrypoint:product-ui @journey:admin-application-detail
@@ -89,6 +90,7 @@ Feature: Admin Console
     And revoking one creates its durable revocation state without deleting its authorization history
     And rotating a client secret requires confirmation because the current secret stops working
     And enabling refresh tokens keeps the required offline access scope selected
+    And saving authorization silently removes allowlist references to deleted Resource Servers
     And deleting it returns to inventory without refetching the removed client
 
   @entrypoint:product-ui @journey:admin-create-user
@@ -331,6 +333,7 @@ Feature: Admin Console
     Then its inventory summary uses real active access-grant counts
     And separate tabs show Agent installations, access requests, access grants, and audit activity
     And those tabs compose canonical Agent access request, Agent access grant, and audit collections
+    And access request and access grant collections omit history associated with deleted Resource Servers
     And protocol Agent implementation records and credential material are not exposed
 
   @entrypoint:product-ui @journey:admin-application-oidc-claims

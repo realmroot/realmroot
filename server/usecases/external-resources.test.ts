@@ -3813,7 +3813,12 @@ describe('external API resource authorization', () => {
     authorizationDeps(deps)
     vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
     vi.mocked(deps.externalResources.listGrants).mockResolvedValue({
-      items: [grantRecord()],
+      items: [
+        {
+          grant: grantRecord(),
+          resource: { id: 'resource-1', identifier: 'resource-1', name: 'Resource 1' },
+        },
+      ],
       total: 1,
       limit: 10,
       offset: 0,

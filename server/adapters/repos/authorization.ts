@@ -296,6 +296,19 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
       return rows.map(toResource)
     },
 
+    async findResources(ids) {
+      const rows = await db
+        .select()
+        .from(apiResource)
+        .where(
+          and(
+            sql`${apiResource.id} in (select value from json_each(${JSON.stringify(ids)}))`,
+            isNull(apiResource.deletedAt),
+          ),
+        )
+      return rows.map(toResource)
+    },
+
     async findResource(id) {
       const rows = await db
         .select()
@@ -628,10 +641,7 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
     },
 
     async deleteResource(id, now, audit) {
-      const [applications, roles] = await Promise.all([
-        db.select().from(application),
-        db.select().from(organizationRole),
-      ])
+      const encodedRoleScopePrefix = `${encodeURIComponent(id)}/`
       const statements: BatchItem<'sqlite'>[] = [
         db.insert(agentAuditEvent).select(
           db
@@ -694,6 +704,50 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
           .set({ revokedAt: now })
           .where(and(eq(applicationConsent.resourceServerId, id), isNull(applicationConsent.revokedAt))),
         db
+          .update(application)
+          .set({
+            resourceScopes: sql`coalesce(
+              (
+                select json_group_array(json(resource_scope.value))
+                from json_each(${application.resourceScopes}) as resource_scope
+                where json_extract(resource_scope.value, '$.resourceServerId') <> ${id}
+              ),
+              '[]'
+            )`,
+            updatedAt: now,
+          })
+          .where(
+            sql`exists (
+              select 1
+              from json_each(${application.resourceScopes}) as resource_scope
+              where json_extract(resource_scope.value, '$.resourceServerId') = ${id}
+            )`,
+          ),
+        db
+          .update(organizationRole)
+          .set({
+            permission: sql`json_set(
+              ${organizationRole.permission},
+              '$.scope',
+              json(coalesce(
+                (
+                  select json_group_array(role_scope.value)
+                  from json_each(json_extract(${organizationRole.permission}, '$.scope')) as role_scope
+                  where substr(role_scope.value, 1, ${encodedRoleScopePrefix.length}) <> ${encodedRoleScopePrefix}
+                ),
+                '[]'
+              ))
+            )`,
+            updatedAt: now,
+          })
+          .where(
+            sql`exists (
+              select 1
+              from json_each(json_extract(${organizationRole.permission}, '$.scope')) as role_scope
+              where substr(role_scope.value, 1, ${encodedRoleScopePrefix.length}) = ${encodedRoleScopePrefix}
+            )`,
+          ),
+        db
           .update(federatedCredential)
           .set({ enabled: false, updatedAt: now })
           .where(and(eq(federatedCredential.audienceResourceId, id), eq(federatedCredential.enabled, true))),
@@ -743,26 +797,6 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
             ),
           ),
       ]
-      for (const app of applications) {
-        const resourceScopes = app.resourceScopes.filter((entry) => entry.resourceServerId !== id)
-        if (resourceScopes.length !== app.resourceScopes.length) {
-          statements.push(
-            db.update(application).set({ resourceScopes, updatedAt: now }).where(eq(application.id, app.id)),
-          )
-        }
-      }
-      for (const role of roles) {
-        const encodedScopes = role.permission.scope ?? []
-        const scopes = encodedScopes.filter((value) => decodeRoleScope(value)?.resourceId !== id)
-        if (scopes.length !== encodedScopes.length) {
-          statements.push(
-            db
-              .update(organizationRole)
-              .set({ permission: { ...role.permission, scope: scopes }, updatedAt: now })
-              .where(eq(organizationRole.id, role.id)),
-          )
-        }
-      }
       const results = await db.batch(statements as [BatchItem<'sqlite'>, ...BatchItem<'sqlite'>[]])
       return results[1].length > 0
     },

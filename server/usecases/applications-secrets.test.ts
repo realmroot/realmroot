@@ -431,6 +431,7 @@ class InMemoryApplicationRepository implements ApplicationRepository {
         updatedAt: new Date('2026-05-18T13:00:00.000Z'),
       })
     }
+    return application ? ('updated' as const) : ('application_not_found' as const)
   }
 
   async delete(id: string) {

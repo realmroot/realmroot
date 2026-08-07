@@ -263,13 +263,19 @@ export function createExternalResourceRepository(db: Database): ExternalResource
         query.resourceId ? eq(agentAccessRequest.resourceId, query.resourceId) : undefined,
         query.organizationId ? eq(agentIdentity.ownerOrganizationId, query.organizationId) : undefined,
         authorityOwnerCondition(scope),
+        isNull(agentIdentity.deletedAt),
+        isNull(apiResource.deletedAt),
         statusCondition,
       )
       const [items, totals] = await Promise.all([
         db
-          .select({ request: agentAccessRequest })
+          .select({
+            request: agentAccessRequest,
+            resource: { id: apiResource.id, identifier: apiResource.identifier, name: apiResource.name },
+          })
           .from(agentAccessRequest)
           .innerJoin(agentIdentity, eq(agentAccessRequest.agentIdentityId, agentIdentity.id))
+          .innerJoin(apiResource, eq(agentAccessRequest.resourceId, apiResource.id))
           .where(condition)
           .orderBy(desc(agentAccessRequest.createdAt), desc(agentAccessRequest.id))
           .limit(query.limit)
@@ -278,9 +284,10 @@ export function createExternalResourceRepository(db: Database): ExternalResource
           .select({ value: count() })
           .from(agentAccessRequest)
           .innerJoin(agentIdentity, eq(agentAccessRequest.agentIdentityId, agentIdentity.id))
+          .innerJoin(apiResource, eq(agentAccessRequest.resourceId, apiResource.id))
           .where(condition),
       ])
-      return { items: items.map(({ request }) => request), total: totals[0]?.value ?? 0, ...query }
+      return { items, total: totals[0]?.value ?? 0, ...query }
     },
 
     async listPendingAccessRequestsByAgent(agentIdentityId, now) {
@@ -414,13 +421,19 @@ export function createExternalResourceRepository(db: Database): ExternalResource
         query.organizationId ? eq(agentIdentity.ownerOrganizationId, query.organizationId) : undefined,
         authorityOwnerCondition(scope),
         ne(agentAccessGrant.status, 'revoked'),
+        isNull(agentIdentity.deletedAt),
+        isNull(apiResource.deletedAt),
         statusCondition,
       )
       const [items, totals] = await Promise.all([
         db
-          .select({ grant: agentAccessGrant })
+          .select({
+            grant: agentAccessGrant,
+            resource: { id: apiResource.id, identifier: apiResource.identifier, name: apiResource.name },
+          })
           .from(agentAccessGrant)
           .innerJoin(agentIdentity, eq(agentAccessGrant.agentIdentityId, agentIdentity.id))
+          .innerJoin(apiResource, eq(agentAccessGrant.resourceId, apiResource.id))
           .where(where)
           .orderBy(desc(agentAccessGrant.createdAt), desc(agentAccessGrant.id))
           .limit(query.limit)
@@ -429,10 +442,11 @@ export function createExternalResourceRepository(db: Database): ExternalResource
           .select({ value: count() })
           .from(agentAccessGrant)
           .innerJoin(agentIdentity, eq(agentAccessGrant.agentIdentityId, agentIdentity.id))
+          .innerJoin(apiResource, eq(agentAccessGrant.resourceId, apiResource.id))
           .where(where),
       ])
       return {
-        items: items.map(({ grant }) => grant),
+        items,
         total: totals[0]?.value ?? 0,
         limit: query.limit,
         offset: query.offset,
@@ -445,22 +459,30 @@ export function createExternalResourceRepository(db: Database): ExternalResource
         db
           .select({ agentIdentityId: agentAccessRequest.agentIdentityId, value: count() })
           .from(agentAccessRequest)
+          .innerJoin(agentIdentity, eq(agentAccessRequest.agentIdentityId, agentIdentity.id))
+          .innerJoin(apiResource, eq(agentAccessRequest.resourceId, apiResource.id))
           .where(
             and(
               inArray(agentAccessRequest.agentIdentityId, agentIdentityIds),
               eq(agentAccessRequest.status, 'pending'),
               gt(agentAccessRequest.expiresAt, now),
+              isNull(agentIdentity.deletedAt),
+              isNull(apiResource.deletedAt),
             ),
           )
           .groupBy(agentAccessRequest.agentIdentityId),
         db
           .select({ agentIdentityId: agentAccessGrant.agentIdentityId, value: count() })
           .from(agentAccessGrant)
+          .innerJoin(agentIdentity, eq(agentAccessGrant.agentIdentityId, agentIdentity.id))
+          .innerJoin(apiResource, eq(agentAccessGrant.resourceId, apiResource.id))
           .where(
             and(
               inArray(agentAccessGrant.agentIdentityId, agentIdentityIds),
               eq(agentAccessGrant.status, 'active'),
               or(isNull(agentAccessGrant.expiresAt), gt(agentAccessGrant.expiresAt, now)),
+              isNull(agentIdentity.deletedAt),
+              isNull(apiResource.deletedAt),
             ),
           )
           .groupBy(agentAccessGrant.agentIdentityId),

@@ -388,10 +388,12 @@ describe('service.test 1', () => {
       scopeRegistry: { scopes: [{ value: 'items:read', description: null, grantMode: 'assigned' }] },
     }
     const findResource = vi.fn().mockResolvedValue(resource)
+    const findResources = vi.fn().mockResolvedValue([resource])
     const deps = {
       applications: repository,
       authorization: {
         findOrganization: vi.fn().mockResolvedValue({ id: 'org-1', disabled: false }),
+        findResources,
         findResource,
       },
     } as unknown as Deps
@@ -415,15 +417,15 @@ describe('service.test 1', () => {
     await expect(
       createApplication(deps, 'https://auth.example.com', { ...base, resourceScopes: [allowed, allowed] }, 'admin-1'),
     ).rejects.toMatchObject({ status: 400, message: expect.stringContaining('only once') })
-    findResource.mockResolvedValueOnce(null)
+    findResources.mockResolvedValueOnce([])
     await expect(
       createApplication(deps, 'https://auth.example.com', { ...base, resourceScopes: [allowed] }, 'admin-1'),
     ).rejects.toMatchObject({ status: 400, message: 'Resource Server is not active.' })
-    findResource.mockResolvedValueOnce({ ...resource, ownerOrganizationId: 'org-other' })
+    findResources.mockResolvedValueOnce([{ ...resource, ownerOrganizationId: 'org-other' }])
     await expect(
       createApplication(deps, 'https://auth.example.com', { ...base, resourceScopes: [allowed] }, 'admin-1'),
     ).rejects.toMatchObject({ status: 400, message: expect.stringContaining('not visible') })
-    findResource.mockResolvedValueOnce(resource)
+    findResources.mockResolvedValueOnce([resource])
     await expect(
       createApplication(
         deps,
@@ -486,6 +488,7 @@ class InMemoryApplicationRepository implements ApplicationRepository {
         updatedAt: new Date('2026-05-18T13:00:00.000Z'),
       })
     }
+    return application ? ('updated' as const) : ('application_not_found' as const)
   }
 
   async delete(id: string) {
