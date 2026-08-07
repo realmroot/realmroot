@@ -115,7 +115,6 @@ describe('management resource routes', () => {
       'POST',
       {
         identifier: 'contacts',
-        name: 'Contacts',
         resourceUrl: 'https://api.example.com',
         ownerOrganizationId: 'org-1',
       },

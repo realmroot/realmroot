@@ -131,7 +131,6 @@ describe('management API client', () => {
     await management.getApiResource('resource-1')
     await management.createApiResource({
       identifier: 'management-api',
-      name: 'Management API',
       resourceUrl: 'https://auth.example.com/api',
       ownerOrganizationId: 'org-1',
     })

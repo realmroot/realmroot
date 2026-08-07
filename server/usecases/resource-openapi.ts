@@ -24,6 +24,8 @@ export interface ResourceContractDefinition {
   sourceUrl: string
   etag: string | null
   documentHash: string
+  name: string
+  description: string | null
   scopes: ResourceScopeDefinition[]
   operations: ResourceOperationDefinition[]
 }
@@ -93,14 +95,40 @@ export async function readResourceContractDocument(
 
   const source = await documentResponse.text()
   const document = parseDocument(source, documentResponse.headers.get('content-type'))
+  const info = extractResourceInfo(document)
   const scopes = extractResourceScopes(document)
   const operations = extractProtectedOperations(document)
   return {
     sourceUrl: documentUrl,
     etag: documentResponse.headers.get('etag'),
     documentHash: await hashDiscoveryData(scopes),
+    ...info,
     scopes,
     operations,
+  }
+}
+
+export function extractResourceInfo(document: unknown) {
+  const root = objectValue(document, 'Business resource OpenAPI document is invalid.')
+  if (typeof root.openapi !== 'string' || !root.openapi.startsWith('3.')) {
+    throw badRequest('Business resource must publish an OpenAPI 3.x document.')
+  }
+  const info = objectValue(root.info, 'Business resource OpenAPI info is invalid.')
+  if (typeof info.title !== 'string' || !info.title.trim()) {
+    throw badRequest('Business resource OpenAPI info must declare a non-empty title.')
+  }
+  if (info.title.trim().length > 200) {
+    throw badRequest('Business resource OpenAPI info title must not exceed 200 characters.')
+  }
+  if (info.description !== undefined && typeof info.description !== 'string') {
+    throw badRequest('Business resource OpenAPI info description must be a string.')
+  }
+  if (typeof info.description === 'string' && info.description.trim().length > 1_000) {
+    throw badRequest('Business resource OpenAPI info description must not exceed 1000 characters.')
+  }
+  return {
+    name: info.title.trim(),
+    description: typeof info.description === 'string' ? info.description.trim() || null : null,
   }
 }
 

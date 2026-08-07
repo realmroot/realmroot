@@ -10,7 +10,6 @@ describe('Agent resource schemas', () => {
   it('creates external API resources by selecting a connector', () => {
     const input = {
       identifier: 'projects',
-      name: 'Projects',
       resourceUrl: 'https://projects.example.com',
       connectorId: 'connector-1',
       ownerOrganizationId: 'org-1',
@@ -24,7 +23,6 @@ describe('Agent resource schemas', () => {
   it('preserves opaque JSON authorization details and rejects malformed values', () => {
     const input = {
       identifier: 'projects',
-      name: 'Projects',
       resourceUrl: 'https://projects.example.com',
       connectorId: 'connector-1',
       ownerOrganizationId: 'org-1',

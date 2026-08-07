@@ -183,7 +183,6 @@ describe('console API resources and roles', () => {
     renderWithQuery(<ApiResourcesPage />)
     fireEvent.click(await screen.findByRole('button', { name: 'New resource server' }))
     expect(screen.getByRole('heading', { name: 'New resource server' })).toBeTruthy()
-    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Projects API' } })
     fireEvent.change(screen.getByLabelText('Identifier'), { target: { value: 'projects' } })
     fireEvent.change(screen.getByLabelText('Protected resource URL'), {
       target: { value: 'https://projects.example.com/api' },
@@ -197,7 +196,6 @@ describe('console API resources and roles', () => {
         value: JSON.stringify([{ type: 'project_access', actions: ['read'], project_id: 'project-1' }]),
       },
     })
-    fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Projects' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() =>
@@ -206,12 +204,10 @@ describe('console API resources and roles', () => {
           url: '/api/resource-servers',
           method: 'POST',
           body: {
-            name: 'Projects API',
             identifier: 'projects',
             resourceUrl: 'https://projects.example.com/api',
             connectorId: 'connector-1',
             authorizationDetails: [{ type: 'project_access', actions: ['read'], project_id: 'project-1' }],
-            description: 'Projects',
             ownerOrganizationId: 'org-1',
             visibility: 'private',
             availableToAgents: true,
@@ -265,7 +261,6 @@ describe('console API resources and roles', () => {
     fireEvent.click(screen.getByRole('button', { name: 'New resource server' }))
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     fireEvent.click(screen.getByRole('button', { name: 'New resource server' }))
-    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Selected API' } })
     fireEvent.change(screen.getByLabelText('Identifier'), { target: { value: 'selected-api' } })
     fireEvent.change(screen.getByLabelText('Protected resource URL'), {
       target: { value: 'https://selected.example.com/api' },
@@ -278,7 +273,6 @@ describe('console API resources and roles', () => {
     await waitFor(() =>
       expect(requests).toEqual([
         {
-          name: 'Selected API',
           identifier: 'selected-api',
           resourceUrl: 'https://selected.example.com/api',
           authorizationDetails: [],
@@ -536,17 +530,15 @@ describe('console API resources and roles', () => {
     expect(screen.queryByRole('heading', { name: 'Authorization provider' })).toBeNull()
     const details = screen.getByRole('heading', { name: 'Resource server details' }).closest('section') as HTMLElement
     fireEvent.click(within(details).getByRole('button', { name: 'Edit' }))
-    fireEvent.change(await screen.findByLabelText('Name'), { target: { value: 'Updated API' } })
+    fireEvent.change(await screen.findByLabelText('Identifier'), { target: { value: 'updated-api' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
     await waitFor(() =>
       expect(requests).toContainEqual({
         url: '/api/resource-servers/resource-1',
         method: 'PATCH',
         body: {
-          name: 'Updated API',
-          identifier: apiResource.identifier,
+          identifier: 'updated-api',
           resourceUrl: apiResource.resourceUrl,
-          description: apiResource.description,
         },
       }),
     )

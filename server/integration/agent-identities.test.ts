@@ -401,9 +401,7 @@ describe('Agent identity enrollment over real D1', () => {
     harness.deps.externalHttp.fetch = resourceOpenApiFetch('https://api.example.com', 'repo:read')
     const resource = await createResource(harness.deps, {
       identifier: 'native-api',
-      name: 'Native API',
       resourceUrl: 'https://api.example.com',
-      description: 'Read private code repositories',
       ownerOrganizationId: 'org_platform',
     })
     const automaticScope = await harness.request(`/api/resource-servers/${resource.id}`, {
@@ -547,6 +545,7 @@ function resourceOpenApiFetch(resourceUrl: string, scope: string) {
     if (request.url === new URL('/openapi.json', resourceUrl).toString()) {
       return Response.json({
         openapi: '3.1.0',
+        info: { title: 'Native API', description: 'Read private code repositories', version: '1.0.0' },
         components: {
           securitySchemes: {
             oauth: {

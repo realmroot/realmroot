@@ -17,8 +17,14 @@ describe('OpenAPI semantic contract gate', () => {
     const documentationContract = JSON.parse(
       readFileSync(new URL('./approved-documentation-semantic-baseline.json', import.meta.url), 'utf8'),
     ) as typeof unchanged
+    const resourceDiscoveryContract = JSON.parse(
+      readFileSync(new URL('./approved-resource-discovery-semantic-baseline.json', import.meta.url), 'utf8'),
+    ) as typeof unchanged
+    const resourceDiscoveryChanges = new Set(resourceDiscoveryContract.map(({ method, path }) => `${method}:${path}`))
     const approvedChanges = new Set(
-      [...ownerSelectorContract, ...documentationContract].map(({ method, path }) => `${method}:${path}`),
+      [...ownerSelectorContract, ...documentationContract, ...resourceDiscoveryContract].map(
+        ({ method, path }) => `${method}:${path}`,
+      ),
     )
     const approvedRemovals = new Set([
       ...['DELETE', 'GET', 'PUT'].flatMap((method) => [
@@ -32,8 +38,9 @@ describe('OpenAPI semantic contract gate', () => {
         ({ method, path }) => !approvedChanges.has(`${method}:${path}`) && !approvedRemovals.has(`${method}:${path}`),
       ),
       ...authorizationContract,
-      ...ownerSelectorContract,
+      ...ownerSelectorContract.filter(({ method, path }) => !resourceDiscoveryChanges.has(`${method}:${path}`)),
       ...documentationContract,
+      ...resourceDiscoveryContract,
     ].sort((left, right) => `${left.path}:${left.method}`.localeCompare(`${right.path}:${right.method}`))
 
     expect(openApiSemanticSnapshot(unifiedOpenApi as unknown as Record<string, unknown>, () => true)).toEqual(baseline)

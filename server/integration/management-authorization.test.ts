@@ -253,7 +253,6 @@ describe('authorization management over real D1', () => {
     const now = new Date()
     const resource = await createResource(harness.deps, {
       identifier: 'atomic-agent-api',
-      name: 'Atomic Agent API',
       resourceUrl: 'https://atomic-agent.example.com/api',
       ownerOrganizationId: 'org_platform',
     })
@@ -553,21 +552,24 @@ describe('authorization management over real D1', () => {
     const resource = (await (
       await postJson(harness, cookie, '/api/resource-servers', {
         identifier: 'grant-api',
-        name: 'Grant API',
         resourceUrl: 'https://grant.example.com/api',
         ownerOrganizationId: 'org_platform',
         visibility: 'public',
       })
     ).json()) as { id: string }
-    await harness.deps.authorization.replaceResourceScopeRegistry(resource.id, {
-      discovery: {
-        sourceUrl: 'https://grant.example.com/openapi.json',
-        etag: null,
-        documentHash: 'grant-registry',
-        syncedAt: new Date().toISOString(),
-        lastError: null,
+    await harness.deps.authorization.replaceResourceDiscovery(resource.id, {
+      name: 'Grant API',
+      description: null,
+      scopeRegistry: {
+        discovery: {
+          sourceUrl: 'https://grant.example.com/openapi.json',
+          etag: null,
+          documentHash: 'grant-registry',
+          syncedAt: new Date().toISOString(),
+          lastError: null,
+        },
+        scopes: [{ value: 'projects:read', description: 'Read projects', grantMode: 'assigned' }],
       },
-      scopes: [{ value: 'projects:read', description: 'Read projects', grantMode: 'assigned' }],
     })
 
     const userGrant = (await (
@@ -713,7 +715,6 @@ describe('authorization management over real D1', () => {
 
     const created = await postJson(harness, cookie, '/api/resource-servers', {
       identifier: 'rar-projects-api',
-      name: 'RAR Projects API',
       resourceUrl: 'https://projects.example.com/api',
       connectorId: connector.id,
       ownerOrganizationId: 'org_platform',
@@ -744,12 +745,11 @@ describe('authorization management over real D1', () => {
     expect(unsupported.status).toBe(400)
   })
 
-  it('rejects an undiscoverable enabled resource but saves a disabled draft', async () => {
+  it('rejects an undiscoverable Resource Server even when the requested state is disabled', async () => {
     const cookie = await signInAdmin(harness)
     harness.deps.externalHttp.fetch = async () => new Response('<html></html>')
     const input = {
       identifier: 'projects-api',
-      name: 'Projects API',
       resourceUrl: 'https://projects.example.com/api',
       ownerOrganizationId: 'org_platform',
     }
@@ -761,16 +761,12 @@ describe('authorization management over real D1', () => {
     })
     expect(enabled.status).toBe(502)
 
-    const draft = await postJson(harness, cookie, '/api/resource-servers', { ...input, enabled: false })
-    const resource = (await draft.json()) as { id: string; enabled: boolean }
-    expect(resource.enabled).toBe(false)
-
-    const enable = await harness.request(`/api/resource-servers/${resource.id}`, {
-      method: 'PATCH',
+    const disabled = await harness.request('/api/resource-servers', {
+      method: 'POST',
       headers: { 'content-type': 'application/json', cookie },
-      body: JSON.stringify({ enabled: true }),
+      body: JSON.stringify({ ...input, enabled: false }),
     })
-    expect(enable.status).toBe(502)
+    expect(disabled.status).toBe(400)
   })
 
   it('requires authorization reconfiguration when an external resource URL changes [spec: agent-identity/external-api-resource-reconfiguration]', async () => {
@@ -827,7 +823,6 @@ describe('authorization management over real D1', () => {
     }
     const resource = await createResource(harness.deps, {
       identifier: 'projects-api',
-      name: 'Projects API',
       resourceUrl: 'https://projects.example.com/api',
       connectorId: connector.id,
       ownerOrganizationId: 'org_platform',
@@ -851,7 +846,6 @@ describe('authorization management over real D1', () => {
     const resource = (await (
       await postJson(harness, cookie, '/api/resource-servers', {
         identifier: 'https://api.example.com',
-        name: 'Example API',
         resourceUrl: 'https://api.example.com',
         ownerOrganizationId: 'org_platform',
       })
@@ -862,13 +856,44 @@ describe('authorization management over real D1', () => {
 
     const fetched = await harness.request(`/api/resource-servers/${resource.id}`, { headers: { cookie } })
     expect(fetched.status).toBe(200)
+    await expect(fetched.json()).resolves.toMatchObject({
+      name: 'Test Resource API',
+      description: 'Integration test resource',
+    })
 
-    const patched = await harness.request(`/api/resource-servers/${resource.id}`, {
+    harness.deps.externalHttp.fetch = async (request) => {
+      if (new URL(request.url).pathname.endsWith('/openapi.json')) {
+        return Response.json({
+          openapi: '3.1.0',
+          info: { title: 'Updated Example API', description: 'Updated by OpenAPI', version: '2.0.0' },
+          paths: {},
+        })
+      }
+      return resourceOpenApiFetch(request)
+    }
+    const synchronized = await harness.request(`/api/resource-servers/${resource.id}/scope-registry`, {
+      method: 'PUT',
+      headers: { cookie },
+    })
+    expect(synchronized.status).toBe(200)
+    await expect(synchronized.json()).resolves.toMatchObject({
+      name: 'Updated Example API',
+      description: 'Updated by OpenAPI',
+    })
+
+    const rejectedManualName = await harness.request(`/api/resource-servers/${resource.id}`, {
       method: 'PATCH',
       headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({ name: 'Renamed API' }),
     })
-    expect(((await patched.json()) as { name: string }).name).toBe('Renamed API')
+    expect(rejectedManualName.status).toBe(400)
+
+    const patched = await harness.request(`/api/resource-servers/${resource.id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ identifier: 'example-api' }),
+    })
+    expect(((await patched.json()) as { identifier: string }).identifier).toBe('example-api')
 
     expect(
       (
@@ -885,7 +910,6 @@ describe('authorization management over real D1', () => {
     const resource = (await (
       await postJson(harness, cookie, '/api/resource-servers', {
         identifier: 'history-api',
-        name: 'History API',
         resourceUrl: 'https://history.example.com/api',
         ownerOrganizationId: 'org_platform',
       })
@@ -893,7 +917,6 @@ describe('authorization management over real D1', () => {
     const retainedResource = (await (
       await postJson(harness, cookie, '/api/resource-servers', {
         identifier: 'retained-history-api',
-        name: 'Retained History API',
         resourceUrl: 'https://retained-history.example.com/api',
         ownerOrganizationId: 'org_platform',
       })
@@ -1087,7 +1110,6 @@ describe('authorization management over real D1', () => {
     }
     const resource = await createResource(harness.deps, {
       identifier: 'conditional-external',
-      name: 'Conditional external API',
       resourceUrl: 'https://conditional.example.com/api',
       connectorId: connector.id,
       ownerOrganizationId: 'org_platform',
@@ -1112,7 +1134,6 @@ describe('authorization management over real D1', () => {
     const resource = (await (
       await postJson(harness, cookie, '/api/resource-servers', {
         identifier: 'deleted-api',
-        name: 'Deleted API',
         resourceUrl: 'https://deleted.example.com/api',
         ownerOrganizationId: 'org_platform',
       })

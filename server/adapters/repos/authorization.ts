@@ -416,7 +416,7 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
       return rows.length > 0
     },
 
-    async replaceResourceScopeRegistry(id, registry) {
+    async replaceResourceDiscovery(id, { name, description, scopeRegistry: registry }) {
       const now = new Date()
       const declared = new Set(registry.scopes.map((scope) => scope.value))
       const assigned = new Set(
@@ -434,7 +434,7 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
       const statements: [BatchItem<'sqlite'>, ...BatchItem<'sqlite'>[]] = [
         db
           .update(apiResource)
-          .set({ scopeRegistry: registry, updatedAt: now })
+          .set({ name, description, scopeRegistry: registry, updatedAt: now })
           .where(and(eq(apiResource.id, id), isNull(apiResource.deletedAt))),
       ]
       for (const app of applications) {

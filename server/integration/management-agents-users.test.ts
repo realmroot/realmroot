@@ -312,7 +312,6 @@ describe('federated credential management over real D1', () => {
       headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({
         identifier: 'https://api.example.com',
-        name: 'Example API',
         resourceUrl: 'https://api.example.com',
         ownerOrganizationId: 'org_platform',
       }),

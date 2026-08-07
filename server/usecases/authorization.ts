@@ -13,7 +13,7 @@ import { validateExternalResourceConnector } from '@server/usecases/resource-con
 import {
   assertOperationScopesAdvertised,
   readProtectedResourceMetadata,
-  synchronizeResourceScopeRegistry,
+  synchronizeResourceDiscovery,
 } from '@server/usecases/resource-metadata'
 import {
   type ResourceOperationDefinition,
@@ -219,26 +219,28 @@ export async function createResource(deps: Deps, input: CreateApiResourceRequest
   if (!input.connectorId && (input.authorizationDetails?.length ?? 0) > 0) {
     throw badRequest('Authorization details require an external API resource connector.')
   }
-  const scopeRegistry = enabled
-    ? await synchronizeResourceScopeRegistry(
+  const synchronized = enabled
+    ? await synchronizeResourceDiscovery(
         deps,
         input.resourceUrl,
         null,
         protectedMetadata ?? (await readProtectedResourceMetadata(deps, input.resourceUrl)),
       )
     : null
+  const contract = synchronized ?? (await readResourceContract(deps, input.resourceUrl))
+  if (!contract) throw new Error('Unconditional Resource Server contract read returned no document.')
   return deps.authorization.createResource({
     id: createId('res'),
     identifier: input.identifier,
-    name: input.name,
+    name: contract.name,
     resourceUrl: input.resourceUrl,
     connectorId: input.connectorId ?? null,
     authorizationDetails: input.authorizationDetails ?? [],
-    description: input.description ?? null,
+    description: contract.description,
     enabled,
     ownerOrganizationId,
     visibility: input.visibility ?? 'private',
-    scopeRegistry,
+    scopeRegistry: synchronized?.scopeRegistry ?? null,
     availableToAgents: input.availableToAgents ?? true,
   })
 }
@@ -270,7 +272,14 @@ export async function reconcileRealmrootResourceServer(deps: Deps, apiOrigin: st
     if (resourceUrlChanged && !(await deps.authorization.updateResource(existing.id, { resourceUrl }))) {
       throw new Error('The persisted Realmroot Resource Server could not be reconciled.')
     }
-    if (registryChanged && !(await deps.authorization.replaceResourceScopeRegistry(existing.id, registry))) {
+    if (
+      registryChanged &&
+      !(await deps.authorization.replaceResourceDiscovery(existing.id, {
+        name: existing.name,
+        description: existing.description,
+        scopeRegistry: registry,
+      }))
+    ) {
       throw new Error('The persisted Realmroot Resource Server could not be reconciled.')
     }
     const reconciled = await deps.authorization.findResource(existing.id)
@@ -325,9 +334,10 @@ export async function getResourceContract(deps: Deps, id: string) {
     operations,
     scopes.map((scope) => scope.value),
   )
+  const { name: _name, description: _description, ...publishedContract } = contract
   return {
     resourceId: resource.id,
-    ...contract,
+    ...publishedContract,
     operations,
     scopes,
   }
@@ -338,7 +348,13 @@ export async function refreshResourceScopeRegistry(deps: Deps, id: string) {
   if (!resource.enabled) throw badRequest('Resource Server must be active before synchronizing scopes.')
   if (isRealmrootResourceServer(id)) {
     const registry = realmrootRegistry(new URL(resource.resourceUrl).origin)
-    if (!(await deps.authorization.replaceResourceScopeRegistry(id, registry))) {
+    if (
+      !(await deps.authorization.replaceResourceDiscovery(id, {
+        name: resource.name,
+        description: resource.description,
+        scopeRegistry: registry,
+      }))
+    ) {
       throw badRequest('Resource Server is no longer active.')
     }
     return getResource(deps, id)
@@ -354,21 +370,20 @@ export async function refreshResourceScopeRegistry(deps: Deps, id: string) {
         metadata,
       )
     }
-    const registry = await synchronizeResourceScopeRegistry(
-      deps,
-      resource.resourceUrl,
-      resource.scopeRegistry,
-      metadata,
-    )
-    if (!(await deps.authorization.replaceResourceScopeRegistry(id, registry))) {
+    const discovery = await synchronizeResourceDiscovery(deps, resource.resourceUrl, resource.scopeRegistry, metadata)
+    if (!(await deps.authorization.replaceResourceDiscovery(id, discovery))) {
       throw badRequest('Resource Server is no longer active.')
     }
     return getResource(deps, id)
   } catch (error) {
     if (resource.scopeRegistry) {
-      await deps.authorization.replaceResourceScopeRegistry(id, {
-        ...resource.scopeRegistry,
-        discovery: { ...resource.scopeRegistry.discovery, lastError: synchronizationError(error) },
+      await deps.authorization.replaceResourceDiscovery(id, {
+        name: resource.name,
+        description: resource.description,
+        scopeRegistry: {
+          ...resource.scopeRegistry,
+          discovery: { ...resource.scopeRegistry.discovery, lastError: synchronizationError(error) },
+        },
       })
     }
     throw error
@@ -420,8 +435,8 @@ export async function updateResource(deps: Deps, id: string, input: UpdateApiRes
     throw badRequest('Authorization details require an external API resource connector.')
   }
   const shouldSynchronize = enabled && (input.enabled === true || input.resourceUrl !== undefined)
-  const synchronizedRegistry = shouldSynchronize
-    ? await synchronizeResourceScopeRegistry(
+  const synchronized = shouldSynchronize
+    ? await synchronizeResourceDiscovery(
         deps,
         resourceUrl,
         input.resourceUrl ? null : resource.scopeRegistry,
@@ -429,12 +444,22 @@ export async function updateResource(deps: Deps, id: string, input: UpdateApiRes
       )
     : null
   const scopeRegistry = input.scopeGrantModes
-    ? updateScopeGrantModes(synchronizedRegistry ?? resource.scopeRegistry, input.scopeGrantModes)
-    : synchronizedRegistry
-  if (!(await deps.authorization.updateResource(id, input))) {
+    ? updateScopeGrantModes(synchronized?.scopeRegistry ?? resource.scopeRegistry, input.scopeGrantModes)
+    : (synchronized?.scopeRegistry ?? null)
+  const resourcePatch = synchronized
+    ? { ...input, name: synchronized.name, description: synchronized.description }
+    : input
+  if (!(await deps.authorization.updateResource(id, resourcePatch))) {
     throw notFound('API resource was not found.')
   }
-  if (scopeRegistry && !(await deps.authorization.replaceResourceScopeRegistry(id, scopeRegistry))) {
+  if (
+    scopeRegistry &&
+    !(await deps.authorization.replaceResourceDiscovery(id, {
+      name: synchronized?.name ?? resource.name,
+      description: synchronized?.description ?? resource.description,
+      scopeRegistry,
+    }))
+  ) {
     throw notFound('API resource was not found.')
   }
   return getResource(deps, id)

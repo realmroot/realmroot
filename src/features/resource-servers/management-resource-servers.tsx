@@ -32,7 +32,7 @@ import {
 import { ListToolbar, navigateConsoleTab, ResourcePage } from '@/features/management/resource-components'
 import type { ApiResourceDetailSection, FormState } from '@/features/management/shared'
 import { emptyForm } from '@/features/management/shared'
-import { formatDate, nullableString, parseForm, setValue, useAdminMutation } from '@/features/management/utils'
+import { formatDate, parseForm, setValue, useAdminMutation } from '@/features/management/utils'
 import {
   consoleQueryKeys,
   createApiResource,
@@ -311,9 +311,6 @@ function ApiResourceCreateDialog({
         pending={pending}
         title={tt('New resource server')}
       >
-        <Field label={tt('Name')}>
-          <TextInput name="name" onChange={(event) => setValue(setForm, 'name', event.target.value)} required />
-        </Field>
         <Field label={tt('Identifier')}>
           <TextInput
             name="identifier"
@@ -399,13 +396,9 @@ function ApiResourceCreateDialog({
             onCheckedChange={setAvailableToAgents}
           />
         </div>
-        <Field label={tt('Description')}>
-          <TextArea
-            name="description"
-            onChange={(event) => setValue(setForm, 'description', event.target.value)}
-            rows={3}
-          />
-        </Field>
+        <p className="text-sm text-muted-foreground">
+          {tt('Name and description are synchronized from the OpenAPI contract advertised by this URL.')}
+        </p>
       </FormDialog>
     </Dialog>
   )
@@ -1003,26 +996,21 @@ function ResourceEditorSheet({
               const form = new FormData(event.currentTarget)
               onSave(
                 parseForm(updateApiResourceRequestSchema, {
-                  name: form.get('name'),
                   identifier: form.get('identifier'),
                   resourceUrl: form.get('resourceUrl'),
-                  description: nullableString(String(form.get('description') ?? '')),
                 }),
               )
             }}
           >
-            <Field label={tt('Name')}>
-              <TextInput defaultValue={resource.name} name="name" required />
-            </Field>
             <Field label={tt('Identifier')}>
               <TextInput defaultValue={resource.identifier} name="identifier" required />
             </Field>
             <Field label={tt('Protected resource URL')}>
               <TextInput defaultValue={resource.resourceUrl} name="resourceUrl" required type="url" />
             </Field>
-            <Field label={tt('Description')}>
-              <TextArea defaultValue={resource.description ?? ''} name="description" rows={4} />
-            </Field>
+            <p className="text-sm text-muted-foreground">
+              {tt('Name and description are synchronized from the OpenAPI contract and cannot be edited here.')}
+            </p>
           </form>
         ) : null}
         {editor === 'connector' ? (

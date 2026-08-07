@@ -201,13 +201,12 @@ Feature: Agent identity and delegated API authorization
       And Realmroot stores only discovered scope metadata and local grant modes, never either source document
 
     @entrypoint:product-ui @journey:api-resource-contract-validation
-    Scenario: Enabled API resources require a discoverable OpenAPI contract
+    Scenario: API resources require a discoverable OpenAPI contract
       Given an API resource URL cannot be reached or does not return a successful service-desc response
-      When an administrator creates or enables the API resource
+      When an administrator creates or enables the API resource, including a disabled registration
       Then Realmroot rejects the request without enabling the resource
       And a network failure identifies whether the resource or its OpenAPI document was unreachable
-      But the administrator can save the API resource as a disabled draft
-      When the administrator enables the draft or changes an enabled resource URL
+      When the administrator enables an existing draft or changes an enabled resource URL
       Then Realmroot validates the exact resource URL before saving the change
 
     @entrypoint:agent-protocol @journey:native-api-resource-access-request

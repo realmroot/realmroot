@@ -52,13 +52,13 @@ export async function readProtectedResourceMetadata(
   }
 }
 
-export async function synchronizeResourceScopeRegistry(
+export async function synchronizeResourceDiscovery(
   deps: Deps,
   resourceUrl: string,
   previousRegistry: ResourceScopeRegistry | null,
   protectedMetadata?: ProtectedResourceMetadata,
   now = new Date(),
-): Promise<ResourceScopeRegistry> {
+): Promise<{ name: string; description: string | null; scopeRegistry: ResourceScopeRegistry }> {
   const metadata = protectedMetadata ?? (await readProtectedResourceMetadata(deps, resourceUrl))
   const contract = await readResourceContract(deps, resourceUrl)
   if (!contract) throw new Error('Unconditional Resource Server contract read returned no document.')
@@ -73,14 +73,18 @@ export async function synchronizeResourceScopeRegistry(
     grantMode: previousModes.get(value) ?? ('assigned' as const),
   }))
   return {
-    discovery: {
-      sourceUrl: metadata.sourceUrl,
-      etag: metadata.etag,
-      documentHash: await hashScopeRegistry(scopes.map(({ value, description }) => ({ value, description }))),
-      syncedAt: now.toISOString(),
-      lastError: null,
+    name: contract.name,
+    description: contract.description,
+    scopeRegistry: {
+      discovery: {
+        sourceUrl: metadata.sourceUrl,
+        etag: metadata.etag,
+        documentHash: await hashScopeRegistry(scopes.map(({ value, description }) => ({ value, description }))),
+        syncedAt: now.toISOString(),
+        lastError: null,
+      },
+      scopes,
     },
-    scopes,
   }
 }
 

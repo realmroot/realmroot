@@ -1200,8 +1200,14 @@ export interface AuthorizationRepository {
   findResources(ids: string[]): Promise<ApiResourceResponse[]>
   findResource(id: string): Promise<ApiResourceResponse | null>
   findResourceByResourceUrl(resourceUrl: string): Promise<ApiResourceResponse | null>
-  updateResource(id: string, patch: UpdateApiResourceRequest): Promise<boolean>
-  replaceResourceScopeRegistry(id: string, registry: ResourceScopeRegistry): Promise<boolean>
+  updateResource(
+    id: string,
+    patch: UpdateApiResourceRequest & { name?: string; description?: string | null },
+  ): Promise<boolean>
+  replaceResourceDiscovery(
+    id: string,
+    discovery: { name: string; description: string | null; scopeRegistry: ResourceScopeRegistry },
+  ): Promise<boolean>
   createUserScopeGrant(input: UserScopeGrantRecord): Promise<UserScopeGrantRecord>
   findUserScopeGrant(id: string): Promise<UserScopeGrantRecord | null>
   listUserScopeGrants(
