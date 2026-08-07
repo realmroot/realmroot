@@ -1188,6 +1188,46 @@ describe('authorization CRUD and assignment policy', () => {
     ).resolves.toBe(resource)
   })
 
+  it('[spec: agent-identity/external-api-resource-registration] projects built-in and external resource contracts onto the same scope boundary', async () => {
+    const authorization = repository()
+    const scopedResource = { ...resource, scopeRegistry: scopeRegistry(['projects:read']) }
+    const deps = {
+      authorization,
+      externalHttp: {
+        fetch: vi.fn(
+          resourceScopeOpenApiFetch(
+            resource.resourceUrl,
+            ['projects:read', 'account:discover'],
+            [['projects:read'], ['account:discover']],
+          ),
+        ),
+      },
+    } as unknown as Deps
+
+    authorization.findResource.mockResolvedValueOnce(scopedResource)
+    await expect(getResourceContract(deps, scopedResource.id)).resolves.toMatchObject({
+      operations: [expect.objectContaining({ requiredScopeSets: [['projects:read']] })],
+    })
+
+    const realmrootResource = {
+      ...scopedResource,
+      id: 'res_realmroot',
+      identifier: 'realmroot',
+      ownerOrganizationId: 'org_platform',
+    }
+    authorization.findResource.mockResolvedValueOnce(realmrootResource)
+    deps.externalHttp.fetch = vi.fn(
+      resourceScopeOpenApiFetch(
+        realmrootResource.resourceUrl,
+        ['projects:read', 'account:discover'],
+        [['projects:read'], ['account:discover']],
+      ),
+    )
+    await expect(getResourceContract(deps, realmrootResource.id)).resolves.toMatchObject({
+      operations: [expect.objectContaining({ requiredScopeSets: [['projects:read']] })],
+    })
+  })
+
   it('updates only declared Resource Server scope grant modes', async () => {
     const authorization = repository()
     const registered = { ...resource, scopeRegistry: scopeRegistry(['projects:read']) }
@@ -1337,7 +1377,7 @@ function resourceOpenApiFetch(resourceUrl: string) {
   }
 }
 
-function resourceScopeOpenApiFetch(resourceUrl: string, scopes: string[]) {
+function resourceScopeOpenApiFetch(resourceUrl: string, scopes: string[], requiredScopeSets = [scopes]) {
   return async (request: Request) => {
     if (request.url === protectedResourceMetadataUrl(resourceUrl)) {
       return Response.json({ resource: resourceUrl, scopes_supported: scopes })
@@ -1362,7 +1402,9 @@ function resourceScopeOpenApiFetch(resourceUrl: string, scopes: string[]) {
             },
           },
         },
-        paths: { '/projects': { get: { security: [{ oauth: scopes }] } } },
+        paths: {
+          '/projects': { get: { security: requiredScopeSets.map((requiredScopes) => ({ oauth: requiredScopes })) } },
+        },
       })
     }
     return new Response(null, { status: 404 })

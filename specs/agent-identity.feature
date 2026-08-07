@@ -348,7 +348,9 @@ Feature: Agent identity and delegated API authorization
       And ordinary Organizations cannot register or take ownership of it
       And the resource URL advertises its OpenAPI contract with a standard service-desc link
       And Realmroot derives every requestable scope only from scopes_supported in that protected-resource metadata
-      And the OpenAPI contract may add descriptions and operation mappings only for advertised scopes
+      And the OpenAPI contract may add descriptions for advertised scopes
+      And Realmroot publishes only operation security alternatives fully supported by those advertised scopes
+      And unrelated scoped operations do not prevent resource synchronization
       And authorization-server scopes_supported is not a scope catalog
       And the resource stores only its connector association rather than another OAuth client
       And the resource cannot be enabled for Agents when a required capability is absent

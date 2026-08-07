@@ -223,6 +223,19 @@ export function extractProtectedOperations(document: unknown): ResourceOperation
   return operations
 }
 
+export function projectResourceOperations(
+  operations: ResourceOperationDefinition[],
+  advertisedScopes: string[],
+): ResourceOperationDefinition[] {
+  const advertised = new Set(advertisedScopes)
+  return operations.flatMap((operation) => {
+    const requiredScopeSets = operation.requiredScopeSets.filter((scopeSet) =>
+      scopeSet.every((scope) => advertised.has(scope)),
+    )
+    return requiredScopeSets.length > 0 ? [{ ...operation, requiredScopeSets }] : []
+  })
+}
+
 function isScopeBearingSecurityScheme(scheme: Record<string, unknown>) {
   return (
     scheme.type === 'oauth2' ||
