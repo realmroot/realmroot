@@ -449,7 +449,7 @@ describe('Agent identity enrollment over real D1', () => {
       expect.objectContaining({
         id: 'res_realmroot',
         identifier: 'realmroot',
-        resourceIndicator: 'http://localhost/api',
+        resourceUrl: 'http://localhost/api',
         connection: expect.objectContaining({ status: 'not_required' }),
       }),
     ])

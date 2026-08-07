@@ -143,6 +143,9 @@ Feature: Agent identity and delegated API authorization
       And every controller can approve scopes only within the selected Resource boundary
       And a platform Organization credential retains only the Agent's automatic protocol scopes plus approved management scopes
       And a token for one Resource cannot authorize another Resource
+      When the Agent reads Resource Servers with either bootstrap or resource-bound authority
+      Then Realmroot returns the same canonical Resource Server representation
+      And the credential authority changes only which Resource Servers the Agent may read or mutate
 
     @entrypoint:agent-protocol @journey:agent-resource-server-model
     Scenario: An Agent discovers Resource Servers before provider-owned Resources
@@ -471,6 +474,7 @@ Feature: Agent identity and delegated API authorization
       Given enabled native and externally authorized API resources exist
       When the Agent lists available resources
       Then Realmroot returns enabled resources even when an external resource has no connected account
+      And a temporarily unreachable external authorization server does not fail the Resource Server collection or revoke its account connection
       And returns each resource server with its protected URL, available scopes, and one connected, not-connected, or not-required account status
       And a connected account reports only its safe display label and connection-authorized scopes
       And Realmroot does not expose Connector, account connection, grant, or token identifiers

@@ -25,34 +25,80 @@ func TestAuthHookIgnoresUnmarkedProfiles(t *testing.T) {
 	}
 }
 
-func TestProtocolCredentialRouteSelection(t *testing.T) {
-	tests := []struct {
-		method string
-		path   string
-		want   bool
-	}{
-		{http.MethodGet, "/api/agent/status", true},
-		{http.MethodGet, "/api/resource-servers", true},
-		{http.MethodGet, "/api/resource-servers/resource-1", true},
-		{http.MethodGet, "/api/resource-servers/resource-1/resources", true},
-		{http.MethodGet, "/api/resource-servers/resource-1/resources/service", true},
-		{http.MethodPost, "/api/resource-servers/resource-1/connection-requests", true},
-		{http.MethodGet, "/api/resource-servers/resource-1/connection-requests/request-1", true},
-		{http.MethodPost, "/api/access/requests", true},
-		{http.MethodGet, "/api/access/requests/request-1", true},
-		{http.MethodPost, "/api/access/requests/request-1/credentials", true},
-		{http.MethodGet, "/api/resource-servers/resource-1/contract", false},
-		{http.MethodPut, "/api/resource-servers/resource-1/scope-registry", false},
-		{http.MethodGet, "/api/resource-servers/resource-1/archival", false},
-		{http.MethodGet, "/api/access/consents", false},
+func TestAuthResolverRequiresMatchingResourceAndScopes(t *testing.T) {
+	credential := testCredential(t, "target-token", time.Now().Add(time.Hour))
+	credential.Scopes = []string{"projects:read"}
+	states := newCredentialState(t, credential)
+	input := authResolverInput{
+		Requirements: []authRequirement{{ID: "OAuth", Kind: "oauth2", Needs: []string{"projects:read"}}},
+		Request:      plugin.HookRequest{Method: http.MethodGet, URI: "https://api.example.com/v1/projects"},
 	}
-	for _, test := range tests {
-		t.Run(test.method+" "+test.path, func(t *testing.T) {
-			got := usesProtocolCredential(test.method, "https://auth.example.com"+test.path)
-			if got != test.want {
-				t.Fatalf("usesProtocolCredential() = %v, want %v", got, test.want)
-			}
-		})
+	output, err := resolveAuthentication(input, states, roundTripFunc(nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !output.Handled {
+		t.Fatal("expected matching Resource credential to be handled")
+	}
+	input.Requirements[0].Needs = []string{"projects:write"}
+	output, err = resolveAuthentication(input, states, roundTripFunc(nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if output.Handled {
+		t.Fatal("credential with insufficient scopes must not be handled")
+	}
+	input.Requirements = append(input.Requirements, authRequirement{ID: "Key", Kind: "api-key"})
+	output, err = resolveAuthentication(input, states, roundTripFunc(nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if output.Handled {
+		t.Fatal("multi-scheme alternatives must not be partially handled")
+	}
+}
+
+func TestAuthResolverClaimsDiscoveredRealmrootProtocolAuthenticationOnly(t *testing.T) {
+	states := newCredentialState(t, testCredential(t, "target-token", time.Now().Add(time.Hour)))
+	states.state.DPoPCredentials = nil
+	states.state.ActiveDPoPCredentials = nil
+	input := authResolverInput{
+		API:          "realmroot",
+		Requirements: []authRequirement{{ID: "OAuth", Kind: "oauth2", Needs: []string{"resource-servers:read"}}},
+		Request:      plugin.HookRequest{Method: http.MethodGet, URI: "https://auth.example.com/api/resource-servers"},
+	}
+
+	client := roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		if request.URL.String() == "https://auth.example.com/.well-known/agent-configuration" {
+			return jsonResponse(http.StatusOK, testAgentConfiguration()), nil
+		}
+		return jsonResponse(http.StatusNotFound, map[string]any{"error": "not_found"}), nil
+	})
+	output, err := resolveAuthentication(input, states, client)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !output.Handled {
+		t.Fatal("expected Realmroot protocol authentication to be handled")
+	}
+
+	input.API = "realmroot-alias"
+	output, err = resolveAuthentication(input, states, client)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !output.Handled {
+		t.Fatal("API aliases must not change protocol discovery")
+	}
+
+	input.API = "projects"
+	input.Request.URI = "https://api.example.com/v1/projects"
+	output, err = resolveAuthentication(input, states, client)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if output.Handled {
+		t.Fatal("external API without a matching Resource credential must not be handled")
 	}
 }
 

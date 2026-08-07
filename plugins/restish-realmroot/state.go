@@ -14,7 +14,7 @@ import (
 
 const (
 	stateDirectoryEnv = "REALMROOT_PLUGIN_STATE_DIR"
-	agentStateVersion = 9
+	agentStateVersion = 10
 	identityDirectory = "identities"
 )
 
@@ -46,6 +46,7 @@ type dpopCredential struct {
 	PrivateKey         string     `json:"private_key"`
 	AccessToken        string     `json:"access_token,omitempty"`
 	ExpiresAt          *time.Time `json:"expires_at,omitempty"`
+	Scopes             []string   `json:"scopes,omitempty"`
 }
 
 type agentState struct {
@@ -197,6 +198,10 @@ func (s *fileStateStore) loadPath(path string) (agentState, error) {
 		}
 		if state.Version == 8 {
 			state.ProtocolCredential = state.LegacyPlatformCredential
+		}
+		if state.Version < 10 {
+			state.DPoPCredentials = nil
+			state.ActiveDPoPCredentials = nil
 		}
 		state.LegacyPlatformCredential = nil
 		state.Version = agentStateVersion

@@ -219,13 +219,6 @@ export const decideAgentEnrollmentSchema = z.discriminatedUnion('kind', [
 ])
 
 export const apiResourceAuthorizationSchema = externalResourceAuthorizationSchema.omit({ resourceId: true })
-export const apiResourceSchema = apiResourceResponseSchema.extend({
-  authorization: apiResourceAuthorizationSchema.nullable(),
-})
-export const apiResourcesResponseSchema = z.object({
-  items: z.array(apiResourceSchema),
-  pagination: paginationMetadataSchema,
-})
 export const createApiResourceSchema = createApiResourceRequestSchema
 export const updateApiResourceSchema = updateApiResourceRequestSchema
 
@@ -235,19 +228,14 @@ export const resourceServerConnectionSummarySchema = z.object({
   authorizedScopes: z.array(z.string()),
 })
 
-export const resourceServerSchema = z.object({
-  id: z.string(),
-  identifier: z.string(),
-  name: z.string(),
-  description: z.string().nullable(),
-  serviceUrl: z.url(),
-  resourceIndicator: z.url(),
+export const resourceServerSchema = apiResourceResponseSchema.extend({
+  authorization: apiResourceAuthorizationSchema.nullable(),
   availability: z.object({
     status: z.enum(['available', 'unavailable']),
     checkedAt: z.iso.datetime(),
   }),
   scopes: z.array(z.object({ value: z.string(), description: z.string().nullable() })),
-  connection: resourceServerConnectionSummarySchema,
+  connection: resourceServerConnectionSummarySchema.nullable(),
   links: z.object({
     self: z.url(),
     resources: z.url(),
@@ -259,6 +247,9 @@ export const resourceServersResponseSchema = z.object({
   items: z.array(resourceServerSchema),
   pagination: paginationMetadataSchema,
 })
+
+export const apiResourceSchema = resourceServerSchema
+export const apiResourcesResponseSchema = resourceServersResponseSchema
 
 export const resourceReferenceSchema = z.object({ href: nonEmptyString })
 
@@ -536,7 +527,7 @@ export type ListManagementAgentAccessRequestsQuery = z.infer<typeof listManageme
 export type ListAgentAccessGrantsQuery = z.infer<typeof listAgentAccessGrantsQuerySchema>
 export type AgentInfo = z.infer<typeof agentInfoSchema>
 export type AgentEnrollment = z.infer<typeof agentEnrollmentSchema>
-export type ApiResource = z.infer<typeof apiResourceSchema>
+export type ApiResource = ResourceServer
 export type ConnectableApiResourcesResponse = z.infer<typeof connectableApiResourcesResponseSchema>
 export type AccountConnection = z.infer<typeof accountConnectionSchema>
 export type AuthorizationDetailCatalogEntry = z.infer<typeof authorizationDetailCatalogEntrySchema>

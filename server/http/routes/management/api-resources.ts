@@ -14,9 +14,9 @@ import {
   listApiResources,
 } from '@server/usecases/external-resources'
 import {
-  apiResourceSchema,
-  apiResourcesResponseSchema,
   createApiResourceSchema,
+  resourceServerSchema,
+  resourceServersResponseSchema,
   updateApiResourceSchema,
 } from '@shared/api/agent-api'
 import { apiResourceContractResponseSchema, listApiResourcesQuerySchema } from '@shared/api/authorization'
@@ -37,21 +37,27 @@ export function createManagementApiResourcesRoute(config: Pick<AppConfig, 'baseU
   const app = new Hono()
 
   app.get('/', async (c) => {
+    const origin = trustedRequestOrigin(config, c.req.url)
     const principal = getPrincipal(c).agent
-    if (principal) {
+    if (principal && !principal.authority) {
       return c.json(
         await listAgentResourceServers(
           getDeps(c),
           principal,
           readQuery(c, listApiResourcesQuerySchema.pick({ limit: true, offset: true })),
-          trustedRequestOrigin(config, c.req.url),
+          origin,
         ),
       )
     }
     const query = readQuery(c, listApiResourcesQuerySchema)
     return c.json(
-      apiResourcesResponseSchema.parse(
-        await listApiResources(getDeps(c), query, await filterOrganizationSelection(c, query.ownerOrganizationId)),
+      resourceServersResponseSchema.parse(
+        await listApiResources(
+          getDeps(c),
+          query,
+          origin,
+          await filterOrganizationSelection(c, query.ownerOrganizationId),
+        ),
       ),
     )
   })
@@ -67,12 +73,17 @@ export function createManagementApiResourcesRoute(config: Pick<AppConfig, 'baseU
       ownerOrganizationId: authorizedOrganizationOwnerId(owner),
     })
     c.header('Location', `/api/resource-servers/${encodeURIComponent(resource.id)}`)
-    return c.json(apiResourceSchema.parse(await getApiResource(getDeps(c), resource.id)), 201)
+    return c.json(
+      resourceServerSchema.parse(
+        await getApiResource(getDeps(c), resource.id, trustedRequestOrigin(config, c.req.url)),
+      ),
+      201,
+    )
   })
 
   app.get('/:resourceId', async (c) => {
     const principal = getPrincipal(c).agent
-    if (principal) {
+    if (principal && !principal.authority) {
       return c.json(
         await getAgentResourceServer(
           getDeps(c),
@@ -82,18 +93,18 @@ export function createManagementApiResourcesRoute(config: Pick<AppConfig, 'baseU
         ),
       )
     }
-    return c.json(apiResourceSchema.parse(await requireResourceAccess(c)))
+    return c.json(resourceServerSchema.parse(await requireResourceAccess(c, config)))
   })
 
   app.get('/:resourceId/contract', async (c) => {
-    await requireResourceAccess(c)
+    await requireResourceAccess(c, config)
     return c.json(
       apiResourceContractResponseSchema.parse(await getResourceContract(getDeps(c), c.req.param('resourceId'))),
     )
   })
 
   app.patch('/:resourceId', async (c) => {
-    const resource = await requireResourceAccess(c)
+    const resource = await requireResourceAccess(c, config)
     const input = await readJson(c, updateApiResourceSchema)
     if (resource.connectorId && input.ownerOrganizationId && input.ownerOrganizationId !== platformOrganization.id) {
       throw badRequest('External Resource Servers must be owned by the built-in platform Organization.')
@@ -105,24 +116,35 @@ export function createManagementApiResourcesRoute(config: Pick<AppConfig, 'baseU
       ...input,
       ...(owner ? { ownerOrganizationId: authorizedOrganizationOwnerId(owner) } : {}),
     })
-    return c.json(apiResourceSchema.parse(await getApiResource(getDeps(c), c.req.param('resourceId'))))
+    return c.json(
+      resourceServerSchema.parse(
+        await getApiResource(getDeps(c), c.req.param('resourceId'), trustedRequestOrigin(config, c.req.url)),
+      ),
+    )
   })
 
   app.delete('/:resourceId', async (c) => {
-    await requireResourceAccess(c)
+    await requireResourceAccess(c, config)
     await deleteResource(getDeps(c), c.req.param('resourceId'), getMutationActor(c))
     return c.body(null, 204)
   })
 
   return app.put('/:resourceId/scope-registry', async (c) => {
-    await requireResourceAccess(c)
+    await requireResourceAccess(c, config)
     await refreshResourceScopeRegistry(getDeps(c), c.req.param('resourceId'))
-    return c.json(apiResourceSchema.parse(await getApiResource(getDeps(c), c.req.param('resourceId'))))
+    return c.json(
+      resourceServerSchema.parse(
+        await getApiResource(getDeps(c), c.req.param('resourceId'), trustedRequestOrigin(config, c.req.url)),
+      ),
+    )
   })
 }
 
-async function requireResourceAccess(c: Parameters<typeof getPrincipal>[0]) {
-  const resource = await getApiResource(getDeps(c), c.req.param('resourceId')!)
+async function requireResourceAccess(
+  c: Parameters<typeof getPrincipal>[0],
+  config: Pick<AppConfig, 'baseURL' | 'trustedOrigins'>,
+) {
+  const resource = await getApiResource(getDeps(c), c.req.param('resourceId')!, trustedRequestOrigin(config, c.req.url))
   await authorizeOrganization(
     c,
     resource.ownerOrganizationId,

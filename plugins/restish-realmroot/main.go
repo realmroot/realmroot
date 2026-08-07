@@ -8,7 +8,7 @@ import (
 	"github.com/rest-sh/restish/v2/plugin"
 )
 
-const pluginVersion = "0.10.0"
+const pluginVersion = "0.11.0"
 
 func main() {
 	manifest := plugin.Manifest{
@@ -16,8 +16,10 @@ func main() {
 		Version:           pluginVersion,
 		Description:       "Authenticate Realmroot and DPoP-bound target API requests as a stable Agent identity",
 		RestishAPIVersion: 2,
-		Hooks:             []string{"auth", "response-middleware"},
+		Hooks:             []string{"auth-resolver", "auth", "response-middleware"},
+		RequiredFeatures:  []string{"auth.operation_security"},
 		HookTimeouts: map[string]time.Duration{
+			"auth-resolver":       30 * time.Second,
 			"auth":                10 * time.Minute,
 			"response-middleware": 10 * time.Minute,
 		},
@@ -32,12 +34,24 @@ func main() {
 	}
 
 	switch messageType {
+	case "auth-resolver":
+		var input authResolverInput
+		if err := plugin.DecMode.Unmarshal(raw, &input); err != nil {
+			exitWithError(fmt.Errorf("decode auth resolver input: %w", err))
+		}
+		output, err := resolveAuthentication(input, newFileStateStore(), newHTTPClient())
+		if err != nil {
+			exitWithError(err)
+		}
+		if err := plugin.WriteMessage(os.Stdout, output); err != nil {
+			exitWithError(fmt.Errorf("write auth resolver output: %w", err))
+		}
 	case "auth":
-		var input plugin.AuthHookInput
+		var input authHookEnvelope
 		if err := plugin.DecMode.Unmarshal(raw, &input); err != nil {
 			exitWithError(fmt.Errorf("decode auth hook input: %w", err))
 		}
-		output, err := authenticateRequest(input, newFileStateStore(), newHTTPClient(), systemPromptWriter{})
+		output, err := authenticateHookRequest(input, newFileStateStore(), newHTTPClient(), systemPromptWriter{})
 		if err != nil {
 			exitWithError(err)
 		}

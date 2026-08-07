@@ -1,7 +1,7 @@
 import { createApp } from '@server/http/app'
 import { unifiedOpenApi } from '@server/http/openapi/management'
 import { protectedResourceCollectionRoutes } from '@shared/api/management'
-import { realmrootOAuthScopes, requiredProtectedScope } from '@shared/authz'
+import { requiredProtectedScope } from '@shared/authz'
 import { calculateJwkThumbprint, exportJWK, generateKeyPair, SignJWT } from 'jose'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -66,25 +66,7 @@ describe('management routes 1', () => {
     })
     expect(unifiedOpenApi.components.securitySchemes.sessionCookie).toMatchObject({ type: 'apiKey', in: 'cookie' })
     expect(unifiedOpenApi.components.securitySchemes).not.toHaveProperty('agentAuth')
-    expect(unifiedOpenApi['x-cli-config']).toEqual({
-      command_layout: 'tags',
-      profiles: {
-        default: {
-          credentials: {
-            dpop: {
-              auth: {
-                type: 'bearer',
-                params: {
-                  token: 'realmroot-plugin-managed',
-                  provider: 'realmroot-agent',
-                },
-              },
-              satisfies: realmrootOAuthScopes,
-            },
-          },
-        },
-      },
-    })
+    expect(unifiedOpenApi['x-cli-config']).toEqual({ command_layout: 'tags' })
 
     for (const operation of openApiOperationObjects()) {
       if (operation.key === managementOpenApiOperationKey) {

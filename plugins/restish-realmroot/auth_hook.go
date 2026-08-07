@@ -69,6 +69,113 @@ type approvalPrompt interface {
 	Show(string) error
 }
 
+type authRequirement struct {
+	ID    string   `cbor:"id" json:"id"`
+	Kind  string   `cbor:"kind" json:"kind"`
+	Needs []string `cbor:"needs,omitempty" json:"needs,omitempty"`
+}
+
+type authResolverInput struct {
+	Type         string             `cbor:"type" json:"type"`
+	API          string             `cbor:"api" json:"api"`
+	Profile      string             `cbor:"profile" json:"profile"`
+	Requirements []authRequirement  `cbor:"requirements" json:"requirements"`
+	Request      plugin.HookRequest `cbor:"request" json:"request"`
+}
+
+type authResolverOutput struct {
+	Handled bool `cbor:"handled" json:"handled"`
+}
+
+type authHookEnvelope struct {
+	Type         string             `cbor:"type" json:"type"`
+	API          string             `cbor:"api" json:"api"`
+	Profile      string             `cbor:"profile" json:"profile"`
+	Params       map[string]string  `cbor:"params" json:"params"`
+	Requirements []authRequirement  `cbor:"requirements,omitempty" json:"requirements,omitempty"`
+	Request      plugin.HookRequest `cbor:"request" json:"request"`
+}
+
+func resolveAuthentication(input authResolverInput, states resourceCredentialStore, client httpDoer) (authResolverOutput, error) {
+	if !supportedResourceAlternative(input.Requirements) {
+		return authResolverOutput{}, nil
+	}
+	runtime, err := agentRuntime()
+	if err != nil {
+		return authResolverOutput{}, err
+	}
+	reference, err := states.FindByResourceURL(input.Request.URI, runtime, "")
+	if errors.Is(err, os.ErrNotExist) {
+		origin, originErr := realmrootOrigin(input.Request.URI)
+		if originErr != nil {
+			return authResolverOutput{}, nil
+		}
+		if _, discoveryErr := discoverAgentConfiguration(context.Background(), client, origin); discoveryErr != nil {
+			return authResolverOutput{}, nil
+		}
+		return authResolverOutput{Handled: true}, nil
+	}
+	if err != nil {
+		return authResolverOutput{}, err
+	}
+	return authResolverOutput{Handled: scopesContain(reference.credential.Scopes, input.Requirements[0].Needs)}, nil
+}
+
+func supportedResourceAlternative(requirements []authRequirement) bool {
+	if len(requirements) != 1 {
+		return false
+	}
+	switch requirements[0].Kind {
+	case "oauth2", "openid", "http-bearer", "http":
+		return true
+	default:
+		return false
+	}
+}
+
+func scopesContain(have []string, needs []string) bool {
+	available := make(map[string]bool, len(have))
+	for _, scope := range have {
+		available[scope] = true
+	}
+	for _, scope := range needs {
+		if !available[scope] {
+			return false
+		}
+	}
+	return true
+}
+
+func authenticateHookRequest(input authHookEnvelope, states stateStore, client httpDoer, prompt approvalPrompt) (plugin.AuthHookOutput, error) {
+	legacy := plugin.AuthHookInput{Type: input.Type, API: input.API, Profile: input.Profile, Params: input.Params, Request: input.Request}
+	if len(input.Requirements) == 0 {
+		return authenticateRequest(legacy, states, client, prompt)
+	}
+	if !supportedResourceAlternative(input.Requirements) {
+		return plugin.AuthHookOutput{}, errors.New("Realmroot cannot satisfy the selected operation security alternative")
+	}
+	credentials, ok := states.(resourceCredentialStore)
+	if !ok {
+		return plugin.AuthHookOutput{}, errors.New("Realmroot Resource credential storage is unavailable")
+	}
+	runtime, err := agentRuntime()
+	if err != nil {
+		return plugin.AuthHookOutput{}, err
+	}
+	reference, err := credentials.FindByResourceURL(input.Request.URI, runtime, "")
+	if errors.Is(err, os.ErrNotExist) {
+		legacy.Params = map[string]string{"provider": authProvider}
+		return authenticateRequest(legacy, states, client, prompt)
+	}
+	if err != nil {
+		return plugin.AuthHookOutput{}, err
+	}
+	if !scopesContain(reference.credential.Scopes, input.Requirements[0].Needs) {
+		return plugin.AuthHookOutput{}, errors.New("active Realmroot Resource credential no longer satisfies the selected operation scopes")
+	}
+	return authenticateTargetRequestForResource(legacy, credentials, client, runtime, reference.state.Issuer, input.Request.URI)
+}
+
 type systemPromptWriter struct{}
 
 func authenticateRequest(
@@ -115,21 +222,6 @@ func authenticateRequest(
 	if err != nil {
 		return plugin.AuthHookOutput{}, err
 	}
-	if !usesProtocolCredential(input.Request.Method, input.Request.URI) {
-		credentials, ok := states.(resourceCredentialStore)
-		if !ok {
-			return plugin.AuthHookOutput{}, errors.New("Realmroot Resource credential storage is unavailable")
-		}
-		resourceIndicator := credential.ResourceIndicator
-		return authenticateTargetRequestForResource(
-			input,
-			credentials,
-			client,
-			runtime,
-			state.Issuer,
-			resourceIndicator,
-		)
-	}
 	proof, err := signDPoPProof(credential.PrivateKey, input.Request.Method, input.Request.URI, credential.AccessToken, time.Now())
 	if err != nil {
 		return plugin.AuthHookOutput{}, err
@@ -140,46 +232,6 @@ func authenticateRequest(
 			Headers: headers,
 		},
 	}, nil
-}
-
-func usesProtocolCredential(method string, requestURL string) bool {
-	parsed, err := url.Parse(requestURL)
-	if err != nil {
-		return false
-	}
-	path := strings.TrimSuffix(parsed.Path, "/")
-	if path == "/api/agent/status" {
-		return method == http.MethodGet || method == http.MethodHead
-	}
-	segments := strings.Split(strings.Trim(path, "/"), "/")
-	if len(segments) >= 3 && segments[0] == "api" && segments[1] == "access" && segments[2] == "requests" {
-		if len(segments) == 3 {
-			return method == http.MethodPost
-		}
-		if len(segments) == 4 {
-			return method == http.MethodGet || method == http.MethodHead
-		}
-		return len(segments) == 5 && segments[4] == "credentials" && method == http.MethodPost
-	}
-	if len(segments) < 2 || segments[0] != "api" || segments[1] != "resource-servers" {
-		return false
-	}
-	if len(segments) == 2 || len(segments) == 3 {
-		return method == http.MethodGet || method == http.MethodHead
-	}
-	if len(segments) == 4 && segments[3] == "resources" {
-		return method == http.MethodGet || method == http.MethodHead
-	}
-	if len(segments) == 5 && segments[3] == "resources" {
-		return method == http.MethodGet || method == http.MethodHead
-	}
-	if len(segments) == 4 && segments[3] == "connection-requests" {
-		return method == http.MethodPost
-	}
-	if len(segments) == 5 && segments[3] == "connection-requests" {
-		return method == http.MethodGet || method == http.MethodHead
-	}
-	return false
 }
 
 func authenticateTargetRequest(

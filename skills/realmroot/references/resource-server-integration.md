@@ -70,17 +70,12 @@ Never manually copy provider access or refresh tokens into Restish.
 
 For either mode:
 
-1. Connect Restish to the returned `serviceUrl` and inspect generated help.
-2. Bind the target OpenAPI security scheme to `realmroot-target` as described
-   in [restish-commands.md](restish-commands.md).
-3. Set that credential binding's `satisfies` list to the scopes declared by the
-   target operations being used. This is Restish's local operation-selection
-   metadata; it is not authority and does not grant access.
-4. List the Resource Server's Resources and select a returned canonical
+1. Connect Restish to the returned `resourceUrl` and inspect generated help.
+2. List the Resource Server's Resources and select a returned canonical
    `links.self`.
-5. Request the union of scopes needed by the acceptance operations in one
+3. Request the union of scopes needed by the acceptance operations in one
    `access` command.
-6. Invoke a generated read operation. When the contract exposes a safe write
+4. Invoke a generated read operation. When the contract exposes a safe write
    operation, invoke it and read the result back.
 
 Acceptance is complete only after a real target operation succeeds. A created

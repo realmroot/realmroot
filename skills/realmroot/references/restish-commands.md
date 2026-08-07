@@ -28,7 +28,7 @@ declared `scopes`. Use only a server whose `availability.status` is
 The selected representation supplies all navigation values:
 
 - `id` identifies the Resource Server in Realmroot commands;
-- `serviceUrl` is the target API to call directly;
+- `resourceUrl` is the target API and OAuth resource indicator;
 - `connection.status` is `connected`, `not_connected`, or `not_required`;
 - `connection.authorizedScopes` is the authority already held by the linked
   account;
@@ -102,7 +102,7 @@ Resource matches, report that result. A native service normally exposes one
 
 ## 4. Inspect And Connect The Target API
 
-Use the selected Resource Server's `serviceUrl`. Reuse one semantic Restish API
+Use the selected Resource Server's `resourceUrl`. Reuse one semantic Restish API
 name for the logical target service; use profiles for local, staging, account,
 or tenant contexts. An environment is never a separate API.
 
@@ -132,32 +132,12 @@ export RSH_PROFILE="$TARGET_PROFILE"
 
 The `default` profile remains production. Do not pre-create non-production
 profiles for external users; profiles are local configuration added only when
-that environment is actually selected. Explicit cleanroom validation must use
-the isolated `RSH_CONFIG_DIR` from the setup reference so temporary target
-connections never appear in the operator's normal `restish api list`.
+that environment is actually selected.
 
 The target's OpenAPI security requirements define the exact operation and
-scope. Bind its declared OIDC security scheme to the generic Realmroot target
-provider in the selected profile. Read the scheme ID and issuer from the
-target's OpenAPI document:
-
-```bash
-PROFILE=default
-SECURITY_SCHEME=realmrootOidc
-REALMROOT_ISSUER=https://id.realmroot.dev/api/auth
-restish api set "$TARGET_API" \
-  "profiles.${PROFILE}.credentials.${SECURITY_SCHEME}.auth.type: bearer" \
-  "profiles.${PROFILE}.credentials.${SECURITY_SCHEME}.auth.params.token: realmroot-plugin-managed" \
-  "profiles.${PROFILE}.credentials.${SECURITY_SCHEME}.auth.params.provider: realmroot-target" \
-  "profiles.${PROFILE}.credentials.${SECURITY_SCHEME}.auth.params.issuer: ${REALMROOT_ISSUER}" \
-  "profiles.${PROFILE}.credentials.${SECURITY_SCHEME}.satisfies: [${REQUIRED_SCOPE}]"
-```
-
-The issuer selects the correct local identity when more than one Realmroot
-deployment can authorize the same target URL. `satisfies` tells Restish which
-generated operations this configured credential can attempt; it grants no
-authority. Populate it only from the selected operations' OpenAPI security
-requirements, and update it when the task's required operation set changes.
+scope. Do not add a local credential binding. Restish passes the selected
+operation's final URL and complete security alternative to the Realmroot
+plugin, which uses only a matching approved Resource credential.
 
 ## 5. Request Exact Resource Access
 
@@ -211,7 +191,8 @@ contract:
 restish "$TARGET_API" <generated-operation> -o json
 ```
 
-The plugin matches the request URL to the active Resource credential and adds
+Restish supplies the operation security requirements; the plugin matches the
+request URL and required scopes to the active Resource credential and adds
 `Authorization: DPoP ...` plus a fresh DPoP proof. Business traffic goes
 directly to the Resource Server, not through Realmroot.
 

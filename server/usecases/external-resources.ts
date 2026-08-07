@@ -13,7 +13,6 @@ import type {
   AccessRequestApproval,
   AccountConnection,
   AgentAccessGrant,
-  ApiResource,
   CreateAccessRequest,
   CreateAccountConnection,
   CreateResourceConnectionRequest,
@@ -67,7 +66,7 @@ export async function getExternalResourceAuthorization(deps: Deps, resourceId: s
   return toExternalAuthorization(authorization)
 }
 
-export async function getApiResource(deps: Deps, resourceId: string): Promise<ApiResource> {
+async function getApiResourceConfiguration(deps: Deps, resourceId: string) {
   const resource = await deps.authorization.findResource(resourceId)
   if (!resource) throw notFound('API resource was not found.')
   const authorization = await findExternalAuthorization(deps, resourceId)
@@ -77,10 +76,19 @@ export async function getApiResource(deps: Deps, resourceId: string): Promise<Ap
   }
 }
 
-export async function listApiResources(deps: Deps, pagination: PaginationInput, ownerOrganizationIds?: string[]) {
+export async function getApiResource(deps: Deps, resourceId: string, apiOrigin: string) {
+  return toResourceServer(await getApiResourceConfiguration(deps, resourceId), apiOrigin, null)
+}
+
+export async function listApiResources(
+  deps: Deps,
+  pagination: PaginationInput,
+  apiOrigin: string,
+  ownerOrganizationIds?: string[],
+) {
   const page = await deps.authorization.listResources(pagination, ownerOrganizationIds)
   return {
-    items: await Promise.all(page.items.map((resource) => getApiResource(deps, resource.id))),
+    items: await Promise.all(page.items.map((resource) => getApiResource(deps, resource.id, apiOrigin))),
     pagination: page.pagination,
   }
 }
@@ -469,8 +477,6 @@ export async function discoverAgentResources(deps: Deps, principal: AgentResourc
         identifier: resource.identifier,
         name: resource.name,
         description: resource.description,
-        serviceUrl: resource.resourceUrl,
-        resourceIndicator: resource.resourceUrl,
         availability: {
           status: scopes ? ('available' as const) : ('unavailable' as const),
           checkedAt: new Date().toISOString(),
@@ -532,8 +538,10 @@ export async function listAgentResourceServers(
   apiOrigin: string,
 ) {
   const origin = apiOrigin.replace(/\/$/, '')
-  const resources = (await discoverAgentResources(deps, principal)).resources.map((resource) =>
-    toResourceServer(resource, origin),
+  const resources = await Promise.all(
+    (await discoverAgentResources(deps, principal)).resources.map(async (resource) =>
+      toResourceServer(await getApiResourceConfiguration(deps, resource.id), origin, resource.connection),
+    ),
   )
   return {
     items: resources.slice(pagination.offset, pagination.offset + pagination.limit),
@@ -551,7 +559,11 @@ export async function getAgentResourceServer(
     (candidate) => candidate.id === resourceServerId,
   )
   if (!resource) throw notFound('Resource Server was not found.')
-  return toResourceServer(resource, apiOrigin.replace(/\/$/, ''))
+  return toResourceServer(
+    await getApiResourceConfiguration(deps, resource.id),
+    apiOrigin.replace(/\/$/, ''),
+    resource.connection,
+  )
 }
 
 export async function listAgentResourceServerResources(
@@ -1996,24 +2008,30 @@ async function toResourceServerResource(
 }
 
 function toResourceServer(
-  resource: Awaited<ReturnType<typeof discoverAgentResources>>['resources'][number],
+  resource: Awaited<ReturnType<typeof getApiResourceConfiguration>>,
   origin: string,
+  connection: {
+    status: 'connected' | 'not_connected' | 'not_required'
+    displayName: string | null
+    authorizedScopes: string[]
+  } | null,
 ) {
   const self = `${origin}/api/resource-servers/${encodeURIComponent(resource.id)}`
   return {
-    id: resource.id,
-    identifier: resource.identifier,
-    name: resource.name,
-    description: resource.description,
-    serviceUrl: resource.serviceUrl,
-    resourceIndicator: resource.resourceIndicator,
-    availability: resource.availability,
-    scopes: resource.scopes,
-    connection: resource.connection,
+    ...resource,
+    availability: {
+      status:
+        resource.scopeRegistry && resource.scopeRegistry.discovery.lastError === null
+          ? ('available' as const)
+          : ('unavailable' as const),
+      checkedAt: resource.scopeRegistry?.discovery.syncedAt ?? resource.updatedAt,
+    },
+    scopes: resource.scopeRegistry?.scopes.map(({ value, description }) => ({ value, description })) ?? [],
+    connection,
     links: {
       self,
       resources: `${self}/resources`,
-      connectionRequests: resource.connection.status === 'not_required' ? null : `${self}/connection-requests`,
+      connectionRequests: resource.connectorId === null ? null : `${self}/connection-requests`,
     },
   }
 }
@@ -2151,7 +2169,9 @@ async function isConnectionUsable(
     await refreshConnectionToken(deps, connection, authorization)
     return true
   } catch (error) {
-    if (!(error instanceof ApiError) || error.status !== 401) throw error
+    if (!(error instanceof ApiError)) throw error
+    if (error.status === 502) return false
+    if (error.status !== 401) throw error
     await deps.externalResources.revokeConnection(connection.id, new Date())
     return false
   }
@@ -2727,9 +2747,14 @@ async function postForm(
   headers.set('accept', 'application/json')
   headers.set('authorization', `Basic ${base64(`${clientId}:${clientSecret}`)}`)
   headers.set('content-type', 'application/x-www-form-urlencoded')
-  const response = await deps.externalHttp.fetch(
-    new Request(url, { method: 'POST', headers, body: new URLSearchParams(body) }),
-  )
+  let response: Response
+  try {
+    response = await deps.externalHttp.fetch(
+      new Request(url, { method: 'POST', headers, body: new URLSearchParams(body) }),
+    )
+  } catch {
+    throw badGateway('External authorization server is unavailable.')
+  }
   if (!response.ok) {
     const detail = await oauthErrorDetail(response)
     throw unauthorized(

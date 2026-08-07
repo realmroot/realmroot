@@ -236,6 +236,7 @@ func acceptCredentialOffer(
 		CredentialEndpoint: offer.Endpoint,
 		ProofTarget:        offer.Proof.URI,
 		PrivateKey:         privateKey,
+		Scopes:             append([]string(nil), resource.Scopes...),
 	}
 	credential, err = refreshTargetToken(ctx, client, state, credential)
 	if err != nil {

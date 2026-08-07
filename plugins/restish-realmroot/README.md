@@ -20,10 +20,13 @@ The plugin performs only work that must happen on the Agent's machine:
   credential, and return a token-free receipt;
 - add `Authorization: DPoP ...` and a fresh proof to matching target requests.
 
-Target profiles identify this hook with `provider: realmroot-target`. They may
-also supply the discovered Realmroot `issuer`; the plugin uses it to select the
-right local identity when local, staging, or production authorize the same
-Resource Server URL.
+Restish passes the final request URL and one complete OpenAPI security
+alternative to the plugin. The plugin claims it only when a cached Resource
+credential matches the URL and covers every required scope. When no Resource
+credential exists, valid same-origin Agent discovery identifies Realmroot
+protocol operations and allows first-use identity enrollment. Restish API
+names and aliases do not affect that decision. No placeholder token, provider,
+issuer, or scope binding is stored in a Restish profile.
 
 The plugin does not recognize Realmroot endpoint paths. It does not list or
 select account connections, grants, authorization details, token endpoints,

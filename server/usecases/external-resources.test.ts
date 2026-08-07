@@ -2221,11 +2221,11 @@ describe('external API resource authorization', () => {
       resourceId: 'resource-1',
       clientSecretConfigured: true,
     })
-    await expect(getApiResource(deps, 'resource-1')).resolves.toMatchObject({
+    await expect(getApiResource(deps, 'resource-1', 'https://auth.example.com')).resolves.toMatchObject({
       id: 'resource-1',
       authorization: { issuer: 'https://projects.example.com' },
     })
-    await expect(listApiResources(deps, { limit: 10, offset: 0 })).resolves.toMatchObject({
+    await expect(listApiResources(deps, { limit: 10, offset: 0 }, 'https://auth.example.com')).resolves.toMatchObject({
       items: [{ id: 'resource-1' }],
     })
     await expect(listResourceConnections(deps, 'user-1')).resolves.toMatchObject({
@@ -4183,9 +4183,13 @@ describe('external API resource authorization', () => {
       'External API resource authorization was not found.',
     )
     vi.mocked(deps.authorization.findResource).mockResolvedValueOnce(null)
-    await expect(getApiResource(deps, 'missing')).rejects.toThrow('API resource was not found.')
+    await expect(getApiResource(deps, 'missing', 'https://auth.example.com')).rejects.toThrow(
+      'API resource was not found.',
+    )
     vi.mocked(deps.connectors.findById).mockResolvedValueOnce(null)
-    await expect(getApiResource(deps, 'resource-1')).resolves.toMatchObject({ authorization: null })
+    await expect(getApiResource(deps, 'resource-1', 'https://auth.example.com')).resolves.toMatchObject({
+      authorization: null,
+    })
     vi.mocked(deps.externalResources.consumeConnectionIntent).mockResolvedValue(null)
     await expect(
       completeResourceConnectionIntent(deps, { state: 'invalid', code: 'code' }, 'https://auth.example.com'),

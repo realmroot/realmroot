@@ -14,8 +14,7 @@ or asking for a manually provisioned API key.
 
 - Be **discovery-driven**: select exact IDs, URLs, scopes, accounts, and
   operations from API responses or published metadata.
-- Use one Restish API name per logical service and profiles for deployments,
-  accounts, tenants, and credential contexts.
+- Use one Restish API name per logical service and profiles for deployments.
 - Apply **least privilege**: request only the OAuth scopes required by the
   user's task and bind them to exactly one Resource.
 - Hand every approval decision to the controller. The Agent may open or report
