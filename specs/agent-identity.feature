@@ -283,6 +283,7 @@ Feature: Agent identity and delegated API authorization
       And activates the selected Resource without reading or selecting an access grant
       And does not delete credentials for other authorization contexts
       And target requests use only the active DPoP credential
+      And when protocol and Resource credentials share one URL the operation scopes select the satisfying credential
       When a short-lived credential expires while its server-managed authority remains active
       Then the plugin renews it through the stored opaque credential endpoint
       When Realmroot rejects credential renewal

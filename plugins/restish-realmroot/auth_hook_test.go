@@ -33,7 +33,10 @@ func TestAuthResolverRequiresMatchingResourceAndScopes(t *testing.T) {
 		Requirements: []authRequirement{{ID: "OAuth", Kind: "oauth2", Needs: []string{"projects:read"}}},
 		Request:      plugin.HookRequest{Method: http.MethodGet, URI: "https://api.example.com/v1/projects"},
 	}
-	output, err := resolveAuthentication(input, states, roundTripFunc(nil))
+	client := roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return jsonResponse(http.StatusNotFound, map[string]any{"error": "not_found"}), nil
+	})
+	output, err := resolveAuthentication(input, states, client)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,7 +44,7 @@ func TestAuthResolverRequiresMatchingResourceAndScopes(t *testing.T) {
 		t.Fatal("expected matching Resource credential to be handled")
 	}
 	input.Requirements[0].Needs = []string{"projects:write"}
-	output, err = resolveAuthentication(input, states, roundTripFunc(nil))
+	output, err = resolveAuthentication(input, states, client)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,12 +52,37 @@ func TestAuthResolverRequiresMatchingResourceAndScopes(t *testing.T) {
 		t.Fatal("credential with insufficient scopes must not be handled")
 	}
 	input.Requirements = append(input.Requirements, authRequirement{ID: "Key", Kind: "api-key"})
-	output, err = resolveAuthentication(input, states, roundTripFunc(nil))
+	output, err = resolveAuthentication(input, states, client)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if output.Handled {
 		t.Fatal("multi-scheme alternatives must not be partially handled")
+	}
+}
+
+func TestAuthResolverSelectsProtocolCredentialWhenSameURLTargetLacksScopes(t *testing.T) {
+	credential := testCredential(t, "target-token", time.Now().Add(time.Hour))
+	credential.ResourceIndicator = "https://auth.example.com/api"
+	credential.Scopes = []string{"resource-servers:write"}
+	states := newCredentialState(t, credential)
+	input := authResolverInput{
+		Requirements: []authRequirement{{ID: "DPoP", Kind: "http", Needs: []string{"resources:read"}}},
+		Request:      plugin.HookRequest{Method: http.MethodGet, URI: "https://auth.example.com/api/resource-servers/example/resources"},
+	}
+	client := roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		if request.URL.String() == "https://auth.example.com/.well-known/agent-configuration" {
+			return jsonResponse(http.StatusOK, testAgentConfiguration()), nil
+		}
+		return jsonResponse(http.StatusNotFound, map[string]any{"error": "not_found"}), nil
+	})
+
+	output, err := resolveAuthentication(input, states, client)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !output.Handled {
+		t.Fatal("expected same-URL protocol credential with sufficient scopes to be selected")
 	}
 }
 

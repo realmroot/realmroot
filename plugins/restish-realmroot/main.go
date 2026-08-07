@@ -8,7 +8,7 @@ import (
 	"github.com/rest-sh/restish/v2/plugin"
 )
 
-const pluginVersion = "0.11.0"
+const pluginVersion = "0.11.1"
 
 func main() {
 	manifest := plugin.Manifest{

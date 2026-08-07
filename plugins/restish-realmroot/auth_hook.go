@@ -106,19 +106,24 @@ func resolveAuthentication(input authResolverInput, states resourceCredentialSto
 	}
 	reference, err := states.FindByResourceURL(input.Request.URI, runtime, "")
 	if errors.Is(err, os.ErrNotExist) {
-		origin, originErr := realmrootOrigin(input.Request.URI)
-		if originErr != nil {
-			return authResolverOutput{}, nil
-		}
-		if _, discoveryErr := discoverAgentConfiguration(context.Background(), client, origin); discoveryErr != nil {
-			return authResolverOutput{}, nil
-		}
-		return authResolverOutput{Handled: true}, nil
+		return authResolverOutput{Handled: protocolAuthenticationSupports(input.Request.URI, input.Requirements, client)}, nil
 	}
 	if err != nil {
 		return authResolverOutput{}, err
 	}
-	return authResolverOutput{Handled: scopesContain(reference.credential.Scopes, input.Requirements[0].Needs)}, nil
+	if scopesContain(reference.credential.Scopes, input.Requirements[0].Needs) {
+		return authResolverOutput{Handled: true}, nil
+	}
+	return authResolverOutput{Handled: protocolAuthenticationSupports(input.Request.URI, input.Requirements, client)}, nil
+}
+
+func protocolAuthenticationSupports(requestURI string, requirements []authRequirement, client httpDoer) bool {
+	origin, err := realmrootOrigin(requestURI)
+	if err != nil {
+		return false
+	}
+	configuration, err := discoverAgentConfiguration(context.Background(), client, origin)
+	return err == nil && scopesContain(configuration.AgentBootstrapScopes, requirements[0].Needs)
 }
 
 func supportedResourceAlternative(requirements []authRequirement) bool {
@@ -164,6 +169,9 @@ func authenticateHookRequest(input authHookEnvelope, states stateStore, client h
 	}
 	reference, err := credentials.FindByResourceURL(input.Request.URI, runtime, "")
 	if errors.Is(err, os.ErrNotExist) {
+		if !protocolAuthenticationSupports(input.Request.URI, input.Requirements, client) {
+			return plugin.AuthHookOutput{}, errors.New("no Realmroot credential satisfies the selected operation scopes")
+		}
 		legacy.Params = map[string]string{"provider": authProvider}
 		return authenticateRequest(legacy, states, client, prompt)
 	}
@@ -171,7 +179,11 @@ func authenticateHookRequest(input authHookEnvelope, states stateStore, client h
 		return plugin.AuthHookOutput{}, err
 	}
 	if !scopesContain(reference.credential.Scopes, input.Requirements[0].Needs) {
-		return plugin.AuthHookOutput{}, errors.New("active Realmroot Resource credential no longer satisfies the selected operation scopes")
+		if !protocolAuthenticationSupports(input.Request.URI, input.Requirements, client) {
+			return plugin.AuthHookOutput{}, errors.New("no Realmroot credential satisfies the selected operation scopes")
+		}
+		legacy.Params = map[string]string{"provider": authProvider}
+		return authenticateRequest(legacy, states, client, prompt)
 	}
 	return authenticateTargetRequestForResource(legacy, credentials, client, runtime, reference.state.Issuer, input.Request.URI)
 }

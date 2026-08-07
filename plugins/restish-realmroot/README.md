@@ -28,6 +28,10 @@ protocol operations and allows first-use identity enrollment. Restish API
 names and aliases do not affect that decision. No placeholder token, provider,
 issuer, or scope binding is stored in a Restish profile.
 
+When multiple credential lifecycles share one Resource URL, selection still
+uses the operation's required scopes. A narrower Resource credential cannot
+shadow a Realmroot protocol credential that covers the requested operation.
+
 The plugin does not recognize Realmroot endpoint paths. It does not list or
 select account connections, grants, authorization details, token endpoints,
 native/external modes, or provider protocols. Realmroot resolves those on the
