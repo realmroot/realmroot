@@ -58,7 +58,7 @@ export type AccountProfileResponse = {
 export type DeveloperConsoleAccessResponse = {
   canCreateOrganization: boolean
   showOrganizations: boolean
-  realmOperator: boolean
+  platformOperator: boolean
   consoleOrganizations: Array<{
     organizationId: string
     accessLevel: 'owner' | 'admin' | 'developer'

@@ -7,10 +7,7 @@ export type AuthorizationSubject =
   | { type: 'application'; id: string }
   | { type: 'workload'; id: string }
 
-export type AuthorizationTenant =
-  | { type: 'realm' }
-  | { type: 'user'; id: string }
-  | { type: 'organization'; id: string }
+export type AuthorizationTenant = { type: 'user'; id: string } | { type: 'organization'; id: string }
 
 export interface AuthorizationContext {
   subject: AuthorizationSubject
@@ -52,5 +49,5 @@ export function authorizeOwner(
 }
 
 function tenantKey(tenant: AuthorizationTenant) {
-  return tenant.type === 'realm' ? 'realm' : `${tenant.type}:${tenant.id}`
+  return `${tenant.type}:${tenant.id}`
 }

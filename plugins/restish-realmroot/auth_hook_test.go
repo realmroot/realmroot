@@ -25,6 +25,37 @@ func TestAuthHookIgnoresUnmarkedProfiles(t *testing.T) {
 	}
 }
 
+func TestProtocolCredentialRouteSelection(t *testing.T) {
+	tests := []struct {
+		method string
+		path   string
+		want   bool
+	}{
+		{http.MethodGet, "/api/agent/status", true},
+		{http.MethodGet, "/api/resource-servers", true},
+		{http.MethodGet, "/api/resource-servers/resource-1", true},
+		{http.MethodGet, "/api/resource-servers/resource-1/resources", true},
+		{http.MethodGet, "/api/resource-servers/resource-1/resources/service", true},
+		{http.MethodPost, "/api/resource-servers/resource-1/connection-requests", true},
+		{http.MethodGet, "/api/resource-servers/resource-1/connection-requests/request-1", true},
+		{http.MethodPost, "/api/access/requests", true},
+		{http.MethodGet, "/api/access/requests/request-1", true},
+		{http.MethodPost, "/api/access/requests/request-1/credentials", true},
+		{http.MethodGet, "/api/resource-servers/resource-1/contract", false},
+		{http.MethodPut, "/api/resource-servers/resource-1/scope-registry", false},
+		{http.MethodGet, "/api/resource-servers/resource-1/archival", false},
+		{http.MethodGet, "/api/access/consents", false},
+	}
+	for _, test := range tests {
+		t.Run(test.method+" "+test.path, func(t *testing.T) {
+			got := usesProtocolCredential(test.method, "https://auth.example.com"+test.path)
+			if got != test.want {
+				t.Fatalf("usesProtocolCredential() = %v, want %v", got, test.want)
+			}
+		})
+	}
+}
+
 func TestAuthHookEnrollsOnceThenSignsOriginalRequest(t *testing.T) {
 	t.Setenv("REALMROOT_AGENT_NAME", "Build Agent")
 	requests := 0
@@ -53,11 +84,13 @@ func TestAuthHookEnrollsOnceThenSignsOriginalRequest(t *testing.T) {
 				t.Fatal(err)
 			}
 			if request.Form.Get("grant_type") != "urn:ietf:params:oauth:grant-type:jwt-bearer" ||
-				request.Form.Get("resource") != "https://auth.example.com/api" || request.Header.Get("DPoP") == "" {
+				request.Form.Get("resource") != "https://auth.example.com/api" ||
+				request.Form.Get("scope") != "agent:read resource-servers:read resources:read connection-requests:read connection-requests:write access-requests:read access-requests:write" ||
+				request.Header.Get("DPoP") == "" {
 				t.Fatalf("token request form = %#v", request.Form)
 			}
 			return jsonResponse(200, map[string]any{
-				"access_token": "platform-token", "token_type": "DPoP", "expires_in": 300,
+				"access_token": "protocol-token", "token_type": "DPoP", "expires_in": 300,
 			}), nil
 		case 5:
 			if request.Method != http.MethodGet || request.URL.String() != "https://auth.example.com/api/agent/status" {
@@ -80,7 +113,7 @@ func TestAuthHookEnrollsOnceThenSignsOriginalRequest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if authorization, _ := output.Request.Headers["Authorization"].(string); authorization != "DPoP platform-token" {
+	if authorization, _ := output.Request.Headers["Authorization"].(string); authorization != "DPoP protocol-token" {
 		t.Fatalf("missing OAuth DPoP token: %q", authorization)
 	}
 	if prompt.uri != "https://auth.example.com/agent/approve?code=abc" {
@@ -158,7 +191,7 @@ func TestAuthHookRenewsExpiredCredentialFromStoredOffer(t *testing.T) {
 			if request.Method != http.MethodPost || request.URL.String() != credential.CredentialEndpoint {
 				t.Fatalf("credential request = %s %s", request.Method, request.URL)
 			}
-			if request.Header.Get("Authorization") != "DPoP platform-token" {
+			if request.Header.Get("Authorization") != "DPoP protocol-token" {
 				t.Fatal("missing Realmroot OAuth credential")
 			}
 			claims := decodeJWTPayload(t, request.Header.Get("DPoP"))
@@ -239,8 +272,8 @@ func newCredentialState(t *testing.T, credential dpopCredential) *memoryStateSto
 	if err != nil {
 		t.Fatal(err)
 	}
-	platformExpiresAt := time.Now().Add(time.Minute)
-	platformKey, err := newDPoPPrivateKey()
+	protocolExpiresAt := time.Now().Add(time.Minute)
+	protocolKey, err := newDPoPPrivateKey()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -251,11 +284,11 @@ func newCredentialState(t *testing.T, credential dpopCredential) *memoryStateSto
 		Identity:              &stableIdentity{ID: "identity-1", Issuer: "https://auth.example.com/api/auth", Subject: "agt_123"},
 		DPoPCredentials:       map[string]dpopCredential{credential.ResourceHref: credential},
 		ActiveDPoPCredentials: map[string]string{credentialSelectionKey(credential.ResourceIndicator): credential.ResourceHref},
-		PlatformCredential: &dpopCredential{
+		ProtocolCredential: &dpopCredential{
 			ResourceHref: "https://auth.example.com/api", ResourceIndicator: "https://auth.example.com/api",
 			CredentialEndpoint: "https://auth.example.com/api/auth/oauth2/token",
-			ProofTarget: "https://auth.example.com/api/auth/oauth2/token", PrivateKey: platformKey,
-			AccessToken: "platform-token", ExpiresAt: &platformExpiresAt,
+			ProofTarget:        "https://auth.example.com/api/auth/oauth2/token", PrivateKey: protocolKey,
+			AccessToken: "protocol-token", ExpiresAt: &protocolExpiresAt,
 		},
 	}}
 }
@@ -276,6 +309,15 @@ func testAgentConfiguration() map[string]any {
 		"agent_enrollment_endpoint": "https://auth.example.com/api/agent/enrollments",
 		"agent_endpoint":            "https://auth.example.com/api/agent/status",
 		"agent_token_endpoint":      "https://auth.example.com/api/auth/oauth2/token",
+		"agent_bootstrap_scopes_supported": []string{
+			"agent:read",
+			"resource-servers:read",
+			"resources:read",
+			"connection-requests:read",
+			"connection-requests:write",
+			"access-requests:read",
+			"access-requests:write",
+		},
 		"endpoints": map[string]any{
 			"register": "https://auth.example.com/api/auth/agent/register",
 			"status":   "https://auth.example.com/api/auth/agent/status",

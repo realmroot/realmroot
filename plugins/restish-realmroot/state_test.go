@@ -130,6 +130,80 @@ func TestFileStateStoreUpgradeDropsLegacyGrantCredentialCache(t *testing.T) {
 	}
 }
 
+func TestFileStateStoreUpgradeRenamesProtocolCredential(t *testing.T) {
+	store := &fileStateStore{root: t.TempDir()}
+	target := agentTarget{
+		API:     "realmroot-local",
+		Profile: "default",
+		Runtime: "codex",
+		Origin:  "https://auth.example.com",
+		Issuer:  "https://auth.example.com/api/auth",
+	}
+	_, agentPrivateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, hostPrivateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	protocolPrivateKey, err := newDPoPPrivateKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	expiresAt := time.Now().Add(time.Minute)
+	legacy := map[string]any{
+		"version": 8, "origin": target.Origin, "issuer": target.Issuer, "runtime": target.Runtime,
+		"name": "Build Agent", "agent_id": "agent-123", "host_id": "host-123",
+		"agent_key_id": "agent-key", "host_key_id": "host-key",
+		"agent_private_key": encodePrivateKey(agentPrivateKey), "host_private_key": encodePrivateKey(hostPrivateKey),
+		"platform_credential": map[string]any{
+			"resource_href": "https://auth.example.com/api", "resource_indicator": "https://auth.example.com/api",
+			"credential_endpoint": "https://auth.example.com/api/auth/oauth2/token",
+			"proof_target":        "https://auth.example.com/api/auth/oauth2/token",
+			"private_key":         protocolPrivateKey,
+			"access_token":        "protocol-token",
+			"expires_at":          expiresAt,
+		},
+	}
+	path := store.path(target)
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := json.Marshal(legacy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, encoded, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	upgraded, err := store.Load(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if upgraded.Version != agentStateVersion || upgraded.ProtocolCredential == nil {
+		t.Fatalf("protocol credential was not migrated: %#v", upgraded)
+	}
+	if upgraded.ProtocolCredential.AccessToken != "protocol-token" || upgraded.LegacyPlatformCredential != nil {
+		t.Fatalf("protocol credential migration was incomplete: %#v", upgraded)
+	}
+	persisted, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var representation map[string]any
+	if err := json.Unmarshal(persisted, &representation); err != nil {
+		t.Fatal(err)
+	}
+	if _, exists := representation["platform_credential"]; exists {
+		t.Fatal("legacy platform credential field was retained")
+	}
+	if _, exists := representation["protocol_credential"]; !exists {
+		t.Fatal("protocol credential field was not persisted")
+	}
+}
+
 func TestFileStateStoreFindsGenericCredentialByResourceIndicator(t *testing.T) {
 	store := &fileStateStore{root: t.TempDir()}
 	target := agentTarget{

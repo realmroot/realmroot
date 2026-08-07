@@ -35,7 +35,7 @@ import type { Context } from 'hono'
 import { Hono } from 'hono'
 import { configzOptions } from '../../app-config'
 import { representationWithEtag, requireMatchingIfMatch } from '../../conditional'
-import { requirePlatformAccess } from '../../middleware/authz'
+import { authorizePlatformOrganization } from '../../middleware/authz'
 import { getDeps } from '../../middleware/deps'
 import { readJson } from '../validation'
 
@@ -43,7 +43,7 @@ export function createManagementSettingsRoutes(securityPolicy?: SecurityPolicy) 
   const app = new Hono()
 
   const requireRealmAccess = async (c: Context, next: () => Promise<void>) => {
-    requirePlatformAccess(c, c.req.method === 'GET' ? 'realm:read' : 'realm:write')
+    await authorizePlatformOrganization(c, c.req.method === 'GET' ? 'settings:read' : 'settings:write')
     await next()
   }
   app.use('/realm', requireRealmAccess)

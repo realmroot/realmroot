@@ -76,7 +76,7 @@ func TestProfiledResponseAcceptsCredentialOfferWithoutGrantKnowledge(t *testing.
 			case "https://auth.example.com/api/access-requests/request-1":
 				return jsonResponse(200, completedInteractionWithOffer(credential)), nil
 			case credential.CredentialEndpoint:
-				if request.Header.Get("Authorization") != "DPoP platform-token" || request.Header.Get("DPoP") == "" {
+				if request.Header.Get("Authorization") != "DPoP protocol-token" || request.Header.Get("DPoP") == "" {
 					t.Fatal("credential request omitted Realmroot OAuth or target DPoP proof")
 				}
 				return jsonResponse(200, map[string]any{

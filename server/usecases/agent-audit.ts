@@ -25,7 +25,7 @@ export function agentGovernanceAuditRecord(input: AgentGovernanceAuditInput) {
     id: createId('agaudit'),
     action: input.action,
     result: input.result,
-    realmOwned: input.tenant.type === 'realm',
+    realmOwned: false,
     ownerUserId: input.tenant.type === 'user' ? input.tenant.id : null,
     ownerOrganizationId: input.tenant.type === 'organization' ? input.tenant.id : null,
     controllerUserId: input.controllerUserId,

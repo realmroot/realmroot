@@ -40,7 +40,7 @@ origin and `API_NAME` is the stable service alias.
 ## Prepare Restish
 
 Require Restish 2.3 or newer, Go 1.25.3 or newer, and the `realmroot` adapter
-0.9.0 or newer:
+0.10.0 or newer:
 
 ```bash
 restish --version

@@ -16,6 +16,7 @@ import { createManagementWebhookRoutes } from './webhooks'
 interface ProtectedResourceRoutesOptions {
   authApi: ManagementAuthApi
   canonicalOrigin?: string
+  trustedOrigins?: string[]
   securityPolicy?: SecurityPolicy
 }
 
@@ -24,7 +25,10 @@ export function createProtectedResourceRoutes(options: ProtectedResourceRoutesOp
 
   app.route('/applications', managementApplicationsRoute)
   app.route('/access/consents', managementApplicationAuthorizationsRoute)
-  app.route('/resource-servers', createManagementApiResourcesRoute())
+  app.route(
+    '/resource-servers',
+    createManagementApiResourcesRoute({ baseURL: options.canonicalOrigin, trustedOrigins: options.trustedOrigins }),
+  )
   app.route('/', managementScopeGrantsRoute)
   app.route('/', managementAgentsRoute)
   app.route('/organizations', managementOrganizationsRoute)

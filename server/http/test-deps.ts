@@ -1,3 +1,4 @@
+import { platformOrganization } from '@server/domain/platform-organization'
 import type { Deps } from '@server/usecases/deps'
 import type { SecurityPolicy } from '@shared/api/security'
 import { vi } from 'vitest'
@@ -40,6 +41,12 @@ function emptyPage() {
  */
 export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> = {}): Deps {
   const policy = testSecurityPolicy()
+  const platformOwnerMembership = {
+    id: 'member-platform-owner',
+    organizationId: platformOrganization.id,
+    userId: 'user-1',
+    roles: ['owner'],
+  }
   const base = {
     agents: {
       listHosts: vi.fn().mockResolvedValue(emptyPage()),
@@ -123,11 +130,17 @@ export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> =
     assetStorage: { put: vi.fn(), get: vi.fn().mockResolvedValue(null) },
     authorization: {
       listEnabledResources: vi.fn().mockResolvedValue([]),
-      listUserMemberships: vi.fn().mockResolvedValue([]),
+      listUserMemberships: vi
+        .fn()
+        .mockImplementation(async (userId) => (userId === 'user-1' ? [platformOwnerMembership] : [])),
       listMemberUserIds: vi.fn().mockResolvedValue([]),
       listOrganizationRoles: vi.fn().mockResolvedValue([]),
       listOrganizationRoleScopes: vi.fn().mockResolvedValue(new Map()),
-      findMemberByOrganizationUser: vi.fn().mockResolvedValue(null),
+      findMemberByOrganizationUser: vi
+        .fn()
+        .mockImplementation(async (organizationId, userId) =>
+          organizationId === platformOrganization.id && userId === 'user-1' ? platformOwnerMembership : null,
+        ),
       findOrganization: vi.fn().mockResolvedValue(null),
       findResource: vi.fn().mockResolvedValue(null),
       hasPendingInvitation: vi.fn().mockResolvedValue(false),
@@ -257,6 +270,8 @@ export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> =
       listManagedUsers: vi.fn().mockResolvedValue(emptyPage()),
       createManagedUser: vi.fn(),
       updateManagedUser: vi.fn(),
+      suspendManagedUser: vi.fn().mockResolvedValue({ id: 'user-1' }),
+      restoreManagedUser: vi.fn().mockResolvedValue({ id: 'user-1' }),
       deleteManagedUser: vi.fn(),
       updateProfile: vi.fn(),
       assertAccountAvatarReference: vi.fn(),
@@ -265,6 +280,7 @@ export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> =
       listConsentedApplications: vi.fn().mockResolvedValue(emptyPage()),
       listSessions: vi.fn().mockResolvedValue(emptyPage()),
       getSessionToken: vi.fn().mockResolvedValue('session-token-1'),
+      deleteSessions: vi.fn().mockResolvedValue([]),
     },
     wallets: {
       findWalletAddress: vi.fn().mockResolvedValue(null),

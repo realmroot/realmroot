@@ -1,3 +1,5 @@
+import { badRequest } from '@server/domain/errors'
+import { platformOrganization } from '@server/domain/platform-organization'
 import {
   createResource,
   deleteResource,
@@ -19,7 +21,8 @@ import {
 } from '@shared/api/agent-api'
 import { apiResourceContractResponseSchema, listApiResourcesQuerySchema } from '@shared/api/authorization'
 import { Hono } from 'hono'
-import { getPrincipal } from '../../middleware/authn'
+import type { AppConfig } from '../../app-types'
+import { getMutationActor, getPrincipal } from '../../middleware/authn'
 import {
   authorizedOrganizationIds,
   authorizedOrganizationOwnerId,
@@ -27,9 +30,10 @@ import {
   authorizeOrganizationOwner,
 } from '../../middleware/authz'
 import { getDeps } from '../../middleware/deps'
+import { trustedRequestOrigin } from '../../trusted-request-origin'
 import { readJson, readQuery } from '../validation'
 
-export function createManagementApiResourcesRoute() {
+export function createManagementApiResourcesRoute(config: Pick<AppConfig, 'baseURL' | 'trustedOrigins'> = {}) {
   const app = new Hono()
 
   app.get('/', async (c) => {
@@ -40,7 +44,7 @@ export function createManagementApiResourcesRoute() {
           getDeps(c),
           principal,
           readQuery(c, listApiResourcesQuerySchema.pick({ limit: true, offset: true })),
-          new URL(c.req.url).origin,
+          trustedRequestOrigin(config, c.req.url),
         ),
       )
     }
@@ -54,6 +58,9 @@ export function createManagementApiResourcesRoute() {
 
   app.post('/', async (c) => {
     const input = await readJson(c, createApiResourceSchema)
+    if (input.connectorId && input.ownerOrganizationId !== platformOrganization.id) {
+      throw badRequest('External Resource Servers must be owned by the built-in platform Organization.')
+    }
     const owner = await authorizeOrganizationOwner(c, input.ownerOrganizationId, 'resource-servers:write')
     const resource = await createResource(getDeps(c), {
       ...input,
@@ -67,7 +74,12 @@ export function createManagementApiResourcesRoute() {
     const principal = getPrincipal(c).agent
     if (principal) {
       return c.json(
-        await getAgentResourceServer(getDeps(c), c.req.param('resourceId'), principal, new URL(c.req.url).origin),
+        await getAgentResourceServer(
+          getDeps(c),
+          c.req.param('resourceId'),
+          principal,
+          trustedRequestOrigin(config, c.req.url),
+        ),
       )
     }
     return c.json(apiResourceSchema.parse(await requireResourceAccess(c)))
@@ -81,8 +93,11 @@ export function createManagementApiResourcesRoute() {
   })
 
   app.patch('/:resourceId', async (c) => {
-    await requireResourceAccess(c)
+    const resource = await requireResourceAccess(c)
     const input = await readJson(c, updateApiResourceSchema)
+    if (resource.connectorId && input.ownerOrganizationId && input.ownerOrganizationId !== platformOrganization.id) {
+      throw badRequest('External Resource Servers must be owned by the built-in platform Organization.')
+    }
     const owner = input.ownerOrganizationId
       ? await authorizeOrganizationOwner(c, input.ownerOrganizationId, 'resource-servers:write')
       : null
@@ -95,7 +110,7 @@ export function createManagementApiResourcesRoute() {
 
   app.delete('/:resourceId', async (c) => {
     await requireResourceAccess(c)
-    await deleteResource(getDeps(c), c.req.param('resourceId'), resourceMutationActor(c))
+    await deleteResource(getDeps(c), c.req.param('resourceId'), getMutationActor(c))
     return c.body(null, 204)
   })
 
@@ -121,19 +136,4 @@ async function filterOrganizationSelection(c: Parameters<typeof getPrincipal>[0]
   if (!allowed) return requestedOrganizationId ? [requestedOrganizationId] : undefined
   if (!requestedOrganizationId) return allowed
   return allowed.includes(requestedOrganizationId) ? [requestedOrganizationId] : []
-}
-
-function resourceMutationActor(c: Parameters<typeof getPrincipal>[0]) {
-  const principal = getPrincipal(c)
-  return {
-    controllerUserId: principal.user?.id ?? null,
-    agent: principal.agent
-      ? {
-          issuer: principal.agent.issuer,
-          subject: principal.agent.subject,
-          identityId: principal.agent.identityId,
-          hostId: principal.agent.hostId,
-        }
-      : null,
-  }
 }

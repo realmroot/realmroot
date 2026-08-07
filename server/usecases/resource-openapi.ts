@@ -67,6 +67,14 @@ export async function readResourceContract(
   )
   if (!resourceResponse.ok) throw badRequest('Business resource discovery failed.')
   const documentUrl = serviceDescriptionUrl(resourceResponse.headers.get('link'), resourceUrl)
+  return readResourceContractDocument(deps, documentUrl, previousRegistry)
+}
+
+export async function readResourceContractDocument(
+  deps: Deps,
+  documentUrl: string,
+  previousRegistry?: ResourceScopeRegistry | null,
+): Promise<ResourceContractDefinition | null> {
   const documentResponse = await fetchForDiscovery(
     deps,
     new Request(documentUrl, {
@@ -161,7 +169,7 @@ export function extractProtectedOperations(document: unknown): ResourceOperation
   const scopeSchemeNames = new Set<string>()
   for (const [name, candidate] of Object.entries(securitySchemes)) {
     const scheme = resolveSecurityScheme(candidate, securitySchemes)
-    if (scheme && (scheme.type === 'oauth2' || scheme.type === 'openIdConnect')) scopeSchemeNames.add(name)
+    if (scheme && isScopeBearingSecurityScheme(scheme)) scopeSchemeNames.add(name)
   }
 
   const documentSecurity = securityRequirements(root.security)
@@ -185,6 +193,14 @@ export function extractProtectedOperations(document: unknown): ResourceOperation
     }
   }
   return operations
+}
+
+function isScopeBearingSecurityScheme(scheme: Record<string, unknown>) {
+  return (
+    scheme.type === 'oauth2' ||
+    scheme.type === 'openIdConnect' ||
+    (scheme.type === 'http' && typeof scheme.scheme === 'string' && scheme.scheme.toLowerCase() === 'dpop')
+  )
 }
 
 async function hashDiscoveryData(scopes: ResourceScopeDefinition[]) {

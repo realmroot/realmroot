@@ -83,7 +83,7 @@ export function protectedResourceForPath(path: string): ProtectedResource | null
 }
 
 export function requiredProtectedScope(method: string, path: string): string | null {
-  const normalized = path.replace(/^\/api\/?/, '')
+  const normalized = path.replace(/^\/+/, '').replace(/^api(?:\/|$)/, '')
   if (/^organizations\/[^/]+\/roles(?:\/[^/]+)?$/.test(normalized)) {
     return method === 'GET' || method === 'HEAD' ? 'roles:read' : 'roles:write'
   }
@@ -110,8 +110,6 @@ export const agentBootstrapScopes = [
   'connection-requests:write',
   'access-requests:read',
   'access-requests:write',
-  'access-grants:read',
-  'access-grants:issue',
 ] as const
 
 export type AgentBootstrapScope = (typeof agentBootstrapScopes)[number]

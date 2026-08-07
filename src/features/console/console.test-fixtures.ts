@@ -113,7 +113,7 @@ export const consoleAccountProfile = {
 export const consoleAccountAccess = {
   canCreateOrganization: true,
   showOrganizations: true,
-  realmOperator: true,
+  platformOperator: true,
   consoleOrganizations: [],
 }
 

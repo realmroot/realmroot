@@ -24,14 +24,16 @@ describe('authorization context', () => {
     )
   })
 
-  it('does not treat the Realm boundary as the platform sentinel Organization', () => {
-    const realmContext: AuthorizationContext = {
+  it('uses the platform Organization as an ordinary tenant boundary', () => {
+    const platformContext: AuthorizationContext = {
       subject: { type: 'user', id: 'admin-1' },
-      tenant: { type: 'realm' },
+      tenant: { type: 'organization', id: 'org_platform' },
       scopes: new Set(['applications:read']),
     }
-    expect(() => authorize(realmContext, { type: 'realm' }, 'applications:read')).not.toThrow()
-    expect(() => authorize(realmContext, { type: 'organization', id: 'org_platform' }, 'applications:read')).toThrow()
+    expect(() =>
+      authorize(platformContext, { type: 'organization', id: 'org_platform' }, 'applications:read'),
+    ).not.toThrow()
+    expect(() => authorize(platformContext, { type: 'organization', id: 'org-1' }, 'applications:read')).toThrow()
   })
 
   it.each([

@@ -1,6 +1,5 @@
 import { z } from 'zod'
 
-export const userRoleSchema = z.union([z.string().min(1), z.array(z.string().min(1)).min(1)])
 export const usernameSchema = z
   .string()
   .min(3)
@@ -15,7 +14,6 @@ export const adminUserListQuerySchema = z.object({
   offset: z.coerce.number().int().min(0).default(0),
   sortBy: z.enum(['createdAt', 'updatedAt', 'email', 'name']).optional(),
   sortDirection: z.enum(['asc', 'desc']).optional(),
-  role: z.string().min(1).optional(),
   banned: z
     .enum(['true', 'false'])
     .transform((value) => value === 'true')
@@ -29,7 +27,6 @@ export const adminCreateUserSchema = z.object({
   displayName: z.string().min(1),
   username: usernameSchema.optional(),
   avatarAssetId: z.string().min(1).nullable().optional(),
-  role: userRoleSchema.optional(),
 })
 
 export const adminUpdateUserSchema = z.object({
@@ -38,7 +35,6 @@ export const adminUpdateUserSchema = z.object({
   displayName: z.string().min(1).optional(),
   username: usernameSchema.nullable().optional(),
   avatarAssetId: z.string().min(1).nullable().optional(),
-  role: userRoleSchema.optional(),
 })
 
 export const adminBanUserSchema = z.object({

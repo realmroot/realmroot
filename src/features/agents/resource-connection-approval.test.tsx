@@ -138,6 +138,20 @@ describe('Agent resource connection approval', () => {
     expect(api.getResourceConnectionApproval).toHaveBeenCalledWith('stored token')
   })
 
+  it('shows a successful callback when canonical-origin navigation cannot read the original session storage', async () => {
+    window.history.replaceState(
+      null,
+      '',
+      '/agent/resource-connection/approve?resource_connection=connected&account_connection_id=connection-1',
+    )
+    window.location.hash = ''
+
+    render(<ResourceConnectionApprovalPage />)
+
+    expect(await screen.findByText('Account connected')).toBeTruthy()
+    expect(api.getResourceConnectionApproval).not.toHaveBeenCalled()
+  })
+
   it('explains when the connection request has no approval token', async () => {
     window.location.hash = ''
 

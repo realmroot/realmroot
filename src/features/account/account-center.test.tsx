@@ -125,7 +125,7 @@ function mockAccountFetch() {
         jsonResponse({
           canCreateOrganization: true,
           showOrganizations: false,
-          realmOperator: false,
+          platformOperator: false,
           consoleOrganizations: [],
         }),
       )

@@ -3,6 +3,7 @@ import {
   extractProtectedOperations,
   extractResourceScopes,
   readResourceContract,
+  readResourceContractDocument,
   validateRequestedScopes,
   validateResourceUrl,
 } from '@server/usecases/resource-openapi'
@@ -13,6 +14,38 @@ async function readScopes(deps: ReturnType<typeof createTestDeps>, resourceUrl: 
 }
 
 describe('business resource OpenAPI scope annotations', () => {
+  it('reads a known OpenAPI document without repeating service discovery', async () => {
+    const deps = createTestDeps()
+    vi.mocked(deps.externalHttp.fetch).mockResolvedValueOnce(
+      Response.json({
+        openapi: '3.1.0',
+        components: { securitySchemes: { dpop: { type: 'http', scheme: 'DPoP' } } },
+        paths: {
+          '/organizations': {
+            get: { operationId: 'listOrganizations', security: [{ dpop: ['organizations:read'] }] },
+          },
+        },
+      }),
+    )
+
+    await expect(
+      readResourceContractDocument(deps, 'https://auth.example.com/api/openapi.json'),
+    ).resolves.toMatchObject({
+      sourceUrl: 'https://auth.example.com/api/openapi.json',
+      scopes: [],
+      operations: [
+        {
+          method: 'GET',
+          path: '/organizations',
+          operationId: 'listOrganizations',
+          requiredScopeSets: [['organizations:read']],
+        },
+      ],
+    })
+    expect(deps.externalHttp.fetch).toHaveBeenCalledOnce()
+    expect(vi.mocked(deps.externalHttp.fetch).mock.calls[0]![0].url).toBe('https://auth.example.com/api/openapi.json')
+  })
+
   it('returns protected operations and exact alternative scope sets [spec: admin-console/admin-create-api-resource]', async () => {
     const deps = createTestDeps()
     vi.mocked(deps.externalHttp.fetch)

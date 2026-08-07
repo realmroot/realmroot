@@ -42,6 +42,7 @@ import { type Context, Hono } from 'hono'
 import { getPrincipal } from '../middleware/authn'
 import { requireAgentScope } from '../middleware/authz'
 import { getDeps } from '../middleware/deps'
+import { trustedRequestOrigin } from '../trusted-request-origin'
 import { toBoundaryError } from './auth-api'
 import { readJson, readQuery } from './validation'
 
@@ -53,8 +54,13 @@ interface AgentSessionApi {
   }) => Promise<{ token: string }>
 }
 
-export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?: string) {
+export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?: string, trustedOrigins?: string[]) {
   const app = new Hono()
+  const requestOriginConfig = {
+    baseURL: oidcIssuer ? new URL(oidcIssuer).origin : undefined,
+    trustedOrigins,
+  }
+  const apiOrigin = (c: Context) => trustedRequestOrigin(requestOriginConfig, c.req.url)
 
   app.get('/agent/status', async (c) => {
     const principal = getPrincipal(c).agent
@@ -140,7 +146,7 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
           c.req.param('resourceServerId'),
           principal,
           readQuery(c, paginationQuerySchema),
-          new URL(requireOidcIssuer()).origin,
+          apiOrigin(c),
         ),
       ),
     )
@@ -156,7 +162,7 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
           c.req.param('resourceServerId'),
           c.req.param('resourceId'),
           principal,
-          new URL(requireOidcIssuer()).origin,
+          apiOrigin(c),
         ),
       ),
     )
@@ -170,7 +176,7 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
       c.req.param('resourceServerId'),
       await readJson(c, createResourceConnectionRequestSchema),
       principal,
-      new URL(requireOidcIssuer()).origin,
+      apiOrigin(c),
     )
     c.header('Location', result.links.self)
     applyInteractionHeaders(c, result)
@@ -180,12 +186,7 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
   app.get('/resource-servers/:resourceServerId/connection-requests/:requestId', async (c) => {
     requireAgentScope(c, 'connection-requests:read')
     const principal = await resourcePrincipal(authApi, getDeps(c), c)
-    const result = await getAgentConnectionRequest(
-      getDeps(c),
-      c.req.param('requestId'),
-      principal,
-      new URL(requireOidcIssuer()).origin,
-    )
+    const result = await getAgentConnectionRequest(getDeps(c), c.req.param('requestId'), principal, apiOrigin(c))
     if (result.resourceServerId !== c.req.param('resourceServerId')) {
       throw forbidden('Connection request does not belong to this Resource Server.')
     }
@@ -200,7 +201,7 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
       getDeps(c),
       await readJson(c, createAccessRequestSchema),
       principal,
-      new URL(requireOidcIssuer()).origin,
+      apiOrigin(c),
     )
     c.header('Location', result.links.self)
     applyInteractionHeaders(c, result)
@@ -210,31 +211,19 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
   app.get('/access/requests/:requestId', async (c) => {
     requireAgentScope(c, 'access-requests:read')
     const principal = await resourcePrincipal(authApi, getDeps(c), c)
-    const result = await getAccessRequest(
-      getDeps(c),
-      c.req.param('requestId'),
-      principal,
-      new URL(requireOidcIssuer()).origin,
-    )
+    const result = await getAccessRequest(getDeps(c), c.req.param('requestId'), principal, apiOrigin(c))
     applyInteractionHeaders(c, result)
     return c.json(accessRequestSchema.parse(result))
   })
 
-  app.post('/agents/:agentId/access-grants/:grantId/credentials', async (c) => {
-    requireAgentScope(c, 'access-grants:issue')
+  app.post('/access/requests/:requestId/credentials', async (c) => {
+    requireAgentScope(c, 'access-requests:write')
     if (!authApi.signJWT) throw unauthorized('Agent assertion signing is unavailable.')
     const principal = await resourcePrincipal(authApi, getDeps(c), c)
-    if (principal.identityId !== c.req.param('agentId')) throw forbidden('Agent access grant was not found.')
     const { proof } = await readJson(c, targetCredentialProofSchema)
-    const dpopProof = proof.value
-    const grant = await getDeps(c).externalResources.findGrant(c.req.param('grantId'))
-    if (!grant || grant.status !== 'active' || grant.agentIdentityId !== principal.identityId) {
-      throw forbidden('Agent access grant was not found.')
-    }
-    const request = await getDeps(c).externalResources.findAccessRequestByGrant(grant.id)
-    if (!request) throw forbidden('Agent access grant has no approved request.')
-    const credentialUrl = `${new URL(requireOidcIssuer()).origin}/api/agents/${encodeURIComponent(principal.identityId)}/access-grants/${encodeURIComponent(grant.id)}/credentials`
-    const result = await createAccessRequestCredential(getDeps(c), request.id, dpopProof, credentialUrl, principal, {
+    const requestId = c.req.param('requestId')
+    const credentialUrl = `${apiOrigin(c)}/api/access/requests/${encodeURIComponent(requestId)}/credentials`
+    const result = await createAccessRequestCredential(getDeps(c), requestId, proof.value, credentialUrl, principal, {
       issuer: requireOidcIssuer(),
       sign: (payload, type) =>
         authApi.signJWT!({ body: { payload, overrideOptions: { jwt: { type } } }, asResponse: false }).then(

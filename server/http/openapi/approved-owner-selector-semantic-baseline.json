@@ -1,6 +1,7 @@
 [
   {"method":"GET","path":"/access/consents","operationId":"listApplicationConsents","semanticHash":"4956431788a3ed67a5f6c059a7a1d31dbb806e55c92c350c4222811f3da963dd"},
   {"method":"GET","path":"/access/consents/{consentId}","operationId":"getApplicationConsent","semanticHash":"1dac509965613c7330152719ef9b1437f03a4b22e2db4d9840f1f652c6884c80"},
+  {"method":"POST","path":"/access/requests/{requestId}/credentials","operationId":"createAgentAccessRequestCredential","semanticHash":"71db05edadbeaf0a12abfebd22ceef3b9b6c2053c273ec74f9d71c8b919a8628"},
   {"method":"GET","path":"/agents","operationId":"listAgents","semanticHash":"6ea934bc076843334af5023d564d64c51732da59cefeca8bae22153b6eb71390"},
   {"method":"DELETE","path":"/agents/{agentId}","operationId":"deleteAgent","semanticHash":"4c50c8449b39e279f89c745df489e4ce12b8767d436e8119745c97463b8cd1a1"},
   {"method":"GET","path":"/agents/{agentId}","operationId":"getAgent","semanticHash":"6d6247a8736aeec88d9cfeaea1648aeb1172c78b2a22308429e061bdade23af6"},

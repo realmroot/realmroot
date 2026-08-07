@@ -6,8 +6,9 @@ const port = Number(process.env.PORT ?? 4101)
 const origin = process.env.ORIGIN ?? `http://127.0.0.1:${port}`
 const resource = `${origin}/api`
 const realmrootOrigin = process.env.REALMROOT_ORIGIN ?? 'http://localhost:4189'
-const realmrootIssuer = `${realmrootOrigin}/api/auth`
-const realmrootJwks = createRemoteJWKSet(new URL(`${realmrootIssuer}/jwks`))
+const realmrootIssuer = process.env.REALMROOT_ISSUER ?? `${realmrootOrigin}/api/auth`
+const realmrootJwksUrl = process.env.REALMROOT_JWKS_URL ?? `${realmrootOrigin}/api/auth/jwks`
+const realmrootJwks = createRemoteJWKSet(new URL(realmrootJwksUrl))
 const usedDpopProofs = new Map<string, number>()
 
 const app = express()

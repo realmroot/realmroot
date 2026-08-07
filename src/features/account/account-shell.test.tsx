@@ -45,13 +45,13 @@ function profile(overrides: Partial<UserProfile> = {}): UserProfile {
 }
 
 function renderShell(profileValue: UserProfile | null) {
-  const realmOperator = profileValue?.role === 'admin'
+  const platformOperator = profileValue?.role === 'admin'
   render(
     <AccountPageShell
       access={{
-        canCreateOrganization: realmOperator,
-        showOrganizations: realmOperator,
-        realmOperator,
+        canCreateOrganization: platformOperator,
+        showOrganizations: platformOperator,
+        platformOperator,
         consoleOrganizations: [],
       }}
       accountCenter={defaultAccountCenterSettings}

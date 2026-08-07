@@ -180,7 +180,7 @@ describe('Agent protocol routes', () => {
     })
     expect(created.status).toBe(201)
     expect(await created.clone().json()).not.toHaveProperty('grantId')
-    const issued = await app.request('/api/agents/identity-1/access-grants/grant-1/credentials', {
+    const issued = await app.request('/api/access/requests/request-1/credentials', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ proof: { type: 'dpop+jwt', value: 'proof' } }),
@@ -267,8 +267,6 @@ function createRouteApp(overrides: { signJWT?: () => Promise<{ token: string }> 
             'connection-requests:write',
             'access-requests:read',
             'access-requests:write',
-            'access-grants:read',
-            'access-grants:issue',
           ],
           authority: null,
         },
@@ -335,17 +333,17 @@ function accessRequest() {
     interaction: { type: 'user-approval' as const, status: 'completed' as const, url: null, expiresAt: null },
     links: {
       self: 'https://auth.example.com/api/access/requests/request-1',
-      credentials: 'https://auth.example.com/api/agents/identity-1/access-grants/grant-1/credentials',
+      credentials: 'https://auth.example.com/api/access/requests/request-1/credentials',
     },
     credentialOffer: {
       type: 'dpop' as const,
       resource: { href: resourceHref },
       resourceIndicator: 'https://drive.example.com/api',
-      endpoint: 'https://auth.example.com/api/agents/identity-1/access-grants/grant-1/credentials',
+      endpoint: 'https://auth.example.com/api/access/requests/request-1/credentials',
       proof: {
         algorithm: 'ES256' as const,
         method: 'POST' as const,
-        uri: 'https://auth.example.com/api/agents/identity-1/access-grants/grant-1/credentials',
+        uri: 'https://auth.example.com/api/access/requests/request-1/credentials',
       },
     },
     expiresAt,

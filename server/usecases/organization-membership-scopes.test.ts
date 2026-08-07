@@ -76,6 +76,15 @@ describe('Organization membership scope resolution', () => {
     ).resolves.toEqual(['contacts:read'])
   })
 
+  it('gives an Organization owner the current assigned scopes of its owned Resource Server', async () => {
+    const deps = dependencies()
+    deps.authorization.findResource = vi.fn().mockResolvedValue(externalResource)
+
+    await expect(resolveOrganizationMembershipScopes(deps, 'org-1', ['owner'], externalResource.id)).resolves.toEqual([
+      'contacts:read',
+    ])
+  })
+
   it('returns no scopes for missing or inactive resources and allows public Role scopes', async () => {
     const deps = dependencies()
     const roleScopes = new Map([['contact-reader', [{ resourceId: externalResource.id, scope: 'contacts:read' }]]])

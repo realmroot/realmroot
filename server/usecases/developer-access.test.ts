@@ -1,5 +1,5 @@
 import { createTestDeps } from '@server/http/test-deps'
-import { hasRole, mayCreateOrganization, resolveDeveloperAccess } from '@server/usecases/developer-access'
+import { mayCreateOrganization, resolveDeveloperAccess } from '@server/usecases/developer-access'
 import { describe, expect, it, vi } from 'vitest'
 
 describe('Developer Console access', () => {
@@ -18,13 +18,13 @@ describe('Developer Console access', () => {
       membership('org-selected', 'developer'),
       membership('org-unselected', 'owner'),
       membership('org-disabled', 'owner'),
-      membership('org-platform', 'owner'),
+      membership('org_platform', 'owner'),
       membership('org-missing', 'owner'),
       membership('org-selected', 'member'),
     ])
     vi.mocked(deps.authorization.findOrganization).mockImplementation(async (id) => {
       if (id === 'org-missing') return null
-      return organization(id === 'org-platform' ? 'org_platform' : id, id === 'org-disabled')
+      return organization(id, id === 'org-disabled')
     })
 
     await expect(
@@ -32,12 +32,11 @@ describe('Developer Console access', () => {
         id: 'user-1',
         email: 'developer@example.com',
         emailVerified: true,
-        role: 'user',
       }),
     ).resolves.toEqual({
       canCreateOrganization: true,
       showOrganizations: true,
-      realmOperator: false,
+      platformOperator: true,
       consoleOrganizations: [{ organizationId: 'org-selected', accessLevel: 'developer' }],
     })
     expect(deps.authorization.hasPendingInvitation).not.toHaveBeenCalled()
@@ -63,36 +62,31 @@ describe('Developer Console access', () => {
         id: 'user-1',
         email: 'invited@example.com',
         emailVerified: false,
-        role: null,
       }),
     ).resolves.toEqual({
       canCreateOrganization: false,
       showOrganizations: true,
-      realmOperator: false,
+      platformOperator: false,
       consoleOrganizations: [],
     })
   })
 
-  it('handles Realm operators, approved users, verified users, and comma-separated roles', () => {
-    expect(hasRole('user, admin', 'admin')).toBe(true)
-    expect(hasRole(undefined, 'admin')).toBe(false)
+  it('handles platform authority, approved users, and verified users', () => {
     expect(
       mayCreateOrganization(
         { mode: 'admins_only', approvedUserIds: [] },
-        { id: 'admin-1', emailVerified: false, role: 'admin' },
+        { id: 'admin-1', emailVerified: false },
+        true,
       ),
     ).toBe(true)
     expect(
       mayCreateOrganization(
         { mode: 'approved_users', approvedUserIds: ['user-1'] },
-        { id: 'user-1', emailVerified: false, role: 'user' },
+        { id: 'user-1', emailVerified: false },
       ),
     ).toBe(true)
     expect(
-      mayCreateOrganization(
-        { mode: 'verified_users', approvedUserIds: [] },
-        { id: 'user-1', emailVerified: false, role: 'user' },
-      ),
+      mayCreateOrganization({ mode: 'verified_users', approvedUserIds: [] }, { id: 'user-1', emailVerified: false }),
     ).toBe(false)
   })
 })

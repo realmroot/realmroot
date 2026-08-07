@@ -57,6 +57,7 @@ type agentConfiguration struct {
 	AgentEnrollmentEndpoint string            `json:"agent_enrollment_endpoint"`
 	AgentEndpoint           string            `json:"agent_endpoint"`
 	AgentTokenEndpoint      string            `json:"agent_token_endpoint"`
+	AgentBootstrapScopes    []string          `json:"agent_bootstrap_scopes_supported"`
 	Endpoints               map[string]string `json:"endpoints"`
 }
 
@@ -110,16 +111,24 @@ func authenticateRequest(
 	if err != nil {
 		return plugin.AuthHookOutput{}, err
 	}
-	state, credential, err := ensurePlatformCredential(context.Background(), states, client, target, state, configuration)
+	state, credential, err := ensureProtocolCredential(context.Background(), states, client, target, state, configuration)
 	if err != nil {
 		return plugin.AuthHookOutput{}, err
 	}
-	if credentials, ok := states.(resourceCredentialStore); ok {
-		if _, lookupErr := credentials.FindByResourceURL(input.Request.URI, runtime, state.Issuer); lookupErr == nil {
-			return authenticateTargetRequest(input, credentials, client, runtime, state.Issuer)
-		} else if !errors.Is(lookupErr, os.ErrNotExist) {
-			return plugin.AuthHookOutput{}, lookupErr
+	if !usesProtocolCredential(input.Request.Method, input.Request.URI) {
+		credentials, ok := states.(resourceCredentialStore)
+		if !ok {
+			return plugin.AuthHookOutput{}, errors.New("Realmroot Resource credential storage is unavailable")
 		}
+		resourceIndicator := credential.ResourceIndicator
+		return authenticateTargetRequestForResource(
+			input,
+			credentials,
+			client,
+			runtime,
+			state.Issuer,
+			resourceIndicator,
+		)
 	}
 	proof, err := signDPoPProof(credential.PrivateKey, input.Request.Method, input.Request.URI, credential.AccessToken, time.Now())
 	if err != nil {
@@ -133,6 +142,46 @@ func authenticateRequest(
 	}, nil
 }
 
+func usesProtocolCredential(method string, requestURL string) bool {
+	parsed, err := url.Parse(requestURL)
+	if err != nil {
+		return false
+	}
+	path := strings.TrimSuffix(parsed.Path, "/")
+	if path == "/api/agent/status" {
+		return method == http.MethodGet || method == http.MethodHead
+	}
+	segments := strings.Split(strings.Trim(path, "/"), "/")
+	if len(segments) >= 3 && segments[0] == "api" && segments[1] == "access" && segments[2] == "requests" {
+		if len(segments) == 3 {
+			return method == http.MethodPost
+		}
+		if len(segments) == 4 {
+			return method == http.MethodGet || method == http.MethodHead
+		}
+		return len(segments) == 5 && segments[4] == "credentials" && method == http.MethodPost
+	}
+	if len(segments) < 2 || segments[0] != "api" || segments[1] != "resource-servers" {
+		return false
+	}
+	if len(segments) == 2 || len(segments) == 3 {
+		return method == http.MethodGet || method == http.MethodHead
+	}
+	if len(segments) == 4 && segments[3] == "resources" {
+		return method == http.MethodGet || method == http.MethodHead
+	}
+	if len(segments) == 5 && segments[3] == "resources" {
+		return method == http.MethodGet || method == http.MethodHead
+	}
+	if len(segments) == 4 && segments[3] == "connection-requests" {
+		return method == http.MethodPost
+	}
+	if len(segments) == 5 && segments[3] == "connection-requests" {
+		return method == http.MethodGet || method == http.MethodHead
+	}
+	return false
+}
+
 func authenticateTargetRequest(
 	input plugin.AuthHookInput,
 	states resourceCredentialStore,
@@ -140,17 +189,28 @@ func authenticateTargetRequest(
 	runtime string,
 	issuer string,
 ) (plugin.AuthHookOutput, error) {
+	return authenticateTargetRequestForResource(input, states, client, runtime, issuer, input.Request.URI)
+}
+
+func authenticateTargetRequestForResource(
+	input plugin.AuthHookInput,
+	states resourceCredentialStore,
+	client httpDoer,
+	runtime string,
+	issuer string,
+	resourceURL string,
+) (plugin.AuthHookOutput, error) {
 	if issuer != "" {
 		parsed, err := validatedAbsoluteURL(issuer)
 		if err != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
 			return plugin.AuthHookOutput{}, errors.New("Realmroot target issuer must be an absolute HTTPS URL without query or fragment")
 		}
 	}
-	reference, err := states.FindByResourceURL(input.Request.URI, runtime, issuer)
+	reference, err := states.FindByResourceURL(resourceURL, runtime, issuer)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			if issuer != "" {
-				unfiltered, unfilteredErr := states.FindByResourceURL(input.Request.URI, runtime, "")
+				unfiltered, unfilteredErr := states.FindByResourceURL(resourceURL, runtime, "")
 				if unfilteredErr == nil {
 					return plugin.AuthHookOutput{}, fmt.Errorf(
 						"Realmroot target issuer %q does not match the active Resource credential issuer %q",
@@ -219,15 +279,15 @@ func refreshTargetToken(
 	if err != nil {
 		return dpopCredential{}, err
 	}
-	platform, err := usablePlatformCredential(ctx, client, state)
+	protocol, err := usableProtocolCredential(ctx, client, state)
 	if err != nil {
 		return dpopCredential{}, err
 	}
 	requestProof, err := signDPoPProof(
-		platform.PrivateKey,
+		protocol.PrivateKey,
 		http.MethodPost,
 		credential.CredentialEndpoint,
-		platform.AccessToken,
+		protocol.AccessToken,
 		time.Now(),
 	)
 	if err != nil {
@@ -240,7 +300,7 @@ func refreshTargetToken(
 		http.MethodPost,
 		credential.CredentialEndpoint,
 		map[string]string{
-			"Authorization": "DPoP " + platform.AccessToken,
+			"Authorization": "DPoP " + protocol.AccessToken,
 			"DPoP":          requestProof,
 		},
 		map[string]any{"proof": map[string]any{"type": "dpop+jwt", "value": targetProof}},
@@ -258,16 +318,19 @@ func refreshTargetToken(
 	return credential, nil
 }
 
-func usablePlatformCredential(ctx context.Context, client httpDoer, state agentState) (dpopCredential, error) {
-	if state.PlatformCredential == nil {
-		return dpopCredential{}, errors.New("Realmroot platform OAuth credential is unavailable")
+func usableProtocolCredential(ctx context.Context, client httpDoer, state agentState) (dpopCredential, error) {
+	if state.ProtocolCredential == nil {
+		return dpopCredential{}, errors.New("Realmroot Agent protocol OAuth credential is unavailable")
 	}
-	platform := *state.PlatformCredential
-	if platform.AccessToken != "" && platform.ExpiresAt != nil && time.Now().Add(5*time.Second).Before(*platform.ExpiresAt) {
-		return platform, nil
+	protocol := *state.ProtocolCredential
+	if protocol.AccessToken != "" && protocol.ExpiresAt != nil && time.Now().Add(5*time.Second).Before(*protocol.ExpiresAt) {
+		return protocol, nil
 	}
-	configuration := agentConfiguration{Issuer: state.Issuer, AgentTokenEndpoint: platform.CredentialEndpoint}
-	return requestPlatformToken(ctx, client, state, platform, configuration)
+	configuration, err := discoverAgentConfiguration(ctx, client, state.Origin)
+	if err != nil {
+		return dpopCredential{}, err
+	}
+	return requestProtocolToken(ctx, client, state, protocol, configuration)
 }
 
 func ensureAgentIdentity(
@@ -329,7 +392,8 @@ func discoverAgentConfiguration(
 	if configuration.Version != "1.0-draft" ||
 		configuration.AgentIdentityIssuer == "" ||
 		configuration.AgentIdentityIssuer != configuration.Issuer ||
-		!contains(configuration.Algorithms, "Ed25519") {
+		!contains(configuration.Algorithms, "Ed25519") ||
+		!validScopes(configuration.AgentBootstrapScopes) {
 		return agentConfiguration{}, errors.New("Agent discovery has an incompatible issuer, version, or signing algorithm")
 	}
 	issuer, err := url.Parse(configuration.Issuer)
@@ -352,7 +416,7 @@ func discoverAgentConfiguration(
 	return configuration, nil
 }
 
-func ensurePlatformCredential(
+func ensureProtocolCredential(
 	ctx context.Context,
 	states stateStore,
 	client httpDoer,
@@ -360,7 +424,7 @@ func ensurePlatformCredential(
 	state agentState,
 	configuration agentConfiguration,
 ) (agentState, dpopCredential, error) {
-	credential := state.PlatformCredential
+	credential := state.ProtocolCredential
 	if credential == nil {
 		issuerURL, err := validatedAbsoluteURL(configuration.Issuer)
 		if err != nil {
@@ -380,13 +444,13 @@ func ensurePlatformCredential(
 		}
 	}
 	if credential.AccessToken == "" || credential.ExpiresAt == nil || !time.Now().Add(5*time.Second).Before(*credential.ExpiresAt) {
-		updated, err := requestPlatformToken(ctx, client, state, *credential, configuration)
+		updated, err := requestProtocolToken(ctx, client, state, *credential, configuration)
 		if err != nil {
 			return state, dpopCredential{}, err
 		}
 		credential = &updated
 	}
-	state.PlatformCredential = credential
+	state.ProtocolCredential = credential
 	if state.Identity == nil {
 		proof, err := signDPoPProof(credential.PrivateKey, http.MethodGet, configuration.AgentEndpoint, credential.AccessToken, time.Now())
 		if err != nil {
@@ -411,7 +475,7 @@ func ensurePlatformCredential(
 	return state, *credential, nil
 }
 
-func requestPlatformToken(
+func requestProtocolToken(
 	ctx context.Context,
 	client httpDoer,
 	state agentState,
@@ -433,7 +497,7 @@ func requestPlatformToken(
 		"grant_type": {"urn:ietf:params:oauth:grant-type:jwt-bearer"},
 		"assertion":  {mustAgentJWT(state, configuration.Issuer)},
 		"resource":   {credential.ResourceIndicator},
-		"scope":      {"agent:read resource-servers:read resources:read connection-requests:read connection-requests:write access-requests:read access-requests:write access-grants:read access-grants:issue"},
+		"scope":      {strings.Join(configuration.AgentBootstrapScopes, " ")},
 	}, &response); err != nil {
 		return credential, fmt.Errorf("obtain Realmroot OAuth access token: %w", err)
 	}
@@ -461,6 +525,23 @@ func contains(values []string, expected string) bool {
 		}
 	}
 	return false
+}
+
+func validScopes(scopes []string) bool {
+	if len(scopes) == 0 {
+		return false
+	}
+	seen := make(map[string]struct{}, len(scopes))
+	for _, scope := range scopes {
+		if len(strings.Fields(scope)) != 1 || strings.TrimSpace(scope) != scope {
+			return false
+		}
+		if _, exists := seen[scope]; exists {
+			return false
+		}
+		seen[scope] = struct{}{}
+	}
+	return true
 }
 
 func registerAgent(

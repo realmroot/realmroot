@@ -114,12 +114,12 @@ export const agentGovernanceRoutes: ManagementRouteConfig[] = [
   },
   {
     method: 'post',
-    path: '/agents/{agentId}/access-grants/{grantId}/credentials',
-    operationId: 'createAgentAccessGrantCredential',
-    summary: 'Create a temporary credential for an Agent access grant',
-    security: [{ dpop: ['access-grants:issue'] }],
+    path: '/access/requests/{requestId}/credentials',
+    operationId: 'createAgentAccessRequestCredential',
+    summary: 'Create a temporary credential for an approved Agent access request',
+    security: [{ dpop: ['access-requests:write'] }],
     request: {
-      params: z.object({ agentId: z.string(), grantId: z.string() }),
+      params: z.object({ requestId: z.string() }),
       body: jsonBody(targetCredentialProofSchema),
     },
     response: targetTokenSchema,

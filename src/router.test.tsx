@@ -175,7 +175,7 @@ function accountRouteResponse(input: RequestInfo | URL) {
       access: {
         canCreateOrganization: false,
         showOrganizations: false,
-        realmOperator: false,
+        platformOperator: false,
         consoleOrganizations: [],
       },
     }),

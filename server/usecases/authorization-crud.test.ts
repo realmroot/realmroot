@@ -41,6 +41,16 @@ import { describe, expect, it, vi } from 'vitest'
 const timestamp = '2026-07-30T00:00:00.000Z'
 const pagination = { limit: 20, offset: 0, total: 1, hasMore: false, nextOffset: null }
 const actor = { controllerUserId: 'user-1', agent: null }
+const adminActor = { controllerUserId: 'admin-1', agent: null }
+const agentActor = {
+  controllerUserId: null,
+  agent: {
+    issuer: 'https://auth.example.com/api/auth',
+    subject: 'agt_123',
+    identityId: 'agent-1',
+    hostId: 'host-1',
+  },
+}
 const organization: OrganizationResponse = {
   id: 'org-1',
   slug: 'acme',
@@ -90,7 +100,7 @@ const resource: ApiResourceResponse = {
   updatedAt: timestamp,
 }
 describe('authorization CRUD and assignment policy', () => {
-  it(`persists one immutable built-in Realmroot Resource Server and reconciles its deployment URL
+  it(`persists one immutable built-in Realmroot Resource Server and reconciles its deployment contract
       [spec: management-api/management-realmroot-resource-server-origin]`, async () => {
     const authorization = repository()
     authorization.createResource.mockImplementation(async (input) => ({
@@ -120,6 +130,17 @@ describe('authorization CRUD and assignment policy', () => {
     expect(authorization.updateResource).toHaveBeenCalledWith('res_realmroot', {
       resourceUrl: 'https://auth.example.com/api',
     })
+
+    const staleRegistry = { ...created, scopeRegistry: null }
+    authorization.findResource.mockResolvedValueOnce(staleRegistry).mockResolvedValueOnce(created)
+    await expect(ensureRealmrootResourceServer(deps, 'https://auth.example.com')).resolves.toBe(created)
+    expect(authorization.replaceResourceScopeRegistry).toHaveBeenCalledWith(
+      'res_realmroot',
+      expect.objectContaining({
+        discovery: expect.objectContaining({ documentHash: 'system-managed' }),
+        scopes: expect.arrayContaining([expect.objectContaining({ value: 'resource-servers:write' })]),
+      }),
+    )
 
     authorization.findResource.mockResolvedValueOnce(stale)
     authorization.updateResource.mockResolvedValueOnce(false)
@@ -183,9 +204,7 @@ describe('authorization CRUD and assignment policy', () => {
     await expect(getOrganization(deps, organization.id)).resolves.toBe(organization)
     await expect(updateOrganization(deps, organization.id, { name: 'Acme 2' })).resolves.toBe(organization)
     expect(authorization.updateOrganization).toHaveBeenCalledWith(organization.id, { name: 'Acme 2' })
-    await expect(
-      addMember(deps, organization.id, { userId: 'user-1', roles: ['member'] }, 'admin-1', false),
-    ).resolves.toBe(member)
+    await expect(addMember(deps, organization.id, { userId: 'user-1', roles: ['member'] })).resolves.toBe(member)
     expect(authorization.addMember).toHaveBeenCalledWith(
       organization.id,
       expect.objectContaining({ id: expect.stringMatching(/^mem_/), title: null }),
@@ -195,10 +214,10 @@ describe('authorization CRUD and assignment policy', () => {
       pagination,
     })
     await expect(updateMember(deps, organization.id, member.id, { title: 'Owner' })).resolves.toBe(member)
-    await expect(removeMember(deps, organization.id, member.id, 'admin-1')).resolves.toBeUndefined()
+    await expect(removeMember(deps, organization.id, member.id, adminActor)).resolves.toBeUndefined()
 
     await expect(
-      createInvitation(deps, organization.id, { email: invitation.email, roles: ['member'] }, 'admin-1', false),
+      createInvitation(deps, organization.id, { email: invitation.email, roles: ['member'] }, adminActor),
     ).resolves.toBe(invitation)
     expect(authorization.createInvitation).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -212,8 +231,7 @@ describe('authorization CRUD and assignment policy', () => {
       deps,
       organization.id,
       { email: invitation.email, roles: ['member'], expiresAt: timestamp },
-      'admin-1',
-      false,
+      adminActor,
     )
     expect(authorization.createInvitation).toHaveBeenLastCalledWith(
       expect.objectContaining({ expiresAt: timestamp, inviterId: 'admin-1' }),
@@ -235,7 +253,7 @@ describe('authorization CRUD and assignment policy', () => {
     authorization.findOrganization.mockResolvedValue(organization)
     await expect(updateMember(deps, organization.id, 'missing', {})).rejects.toMatchObject({ status: 404 })
     authorization.findMember.mockResolvedValue({ ...member, organizationId: 'org-2' })
-    await expect(removeMember(deps, organization.id, member.id, 'admin-1')).rejects.toMatchObject({ status: 404 })
+    await expect(removeMember(deps, organization.id, member.id, adminActor)).rejects.toMatchObject({ status: 404 })
     authorization.findInvitation.mockResolvedValue(null)
     await expect(cancelInvitation(deps, organization.id, 'missing')).rejects.toMatchObject({ status: 404 })
     authorization.findInvitation.mockResolvedValue({ ...invitation, organizationId: 'org-2' })
@@ -250,32 +268,32 @@ describe('authorization CRUD and assignment policy', () => {
     authorization.removeMember.mockResolvedValue(false)
 
     await expect(
-      replaceMemberRoles(deps, organization.id, member.id, { roles: ['admin'] }, 'admin-1', false),
+      replaceMemberRoles(deps, organization.id, member.id, { roles: ['admin'] }, adminActor),
     ).rejects.toMatchObject({
       status: 400,
       message: 'Transfer Organization ownership before changing or removing the last Owner.',
     })
-    await expect(removeMember(deps, organization.id, member.id, 'admin-1')).rejects.toMatchObject({ status: 412 })
+    await expect(removeMember(deps, organization.id, member.id, adminActor)).rejects.toMatchObject({ status: 412 })
     expect(authorization.replaceMemberRoles).not.toHaveBeenCalled()
     expect(authorization.removeMember).toHaveBeenCalled()
   })
 
-  it('rejects granting Owner by a non-Owner Organization member', async () => {
+  it('allows Owner assignment after the caller has role-assignment permission', async () => {
     const authorization = repository()
     const deps = { authorization } as unknown as Deps
     authorization.findOrganization.mockResolvedValue(organization)
     authorization.findMember.mockResolvedValue(member)
-    authorization.findMemberByOrganizationUser.mockResolvedValue({ ...member, userId: 'admin-1', roles: ['admin'] })
+    authorization.replaceMemberRoles.mockResolvedValue(true)
+    authorization.addMember.mockResolvedValue(member)
+    authorization.createInvitation.mockResolvedValue({ ...invitation, roles: ['owner'] })
 
     await expect(
-      replaceMemberRoles(deps, organization.id, member.id, { roles: ['owner'] }, 'admin-1', false),
-    ).rejects.toMatchObject({ status: 403, message: 'Only an Organization Owner can assign the Owner Role.' })
+      replaceMemberRoles(deps, organization.id, member.id, { roles: ['owner'] }, adminActor),
+    ).resolves.toEqual({ roles: ['owner'] })
+    await expect(addMember(deps, organization.id, { userId: 'new-owner', roles: ['owner'] })).resolves.toBe(member)
     await expect(
-      addMember(deps, organization.id, { userId: 'new-owner', roles: ['owner'] }, 'admin-1', false),
-    ).rejects.toMatchObject({ status: 403 })
-    await expect(
-      createInvitation(deps, organization.id, { email: 'owner@example.com', roles: ['owner'] }, 'admin-1', false),
-    ).rejects.toMatchObject({ status: 403 })
+      createInvitation(deps, organization.id, { email: 'owner@example.com', roles: ['owner'] }, adminActor),
+    ).resolves.toMatchObject({ roles: ['owner'] })
   })
 
   it('replaces multiple Roles atomically and validates Owner and dynamic Role assignments', async () => {
@@ -298,7 +316,7 @@ describe('authorization CRUD and assignment policy', () => {
     const deps = { authorization } as unknown as Deps
 
     await expect(
-      replaceMemberRoles(deps, organization.id, member.id, { roles: ['admin', 'operator'] }, 'admin-1', false),
+      replaceMemberRoles(deps, organization.id, member.id, { roles: ['admin', 'operator'] }, adminActor),
     ).resolves.toEqual({ roles: ['admin', 'operator'] })
     expect(authorization.replaceMemberRoles).toHaveBeenCalledWith(
       organization.id,
@@ -310,18 +328,13 @@ describe('authorization CRUD and assignment policy', () => {
 
     authorization.replaceMemberRoles.mockResolvedValue(false)
     await expect(
-      replaceMemberRoles(deps, organization.id, member.id, { roles: ['admin'] }, 'admin-1', false),
+      replaceMemberRoles(deps, organization.id, member.id, { roles: ['admin'] }, adminActor),
     ).rejects.toMatchObject({ status: 412 })
 
+    await expect(addMember(deps, organization.id, { userId: 'owner-2', roles: ['owner'] })).resolves.toBe(member)
+    await expect(addMember(deps, organization.id, { userId: 'owner-3', roles: ['owner'] })).resolves.toBe(member)
     await expect(
-      addMember(deps, organization.id, { userId: 'owner-2', roles: ['owner'] }, 'realm-admin', true),
-    ).resolves.toBe(member)
-    authorization.findMemberByOrganizationUser.mockResolvedValue({ ...member, userId: 'owner-1', roles: ['owner'] })
-    await expect(
-      addMember(deps, organization.id, { userId: 'owner-3', roles: ['owner'] }, 'owner-1', false),
-    ).resolves.toBe(member)
-    await expect(
-      addMember(deps, organization.id, { userId: 'unknown', roles: ['missing-role'] }, 'owner-1', false),
+      addMember(deps, organization.id, { userId: 'unknown', roles: ['missing-role'] }),
     ).rejects.toMatchObject({ status: 400 })
   })
 
@@ -342,12 +355,10 @@ describe('authorization CRUD and assignment policy', () => {
     const deps = { authorization } as unknown as Deps
 
     await expect(getRole(deps, organization.id, 'owner')).resolves.toMatchObject({ predefined: true })
-    await expect(
-      updateRole(deps, organization.id, 'owner', { displayName: 'Changed' }, 'user-1'),
-    ).rejects.toMatchObject({
+    await expect(updateRole(deps, organization.id, 'owner', { displayName: 'Changed' }, actor)).rejects.toMatchObject({
       status: 409,
     })
-    await expect(deleteRole(deps, organization.id, 'owner', 'user-1')).rejects.toMatchObject({ status: 409 })
+    await expect(deleteRole(deps, organization.id, 'owner', actor)).rejects.toMatchObject({ status: 409 })
 
     await expect(
       createRole(
@@ -359,14 +370,21 @@ describe('authorization CRUD and assignment policy', () => {
           description: null,
           scopes: [{ resourceId: 'res_realmroot', scope: 'applications:read' }],
         },
-        'user-1',
+        agentActor,
       ),
     ).resolves.toMatchObject({ key: 'operator', predefined: false })
     expect(authorization.createOrganizationRole).toHaveBeenCalledWith(
       organization.id,
       expect.objectContaining({ key: 'operator' }),
       { scope: ['res_realmroot/applications%3Aread'] },
-      expect.objectContaining({ action: 'organization.role.created' }),
+      expect.objectContaining({
+        action: 'organization.role.created',
+        controllerUserId: null,
+        subjectIssuer: agentActor.agent.issuer,
+        subject: agentActor.agent.subject,
+        agentIdentityId: agentActor.agent.identityId,
+        hostId: agentActor.agent.hostId,
+      }),
     )
   })
 
@@ -399,7 +417,7 @@ describe('authorization CRUD and assignment policy', () => {
       scopes: [{ resourceId: 'res_realmroot', scope: 'applications:read' }],
     })
     await expect(
-      updateRole(deps, organization.id, 'operator', { displayName: 'Tenant operator' }, 'user-1'),
+      updateRole(deps, organization.id, 'operator', { displayName: 'Tenant operator' }, actor),
     ).resolves.toMatchObject({ key: 'operator' })
     expect(authorization.updateOrganizationRole).toHaveBeenCalledWith(
       organization.id,
@@ -409,7 +427,7 @@ describe('authorization CRUD and assignment policy', () => {
       timestamp,
       expect.objectContaining({ action: 'organization.role.updated' }),
     )
-    await expect(deleteRole(deps, organization.id, 'operator', 'user-1')).resolves.toBeUndefined()
+    await expect(deleteRole(deps, organization.id, 'operator', actor)).resolves.toBeUndefined()
     expect(authorization.deleteOrganizationRole).toHaveBeenCalledWith(
       organization.id,
       'operator',
@@ -422,12 +440,12 @@ describe('authorization CRUD and assignment policy', () => {
     authorization.findOrganizationRole.mockResolvedValue(dynamicRole)
     authorization.updateOrganizationRole.mockResolvedValue(false)
     await expect(
-      updateRole(deps, organization.id, 'operator', { description: 'Changed' }, 'user-1'),
+      updateRole(deps, organization.id, 'operator', { description: 'Changed' }, actor),
     ).rejects.toMatchObject({ status: 412 })
     authorization.deleteOrganizationRole.mockResolvedValue('assigned')
-    await expect(deleteRole(deps, organization.id, 'operator', 'user-1')).rejects.toMatchObject({ status: 409 })
+    await expect(deleteRole(deps, organization.id, 'operator', actor)).rejects.toMatchObject({ status: 409 })
     authorization.deleteOrganizationRole.mockResolvedValue('not_found')
-    await expect(deleteRole(deps, organization.id, 'operator', 'user-1')).rejects.toMatchObject({ status: 412 })
+    await expect(deleteRole(deps, organization.id, 'operator', actor)).rejects.toMatchObject({ status: 412 })
   })
 
   it('validates and normalizes internal and external dynamic Role scopes', async () => {
@@ -461,7 +479,7 @@ describe('authorization CRUD and assignment policy', () => {
     } as unknown as Deps
 
     await expect(
-      createRole(deps, organization.id, { key: 'owner', displayName: 'Reserved', scopes: [] }, 'user-1'),
+      createRole(deps, organization.id, { key: 'owner', displayName: 'Reserved', scopes: [] }, actor),
     ).rejects.toMatchObject({ status: 409 })
     await expect(
       createRole(
@@ -472,7 +490,7 @@ describe('authorization CRUD and assignment policy', () => {
           displayName: 'Invalid',
           scopes: [{ resourceId: 'res_realmroot', scope: 'unknown:scope' }],
         },
-        'user-1',
+        actor,
       ),
     ).rejects.toMatchObject({ status: 400 })
 
@@ -487,7 +505,7 @@ describe('authorization CRUD and assignment policy', () => {
           { resourceId: 'res_realmroot', scope: 'applications:read' },
         ],
       },
-      'user-1',
+      actor,
     )
     expect(authorization.updateOrganizationRole).toHaveBeenCalledWith(
       organization.id,
@@ -508,7 +526,7 @@ describe('authorization CRUD and assignment policy', () => {
         organization.id,
         'operator',
         { scopes: [{ resourceId: resource.id, scope: 'projects:read' }] },
-        'user-1',
+        actor,
       ),
     ).rejects.toMatchObject({ status: 400 })
   })
@@ -906,8 +924,16 @@ describe('authorization CRUD and assignment policy', () => {
     await expect(
       updateResource(deps, resource.id, { scopeGrantModes: [{ scope: 'projects:read', grantMode: 'automatic' }] }),
     ).rejects.toThrow('API resource was not found.')
-    authorization.findResource.mockResolvedValueOnce({ ...registered, id: 'res_realmroot' })
-    await expect(refreshResourceScopeRegistry(deps, 'res_realmroot')).rejects.toMatchObject({ status: 400 })
+    const realmroot = { ...registered, id: 'res_realmroot', resourceUrl: 'https://auth.example.com/api' }
+    authorization.findResource.mockResolvedValueOnce(realmroot).mockResolvedValueOnce(realmroot)
+    await expect(refreshResourceScopeRegistry(deps, 'res_realmroot')).resolves.toBe(realmroot)
+    expect(authorization.replaceResourceScopeRegistry).toHaveBeenCalledWith(
+      'res_realmroot',
+      expect.objectContaining({
+        discovery: expect.objectContaining({ documentHash: 'system-managed' }),
+        scopes: expect.arrayContaining([expect.objectContaining({ value: 'resource-servers:write' })]),
+      }),
+    )
   })
 
   it('covers Role defaults, visibility, and derived token scopes', async () => {
@@ -938,7 +964,7 @@ describe('authorization CRUD and assignment policy', () => {
         deps,
         organization.id,
         { key: 'hidden', displayName: 'Hidden', scopes: [{ resourceId: resource.id, scope: 'projects:read' }] },
-        'user-1',
+        actor,
       ),
     ).rejects.toThrow('not visible')
     authorization.findResource.mockResolvedValueOnce({
@@ -953,7 +979,7 @@ describe('authorization CRUD and assignment policy', () => {
         deps,
         organization.id,
         { key: 'automatic', displayName: 'Automatic', scopes: [{ resourceId: resource.id, scope: 'projects:read' }] },
-        'user-1',
+        actor,
       ),
     ).rejects.toThrow('assigned scopes')
 

@@ -9,7 +9,7 @@ import type { SecurityPolicy } from '@shared/api/security'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
 import { configzOptions } from '../../app-config'
-import { requirePlatformAccess } from '../../middleware/authz'
+import { authorizePlatformOrganization } from '../../middleware/authz'
 import { getDeps } from '../../middleware/deps'
 
 interface ReadinessBindings {
@@ -20,7 +20,7 @@ export function createManagementReadinessRoute({ securityPolicy }: { securityPol
   const app = new Hono<{ Bindings: ReadinessBindings }>()
 
   app.use('/realm/configuration-status', async (c, next) => {
-    requirePlatformAccess(c, 'realm:read')
+    await authorizePlatformOrganization(c, 'readiness:read')
     await next()
   })
 

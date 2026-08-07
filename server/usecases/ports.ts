@@ -231,6 +231,8 @@ export interface UserRepository {
   listManagedUsers(query: AdminUserListQuery, userIds?: string[]): Promise<PaginatedResult<UserProfile>>
   createManagedUser(input: AdminCreateUserInput): Promise<UserProfile>
   updateManagedUser(userId: string, input: AdminUpdateUserInput): Promise<UserProfile>
+  suspendManagedUser(userId: string, reason: string | null, expiresAt: Date | null): Promise<UserProfile>
+  restoreManagedUser(userId: string): Promise<UserProfile>
   deleteManagedUser(userId: string): Promise<void>
   updateProfile(userId: string, input: AccountProfileUpdateInput): Promise<UserProfile>
   assertAccountAvatarReference(userId: string, avatarAssetId: string | null | undefined): Promise<void>
@@ -239,6 +241,7 @@ export interface UserRepository {
   listConsentedApplications(userId: string, page: PaginationInput): Promise<PaginatedResult<ConsentedApplication>>
   listSessions(userId: string, page: PaginationInput): Promise<PaginatedResult<UserSessionDevice>>
   getSessionToken(userId: string, sessionId: string): Promise<string>
+  deleteSessions(userId: string, sessionId?: string): Promise<UserSessionDevice[]>
   createPasswordResetRequest?(input: PasswordResetRequest): Promise<PasswordResetRequest>
   findPasswordResetRequest?(userId: string, requestId: string): Promise<PasswordResetRequest | null>
 }

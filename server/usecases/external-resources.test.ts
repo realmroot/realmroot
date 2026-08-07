@@ -4612,7 +4612,7 @@ describe('external API resource authorization', () => {
       status: 'approved',
     })
     const signer = { issuer: principal().issuer, sign: vi.fn().mockResolvedValue('realmroot-token') }
-    const tokenUrl = 'https://auth.example.com/api/agents/identity-1/access-grants/grant-1/credentials'
+    const tokenUrl = 'https://auth.example.com/api/access/requests/request-1/credentials'
 
     const result = await issueTargetAccessToken(
       deps,
@@ -4635,7 +4635,7 @@ describe('external API resource authorization', () => {
         host_id: principal().hostId,
         groups: ['org-1'],
         realmroot_authority: authority,
-        scope: expect.stringContaining('users:read'),
+        scope: 'users:read',
       }),
       'at+jwt',
     )

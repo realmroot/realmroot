@@ -160,11 +160,11 @@ func handleInteractiveResource(
 			case <-timer.C:
 			}
 			var polledRepresentation map[string]any
-			platform, err := usablePlatformCredential(ctx, client, state)
+			protocol, err := usableProtocolCredential(ctx, client, state)
 			if err != nil {
 				return plugin.ResponseMiddlewareOutput{}, err
 			}
-			proof, err := signDPoPProof(platform.PrivateKey, http.MethodGet, resource.Links.Self, platform.AccessToken, time.Now())
+			proof, err := signDPoPProof(protocol.PrivateKey, http.MethodGet, resource.Links.Self, protocol.AccessToken, time.Now())
 			if err != nil {
 				return plugin.ResponseMiddlewareOutput{}, err
 			}
@@ -174,7 +174,7 @@ func handleInteractiveResource(
 				http.MethodGet,
 				resource.Links.Self,
 				map[string]string{
-					"Authorization": "DPoP " + platform.AccessToken,
+					"Authorization": "DPoP " + protocol.AccessToken,
 					"DPoP":          proof,
 				},
 				nil,

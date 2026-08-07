@@ -34,7 +34,7 @@ import {
   authorizedOrganizationOwnerId,
   authorizeOrganization,
   authorizeOrganizationOwner,
-  requirePlatformAccess,
+  authorizePlatformOrganization,
 } from '../../middleware/authz'
 import { getDeps } from '../../middleware/deps'
 import { readJson, readQuery } from '../validation'
@@ -152,7 +152,7 @@ async function authorizedWebhookOrganizationId(c: Context, organizationId: strin
   if (organizationId) {
     return authorizedOrganizationOwnerId(await authorizeOrganizationOwner(c, organizationId, 'webhooks:write'))
   }
-  requirePlatformAccess(c, 'webhooks:write')
+  await authorizePlatformOrganization(c, 'webhooks:write')
   return null
 }
 
@@ -160,7 +160,7 @@ async function requireEndpointAccess(c: Context) {
   const endpoint = await getWebhookEndpoint(getDeps(c), c.req.param('webhookId')!)
   const scope = c.req.method === 'GET' || c.req.method === 'HEAD' ? 'webhooks:read' : 'webhooks:write'
   if (endpoint.organizationId) await authorizeOrganization(c, endpoint.organizationId, scope)
-  else requirePlatformAccess(c, scope)
+  else await authorizePlatformOrganization(c, scope)
   return endpoint
 }
 
@@ -169,6 +169,6 @@ async function requireRequestAccess(c: Context) {
   if (request.endpointId !== c.req.param('webhookId')) throw notFound('Webhook delivery was not found.')
   const scope = c.req.method === 'GET' || c.req.method === 'HEAD' ? 'webhooks:read' : 'webhooks:write'
   if (request.organizationId) await authorizeOrganization(c, request.organizationId, scope)
-  else requirePlatformAccess(c, scope)
+  else await authorizePlatformOrganization(c, scope)
   return request
 }

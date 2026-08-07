@@ -73,7 +73,7 @@ describe('management API client', () => {
     await management.uploadApplicationLogo('app-1', new File(['logo'], 'logo.png'))
     await management.listUsers({ search: 'jane', limit: 50, offset: undefined })
     await management.createUser({ email: 'jane@example.com', displayName: 'Jane Doe' })
-    await management.updateUser('user-1', { role: 'admin' })
+    await management.updateUser('user-1', { displayName: 'Jane Admin' })
     await management.getUser('user-1')
     await management.deleteUser('user-1')
     await management.requestUserPasswordReset('user-1')

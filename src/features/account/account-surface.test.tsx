@@ -40,7 +40,7 @@ describe('AccountSurface', () => {
     renderWithClient(
       <AccountSurface section="overview">
         {(profile, access, activeOrganizationId) => (
-          <p>{`${profile.email}|${access.realmOperator}|${String(activeOrganizationId)}`}</p>
+          <p>{`${profile.email}|${access.platformOperator}|${String(activeOrganizationId)}`}</p>
         )}
       </AccountSurface>,
     )

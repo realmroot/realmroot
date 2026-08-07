@@ -4,11 +4,10 @@ Use this reference only when the user explicitly requests Realmroot tenant
 administration.
 
 Realmroot is a built-in Resource Server in its own Resource Server inventory.
-Its Resources are tenant boundaries: one Organization or one User. Realm
-administration remains a human platform permission rather than a tenant.
-AgentAuth enrollment establishes identity only. Management
-requests use a short-lived OAuth 2.0 access token bound to the selected Resource
-with DPoP.
+Its Resources are authority boundaries: Organization and User. The built-in
+Realmroot Platform Organization owns platform-wide administration.
+AgentAuth enrollment establishes identity only. Management requests use a
+short-lived OAuth 2.0 access token bound to the selected Resource with DPoP.
 
 ## Obtain Management Access
 
@@ -17,13 +16,21 @@ Follow the normal Resource Server flow in
 
 1. discover the Resource Server whose `identifier` is `realmroot`;
 2. list its `links.resources` collection;
-3. select exactly one Organization or User Resource;
+3. select exactly one Organization or User Resource whose
+   `requestableScopes` cover the intended operations;
 4. inspect the intended operations in the live OpenAPI document;
 5. request the union of their declared OAuth scopes with the `access` command.
 
-The controller may approve several scopes together, but every issued token is
-short-lived and restricted to exactly one authority Resource. Reuse that token
-for the task. Request another Resource when changing authority boundaries.
+Select the Realmroot Platform Organization Resource for platform-wide
+operations. Other Organization and User Resources remain restricted to their
+own tenant. Request the union of scopes needed for one management task in one
+approval; every issued token remains short-lived and bound to the selected
+authority Resource.
+
+Connectors and external Resource Servers are platform resources. Register or
+change them only with the Realmroot Platform Organization Resource. Native
+Resource Servers may be owned by another Organization when the live operation
+and caller authority allow it.
 
 Do not request AgentAuth capabilities, use an Agent assertion as a Resource API
 credential, or provision an API key. The adapter keeps the Agent assertion for
@@ -38,7 +45,8 @@ the OAuth token endpoint and manages DPoP access tokens locally.
 | Resource Servers | `/resource-servers` | `resource-servers` |
 | Organizations | `/organizations` | `organizations` |
 | Users and security state | `/users` | `users` |
-| Agents and Resource access | `/agents`, `/agents/{agentId}/access-grants`, `/access/requests` | `agents` |
+| Agent inventory | `/agents` | `agents` |
+| Agent access requests | `/access/requests` | `access-requests` |
 | Connectors | `/connectors` | `connectors` |
 | Realm settings | `/realm` | `settings` |
 | Realm security policy | `/realm/security-policy` | `security` |
@@ -47,11 +55,6 @@ the OAuth token endpoint and manages DPoP access tokens locally.
 
 The live OpenAPI operation is authoritative for its exact scope, request
 schema, ETag requirements, and response headers.
-
-Organization Role definitions and member Role replacement are human
-membership operations under `/organizations/{organizationId}/roles` and
-`/organizations/{organizationId}/members/{memberId}/roles`. Agents and
-workloads cannot receive or mutate Roles; they use direct scopes.
 
 ## Operate Resources
 

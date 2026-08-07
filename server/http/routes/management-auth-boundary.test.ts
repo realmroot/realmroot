@@ -173,6 +173,21 @@ describe('management routes 1', () => {
     expect(protectedResponse.headers.get('link')).toContain('</api/openapi.json>; rel="service-desc"')
   })
 
+  it('publishes the runtime Organization authorization scopes in OpenAPI', () => {
+    const expectedScopes = new Map([
+      ['DELETE /organizations/{param}', 'organizations:delete'],
+      ['GET /organizations/{param}/roles', 'roles:read'],
+      ['POST /organizations/{param}/roles', 'roles:write'],
+      ['GET /organizations/{param}/members/{param}/roles', 'role-assignments:read'],
+      ['PUT /organizations/{param}/members/{param}/roles', 'role-assignments:write'],
+    ])
+
+    for (const [key, scope] of expectedScopes) {
+      const operation = openApiOperationObjects().find((candidate) => candidate.key === key)
+      expect(operation?.security, key).toEqual([{ dpop: [scope] }, { sessionCookie: [scope] }])
+    }
+  })
+
   it('limits generated Restish commands to discovery, approval, and credential workflows [spec: management-api/management-restish-command-surface]', () => {
     const generatedCommands = openApiOperationObjects()
       .filter((operation) => operation.cliHidden !== true)
@@ -262,7 +277,7 @@ describe('management routes 1', () => {
           host_id: 'host-1',
           scope: scopes.join(' '),
           cnf: { jkt: dpop.thumbprint },
-          realmroot_authority: { type: 'realmroot_authority', authority: 'realm', id: 'realm' },
+          realmroot_authority: { type: 'realmroot_authority', authority: 'organization', id: 'org_platform' },
         },
       })),
     })

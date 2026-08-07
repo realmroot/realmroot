@@ -353,6 +353,8 @@ function createUserRepositoryMock(): UserRepository {
     listManagedUsers: vi.fn().mockImplementation((page) => Promise.resolve(createPage(page))),
     createManagedUser: vi.fn().mockResolvedValue({ id: 'user-1' }),
     updateManagedUser: vi.fn().mockResolvedValue({ id: 'user-1' }),
+    suspendManagedUser: vi.fn().mockResolvedValue({ id: 'user-1' }),
+    restoreManagedUser: vi.fn().mockResolvedValue({ id: 'user-1' }),
     deleteManagedUser: vi.fn().mockResolvedValue(undefined),
     updateProfile: vi.fn().mockResolvedValue({ id: 'user-1' }),
     assertAccountAvatarReference: vi.fn().mockResolvedValue(undefined),
@@ -361,6 +363,7 @@ function createUserRepositoryMock(): UserRepository {
     listConsentedApplications: vi.fn().mockImplementation((_userId, page) => Promise.resolve(createPage(page))),
     listSessions: vi.fn().mockImplementation((_userId, page) => Promise.resolve(createPage(page))),
     getSessionToken: vi.fn().mockResolvedValue('session-token-1'),
+    deleteSessions: vi.fn().mockResolvedValue([]),
   }
 }
 

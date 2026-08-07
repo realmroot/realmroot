@@ -34,9 +34,10 @@ import type {
 } from '@shared/api/external-resources'
 import { type PaginationInput, paginationMetadata } from '@shared/api/pagination'
 import { agentBootstrapScopes, realmrootOAuthScopes } from '@shared/authz'
+import { realmrootManagementScopes } from '@shared/scope-registry'
 import { ensureDynamicConnectorScopes, refreshDynamicConnectorMetadata } from './connectors'
 import { validateDpopTokenProof } from './dpop'
-import { organizationUserHasScope } from './organization-membership-scopes'
+import { organizationUserHasScope, resolveOrganizationMembershipScopes } from './organization-membership-scopes'
 import { validateRequestedScopes } from './resource-openapi'
 import { userEffectiveResourceScopes } from './resource-scope-entitlements'
 import { activePublicResource, activeResourceVisibleToOrganization } from './resource-visibility'
@@ -503,6 +504,9 @@ export async function discoverAgentResources(deps: Deps, principal: AgentResourc
 function discoverAgentResourceScopes(
   resource: NonNullable<Awaited<ReturnType<Deps['authorization']['findResource']>>>,
 ) {
+  if (isRealmrootResourceServer(resource.id)) {
+    return realmrootOAuthScopes.map((value) => ({ value, description: null }))
+  }
   return resource.scopeRegistry?.scopes.map(({ value, description }) => ({ value, description })) ?? null
 }
 
@@ -1147,7 +1151,9 @@ export async function decideAgentAccessRequest(
   const requestIdentity = await deps.agentIdentities.findIdentity(request.agentIdentityId)
   if (!requestIdentity) throw notFound('Active Agent identity was not found.')
   requireAgentResourceVisibility(resource, requestIdentity.identity.ownerOrganizationId)
-  const grantorScopes = await userEffectiveResourceScopes(deps, actorUserId, resource)
+  const grantorScopes = isRealmrootResourceServer(resource.id)
+    ? await realmrootAuthorityEffectiveScopes(deps, actorUserId, resource, authorizationDetails[0]!)
+    : await userEffectiveResourceScopes(deps, actorUserId, resource)
   assertScopeSubset(request.scopes, grantorScopes, 'controller effective scope')
   const connectionId = request.connectionId
   let connection: ResourceAccountConnectionRecord | null = null
@@ -1353,7 +1359,15 @@ export async function issueTargetAccessToken(
   if (String(token.token_type).toLowerCase() !== 'dpop') {
     throw unauthorized('Target authorization server did not issue a DPoP-bound access token.')
   }
-  const expiresIn = Math.min(requiredPositiveInteger(token, 'expires_in', 'Token exchange response'), 3600)
+  const expiresIn = requiredPositiveInteger(token, 'expires_in', 'Token exchange response')
+  const now = new Date()
+  const expiresAt = new Date(now.getTime() + expiresIn * 1000)
+  if (expiresIn > 3600) {
+    throw unauthorized('Target authorization server issued an access token with an excessive lifetime.')
+  }
+  if (grant.expiresAt && expiresAt.getTime() > grant.expiresAt.getTime()) {
+    throw unauthorized('Target authorization server issued an access token beyond the access grant lifetime.')
+  }
   const issuedScope = scopeString(token.scope) ?? request.scopes
   if (!exactScopes(issuedScope, request.scopes)) {
     throw unauthorized('Target authorization server issued a different scope set.')
@@ -1367,7 +1381,6 @@ export async function issueTargetAccessToken(
   if (!exactAuthorizationDetails(issuedAuthorizationDetails, grant.authorizationDetails)) {
     throw unauthorized('Target authorization server issued different authorization details.')
   }
-  const now = new Date()
   const leaseId = createId('tokenlease')
   const leaseRecord = {
     id: leaseId,
@@ -1381,7 +1394,7 @@ export async function issueTargetAccessToken(
     confirmationJkt,
     scopes: request.scopes,
     authorizationDetails: grant.authorizationDetails,
-    expiresAt: new Date(now.getTime() + expiresIn * 1000),
+    expiresAt,
     revokedAt: null,
     createdAt: now,
   }
@@ -1403,7 +1416,7 @@ export async function issueTargetAccessToken(
     accessToken,
     tokenType: 'DPoP' as const,
     expiresIn,
-    expiresAt: new Date(now.getTime() + expiresIn * 1000).toISOString(),
+    expiresAt: expiresAt.toISOString(),
     scopes: request.scopes,
     authorizationDetails: grant.authorizationDetails,
     resourceUrl: resource.resourceUrl,
@@ -1475,7 +1488,7 @@ async function issueNativeAccessToken(
   const realmroot = isRealmrootResourceServer(resource.id)
   const realmrootAuthority = realmroot ? grant.authorizationDetails[0] : undefined
   if (realmroot) assertRealmrootAuthoritySelection(grant.authorizationDetails)
-  const issuedScopes = realmroot ? [...new Set([...agentBootstrapScopes, ...request.scopes])] : request.scopes
+  const issuedScopes = realmroot ? [...new Set([...agentBootstrapScopes, ...request.scopes])].sort() : request.scopes
   const accessToken = await signer.sign(
     {
       iss: signer.issuer,
@@ -1849,11 +1862,16 @@ async function realmrootAuthorityResources(
   resource: NonNullable<Awaited<ReturnType<Deps['authorization']['findResource']>>>,
   apiOrigin: string,
 ) {
-  const requestableScopes = discoverAgentResourceScopes(resource)?.map((scope) => scope.value) ?? []
   const details = await realmrootAuthorityDetails(deps, identity)
   return Promise.all(
     details.map(async (detail) => {
       const display = await realmrootAuthorityDisplay(deps, detail)
+      const requestableScopes = await realmrootAuthorityEffectiveScopes(
+        deps,
+        identity.identity.ownerUserId,
+        resource,
+        detail,
+      )
       return toResourceServerResource(
         resource.id,
         detail,
@@ -1918,6 +1936,34 @@ async function realmrootAuthorityDisplay(
     }
   }
   throw badRequest('Realmroot authority Resource is invalid.')
+}
+
+async function realmrootAuthorityEffectiveScopes(
+  deps: Deps,
+  controllerUserId: string | null,
+  resource: ApiResourceResponse,
+  detail: AuthorizationDetail,
+) {
+  const declared = new Set(discoverAgentResourceScopes(resource)?.map((scope) => scope.value) ?? [])
+  const current = (scopes: Iterable<string>) => [...new Set(scopes)].filter((scope) => declared.has(scope)).sort()
+
+  if (detail.authority === 'organization' && typeof detail.id === 'string') {
+    if (!controllerUserId) return current(realmrootManagementScopes)
+    const membership = (await deps.authorization.listUserMemberships(controllerUserId)).find(
+      (item) => item.organizationId === detail.id,
+    )
+    return membership
+      ? current(await resolveOrganizationMembershipScopes(deps, detail.id, membership.roles, resource.id))
+      : []
+  }
+  if (controllerUserId && detail.authority === 'user' && detail.id === controllerUserId) {
+    const scopes = new Set(['agents:read', 'agents:write', 'audit-events:read'])
+    for (const grant of await deps.authorization.listActiveUserScopeGrants(controllerUserId, resource.id, new Date())) {
+      for (const scope of grant.scopes) scopes.add(scope)
+    }
+    return current(scopes)
+  }
+  return []
 }
 
 async function toResourceServerResource(
@@ -2800,9 +2846,8 @@ function tokenExpiry(token: Record<string, unknown>, now: Date) {
 }
 
 function assertScopeSubset(requested: string[], allowed: string[], boundary: string) {
-  if (requested.some((scope) => !allowed.includes(scope))) {
-    throw badRequest(`Requested scope exceeds the ${boundary} boundary.`)
-  }
+  const missing = requested.filter((scope) => !allowed.includes(scope))
+  if (missing.length > 0) throw badRequest(`Requested scopes exceed the ${boundary} boundary: ${missing.join(', ')}.`)
 }
 
 function includesScopes(allowed: string[], requested: string[]) {
@@ -3003,9 +3048,7 @@ function toAccessRequest(
     },
     links: {
       self,
-      credentials: request.grantId
-        ? `${origin}/api/agents/${encodeURIComponent(request.agentIdentityId)}/access-grants/${encodeURIComponent(request.grantId)}/credentials`
-        : null,
+      credentials: request.grantId ? `${self}/credentials` : null,
     },
     credentialOffer: null,
     expiresAt: request.expiresAt,

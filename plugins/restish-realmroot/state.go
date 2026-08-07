@@ -14,7 +14,7 @@ import (
 
 const (
 	stateDirectoryEnv = "REALMROOT_PLUGIN_STATE_DIR"
-	agentStateVersion = 8
+	agentStateVersion = 9
 	identityDirectory = "identities"
 )
 
@@ -49,22 +49,23 @@ type dpopCredential struct {
 }
 
 type agentState struct {
-	Version               int                       `json:"version"`
-	Origin                string                    `json:"origin"`
-	Issuer                string                    `json:"issuer"`
-	Runtime               string                    `json:"runtime"`
-	Name                  string                    `json:"name"`
-	AgentID               string                    `json:"agent_id"`
-	HostID                string                    `json:"host_id"`
-	AgentKeyID            string                    `json:"agent_key_id"`
-	HostKeyID             string                    `json:"host_key_id"`
-	AgentPrivateKey       string                    `json:"agent_private_key"`
-	HostPrivateKey        string                    `json:"host_private_key"`
-	RegistrationApproval  *pendingApproval          `json:"registration_approval,omitempty"`
-	Identity              *stableIdentity           `json:"identity,omitempty"`
-	DPoPCredentials       map[string]dpopCredential `json:"dpop_credentials,omitempty"`
-	ActiveDPoPCredentials map[string]string         `json:"active_dpop_credentials,omitempty"`
-	PlatformCredential    *dpopCredential           `json:"platform_credential,omitempty"`
+	Version                  int                       `json:"version"`
+	Origin                   string                    `json:"origin"`
+	Issuer                   string                    `json:"issuer"`
+	Runtime                  string                    `json:"runtime"`
+	Name                     string                    `json:"name"`
+	AgentID                  string                    `json:"agent_id"`
+	HostID                   string                    `json:"host_id"`
+	AgentKeyID               string                    `json:"agent_key_id"`
+	HostKeyID                string                    `json:"host_key_id"`
+	AgentPrivateKey          string                    `json:"agent_private_key"`
+	HostPrivateKey           string                    `json:"host_private_key"`
+	RegistrationApproval     *pendingApproval          `json:"registration_approval,omitempty"`
+	Identity                 *stableIdentity           `json:"identity,omitempty"`
+	DPoPCredentials          map[string]dpopCredential `json:"dpop_credentials,omitempty"`
+	ActiveDPoPCredentials    map[string]string         `json:"active_dpop_credentials,omitempty"`
+	ProtocolCredential       *dpopCredential           `json:"protocol_credential,omitempty"`
+	LegacyPlatformCredential *dpopCredential           `json:"platform_credential,omitempty"`
 }
 
 type stateStore interface {
@@ -194,7 +195,10 @@ func (s *fileStateStore) loadPath(path string) (agentState, error) {
 			state.DPoPCredentials = nil
 			state.ActiveDPoPCredentials = nil
 		}
-		state.PlatformCredential = nil
+		if state.Version == 8 {
+			state.ProtocolCredential = state.LegacyPlatformCredential
+		}
+		state.LegacyPlatformCredential = nil
 		state.Version = agentStateVersion
 		if err := s.updatePath(path, state); err != nil {
 			return agentState{}, fmt.Errorf("upgrade Agent state: %w", err)
@@ -584,16 +588,19 @@ func validateAgentStateCredentials(state agentState) error {
 			return errors.New("Agent state contains an incomplete target API token")
 		}
 	}
-	if state.PlatformCredential != nil {
-		credential := state.PlatformCredential
+	if state.LegacyPlatformCredential != nil {
+		return errors.New("Agent state contains a legacy platform credential")
+	}
+	if state.ProtocolCredential != nil {
+		credential := state.ProtocolCredential
 		if credential.ResourceIndicator == "" || credential.CredentialEndpoint == "" || credential.ProofTarget == "" {
-			return errors.New("Agent state contains invalid Realmroot OAuth credential metadata")
+			return errors.New("Agent state contains invalid Agent protocol OAuth credential metadata")
 		}
 		if _, err := decodeDPoPPrivateKey(credential.PrivateKey); err != nil {
-			return fmt.Errorf("Agent state Realmroot OAuth credential is invalid: %w", err)
+			return fmt.Errorf("Agent state protocol OAuth credential is invalid: %w", err)
 		}
 		if (credential.AccessToken == "") != (credential.ExpiresAt == nil) {
-			return errors.New("Agent state contains an incomplete Realmroot OAuth credential")
+			return errors.New("Agent state contains an incomplete Agent protocol OAuth credential")
 		}
 	}
 	for selectionKey, resourceHref := range state.ActiveDPoPCredentials {

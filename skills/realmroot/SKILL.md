@@ -51,6 +51,18 @@ When a matching resource exists, this branch is complete only when the target's
 generated Restish operation succeeds. When exhaustive discovery finds no match,
 report the missing capability with the original task still open.
 
+### Integrate A Resource Server
+
+Read [references/management.md](references/management.md) for management
+authority, then read
+[references/resource-server-integration.md](references/resource-server-integration.md)
+when the user asks to register, configure, or validate a native or external
+Resource Server.
+
+This branch is complete only when metadata and command discovery succeed, the
+controller can connect any required external account, and at least one real
+target operation succeeds with the requested authority.
+
 ### Administer A Realmroot Tenant
 
 Read [references/management.md](references/management.md) only when the user

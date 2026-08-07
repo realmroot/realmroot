@@ -149,11 +149,15 @@ restish api set "$TARGET_API" \
   "profiles.${PROFILE}.credentials.${SECURITY_SCHEME}.auth.type: bearer" \
   "profiles.${PROFILE}.credentials.${SECURITY_SCHEME}.auth.params.token: realmroot-plugin-managed" \
   "profiles.${PROFILE}.credentials.${SECURITY_SCHEME}.auth.params.provider: realmroot-target" \
-  "profiles.${PROFILE}.credentials.${SECURITY_SCHEME}.auth.params.issuer: ${REALMROOT_ISSUER}"
+  "profiles.${PROFILE}.credentials.${SECURITY_SCHEME}.auth.params.issuer: ${REALMROOT_ISSUER}" \
+  "profiles.${PROFILE}.credentials.${SECURITY_SCHEME}.satisfies: [${REQUIRED_SCOPE}]"
 ```
 
 The issuer selects the correct local identity when more than one Realmroot
-deployment can authorize the same target URL.
+deployment can authorize the same target URL. `satisfies` tells Restish which
+generated operations this configured credential can attempt; it grants no
+authority. Populate it only from the selected operations' OpenAPI security
+requirements, and update it when the task's required operation set changes.
 
 ## 5. Request Exact Resource Access
 
@@ -190,7 +194,7 @@ stores it with the Resource href, and returns a safe receipt:
 }
 ```
 
-The plugin owns grant selection and token custody. If the command is
+The plugin owns credential and token custody. If the command is
 interrupted, repeat the same access request; Realmroot resumes pending work or
 reuses matching approved authority. Reuse the resulting cached credential for
 every operation in that task. Request access again when switching Resources,
