@@ -25,9 +25,10 @@ sessions are request contexts, not identities. The same runtime therefore
 reuses one stable Agent across aliases and profiles that resolve to the same
 issuer; another runtime or issuer gets separately secured state.
 
-Recovery preserves `(issuer, subject)`, revokes current registrations and
-bindings, and waits for a controller-approved replacement. Retirement is
-permanent: the subject stays reserved while all bindings remain revoked.
+Recovery preserves `(issuer, subject)`, deactivates the identity, revokes current
+registrations and bindings, and waits for a controller-approved replacement.
+Deletion is permanent at the API boundary: the subject stays reserved in a
+soft-deleted database record while all bindings remain revoked.
 
 ## Federation Boundary
 

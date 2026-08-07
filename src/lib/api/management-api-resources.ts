@@ -36,11 +36,3 @@ export function refreshApiResourceScopeRegistry(id: string): Promise<ApiResource
 export function deleteApiResource(id: string) {
   return readRpcResponse(apiClient.api['resource-servers'][':id'].$delete({ param: { id } }))
 }
-
-export function archiveApiResource(id: string): Promise<ApiResource> {
-  return readRpcResponse(apiClient.api['resource-servers'][':id'].archival.$put({ param: { id } }))
-}
-
-export function restoreApiResource(id: string): Promise<ApiResource> {
-  return readRpcResponse(apiClient.api['resource-servers'][':id'].archival.$delete({ param: { id } }))
-}

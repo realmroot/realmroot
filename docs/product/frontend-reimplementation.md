@@ -61,7 +61,7 @@ reviewed.
 | Profile | canonical sibling route | Real | Avatar, display name, username, email |
 | Sign-in & security | `/security` | Real | Password, MFA, passkeys, sessions, linked identities |
 | Applications | canonical sibling route | Real but grouped elsewhere | Authorized apps and revocation |
-| Agents | canonical sibling route | Partial | Personal Agent inventory, grants, and retirement |
+| Agents | canonical sibling route | Partial | Personal Agent inventory, active/inactive control, grants, and deletion |
 | Organizations | canonical sibling route | Missing | Memberships, invitations, and conditional creation |
 | Organization detail | `/organizations/:organizationId/*` | Implemented | Canonical Organization Workspace with Overview, Members, Roles, Agents, Applications, Resource Servers, Webhooks, Activity, and Settings |
 

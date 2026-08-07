@@ -191,7 +191,7 @@ export const apiResource = sqliteTable(
       .default('private'),
     scopeRegistry: text('scope_registry', { mode: 'json' }).$type<ResourceScopeRegistry | null>(),
     availableToAgents: integer('available_to_agents', { mode: 'boolean' }).default(true).notNull(),
-    archivedAt: integer('archived_at', { mode: 'timestamp_ms' }),
+    deletedAt: integer('deleted_at', { mode: 'timestamp_ms' }),
     createdAt: integer('created_at', { mode: 'timestamp_ms' })
       .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
       .notNull(),
@@ -205,6 +205,7 @@ export const apiResource = sqliteTable(
     index('apiResource_enabled_idx').on(table.enabled),
     index('apiResource_connectorId_idx').on(table.connectorId),
     index('apiResource_ownerOrganizationId_idx').on(table.ownerOrganizationId),
+    index('apiResource_deletedAt_idx').on(table.deletedAt),
   ],
 )
 

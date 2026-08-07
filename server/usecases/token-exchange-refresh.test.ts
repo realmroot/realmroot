@@ -231,7 +231,6 @@ describe('token exchange refresh and assertion boundaries', () => {
     transferred.deps.authorization.findResourceByResourceUrl = async () =>
       ({
         enabled: true,
-        archivedAt: null,
         ownerOrganizationId: 'org_2',
         visibility: 'private',
         scopeRegistry: null,
@@ -572,7 +571,6 @@ async function fixture(options: { grantTypes?: string[]; scopes?: string[] } = {
           ? {
               id: 'res_1',
               enabled: true,
-              archivedAt: null,
               ownerOrganizationId: 'org_1',
               visibility: 'private',
               scopeRegistry: {

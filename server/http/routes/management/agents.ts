@@ -1,5 +1,7 @@
 import {
-  emergencyRetireAgentIdentity,
+  emergencyActivateAgentIdentity,
+  emergencyDeactivateAgentIdentity,
+  emergencyDeleteAgentIdentity,
   getAgent,
   getManagementAgent,
   getManagementAgentAccessGrant,
@@ -8,7 +10,6 @@ import {
   listManagementAgentAccessGrants,
   listManagementAgentAccessRequests,
   listManagementAgentInstallations,
-  recoverAgentIdentity,
 } from '@server/usecases/agent-identities'
 import {
   decideAccessRequest,
@@ -168,23 +169,30 @@ managementAgentsRoute.delete('/agents/:agentId/access-grants/:grantId', async (c
   return c.body(null, 204)
 })
 
-managementAgentsRoute.get('/agents/:agentId/retirement', async (c) => {
+managementAgentsRoute.get('/agents/:agentId/activation', async (c) => {
   const result = await getManagementAgent(getDeps(c), c.req.param('agentId'))
   await requireAgentAccess(c, result.agent)
-  return c.json({ agentId: result.agent.id, status: result.agent.status, retiredAt: result.agent.retiredAt })
+  return c.json({ agentId: result.agent.id, active: result.agent.status === 'active' })
 })
 
-managementAgentsRoute.put('/agents/:agentId/retirement', async (c) => {
+managementAgentsRoute.put('/agents/:agentId/activation', async (c) => {
   const agent = await getAgent(getDeps(c), c.req.param('agentId'))
   await requireAgentAccess(c, agent, true)
-  await emergencyRetireAgentIdentity(getDeps(c), c.req.param('agentId'), getActorUserId(c))
+  await emergencyActivateAgentIdentity(getDeps(c), c.req.param('agentId'), getActorUserId(c))
   return c.body(null, 204)
 })
 
-managementAgentsRoute.delete('/agents/:agentId/retirement', async (c) => {
+managementAgentsRoute.delete('/agents/:agentId/activation', async (c) => {
   const agent = await getAgent(getDeps(c), c.req.param('agentId'))
   await requireAgentAccess(c, agent, true)
-  await recoverAgentIdentity(getDeps(c), c.req.param('agentId'), getActorUserId(c)!)
+  await emergencyDeactivateAgentIdentity(getDeps(c), c.req.param('agentId'), getActorUserId(c))
+  return c.body(null, 204)
+})
+
+managementAgentsRoute.delete('/agents/:agentId', async (c) => {
+  const agent = await getAgent(getDeps(c), c.req.param('agentId'))
+  await requireAgentAccess(c, agent, true)
+  await emergencyDeleteAgentIdentity(getDeps(c), c.req.param('agentId'), getActorUserId(c))
   return c.body(null, 204)
 })
 

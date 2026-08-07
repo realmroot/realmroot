@@ -222,7 +222,6 @@ describe('console route navigation', () => {
               homeSpace: { type: 'organization', organizationId: 'org-1' },
               owner: { id: 'org-1', type: 'organization', displayName: 'Acme' },
               status: 'active',
-              retiredAt: null,
               installationCount: 1,
               pendingRequestCount: 0,
               activeGrantCount: 1,

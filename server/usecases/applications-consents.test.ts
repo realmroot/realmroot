@@ -278,6 +278,89 @@ describe('service.test 3', () => {
     ).resolves.toBeDefined()
     await expect(loadConsentRequest(deps, issuer, request, { id: 'user-member' })).resolves.toBeDefined()
   })
+  it('binds consent to an active Resource Server visible to the current user', async () => {
+    const repository = new InMemoryApplicationRepository()
+    const resource = {
+      id: 'resource-1',
+      resourceUrl: 'https://api.example.com',
+      enabled: true,
+      visibility: 'private',
+      ownerOrganizationId: 'org-1',
+      scopeRegistry: { scopes: [{ value: 'items:read', description: null, grantMode: 'assigned' }] },
+    }
+    const authorization = {
+      findOrganization: async () => ({ disabled: false }),
+      findResource: async () => resource,
+      findResourceByResourceUrl: async () => resource,
+      findMemberByOrganizationUser: async (_organizationId: string, userId: string) =>
+        userId === 'member-1' ? { id: 'membership-1' } : null,
+    }
+    const deps = { applications: repository, authorization } as unknown as Deps
+    const created = await createApplication(
+      deps,
+      'https://auth.example.com',
+      {
+        name: 'Resource Consent App',
+        clientType: 'public_spa',
+        redirectUris: ['https://spa.example.com/callback'],
+        ownerOrganizationId: 'org-1',
+        resourceScopes: [{ resourceServerId: resource.id, scopes: ['items:read'] }],
+      },
+      'admin-1',
+    )
+
+    await expect(
+      loadConsentRequest(
+        deps,
+        'https://auth.example.com',
+        {
+          clientId: created.clientId,
+          redirectUri: 'https://spa.example.com/callback',
+          scope: 'items:read',
+          state: 'state-1',
+          authorizationParams: { resource: resource.resourceUrl },
+        },
+        { id: 'member-1', username: 'member', image: 'https://example.com/avatar.png' },
+      ),
+    ).resolves.toMatchObject({ resourceServerId: resource.id, requestedScopes: ['items:read'], state: 'state-1' })
+    await expect(
+      createConsent(
+        deps,
+        {
+          clientId: created.clientId,
+          resourceServerId: resource.id,
+          scopes: ['items:read'],
+        },
+        'member-1',
+      ),
+    ).resolves.toMatchObject({ scopes: ['items:read'] })
+    await expect(
+      createConsent(
+        deps,
+        {
+          clientId: created.clientId,
+          resourceServerId: resource.id,
+          scopes: ['items:read'],
+        },
+        'outsider',
+      ),
+    ).rejects.toMatchObject({ status: 400, message: expect.stringContaining('not visible') })
+    await expect(
+      loadConsentRequest(
+        {
+          ...deps,
+          authorization: { ...authorization, findResourceByResourceUrl: async () => null },
+        } as unknown as Deps,
+        'https://auth.example.com',
+        {
+          clientId: created.clientId,
+          redirectUri: 'https://spa.example.com/callback',
+          authorizationParams: { resource: resource.resourceUrl },
+        },
+        { id: 'member-1' },
+      ),
+    ).rejects.toMatchObject({ status: 400, message: expect.stringContaining('not active') })
+  })
 })
 
 class InMemoryApplicationRepository implements ApplicationRepository {

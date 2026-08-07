@@ -4,7 +4,7 @@ import { openApiSemanticSnapshot } from '../../../scripts/openapi-semantic-snaps
 import { unifiedOpenApi } from './management'
 
 describe('OpenAPI semantic contract gate', () => {
-  it('matches origin/main except for approved explicit owner selectors', () => {
+  it('matches origin/main except for approved contract changes', () => {
     const unchanged = JSON.parse(
       readFileSync(new URL('./origin-main-semantic-baseline.json', import.meta.url), 'utf8'),
     ) as { method: string; path: string; operationId: string; semanticHash: string }[]
@@ -20,8 +20,16 @@ describe('OpenAPI semantic contract gate', () => {
     const approvedChanges = new Set(
       [...ownerSelectorContract, ...documentationContract].map(({ method, path }) => `${method}:${path}`),
     )
+    const approvedRemovals = new Set(
+      ['DELETE', 'GET', 'PUT'].flatMap((method) => [
+        `${method}:/agents/{agentId}/retirement`,
+        `${method}:/resource-servers/{resourceServerId}/archival`,
+      ]),
+    )
     const baseline = [
-      ...unchanged.filter(({ method, path }) => !approvedChanges.has(`${method}:${path}`)),
+      ...unchanged.filter(
+        ({ method, path }) => !approvedChanges.has(`${method}:${path}`) && !approvedRemovals.has(`${method}:${path}`),
+      ),
       ...authorizationContract,
       ...ownerSelectorContract,
       ...documentationContract,

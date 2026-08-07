@@ -91,7 +91,6 @@ describe('Account Organization detail', () => {
               name: 'Family assistant',
               homeSpace: { type: 'organization', organizationId: 'org-family' },
               status: 'active',
-              retiredAt: null,
               createdAt: '2026-08-01T00:00:00.000Z',
               updatedAt: '2026-08-01T00:00:00.000Z',
             },

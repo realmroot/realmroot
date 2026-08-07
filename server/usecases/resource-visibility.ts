@@ -5,9 +5,9 @@ export function resourceVisibleToOrganization(resource: ApiResourceResponse, org
 }
 
 export function activeResourceVisibleToOrganization(resource: ApiResourceResponse, organizationId: string) {
-  return Boolean(resource.enabled && !resource.archivedAt && resourceVisibleToOrganization(resource, organizationId))
+  return Boolean(resource.enabled && resourceVisibleToOrganization(resource, organizationId))
 }
 
 export function activePublicResource(resource: ApiResourceResponse) {
-  return Boolean(resource.enabled && !resource.archivedAt && resource.visibility === 'public')
+  return Boolean(resource.enabled && resource.visibility === 'public')
 }

@@ -70,7 +70,6 @@ export function toResource(row: typeof apiResource.$inferSelect) {
     visibility: row.visibility,
     scopeRegistry: row.scopeRegistry,
     availableToAgents: row.availableToAgents,
-    archivedAt: row.archivedAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   }

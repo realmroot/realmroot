@@ -13,8 +13,10 @@ export const agentIdentity = sqliteTable(
     name: text('name').notNull(),
     ownerUserId: text('owner_user_id').references(() => user.id, { onDelete: 'restrict' }),
     ownerOrganizationId: text('owner_organization_id').references(() => organization.id, { onDelete: 'restrict' }),
-    status: text('status').notNull().default('active'),
-    retiredAt: integer('retired_at', { mode: 'timestamp_ms' }),
+    status: text('status', { enum: ['active', 'inactive'] })
+      .notNull()
+      .default('active'),
+    deletedAt: integer('deleted_at', { mode: 'timestamp_ms' }),
     createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
     updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
   },
@@ -23,6 +25,7 @@ export const agentIdentity = sqliteTable(
     index('agentIdentity_ownerUserId_idx').on(table.ownerUserId),
     index('agentIdentity_ownerOrganizationId_idx').on(table.ownerOrganizationId),
     index('agentIdentity_status_idx').on(table.status),
+    index('agentIdentity_deletedAt_idx').on(table.deletedAt),
     check(
       'agentIdentity_exactly_one_owner_check',
       sql`((${table.ownerUserId} is not null) + (${table.ownerOrganizationId} is not null)) = 1`,

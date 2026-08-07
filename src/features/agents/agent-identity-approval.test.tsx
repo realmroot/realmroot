@@ -34,7 +34,6 @@ describe('Agent stable identity approval', () => {
         name: 'Build Agent',
         homeSpace: { type: 'personal', userId: 'user-1' },
         status: 'active',
-        retiredAt: null,
         createdAt: '2026-08-01T00:00:00.000Z',
         updatedAt: '2026-08-01T00:00:00.000Z',
       },

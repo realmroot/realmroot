@@ -1,12 +1,4 @@
-import {
-  ApiError,
-  badRequest,
-  conflict,
-  forbidden,
-  notFound,
-  preconditionFailed,
-  resourceInUse,
-} from '@server/domain/errors'
+import { ApiError, badRequest, conflict, forbidden, notFound, preconditionFailed } from '@server/domain/errors'
 import {
   isRealmrootResourceServer,
   realmrootResourceServer,
@@ -333,8 +325,7 @@ export async function getResourceContract(deps: Deps, id: string) {
 
 export async function refreshResourceScopeRegistry(deps: Deps, id: string) {
   const resource = await getResource(deps, id)
-  if (!resource.enabled || resource.archivedAt)
-    throw badRequest('Resource Server must be active before synchronizing scopes.')
+  if (!resource.enabled) throw badRequest('Resource Server must be active before synchronizing scopes.')
   if (isRealmrootResourceServer(id)) throw badRequest('The Realmroot Resource Server is system-managed.')
   try {
     const metadata = await readProtectedResourceMetadata(deps, resource.resourceUrl)
@@ -370,7 +361,7 @@ export async function refreshResourceScopeRegistry(deps: Deps, id: string) {
 
 export async function synchronizeEnabledResourceScopeRegistries(deps: Deps) {
   const resources = (await deps.authorization.listEnabledResources()).filter(
-    (resource) => !resource.archivedAt && !isRealmrootResourceServer(resource.id),
+    (resource) => !isRealmrootResourceServer(resource.id),
   )
   for (const resource of resources) {
     try {
@@ -390,7 +381,6 @@ function synchronizationError(error: unknown) {
 export async function updateResource(deps: Deps, id: string, input: UpdateApiResourceRequest) {
   const resource = await getResource(deps, id)
   if (isRealmrootResourceServer(id)) throw badRequest('The Realmroot Resource Server is system-managed.')
-  if (resource.archivedAt) throw badRequest('Archived API resources must be restored before updating.')
   if (input.resourceUrl !== undefined) validateResourceUrl(input.resourceUrl)
   if (input.ownerOrganizationId) await requireActiveOrganization(deps, input.ownerOrganizationId)
   if (input.connectorId !== undefined && (input.connectorId === null) !== (resource.connectorId === null)) {
@@ -422,10 +412,10 @@ export async function updateResource(deps: Deps, id: string, input: UpdateApiRes
     ? updateScopeGrantModes(synchronizedRegistry ?? resource.scopeRegistry, input.scopeGrantModes)
     : synchronizedRegistry
   if (!(await deps.authorization.updateResource(id, input))) {
-    throw badRequest('Archived API resources must be restored before updating.')
+    throw notFound('API resource was not found.')
   }
   if (scopeRegistry && !(await deps.authorization.replaceResourceScopeRegistry(id, scopeRegistry))) {
-    throw badRequest('Archived API resources must be restored before updating.')
+    throw notFound('API resource was not found.')
   }
   return getResource(deps, id)
 }
@@ -436,36 +426,7 @@ async function requireActiveOrganization(deps: Deps, organizationId: string) {
   return organization
 }
 
-export async function archiveResource(deps: Deps, id: string, actor: ResourceMutationActor) {
-  const resource = await getResource(deps, id)
-  if (isRealmrootResourceServer(id)) throw badRequest('The Realmroot Resource Server is system-managed.')
-  if (!resource.archivedAt) {
-    const now = new Date()
-    await deps.authorization.archiveResource(
-      id,
-      now,
-      resourceMutationAudit('api_resource.archived', id, resource.ownerOrganizationId, now, actor),
-    )
-  }
-  return getResource(deps, id)
-}
-
-export async function restoreResource(deps: Deps, id: string, actor: ResourceMutationActor) {
-  const resource = await getResource(deps, id)
-  if (isRealmrootResourceServer(id)) throw badRequest('The Realmroot Resource Server is system-managed.')
-  if (resource.archivedAt) {
-    const now = new Date()
-    await deps.authorization.restoreResource(
-      id,
-      now,
-      resourceMutationAudit('api_resource.restored', id, resource.ownerOrganizationId, now, actor),
-    )
-  }
-  return getResource(deps, id)
-}
-
 function resourceMutationAudit(
-  action: 'api_resource.archived' | 'api_resource.restored',
   resourceId: string,
   ownerOrganizationId: string,
   occurredAt: Date,
@@ -473,7 +434,7 @@ function resourceMutationAudit(
 ) {
   return {
     id: createId('agaudit'),
-    action,
+    action: 'api_resource.deleted',
     result: 'allowed',
     realmOwned: false,
     ownerUserId: null,
@@ -488,17 +449,23 @@ function resourceMutationAudit(
     accessGrantId: null,
     scopes: null,
     reasonCode: null,
-    metadata: action === 'api_resource.archived' ? { authorizationRecordsRevoked: true } : null,
+    metadata: { authorizationRecordsRevoked: true },
     occurredAt,
   }
 }
 
-export async function deleteResource(deps: Deps, id: string) {
-  await getResource(deps, id)
+export async function deleteResource(deps: Deps, id: string, actor: ResourceMutationActor) {
+  const resource = await getResource(deps, id)
   if (isRealmrootResourceServer(id)) throw badRequest('The Realmroot Resource Server is system-managed.')
-  const references = await deps.authorization.deleteResource(id)
-  if (references) {
-    throw resourceInUse('API resource has authorization history and cannot be permanently deleted.', { ...references })
+  const now = new Date()
+  if (
+    !(await deps.authorization.deleteResource(
+      id,
+      now,
+      resourceMutationAudit(id, resource.ownerOrganizationId, now, actor),
+    ))
+  ) {
+    throw notFound('API resource was not found.')
   }
 }
 
@@ -510,7 +477,7 @@ export async function createUserScopeGrant(
 ) {
   await deps.users.getUser(userId)
   const resource = await getResource(deps, input.resourceServerId)
-  if (!resource.enabled || resource.archivedAt) throw badRequest('Resource Server must be active.')
+  if (!resource.enabled) throw badRequest('Resource Server must be active.')
   validateAssignedScopes(resource, input.scopes)
   if (resource.visibility === 'private') {
     const membership = await deps.authorization.findMemberByOrganizationUser(resource.ownerOrganizationId, userId)

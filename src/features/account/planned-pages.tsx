@@ -24,15 +24,17 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import {
   acceptAccountOrganizationInvitation,
+  activateAgent,
   cancelAccountOrganizationInvitation,
   createAccountOrganization,
+  deactivateAgent,
   decideAccountAgentResourceRequest,
   deleteAccountOrganization,
+  deleteAgent,
   inviteAccountOrganizationMember,
   leaveAccountOrganization,
   rejectAccountOrganizationInvitation,
   removeAccountOrganizationMember,
-  retireAgent,
   revokeAccountConnection,
   revokeApplicationConsent,
   setActiveAccountOrganization,
@@ -530,16 +532,16 @@ export function AccountAgentsPage() {
           <AgentDialog
             agent={selected}
             onClose={() => setSelected(null)}
-            onRetire={async (agent) => {
+            onDelete={async (agent) => {
               setConfirmation({
-                title: tt('Retire {{agent}}?', { agent: agent.name }),
+                title: tt('Delete {{agent}}?', { agent: agent.name }),
                 description: tt(
-                  'Hosts and active resource access stop immediately. The stable subject remains reserved for audit history.',
+                  'The Agent disappears from every interface. Hosts and active resource access stop immediately, and it cannot be restored.',
                 ),
-                actionLabel: tt('Retire Agent'),
+                actionLabel: tt('Delete Agent'),
                 onConfirm: async () => {
                   let failed = false
-                  await mutate('Agent retired.', () => retireAgent(agent.id), {
+                  await mutate('Agent deleted.', () => deleteAgent(agent.id), {
                     invalidate: [accountQueryKeys.agents],
                     onError: () => {
                       failed = true
@@ -548,6 +550,13 @@ export function AccountAgentsPage() {
                   if (!failed) setSelected(null)
                 },
               })
+            }}
+            onStatusChange={async (agent) => {
+              await mutate(
+                agent.status === 'active' ? 'Agent deactivated.' : 'Agent activated.',
+                () => (agent.status === 'active' ? deactivateAgent(agent.id) : activateAgent(agent.id)),
+                { invalidate: [accountQueryKeys.agents] },
+              )
             }}
           />
           <DestructiveConfirmationDialog confirmation={confirmation} onClose={() => setConfirmation(null)} />
@@ -578,11 +587,13 @@ export function AccountAgentsPage() {
 function AgentDialog({
   agent,
   onClose,
-  onRetire,
+  onDelete,
+  onStatusChange,
 }: {
   agent: Agent | null
   onClose: () => void
-  onRetire: (agent: Agent) => void
+  onDelete: (agent: Agent) => void
+  onStatusChange: (agent: Agent) => void
 }) {
   return (
     <Dialog onOpenChange={(open) => !open && onClose()} open={agent !== null}>
@@ -605,9 +616,14 @@ function AgentDialog({
             {tt('Close')}
           </Button>
           {agent ? (
-            <Button disabled={agent.status === 'retired'} onClick={() => onRetire(agent)} variant="destructive">
-              {tt('Retire Agent')}
-            </Button>
+            <>
+              <Button onClick={() => onStatusChange(agent)} variant="outline">
+                {tt(agent.status === 'active' ? 'Deactivate Agent' : 'Activate Agent')}
+              </Button>
+              <Button onClick={() => onDelete(agent)} variant="destructive">
+                {tt('Delete Agent')}
+              </Button>
+            </>
           ) : null}
         </DialogFooter>
       </DialogContent>

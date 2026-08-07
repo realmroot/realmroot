@@ -59,13 +59,10 @@ import { describe, expect, it, vi } from 'vitest'
 const now = new Date('2026-07-29T12:00:00.000Z')
 
 describe('external API resource authorization', () => {
-  it('rejects an archived external resource connection intent', async () => {
+  it('rejects a deleted external resource connection intent', async () => {
     const deps = createTestDeps()
     authorizationDeps(deps)
-    vi.mocked(deps.authorization.findResource).mockResolvedValue({
-      ...resource(),
-      archivedAt: now.toISOString(),
-    })
+    vi.mocked(deps.authorization.findResource).mockResolvedValue(null)
 
     await expect(
       createResourceConnectionIntent(
@@ -75,7 +72,7 @@ describe('external API resource authorization', () => {
         'user-1',
         'https://auth.example.com',
       ),
-    ).rejects.toThrow('Enabled external API resource was not found.')
+    ).rejects.toThrow('External API resource was not found.')
   })
 
   it('validates a reusable OIDC connector when creating an external resource [spec: agent-identity/external-api-resource-registration]', async () => {
@@ -255,10 +252,10 @@ describe('external API resource authorization', () => {
     await expect(
       completeResourceConnectionIntent(
         deps,
-        { state: 'archived-state', code: 'archived-code' },
+        { state: 'deleted-state', code: 'deleted-code' },
         'https://auth.example.com/',
       ),
-    ).rejects.toThrow('archived while completing the connection')
+    ).rejects.toThrow('deleted while completing the connection')
   })
 
   it('preserves a same-subject connection identity while switching only it to a new client generation', async () => {
@@ -922,7 +919,7 @@ describe('external API resource authorization', () => {
 
     vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue({
       ...identityAggregate(),
-      identity: { ...identityAggregate().identity, status: 'revoked' },
+      identity: { ...identityAggregate().identity, status: 'inactive' },
     })
     await expect(approve()).rejects.toThrow('Pending connection request was not found.')
 
@@ -1106,7 +1103,7 @@ describe('external API resource authorization', () => {
     vi.mocked(deps.externalResources.createGrant).mockResolvedValueOnce(null)
     await expect(
       decideAgentAccessRequestByToken(deps, 'approval-token', { decision: 'approve', mode: 'once' }, 'user-1'),
-    ).rejects.toThrow('archived before access could be approved')
+    ).rejects.toThrow('deleted before access could be approved')
   })
 
   it('[spec: agent-identity/external-resource-contextual-delegation] requests and approves exact granted detail sets', async () => {
@@ -2807,7 +2804,11 @@ describe('external API resource authorization', () => {
 
     vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue({
       ...identityAggregate(),
-      identity: { ...identityAggregate().identity, ownerUserId: 'user-1', ownerOrganizationId: null },
+      identity: {
+        ...identityAggregate().identity,
+        ownerUserId: 'user-1',
+        ownerOrganizationId: null,
+      },
     })
     vi.mocked(deps.authorization.listUserMemberships).mockResolvedValue([
       { organizationId: 'org-1' } as never,
@@ -3686,14 +3687,14 @@ describe('external API resource authorization', () => {
     await expect(discoverAgentResources(discoveryDeps, principal())).rejects.toThrow('credential storage failed')
   })
 
-  it('discovers enabled resources independently of archived management pagination', async () => {
+  it('discovers enabled resources independently of deleted database history', async () => {
     const deps = createTestDeps()
     const active = nativeResource()
     const managementPage = vi.fn().mockResolvedValue({
       items: Array.from({ length: 100 }, (_, index) => ({
         ...nativeResource(),
-        id: `archived-${index}`,
-        archivedAt: now.toISOString(),
+        id: `deleted-${index}`,
+        deletedAt: now,
         enabled: false,
       })),
       pagination: { limit: 100, offset: 0, total: 101, hasMore: true, nextOffset: 100 },
@@ -4821,7 +4822,6 @@ function resource(): ApiResourceResponse {
       })),
     },
     availableToAgents: true,
-    archivedAt: null,
     createdAt: now.toISOString(),
     updatedAt: now.toISOString(),
   }
@@ -5018,7 +5018,7 @@ function identityAggregate(): AgentIdentityAggregate {
       ownerUserId: null,
       ownerOrganizationId: 'org-1',
       status: 'active',
-      retiredAt: null,
+      deletedAt: null,
       createdAt: now,
       updatedAt: now,
     },

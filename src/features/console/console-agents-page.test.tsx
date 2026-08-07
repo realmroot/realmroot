@@ -46,23 +46,23 @@ describe('console Agents page', () => {
 
     expect(await screen.findByRole('heading', { name: 'Agents' })).toBeTruthy()
     expect(await screen.findByText('Stable Build Agent')).toBeTruthy()
-    expect(screen.getByText('Retired Personal Agent')).toBeTruthy()
+    expect(screen.getByText('Inactive Personal Agent')).toBeTruthy()
     expect(screen.getByText('Acme Engineering')).toBeTruthy()
     expect(screen.getByText('Ada Lovelace')).toBeTruthy()
     expect(screen.getByText('org-1')).toBeTruthy()
     expect(screen.getByText('user-2')).toBeTruthy()
     expect(screen.queryByRole('button', { name: /create|new/i })).toBeNull()
-    fireEvent.change(screen.getByRole('textbox', { name: 'Search Agents' }), { target: { value: 'retired' } })
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search Agents' }), { target: { value: 'inactive' } })
     expect(screen.queryByText('Stable Build Agent')).toBeNull()
-    expect(screen.getByText('Retired Personal Agent')).toBeTruthy()
+    expect(screen.getByText('Inactive Personal Agent')).toBeTruthy()
     fireEvent.change(screen.getByRole('textbox', { name: 'Search Agents' }), { target: { value: '' } })
     fireEvent.change(screen.getByLabelText('Filter owner type'), { target: { value: 'organization' } })
     expect(screen.getByText('Stable Build Agent')).toBeTruthy()
-    expect(screen.queryByText('Retired Personal Agent')).toBeNull()
+    expect(screen.queryByText('Inactive Personal Agent')).toBeNull()
     fireEvent.change(screen.getByLabelText('Filter owner type'), { target: { value: 'any' } })
-    fireEvent.change(screen.getByLabelText('Filter Agent status'), { target: { value: 'retired' } })
+    fireEvent.change(screen.getByLabelText('Filter Agent status'), { target: { value: 'inactive' } })
     expect(screen.queryByText('Stable Build Agent')).toBeNull()
-    expect(screen.getByText('Retired Personal Agent')).toBeTruthy()
+    expect(screen.getByText('Inactive Personal Agent')).toBeTruthy()
     expect(requests).toEqual([{ url: '/api/agents', method: 'GET' }])
     expect(requests.some(({ url }) => url.includes('host') || url.includes('binding'))).toBe(false)
   })
@@ -116,7 +116,6 @@ const agentInventory = {
       homeSpace: { type: 'organization', organizationId: 'org-1' },
       owner: { id: 'org-1', type: 'organization', displayName: 'Acme Engineering' },
       status: 'active',
-      retiredAt: null,
       installationCount: 1,
       pendingRequestCount: 1,
       activeGrantCount: 3,
@@ -126,12 +125,11 @@ const agentInventory = {
     {
       id: 'agent-2',
       issuer: 'https://auth.example.com',
-      subject: 'agt_retired',
-      name: 'Retired Personal Agent',
+      subject: 'agt_inactive',
+      name: 'Inactive Personal Agent',
       homeSpace: { type: 'personal', userId: 'user-2' },
       owner: { id: 'user-2', type: 'user', displayName: 'Ada Lovelace' },
-      status: 'retired',
-      retiredAt: timestamp,
+      status: 'inactive',
       installationCount: 0,
       pendingRequestCount: 0,
       activeGrantCount: 0,

@@ -3,6 +3,7 @@ import { depsMiddleware } from '@server/http/middleware/deps'
 import { createAgentProtocolRoutes } from '@server/http/routes/agent-protocol'
 import * as agentIdentities from '@server/usecases/agent-identities'
 import * as externalResources from '@server/usecases/external-resources'
+import type { AgentIdentityAggregate } from '@server/usecases/ports'
 import { Hono } from 'hono'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createTestDeps } from '../test-deps'
@@ -211,7 +212,7 @@ function createRouteApp(overrides: { signJWT?: () => Promise<{ token: string }> 
     ...overrides,
   }
   const deps = createTestDeps()
-  const aggregate = {
+  const aggregate: AgentIdentityAggregate = {
     identity: {
       id: 'identity-1',
       issuer: 'https://auth.example.com/api/auth',
@@ -220,7 +221,7 @@ function createRouteApp(overrides: { signJWT?: () => Promise<{ token: string }> 
       ownerUserId: 'user-1',
       ownerOrganizationId: null,
       status: 'active',
-      retiredAt: null,
+      deletedAt: null,
       createdAt: now,
       updatedAt: now,
     },
@@ -286,7 +287,7 @@ function activeIdentity() {
     name: 'Build Agent',
     homeSpace: { type: 'personal' as const, userId: 'user-1' },
     status: 'active' as const,
-    retiredAt: null,
+    deletedAt: null,
     createdAt: now,
     updatedAt: now,
     bindings: [

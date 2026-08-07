@@ -9,7 +9,7 @@
     "method": "GET",
     "path": "/agent/status",
     "operationId": "getAgentStatus",
-    "semanticHash": "bd400bfe2408cd53834d62e1a5236dfae46848f19bde1d0e3288a2be6b7fc52f"
+    "semanticHash": "fa6e9f83216ccee06eace773a427d0ee55c1d5179526bbcb11a30ee7c25f38e8"
   },
   {
     "method": "POST",

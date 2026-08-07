@@ -220,15 +220,15 @@ Feature: Admin Console
     And external authorization connection details are included in Overview
     And Organization Roles and direct Access grants remain managed from their owning resources
 
-  @entrypoint:product-ui @journey:admin-archive-api-resource
-  Scenario: API resource settings archive and restore a resource
+  @entrypoint:product-ui @journey:admin-delete-api-resource
+  Scenario: API resource settings soft-delete a resource
     Given an API resource exists
-    When I archive the API resource from its settings
+    When I delete the API resource from its settings
     Then the Console asks me to confirm that existing authorization will be revoked
-    When I confirm the archive
-    Then the Console marks it archived and offers restoration
-    When I restore the API resource
-    Then the Console marks it disabled and does not enable it automatically
+    When I confirm the deletion
+    Then the Console removes it from resource lists and details
+    And the deleted resource remains only in the database for incident investigation
+    And the Console offers no restoration
 
   @entrypoint:product-ui @journey:admin-authorization-inventory
   Scenario: Authorization inventory lists organizations, Organization Roles, and Resource servers
@@ -362,6 +362,6 @@ Feature: Admin Console
     When Console reads the tenant Agent inventory
     Then Realmroot presents stable Agents, access requests, access grants, account connections, and audit events
     And it does not expose hosts, registrations, bindings, or protocol approval records as management resources
-    When an admin retires an Agent or revokes an access grant
+    When an admin deletes an Agent or revokes an access grant
     Then the Agent or grant is no longer active
     And no autonomous agent mode or broad admin mutation capability is enabled

@@ -84,19 +84,21 @@ Feature: Agent identity and delegated API authorization
       And the other host and the Agent identity remain active
 
     @entrypoint:product-ui @journey:agent-identity-recovery
-    Scenario: A controller recovers an Agent without changing its subject
+    Scenario: A controller replaces compromised Agent credentials without changing its subject
       Given an Agent's host credentials may be compromised
       When an authorized controller recovers the Agent
       Then every existing host credential and session is revoked
       And external API resource grants are frozen
+      And the Agent becomes inactive without entering a recovering state
       And the Agent keeps the same issuer and subject
 
-    @entrypoint:product-ui @journey:agent-identity-retirement
-    Scenario: A retired Agent subject is never reassigned
+    @entrypoint:product-ui @journey:agent-identity-deletion
+    Scenario: A soft-deleted Agent subject is never reassigned
       Given an Agent has a stable issuer and subject
-      When an authorized controller permanently retires the Agent
-      Then the Agent can no longer authenticate or receive grants
+      When an authorized controller deletes the Agent
+      Then the Agent can no longer authenticate, receive grants, or be queried through an interface
       And its subject remains reserved for historical audit records
+      And no interface can restore it
 
     @entrypoint:agent-protocol @journey:agent-stable-issuer
     Scenario: Agent identity uses the deployment's existing OIDC issuer
@@ -109,7 +111,7 @@ Feature: Agent identity and delegated API authorization
 
     @entrypoint:agent-protocol @journey:agent-info-resolution
     Scenario: Resource servers resolve stable Agent display information
-      Given an active or retired Agent has a stable issuer and subject
+      Given a non-deleted Agent has a stable issuer and subject
       When a resource server discovers the issuer metadata
       Then Realmroot advertises the public AgentInfo endpoint and supported display claims
       When the resource server requests AgentInfo for the stable subject
@@ -128,7 +130,7 @@ Feature: Agent identity and delegated API authorization
       Then exactly one enabled native Resource Server represents that deployment's Realmroot API
       And its service URL and OAuth resource indicator use the deployment's canonical API URL
       And its account connection status is not-required
-      And it cannot be disabled, archived, deleted, or reassigned through tenant management
+      And it cannot be disabled, soft-deleted, or reassigned through tenant management
       When the Agent lists that Resource Server's Resources
       Then Realm, Organization, and personal Account Resources reflect the controller boundaries available for approval
       And a token for one Resource cannot authorize another Resource

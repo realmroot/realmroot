@@ -12,7 +12,7 @@ vi.mock('@/lib/api', () => ({
 }))
 vi.mock('@/lib/auth-client', () => ({ nativeAuth: vi.fn() }))
 
-import { approveAgentEnrollment, getAgentEnrollment, retireAgent } from '@/lib/api/account'
+import { approveAgentEnrollment, deleteAgent, getAgentEnrollment } from '@/lib/api/account'
 
 afterEach(() => {
   vi.restoreAllMocks()
@@ -50,13 +50,13 @@ describe('Agent identity account API', () => {
     ])
   })
 
-  it('retires successfully and delegates error parsing for a failed response', async () => {
+  it('deletes successfully and delegates error parsing for a failed response', async () => {
     vi.spyOn(window, 'fetch')
       .mockResolvedValueOnce(new Response(null, { status: 204 }))
-      .mockResolvedValueOnce(Response.json({ error: 'already retired' }, { status: 400 }))
+      .mockResolvedValueOnce(Response.json({ error: 'already deleted' }, { status: 400 }))
 
-    await expect(retireAgent('agent/1')).resolves.toBeUndefined()
-    await expect(retireAgent('agent/1')).resolves.toEqual({ error: 'already retired' })
+    await expect(deleteAgent('agent/1')).resolves.toBeUndefined()
+    await expect(deleteAgent('agent/1')).resolves.toEqual({ error: 'already deleted' })
     expect(window.fetch).toHaveBeenCalledWith('/api/account/agents/agent%2F1', {
       method: 'DELETE',
       credentials: 'same-origin',

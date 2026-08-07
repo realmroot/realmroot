@@ -125,9 +125,6 @@ describe('management resource routes', () => {
     await expectJson(app, '/resource-servers/resource-1', 'GET', undefined, 200)
     await expectJson(app, '/resource-servers/resource-1/contract', 'GET', undefined, 200)
     await expectJson(app, '/resource-servers/resource-1', 'PATCH', { enabled: false }, 200)
-    await expectJson(app, '/resource-servers/resource-1/archival', 'GET', undefined, 200)
-    await expectJson(app, '/resource-servers/resource-1/archival', 'PUT', undefined, 200)
-    await expectJson(app, '/resource-servers/resource-1/archival', 'DELETE', undefined, 200)
     await expectStatus(app, '/resource-servers/resource-1', 'DELETE', undefined, 204)
     await expectJson(app, '/organizations/org-1/roles', 'GET', undefined, 200)
     const createdAssignment = await expectJson(
@@ -238,7 +235,6 @@ async function loadAuthorizationRoutes() {
     visibility: 'public' as const,
     scopeRegistry: null,
     availableToAgents: true,
-    archivedAt: null,
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
     authorization: null,
@@ -270,8 +266,6 @@ async function loadAuthorizationRoutes() {
     const delegate = authorizationService[name as keyof typeof authorizationService] as (...a: unknown[]) => unknown
     vi.spyOn(usecaseModule, name).mockImplementation((_d: unknown, ...args: unknown[]) => delegate(...args))
   }
-  vi.mocked(authorizationUsecase.archiveResource).mockResolvedValue(apiResource)
-  vi.mocked(authorizationUsecase.restoreResource).mockResolvedValue(apiResource)
 
   const { createManagementApiResourcesRoute } = await import('@server/http/routes/management/api-resources')
   const { managementOrganizationsRoute } = await import('@server/http/routes/management/organizations')
@@ -442,8 +436,6 @@ function authorizationServiceMock() {
     createResource: vi.fn().mockResolvedValue({ id: 'resource-1' }),
     getResource: vi.fn().mockResolvedValue({ id: 'resource-1' }),
     updateResource: vi.fn().mockResolvedValue({ id: 'resource-1' }),
-    archiveResource: vi.fn().mockResolvedValue({ id: 'resource-1' }),
-    restoreResource: vi.fn().mockResolvedValue({ id: 'resource-1' }),
     deleteResource: vi.fn().mockResolvedValue(undefined),
     listRoles: vi.fn().mockResolvedValue({ roles: [role], pagination: page.pagination }),
     createRole: vi.fn().mockResolvedValue(role),

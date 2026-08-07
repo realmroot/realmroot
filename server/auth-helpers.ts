@@ -197,7 +197,7 @@ export async function filterOAuthAccessTokenScopes(
   }
 
   const resource = await deps.authorization.findResourceByResourceUrl(input.resource)
-  if (!resource?.enabled || resource.archivedAt || !resource.scopeRegistry) {
+  if (!resource?.enabled || !resource.scopeRegistry) {
     throw oauthProviderError('invalid_target', 'Requested Resource Server is not active.')
   }
   const visible = input.user?.id

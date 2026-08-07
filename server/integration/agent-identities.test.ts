@@ -279,12 +279,12 @@ describe('Agent identity enrollment over real D1', () => {
     expect(audits.filter((row) => row.id.startsWith('controller-claim-audit-'))).toHaveLength(1)
   })
 
-  it(`enrolls a stable identity, adds and revokes hosts, recovers, and permanently retires it
+  it(`enrolls a stable identity, adds and revokes hosts, recovers, toggles, and soft-deletes it
       [spec: agent-identity/agent-identity-enrollment]
       [spec: agent-identity/agent-multi-host-continuity]
       [spec: agent-identity/agent-host-revocation]
       [spec: agent-identity/agent-identity-recovery]
-      [spec: agent-identity/agent-identity-retirement]
+      [spec: agent-identity/agent-identity-deletion]
       [spec: agent-identity/agent-info-resolution]
       [spec: agent-identity/agent-stable-issuer]`, async () => {
     const first = await seedAgent(harness, userId, 'identity-first')
@@ -334,8 +334,8 @@ describe('Agent identity enrollment over real D1', () => {
       headers: { cookie: ownerCookie },
     })
     expect(recover.status).toBe(202)
-    const [recovering] = await harness.db.select().from(agentIdentity).where(eq(agentIdentity.id, approved.agent.id))
-    expect(recovering).toMatchObject({ subject: stableSubject, status: 'recovering' })
+    const [inactive] = await harness.db.select().from(agentIdentity).where(eq(agentIdentity.id, approved.agent.id))
+    expect(inactive).toMatchObject({ subject: stableSubject, status: 'inactive' })
 
     const replacement = await seedAgent(harness, userId, 'identity-replacement')
     const replacementIntent = await createIntent(harness, userId, {
@@ -343,30 +343,34 @@ describe('Agent identity enrollment over real D1', () => {
       protocolAgentId: replacement.agentId,
     })
     const recovered = await approveIntent(harness, ownerCookie, replacementIntent.id)
-    expect(recovered.agent).toMatchObject({ subject: stableSubject, status: 'active' })
+    expect(recovered.agent).toMatchObject({ subject: stableSubject, status: 'inactive' })
 
-    const retire = await harness.request(`/api/account/agents/${approved.agent.id}`, {
+    const activate = await harness.request(`/api/account/agents/${approved.agent.id}/activation`, {
+      method: 'PUT',
+      headers: { cookie: ownerCookie },
+    })
+    expect(activate.status).toBe(204)
+
+    const deletion = await harness.request(`/api/account/agents/${approved.agent.id}`, {
       method: 'DELETE',
       headers: { cookie: ownerCookie },
     })
-    expect(retire.status).toBe(204)
-    const [retired] = await harness.db.select().from(agentIdentity).where(eq(agentIdentity.id, approved.agent.id))
+    expect(deletion.status).toBe(204)
+    const [deleted] = await harness.db.select().from(agentIdentity).where(eq(agentIdentity.id, approved.agent.id))
     const bindings = await harness.db
       .select()
       .from(agentIdentityBinding)
       .where(eq(agentIdentityBinding.agentIdentityId, approved.agent.id))
-    expect(retired).toMatchObject({ subject: stableSubject, status: 'retired' })
-    expect(retired.retiredAt).toBeInstanceOf(Date)
+    expect(deleted).toMatchObject({ subject: stableSubject, status: 'inactive' })
+    expect(deleted.deletedAt).toBeInstanceOf(Date)
     expect(bindings.some((binding) => binding.status === 'active')).toBe(false)
 
-    const retiredInfo = await harness.request(`/api/auth/agentinfo?sub=${encodeURIComponent(stableSubject)}`)
-    expect(retiredInfo.status).toBe(200)
-    await expect(retiredInfo.json()).resolves.toMatchObject({
-      iss: 'http://localhost/api/auth',
-      sub: stableSubject,
-      sub_profile: 'ai_agent',
-      name: 'Release Agent',
+    const deletedInfo = await harness.request(`/api/auth/agentinfo?sub=${encodeURIComponent(stableSubject)}`)
+    expect(deletedInfo.status).toBe(404)
+    const deletedDetail = await harness.request(`/api/account/agents/${approved.agent.id}`, {
+      headers: { cookie: ownerCookie },
     })
+    expect(deletedDetail.status).toBe(404)
   })
 
   it('rejects anonymous Agent enrollment', async () => {

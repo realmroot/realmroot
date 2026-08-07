@@ -220,16 +220,7 @@ describe('management routes 1', () => {
       (operation) => operation.key === 'DELETE /resource-servers/{param}',
     )
     expect(deleteApiResource?.responses).toHaveProperty('204')
-    expect(deleteApiResource?.responses).toHaveProperty('409')
-
-    const archiveApiResource = openApiOperationObjects().find(
-      (operation) => operation.key === 'PUT /resource-servers/{param}/archival',
-    )
-    const restoreApiResource = openApiOperationObjects().find(
-      (operation) => operation.key === 'DELETE /resource-servers/{param}/archival',
-    )
-    expect(archiveApiResource?.responses).toHaveProperty('200')
-    expect(restoreApiResource?.responses).toHaveProperty('200')
+    expect(openApiOperationObjects().some((operation) => operation.key.includes('/archival'))).toBe(false)
   })
 
   it('mounts the documented management collections behind the admin boundary', async () => {
@@ -285,7 +276,7 @@ describe('management routes 1', () => {
         ownerUserId: 'controller-1',
         ownerOrganizationId: null,
         status: 'active',
-        retiredAt: null,
+        deletedAt: null,
         createdAt: now,
         updatedAt: now,
       },
@@ -483,7 +474,7 @@ function agentIdentity() {
       ownerUserId: 'controller-1',
       ownerOrganizationId: null,
       status: 'active',
-      retiredAt: null,
+      deletedAt: null,
       createdAt: now,
       updatedAt: now,
     },

@@ -253,6 +253,13 @@
       "when": 1786052920542,
       "tag": "20260806214840_rfc9728_scope_registry",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "6",
+      "when": 1786063571171,
+      "tag": "20260807004611_unique_weapon_omega",
+      "breakpoints": true
     }
   ]
 }

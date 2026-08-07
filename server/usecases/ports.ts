@@ -822,8 +822,8 @@ export interface AgentIdentityRecord {
   name: string
   ownerUserId: string | null
   ownerOrganizationId: string | null
-  status: string
-  retiredAt: Date | null
+  status: 'active' | 'inactive'
+  deletedAt: Date | null
   createdAt: Date
   updatedAt: Date
 }
@@ -896,8 +896,9 @@ export interface AgentIdentityRepository {
     approvedAt: Date
   }): Promise<AgentIdentityAggregate>
   revokeBinding(identityId: string, protocolAgentId: string, now: Date): Promise<boolean>
-  recoverIdentity(identityId: string, now: Date): Promise<boolean>
-  retireIdentity(identityId: string, now: Date): Promise<boolean>
+  deactivateIdentity(identityId: string, now: Date, revokeBindings: boolean): Promise<boolean>
+  activateIdentity(identityId: string, now: Date): Promise<boolean>
+  deleteIdentity(identityId: string, now: Date): Promise<boolean>
 }
 
 export interface AgentTokenRepository {
@@ -1099,16 +1100,8 @@ export interface AuthorizationPaginatedResult<T> {
 export type OrganizationRecordInput = Omit<OrganizationResponse, 'createdAt' | 'updatedAt'>
 export type MemberRecordInput = Omit<MemberResponse, 'createdAt' | 'updatedAt'>
 export type InvitationRecordInput = Omit<InvitationResponse, 'createdAt' | 'acceptedAt' | 'revokedAt'>
-export type ApiResourceRecordInput = Omit<ApiResourceResponse, 'archivedAt' | 'createdAt' | 'updatedAt'>
+export type ApiResourceRecordInput = Omit<ApiResourceResponse, 'createdAt' | 'updatedAt'>
 export type OrganizationRoleRecordInput = Omit<RoleResponse, 'predefined' | 'createdAt' | 'updatedAt'>
-
-export interface ApiResourceReferenceCounts {
-  federatedCredentials: number
-  accountConnections: number
-  connectionIntents: number
-  agentAccessRequests: number
-  agentAccessGrants: number
-}
 
 export interface UserScopeGrantRecord {
   id: string
@@ -1208,9 +1201,7 @@ export interface AuthorizationRepository {
     now: Date,
   ): Promise<ApplicationScopeGrantRecord[]>
   revokeApplicationScopeGrant(id: string, now: Date): Promise<boolean>
-  archiveResource(id: string, now: Date, audit: AgentAuditEventRecord): Promise<void>
-  restoreResource(id: string, now: Date, audit: AgentAuditEventRecord): Promise<void>
-  deleteResource(id: string): Promise<ApiResourceReferenceCounts | null>
+  deleteResource(id: string, now: Date, audit: AgentAuditEventRecord): Promise<boolean>
   createOrganizationRole(
     organizationId: string,
     input: OrganizationRoleRecordInput,

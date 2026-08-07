@@ -92,7 +92,7 @@ export async function createResourceConnectionIntent(
   callbackOrigin: string,
 ) {
   const resource = await requireExternalResource(deps, resourceId)
-  if (!resource.enabled || resource.archivedAt) throw notFound('Enabled external API resource was not found.')
+  if (!resource.enabled) throw notFound('Enabled external API resource was not found.')
   const currentAuthorization = await requireActiveExternalAuthorization(deps, resourceId)
   await requireConnectionOwnerControl(deps, input.owner, actorUserId)
   const scopes = input.scopes
@@ -264,7 +264,7 @@ export async function completeResourceConnectionIntent(
         ...authorizationInput,
         createdAt: now,
       })
-  if (!connection) throw badRequest('The API resource was archived while completing the connection.')
+  if (!connection) throw badRequest('The API resource was deleted while completing the connection.')
   if (existing) {
     await revokeUncoveredGrants(deps, connection, intent.authorizationDetails.length > 0, intent.initiatedByUserId, now)
   }
@@ -452,7 +452,6 @@ export async function discoverAgentResources(deps: Deps, principal: AgentResourc
       const authorization = await findExternalAuthorization(deps, resourceId)
       if (
         !resource?.enabled ||
-        resource.archivedAt ||
         !activeResourceVisibleToAgent(resource, identity.identity.ownerOrganizationId) ||
         (resource.connectorId !== null && authorization?.status !== 'active')
       ) {
@@ -1213,7 +1212,7 @@ export async function decideAgentAccessRequest(
     audit,
   )
   if (approved === 'grant_unavailable') {
-    throw badRequest('The API resource was archived before access could be approved.')
+    throw badRequest('The API resource was deleted before access could be approved.')
   }
   if (approved === 'request_changed') throw badRequest('Agent access request was already decided.')
   return toAgentAccessRequest(approved.request, await requestHostId(deps, request), null)
@@ -2310,7 +2309,7 @@ function authorizationClientSecret(authorization: ResolvedExternalAuthorization)
 
 async function requireEnabledResource(deps: Deps, resourceId: string) {
   const resource = await deps.authorization.findResource(resourceId)
-  if (!resource?.enabled || resource.archivedAt) throw notFound('Enabled Resource Server was not found.')
+  if (!resource?.enabled) throw notFound('Enabled Resource Server was not found.')
   if (resource.connectorId !== null) {
     await requireActiveExternalAuthorization(deps, resourceId)
   }

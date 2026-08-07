@@ -45,7 +45,6 @@ describe('account agent routes', () => {
             name: 'Desktop Agent',
             homeSpace: { type: 'personal', userId: 'user-1' },
             status: 'active',
-            retiredAt: null,
             createdAt: '2026-01-01T00:00:00.000Z',
             updatedAt: '2026-01-01T00:00:00.000Z',
           },
@@ -57,7 +56,7 @@ describe('account agent routes', () => {
     vi.spyOn(agentIdentitiesUsecase, 'listPersonalAgents').mockImplementation((_d, userId, page) =>
       stableAgents.list(userId, page),
     )
-    vi.spyOn(agentIdentitiesUsecase, 'retireAgentIdentity').mockImplementation((_d, agentId, userId) =>
+    vi.spyOn(agentIdentitiesUsecase, 'deleteAgentIdentity').mockImplementation((_d, agentId, userId) =>
       stableAgents.retire(agentId, userId),
     )
 

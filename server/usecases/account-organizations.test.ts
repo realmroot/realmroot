@@ -42,7 +42,7 @@ function organizationAgent(id: string): AgentIdentityAggregate {
       ownerUserId: null,
       ownerOrganizationId: 'org-1',
       status: 'active',
-      retiredAt: null,
+      deletedAt: null,
       createdAt: now,
       updatedAt: now,
     },

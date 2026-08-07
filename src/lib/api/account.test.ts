@@ -5,6 +5,7 @@ import {
   createAccountConnection,
   createPasskeyRegistrationOptions,
   decideAgentResourceApproval,
+  deleteAgent,
   getAccountProfile,
   getAgentResourceApproval,
   getResourceConnectionApproval,
@@ -14,7 +15,6 @@ import {
   listApprovalAccountConnections,
   listApprovalAuthorizationDetailCatalog,
   listExternalApiResources,
-  retireAgent,
   revokeAccountConnection,
   verifyPasskeyRegistration,
 } from '@/lib/api/account'
@@ -131,7 +131,7 @@ describe('account API client over the real network boundary', () => {
   afterEach(() => realClientServer.resetHandlers())
   afterAll(() => realClientServer.close())
 
-  it('lists and retires stable Agents', async () => {
+  it('lists and deletes stable Agents', async () => {
     realClientServer.use(
       http.get(`${base}/api/account/agents`, () =>
         HttpResponse.json({
@@ -142,7 +142,7 @@ describe('account API client over the real network boundary', () => {
       http.delete(`${base}/api/account/agents/:agentId`, () => new HttpResponse(null, { status: 204 })),
     )
     expect((await listAccountAgents()).items).toEqual([{ id: 'ag1' }])
-    expect(await retireAgent('ag1')).toBeUndefined()
+    expect(await deleteAgent('ag1')).toBeUndefined()
   })
 
   it('links a social provider via the native sign-in endpoint', async () => {

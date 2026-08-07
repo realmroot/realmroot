@@ -11,8 +11,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ErrorState, LoadingState, MutationError } from '@/features/management/dialogs'
 import { navigateConsoleTab } from '@/features/management/resource-components'
 import {
+  activateAgent,
   consoleQueryKeys,
-  emergencyRetireAgent,
+  deactivateAgent,
+  deleteAgent,
   getAgent,
   getAgentAuditEvents,
   listAgentAccessGrants,
@@ -35,7 +37,7 @@ export function AgentDetailPage({
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const [tab, setTab] = useState<AgentDetailSection>(section)
-  const [retireOpen, setRetireOpen] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
   const agentQuery = useQuery({ queryKey: [...consoleQueryKeys.agents, agentId], queryFn: () => getAgent(agentId) })
   const hosts = useQuery({
     queryKey: [...consoleQueryKeys.agents, agentId, 'hosts'],
@@ -54,11 +56,11 @@ export function AgentDetailPage({
     queryFn: () => getAgentAuditEvents({ agentId, organizationId }),
   })
   const agent = agentQuery.data?.agent
-  const retire = useMutation({
-    mutationFn: () => emergencyRetireAgent(agentId),
+  const deletion = useMutation({
+    mutationFn: () => deleteAgent(agentId),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: consoleQueryKeys.agents })
-      setRetireOpen(false)
+      setDeleteOpen(false)
       if (organizationId) {
         await navigate({
           params: { organizationId },
@@ -69,6 +71,10 @@ export function AgentDetailPage({
         await navigate({ search: {}, to: '/console/agents' })
       }
     },
+  })
+  const activation = useMutation({
+    mutationFn: (active: boolean) => (active ? activateAgent(agentId) : deactivateAgent(agentId)),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: consoleQueryKeys.agents }),
   })
   useEffect(() => {
     setTab(section)
@@ -167,13 +173,27 @@ export function AgentDetailPage({
             <div className="detailFlatRows">
               <div className="detailFlatRow">
                 <div>
-                  <strong>{tt('Retire Agent')}</strong>
-                  <span>{tt('Permanently ends active installations and grants while preserving audit history.')}</span>
+                  <strong>{tt('Agent status')}</strong>
+                  <span>{tt('Inactive Agents remain visible but cannot authenticate or use authority.')}</span>
                 </div>
-                <span>{agent.status === 'retired' ? tt('Already retired') : tt('Active')}</span>
-                <Button disabled={agent.status === 'retired'} onClick={() => setRetireOpen(true)} variant="destructive">
+                <span>{tt(agent.status === 'active' ? 'Active' : 'Inactive')}</span>
+                <Button
+                  disabled={activation.isPending}
+                  onClick={() => activation.mutate(agent.status !== 'active')}
+                  variant="outline"
+                >
+                  {tt(agent.status === 'active' ? 'Deactivate' : 'Activate')}
+                </Button>
+              </div>
+              <div className="detailFlatRow">
+                <div>
+                  <strong>{tt('Delete Agent')}</strong>
+                  <span>{tt('Permanently hides the Agent and revokes installations and grants.')}</span>
+                </div>
+                <span>{tt('Cannot be restored')}</span>
+                <Button onClick={() => setDeleteOpen(true)} variant="destructive">
                   <Trash2 />
-                  {tt('Retire')}
+                  {tt('Delete')}
                 </Button>
               </div>
             </div>
@@ -181,16 +201,16 @@ export function AgentDetailPage({
         </Tabs>
       </div>
       <DestructiveConfirmation
-        confirmLabel={retire.isPending ? tt('Retiring…') : tt('Retire Agent')}
+        confirmLabel={deletion.isPending ? tt('Deleting…') : tt('Delete Agent')}
         description={tt(
-          'Installations, active grants, and pending requests stop working immediately. The stable subject remains reserved.',
+          'The Agent disappears from every interface. Installations, active grants, and pending requests stop immediately, and it cannot be restored.',
         )}
-        error={<MutationError error={retire.error} />}
-        onClose={() => setRetireOpen(false)}
-        onConfirm={() => retire.mutate()}
-        open={retireOpen}
-        pending={retire.isPending}
-        title={tt('Retire {{name}}?', { name: agent.name })}
+        error={<MutationError error={deletion.error} />}
+        onClose={() => setDeleteOpen(false)}
+        onConfirm={() => deletion.mutate()}
+        open={deleteOpen}
+        pending={deletion.isPending}
+        title={tt('Delete {{name}}?', { name: agent.name })}
       />
     </>
   )
@@ -354,7 +374,9 @@ function AgentEventTarget({
 function agentEventLabel(action: string, result: string) {
   if (action === 'agent.identity_enrolled') return tt('Agent enrolled')
   if (action === 'agent.identity_recovered') return tt('Agent recovered')
-  if (action === 'agent.identity_retired') return tt('Agent retired')
+  if (action === 'agent.identity_deleted') return tt('Agent deleted')
+  if (action === 'agent.identity_activated') return tt('Agent activated')
+  if (action === 'agent.identity_deactivated') return tt('Agent deactivated')
   if (action === 'agent.host_revoked') return tt('Host revoked')
   if (action === 'agent.capability_decided') {
     return result === 'denied' ? tt('Agent permissions denied') : tt('Agent permissions approved')

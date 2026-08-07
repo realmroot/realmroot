@@ -1,6 +1,5 @@
 import {
   addMember,
-  archiveResource,
   buildTokenClaims,
   cancelInvitation,
   createInvitation,
@@ -23,7 +22,6 @@ import {
   refreshResourceScopeRegistry,
   removeMember,
   replaceMemberRoles,
-  restoreResource,
   synchronizeEnabledResourceScopeRegistries,
   updateMember,
   updateOrganization,
@@ -88,7 +86,6 @@ const resource: ApiResourceResponse = {
   visibility: 'public',
   scopeRegistry: null,
   availableToAgents: true,
-  archivedAt: null,
   createdAt: timestamp,
   updatedAt: timestamp,
 }
@@ -98,7 +95,6 @@ describe('authorization CRUD and assignment policy', () => {
     const authorization = repository()
     authorization.createResource.mockImplementation(async (input) => ({
       ...input,
-      archivedAt: null,
       createdAt: timestamp,
       updatedAt: timestamp,
     }))
@@ -137,9 +133,7 @@ describe('authorization CRUD and assignment policy', () => {
     )
 
     await expect(updateResource(deps, created.id, { name: 'Changed' })).rejects.toThrow('system-managed')
-    await expect(archiveResource(deps, created.id, actor)).rejects.toThrow('system-managed')
-    await expect(restoreResource(deps, created.id, actor)).rejects.toThrow('system-managed')
-    await expect(deleteResource(deps, created.id)).rejects.toThrow('system-managed')
+    await expect(deleteResource(deps, created.id, actor)).rejects.toThrow('system-managed')
 
     for (const invalid of [
       { ...created, identifier: 'changed' },
@@ -740,34 +734,8 @@ describe('authorization CRUD and assignment policy', () => {
     )
     expect(authorization.updateResource).not.toHaveBeenCalled()
     authorization.findResource.mockResolvedValue(resource)
-    authorization.archiveResource.mockResolvedValue(undefined)
-    await expect(archiveResource(deps, resource.id, actor)).resolves.toBe(resource)
-    expect(authorization.archiveResource).toHaveBeenCalledWith(
-      resource.id,
-      expect.any(Date),
-      expect.objectContaining({
-        action: 'api_resource.archived',
-        controllerUserId: 'user-1',
-        resourceId: resource.id,
-      }),
-    )
-
-    authorization.findResource.mockResolvedValueOnce({ ...resource, archivedAt: timestamp }).mockResolvedValue(resource)
-    authorization.restoreResource.mockResolvedValue(undefined)
-    await expect(restoreResource(deps, resource.id, actor)).resolves.toBe(resource)
-    expect(authorization.restoreResource).toHaveBeenCalledWith(
-      resource.id,
-      expect.any(Date),
-      expect.objectContaining({
-        action: 'api_resource.restored',
-        controllerUserId: 'user-1',
-        resourceId: resource.id,
-      }),
-    )
-
-    authorization.archiveResource.mockClear()
-    authorization.findResource.mockResolvedValue(resource)
-    await archiveResource(deps, resource.id, {
+    authorization.deleteResource.mockResolvedValue(true)
+    await deleteResource(deps, resource.id, {
       controllerUserId: null,
       agent: {
         issuer: 'https://auth.example.com',
@@ -776,10 +744,11 @@ describe('authorization CRUD and assignment policy', () => {
         hostId: 'host-1',
       },
     })
-    expect(authorization.archiveResource).toHaveBeenCalledWith(
+    expect(authorization.deleteResource).toHaveBeenCalledWith(
       resource.id,
       expect.any(Date),
       expect.objectContaining({
+        action: 'api_resource.deleted',
         controllerUserId: null,
         subjectIssuer: 'https://auth.example.com',
         subject: 'agent-subject',
@@ -788,51 +757,16 @@ describe('authorization CRUD and assignment policy', () => {
       }),
     )
 
-    authorization.archiveResource.mockClear()
-    authorization.findResource.mockResolvedValue({ ...resource, archivedAt: timestamp })
-    await archiveResource(deps, resource.id, actor)
-    expect(authorization.archiveResource).not.toHaveBeenCalled()
-
-    authorization.restoreResource.mockClear()
-    authorization.findResource.mockResolvedValue(resource)
-    await restoreResource(deps, resource.id, actor)
-    expect(authorization.restoreResource).not.toHaveBeenCalled()
-
-    authorization.findResource.mockResolvedValue({ ...resource, archivedAt: timestamp })
-    await expect(updateResource(deps, resource.id, { enabled: true })).rejects.toMatchObject({
-      status: 400,
-      message: 'Archived API resources must be restored before updating.',
-    })
-
     authorization.findResource.mockResolvedValue(resource)
     authorization.updateResource.mockResolvedValueOnce(false)
     await expect(updateResource(deps, resource.id, { enabled: true })).rejects.toMatchObject({
-      status: 400,
-      message: 'Archived API resources must be restored before updating.',
+      status: 404,
+      message: 'API resource was not found.',
     })
 
     authorization.findResource.mockResolvedValue(resource)
-    authorization.deleteResource.mockResolvedValue(null)
-    await expect(deleteResource(deps, resource.id)).resolves.toBeUndefined()
-
-    authorization.deleteResource.mockResolvedValue({
-      federatedCredentials: 0,
-      accountConnections: 1,
-      connectionIntents: 1,
-      agentAccessRequests: 1,
-      agentAccessGrants: 1,
-    })
-    await expect(deleteResource(deps, resource.id)).rejects.toMatchObject({
-      status: 409,
-      code: 'resource_in_use',
-      details: {
-        federatedCredentials: 0,
-        accountConnections: 1,
-        connectionIntents: 1,
-        agentAccessRequests: 1,
-        agentAccessGrants: 1,
-      },
-    })
+    authorization.deleteResource.mockResolvedValue(false)
+    await expect(deleteResource(deps, resource.id, actor)).rejects.toMatchObject({ status: 404 })
 
     authorization.findResource.mockResolvedValue({
       ...resource,
@@ -906,15 +840,17 @@ describe('authorization CRUD and assignment policy', () => {
     })
   })
 
-  it('refreshes active registries and continues after an isolated failure', async () => {
+  it('refreshes active scope registries and continues after an isolated failure', async () => {
     const authorization = repository()
     const active = { ...resource, scopeRegistry: scopeRegistry(['projects:read']) }
     authorization.findResource.mockImplementation(async (id) =>
-      id === 'failing' ? { ...active, id, resourceUrl: 'https://failing.example.com' } : active,
+      id === 'resource-failing' ? { ...active, id, resourceUrl: 'https://failing.example.com' } : active,
     )
     authorization.listEnabledResources.mockResolvedValue([
       active,
-      { ...active, id: 'failing', resourceUrl: 'https://failing.example.com' },
+      { ...active, id: 'resource-failing', resourceUrl: 'https://failing.example.com' },
+      { ...active, id: 'res_realmroot' },
+      { ...active, id: 'resource-deleted', deletedAt: new Date(timestamp) },
     ])
     const openApiFetch = resourceOpenApiFetch(resource.resourceUrl)
     const deps = {
@@ -922,15 +858,20 @@ describe('authorization CRUD and assignment policy', () => {
       externalHttp: {
         fetch: vi.fn((request: Request) => {
           if (request.url.includes('failing.example.com')) return Promise.reject(new Error('offline'))
-          if (request.url.includes('/.well-known/oauth-protected-resource'))
+          if (request.url.includes('/.well-known/oauth-protected-resource')) {
             return Promise.resolve(
               Response.json({ resource: resource.resourceUrl, scopes_supported: ['projects:read'] }),
             )
+          }
           return openApiFetch(request)
         }),
       },
     } as unknown as Deps
     await expect(refreshResourceScopeRegistry(deps, resource.id)).resolves.toBe(active)
+    expect(authorization.replaceResourceScopeRegistry).toHaveBeenCalledWith(
+      resource.id,
+      expect.objectContaining({ scopes: [expect.objectContaining({ value: 'projects:read' })] }),
+    )
     await expect(synchronizeEnabledResourceScopeRegistries(deps)).resolves.toBeUndefined()
     authorization.findResource.mockResolvedValueOnce({ ...active, enabled: false })
     await expect(refreshResourceScopeRegistry(deps, resource.id)).rejects.toMatchObject({ status: 400 })
@@ -964,7 +905,7 @@ describe('authorization CRUD and assignment policy', () => {
     authorization.replaceResourceScopeRegistry.mockResolvedValueOnce(false)
     await expect(
       updateResource(deps, resource.id, { scopeGrantModes: [{ scope: 'projects:read', grantMode: 'automatic' }] }),
-    ).rejects.toThrow('restored')
+    ).rejects.toThrow('API resource was not found.')
     authorization.findResource.mockResolvedValueOnce({ ...registered, id: 'res_realmroot' })
     await expect(refreshResourceScopeRegistry(deps, 'res_realmroot')).rejects.toMatchObject({ status: 400 })
   })
@@ -1056,7 +997,6 @@ describe('authorization CRUD and assignment policy', () => {
       }),
     ).resolves.toMatchObject({ authorization: { scopes: [] } })
   })
-
   it('reads resource contracts and rejects disabled owner Organizations', async () => {
     const authorization = repository()
     authorization.findResource.mockResolvedValue(resource)
@@ -1094,6 +1034,38 @@ describe('authorization CRUD and assignment policy', () => {
         enabled: false,
       }),
     ).resolves.toBe(resource)
+  })
+
+  it('updates only declared Resource Server scope grant modes', async () => {
+    const authorization = repository()
+    const registered = { ...resource, scopeRegistry: scopeRegistry(['projects:read']) }
+    authorization.findResource.mockResolvedValue(registered)
+    authorization.updateResource.mockResolvedValue(true)
+    authorization.replaceResourceScopeRegistry.mockResolvedValue(true)
+    const deps = { authorization } as unknown as Deps
+
+    await expect(
+      updateResource(deps, resource.id, {
+        scopeGrantModes: [{ scope: 'projects:read', grantMode: 'automatic' }],
+      }),
+    ).resolves.toBe(registered)
+    expect(authorization.replaceResourceScopeRegistry).toHaveBeenCalledWith(
+      resource.id,
+      expect.objectContaining({ scopes: [expect.objectContaining({ grantMode: 'automatic' })] }),
+    )
+
+    authorization.findResource.mockResolvedValueOnce({ ...resource, scopeRegistry: null })
+    await expect(
+      updateResource(deps, resource.id, {
+        scopeGrantModes: [{ scope: 'projects:read', grantMode: 'automatic' }],
+      }),
+    ).rejects.toMatchObject({ status: 400, message: expect.stringContaining('synchronized') })
+    authorization.findResource.mockResolvedValueOnce(registered)
+    await expect(
+      updateResource(deps, resource.id, {
+        scopeGrantModes: [{ scope: 'projects:unknown', grantMode: 'automatic' }],
+      }),
+    ).rejects.toMatchObject({ status: 400, message: expect.stringContaining('not declared') })
   })
 
   it('validates the resource contract before enabling it [spec: agent-identity/api-resource-contract-validation]', async () => {
@@ -1169,9 +1141,7 @@ function repository() {
     findResourceByResourceUrl: vi.fn().mockResolvedValue(null),
     updateResource: vi.fn().mockResolvedValue(true),
     replaceResourceScopeRegistry: vi.fn().mockResolvedValue(true),
-    archiveResource: vi.fn(),
-    restoreResource: vi.fn(),
-    deleteResource: vi.fn(),
+    deleteResource: vi.fn().mockResolvedValue(true),
     createOrganizationRole: vi.fn(),
     listOrganizationRoles: vi.fn().mockResolvedValue([]),
     findOrganizationRole: vi.fn().mockResolvedValue(null),

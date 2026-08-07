@@ -1331,7 +1331,6 @@ function eligibleAudienceResource(scopes: string[] = ['runner:connect']) {
     id: audienceResourceId,
     resourceUrl: defaultAudience,
     enabled: true,
-    archivedAt: null,
     ownerOrganizationId: 'org_1',
     visibility: 'private' as const,
     scopeRegistry: {
