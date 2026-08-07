@@ -911,6 +911,82 @@ describe('authorization CRUD and assignment policy', () => {
     await expect(refreshResourceScopeRegistry(deps, resource.id)).rejects.toMatchObject({ status: 400 })
   })
 
+  it('refreshes dynamic connector metadata before synchronizing an external scope registry', async () => {
+    const authorization = repository()
+    const externalResource = {
+      ...resource,
+      connectorId: 'connector-1',
+      authorizationDetails: [{ type: 'workspace' }],
+    }
+    authorization.findResource.mockResolvedValue(externalResource)
+    const providerMetadata = {
+      issuer: 'https://issuer.example.com',
+      authorization_endpoint: 'https://issuer.example.com/authorize',
+      token_endpoint: 'https://issuer.example.com/token',
+      userinfo_endpoint: 'https://issuer.example.com/userinfo',
+      jwks_uri: 'https://issuer.example.com/jwks',
+      registration_endpoint: 'https://issuer.example.com/register',
+      revocation_endpoint: 'https://issuer.example.com/revoke',
+      grant_types_supported: [
+        'authorization_code',
+        'refresh_token',
+        'urn:ietf:params:oauth:grant-type:jwt-bearer',
+        'urn:ietf:params:oauth:grant-type:token-exchange',
+      ],
+      dpop_signing_alg_values_supported: ['ES256'],
+      authorization_details_types_supported: ['workspace'],
+      pushed_authorization_request_endpoint: 'https://issuer.example.com/par',
+      authorization_details_catalog_endpoint: 'https://issuer.example.com/catalog',
+      authorization_details_catalog_scope: 'resources:discover',
+      authorization_details_catalog_version: 1,
+    }
+    const connector = {
+      id: 'connector-1',
+      providerType: 'generic_oauth',
+      enabled: true,
+      clientId: 'client-1',
+      clientSecret: 'secret',
+      issuer: 'https://issuer.example.com',
+      authorizationEndpoint: 'https://issuer.example.com/authorize',
+      tokenEndpoint: 'https://issuer.example.com/token',
+      userInfoEndpoint: 'https://issuer.example.com/userinfo',
+      jwksEndpoint: 'https://issuer.example.com/jwks',
+      revocationEndpoint: 'https://issuer.example.com/revoke',
+      registrationMode: 'dynamic',
+      providerMetadata,
+    }
+    const connectors = {
+      findById: vi.fn().mockResolvedValue(connector),
+      update: vi.fn().mockResolvedValue(true),
+    }
+    const openApiFetch = resourceOpenApiFetch(resource.resourceUrl)
+    const externalHttp = {
+      fetch: vi.fn((request: Request) => {
+        if (request.url.includes('/.well-known/openid-configuration'))
+          return Promise.resolve(Response.json(providerMetadata))
+        if (request.url === protectedResourceMetadataUrl(resource.resourceUrl)) {
+          return Promise.resolve(
+            Response.json({
+              resource: resource.resourceUrl,
+              authorization_servers: ['https://issuer.example.com'],
+              scopes_supported: ['projects:read'],
+            }),
+          )
+        }
+        return openApiFetch(request)
+      }),
+    }
+    const deps = { authorization, connectors, externalHttp } as unknown as Deps
+
+    await expect(refreshResourceScopeRegistry(deps, resource.id)).resolves.toBe(externalResource)
+    expect(connectors.update).toHaveBeenCalledWith(
+      connector.id,
+      expect.objectContaining({
+        providerMetadata: expect.objectContaining({ authorization_details_catalog_version: 1 }),
+      }),
+    )
+  })
+
   it('updates only declared Resource Server scope grant modes', async () => {
     const authorization = repository()
     const registered = { ...resource, scopeRegistry: scopeRegistry(['projects:read', 'projects:write']) }

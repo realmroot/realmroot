@@ -7,6 +7,7 @@ import {
   realmrootResourceUrl,
 } from '@server/domain/realmroot-resource-server'
 import { type AuthorizationTokenClaimInput, createId, toTokenClaims } from '@server/usecases/authorization-utils'
+import { refreshDynamicConnectorMetadata } from '@server/usecases/connectors'
 import type { Deps } from '@server/usecases/deps'
 import { resolveOrganizationMembershipScopes } from '@server/usecases/organization-membership-scopes'
 import { validateExternalResourceConnector } from '@server/usecases/resource-connectors'
@@ -362,6 +363,7 @@ export async function refreshResourceScopeRegistry(deps: Deps, id: string) {
   try {
     const metadata = await readProtectedResourceMetadata(deps, resource.resourceUrl)
     if (resource.connectorId) {
+      await refreshDynamicConnectorMetadata(deps, resource.connectorId)
       await validateExternalResourceConnector(
         deps,
         resource.resourceUrl,

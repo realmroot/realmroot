@@ -199,6 +199,7 @@ Feature: Agent identity and delegated API authorization
       And the protected resource publishes its requestable scopes through RFC 9728 metadata
       And the protected resource advertises its OpenAPI contract with a standard service-desc link
       And Realmroot derives its local scope registry from that protected-resource metadata
+      And scope registry refresh first refreshes dynamic connector metadata before validating provider compatibility
       And OpenAPI may add descriptions and maps operations only to advertised scopes
       And advertised scopes remain valid even when no public operation references them
       And Realmroot stores only discovered scope metadata and local grant modes, never either source document
