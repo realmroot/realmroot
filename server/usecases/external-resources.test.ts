@@ -2696,8 +2696,6 @@ describe('external API resource authorization', () => {
     await expect(discoverAgentResources(deps, principal())).resolves.toMatchObject({
       resources: [{ id: native.id }],
     })
-    vi.mocked(deps.authorization.findResource).mockResolvedValueOnce({ ...native, visibility: 'private' })
-    await expect(discoverAgentResources(deps, principal())).resolves.toEqual({ resources: [] })
     vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
     const created = await createAccessRequest(
       deps,
@@ -2760,6 +2758,47 @@ describe('external API resource authorization', () => {
     await expect(getAccessRequest(deps, stored.id, principal(), 'https://auth.example.com')).resolves.toMatchObject({
       target: { type: 'resource' },
     })
+  })
+
+  it("uses a personal Agent controller's active Organization memberships for private Resource Server visibility [spec: agent-identity/agent-private-resource-server-visibility]", async () => {
+    const deps = createTestDeps()
+    const privateNative = { ...nativeResource(), visibility: 'private' as const }
+    const personalIdentity = identityAggregate()
+    personalIdentity.identity.ownerOrganizationId = null
+    personalIdentity.identity.ownerUserId = 'user-1'
+    Object.assign(deps.authorization, {
+      findResource: vi.fn().mockResolvedValue(privateNative),
+      listEnabledResources: vi.fn().mockResolvedValue([privateNative]),
+      listUserMemberships: vi.fn().mockResolvedValue([{ organizationId: privateNative.ownerOrganizationId }]),
+      findOrganization: vi.fn().mockResolvedValue({ id: privateNative.ownerOrganizationId, disabled: false }),
+    })
+    vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(personalIdentity)
+
+    await expect(discoverAgentResources(deps, principal())).resolves.toMatchObject({
+      resources: [{ id: privateNative.id }],
+    })
+    await expect(
+      listAgentAuthorizationDetailCatalog(
+        deps,
+        privateNative.id,
+        principal(),
+        { limit: 10, offset: 0 },
+        'https://auth.example.com',
+      ),
+    ).resolves.toMatchObject({ pagination: { total: 1 } })
+
+    vi.mocked(deps.authorization.listUserMemberships).mockResolvedValue([{ organizationId: 'org-other' }] as never)
+    vi.mocked(deps.authorization.findOrganization).mockResolvedValue({ id: 'org-other', disabled: false } as never)
+    await expect(discoverAgentResources(deps, principal())).resolves.toEqual({ resources: [] })
+    await expect(
+      listAgentAuthorizationDetailCatalog(
+        deps,
+        privateNative.id,
+        principal(),
+        { limit: 10, offset: 0 },
+        'https://auth.example.com',
+      ),
+    ).rejects.toThrow('Resource Server is not visible to this Agent.')
   })
 
   it('exposes Organization and User tenant authority as separate Realmroot Resources [spec: agent-identity/realmroot-built-in-resource-server] [spec: management-api/management-canonical-authority-inventory]', async () => {

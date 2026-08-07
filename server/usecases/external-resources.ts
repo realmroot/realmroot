@@ -438,6 +438,7 @@ export async function revokeResourceConnection(deps: Deps, connectionId: string,
 
 export async function discoverAgentResources(deps: Deps, principal: AgentResourcePrincipal) {
   const identity = await requireActiveIdentityAndBinding(deps, principal)
+  const visibleOrganizationIds = await activeIdentityOrganizationIds(deps, identity.identity)
   const connections = identity.identity.ownerUserId
     ? await deps.externalResources.listConnectionsByUser(identity.identity.ownerUserId)
     : await deps.externalResources.listConnectionsByOrganizations([identity.identity.ownerOrganizationId!])
@@ -453,7 +454,8 @@ export async function discoverAgentResources(deps: Deps, principal: AgentResourc
       const authorization = await findExternalAuthorization(deps, resourceId)
       if (
         !resource?.enabled ||
-        !activeResourceVisibleToAgent(resource, identity.identity.ownerOrganizationId) ||
+        !resource.availableToAgents ||
+        !activeResourceVisibleToAgent(resource, visibleOrganizationIds) ||
         (resource.connectorId !== null && authorization?.status !== 'active')
       ) {
         return null
@@ -561,6 +563,7 @@ export async function listAgentResourceServerResources(
 ) {
   const identity = await requireActiveIdentityAndBinding(deps, principal)
   const resource = await requireEnabledResource(deps, resourceServerId)
+  await requireAgentResourceVisibility(deps, resource, identity.identity)
   const origin = apiOrigin.replace(/\/$/, '')
   if (isRealmrootResourceServer(resource.id)) {
     const items = await realmrootAuthorityResources(deps, identity, principal.identityId, resource, origin)
@@ -673,7 +676,7 @@ export async function createAgentConnectionRequest(
   if (resource.connectorId === null) throw badRequest('Native Resource Servers do not use account connections.')
   await refreshDynamicConnectorMetadata(deps, resource.connectorId)
   validateResourceRequestedScopes(resource, input.scopes)
-  requireAgentResourceVisibility(resource, identity.identity.ownerOrganizationId)
+  await requireAgentResourceVisibility(deps, resource, identity.identity)
   const connection = await deps.externalResources.findConnectionByOwnerResource({
     resourceId: resourceServerId,
     ownerUserId: identity.identity.ownerUserId,
@@ -821,7 +824,7 @@ export async function createAgentAccessRequest(
   validateResourceRequestedScopes(resource, input.scopes)
   const authorizationDetails = input.authorizationDetails ?? []
   assertAccessRequestAuthorizationDetails(resource, connection, authorizationDetails)
-  requireAgentResourceVisibility(resource, identity.identity.ownerOrganizationId)
+  await requireAgentResourceVisibility(deps, resource, identity.identity)
   const scopes = [...new Set(input.scopes)].sort()
   const reusableGrants = (await deps.externalResources.listActiveGrantsByAgent(principal.identityId)).filter(
     (grant) =>
@@ -1150,7 +1153,7 @@ export async function decideAgentAccessRequest(
   validateResourceRequestedScopes(resource, request.scopes)
   const requestIdentity = await deps.agentIdentities.findIdentity(request.agentIdentityId)
   if (!requestIdentity) throw notFound('Active Agent identity was not found.')
-  requireAgentResourceVisibility(resource, requestIdentity.identity.ownerOrganizationId)
+  await requireAgentResourceVisibility(deps, resource, requestIdentity.identity)
   const grantorScopes = isRealmrootResourceServer(resource.id)
     ? await realmrootAuthorityEffectiveScopes(deps, actorUserId, resource, authorizationDetails[0]!)
     : await userEffectiveResourceScopes(deps, actorUserId, resource)
@@ -1267,7 +1270,7 @@ export async function issueTargetAccessToken(
   }
   assertScopeSubset(request.scopes, grant.scopes, 'Agent access grant')
   validateResourceRequestedScopes(resource, request.scopes)
-  if (!activeResourceVisibleToAgent(resource, identity.identity.ownerOrganizationId)) {
+  if (!activeResourceVisibleToAgent(resource, await activeIdentityOrganizationIds(deps, identity.identity))) {
     throw forbidden('Resource Server is not visible to this Agent.')
   }
   if (!authorizationDetailsMatchRequest(grant.authorizationDetails, request.authorizationDetails)) {
@@ -1895,18 +1898,12 @@ async function realmrootAuthorityDetails(
   const ownerUserId = identity.identity.ownerUserId
   if (ownerUserId) {
     details.push({ type: 'realmroot_authority', authority: 'user', id: ownerUserId })
-    const memberships = await deps.authorization.listUserMemberships(ownerUserId)
-    for (const organizationId of [...new Set(memberships.map((membership) => membership.organizationId))].sort()) {
-      const organization = await deps.authorization.findOrganization(organizationId)
-      if (organization && !organization.disabled) {
-        details.push({ type: 'realmroot_authority', authority: 'organization', id: organizationId })
-      }
-    }
-  } else if (identity.identity.ownerOrganizationId) {
+  }
+  for (const organizationId of [...(await activeIdentityOrganizationIds(deps, identity.identity))].sort()) {
     details.push({
       type: 'realmroot_authority',
       authority: 'organization',
-      id: identity.identity.ownerOrganizationId,
+      id: organizationId,
     })
   }
   return details
@@ -2859,17 +2856,39 @@ function exactScopes(left: string[], right: string[]) {
   return left.length === right.length && [...left].sort().every((value, index) => value === [...right].sort()[index])
 }
 
-function requireAgentResourceVisibility(
+async function requireAgentResourceVisibility(
+  deps: Deps,
   resource: NonNullable<Awaited<ReturnType<Deps['authorization']['findResource']>>>,
-  organizationId: string | null,
+  identity: { ownerUserId: string | null; ownerOrganizationId: string | null },
 ) {
-  if (!resource.availableToAgents || !activeResourceVisibleToAgent(resource, organizationId)) {
+  const organizationIds = await activeIdentityOrganizationIds(deps, identity)
+  if (!resource.availableToAgents || !activeResourceVisibleToAgent(resource, organizationIds)) {
     throw forbidden('Resource Server is not visible to this Agent.')
   }
 }
 
-function activeResourceVisibleToAgent(resource: ApiResourceResponse, organizationId: string | null) {
-  return organizationId ? activeResourceVisibleToOrganization(resource, organizationId) : activePublicResource(resource)
+async function activeIdentityOrganizationIds(
+  deps: Deps,
+  identity: { ownerUserId: string | null; ownerOrganizationId: string | null },
+) {
+  const candidateIds = identity.ownerOrganizationId
+    ? [identity.ownerOrganizationId]
+    : identity.ownerUserId
+      ? (await deps.authorization.listUserMemberships(identity.ownerUserId)).map(
+          (membership) => membership.organizationId,
+        )
+      : []
+  const organizations = await Promise.all(
+    [...new Set(candidateIds)].map((organizationId) => deps.authorization.findOrganization(organizationId)),
+  )
+  return new Set(
+    organizations.flatMap((organization) => (organization && !organization.disabled ? [organization.id] : [])),
+  )
+}
+
+function activeResourceVisibleToAgent(resource: ApiResourceResponse, organizationIds: ReadonlySet<string>) {
+  if (activePublicResource(resource)) return true
+  return [...organizationIds].some((organizationId) => activeResourceVisibleToOrganization(resource, organizationId))
 }
 
 function toExternalAuthorization(record: ExternalResourceAuthorizationRecord) {

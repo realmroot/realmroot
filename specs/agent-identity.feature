@@ -156,6 +156,15 @@ Feature: Agent identity and delegated API authorization
       And an Organization owner may approve current assigned scopes of a Resource Server owned by that Organization
       And provider-specific RFC 9396 authorization details remain internal to Realmroot
 
+    @entrypoint:agent-protocol @journey:agent-private-resource-server-visibility
+    Scenario: A private Resource Server stays inside its owner Organization boundary
+      Given a private Resource Server is owned by an Organization and available to Agents
+      And a personal Agent's controller is an active member of that Organization
+      When the Agent lists Resource Servers or directly reads that Resource Server's Resources
+      Then the private Resource Server is visible to that Agent
+      But it remains hidden from Agents outside the owner Organization
+      And discovery grants no Resource scope or credential
+
     @entrypoint:restish @journey:restish-generic-interactive-resource
     Scenario: Restish handles every Realmroot controller interaction through one response profile
       Given any Realmroot operation returns the interactive-resource profile with an approval URL and canonical self link
