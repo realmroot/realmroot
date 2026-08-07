@@ -128,7 +128,7 @@ describe('protected resource scope discovery', () => {
     }
   })
 
-  it('rejects OpenAPI operations that reference a scope not advertised by RFC 9728 metadata', async () => {
+  it('ignores OpenAPI operations outside the RFC 9728 resource scope boundary', async () => {
     const deps = createTestDeps()
     vi.mocked(deps.externalHttp.fetch).mockImplementation(
       resourceDiscoveryFetch({
@@ -138,9 +138,9 @@ describe('protected resource scope discovery', () => {
       }),
     )
 
-    await expect(synchronizeResourceDiscovery(deps, resourceUrl, null)).rejects.toThrow(
-      'OpenAPI operation references a scope not advertised by protected-resource metadata.',
-    )
+    await expect(synchronizeResourceDiscovery(deps, resourceUrl, null)).resolves.toMatchObject({
+      scopeRegistry: { scopes: [{ value: 'orders:read', description: 'Read orders' }] },
+    })
   })
 })
 

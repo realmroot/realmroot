@@ -63,8 +63,6 @@ export async function synchronizeResourceDiscovery(
   const contract = await readResourceContract(deps, resourceUrl)
   if (!contract) throw new Error('Unconditional Resource Server contract read returned no document.')
 
-  assertOperationScopesAdvertised(contract.operations, metadata.scopesSupported)
-
   const descriptions = new Map(contract.scopes.map((scope) => [scope.value, scope.description]))
   const previousModes = new Map(previousRegistry?.scopes.map((scope) => [scope.value, scope.grantMode]))
   const scopes = metadata.scopesSupported.map((value) => ({
@@ -85,20 +83,6 @@ export async function synchronizeResourceDiscovery(
       },
       scopes,
     },
-  }
-}
-
-export function assertOperationScopesAdvertised(
-  operations: Array<{ requiredScopeSets: string[][] }>,
-  scopesSupported: string[],
-) {
-  const advertisedScopes = new Set(scopesSupported)
-  if (
-    operations.some((operation) =>
-      operation.requiredScopeSets.some((scopeSet) => scopeSet.some((scope) => !advertisedScopes.has(scope))),
-    )
-  ) {
-    throw badRequest('OpenAPI operation references a scope not advertised by protected-resource metadata.')
   }
 }
 

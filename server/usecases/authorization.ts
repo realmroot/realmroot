@@ -11,13 +11,9 @@ import { refreshDynamicConnectorMetadata } from '@server/usecases/connectors'
 import type { Deps } from '@server/usecases/deps'
 import { resolveOrganizationMembershipScopes } from '@server/usecases/organization-membership-scopes'
 import { validateExternalResourceConnector } from '@server/usecases/resource-connectors'
+import { readProtectedResourceMetadata, synchronizeResourceDiscovery } from '@server/usecases/resource-metadata'
 import {
-  assertOperationScopesAdvertised,
-  readProtectedResourceMetadata,
-  synchronizeResourceDiscovery,
-} from '@server/usecases/resource-metadata'
-import {
-  type ResourceOperationDefinition,
+  projectResourceOperations,
   readResourceContract,
   readResourceContractDocument,
   validateRequestedScopes,
@@ -328,11 +324,8 @@ export async function getResourceContract(deps: Deps, id: string) {
     : await readResourceContract(deps, resource.resourceUrl)
   if (!contract) throw new Error('Unconditional Resource Server contract read returned no document.')
   const scopes = resource.scopeRegistry?.scopes ?? []
-  const operations = isRealmrootResourceServer(id)
-    ? contract.operations.filter((operation) => operationUsesAdvertisedScopes(operation, scopes))
-    : contract.operations
-  assertOperationScopesAdvertised(
-    operations,
+  const operations = projectResourceOperations(
+    contract.operations,
     scopes.map((scope) => scope.value),
   )
   const { name: _name, description: _description, ...publishedContract } = contract
@@ -892,14 +885,6 @@ function isCurrentRealmrootRegistry(
     const candidate = actualScopes.get(scope.value)
     return candidate?.description === scope.description && candidate.grantMode === scope.grantMode
   })
-}
-
-function operationUsesAdvertisedScopes(
-  operation: ResourceOperationDefinition,
-  scopes: NonNullable<ApiResourceResponse['scopeRegistry']>['scopes'],
-) {
-  const advertised = new Set(scopes.map((scope) => scope.value))
-  return operation.requiredScopeSets.some((scopeSet) => scopeSet.every((scope) => advertised.has(scope)))
 }
 
 async function requireMember(deps: Deps, id: string) {

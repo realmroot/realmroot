@@ -3,6 +3,7 @@ import {
   extractProtectedOperations,
   extractResourceInfo,
   extractResourceScopes,
+  projectResourceOperations,
   readResourceContract,
   readResourceContractDocument,
   validateRequestedScopes,
@@ -15,6 +16,28 @@ async function readScopes(deps: ReturnType<typeof createTestDeps>, resourceUrl: 
 }
 
 describe('business resource OpenAPI scope annotations', () => {
+  it('[spec: agent-identity/external-api-resource-registration] projects operations and security alternatives onto advertised resource scopes', () => {
+    const operation = {
+      method: 'GET',
+      path: '/orders',
+      operationId: 'listOrders',
+      summary: 'List orders',
+      description: null,
+      requiredScopeSets: [['orders:read'], ['orders:admin']],
+    }
+
+    expect(
+      projectResourceOperations(
+        [
+          operation,
+          { ...operation, path: '/account', requiredScopeSets: [['account:discover']] },
+          { ...operation, path: '/reports', requiredScopeSets: [['orders:read', 'reports:read']] },
+        ],
+        ['orders:read'],
+      ),
+    ).toEqual([{ ...operation, requiredScopeSets: [['orders:read']] }])
+  })
+
   it('reads a known OpenAPI document without repeating service discovery', async () => {
     const deps = createTestDeps()
     vi.mocked(deps.externalHttp.fetch).mockResolvedValueOnce(
