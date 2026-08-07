@@ -19,5 +19,6 @@ describe('resource ownership inventory', () => {
   it('keeps consent user-owned and platform configuration realm-owned', () => {
     expect(resourceOwnershipInventory.applicationConsents.boundary).toBe('user')
     expect(resourceOwnershipInventory.platformConfiguration.boundary).toBe('realm')
+    expect(resourceOwnershipInventory.resourceServers.children).toEqual([])
   })
 })

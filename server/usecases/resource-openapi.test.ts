@@ -355,6 +355,69 @@ describe('business resource OpenAPI scope annotations', () => {
     ).toEqual([])
   })
 
+  it('rejects malformed and inconsistent OAuth scope declarations', () => {
+    const doc = (scopes: Record<string, unknown>) => ({
+      openapi: '3.1.0',
+      components: {
+        securitySchemes: {
+          oauth: { type: 'oauth2', flows: { authorizationCode: { scopes } } },
+        },
+      },
+    })
+    expect(() => extractResourceScopes(doc({ '': 'Empty' }))).toThrow('non-empty scope names')
+    expect(() => extractResourceScopes(doc({ read: 42 }))).toThrow('string descriptions')
+    expect(() =>
+      extractResourceScopes({
+        openapi: '3.1.0',
+        components: {
+          securitySchemes: {
+            oauth: {
+              type: 'oauth2',
+              flows: { a: { scopes: { read: 'Read' } }, b: { scopes: { read: 'Read all' } } },
+            },
+          },
+        },
+      }),
+    ).toThrow('inconsistent descriptions')
+  })
+
+  it('supports OpenID Connect operations and conditional YAML discovery', async () => {
+    expect(
+      extractProtectedOperations({
+        openapi: '3.1.0',
+        components: { securitySchemes: { oidc: { type: 'openIdConnect' } } },
+        paths: {
+          '/items': { get: { security: [{ oidc: ['read'] }], responses: {} } },
+        },
+      }),
+    ).toHaveLength(1)
+    const deps = createTestDeps()
+    vi.mocked(deps.externalHttp.fetch)
+      .mockResolvedValueOnce(new Response(null, { headers: { link: '</openapi.yaml>; rel=service-desc alternate' } }))
+      .mockImplementationOnce(async (request) => {
+        expect(request.headers.get('if-none-match')).toBe('"v1"')
+        return new Response(null, { status: 304 })
+      })
+    await expect(
+      readResourceContract(deps, 'https://orders.example.com/', {
+        discovery: {
+          sourceUrl: 'https://orders.example.com/openapi.yaml',
+          etag: '"v1"',
+          documentHash: 'x',
+          syncedAt: '2026-08-01T00:00:00.000Z',
+          lastError: null,
+        },
+        scopes: [],
+      }),
+    ).resolves.toBeNull()
+    vi.mocked(deps.externalHttp.fetch)
+      .mockResolvedValueOnce(new Response(null, { headers: { link: '</openapi.yaml>; rel=service-desc' } }))
+      .mockResolvedValueOnce(
+        new Response('openapi: 3.1.0\npaths: {}\n', { headers: { 'content-type': 'application/yaml' } }),
+      )
+    await expect(readResourceContract(deps, 'https://orders.example.com/')).resolves.toMatchObject({ operations: [] })
+  })
+
   it('requires protected-operation documents to use OpenAPI 3.x', () => {
     expect(() => extractProtectedOperations({})).toThrow('must publish an OpenAPI 3.x document')
     expect(() => extractProtectedOperations({ openapi: '2.0', paths: {} })).toThrow(

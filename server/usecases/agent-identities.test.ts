@@ -27,6 +27,7 @@ import {
   requireActiveAgentIdentity,
   retireAgentIdentity,
   revokeAgentIdentityHost,
+  toAgent,
   toAgentEnrollment,
 } from '@server/usecases/agent-identities'
 import type {
@@ -38,6 +39,22 @@ import type {
 import { describe, expect, it, vi } from 'vitest'
 
 describe('Agent login identity', () => {
+  it('projects an already-normalized Agent identity', () => {
+    expect(
+      toAgent({
+        id: 'identity-1',
+        issuer: 'https://agent.example',
+        subject: 'agent-1',
+        name: 'Agent',
+        homeSpace: { type: 'personal', userId: 'user-1' },
+        status: 'active',
+        retiredAt: null,
+        createdAt: new Date('2026-08-01'),
+        updatedAt: new Date('2026-08-02'),
+        bindings: [],
+      }),
+    ).toMatchObject({ id: 'identity-1' })
+  })
   it('returns public display information for a stable Agent subject [spec: agent-identity/agent-info-resolution]', async () => {
     const deps = createTestDeps()
     vi.mocked(deps.agentIdentities.findByIssuerSubject).mockResolvedValue(

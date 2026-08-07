@@ -185,7 +185,7 @@ export function AccessGrantsPanel({ subject }: { subject: AccessGrantSubject }) 
                 </Button>
                 <Button
                   disabled={!pagination.hasMore || pagination.nextOffset === null}
-                  onClick={() => setOffset(pagination.nextOffset ?? offset)}
+                  onClick={() => setOffset(pagination.nextOffset!)}
                   variant="outline"
                 >
                   {tt('Next')}
@@ -208,9 +208,7 @@ export function AccessGrantsPanel({ subject }: { subject: AccessGrantSubject }) 
         description={tt('The assigned scopes stop applying immediately. Existing audit history is preserved.')}
         error={<MutationError error={revokeMutation.error} />}
         onClose={() => setRevokeTarget(null)}
-        onConfirm={() => {
-          if (revokeTarget) revokeMutation.mutate(revokeTarget.id)
-        }}
+        onConfirm={() => revokeMutation.mutate(revokeTarget!.id)}
         open={revokeTarget !== null}
         pending={revokeMutation.isPending}
         title={tt('Revoke access grant?')}

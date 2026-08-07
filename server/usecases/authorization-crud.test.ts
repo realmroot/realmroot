@@ -24,6 +24,7 @@ import {
   removeMember,
   replaceMemberRoles,
   restoreResource,
+  synchronizeEnabledResourceScopeRegistries,
   updateMember,
   updateOrganization,
   updateResource,
@@ -903,6 +904,157 @@ describe('authorization CRUD and assignment policy', () => {
         lastError: expect.objectContaining({ code: 'bad_request' }),
       },
     })
+  })
+
+  it('refreshes active registries and continues after an isolated failure', async () => {
+    const authorization = repository()
+    const active = { ...resource, scopeRegistry: scopeRegistry(['projects:read']) }
+    authorization.findResource.mockImplementation(async (id) =>
+      id === 'failing' ? { ...active, id, resourceUrl: 'https://failing.example.com' } : active,
+    )
+    authorization.listEnabledResources.mockResolvedValue([
+      active,
+      { ...active, id: 'failing', resourceUrl: 'https://failing.example.com' },
+    ])
+    const openApiFetch = resourceOpenApiFetch(resource.resourceUrl)
+    const deps = {
+      authorization,
+      externalHttp: {
+        fetch: vi.fn((request: Request) => {
+          if (request.url.includes('failing.example.com')) return Promise.reject(new Error('offline'))
+          if (request.url.includes('/.well-known/oauth-protected-resource'))
+            return Promise.resolve(
+              Response.json({ resource: resource.resourceUrl, scopes_supported: ['projects:read'] }),
+            )
+          return openApiFetch(request)
+        }),
+      },
+    } as unknown as Deps
+    await expect(refreshResourceScopeRegistry(deps, resource.id)).resolves.toBe(active)
+    await expect(synchronizeEnabledResourceScopeRegistries(deps)).resolves.toBeUndefined()
+    authorization.findResource.mockResolvedValueOnce({ ...active, enabled: false })
+    await expect(refreshResourceScopeRegistry(deps, resource.id)).rejects.toMatchObject({ status: 400 })
+    authorization.findResource.mockResolvedValueOnce(active)
+    authorization.replaceResourceScopeRegistry.mockResolvedValueOnce(false)
+    await expect(refreshResourceScopeRegistry(deps, resource.id)).rejects.toMatchObject({ status: 400 })
+  })
+
+  it('updates only declared Resource Server scope grant modes', async () => {
+    const authorization = repository()
+    const registered = { ...resource, scopeRegistry: scopeRegistry(['projects:read', 'projects:write']) }
+    authorization.findResource.mockResolvedValue(registered)
+    authorization.updateResource.mockResolvedValue(true)
+    authorization.replaceResourceScopeRegistry.mockResolvedValue(true)
+    const deps = { authorization } as unknown as Deps
+    await expect(
+      updateResource(deps, resource.id, { scopeGrantModes: [{ scope: 'projects:read', grantMode: 'automatic' }] }),
+    ).resolves.toBe(registered)
+    authorization.findResource.mockResolvedValueOnce({ ...resource, scopeRegistry: null })
+    await expect(
+      updateResource(deps, resource.id, { scopeGrantModes: [{ scope: 'projects:read', grantMode: 'automatic' }] }),
+    ).rejects.toThrow('synchronized')
+    authorization.findResource.mockResolvedValueOnce(registered)
+    await expect(
+      updateResource(deps, resource.id, { scopeGrantModes: [{ scope: 'unknown', grantMode: 'automatic' }] }),
+    ).rejects.toThrow('not declared')
+    authorization.findResource.mockResolvedValueOnce(registered)
+    authorization.findOrganization.mockResolvedValueOnce(organization)
+    await expect(updateResource(deps, resource.id, { ownerOrganizationId: organization.id })).resolves.toBe(registered)
+    authorization.findResource.mockResolvedValueOnce(registered)
+    authorization.replaceResourceScopeRegistry.mockResolvedValueOnce(false)
+    await expect(
+      updateResource(deps, resource.id, { scopeGrantModes: [{ scope: 'projects:read', grantMode: 'automatic' }] }),
+    ).rejects.toThrow('restored')
+    authorization.findResource.mockResolvedValueOnce({ ...registered, id: 'res_realmroot' })
+    await expect(refreshResourceScopeRegistry(deps, 'res_realmroot')).rejects.toMatchObject({ status: 400 })
+  })
+
+  it('covers Role defaults, visibility, and derived token scopes', async () => {
+    const authorization = repository()
+    const dynamicRole = {
+      key: 'operator',
+      displayName: 'Operator',
+      description: null,
+      predefined: false,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    }
+    authorization.findOrganization.mockResolvedValue(organization)
+    authorization.listOrganizationRoles.mockResolvedValue([dynamicRole])
+    authorization.listOrganizationRoleScopes.mockResolvedValue(new Map())
+    const deps = { authorization } as unknown as Deps
+    await expect(listRoles(deps, organization.id, { limit: 20, offset: 0 })).resolves.toMatchObject({
+      roles: expect.arrayContaining([expect.objectContaining({ key: 'operator', scopes: [] })]),
+    })
+
+    authorization.findResource.mockResolvedValueOnce({
+      ...resource,
+      visibility: 'private',
+      ownerOrganizationId: 'other',
+    })
+    await expect(
+      createRole(
+        deps,
+        organization.id,
+        { key: 'hidden', displayName: 'Hidden', scopes: [{ resourceId: resource.id, scope: 'projects:read' }] },
+        'user-1',
+      ),
+    ).rejects.toThrow('not visible')
+    authorization.findResource.mockResolvedValueOnce({
+      ...resource,
+      scopeRegistry: {
+        ...scopeRegistry(['projects:read']),
+        scopes: [{ value: 'projects:read', description: null, grantMode: 'automatic' }],
+      },
+    })
+    await expect(
+      createRole(
+        deps,
+        organization.id,
+        { key: 'automatic', displayName: 'Automatic', scopes: [{ resourceId: resource.id, scope: 'projects:read' }] },
+        'user-1',
+      ),
+    ).rejects.toThrow('assigned scopes')
+
+    const assignedResource = {
+      ...resource,
+      scopeRegistry: {
+        ...scopeRegistry(['projects:read']),
+        scopes: [{ value: 'projects:read', description: null, grantMode: 'assigned' as const }],
+      },
+    }
+    authorization.findResourceByResourceUrl.mockResolvedValue(assignedResource)
+    authorization.findMemberByOrganizationUser.mockResolvedValue({ ...member, roles: ['operator'] })
+    authorization.listOrganizationRoleScopes.mockResolvedValue(
+      new Map([['operator', [{ resourceId: resource.id, scope: 'projects:read' }]]]),
+    )
+    authorization.findResource.mockResolvedValue(assignedResource)
+    await expect(
+      buildTokenClaims(deps, {
+        userId: member.userId,
+        organizationId: organization.id,
+        resource: resource.resourceUrl,
+        scopes: ['projects:read'],
+      }),
+    ).resolves.toMatchObject({ authorization: { scopes: ['projects:read'] } })
+    await expect(
+      buildTokenClaims(deps, {
+        userId: member.userId,
+        organizationId: organization.id,
+        resource: resource.resourceUrl,
+        scopes: ['projects:read'],
+        authorizedScopes: ['projects:read'],
+      }),
+    ).resolves.toMatchObject({ authorization: { scopes: ['projects:read'] } })
+    authorization.findResourceByResourceUrl.mockResolvedValueOnce(null)
+    await expect(
+      buildTokenClaims(deps, {
+        userId: member.userId,
+        organizationId: organization.id,
+        resource: 'https://missing.example.com',
+        scopes: ['projects:read'],
+      }),
+    ).resolves.toMatchObject({ authorization: { scopes: [] } })
   })
 
   it('reads resource contracts and rejects disabled owner Organizations', async () => {

@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, type Page, test } from '@playwright/test'
 import { admin, baseURL, resetAndBootstrap, signIn, signOut } from './helpers/real-app'
 import { createRestishAgentPlugin } from './helpers/restish-agent-plugin'
 
@@ -6,6 +6,16 @@ const externalOrigin = `http://127.0.0.1:${process.env.E2E_EXTERNAL_PORT ?? '439
 const externalResource = `${externalOrigin}/api`
 const nativeOrigin = `http://127.0.0.1:${process.env.E2E_NATIVE_PORT ?? '4400'}`
 const realmrootResource = `${nativeOrigin}/api`
+
+async function grantControllerScope(page: Page, resourceServerId: string) {
+  const sessionResponse = await page.request.get('/api/auth/get-session')
+  expect(sessionResponse.status(), await sessionResponse.text()).toBe(200)
+  const session = (await sessionResponse.json()) as { user: { id: string } }
+  const grantResponse = await page.request.post(`/api/users/${session.user.id}/scope-grants`, {
+    data: { organizationId: null, resourceServerId, scopes: ['projects:read'], expiresAt: null },
+  })
+  expect(grantResponse.status(), await grantResponse.text()).toBe(201)
+}
 
 test.describe('external API resource authorization', () => {
   test.beforeEach(resetAndBootstrap)
@@ -43,10 +53,12 @@ test.describe('external API resource authorization', () => {
           resourceUrl: externalResource,
           ownerOrganizationId: 'org_platform',
           connectorId: connector.id,
+          visibility: 'public',
         },
       })
       expect(resourceResponse.status(), await resourceResponse.text()).toBe(201)
       const resource = (await resourceResponse.json()) as { id: string }
+      await grantControllerScope(page, resource.id)
 
       const discovered = plugin.listResourceServers<{
         items: Array<{
@@ -172,10 +184,12 @@ test.describe('external API resource authorization', () => {
           name: 'E2E Realmroot Projects API',
           resourceUrl: realmrootResource,
           ownerOrganizationId: 'org_platform',
+          visibility: 'public',
         },
       })
       expect(resourceResponse.status(), await resourceResponse.text()).toBe(201)
       const resource = (await resourceResponse.json()) as { id: string }
+      await grantControllerScope(page, resource.id)
 
       const discovered = plugin.listResourceServers<{
         items: Array<{

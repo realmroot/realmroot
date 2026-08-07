@@ -3,7 +3,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ApplicationDetailPage } from '@/features/applications/management/application-detail'
 import { ApplicationsPage } from '@/features/applications/management/applications-list'
 import { queryClient } from '@/router'
-import { application, consoleSharedFetch, jsonResponse, pagination, renderWithQuery } from './console.test-utils'
+import {
+  apiResource,
+  application,
+  consoleSharedFetch,
+  jsonResponse,
+  pagination,
+  renderWithQuery,
+} from './console.test-utils'
 
 globalThis.ResizeObserver ??= class ResizeObserver {
   disconnect() {}
@@ -21,6 +28,83 @@ afterEach(() => {
 })
 
 describe('admin console applications-detail-a', () => {
+  it('fails closed for cross-Organization applications and unavailable tabs', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      if (String(input) === '/api/applications/app-1') return Promise.resolve(jsonResponse(application))
+      return consoleSharedFetch(input, init)
+    })
+    renderWithQuery(<ApplicationDetailPage applicationId="app-1" organizationId="org-other" section="access-grants" />)
+    expect(await screen.findByText('Application does not belong to this Organization.')).toBeTruthy()
+
+    cleanup()
+    vi.mocked(window.fetch).mockImplementation((input, init) => {
+      if (String(input) === '/api/applications/app-1') {
+        return Promise.resolve(jsonResponse({ ...application, allowedGrantTypes: [] }))
+      }
+      return consoleSharedFetch(input, init)
+    })
+    renderWithQuery(<ApplicationDetailPage applicationId="app-1" section="access-grants" />)
+    expect(await screen.findByRole('heading', { name: 'Customer portal' })).toBeTruthy()
+    expect(screen.getByRole('tab', { name: 'Overview' }).getAttribute('data-state')).toBe('active')
+  })
+
+  it('edits Resource Server allowlists across registry and visibility variants', async () => {
+    const privateResource = {
+      ...apiResource,
+      id: 'resource-private',
+      name: 'Private API',
+      visibility: 'private' as const,
+      scopeRegistry: {
+        discovery: {
+          sourceUrl: 'https://private.example.com/openapi.json',
+          etag: null,
+          documentHash: 'hash',
+          syncedAt: '2026-08-06T00:00:00.000Z',
+          lastError: null,
+        },
+        scopes: [
+          { value: 'private:read', description: 'Read private records', grantMode: 'assigned' as const },
+          { value: 'private:write', description: null, grantMode: 'assigned' as const },
+        ],
+      },
+    }
+    const publicResource = {
+      ...apiResource,
+      id: 'resource-public',
+      name: 'Public API',
+      visibility: 'public' as const,
+      scopeRegistry: null,
+    }
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url === '/api/applications/app-1') {
+        return Promise.resolve(
+          jsonResponse({
+            ...application,
+            resourceScopes: [{ resourceServerId: privateResource.id, scopes: ['private:read'] }],
+          }),
+        )
+      }
+      if (url === '/api/resource-servers') {
+        return Promise.resolve(jsonResponse({ items: [privateResource, publicResource], pagination }))
+      }
+      return consoleSharedFetch(input, init)
+    })
+
+    renderWithQuery(<ApplicationDetailPage applicationId="app-1" section="oauth" />)
+    const authorization = (await screen.findByRole('heading', { name: 'Authorization' })).closest(
+      'section',
+    ) as HTMLElement
+    fireEvent.click(within(authorization).getByRole('button', { name: 'Edit' }))
+    const readScope = await screen.findByRole('checkbox', { name: /private:read/ })
+    expect(screen.getByText('Private Resource Server')).toBeTruthy()
+    expect(screen.getByText('Public Resource Server')).toBeTruthy()
+    fireEvent.click(readScope)
+    fireEvent.click(readScope)
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('checkbox', { name: /private:read/ })).toBeNull())
+  })
+
   it('renders the unified application inventory with compact client metadata', async () => {
     const thirdPartyApplication = {
       ...application,

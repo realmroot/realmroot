@@ -21,6 +21,7 @@ import type {
   ResourceConnectionApproval,
   ResourceConnectionRequest,
 } from '@shared/api/agent-api'
+import type { ApiResourceResponse } from '@shared/api/authorization'
 import {
   type AuthorizationDetail,
   authorizationDetailCatalogSchema,
@@ -38,7 +39,7 @@ import { validateDpopTokenProof } from './dpop'
 import { organizationUserHasScope } from './organization-membership-scopes'
 import { validateRequestedScopes } from './resource-openapi'
 import { userEffectiveResourceScopes } from './resource-scope-entitlements'
-import { activeResourceVisibleToOrganization } from './resource-visibility'
+import { activePublicResource, activeResourceVisibleToOrganization } from './resource-visibility'
 
 const tokenExchangeGrantType = 'urn:ietf:params:oauth:grant-type:token-exchange'
 const jwtBearerGrantType = 'urn:ietf:params:oauth:grant-type:jwt-bearer'
@@ -452,8 +453,7 @@ export async function discoverAgentResources(deps: Deps, principal: AgentResourc
       if (
         !resource?.enabled ||
         resource.archivedAt ||
-        !identity.identity.ownerOrganizationId ||
-        !activeResourceVisibleToOrganization(resource, identity.identity.ownerOrganizationId) ||
+        !activeResourceVisibleToAgent(resource, identity.identity.ownerOrganizationId) ||
         (resource.connectorId !== null && authorization?.status !== 'active')
       ) {
         return null
@@ -1017,7 +1017,6 @@ export async function getAccountAccessRequestByToken(
 }
 
 async function resolveAccessRequestApproval(deps: Deps, request: AccessRequest): Promise<AccessRequestApproval> {
-  if (request.target.type !== 'resource') throw notFound('Agent access request was not found.')
   const record = await deps.externalResources.findAccessRequest(request.id)
   if (!record) throw notFound('Agent access request was not found.')
   const [identity, resource] = await Promise.all([
@@ -1263,10 +1262,7 @@ export async function issueTargetAccessToken(
   }
   assertScopeSubset(request.scopes, grant.scopes, 'Agent access grant')
   validateResourceRequestedScopes(resource, request.scopes)
-  if (
-    !identity.identity.ownerOrganizationId ||
-    !activeResourceVisibleToOrganization(resource, identity.identity.ownerOrganizationId)
-  ) {
+  if (!activeResourceVisibleToAgent(resource, identity.identity.ownerOrganizationId)) {
     throw forbidden('Resource Server is not visible to this Agent.')
   }
   if (!authorizationDetailsMatchRequest(grant.authorizationDetails, request.authorizationDetails)) {
@@ -2107,7 +2103,6 @@ async function isConnectionUsable(
   resourceId: string,
   connection: ResourceAccountConnectionRecord,
 ): Promise<boolean> {
-  if (connection.status !== 'active') return false
   try {
     const authorization = await requireActiveExternalAuthorization(deps, resourceId, connection.clientGeneration ?? 1)
     await refreshConnectionToken(deps, connection, authorization)
@@ -2823,13 +2818,13 @@ function requireAgentResourceVisibility(
   resource: NonNullable<Awaited<ReturnType<Deps['authorization']['findResource']>>>,
   organizationId: string | null,
 ) {
-  if (
-    !organizationId ||
-    !resource.availableToAgents ||
-    !activeResourceVisibleToOrganization(resource, organizationId)
-  ) {
+  if (!resource.availableToAgents || !activeResourceVisibleToAgent(resource, organizationId)) {
     throw forbidden('Resource Server is not visible to this Agent.')
   }
+}
+
+function activeResourceVisibleToAgent(resource: ApiResourceResponse, organizationId: string | null) {
+  return organizationId ? activeResourceVisibleToOrganization(resource, organizationId) : activePublicResource(resource)
 }
 
 function toExternalAuthorization(record: ExternalResourceAuthorizationRecord) {

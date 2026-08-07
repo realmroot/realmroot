@@ -80,6 +80,7 @@ export function resetLocalData() {
   sql(`
     PRAGMA foreign_keys = OFF;
     DELETE FROM agent_audit_event;
+    DELETE FROM ownership_quarantine;
     DELETE FROM agent_dpop_jti;
     DELETE FROM agent_connection_request;
     DELETE FROM external_token_lease;
@@ -94,6 +95,7 @@ export function resetLocalData() {
     DELETE FROM agent_capability_grant;
     DELETE FROM agent;
     DELETE FROM agent_host;
+    DELETE FROM webhook_delivery_attempt;
     DELETE FROM webhook_delivery_request;
     DELETE FROM webhook_endpoint;
     DELETE FROM organization_role;
@@ -102,10 +104,9 @@ export function resetLocalData() {
     DELETE FROM token_exchange_access_token;
     DELETE FROM token_exchange_refresh_token;
     DELETE FROM federated_credential;
-    DELETE FROM api_resource_eligible_organization;
+    DELETE FROM user_scope_grant;
+    DELETE FROM application_scope_grant;
     DELETE FROM api_resource;
-    DELETE FROM application_audience_organization;
-    DELETE FROM application_audience_user;
     DELETE FROM application_consent;
     DELETE FROM application_client_secret;
     DELETE FROM application_client_metadata;
@@ -116,6 +117,7 @@ export function resetLocalData() {
     DELETE FROM oauth_client;
     DELETE FROM device_code;
     DELETE FROM passkey;
+    DELETE FROM password_reset_request;
     DELETE FROM wallet_address;
     DELETE FROM two_factor;
     DELETE FROM verification;

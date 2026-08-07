@@ -29,7 +29,7 @@ export const resourceOwnershipInventory = {
   resourceServers: {
     boundary: 'organization',
     persistedBy: 'api_resource.owner_organization_id',
-    children: ['api_resource_eligible_organization'],
+    children: [],
   },
   agents: {
     boundary: 'tenant',
