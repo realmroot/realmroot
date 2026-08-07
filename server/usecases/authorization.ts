@@ -335,8 +335,7 @@ export async function getResourceContract(deps: Deps, id: string) {
 
 export async function refreshResourceScopeRegistry(deps: Deps, id: string) {
   const resource = await getResource(deps, id)
-  if (!resource.enabled || resource.archivedAt)
-    throw badRequest('Resource Server must be active before synchronizing scopes.')
+  if (!resource.enabled) throw badRequest('Resource Server must be active before synchronizing scopes.')
   if (isRealmrootResourceServer(id)) {
     const registry = realmrootRegistry(new URL(resource.resourceUrl).origin)
     if (!(await deps.authorization.replaceResourceScopeRegistry(id, registry))) {

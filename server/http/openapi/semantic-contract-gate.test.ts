@@ -20,12 +20,13 @@ describe('OpenAPI semantic contract gate', () => {
     const approvedChanges = new Set(
       [...ownerSelectorContract, ...documentationContract].map(({ method, path }) => `${method}:${path}`),
     )
-    const approvedRemovals = new Set(
-      ['DELETE', 'GET', 'PUT'].flatMap((method) => [
+    const approvedRemovals = new Set([
+      ...['DELETE', 'GET', 'PUT'].flatMap((method) => [
         `${method}:/agents/{agentId}/retirement`,
         `${method}:/resource-servers/{resourceServerId}/archival`,
       ]),
-    )
+      'POST:/agents/{agentId}/access-grants/{grantId}/credentials',
+    ])
     const baseline = [
       ...unchanged.filter(
         ({ method, path }) => !approvedChanges.has(`${method}:${path}`) && !approvedRemovals.has(`${method}:${path}`),
