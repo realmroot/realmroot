@@ -248,6 +248,21 @@ describe('authorization CRUD and assignment policy', () => {
     expect(authorization.deleteOrganization).toHaveBeenCalledWith(organization.id)
   })
 
+  it('protects the built-in platform Organization lifecycle through ordinary Organization operations', async () => {
+    const authorization = repository()
+    const platformOrganization = { ...organization, id: 'org_platform', slug: 'platform' }
+    authorization.findOrganization.mockResolvedValue(platformOrganization)
+    const deps = { authorization } as unknown as Deps
+
+    await expect(updateOrganization(deps, platformOrganization.id, { name: 'Platform' })).resolves.toBe(
+      platformOrganization,
+    )
+    await expect(updateOrganization(deps, platformOrganization.id, { disabled: true })).rejects.toThrow(
+      'cannot be disabled',
+    )
+    await expect(deleteOrganization(deps, platformOrganization.id)).rejects.toThrow('cannot be deleted')
+  })
+
   it('surfaces missing and cross-organization records', async () => {
     const authorization = repository()
     const deps = { authorization } as unknown as Deps
@@ -670,6 +685,15 @@ describe('authorization CRUD and assignment policy', () => {
         ),
       },
     } as unknown as Deps
+
+    await expect(
+      createResource(deps, {
+        identifier: 'organization-owned-external',
+        resourceUrl: resource.resourceUrl,
+        connectorId: 'connector-1',
+        ownerOrganizationId: organization.id,
+      }),
+    ).rejects.toThrow('must be owned by the built-in platform Organization')
 
     await createResource(deps, {
       identifier: 'native',
@@ -1128,6 +1152,19 @@ describe('authorization CRUD and assignment policy', () => {
       sourceUrl: 'https://api.example.com/openapi.json',
       scopes: [],
       operations: [],
+    })
+    const realmrootResource = {
+      ...resource,
+      id: 'res_realmroot',
+      identifier: 'realmroot',
+      ownerOrganizationId: 'org_platform',
+      scopeRegistry: scopeRegistry(['projects:read']),
+    }
+    authorization.findResource.mockResolvedValueOnce(realmrootResource)
+    deps.externalHttp.fetch = vi.fn(resourceScopeOpenApiFetch(realmrootResource.resourceUrl, ['projects:read']))
+    await expect(getResourceContract(deps, realmrootResource.id)).resolves.toMatchObject({
+      resourceId: realmrootResource.id,
+      operations: [expect.objectContaining({ requiredScopeSets: [['projects:read']] })],
     })
     await expect(
       createResource(deps, {

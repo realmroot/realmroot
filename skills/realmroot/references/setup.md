@@ -17,13 +17,14 @@ Use an origin explicitly supplied for the task, then an existing `AUTH_ORIGIN`,
 then `REALMROOT_ORIGIN`; otherwise use the hosted production origin
 `https://id.realmroot.dev`.
 
-Normalize it into `AUTH_ORIGIN`. The examples default to the API name
-`realmroot`, but protocol discovery does not depend on that local alias:
+Normalize it into `AUTH_ORIGIN`. Use the stable Restish API name `realmroot`;
+the adapter scopes automatic Agent protocol authentication to that name so it
+does not claim unrelated Resource Server security requirements:
 
 ```bash
 AUTH_ORIGIN="${AUTH_ORIGIN:-${REALMROOT_ORIGIN:-https://id.realmroot.dev}}"
 AUTH_ORIGIN="${AUTH_ORIGIN%/}"
-API_NAME="${API_NAME:-realmroot}"
+API_NAME=realmroot
 ```
 
 `API_NAME` identifies the service. Profiles under that name identify
@@ -39,9 +40,10 @@ origin and `API_NAME` is the stable service alias.
 
 ## Prepare Restish
 
-Require a Restish build supporting `auth.operation_security` and the Realmroot
-adapter 0.11.0 or newer. The adapter declares that required feature, so an
-incompatible Restish build rejects it explicitly:
+Require a Restish build supporting `auth.operation_security` and
+`auth.dpop_credential_source`, plus the corresponding Realmroot adapter build.
+The adapter declares both required features, so an incompatible Restish build
+rejects it explicitly:
 
 ```bash
 restish --version
@@ -128,7 +130,7 @@ PROFILE_ORIGIN="${PROFILE_ORIGIN%/}"
 restish api set "$API_NAME" \
   "profiles.${PROFILE_NAME}.base_url: ${PROFILE_ORIGIN}/api"
 restish api inspect "$API_NAME"
-restish -p "$PROFILE_NAME" "$API_NAME" whoami -o json
+restish -p "$PROFILE_NAME" "$API_NAME" agents whoami -o json
 AUTH_ORIGIN="$PROFILE_ORIGIN"
 export RSH_PROFILE="$PROFILE_NAME"
 ```
@@ -147,7 +149,7 @@ matching `AUTH_ORIGIN` for every later branch command.
 Invoke the generated identity operation in the selected profile:
 
 ```bash
-restish "$API_NAME" whoami -o json
+restish "$API_NAME" agents whoami -o json
 ```
 
 On first use, the adapter registers a stable Agent, opens the controller's

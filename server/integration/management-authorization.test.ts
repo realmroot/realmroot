@@ -494,7 +494,7 @@ describe('authorization management over real D1', () => {
     expect(remaining.items.filter((member) => member.roles.includes('owner'))).toHaveLength(1)
   })
 
-  it('prevents an Organization admin from granting itself Owner', async () => {
+  it('allows an Organization admin with Role assignment authority to assign itself Owner', async () => {
     const ownerCookie = await signInAdmin(harness)
     const organization = (await (
       await postJson(harness, ownerCookie, '/api/organizations', { slug: 'no-self-promotion', name: 'No Promotion' })
@@ -518,7 +518,9 @@ describe('authorization management over real D1', () => {
       headers: { 'content-type': 'application/json', cookie: adminCookie },
       body: JSON.stringify({ roles: ['owner'] }),
     })
-    expect(response.status).toBe(403)
+    expect(response.status, await response.clone().text()).toBe(200)
+    const updated = await harness.deps.authorization.findMember(member.id)
+    expect(updated?.roles).toEqual(['owner'])
   })
 
   it('rejects an invalid api-resource payload with 400', async () => {

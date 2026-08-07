@@ -56,10 +56,7 @@ describe('management security user routes', () => {
     })
     expect(security.listPasskeys).toHaveBeenCalledWith('user-2', { limit: 2, offset: 4 })
     expect(users.listSessions).toHaveBeenCalledWith('user-2', { limit: 3, offset: 6 })
-    expect(auth.api.revokeUserSessions).toHaveBeenCalledWith({
-      body: { userId: 'user-2' },
-      headers: expect.any(Headers),
-    })
+    expect(users.deleteSessions).toHaveBeenCalledWith('user-2')
   })
 
   it('persists admin security policy updates through both admin and management boundaries', async () => {
@@ -302,7 +299,7 @@ function createUserRepositoryMock(): UserRepository {
     listConsentedApplications: vi.fn().mockImplementation((_userId, page) => Promise.resolve(createPage(page))),
     listSessions: vi.fn().mockImplementation((_userId, page) => Promise.resolve(createPage(page))),
     getSessionToken: vi.fn().mockResolvedValue('session-token-1'),
-    deleteSessions: vi.fn().mockResolvedValue([]),
+    deleteSessions: vi.fn().mockResolvedValue([{ id: 'session-1' }]),
   }
 }
 

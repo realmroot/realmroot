@@ -4,6 +4,7 @@ import {
   agentAccessGrantsResponseSchema,
   auditEventsResponseSchema,
   decideAccessRequestSchema,
+  dpopNonceErrorResponseSchema,
   listAgentAccessGrantsQuerySchema,
   listAgentAuditEventsQuerySchema,
   listAgentsQuerySchema,
@@ -16,6 +17,7 @@ import {
   targetCredentialProofSchema,
   targetTokenSchema,
 } from '@shared/api/agent-api'
+import { managementErrorResponseSchema } from '@shared/api/management'
 import { paginationQuerySchema } from '@shared/api/pagination'
 import { jsonBody, type ManagementRouteConfig, z } from './helpers'
 
@@ -124,6 +126,24 @@ export const agentGovernanceRoutes: ManagementRouteConfig[] = [
     },
     response: targetTokenSchema,
     status: 201,
+    responseHeaders: {
+      'DPoP-Nonce': {
+        description: 'Opaque authorization-server nonce to include in the next credential DPoP proof.',
+        schema: { type: 'string' },
+      },
+    },
+    errors: {
+      400: {
+        description: 'The request is invalid or the authorization server requires a nonce in a fresh DPoP proof.',
+        schema: z.union([managementErrorResponseSchema, dpopNonceErrorResponseSchema]),
+        headers: {
+          'DPoP-Nonce': {
+            description: 'Opaque authorization-server nonce required in the retry proof.',
+            schema: { type: 'string' },
+          },
+        },
+      },
+    },
   },
   {
     method: 'get',

@@ -227,6 +227,7 @@ function projectsOpenAPI(title: string, serverUrl: string, openIdConnectUrl: str
         resourceOidc: {
           type: 'openIdConnect',
           openIdConnectUrl,
+          'x-dpop-required': true,
         },
       },
     },

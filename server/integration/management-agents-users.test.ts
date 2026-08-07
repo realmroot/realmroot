@@ -217,7 +217,7 @@ describe('user management over real D1', () => {
       method: 'DELETE',
       headers: { cookie },
     })
-    expect(removed.status).toBe(200)
+    expect(removed.status).toBe(204)
   })
 
   it('rejects an invalid admin create payload with 400', async () => {

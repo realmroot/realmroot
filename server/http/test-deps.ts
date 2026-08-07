@@ -44,7 +44,7 @@ export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> =
   const platformOwnerMembership = {
     id: 'member-platform-owner',
     organizationId: platformOrganization.id,
-    userId: 'user-1',
+    userId: 'admin-1',
     roles: ['owner'],
   }
   const base = {
@@ -129,20 +129,32 @@ export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> =
     },
     assetStorage: { put: vi.fn(), get: vi.fn().mockResolvedValue(null) },
     authorization: {
+      listResources: vi.fn().mockResolvedValue({
+        items: [],
+        pagination: { limit: 20, offset: 0, total: 0, hasMore: false, nextOffset: null },
+      }),
       listEnabledResources: vi.fn().mockResolvedValue([]),
+      findResources: vi.fn().mockResolvedValue([]),
+      findResourceByResourceUrl: vi.fn().mockResolvedValue(null),
       listUserMemberships: vi
         .fn()
-        .mockImplementation(async (userId) => (userId === 'user-1' ? [platformOwnerMembership] : [])),
+        .mockImplementation(async (userId) =>
+          userId === platformOwnerMembership.userId ? [platformOwnerMembership] : [],
+        ),
       listMemberUserIds: vi.fn().mockResolvedValue([]),
       listOrganizationRoles: vi.fn().mockResolvedValue([]),
       listOrganizationRoleScopes: vi.fn().mockResolvedValue(new Map()),
       findMemberByOrganizationUser: vi
         .fn()
         .mockImplementation(async (organizationId, userId) =>
-          organizationId === platformOrganization.id && userId === 'user-1' ? platformOwnerMembership : null,
+          organizationId === platformOrganization.id && userId === platformOwnerMembership.userId
+            ? platformOwnerMembership
+            : null,
         ),
       findOrganization: vi.fn().mockResolvedValue(null),
       findResource: vi.fn().mockResolvedValue(null),
+      listActiveUserScopeGrants: vi.fn().mockResolvedValue([]),
+      listActiveApplicationScopeGrants: vi.fn().mockResolvedValue([]),
       hasPendingInvitation: vi.fn().mockResolvedValue(false),
     },
     configz: {

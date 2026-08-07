@@ -17,8 +17,7 @@ import (
 )
 
 const (
-	authProvider       = "realmroot-agent"
-	targetAuthProvider = "realmroot-target"
+	authProvider = "realmroot-agent"
 )
 
 type registrationResponse struct {
@@ -43,10 +42,12 @@ type targetTokenResponse struct {
 	AccessToken       string    `json:"accessToken"`
 	TokenType         string    `json:"tokenType"`
 	ExpiresAt         time.Time `json:"expiresAt"`
+	Scopes            []string  `json:"scopes"`
 	ResourceIndicator string    `json:"resourceIndicator"`
 	Resource          struct {
 		Href string `json:"href"`
 	} `json:"resource"`
+	DPoPNonce string `json:"-"`
 }
 
 type agentConfiguration struct {
@@ -69,125 +70,6 @@ type approvalPrompt interface {
 	Show(string) error
 }
 
-type authRequirement struct {
-	ID    string   `cbor:"id" json:"id"`
-	Kind  string   `cbor:"kind" json:"kind"`
-	Needs []string `cbor:"needs,omitempty" json:"needs,omitempty"`
-}
-
-type authResolverInput struct {
-	Type         string             `cbor:"type" json:"type"`
-	API          string             `cbor:"api" json:"api"`
-	Profile      string             `cbor:"profile" json:"profile"`
-	Requirements []authRequirement  `cbor:"requirements" json:"requirements"`
-	Request      plugin.HookRequest `cbor:"request" json:"request"`
-}
-
-type authResolverOutput struct {
-	Handled bool `cbor:"handled" json:"handled"`
-}
-
-type authHookEnvelope struct {
-	Type         string             `cbor:"type" json:"type"`
-	API          string             `cbor:"api" json:"api"`
-	Profile      string             `cbor:"profile" json:"profile"`
-	Params       map[string]string  `cbor:"params" json:"params"`
-	Requirements []authRequirement  `cbor:"requirements,omitempty" json:"requirements,omitempty"`
-	Request      plugin.HookRequest `cbor:"request" json:"request"`
-}
-
-func resolveAuthentication(input authResolverInput, states resourceCredentialStore, client httpDoer) (authResolverOutput, error) {
-	if !supportedResourceAlternative(input.Requirements) {
-		return authResolverOutput{}, nil
-	}
-	runtime, err := agentRuntime()
-	if err != nil {
-		return authResolverOutput{}, err
-	}
-	reference, err := states.FindByResourceURL(input.Request.URI, runtime, "")
-	if errors.Is(err, os.ErrNotExist) {
-		return authResolverOutput{Handled: protocolAuthenticationSupports(input.Request.URI, input.Requirements, client)}, nil
-	}
-	if err != nil {
-		return authResolverOutput{}, err
-	}
-	if scopesContain(reference.credential.Scopes, input.Requirements[0].Needs) {
-		return authResolverOutput{Handled: true}, nil
-	}
-	return authResolverOutput{Handled: protocolAuthenticationSupports(input.Request.URI, input.Requirements, client)}, nil
-}
-
-func protocolAuthenticationSupports(requestURI string, requirements []authRequirement, client httpDoer) bool {
-	origin, err := realmrootOrigin(requestURI)
-	if err != nil {
-		return false
-	}
-	configuration, err := discoverAgentConfiguration(context.Background(), client, origin)
-	return err == nil && scopesContain(configuration.AgentBootstrapScopes, requirements[0].Needs)
-}
-
-func supportedResourceAlternative(requirements []authRequirement) bool {
-	if len(requirements) != 1 {
-		return false
-	}
-	switch requirements[0].Kind {
-	case "oauth2", "openid", "http-bearer", "http":
-		return true
-	default:
-		return false
-	}
-}
-
-func scopesContain(have []string, needs []string) bool {
-	available := make(map[string]bool, len(have))
-	for _, scope := range have {
-		available[scope] = true
-	}
-	for _, scope := range needs {
-		if !available[scope] {
-			return false
-		}
-	}
-	return true
-}
-
-func authenticateHookRequest(input authHookEnvelope, states stateStore, client httpDoer, prompt approvalPrompt) (plugin.AuthHookOutput, error) {
-	legacy := plugin.AuthHookInput{Type: input.Type, API: input.API, Profile: input.Profile, Params: input.Params, Request: input.Request}
-	if len(input.Requirements) == 0 {
-		return authenticateRequest(legacy, states, client, prompt)
-	}
-	if !supportedResourceAlternative(input.Requirements) {
-		return plugin.AuthHookOutput{}, errors.New("Realmroot cannot satisfy the selected operation security alternative")
-	}
-	credentials, ok := states.(resourceCredentialStore)
-	if !ok {
-		return plugin.AuthHookOutput{}, errors.New("Realmroot Resource credential storage is unavailable")
-	}
-	runtime, err := agentRuntime()
-	if err != nil {
-		return plugin.AuthHookOutput{}, err
-	}
-	reference, err := credentials.FindByResourceURL(input.Request.URI, runtime, "")
-	if errors.Is(err, os.ErrNotExist) {
-		if !protocolAuthenticationSupports(input.Request.URI, input.Requirements, client) {
-			return plugin.AuthHookOutput{}, errors.New("no Realmroot credential satisfies the selected operation scopes")
-		}
-		legacy.Params = map[string]string{"provider": authProvider}
-		return authenticateRequest(legacy, states, client, prompt)
-	}
-	if err != nil {
-		return plugin.AuthHookOutput{}, err
-	}
-	if !scopesContain(reference.credential.Scopes, input.Requirements[0].Needs) {
-		if !protocolAuthenticationSupports(input.Request.URI, input.Requirements, client) {
-			return plugin.AuthHookOutput{}, errors.New("no Realmroot credential satisfies the selected operation scopes")
-		}
-		legacy.Params = map[string]string{"provider": authProvider}
-		return authenticateRequest(legacy, states, client, prompt)
-	}
-	return authenticateTargetRequestForResource(legacy, credentials, client, runtime, reference.state.Issuer, input.Request.URI)
-}
-
 type systemPromptWriter struct{}
 
 func authenticateRequest(
@@ -201,12 +83,6 @@ func authenticateRequest(
 		return plugin.AuthHookOutput{}, err
 	}
 	switch input.Params["provider"] {
-	case targetAuthProvider:
-		credentials, ok := states.(resourceCredentialStore)
-		if !ok {
-			return plugin.AuthHookOutput{}, nil
-		}
-		return authenticateTargetRequest(input, credentials, client, runtime, strings.TrimSuffix(input.Params["issuer"], "/"))
 	case authProvider:
 	default:
 		return plugin.AuthHookOutput{}, nil
@@ -246,140 +122,23 @@ func authenticateRequest(
 	}, nil
 }
 
-func authenticateTargetRequest(
-	input plugin.AuthHookInput,
-	states resourceCredentialStore,
+func authenticateHookRequest(
+	input authHookEnvelope,
+	states stateStore,
 	client httpDoer,
-	runtime string,
-	issuer string,
+	prompt approvalPrompt,
 ) (plugin.AuthHookOutput, error) {
-	return authenticateTargetRequestForResource(input, states, client, runtime, issuer, input.Request.URI)
-}
-
-func authenticateTargetRequestForResource(
-	input plugin.AuthHookInput,
-	states resourceCredentialStore,
-	client httpDoer,
-	runtime string,
-	issuer string,
-	resourceURL string,
-) (plugin.AuthHookOutput, error) {
-	if issuer != "" {
-		parsed, err := validatedAbsoluteURL(issuer)
-		if err != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
-			return plugin.AuthHookOutput{}, errors.New("Realmroot target issuer must be an absolute HTTPS URL without query or fragment")
+	legacy := plugin.AuthHookInput{
+		Type: input.Type, API: input.API, Profile: input.Profile, Params: input.Params, Request: input.Request,
+	}
+	if len(input.Requirements) > 0 {
+		if !supportedProtocolAlternative(input.Requirements) ||
+			!protocolAuthenticationSupports(input.Request.URI, input.Requirements, client) {
+			return plugin.AuthHookOutput{}, errors.New("Realmroot cannot satisfy the selected operation security alternative")
 		}
+		legacy.Params = map[string]string{"provider": authProvider}
 	}
-	reference, err := states.FindByResourceURL(resourceURL, runtime, issuer)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			if issuer != "" {
-				unfiltered, unfilteredErr := states.FindByResourceURL(resourceURL, runtime, "")
-				if unfilteredErr == nil {
-					return plugin.AuthHookOutput{}, fmt.Errorf(
-						"Realmroot target issuer %q does not match the active Resource credential issuer %q",
-						issuer,
-						unfiltered.state.Issuer,
-					)
-				}
-				if !errors.Is(unfilteredErr, os.ErrNotExist) {
-					return plugin.AuthHookOutput{}, unfilteredErr
-				}
-			}
-			return plugin.AuthHookOutput{}, errors.New(
-				"no active Realmroot Resource credential matches the target API request; request Resource access before retrying",
-			)
-		}
-		return plugin.AuthHookOutput{}, err
-	}
-	credential := reference.credential
-	if credential.AccessToken == "" || credential.ExpiresAt == nil || !time.Now().Add(5*time.Second).Before(*credential.ExpiresAt) {
-		credential, err = refreshTargetToken(context.Background(), client, reference.state, credential)
-		if err != nil {
-			var responseError *httpResponseError
-			if errors.As(err, &responseError) && responseError.StatusCode == http.StatusForbidden {
-				if deleteErr := states.DeleteCredential(reference); deleteErr != nil {
-					return plugin.AuthHookOutput{}, fmt.Errorf("remove inactive target credential: %w", deleteErr)
-				}
-				return plugin.AuthHookOutput{}, errors.New(
-					"cached Resource credential can no longer be renewed; request current Resource access before retrying",
-				)
-			}
-			return plugin.AuthHookOutput{}, err
-		}
-		if err := states.UpdateCredential(reference, credential); err != nil {
-			return plugin.AuthHookOutput{}, err
-		}
-	}
-	proof, err := signDPoPProof(
-		credential.PrivateKey,
-		input.Request.Method,
-		input.Request.URI,
-		credential.AccessToken,
-		time.Now(),
-	)
-	if err != nil {
-		return plugin.AuthHookOutput{}, err
-	}
-	return plugin.AuthHookOutput{Request: &plugin.HookRequestHeaderUpdate{Headers: map[string]any{
-		"Authorization": "DPoP " + credential.AccessToken,
-		"DPoP":          proof,
-	}}}, nil
-}
-
-func refreshTargetToken(
-	ctx context.Context,
-	client httpDoer,
-	state agentState,
-	credential dpopCredential,
-) (dpopCredential, error) {
-	if credential.CredentialEndpoint == "" || credential.ProofTarget == "" {
-		return dpopCredential{}, errors.New("stored Resource credential is missing its renewal offer")
-	}
-	if !sameOrigin(credential.CredentialEndpoint, state.Origin) {
-		return dpopCredential{}, errors.New("stored Resource credential endpoint does not belong to its issuer")
-	}
-	targetProof, err := signDPoPProof(credential.PrivateKey, http.MethodPost, credential.ProofTarget, "", time.Now())
-	if err != nil {
-		return dpopCredential{}, err
-	}
-	protocol, err := usableProtocolCredential(ctx, client, state)
-	if err != nil {
-		return dpopCredential{}, err
-	}
-	requestProof, err := signDPoPProof(
-		protocol.PrivateKey,
-		http.MethodPost,
-		credential.CredentialEndpoint,
-		protocol.AccessToken,
-		time.Now(),
-	)
-	if err != nil {
-		return dpopCredential{}, err
-	}
-	var token targetTokenResponse
-	if err := requestJSONHeaders(
-		ctx,
-		client,
-		http.MethodPost,
-		credential.CredentialEndpoint,
-		map[string]string{
-			"Authorization": "DPoP " + protocol.AccessToken,
-			"DPoP":          requestProof,
-		},
-		map[string]any{"proof": map[string]any{"type": "dpop+jwt", "value": targetProof}},
-		&token,
-	); err != nil {
-		return dpopCredential{}, fmt.Errorf("issue target API access token: %w", err)
-	}
-	if token.TokenType != "DPoP" || token.AccessToken == "" || token.ResourceIndicator != credential.ResourceIndicator ||
-		token.Resource.Href != credential.ResourceHref ||
-		!token.ExpiresAt.After(time.Now()) {
-		return dpopCredential{}, errors.New("Realmroot returned an invalid target API access token")
-	}
-	credential.AccessToken = token.AccessToken
-	credential.ExpiresAt = &token.ExpiresAt
-	return credential, nil
+	return authenticateRequest(legacy, states, client, prompt)
 }
 
 func usableProtocolCredential(ctx context.Context, client httpDoer, state agentState) (dpopCredential, error) {
@@ -765,17 +524,30 @@ func requestJSONHeaders(
 	body any,
 	output any,
 ) error {
+	_, err := requestJSONHeadersResponse(ctx, client, method, uri, headers, body, output)
+	return err
+}
+
+func requestJSONHeadersResponse(
+	ctx context.Context,
+	client httpDoer,
+	method string,
+	uri string,
+	headers map[string]string,
+	body any,
+	output any,
+) (http.Header, error) {
 	var reader io.Reader
 	if body != nil {
 		encoded, err := json.Marshal(body)
 		if err != nil {
-			return fmt.Errorf("encode request body: %w", err)
+			return nil, fmt.Errorf("encode request body: %w", err)
 		}
 		reader = bytes.NewReader(encoded)
 	}
 	request, err := http.NewRequestWithContext(ctx, method, uri, reader)
 	if err != nil {
-		return fmt.Errorf("create Realmroot request: %w", err)
+		return nil, fmt.Errorf("create Realmroot request: %w", err)
 	}
 	request.Header.Set("Accept", "application/json")
 	if body != nil {
@@ -786,23 +558,27 @@ func requestJSONHeaders(
 	}
 	response, err := client.Do(request)
 	if err != nil {
-		return fmt.Errorf("call Realmroot: %w", err)
+		return nil, fmt.Errorf("call Realmroot: %w", err)
 	}
 	defer response.Body.Close()
 	encoded, err := io.ReadAll(io.LimitReader(response.Body, 1<<20))
 	if err != nil {
-		return fmt.Errorf("read Realmroot response: %w", err)
+		return nil, fmt.Errorf("read Realmroot response: %w", err)
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return &httpResponseError{StatusCode: response.StatusCode, Body: strings.TrimSpace(string(encoded))}
+		return nil, &httpResponseError{
+			StatusCode: response.StatusCode,
+			Header:     response.Header.Clone(),
+			Body:       strings.TrimSpace(string(encoded)),
+		}
 	}
 	if output == nil || len(encoded) == 0 {
-		return nil
+		return response.Header.Clone(), nil
 	}
 	if err := json.Unmarshal(encoded, output); err != nil {
-		return fmt.Errorf("decode Realmroot response: %w", err)
+		return nil, fmt.Errorf("decode Realmroot response: %w", err)
 	}
-	return nil
+	return response.Header.Clone(), nil
 }
 
 func requestForm(
@@ -842,6 +618,7 @@ func requestForm(
 
 type httpResponseError struct {
 	StatusCode int
+	Header     http.Header
 	Body       string
 }
 

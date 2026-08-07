@@ -60,7 +60,7 @@ export function createUserRepositoryMock(): UserRepository {
     listConsentedApplications: vi.fn().mockResolvedValue(createPage({ limit: 50, offset: 0 })),
     listSessions: vi.fn().mockResolvedValue(createPage({ limit: 50, offset: 0 })),
     getSessionToken: vi.fn().mockResolvedValue('session-token-1'),
-    deleteSessions: vi.fn().mockResolvedValue([]),
+    deleteSessions: vi.fn().mockResolvedValue([{ id: 'session-1' }]),
     createPasswordResetRequest: vi.fn().mockImplementation(async (input) => input),
     findPasswordResetRequest: vi.fn().mockResolvedValue(null),
   }

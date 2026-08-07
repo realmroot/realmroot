@@ -1350,7 +1350,7 @@ export async function issueTargetAccessToken(
     clientSecret,
   )
   const actorToken = requiredString(actorGrant, 'access_token', 'RFC 7523 JWT bearer grant response')
-  const token = await postForm(
+  const tokenResponse = await postFormResponse(
     deps,
     authorization.tokenEndpoint,
     {
@@ -1370,6 +1370,7 @@ export async function issueTargetAccessToken(
     clientSecret,
     new Headers({ dpop: dpopProof }),
   )
+  const token = tokenResponse.body
   const accessToken = requiredString(token, 'access_token', 'Token exchange response')
   if (String(token.token_type).toLowerCase() !== 'dpop') {
     throw unauthorized('Target authorization server did not issue a DPoP-bound access token.')
@@ -1435,6 +1436,7 @@ export async function issueTargetAccessToken(
     scopes: request.scopes,
     authorizationDetails: grant.authorizationDetails,
     resourceUrl: resource.resourceUrl,
+    dpopNonce: tokenResponse.dpopNonce,
   }
 }
 
@@ -1571,6 +1573,7 @@ async function issueNativeAccessToken(
     scopes: request.scopes,
     authorizationDetails: realmroot ? grant.authorizationDetails : [],
     resourceUrl: resource.resourceUrl,
+    dpopNonce: null,
   }
 }
 
@@ -2743,6 +2746,17 @@ async function postForm(
   clientSecret: string,
   extraHeaders = new Headers(),
 ) {
+  return (await postFormResponse(deps, url, body, clientId, clientSecret, extraHeaders)).body
+}
+
+async function postFormResponse(
+  deps: Deps,
+  url: string,
+  body: Record<string, string>,
+  clientId: string,
+  clientSecret: string,
+  extraHeaders = new Headers(),
+) {
   const headers = new Headers(extraHeaders)
   headers.set('accept', 'application/json')
   headers.set('authorization', `Basic ${base64(`${clientId}:${clientSecret}`)}`)
@@ -2756,17 +2770,40 @@ async function postForm(
     throw badGateway('External authorization server is unavailable.')
   }
   if (!response.ok) {
-    const detail = await oauthErrorDetail(response)
+    const providerError = await readOAuthError(response)
+    if (providerError?.error === 'use_dpop_nonce') {
+      const nonce = response.headers.get('dpop-nonce')
+      if (!nonce || !validDpopNonce(nonce)) {
+        throw badGateway('External authorization server returned an invalid DPoP nonce challenge.')
+      }
+      throw oauthError(
+        providerError.error,
+        providerError.description ?? 'Authorization server requires nonce in DPoP proof.',
+        400,
+        {},
+        { 'DPoP-Nonce': nonce },
+      )
+    }
+    const detail = providerError?.detail ?? null
     throw unauthorized(
       detail
         ? `External authorization server rejected the token request: ${detail}.`
         : 'External authorization server rejected the token request.',
     )
   }
-  return readObject(response, 'External authorization server response is invalid.')
+  const dpopNonce = response.headers.get('dpop-nonce')
+  if (dpopNonce !== null && !validDpopNonce(dpopNonce)) {
+    throw badGateway('External authorization server returned an invalid DPoP nonce.')
+  }
+  return {
+    body: await readObject(response, 'External authorization server response is invalid.'),
+    dpopNonce,
+  }
 }
 
-async function oauthErrorDetail(response: Response): Promise<string | null> {
+async function readOAuthError(
+  response: Response,
+): Promise<{ error: string; description: string | null; detail: string } | null> {
   try {
     const body = (await response.json()) as Record<string, unknown>
     const error =
@@ -2778,10 +2815,14 @@ async function oauthErrorDetail(response: Response): Promise<string | null> {
           ? body.message
           : null
     if (!error) return null
-    return description ? `${error}: ${description}` : error
+    return { error, description, detail: description ? `${error}: ${description}` : error }
   } catch {
     return null
   }
+}
+
+function validDpopNonce(value: string) {
+  return value.length <= 4096 && /^[\x21\x23-\x5B\x5D-\x7E]+$/.test(value)
 }
 
 async function postPushedAuthorizationRequest(

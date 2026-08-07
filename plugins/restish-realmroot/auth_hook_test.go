@@ -25,111 +25,6 @@ func TestAuthHookIgnoresUnmarkedProfiles(t *testing.T) {
 	}
 }
 
-func TestAuthResolverRequiresMatchingResourceAndScopes(t *testing.T) {
-	credential := testCredential(t, "target-token", time.Now().Add(time.Hour))
-	credential.Scopes = []string{"projects:read"}
-	states := newCredentialState(t, credential)
-	input := authResolverInput{
-		Requirements: []authRequirement{{ID: "OAuth", Kind: "oauth2", Needs: []string{"projects:read"}}},
-		Request:      plugin.HookRequest{Method: http.MethodGet, URI: "https://api.example.com/v1/projects"},
-	}
-	client := roundTripFunc(func(*http.Request) (*http.Response, error) {
-		return jsonResponse(http.StatusNotFound, map[string]any{"error": "not_found"}), nil
-	})
-	output, err := resolveAuthentication(input, states, client)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !output.Handled {
-		t.Fatal("expected matching Resource credential to be handled")
-	}
-	input.Requirements[0].Needs = []string{"projects:write"}
-	output, err = resolveAuthentication(input, states, client)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if output.Handled {
-		t.Fatal("credential with insufficient scopes must not be handled")
-	}
-	input.Requirements = append(input.Requirements, authRequirement{ID: "Key", Kind: "api-key"})
-	output, err = resolveAuthentication(input, states, client)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if output.Handled {
-		t.Fatal("multi-scheme alternatives must not be partially handled")
-	}
-}
-
-func TestAuthResolverSelectsProtocolCredentialWhenSameURLTargetLacksScopes(t *testing.T) {
-	credential := testCredential(t, "target-token", time.Now().Add(time.Hour))
-	credential.ResourceIndicator = "https://auth.example.com/api"
-	credential.Scopes = []string{"resource-servers:write"}
-	states := newCredentialState(t, credential)
-	input := authResolverInput{
-		Requirements: []authRequirement{{ID: "DPoP", Kind: "http", Needs: []string{"resources:read"}}},
-		Request:      plugin.HookRequest{Method: http.MethodGet, URI: "https://auth.example.com/api/resource-servers/example/resources"},
-	}
-	client := roundTripFunc(func(request *http.Request) (*http.Response, error) {
-		if request.URL.String() == "https://auth.example.com/.well-known/agent-configuration" {
-			return jsonResponse(http.StatusOK, testAgentConfiguration()), nil
-		}
-		return jsonResponse(http.StatusNotFound, map[string]any{"error": "not_found"}), nil
-	})
-
-	output, err := resolveAuthentication(input, states, client)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !output.Handled {
-		t.Fatal("expected same-URL protocol credential with sufficient scopes to be selected")
-	}
-}
-
-func TestAuthResolverClaimsDiscoveredRealmrootProtocolAuthenticationOnly(t *testing.T) {
-	states := newCredentialState(t, testCredential(t, "target-token", time.Now().Add(time.Hour)))
-	states.state.DPoPCredentials = nil
-	states.state.ActiveDPoPCredentials = nil
-	input := authResolverInput{
-		API:          "realmroot",
-		Requirements: []authRequirement{{ID: "OAuth", Kind: "oauth2", Needs: []string{"resource-servers:read"}}},
-		Request:      plugin.HookRequest{Method: http.MethodGet, URI: "https://auth.example.com/api/resource-servers"},
-	}
-
-	client := roundTripFunc(func(request *http.Request) (*http.Response, error) {
-		if request.URL.String() == "https://auth.example.com/.well-known/agent-configuration" {
-			return jsonResponse(http.StatusOK, testAgentConfiguration()), nil
-		}
-		return jsonResponse(http.StatusNotFound, map[string]any{"error": "not_found"}), nil
-	})
-	output, err := resolveAuthentication(input, states, client)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !output.Handled {
-		t.Fatal("expected Realmroot protocol authentication to be handled")
-	}
-
-	input.API = "realmroot-alias"
-	output, err = resolveAuthentication(input, states, client)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !output.Handled {
-		t.Fatal("API aliases must not change protocol discovery")
-	}
-
-	input.API = "projects"
-	input.Request.URI = "https://api.example.com/v1/projects"
-	output, err = resolveAuthentication(input, states, client)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if output.Handled {
-		t.Fatal("external API without a matching Resource credential must not be handled")
-	}
-}
-
 func TestAuthHookEnrollsOnceThenSignsOriginalRequest(t *testing.T) {
 	t.Setenv("REALMROOT_AGENT_NAME", "Build Agent")
 	requests := 0
@@ -139,9 +34,9 @@ func TestAuthHookEnrollsOnceThenSignsOriginalRequest(t *testing.T) {
 		requests++
 		switch requests {
 		case 1, 6:
-			return jsonResponse(200, testAgentConfiguration()), nil
+			return jsonResponse(http.StatusOK, testAgentConfiguration()), nil
 		case 2:
-			return jsonResponse(200, map[string]any{
+			return jsonResponse(http.StatusOK, map[string]any{
 				"agent_id": "agent-123", "host_id": "host-123",
 				"approval": map[string]any{
 					"verification_uri_complete": "https://auth.example.com/agent/approve?code=abc",
@@ -149,7 +44,7 @@ func TestAuthHookEnrollsOnceThenSignsOriginalRequest(t *testing.T) {
 				},
 			}), nil
 		case 3:
-			return jsonResponse(200, map[string]any{"status": "active"}), nil
+			return jsonResponse(http.StatusOK, map[string]any{"status": "active"}), nil
 		case 4:
 			if request.Method != http.MethodPost || request.URL.String() != "https://auth.example.com/api/auth/oauth2/token" {
 				t.Fatalf("token request = %s %s", request.Method, request.URL)
@@ -163,14 +58,14 @@ func TestAuthHookEnrollsOnceThenSignsOriginalRequest(t *testing.T) {
 				request.Header.Get("DPoP") == "" {
 				t.Fatalf("token request form = %#v", request.Form)
 			}
-			return jsonResponse(200, map[string]any{
+			return jsonResponse(http.StatusOK, map[string]any{
 				"access_token": "protocol-token", "token_type": "DPoP", "expires_in": 300,
 			}), nil
 		case 5:
 			if request.Method != http.MethodGet || request.URL.String() != "https://auth.example.com/api/agent/status" {
 				t.Fatalf("status request = %s %s", request.Method, request.URL)
 			}
-			return jsonResponse(201, map[string]any{"agent": map[string]any{
+			return jsonResponse(http.StatusCreated, map[string]any{"agent": map[string]any{
 				"id": "agent-identity-1", "issuer": "https://auth.example.com/api/auth", "subject": "agt_123",
 			}}), nil
 		default:
@@ -204,144 +99,23 @@ func TestAuthHookEnrollsOnceThenSignsOriginalRequest(t *testing.T) {
 	}
 }
 
-func TestAuthHookSignsTargetRequestWithCachedShortLivedCredential(t *testing.T) {
-	t.Log("[spec: agent-identity/restish-resource-credential-lifecycle]")
-	credential := testCredential(t, "access-token", time.Now().Add(time.Minute))
-	states := newCredentialState(t, credential)
-	input := targetHookInput()
-
-	output, err := authenticateRequest(input, states, roundTripFunc(nil), &promptRecorder{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if output.Request.Headers["Authorization"] != "DPoP access-token" {
-		t.Fatalf("authorization = %#v", output.Request.Headers["Authorization"])
-	}
-	claims := decodeJWTPayload(t, output.Request.Headers["DPoP"].(string))
-	if claims["htm"] != http.MethodGet || claims["htu"] != "https://api.example.com/v1/projects" || claims["ath"] == "" {
-		t.Fatalf("unexpected DPoP claims: %#v", claims)
-	}
-}
-
-func TestAuthHookUsesConfiguredIssuerToSelectTargetIdentity(t *testing.T) {
-	credential := testCredential(t, "access-token", time.Now().Add(time.Minute))
-	states := newCredentialState(t, credential)
-	input := targetHookInput()
-	input.Params["issuer"] = "https://other.example.com/api/auth"
-
-	_, err := authenticateRequest(input, states, roundTripFunc(nil), &promptRecorder{})
-	if err == nil || !strings.Contains(err.Error(), "does not match the active Resource credential issuer") {
-		t.Fatalf("issuer mismatch error = %v", err)
-	}
-}
-
-func TestAuthHookExplainsMissingTargetCredential(t *testing.T) {
-	states := newCredentialState(t, testCredential(t, "access-token", time.Now().Add(time.Minute)))
-	states.state.DPoPCredentials = nil
-	states.state.ActiveDPoPCredentials = nil
-
-	_, err := authenticateRequest(targetHookInput(), states, roundTripFunc(nil), &promptRecorder{})
-	if err == nil || !strings.Contains(err.Error(), "request Resource access") {
-		t.Fatalf("missing credential error = %v", err)
-	}
-}
-
-func TestAuthHookRejectsInvalidTargetIssuer(t *testing.T) {
-	input := targetHookInput()
-	input.Params["issuer"] = "not-a-url"
-	_, err := authenticateRequest(input, newCredentialState(t, testCredential(t, "token", time.Now().Add(time.Minute))), roundTripFunc(nil), &promptRecorder{})
-	if err == nil || !strings.Contains(err.Error(), "target issuer") {
-		t.Fatalf("issuer validation error = %v", err)
-	}
-}
-
-func TestAuthHookRenewsExpiredCredentialFromStoredOffer(t *testing.T) {
-	t.Run("[spec: agent-identity/restish-resource-credential-lifecycle] [spec: agent-identity/restish-target-token-origin]", func(t *testing.T) {
-		t.Log("[spec: agent-identity/restish-target-token-origin]")
-		expired := time.Now().Add(-time.Minute)
-		credential := testCredential(t, "expired-token", expired)
-		states := newCredentialState(t, credential)
-		client := roundTripFunc(func(request *http.Request) (*http.Response, error) {
-			if request.Method != http.MethodPost || request.URL.String() != credential.CredentialEndpoint {
-				t.Fatalf("credential request = %s %s", request.Method, request.URL)
-			}
-			if request.Header.Get("Authorization") != "DPoP protocol-token" {
-				t.Fatal("missing Realmroot OAuth credential")
-			}
-			claims := decodeJWTPayload(t, request.Header.Get("DPoP"))
-			if claims["htu"] != credential.CredentialEndpoint || claims["htm"] != http.MethodPost || claims["ath"] == "" {
-				t.Fatalf("Realmroot request proof = %#v", claims)
-			}
-			var body struct {
-				Proof struct {
-					Value string `json:"value"`
-				} `json:"proof"`
-			}
-			if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
-				t.Fatal(err)
-			}
-			targetClaims := decodeJWTPayload(t, body.Proof.Value)
-			if targetClaims["htu"] != credential.ProofTarget || targetClaims["htm"] != http.MethodPost {
-				t.Fatalf("target proof = %#v", targetClaims)
-			}
-			return jsonResponse(200, map[string]any{
-				"accessToken": "renewed-token", "tokenType": "DPoP", "expiresAt": time.Now().Add(time.Minute),
-				"resourceIndicator": credential.ResourceIndicator,
-				"resource":          map[string]any{"href": credential.ResourceHref},
-			}), nil
-		})
-
-		output, err := authenticateRequest(targetHookInput(), states, client, &promptRecorder{})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if output.Request.Headers["Authorization"] != "DPoP renewed-token" {
-			t.Fatalf("authorization = %#v", output.Request.Headers["Authorization"])
-		}
-		if states.state.DPoPCredentials[credential.ResourceHref].AccessToken != "renewed-token" {
-			t.Fatal("renewed credential was not cached")
-		}
-	})
-}
-
-func TestAuthHookRemovesCredentialWhenIssuerRejectsRenewal(t *testing.T) {
-	credential := testCredential(t, "expired-token", time.Now().Add(-time.Minute))
-	states := newCredentialState(t, credential)
-	client := roundTripFunc(func(*http.Request) (*http.Response, error) {
-		return jsonResponse(http.StatusForbidden, map[string]any{"message": "authorization expired"}), nil
-	})
-
-	_, err := authenticateRequest(targetHookInput(), states, client, &promptRecorder{})
-	if err == nil || !strings.Contains(err.Error(), "request current Resource access") {
-		t.Fatalf("renewal error = %v", err)
-	}
-	if len(states.state.DPoPCredentials) != 0 || len(states.state.ActiveDPoPCredentials) != 0 {
-		t.Fatalf("credential was not removed: %#v", states.state)
-	}
-}
-
-func testCredential(t *testing.T, accessToken string, expiresAt time.Time) dpopCredential {
-	t.Helper()
-	privateKey, err := newDPoPPrivateKey()
-	if err != nil {
-		t.Fatal(err)
-	}
+func testCredential(_ *testing.T, _ string, _ time.Time) dpopCredential {
 	return dpopCredential{
 		ResourceHref:       "https://auth.example.com/api/resource-servers/zpan/resources/workspace-1",
 		ResourceIndicator:  "https://api.example.com/v1",
 		CredentialEndpoint: "https://auth.example.com/api/access-requests/request-1/credentials",
 		ProofTarget:        "https://api.example.com/oauth/token",
-		PrivateKey:         privateKey, AccessToken: accessToken, ExpiresAt: &expiresAt,
+		Scopes:             []string{"files:read"},
 	}
 }
 
 func newCredentialState(t *testing.T, credential dpopCredential) *memoryStateStore {
 	t.Helper()
-	agentPublic, agentPrivate, err := ed25519.GenerateKey(rand.Reader)
+	t.Setenv("AGENT", defaultAgentRuntime)
+	_, agentPrivate, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_ = agentPublic
 	_, hostPrivate, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatal(err)
@@ -355,24 +129,14 @@ func newCredentialState(t *testing.T, credential dpopCredential) *memoryStateSto
 		Version: agentStateVersion, Origin: "https://auth.example.com", Issuer: "https://auth.example.com/api/auth",
 		Runtime: defaultAgentRuntime, AgentID: "agent-123", HostID: "host-123", AgentKeyID: "agent-key", HostKeyID: "host-key",
 		AgentPrivateKey: encodePrivateKey(agentPrivate), HostPrivateKey: encodePrivateKey(hostPrivate),
-		Identity:              &stableIdentity{ID: "identity-1", Issuer: "https://auth.example.com/api/auth", Subject: "agt_123"},
-		DPoPCredentials:       map[string]dpopCredential{credential.ResourceHref: credential},
-		ActiveDPoPCredentials: map[string]string{credentialSelectionKey(credential.ResourceIndicator): credential.ResourceHref},
+		Identity:             &stableIdentity{ID: "identity-1", Issuer: "https://auth.example.com/api/auth", Subject: "agt_123"},
+		DPoPCredentialOffers: map[string][]dpopCredential{credential.ResourceHref: {credential}},
 		ProtocolCredential: &dpopCredential{
 			ResourceHref: "https://auth.example.com/api", ResourceIndicator: "https://auth.example.com/api",
 			CredentialEndpoint: "https://auth.example.com/api/auth/oauth2/token",
 			ProofTarget:        "https://auth.example.com/api/auth/oauth2/token", PrivateKey: protocolKey,
 			AccessToken: "protocol-token", ExpiresAt: &protocolExpiresAt,
 		},
-	}}
-}
-
-func targetHookInput() plugin.AuthHookInput {
-	return plugin.AuthHookInput{API: "projects", Profile: "default", Params: map[string]string{
-		"provider": targetAuthProvider,
-		"issuer":   "https://auth.example.com/api/auth",
-	}, Request: plugin.HookRequest{
-		Method: http.MethodGet, URI: "https://api.example.com/v1/projects?limit=20",
 	}}
 }
 
@@ -384,13 +148,8 @@ func testAgentConfiguration() map[string]any {
 		"agent_endpoint":            "https://auth.example.com/api/agent/status",
 		"agent_token_endpoint":      "https://auth.example.com/api/auth/oauth2/token",
 		"agent_bootstrap_scopes_supported": []string{
-			"agent:read",
-			"resource-servers:read",
-			"resources:read",
-			"connection-requests:read",
-			"connection-requests:write",
-			"access-requests:read",
-			"access-requests:write",
+			"agent:read", "resource-servers:read", "resources:read", "connection-requests:read",
+			"connection-requests:write", "access-requests:read", "access-requests:write",
 		},
 		"endpoints": map[string]any{
 			"register": "https://auth.example.com/api/auth/agent/register",
@@ -421,64 +180,64 @@ func (s *memoryStateStore) Create(_ agentTarget, state agentState) (string, erro
 	s.state, s.exists = state, true
 	return "/private/agent.json", nil
 }
+
 func (s *memoryStateStore) Load(_ agentTarget) (agentState, error) {
 	if !s.exists {
 		return agentState{}, os.ErrNotExist
 	}
 	return s.state, nil
 }
+
 func (s *memoryStateStore) Update(_ agentTarget, state agentState) error {
 	s.state, s.exists = state, true
 	return nil
 }
+
 func (s *memoryStateStore) FindByOriginAndAgentID(origin, agentID string) (agentState, error) {
 	if !s.exists || s.state.Origin != origin || s.state.AgentID != agentID {
 		return agentState{}, os.ErrNotExist
 	}
 	return s.state, nil
 }
+
 func (s *memoryStateStore) FindByOriginAndIdentityID(origin, identityID string) (agentState, error) {
 	if !s.exists || s.state.Origin != origin || s.state.Identity == nil || s.state.Identity.ID != identityID {
 		return agentState{}, os.ErrNotExist
 	}
 	return s.state, nil
 }
+
 func (s *memoryStateStore) FindReferenceByOriginIdentityRuntime(origin, identityID, runtime string) (agentStateReference, error) {
 	state, err := s.FindByOriginAndIdentityID(origin, identityID)
-	if err != nil {
+	if err != nil || state.Runtime != runtime {
 		return agentStateReference{}, os.ErrNotExist
 	}
-	_ = runtime
 	return agentStateReference{path: "memory", state: state}, nil
 }
+
 func (s *memoryStateStore) UpdateStateReference(reference agentStateReference) error {
 	s.state = reference.state
 	return nil
 }
-func (s *memoryStateStore) FindByResourceURL(resourceURL, _ string, issuer string) (resourceCredentialReference, error) {
-	if issuer != "" && strings.TrimSuffix(s.state.Issuer, "/") != issuer {
+
+func (s *memoryStateStore) FindCredentialOffer(reference, runtime string, scopes []string) (resourceCredentialReference, error) {
+	offers := s.state.DPoPCredentialOffers[reference]
+	if !s.exists || s.state.Runtime != runtime {
 		return resourceCredentialReference{}, os.ErrNotExist
 	}
-	for _, href := range s.state.ActiveDPoPCredentials {
-		credential, ok := s.state.DPoPCredentials[href]
-		if ok && resourceURLMatches(credential.ResourceIndicator, resourceURL) {
-			return resourceCredentialReference{state: s.state, credential: credential}, nil
+	for _, credential := range offers {
+		if scopesContain(credential.Scopes, scopes) {
+			return resourceCredentialReference{path: "memory", state: s.state, credential: credential}, nil
 		}
 	}
 	return resourceCredentialReference{}, os.ErrNotExist
 }
-func (s *memoryStateStore) UpdateCredential(_ resourceCredentialReference, credential dpopCredential) error {
-	s.state.DPoPCredentials[credential.ResourceHref] = credential
-	return nil
-}
-func (s *memoryStateStore) DeleteCredential(reference resourceCredentialReference) error {
-	delete(s.state.DPoPCredentials, reference.credential.ResourceHref)
-	for key, href := range s.state.ActiveDPoPCredentials {
-		if href == reference.credential.ResourceHref {
-			delete(s.state.ActiveDPoPCredentials, key)
-		}
+
+func (s *memoryStateStore) FindCredentialState(reference, runtime string) (agentStateReference, error) {
+	if !s.exists || s.state.Runtime != runtime || !sameOrigin(reference, s.state.Origin) {
+		return agentStateReference{}, os.ErrNotExist
 	}
-	return nil
+	return agentStateReference{path: "memory", state: s.state}, nil
 }
 
 func decodeJWTPayload(t *testing.T, token string) map[string]any {

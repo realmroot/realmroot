@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -56,17 +55,6 @@ func handleProfiledResponse(
 	states agentStateFinder,
 	client httpDoer,
 ) (plugin.ResponseMiddlewareOutput, error) {
-	if input.Response.Status == http.StatusUnauthorized && requestUsedDPoP(input.Request.Headers) {
-		removed, err := removeRejectedTargetCredential(input.Request.URI, states)
-		if err != nil {
-			return plugin.ResponseMiddlewareOutput{}, err
-		}
-		if removed {
-			return plugin.ResponseMiddlewareOutput{}, errors.New(
-				"target API rejected the cached Agent credential; the credential was removed; request current Resource access before retrying",
-			)
-		}
-	}
 	if input.Response.Status < 200 || input.Response.Status >= 300 || !hasProfile(input.Response.Headers, interactiveResourceProfile) {
 		return plugin.ResponseMiddlewareOutput{}, nil
 	}
@@ -95,20 +83,6 @@ func handleProfiledResponse(
 	)
 }
 
-func requestUsedDPoP(headers map[string][]string) bool {
-	var authorization string
-	var proof string
-	for name, values := range headers {
-		switch {
-		case strings.EqualFold(name, "Authorization") && len(values) > 0:
-			authorization = values[0]
-		case strings.EqualFold(name, "DPoP") && len(values) > 0:
-			proof = values[0]
-		}
-	}
-	return strings.HasPrefix(authorization, "DPoP ") && proof != ""
-}
-
 func handleInteractiveResource(
 	ctx context.Context,
 	resource interactiveResponse,
@@ -133,7 +107,7 @@ func handleInteractiveResource(
 		switch resource.Interaction.Status {
 		case "completed":
 			if resource.CredentialOffer != nil {
-				return acceptCredentialOffer(ctx, resource, *resource.CredentialOffer, origin, state, states, client)
+				return acceptCredentialOffer(resource, *resource.CredentialOffer, origin, states)
 			}
 			return plugin.ResponseMiddlewareOutput{Response: &plugin.HookResponseUpdate{Body: representation}}, nil
 		case "denied", "expired", "failed":
@@ -199,13 +173,10 @@ func handleInteractiveResource(
 }
 
 func acceptCredentialOffer(
-	ctx context.Context,
 	resource interactiveResponse,
 	offer credentialOffer,
 	origin string,
-	state agentState,
 	states agentStateFinder,
-	client httpDoer,
 ) (plugin.ResponseMiddlewareOutput, error) {
 	if offer.Type != "dpop" || offer.Proof.Algorithm != "ES256" || offer.Proof.Method != http.MethodPost ||
 		offer.Resource.Href == "" || offer.ResourceIndicator == "" || offer.Endpoint == "" || offer.Proof.URI == "" {
@@ -226,30 +197,30 @@ func acceptCredentialOffer(
 	if err != nil {
 		return plugin.ResponseMiddlewareOutput{}, err
 	}
-	privateKey, err := newDPoPPrivateKey()
-	if err != nil {
-		return plugin.ResponseMiddlewareOutput{}, err
-	}
 	credential := dpopCredential{
 		ResourceHref:       offer.Resource.Href,
 		ResourceIndicator:  offer.ResourceIndicator,
 		CredentialEndpoint: offer.Endpoint,
 		ProofTarget:        offer.Proof.URI,
-		PrivateKey:         privateKey,
 		Scopes:             append([]string(nil), resource.Scopes...),
 	}
-	credential, err = refreshTargetToken(ctx, client, state, credential)
-	if err != nil {
-		return plugin.ResponseMiddlewareOutput{}, err
+	if reference.state.DPoPCredentialOffers == nil {
+		reference.state.DPoPCredentialOffers = make(map[string][]dpopCredential)
 	}
-	if reference.state.DPoPCredentials == nil {
-		reference.state.DPoPCredentials = make(map[string]dpopCredential)
+	offers := reference.state.DPoPCredentialOffers[credential.ResourceHref]
+	replaced := false
+	for index := range offers {
+		if sameStringSet(offers[index].Scopes, credential.Scopes) {
+			offers[index] = credential
+			replaced = true
+			break
+		}
 	}
-	if reference.state.ActiveDPoPCredentials == nil {
-		reference.state.ActiveDPoPCredentials = make(map[string]string)
+	if !replaced {
+		offers = append(offers, credential)
 	}
-	reference.state.DPoPCredentials[credential.ResourceHref] = credential
-	reference.state.ActiveDPoPCredentials[credentialSelectionKey(credential.ResourceIndicator)] = credential.ResourceHref
+	reference.state.DPoPCredentialOffers[credential.ResourceHref] = offers
+	reference.state.ActiveDPoPCredentials = nil
 	if err := store.UpdateStateReference(reference); err != nil {
 		return plugin.ResponseMiddlewareOutput{}, err
 	}
@@ -258,7 +229,10 @@ func acceptCredentialOffer(
 		"resource":          map[string]any{"href": credential.ResourceHref},
 		"resourceIndicator": credential.ResourceIndicator,
 		"scopes":            resource.Scopes,
-		"tokenExpiresAt":    credential.ExpiresAt.Format(time.RFC3339),
+		"credentialSource": map[string]any{
+			"name":      "realmroot",
+			"reference": credential.ResourceHref,
+		},
 	}}}, nil
 }
 
@@ -270,28 +244,6 @@ func stateForInteractiveResource(states agentStateFinder, origin string, agentID
 		}
 	}
 	return states.FindByOriginAndAgentID(origin, agentID)
-}
-
-func removeRejectedTargetCredential(requestURI string, states agentStateFinder) (bool, error) {
-	credentials, ok := states.(resourceCredentialStore)
-	if !ok {
-		return false, nil
-	}
-	runtime, err := agentRuntime()
-	if err != nil {
-		return false, err
-	}
-	reference, err := credentials.FindByResourceURL(requestURI, runtime, "")
-	if errors.Is(err, os.ErrNotExist) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	if err := credentials.DeleteCredential(reference); err != nil {
-		return false, fmt.Errorf("remove target credential rejected by Resource Server: %w", err)
-	}
-	return true, nil
 }
 
 func hasProfile(headers map[string][]string, expected string) bool {

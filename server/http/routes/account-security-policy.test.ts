@@ -214,11 +214,7 @@ describe('account security policy routes', () => {
       },
     })
     expect(security.deletePasskey).toHaveBeenCalledWith('user-2', 'passkey-1')
-    expect(users.getSessionToken).toHaveBeenCalledWith('user-2', 'session-1')
-    expect(auth.api.revokeUserSession).toHaveBeenCalledWith({
-      body: { sessionToken: 'session-token-1' },
-      headers: expect.any(Headers),
-    })
+    expect(users.deleteSessions).toHaveBeenCalledWith('user-2', 'session-1')
   })
 })
 
@@ -278,7 +274,7 @@ function createUserRepositoryMock(): UserRepository {
     listConsentedApplications: vi.fn().mockImplementation((_userId, page) => Promise.resolve(createPage(page))),
     listSessions: vi.fn().mockImplementation((_userId, page) => Promise.resolve(createPage(page))),
     getSessionToken: vi.fn().mockResolvedValue('session-token-1'),
-    deleteSessions: vi.fn().mockResolvedValue([]),
+    deleteSessions: vi.fn().mockResolvedValue([{ id: 'session-1' }]),
   }
 }
 

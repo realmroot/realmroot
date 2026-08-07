@@ -208,7 +208,7 @@ describe('management API client', () => {
       ['applications.patch', { param: { id: 'app-1' }, json: { iconUrl: '/api/assets/asset-1' } }],
       ['users.get', { query: { search: 'jane', limit: '50' } }],
       ['users.post', { json: { email: 'jane@example.com', displayName: 'Jane Doe' } }],
-      ['users.patch', { param: { id: 'user-1' }, json: { role: 'admin' } }],
+      ['users.patch', { param: { id: 'user-1' }, json: { displayName: 'Jane Admin' } }],
       ['user.get', { param: { id: 'user-1' } }],
       ['users.delete', { param: { id: 'user-1' } }],
       ['userPasswordReset.post', { param: { id: 'user-1' }, json: {} }],
@@ -303,7 +303,6 @@ describe('management API client', () => {
         {
           json: {
             identifier: 'management-api',
-            name: 'Management API',
             resourceUrl: 'https://auth.example.com/api',
             ownerOrganizationId: 'org-1',
           },

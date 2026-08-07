@@ -1,3 +1,4 @@
+import { oauthError } from '@server/domain/errors'
 import { handleApiError } from '@server/http/errors'
 import { depsMiddleware } from '@server/http/middleware/deps'
 import { createAgentProtocolRoutes } from '@server/http/routes/agent-protocol'
@@ -113,7 +114,7 @@ describe('Agent protocol routes', () => {
     })
     const app = createRouteApp()
     const resources = await app.request('/api/resource-servers/resource-1/resources')
-    expect(resources.status).toBe(200)
+    expect(resources.status, await resources.clone().text()).toBe(200)
     expect(JSON.stringify(await resources.json())).not.toContain('authorizationDetail')
   })
 
@@ -188,6 +189,7 @@ describe('Agent protocol routes', () => {
       resourceIndicator: 'https://drive.example.com/api',
       resource: { href: resourceHref },
       resourceUrl: 'https://drive.example.com/api',
+      dpopNonce: 'next-nonce',
     }
     vi.spyOn(externalResources, 'createAccessRequestCredential').mockResolvedValue(credential)
     const app = createRouteApp({ signJWT: vi.fn().mockResolvedValue({ token: 'signed' }) })
@@ -204,6 +206,7 @@ describe('Agent protocol routes', () => {
       body: JSON.stringify({ proof: { type: 'dpop+jwt', value: 'proof' } }),
     })
     expect(issued.status).toBe(201)
+    expect(issued.headers.get('dpop-nonce')).toBe('next-nonce')
     await expect(issued.json()).resolves.toEqual({
       accessToken: credential.accessToken,
       tokenType: credential.tokenType,
@@ -213,6 +216,34 @@ describe('Agent protocol routes', () => {
       authorizationDetails: credential.authorizationDetails,
       resourceIndicator: credential.resourceIndicator,
       resource: credential.resource,
+    })
+  })
+
+  it('preserves a target authorization server DPoP nonce challenge', async () => {
+    vi.spyOn(agentIdentities, 'getAgentIdentityByProtocolAgent').mockResolvedValue(activeIdentity())
+    vi.spyOn(externalResources, 'createAccessRequestCredential').mockRejectedValue(
+      oauthError(
+        'use_dpop_nonce',
+        'Authorization server requires nonce in DPoP proof.',
+        400,
+        {},
+        { 'DPoP-Nonce': 'challenge-nonce' },
+      ),
+    )
+    const response = await createRouteApp({ signJWT: vi.fn().mockResolvedValue({ token: 'signed' }) }).request(
+      '/api/access/requests/request-1/credentials',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ proof: { type: 'dpop+jwt', value: 'proof' } }),
+      },
+    )
+
+    expect(response.status).toBe(400)
+    expect(response.headers.get('dpop-nonce')).toBe('challenge-nonce')
+    await expect(response.json()).resolves.toEqual({
+      error: 'use_dpop_nonce',
+      error_description: 'Authorization server requires nonce in DPoP proof.',
     })
   })
 
@@ -292,7 +323,7 @@ function createRouteApp(overrides: { signJWT?: () => Promise<{ token: string }> 
       await next()
     })
     .onError((error, c) => handleApiError(error, c))
-    .route('/api', createAgentProtocolRoutes(authApi, 'https://auth.example.com/api/auth'))
+    .route('/api', createAgentProtocolRoutes(authApi, 'https://auth.example.com/api/auth', ['http://localhost']))
 }
 
 function activeIdentity() {

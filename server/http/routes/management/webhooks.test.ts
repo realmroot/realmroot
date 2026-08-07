@@ -2,6 +2,7 @@ import { createManagementWebhookRoutes } from '@server/http/routes/management/we
 import * as webhooksUsecase from '@server/usecases/webhooks'
 import { Hono } from 'hono'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { createTestDeps } from '../../test-deps'
 
 afterEach(() => {
   vi.restoreAllMocks()
@@ -33,7 +34,7 @@ describe('createManagementWebhookRoutes', () => {
     app.use('*', async (c, next) => {
       const user = { id: 'admin-1', role: 'admin' }
       c.set('principal', { session: { session: { id: 'session-1' }, user }, user })
-      c.set('deps', {} as never)
+      c.set('deps', createTestDeps())
       await next()
     })
     app.route('/', createManagementWebhookRoutes())

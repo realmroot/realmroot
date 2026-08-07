@@ -314,7 +314,7 @@ describe('admin console applications-detail-b', () => {
 
     expect(await screen.findByText('jane@example.com')).toBeTruthy()
     expect(screen.getByRole('columnheader', { name: 'User' })).toBeTruthy()
-    expect(screen.getByRole('columnheader', { name: 'Realm access' })).toBeTruthy()
+    expect(screen.queryByRole('columnheader', { name: 'Realm access' })).toBeNull()
     expect(screen.getByRole('columnheader', { name: 'Email' })).toBeTruthy()
     expect(screen.getByRole('columnheader', { name: 'Created' })).toBeTruthy()
     expect(screen.getByRole('columnheader', { name: 'Status' })).toBeTruthy()

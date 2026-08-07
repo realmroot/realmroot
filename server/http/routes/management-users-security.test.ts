@@ -20,7 +20,8 @@ describe('management routes 2', () => {
 
   it('preserves existing admin-session auth behavior on management routes', async () => {
     const auth = createAuthMock()
-    const response = await createApp(auth, createTestDeps({ users: createUserRepositoryMock() })).request(
+    const users = createUserRepositoryMock()
+    const response = await createApp(auth, createTestDeps({ users })).request(
       '/api/users?limit=10&offset=20&banned=false',
       { headers: adminHeaders() },
     )
@@ -31,20 +32,15 @@ describe('management routes 2', () => {
       pagination: {
         limit: 10,
         offset: 20,
-        total: 0,
+        total: 10,
         hasMore: false,
         nextOffset: null,
       },
     })
-    expect(auth.api.listUsers).toHaveBeenCalledWith({
-      query: expect.objectContaining({
-        limit: 10,
-        offset: 20,
-        filterField: 'banned',
-        filterValue: false,
-      }),
-      headers: expect.any(Headers),
-    })
+    expect(users.listManagedUsers).toHaveBeenCalledWith(
+      expect.objectContaining({ limit: 10, offset: 20, banned: false }),
+      undefined,
+    )
     expect(auth.api.getSession).toHaveBeenCalledWith({
       headers: expect.any(Headers),
       asResponse: false,
@@ -98,8 +94,14 @@ describe('management routes 2', () => {
 
   it('normalizes management user list pagination', async () => {
     const auth = createAuthMock()
-    auth.api.listUsers.mockResolvedValueOnce({ users: [{ id: 'user-1' }], total: 1, limit: 50 })
-    const app = createApp(auth, createTestDeps({ users: createUserRepositoryMock() }))
+    const users = createUserRepositoryMock()
+    vi.mocked(users.listManagedUsers).mockResolvedValueOnce({
+      items: [{ id: 'user-1' } as never],
+      total: 1,
+      limit: 50,
+      offset: 0,
+    })
+    const app = createApp(auth, createTestDeps({ users }))
 
     const managementResponse = await app.request('/api/users', { headers: adminHeaders() })
 
@@ -133,7 +135,8 @@ describe('management routes 2', () => {
 
   it('supports REST-shaped management account action resources', async () => {
     const auth = createAuthMock()
-    const app = createApp(auth, createTestDeps({ users: createUserRepositoryMock() }))
+    const users = createUserRepositoryMock()
+    const app = createApp(auth, createTestDeps({ users }))
     const headers = adminHeaders()
 
     await app.request('/api/users/user-1/password-reset-requests', {
@@ -155,15 +158,8 @@ describe('management routes 2', () => {
       },
       headers: expect.any(Headers),
     })
-    expect(auth.api.banUser).toHaveBeenCalledWith({
-      body: {
-        userId: 'user-1',
-        banReason: 'abuse',
-        banExpiresIn: 3600,
-      },
-      headers: expect.any(Headers),
-    })
-    expect(auth.api.unbanUser).toHaveBeenCalledWith({ body: { userId: 'user-1' }, headers: expect.any(Headers) })
+    expect(users.suspendManagedUser).toHaveBeenCalledWith('user-1', 'abuse', expect.any(Date))
+    expect(users.restoreManagedUser).toHaveBeenCalledWith('user-1')
   })
 
   it('aggregates management user detail and sub-collections without leaking unrelated lookups', async () => {
@@ -348,30 +344,16 @@ describe('management routes 2', () => {
 
     expect(updated.status).toBe(200)
     await expect(updated.json()).resolves.toEqual({ user: { id: 'user-1' } })
-    await expect(revokedOne.json()).resolves.toEqual({ success: true })
-    await expect(revokedAll.json()).resolves.toEqual({ success: true })
+    expect(revokedOne.status).toBe(204)
+    expect(revokedAll.status).toBe(204)
 
-    expect(auth.api.adminUpdateUser).toHaveBeenCalledWith({
-      body: {
-        userId: 'user-1',
-        data: {
-          email: 'grace@example.com',
-          emailVerified: false,
-          name: 'Grace Hopper',
-          username: 'grace',
-          role: 'user',
-        },
-      },
-      headers: expect.any(Headers),
+    expect(users.updateManagedUser).toHaveBeenCalledWith('user-1', {
+      email: 'grace@example.com',
+      emailVerified: false,
+      displayName: 'Grace Hopper',
+      username: 'grace',
     })
-    expect(users.getSessionToken).toHaveBeenCalledWith('user-1', 'session-1')
-    expect(auth.api.revokeUserSession).toHaveBeenCalledWith({
-      body: { sessionToken: 'session-token-1' },
-      headers: expect.any(Headers),
-    })
-    expect(auth.api.revokeUserSessions).toHaveBeenCalledWith({
-      body: { userId: 'user-1' },
-      headers: expect.any(Headers),
-    })
+    expect(users.deleteSessions).toHaveBeenCalledWith('user-1', 'session-1')
+    expect(users.deleteSessions).toHaveBeenCalledWith('user-1')
   })
 })

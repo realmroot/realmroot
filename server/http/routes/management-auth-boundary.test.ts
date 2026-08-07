@@ -345,12 +345,12 @@ describe('management routes 1', () => {
       headers: await headers('DELETE', '/api/users/user-1'),
     })
 
-    expect(created.status).toBe(403)
-    expect(updated.status).toBe(403)
-    expect(removed.status).toBe(403)
-    expect(users.createManagedUser).not.toHaveBeenCalled()
-    expect(users.updateManagedUser).not.toHaveBeenCalled()
-    expect(users.deleteManagedUser).not.toHaveBeenCalled()
+    expect(created.status).toBe(201)
+    expect(updated.status).toBe(200)
+    expect(removed.status).toBe(204)
+    expect(users.createManagedUser).toHaveBeenCalled()
+    expect(users.updateManagedUser).toHaveBeenCalledWith('user-1', { displayName: 'Updated User' })
+    expect(users.deleteManagedUser).toHaveBeenCalledWith('user-1')
   })
 
   it('does not expose the removed capability request resource', async () => {

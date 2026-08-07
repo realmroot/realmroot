@@ -78,7 +78,7 @@ test.describe('password sign-in, session, and routing', () => {
     await expect(page.getByRole('heading', { name: organizationOwner.organizationName })).toBeVisible()
     await page.getByRole('tab', { name: 'Applications' }).click()
     await expect(page).toHaveURL(new RegExp(`/organizations/${organizationOwner.organizationId}/applications$`))
-    await expect(page.getByRole('heading', { name: 'Applications' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Applications', exact: true })).toBeVisible()
 
     const realmInventoryRequests: string[] = []
     page.on('request', (request) => {

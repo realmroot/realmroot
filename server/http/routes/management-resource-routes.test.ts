@@ -99,10 +99,12 @@ describe('management resource routes', () => {
     expect(authorizationService.createInvitation).toHaveBeenCalledWith(
       'org-1',
       { email: 'new@example.com', roles: ['member'] },
-      'admin-1',
-      true,
+      { agent: null, controllerUserId: 'admin-1' },
     )
-    expect(authorizationService.removeMember).toHaveBeenCalledWith('org-1', 'member-1', 'admin-1')
+    expect(authorizationService.removeMember).toHaveBeenCalledWith('org-1', 'member-1', {
+      agent: null,
+      controllerUserId: 'admin-1',
+    })
   })
 
   it('routes API resource and Organization Role requests', async () => {

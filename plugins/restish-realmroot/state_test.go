@@ -204,7 +204,7 @@ func TestFileStateStoreUpgradeRenamesProtocolCredential(t *testing.T) {
 	}
 }
 
-func TestFileStateStoreFindsGenericCredentialByResourceIndicator(t *testing.T) {
+func TestFileStateStoreFindsCredentialOfferByOpaqueReference(t *testing.T) {
 	store := &fileStateStore{root: t.TempDir()}
 	target := agentTarget{
 		API:     "realmroot",
@@ -221,23 +221,20 @@ func TestFileStateStoreFindsGenericCredentialByResourceIndicator(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	credential := testCredential(t, "short-lived-token", time.Now().Add(time.Minute))
+	credential := testCredential(t, "", time.Time{})
 	state := agentState{
-		Version:         agentStateVersion,
-		Origin:          target.Origin,
-		Issuer:          target.Issuer,
-		Runtime:         target.Runtime,
-		Name:            "Build Agent",
-		AgentID:         "agent-123",
-		HostID:          "host-123",
-		AgentKeyID:      "agent-key",
-		HostKeyID:       "host-key",
-		AgentPrivateKey: encodePrivateKey(agentPrivateKey),
-		HostPrivateKey:  encodePrivateKey(hostPrivateKey),
-		DPoPCredentials: map[string]dpopCredential{credential.ResourceHref: credential},
-		ActiveDPoPCredentials: map[string]string{
-			credential.ResourceIndicator: credential.ResourceHref,
-		},
+		Version:              agentStateVersion,
+		Origin:               target.Origin,
+		Issuer:               target.Issuer,
+		Runtime:              target.Runtime,
+		Name:                 "Build Agent",
+		AgentID:              "agent-123",
+		HostID:               "host-123",
+		AgentKeyID:           "agent-key",
+		HostKeyID:            "host-key",
+		AgentPrivateKey:      encodePrivateKey(agentPrivateKey),
+		HostPrivateKey:       encodePrivateKey(hostPrivateKey),
+		DPoPCredentialOffers: map[string][]dpopCredential{credential.ResourceHref: {credential}},
 	}
 	path := store.path(target)
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
@@ -251,7 +248,7 @@ func TestFileStateStoreFindsGenericCredentialByResourceIndicator(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	reference, err := store.FindByResourceURL("https://api.example.com/v1/accounts", target.Runtime, "")
+	reference, err := store.FindCredentialOffer(credential.ResourceHref, target.Runtime, credential.Scopes)
 	if err != nil {
 		t.Fatal(err)
 	}

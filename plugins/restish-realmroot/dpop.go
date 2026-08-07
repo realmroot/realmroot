@@ -119,17 +119,3 @@ func validatedAbsoluteURL(value string) (*url.URL, error) {
 func isLoopbackHost(host string) bool {
 	return host == "localhost" || host == "127.0.0.1" || host == "::1"
 }
-
-func resourceURLMatches(configured string, requested string) bool {
-	resource, err := validatedAbsoluteURL(configured)
-	if err != nil {
-		return false
-	}
-	target, err := validatedAbsoluteURL(requested)
-	if err != nil || resource.Scheme != target.Scheme || resource.Host != target.Host {
-		return false
-	}
-	resourcePath := strings.TrimSuffix(resource.EscapedPath(), "/")
-	targetPath := strings.TrimSuffix(target.EscapedPath(), "/")
-	return targetPath == resourcePath || strings.HasPrefix(targetPath, resourcePath+"/")
-}

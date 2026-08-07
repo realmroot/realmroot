@@ -73,6 +73,17 @@ describe('external API resource authorization', () => {
         'https://auth.example.com',
       ),
     ).rejects.toThrow('External API resource was not found.')
+
+    vi.mocked(deps.authorization.findResource).mockResolvedValue({ ...resource(), enabled: false })
+    await expect(
+      createResourceConnectionIntent(
+        deps,
+        'resource-1',
+        { owner: { type: 'user' }, scopes: [] },
+        'user-1',
+        'https://auth.example.com',
+      ),
+    ).rejects.toThrow('Enabled external API resource was not found.')
   })
 
   it('validates a reusable OIDC connector when creating an external resource [spec: agent-identity/external-api-resource-registration]', async () => {
@@ -1844,9 +1855,11 @@ describe('external API resource authorization', () => {
     let exchangeResponse: Record<string, unknown> = {
       access_token: 'target-dpop-access',
       token_type: 'DPoP',
-      expires_in: 5_000,
+      expires_in: 3_600,
     }
     let exchangeStatus = 200
+    let exchangeHeaders: Record<string, string> = {}
+    let exchangeFailure: 'network' | 'invalid-json' | null = null
     vi.mocked(deps.externalHttp.fetch).mockImplementation(async (outbound) => {
       if (outbound.url === resource().resourceUrl || outbound.url === 'https://projects.example.com/openapi.json') {
         return openApiFetch(outbound)
@@ -1876,7 +1889,9 @@ describe('external API resource authorization', () => {
       expect(form.get('actor_token')).toBe('target-agent-access')
       expect(form.get('actor_token_type')).toBe('urn:ietf:params:oauth:token-type:access_token')
       expect(form.get('scope')).toBe('projects:read')
-      return Response.json(exchangeResponse, { status: exchangeStatus })
+      if (exchangeFailure === 'network') throw new Error('connection reset')
+      if (exchangeFailure === 'invalid-json') return new Response('upstream failure', { status: 502 })
+      return Response.json(exchangeResponse, { status: exchangeStatus, headers: exchangeHeaders })
     })
 
     const sign = vi.fn().mockResolvedValue('signed-agent-assertion')
@@ -1911,6 +1926,7 @@ describe('external API resource authorization', () => {
       scopes: ['projects:read'],
       authorizationDetails: [],
       resourceUrl: 'https://projects.example.com/api',
+      dpopNonce: null,
     })
     expect(deps.agentAudit.append).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1924,6 +1940,17 @@ describe('external API resource authorization', () => {
     )
 
     vi.mocked(deps.externalResources.findConnection).mockResolvedValue(connectionRecord())
+    exchangeResponse = { access_token: 'excessive-expiry', token_type: 'DPoP', expires_in: 5_000 }
+    await expect(
+      issueTargetAccessToken(
+        deps,
+        grant.id,
+        proof,
+        'https://auth.example.com/api/agent/access-grants/grant-1/tokens',
+        principal(),
+        { issuer: principal().issuer, sign },
+      ),
+    ).rejects.toThrow('excessive lifetime')
     exchangeResponse = { access_token: 'wrong-type', token_type: 'Bearer', expires_in: 60 }
     await expect(
       issueTargetAccessToken(
@@ -2022,6 +2049,105 @@ describe('external API resource authorization', () => {
         { issuer: principal().issuer, sign },
       ),
     ).rejects.toThrow('External authorization server rejected the token request.')
+
+    exchangeResponse = {
+      error: 'use_dpop_nonce',
+      error_description: 'Authorization server requires nonce in DPoP proof',
+    }
+    exchangeHeaders = { 'DPoP-Nonce': 'challenge-nonce' }
+    await expect(
+      issueTargetAccessToken(
+        deps,
+        grant.id,
+        proof,
+        'https://auth.example.com/api/agent/access-grants/grant-1/tokens',
+        principal(),
+        { issuer: principal().issuer, sign },
+      ),
+    ).rejects.toMatchObject({
+      status: 400,
+      error: 'use_dpop_nonce',
+      headers: { 'DPoP-Nonce': 'challenge-nonce' },
+    })
+
+    exchangeResponse = { error: 'use_dpop_nonce' }
+    exchangeHeaders = {}
+    await expect(
+      issueTargetAccessToken(
+        deps,
+        grant.id,
+        proof,
+        'https://auth.example.com/api/agent/access-grants/grant-1/tokens',
+        principal(),
+        { issuer: principal().issuer, sign },
+      ),
+    ).rejects.toThrow('invalid DPoP nonce challenge')
+
+    exchangeHeaders = { 'DPoP-Nonce': 'fallback-nonce' }
+    await expect(
+      issueTargetAccessToken(
+        deps,
+        grant.id,
+        proof,
+        'https://auth.example.com/api/agent/access-grants/grant-1/tokens',
+        principal(),
+        { issuer: principal().issuer, sign },
+      ),
+    ).rejects.toMatchObject({
+      message: 'Authorization server requires nonce in DPoP proof.',
+      headers: { 'DPoP-Nonce': 'fallback-nonce' },
+    })
+
+    exchangeStatus = 200
+    exchangeResponse = { access_token: 'target-dpop-access', token_type: 'DPoP', expires_in: 60 }
+    exchangeHeaders = { 'DPoP-Nonce': 'invalid nonce' }
+    await expect(
+      issueTargetAccessToken(
+        deps,
+        grant.id,
+        proof,
+        'https://auth.example.com/api/agent/access-grants/grant-1/tokens',
+        principal(),
+        { issuer: principal().issuer, sign },
+      ),
+    ).rejects.toThrow('invalid DPoP nonce')
+
+    exchangeFailure = 'network'
+    await expect(
+      issueTargetAccessToken(
+        deps,
+        grant.id,
+        proof,
+        'https://auth.example.com/api/agent/access-grants/grant-1/tokens',
+        principal(),
+        { issuer: principal().issuer, sign },
+      ),
+    ).rejects.toThrow('External authorization server is unavailable')
+
+    exchangeFailure = 'invalid-json'
+    await expect(
+      issueTargetAccessToken(
+        deps,
+        grant.id,
+        proof,
+        'https://auth.example.com/api/agent/access-grants/grant-1/tokens',
+        principal(),
+        { issuer: principal().issuer, sign },
+      ),
+    ).rejects.toThrow('External authorization server rejected the token request')
+
+    exchangeFailure = null
+    exchangeHeaders = { 'DPoP-Nonce': 'next-nonce' }
+    await expect(
+      issueTargetAccessToken(
+        deps,
+        grant.id,
+        proof,
+        'https://auth.example.com/api/agent/access-grants/grant-1/tokens',
+        principal(),
+        { issuer: principal().issuer, sign },
+      ),
+    ).resolves.toMatchObject({ dpopNonce: 'next-nonce' })
   })
 
   it('[spec: agent-identity/external-resource-contextual-delegation] exchanges and leases the exact approved authorization details', async () => {
@@ -2610,6 +2736,14 @@ describe('external API resource authorization', () => {
     await expect(
       listAccessRequestConnections(deps, 'approval-token', 'user-1', { limit: 20, offset: 0 }),
     ).resolves.toMatchObject({ items: [{ id: 'connection-1' }], pagination: { total: 1 } })
+
+    vi.mocked(deps.externalResources.listConnectionsByOrganizations).mockResolvedValue([
+      { ...connectionRecord(), ownerUserId: null, ownerOrganizationId: 'org-1' },
+      { ...connectionRecord(), id: 'connection-2', ownerUserId: null, ownerOrganizationId: 'org-1' },
+    ])
+    await expect(
+      listAccessRequestConnections(deps, 'approval-token', 'user-1', { limit: 20, offset: 0 }),
+    ).rejects.toThrow('cannot have more than one active account connection')
   })
 
   it('rejects invalid internally resolved connections when approving first access', async () => {
@@ -2688,6 +2822,18 @@ describe('external API resource authorization', () => {
         },
       ],
       pagination: { total: 1 },
+    })
+    vi.mocked(deps.authorization.findResource).mockResolvedValueOnce({ ...native, scopeRegistry: null })
+    await expect(
+      listAgentAuthorizationDetailCatalog(
+        deps,
+        native.id,
+        principal(),
+        { limit: 10, offset: 0 },
+        'https://auth.example.com',
+      ),
+    ).resolves.toMatchObject({
+      items: [{ agentAuthorization: { requestableScopes: [] } }],
     })
     const personalIdentity = identityAggregate()
     personalIdentity.identity.ownerOrganizationId = null
@@ -2850,9 +2996,9 @@ describe('external API resource authorization', () => {
       },
     })
     vi.mocked(deps.authorization.listUserMemberships).mockResolvedValue([
-      { organizationId: 'org-1' } as never,
-      { organizationId: 'org-1' } as never,
-      { organizationId: 'org-disabled' } as never,
+      { organizationId: 'org-1', roles: ['owner'] } as never,
+      { organizationId: 'org-1', roles: ['owner'] } as never,
+      { organizationId: 'org-disabled', roles: ['owner'] } as never,
     ])
     vi.mocked(deps.authorization.findOrganization).mockImplementation(async (id) =>
       id === 'org-1'
@@ -3016,7 +3162,7 @@ describe('external API resource authorization', () => {
         { limit: 10, offset: 0 },
         'https://auth.example.com',
       ),
-    ).rejects.toThrow('Organization authority was not found.')
+    ).resolves.toMatchObject({ items: [], pagination: { total: 0 } })
   })
 
   it('validates Realmroot scopes and requires exactly one authority Resource', async () => {
@@ -3047,6 +3193,45 @@ describe('external API resource authorization', () => {
         'https://auth.example.com',
       ),
     ).rejects.toThrow('exactly one Realmroot authority')
+
+    const organizationAuthority = { type: 'realmroot_authority', authority: 'organization', id: 'org-1' }
+    vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue({
+      ...identityAggregate(),
+      identity: { ...identityAggregate().identity, ownerUserId: 'user-1', ownerOrganizationId: null },
+    })
+    vi.mocked(deps.externalResources.findAccessRequest).mockResolvedValue({
+      ...requestRecord(),
+      resourceId: builtIn.id,
+      connectionId: null,
+      scopes: ['users:read'],
+      authorizationDetails: [organizationAuthority],
+    })
+    vi.mocked(deps.authorization.listUserMemberships).mockResolvedValue([])
+    await expect(
+      decideAgentAccessRequest(
+        deps,
+        'request-1',
+        { decision: 'approve', mode: 'persistent', authorizationDetails: [organizationAuthority] },
+        'user-1',
+      ),
+    ).rejects.toThrow('controller effective scope')
+
+    const otherUserAuthority = { type: 'realmroot_authority', authority: 'user', id: 'user-2' }
+    vi.mocked(deps.externalResources.findAccessRequest).mockResolvedValue({
+      ...requestRecord(),
+      resourceId: builtIn.id,
+      connectionId: null,
+      scopes: ['users:read'],
+      authorizationDetails: [otherUserAuthority],
+    })
+    await expect(
+      decideAgentAccessRequest(
+        deps,
+        'request-1',
+        { decision: 'approve', mode: 'persistent', authorizationDetails: [otherUserAuthority] },
+        'user-1',
+      ),
+    ).rejects.toThrow('controller effective scope')
   })
 
   it('issues a credential from an approved Resource access request', async () => {
@@ -3715,6 +3900,18 @@ describe('external API resource authorization', () => {
         'https://auth.example.com',
       ),
     ).rejects.toThrow('Resources must be unique.')
+    await expect(
+      createAgentResourceConnectionRequest(
+        duplicateDeps,
+        resource().id,
+        {
+          scopes: ['projects:read'],
+          resources: [{ href: `https://realmroot.invalid/api/resource-servers/${resource().id}/resources/service` }],
+        },
+        principal(),
+        '',
+      ),
+    ).resolves.toMatchObject({ resourceServerId: resource().id, status: 'connected' })
 
     const discoveryDeps = createTestDeps()
     authorizationDeps(discoveryDeps)
@@ -4678,10 +4875,11 @@ describe('external API resource authorization', () => {
         host_id: principal().hostId,
         groups: ['org-1'],
         realmroot_authority: authority,
-        scope: 'users:read',
       }),
       'at+jwt',
     )
+    const signedScope = String(signer.sign.mock.calls[0]![0].scope).split(' ')
+    expect(signedScope).toContain('users:read')
   })
 
   it('enforces organization controllers and handles revocation error paths', async () => {

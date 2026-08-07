@@ -3,12 +3,12 @@
     "method": "POST",
     "path": "/resource-servers",
     "operationId": "createResourceServer",
-    "semanticHash": "8cbc3832ecd59f21cdcce1d348e31ea7c36d700bd654fd52e88aa05a075dbc73"
+    "semanticHash": "e6beab86b270fa8b6292bcc7010dbc10e3e42ac7a551c25ec251c7a612cffd34"
   },
   {
     "method": "PATCH",
     "path": "/resource-servers/{resourceServerId}",
     "operationId": "updateResourceServer",
-    "semanticHash": "c8b2c966722c15aa33223406ff9ee3e4b3fc8e2de924ef62e322ae3bbe6a8932"
+    "semanticHash": "69f00ae6e30f4c73125d7554f7aa770388351c2b6f553e04bf5c3570c0ee60de"
   }
 ]

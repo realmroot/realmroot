@@ -37,6 +37,7 @@ app.get('/openapi.json', (_request, response) => {
         realmrootOidc: {
           type: 'openIdConnect',
           openIdConnectUrl: `${realmrootIssuer}/.well-known/openid-configuration`,
+          'x-dpop-required': true,
         },
       },
     },

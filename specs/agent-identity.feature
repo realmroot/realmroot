@@ -179,13 +179,19 @@ Feature: Agent identity and delegated API authorization
       But the plugin never parses an approval secret or constructs a Realmroot polling endpoint
 
     @entrypoint:restish @journey:restish-generic-resource-credential-offer
-    Scenario: Restish accepts a Resource credential without observing Realmroot grant internals
+    Scenario: Restish registers a Resource credential without observing Realmroot grant internals
       Given an approved access request returns a DPoP resource-credential offer
       When the Restish response middleware handles that offer
-      Then the plugin creates and retains the DPoP private key locally
-      And signs the exact proof method and URI supplied by Realmroot
-      And submits the proof to the supplied credential endpoint
-      And stores but never prints the returned short-lived credential
+      Then the plugin retains only the opaque credential source reference and server-supplied offer
+      And returns a safe receipt that identifies the Restish credential source
+      When the Agent adds that credential source to the target Restish API
+      Then Restish creates and retains the DPoP private key locally
+      And asks the plugin to redeem the offer with a proof for the exact supplied method and URI
+      When the target authorization server requires a DPoP nonce
+      Then Realmroot preserves the structured nonce challenge through the credential source
+      And Restish retries once with the same private key and a fresh proof containing that nonce
+      And Restish retains a nonce supplied with a successful credential for the next renewal
+      And Restish stores but never prints the returned short-lived credential
       But the plugin never reads a grant, chooses an authorization mode, discovers an authorization server, or constructs a token endpoint
 
     @entrypoint:product-ui @journey:native-api-resource-registration
@@ -277,20 +283,18 @@ Feature: Agent identity and delegated API authorization
 
     @entrypoint:restish @journey:restish-resource-credential-lifecycle
     Scenario: Restish manages target credentials without observing access grants
-      Given Restish stores a DPoP credential from an approved access request
+      Given Restish stores a DPoP credential obtained through the Realmroot credential source
       When another approved access request returns a credential offer for the same Resource Server
-      Then the plugin accepts only the supplied opaque credential endpoint
-      And activates the selected Resource without reading or selecting an access grant
-      And does not delete credentials for other authorization contexts
-      And target requests use only the active DPoP credential
-      And when protocol and Resource credentials share one URL the operation scopes select the satisfying credential
+      Then the plugin replaces only the stored offer for that Resource without reading or selecting an access grant
+      And does not alter Restish credentials for other authorization contexts
+      And target requests use only the explicitly configured Restish DPoP credential
       When a short-lived credential expires while its server-managed authority remains active
-      Then the plugin renews it through the stored opaque credential endpoint
+      Then Restish asks the credential source to renew it through the stored opaque credential endpoint
       When Realmroot rejects credential renewal
-      Then the plugin removes that local resource credential and its active binding
+      Then Restish removes the rejected access token but retains the credential source binding
       And the Agent must request current Resource access
       When the target API rejects a cached DPoP credential with HTTP 401
-      Then the plugin removes that local resource credential
+      Then Restish removes the rejected access token
       And the Agent must discover the current connection state and request current Resource access before retrying
 
     @entrypoint:restish @journey:restish-deep-resource-response

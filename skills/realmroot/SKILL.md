@@ -19,8 +19,8 @@ or asking for a manually provisioned API key.
   user's task and bind them to exactly one Resource.
 - Hand every approval decision to the controller. The Agent may open or report
   the approval URL and wait for the original command to finish.
-- Keep keys, DPoP proofs, approval tokens, access tokens, and target credentials
-  in adapter custody.
+- Keep Agent protocol secrets in the Realmroot adapter and target DPoP keys,
+  proofs, access tokens, and token cache in Restish custody.
 - Treat a successful target operation as completion; discovery, approval, and
   credential readiness are intermediate states.
 

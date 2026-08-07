@@ -302,6 +302,11 @@ export const targetCredentialProofSchema = z.object({
   proof: z.object({ type: z.literal('dpop+jwt'), value: nonEmptyString }),
 })
 
+export const dpopNonceErrorResponseSchema = z.object({
+  error: z.literal('use_dpop_nonce'),
+  error_description: nonEmptyString,
+})
+
 export const resourceLinksSchema = z.object({ self: nonEmptyString })
 
 export const capabilityRequestSchema = z.object({

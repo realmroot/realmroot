@@ -49,7 +49,6 @@ test.describe('external API resource authorization', () => {
       const resourceResponse = await page.request.post('/api/resource-servers', {
         data: {
           identifier: 'e2e-projects',
-          name: 'E2E Projects API',
           resourceUrl: externalResource,
           ownerOrganizationId: 'org_platform',
           connectorId: connector.id,
@@ -63,14 +62,14 @@ test.describe('external API resource authorization', () => {
       const discovered = plugin.listResourceServers<{
         items: Array<{
           id: string
-          serviceUrl: string
+          resourceUrl: string
           scopes: Array<{ value: string }>
           connection: { status: string; authorizedScopes: string[] }
         }>
       }>()
       const available = discovered.items.find((candidate) => candidate.id === resource.id)
       expect(available).toMatchObject({
-        serviceUrl: externalResource,
+        resourceUrl: externalResource,
         scopes: expect.arrayContaining([expect.objectContaining({ value: 'projects:read' })]),
         connection: { status: 'not_connected', authorizedScopes: [] },
       })
@@ -101,7 +100,10 @@ test.describe('external API resource authorization', () => {
         accountAuthorization: { status: 'authorized' },
       })
 
-      const accessRequest = plugin.requestResourceAccess<{ status: string }>({
+      const accessRequest = plugin.requestResourceAccess<{
+        status: string
+        credentialSource: { reference: string }
+      }>({
         resource: { href: providerResource!.links.self },
         scopes: ['projects:read'],
         reason: 'List projects for the controller',
@@ -122,7 +124,7 @@ test.describe('external API resource authorization', () => {
       expect(connection?.scopes).toEqual(expect.arrayContaining(['projects:read']))
       expect(connection?.scopes).not.toContain('projects:write')
 
-      plugin.connectTarget('external-projects', externalResource)
+      plugin.connectTarget('external-projects', externalResource, 'resourceOidc', approved.credentialSource.reference)
       const directBody = plugin.targetRequest<{
         projects: Array<{ id: string; name: string }>
         authorization: {
@@ -181,7 +183,6 @@ test.describe('external API resource authorization', () => {
       const resourceResponse = await page.request.post('/api/resource-servers', {
         data: {
           identifier: 'e2e-realmroot-projects',
-          name: 'E2E Realmroot Projects API',
           resourceUrl: realmrootResource,
           ownerOrganizationId: 'org_platform',
           visibility: 'public',
@@ -194,7 +195,7 @@ test.describe('external API resource authorization', () => {
       const discovered = plugin.listResourceServers<{
         items: Array<{
           id: string
-          serviceUrl: string
+          resourceUrl: string
           scopes: Array<{ value: string }>
           connection: { status: string }
         }>
@@ -202,7 +203,7 @@ test.describe('external API resource authorization', () => {
       expect(discovered.items).toContainEqual(
         expect.objectContaining({
           id: resource.id,
-          serviceUrl: realmrootResource,
+          resourceUrl: realmrootResource,
           scopes: expect.arrayContaining([expect.objectContaining({ value: 'projects:read' })]),
           connection: { status: 'not_required', displayName: null, authorizedScopes: [] },
         }),
@@ -213,7 +214,10 @@ test.describe('external API resource authorization', () => {
       }>(resource.id)
       expect(providerResources.items).toHaveLength(1)
 
-      const accessRequest = plugin.requestResourceAccess<{ status: string }>({
+      const accessRequest = plugin.requestResourceAccess<{
+        status: string
+        credentialSource: { reference: string }
+      }>({
         resource: { href: providerResources.items[0]!.links.self },
         scopes: ['projects:read'],
         reason: 'List projects for the controller',
@@ -234,7 +238,7 @@ test.describe('external API resource authorization', () => {
       const approved = await accessRequest.result
       expect(approved.status).toBe('ready')
 
-      plugin.connectTarget('native-projects', realmrootResource)
+      plugin.connectTarget('native-projects', realmrootResource, 'realmrootOidc', approved.credentialSource.reference)
       expect(plugin.targetRequest('native-projects', 'projects')).toMatchObject({
         projects: [{ id: 'project-1', name: 'Realmroot-native project' }],
         authorization: {

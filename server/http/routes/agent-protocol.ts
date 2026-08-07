@@ -231,6 +231,7 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
         ),
     })
     c.header('Link', `<${credentialOfferProfile}>; rel="profile"`)
+    if (result.dpopNonce) c.header('DPoP-Nonce', result.dpopNonce)
     return c.json(targetTokenSchema.parse(result), 201)
   })
 

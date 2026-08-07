@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"time"
@@ -8,19 +9,21 @@ import (
 	"github.com/rest-sh/restish/v2/plugin"
 )
 
-const pluginVersion = "0.11.1"
+const pluginVersion = "0.12.0"
 
 func main() {
 	manifest := plugin.Manifest{
 		Name:              "realmroot",
 		Version:           pluginVersion,
-		Description:       "Authenticate Realmroot and DPoP-bound target API requests as a stable Agent identity",
+		Description:       "Authenticate a stable Realmroot Agent identity and supply proof-bound target credentials to Restish",
 		RestishAPIVersion: 2,
-		Hooks:             []string{"auth-resolver", "auth", "response-middleware"},
-		RequiredFeatures:  []string{"auth.operation_security"},
+		AuthAPINames:      []string{"realmroot"},
+		Hooks:             []string{"auth-resolver", "auth", "credential-source", "response-middleware"},
+		RequiredFeatures:  []string{"auth.operation_security", "auth.dpop_credential_source", "auth.dpop_operation_scopes"},
 		HookTimeouts: map[string]time.Duration{
 			"auth-resolver":       30 * time.Second,
 			"auth":                10 * time.Minute,
+			"credential-source":   10 * time.Minute,
 			"response-middleware": 10 * time.Minute,
 		},
 	}
@@ -39,7 +42,7 @@ func main() {
 		if err := plugin.DecMode.Unmarshal(raw, &input); err != nil {
 			exitWithError(fmt.Errorf("decode auth resolver input: %w", err))
 		}
-		output, err := resolveAuthentication(input, newFileStateStore(), newHTTPClient())
+		output, err := resolveProtocolAuthentication(input, newHTTPClient())
 		if err != nil {
 			exitWithError(err)
 		}
@@ -57,6 +60,18 @@ func main() {
 		}
 		if err := plugin.WriteMessage(os.Stdout, output); err != nil {
 			exitWithError(fmt.Errorf("write auth hook output: %w", err))
+		}
+	case "credential-source":
+		var input credentialSourceInput
+		if err := plugin.DecMode.Unmarshal(raw, &input); err != nil {
+			exitWithError(fmt.Errorf("decode credential source input: %w", err))
+		}
+		output, err := handleCredentialSource(context.Background(), input, newFileStateStore(), newHTTPClient(), systemBrowserOpener{})
+		if err != nil {
+			exitWithError(err)
+		}
+		if err := plugin.WriteMessage(os.Stdout, output); err != nil {
+			exitWithError(fmt.Errorf("write credential source output: %w", err))
 		}
 	case "response-middleware":
 		var input plugin.ResponseMiddlewareInput
