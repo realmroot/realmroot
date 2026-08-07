@@ -18,6 +18,7 @@ import {
 } from '@server/db/schema'
 import { createResource } from '@server/usecases/authorization'
 import { discoverAgentResources } from '@server/usecases/external-resources'
+import { encodeRoleScope } from '@shared/organization-access'
 import { eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createHarness, createUser, type Harness, resourceOpenApiFetch, signIn, signInAdmin } from './harness'
@@ -889,6 +890,14 @@ describe('authorization management over real D1', () => {
         ownerOrganizationId: 'org_platform',
       })
     ).json()) as { id: string }
+    const retainedResource = (await (
+      await postJson(harness, cookie, '/api/resource-servers', {
+        identifier: 'retained-history-api',
+        name: 'Retained History API',
+        resourceUrl: 'https://retained-history.example.com/api',
+        ownerOrganizationId: 'org_platform',
+      })
+    ).json()) as { id: string }
     const configuredApplication = (await (
       await postJson(harness, cookie, '/api/applications', {
         name: 'Deleted Resource Client',
@@ -896,11 +905,26 @@ describe('authorization management over real D1', () => {
         clientType: 'confidential_web',
         redirectUris: ['http://localhost/deleted-resource-callback'],
         ownerOrganizationId: 'org_platform',
-        resourceScopes: [{ resourceServerId: resource.id, scopes: ['resource:read'] }],
+        resourceScopes: [
+          { resourceServerId: resource.id, scopes: ['resource:read'] },
+          { resourceServerId: retainedResource.id, scopes: ['resource:read'] },
+        ],
       })
     ).json()) as { id: string }
     const [admin] = await harness.db.select({ id: user.id }).from(user).where(eq(user.email, 'admin@example.com'))
     const now = new Date()
+    await harness.db.insert(organizationRole).values({
+      id: 'role-resource-history',
+      organizationId: 'org_platform',
+      role: 'resource-history',
+      displayName: 'Resource history',
+      permission: {
+        scope: [encodeRoleScope(resource.id, 'resource:read'), encodeRoleScope(retainedResource.id, 'resource:read')],
+        user: ['read'],
+      },
+      createdAt: now,
+      updatedAt: now,
+    })
     await harness.db.insert(resourceAccountConnection).values({
       id: 'connection-history',
       resourceId: resource.id,
@@ -936,8 +960,81 @@ describe('authorization management over real D1', () => {
         .select({ resourceScopes: application.resourceScopes })
         .from(application)
         .where(eq(application.id, configuredApplication.id)),
-    ).resolves.toEqual([{ resourceScopes: [] }])
+    ).resolves.toEqual([{ resourceScopes: [{ resourceServerId: retainedResource.id, scopes: ['resource:read'] }] }])
+    await expect(
+      harness.db
+        .select({ permission: organizationRole.permission })
+        .from(organizationRole)
+        .where(eq(organizationRole.id, 'role-resource-history')),
+    ).resolves.toEqual([
+      {
+        permission: {
+          scope: [encodeRoleScope(retainedResource.id, 'resource:read')],
+          user: ['read'],
+        },
+      },
+    ])
     expect((await harness.request(`/api/resource-servers/${resource.id}`, { headers: { cookie } })).status).toBe(404)
+
+    await harness.db
+      .update(application)
+      .set({ resourceScopes: [{ resourceServerId: resource.id, scopes: ['resource:read'] }] })
+      .where(eq(application.id, configuredApplication.id))
+    await expect(
+      harness.deps.applications.update(configuredApplication.id, {
+        resourceScopes: [{ resourceServerId: resource.id, scopes: ['resource:read'] }],
+      }),
+    ).resolves.toBe('resource_inactive')
+    await expect(harness.deps.applications.update('missing-application', {})).resolves.toBe('application_not_found')
+    const saved = await harness.request(`/api/applications/${configuredApplication.id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ resourceScopes: [{ resourceServerId: resource.id, scopes: ['resource:read'] }] }),
+    })
+    expect(saved.status).toBe(200)
+    await expect(saved.json()).resolves.toMatchObject({ resourceScopes: [] })
+    await expect(
+      harness.db
+        .select({ resourceScopes: application.resourceScopes })
+        .from(application)
+        .where(eq(application.id, configuredApplication.id)),
+    ).resolves.toEqual([{ resourceScopes: [] }])
+
+    const boundedResourceIds = ['res_realmroot']
+    for (let index = 0; index < 99; index += 1) {
+      const id = `bounded-resource-${index}`
+      boundedResourceIds.push(id)
+      await harness.db.insert(apiResource).values({
+        id,
+        identifier: id,
+        name: `Bounded resource ${index}`,
+        resourceUrl: `https://bounded-${index}.example.com/api`,
+        ownerOrganizationId: 'org_platform',
+        scopeRegistry: null,
+        createdAt: now,
+        updatedAt: now,
+      })
+    }
+    const boundedSave = await harness.request(`/api/applications/${configuredApplication.id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({
+        resourceScopes: boundedResourceIds.map((resourceServerId) => ({ resourceServerId, scopes: [] })),
+      }),
+    })
+    expect(boundedSave.status).toBe(200)
+    const boundedApplication = (await boundedSave.json()) as { resourceScopes: Array<{ resourceServerId: string }> }
+    expect(boundedApplication.resourceScopes).toHaveLength(100)
+    await expect(
+      harness.db
+        .select({ resourceScopes: application.resourceScopes })
+        .from(application)
+        .where(eq(application.id, configuredApplication.id)),
+    ).resolves.toEqual([
+      {
+        resourceScopes: boundedResourceIds.map((resourceServerId) => ({ resourceServerId, scopes: [] })),
+      },
+    ])
   })
 
   it('does not expose a deleted Resource Server for updates [spec: management-api/management-api-resource-soft-delete]', async () => {
@@ -1131,6 +1228,48 @@ describe('authorization management over real D1', () => {
     })
 
     expect(deleted.status).toBe(204)
+    await Promise.all([
+      harness.db
+        .update(agentAccessRequest)
+        .set({ status: 'pending', decidedAt: null })
+        .where(eq(agentAccessRequest.id, 'deleted-request')),
+      harness.db
+        .update(agentAccessGrant)
+        .set({ status: 'active', revokedAt: null })
+        .where(eq(agentAccessGrant.id, 'deleted-grant')),
+    ])
+    const agentDetail = await harness.request('/api/agents/deleted-identity', { headers: { cookie } })
+    expect(agentDetail.status).toBe(200)
+    await expect(agentDetail.json()).resolves.toMatchObject({
+      agent: { pendingRequestCount: 0, activeGrantCount: 0 },
+    })
+    const requests = await harness.request('/api/access/requests?agentId=deleted-identity', {
+      headers: { cookie },
+    })
+    expect(requests.status).toBe(200)
+    await expect(requests.json()).resolves.toMatchObject({
+      items: [],
+      pagination: { total: 0 },
+    })
+    expect((await harness.request('/api/access/requests/deleted-request', { headers: { cookie } })).status).toBe(404)
+    const grants = await harness.request('/api/agents/deleted-identity/access-grants', {
+      headers: { cookie },
+    })
+    expect(grants.status).toBe(200)
+    await expect(grants.json()).resolves.toMatchObject({
+      items: [],
+      pagination: { total: 0 },
+    })
+    await Promise.all([
+      harness.db
+        .update(agentAccessRequest)
+        .set({ status: 'denied', decidedAt: now })
+        .where(eq(agentAccessRequest.id, 'deleted-request')),
+      harness.db
+        .update(agentAccessGrant)
+        .set({ status: 'revoked', revokedAt: now })
+        .where(eq(agentAccessGrant.id, 'deleted-grant')),
+    ])
     await expect(
       discoverAgentResources(harness.deps, {
         issuer: 'http://localhost/api/auth',
@@ -1157,6 +1296,31 @@ describe('authorization management over real D1', () => {
     expect(request).toMatchObject({ status: 'denied', decidedAt: expect.any(Date) })
     expect(grant).toMatchObject({ status: 'revoked', revokedAt: expect.any(Date) })
     expect(lease).toMatchObject({ revokedAt: expect.any(Date) })
+    await Promise.all([
+      harness.db
+        .update(agentAccessRequest)
+        .set({ resourceId: 'res_realmroot' })
+        .where(eq(agentAccessRequest.id, 'deleted-request')),
+      harness.db
+        .update(agentIdentity)
+        .set({ status: 'inactive', deletedAt: now })
+        .where(eq(agentIdentity.id, 'deleted-identity')),
+    ])
+    const deletedAgentRequests = await harness.request('/api/access/requests?agentId=deleted-identity', {
+      headers: { cookie },
+    })
+    expect(deletedAgentRequests.status).toBe(200)
+    await expect(deletedAgentRequests.json()).resolves.toMatchObject({ items: [], pagination: { total: 0 } })
+    await harness.db
+      .update(agentAccessRequest)
+      .set({ resourceId: resource.id })
+      .where(eq(agentAccessRequest.id, 'deleted-request'))
+    await expect(
+      harness.db
+        .select({ resourceId: agentAccessRequest.resourceId })
+        .from(agentAccessRequest)
+        .where(eq(agentAccessRequest.id, 'deleted-request')),
+    ).resolves.toEqual([{ resourceId: resource.id }])
     const [deletionAudit] = await harness.db
       .select()
       .from(agentAuditEvent)

@@ -124,15 +124,11 @@ export async function listManagementAgentAccessRequests(
 ) {
   const result = await deps.externalResources.listAccessRequests(query, scope)
   const now = Date.now()
-  const resources = await loadManagementResources(
-    deps,
-    result.items.map((request) => request.resourceId),
-  )
   return {
-    items: result.items.map((request) => ({
+    items: result.items.map(({ request, resource }) => ({
       id: request.id,
       agentId: request.agentIdentityId,
-      resource: resources.get(request.resourceId)!,
+      resource,
       scopes: request.scopes,
       authorizationDetails: request.authorizationDetails,
       reason: request.reason,
@@ -150,11 +146,11 @@ export async function getManagementAgentAccessRequest(deps: Deps, requestId: str
   const request = await deps.externalResources.findAccessRequest(requestId)
   if (!request) throw notFound('Agent access request was not found.')
   await requireIdentity(deps, request.agentIdentityId)
-  const resources = await loadManagementResources(deps, [request.resourceId])
+  const resource = await getManagementResource(deps, request.resourceId, 'Agent access request was not found.')
   return {
     id: request.id,
     agentId: request.agentIdentityId,
-    resource: resources.get(request.resourceId)!,
+    resource,
     scopes: request.scopes,
     authorizationDetails: request.authorizationDetails,
     reason: request.reason,
@@ -171,12 +167,8 @@ export async function listManagementAgentAccessGrants(
   scope?: AgentAuthorityInventoryScope,
 ) {
   const result = await deps.externalResources.listGrants(query, scope)
-  const resources = await loadManagementResources(
-    deps,
-    result.items.map((grant) => grant.resourceId),
-  )
   return {
-    items: result.items.map((grant) => ({
+    items: result.items.map(({ grant, resource }) => ({
       id: grant.id,
       agentId: grant.agentIdentityId,
       target: {
@@ -184,7 +176,7 @@ export async function listManagementAgentAccessGrants(
         apiResourceId: grant.resourceId,
         ...(grant.connectionId ? { accountConnectionId: grant.connectionId } : {}),
       },
-      resource: resources.get(grant.resourceId)!,
+      resource,
       scopes: grant.scopes,
       authorizationDetails: grant.authorizationDetails,
       mode: grant.mode,
@@ -207,7 +199,7 @@ export async function getManagementAgentAccessGrant(deps: Deps, grantId: string)
   const grant = await deps.externalResources.findGrant(grantId)
   if (!grant || grant.status === 'revoked') throw notFound('Agent access grant was not found.')
   await requireIdentity(deps, grant.agentIdentityId)
-  const resources = await loadManagementResources(deps, [grant.resourceId])
+  const resource = await getManagementResource(deps, grant.resourceId, 'Agent access grant was not found.')
   return {
     id: grant.id,
     agentId: grant.agentIdentityId,
@@ -216,7 +208,7 @@ export async function getManagementAgentAccessGrant(deps: Deps, grantId: string)
       apiResourceId: grant.resourceId,
       ...(grant.connectionId ? { accountConnectionId: grant.connectionId } : {}),
     },
-    resource: resources.get(grant.resourceId)!,
+    resource,
     scopes: grant.scopes,
     authorizationDetails: grant.authorizationDetails,
     mode: grant.mode,
@@ -666,15 +658,10 @@ function toManagementAgent(
   }
 }
 
-async function loadManagementResources(deps: Deps, resourceIds: string[]) {
-  const resources = await Promise.all(
-    [...new Set(resourceIds)].map(async (resourceId) => {
-      const resource = await deps.authorization.findResource(resourceId)
-      if (!resource) throw new Error(`API resource ${resourceId} referenced by Agent governance was not found.`)
-      return [resourceId, { id: resource.id, identifier: resource.identifier, name: resource.name }] as const
-    }),
-  )
-  return new Map(resources)
+async function getManagementResource(deps: Deps, resourceId: string, missingDetail: string) {
+  const resource = await deps.authorization.findResource(resourceId)
+  if (!resource) throw notFound(missingDetail)
+  return { id: resource.id, identifier: resource.identifier, name: resource.name }
 }
 
 function homeSpaceOf(

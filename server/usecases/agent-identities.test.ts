@@ -320,7 +320,7 @@ describe('Agent identity lifecycle', () => {
       createdAt: new Date('2026-08-01T00:00:00.000Z'),
     }
     vi.mocked(deps.externalResources.listAccessRequests).mockResolvedValue({
-      items: [request],
+      items: [{ request, resource: { id: 'resource-1', identifier: 'projects', name: 'Projects API' } }],
       total: 1,
       limit: 20,
       offset: 0,
@@ -371,7 +371,10 @@ describe('Agent identity lifecycle', () => {
       },
     ]
     vi.mocked(deps.externalResources.listGrants).mockResolvedValue({
-      items: grants,
+      items: grants.map((grant) => ({
+        grant,
+        resource: { id: 'resource-1', identifier: 'projects', name: 'Projects API' },
+      })),
       total: 2,
       limit: 20,
       offset: 0,
@@ -456,29 +459,24 @@ describe('Agent identity lifecycle', () => {
     await expect(getManagementAgentAccessRequest(deps, 'missing')).rejects.toMatchObject({ status: 404 })
     await expect(getManagementAgentAccessGrant(deps, 'missing')).rejects.toMatchObject({ status: 404 })
 
+    vi.mocked(deps.externalResources.findAccessRequest).mockResolvedValue({
+      id: 'deleted-resource-request',
+      resourceId: 'deleted-resource',
+      agentIdentityId: 'identity-1',
+    } as never)
+    await expect(getManagementAgentAccessRequest(deps, 'deleted-resource-request')).rejects.toMatchObject({
+      status: 404,
+    })
+    vi.mocked(deps.externalResources.findGrant).mockResolvedValue({
+      id: 'deleted-resource-grant',
+      resourceId: 'deleted-resource',
+      agentIdentityId: 'identity-1',
+      status: 'active',
+    } as never)
+    await expect(getManagementAgentAccessGrant(deps, 'deleted-resource-grant')).rejects.toMatchObject({ status: 404 })
+
     vi.mocked(deps.agentIdentities.findIntent).mockResolvedValue(null)
     await expect(getProtocolAgentEnrollment(deps, 'missing', 'protocol-agent-1')).rejects.toMatchObject({ status: 404 })
-
-    vi.mocked(deps.externalResources.listAccessRequests).mockResolvedValue({
-      items: [
-        {
-          resourceId: 'missing-resource',
-          agentIdentityId: 'identity-1',
-          scopes: [],
-          reason: null,
-          status: 'pending',
-          expiresAt: new Date(),
-          decidedAt: null,
-          createdAt: new Date(),
-        },
-      ],
-      total: 1,
-      limit: 20,
-      offset: 0,
-    } as never)
-    await expect(listManagementAgentAccessRequests(deps, { limit: 20, offset: 0 })).rejects.toThrow(
-      'referenced by Agent governance was not found',
-    )
   })
 
   it('maps Organization-owned management Agents and validates summary invariants', async () => {

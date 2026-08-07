@@ -1553,9 +1553,8 @@ export async function listAgentAccessGrants(
 ) {
   await requireActiveIdentityAndBinding(deps, principal)
   const result = await deps.externalResources.listGrants({ ...query, agentId: principal.identityId })
-  const grants = await Promise.all(result.items.map((grant) => toAccessGrant(deps, grant)))
   return {
-    items: grants,
+    items: result.items.map(({ grant, resource }) => toAccessGrant(grant, resource)),
     pagination: paginationMetadata(result),
   }
 }
@@ -1570,7 +1569,9 @@ export async function getAgentAccessGrant(
   if (!grant || grant.status === 'revoked' || grant.agentIdentityId !== principal.identityId) {
     throw notFound('Agent access grant was not found.')
   }
-  return toAccessGrant(deps, grant)
+  const resource = await deps.authorization.findResource(grant.resourceId)
+  if (!resource) throw notFound('Agent access grant Resource Server was not found.')
+  return toAccessGrant(grant, resource)
 }
 
 export async function revokeAgentAccessGrant(deps: Deps, grantId: string, actorUserId: string) {
@@ -3049,9 +3050,10 @@ async function agentAccessRequestRepresentation(
   }
 }
 
-async function toAccessGrant(deps: Deps, record: AgentAccessGrantRecord): Promise<AgentAccessGrant> {
-  const resource = await deps.authorization.findResource(record.resourceId)
-  if (!resource) throw notFound('Agent access grant Resource Server was not found.')
+function toAccessGrant(
+  record: AgentAccessGrantRecord,
+  resource: { id: string; identifier: string; name: string },
+): AgentAccessGrant {
   return {
     id: record.id,
     agentId: record.agentIdentityId,

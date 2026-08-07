@@ -53,8 +53,7 @@ export async function createApplication(
   const secretPrefix = clientSecret ? clientSecret.slice(0, 12) : null
   const ownerOrganizationId = input.ownerOrganizationId
   await requireActiveOrganization(deps, ownerOrganizationId)
-  const resourceScopes = input.resourceScopes ?? []
-  await validateApplicationResourceScopes(deps, ownerOrganizationId, resourceScopes)
+  const resourceScopes = await validateApplicationResourceScopes(deps, ownerOrganizationId, input.resourceScopes ?? [])
 
   const application = await deps.applications.create({
     application: {
@@ -151,9 +150,16 @@ export async function updateApplication(
   const corsOrigins = input.corsOrigins !== undefined ? normalizeCorsOrigins(input.corsOrigins) : undefined
   if (input.ownerOrganizationId) await requireActiveOrganization(deps, input.ownerOrganizationId)
   const ownerOrganizationId = input.ownerOrganizationId ?? application.ownerOrganizationId
-  if (input.resourceScopes) await validateApplicationResourceScopes(deps, ownerOrganizationId, input.resourceScopes)
+  const resourceScopes = input.resourceScopes
+    ? await validateApplicationResourceScopes(
+        deps,
+        ownerOrganizationId,
+        input.resourceScopes,
+        new Set(application.resourceScopes.map((configuration) => configuration.resourceServerId)),
+      )
+    : undefined
 
-  await deps.applications.update(id, {
+  const updated = await deps.applications.update(id, {
     slug: input.slug,
     name: input.name,
     description: input.description,
@@ -170,9 +176,11 @@ export async function updateApplication(
     customData: input.customData,
     allowedGrantTypes: settings?.allowedGrantTypes,
     oidcScopes: settings?.oidcScopes,
-    resourceScopes: input.resourceScopes,
+    resourceScopes,
     oidcClaims: input.oidcClaims,
   })
+  if (updated === 'application_not_found') throw notFound('Application was not found.')
+  if (updated === 'resource_inactive') throw badRequest('Resource Server is not active.')
 
   return getApplication(deps, issuer, id)
 }
@@ -455,15 +463,29 @@ async function validateApplicationResourceScopes(
   deps: Deps,
   ownerOrganizationId: string,
   configurations: ApplicationResponse['resourceScopes'],
+  existingResourceServerIds = new Set<string>(),
 ) {
+  const activeConfigurations: ApplicationResponse['resourceScopes'] = []
   const seen = new Set<string>()
   for (const configuration of configurations) {
     if (seen.has(configuration.resourceServerId)) {
       throw badRequest('Each Resource Server can appear only once in an Application scope allowlist.')
     }
     seen.add(configuration.resourceServerId)
-    const resource = await deps.authorization.findResource(configuration.resourceServerId)
-    if (!resource?.enabled) throw badRequest('Resource Server is not active.')
+  }
+  if (configurations.length === 0) return activeConfigurations
+  const resources = new Map(
+    (await deps.authorization.findResources(configurations.map(({ resourceServerId }) => resourceServerId))).map(
+      (resource) => [resource.id, resource],
+    ),
+  )
+  for (const configuration of configurations) {
+    const resource = resources.get(configuration.resourceServerId)
+    if (!resource) {
+      if (existingResourceServerIds.has(configuration.resourceServerId)) continue
+      throw badRequest('Resource Server is not active.')
+    }
+    if (!resource.enabled) throw badRequest('Resource Server is not active.')
     if (resource.visibility === 'private' && resource.ownerOrganizationId !== ownerOrganizationId) {
       throw badRequest('Private Resource Server is not visible to the Application owner Organization.')
     }
@@ -471,7 +493,9 @@ async function validateApplicationResourceScopes(
     if (configuration.scopes.some((scope) => !declared.has(scope))) {
       throw badRequest('Application scope allowlist contains an undeclared Resource Server scope.')
     }
+    activeConfigurations.push(configuration)
   }
+  return activeConfigurations
 }
 
 async function resolveRequestedResource(deps: Deps, resourceUrl: string | undefined, userId: string) {

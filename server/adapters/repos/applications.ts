@@ -1,8 +1,9 @@
 import type { ApplicationRepository } from '@server/usecases/ports'
-import { and, count, desc, eq, gt, inArray, isNotNull, isNull, lte, or } from 'drizzle-orm'
+import { and, count, desc, eq, gt, inArray, isNotNull, isNull, lte, or, sql } from 'drizzle-orm'
 import type { BatchItem } from 'drizzle-orm/batch'
 import type { Database } from '../../db/client'
 import {
+  apiResource,
   application,
   applicationClientMetadata,
   applicationClientSecret,
@@ -109,7 +110,7 @@ export function createDrizzleApplicationRepository(db: Database): ApplicationRep
       const now = new Date()
       const currentRows = await db.select().from(application).where(eq(application.id, id)).limit(1)
       const current = currentRows[0]
-      if (!current) return
+      if (!current) return 'application_not_found'
 
       const applicationPatch = {
         ...(patch.slug !== undefined ? { slug: patch.slug } : {}),
@@ -163,11 +164,36 @@ export function createDrizzleApplicationRepository(db: Database): ApplicationRep
           : {}),
         updatedAt: now,
       }
+      const activeResourceCondition = patch.resourceScopes?.length
+        ? sql`not exists (
+            select 1
+            from json_each(${JSON.stringify(patch.resourceScopes)}) as requested_resource
+            left join ${apiResource}
+              on ${apiResource.id} = json_extract(requested_resource.value, '$.resourceServerId')
+            where ${apiResource.id} is null
+              or ${apiResource.enabled} <> 1
+              or ${apiResource.deletedAt} is not null
+          )`
+        : undefined
       const statements: [BatchItem<'sqlite'>, ...BatchItem<'sqlite'>[]] = [
-        db.update(application).set(applicationPatch).where(eq(application.id, id)),
-        db.update(oauthClient).set(oauthPatch).where(eq(oauthClient.clientId, current.oauthClientId)),
+        db
+          .update(application)
+          .set(applicationPatch)
+          .where(and(eq(application.id, id), activeResourceCondition))
+          .returning({ id: application.id }),
+        db
+          .update(oauthClient)
+          .set(oauthPatch)
+          .where(and(eq(oauthClient.clientId, current.oauthClientId), activeResourceCondition)),
       ]
-      await db.batch(statements)
+      const [updated] = await db.batch(statements)
+      if (updated.length > 0) return 'updated'
+      const [remaining] = await db
+        .select({ id: application.id })
+        .from(application)
+        .where(eq(application.id, id))
+        .limit(1)
+      return remaining ? 'resource_inactive' : 'application_not_found'
     },
 
     async delete(id) {

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createApplication, createConsent, loadConsentRequest, updateApplication } from './applications'
 import type { Deps } from './deps'
+import type { ApplicationAggregate } from './ports'
 
 const now = new Date('2026-08-06T00:00:00.000Z')
 const resource = {
@@ -14,15 +15,17 @@ const resource = {
 }
 
 function setup() {
-  let application: any
+  let application: ApplicationAggregate | undefined
   const applications = {
     create: vi.fn(async ({ application: input }) => (application = { ...input, createdAt: now, updatedAt: now })),
     listSecrets: vi.fn().mockResolvedValue({ items: [], pagination: {} }),
     findById: vi.fn(async () => application),
     findByClientId: vi.fn(async () => application),
-    update: vi.fn(async (_id, patch) =>
-      Object.assign(application, Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined))),
-    ),
+    update: vi.fn(async (_id, patch) => {
+      if (!application) throw new Error('Application fixture was not created.')
+      Object.assign(application, Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined)))
+      return 'updated' as const
+    }),
     findConsent: vi.fn().mockResolvedValue(null),
     createConsent: vi.fn(async (input) => ({
       id: 'consent-1',
@@ -33,6 +36,7 @@ function setup() {
   }
   const authorization = {
     findOrganization: vi.fn().mockResolvedValue({ id: 'org-1', disabled: false }),
+    findResources: vi.fn().mockResolvedValue([resource]),
     findResource: vi.fn().mockResolvedValue(resource),
     findResourceByResourceUrl: vi.fn().mockResolvedValue(resource),
     findMemberByOrganizationUser: vi.fn().mockResolvedValue({ id: 'member-1' }),
@@ -63,11 +67,11 @@ describe('Application Resource Server scopes', () => {
         'admin-1',
       ),
     ).rejects.toThrow('only once')
-    authorization.findResource.mockResolvedValueOnce(null)
+    authorization.findResources.mockResolvedValueOnce([])
     await expect(createApplication(deps, 'https://auth.example', input, 'admin-1')).rejects.toThrow('not active')
-    authorization.findResource.mockResolvedValueOnce({ ...resource, ownerOrganizationId: 'other' })
+    authorization.findResources.mockResolvedValueOnce([{ ...resource, ownerOrganizationId: 'other' }])
     await expect(createApplication(deps, 'https://auth.example', input, 'admin-1')).rejects.toThrow('not visible')
-    authorization.findResource.mockResolvedValueOnce(resource)
+    authorization.findResources.mockResolvedValueOnce([resource])
     await expect(
       createApplication(
         deps,
@@ -76,6 +80,21 @@ describe('Application Resource Server scopes', () => {
         'admin-1',
       ),
     ).rejects.toThrow('undeclared')
+  })
+
+  it('removes an existing deleted Resource Server allowlist when the Application is saved [spec: admin-console/admin-application-detail]', async () => {
+    const { deps, authorization } = setup()
+    const created = await createApplication(deps, 'https://auth.example', input, 'admin-1')
+
+    authorization.findResources.mockResolvedValueOnce([{ ...resource, enabled: false }])
+    await expect(
+      updateApplication(deps, 'https://auth.example', created.id, { resourceScopes: input.resourceScopes }),
+    ).rejects.toThrow('not active')
+
+    authorization.findResources.mockResolvedValueOnce([])
+    await expect(
+      updateApplication(deps, 'https://auth.example', created.id, { resourceScopes: input.resourceScopes }),
+    ).resolves.toMatchObject({ resourceScopes: [] })
   })
 
   it('binds consent to an active visible resource', async () => {
