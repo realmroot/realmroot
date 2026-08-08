@@ -658,6 +658,8 @@ describe('authorization CRUD and assignment policy', () => {
           'urn:ietf:params:oauth:grant-type:jwt-bearer',
           'urn:ietf:params:oauth:grant-type:token-exchange',
         ],
+        code_challenge_methods_supported: ['S256'],
+        token_endpoint_auth_methods_supported: ['client_secret_basic'],
         dpop_signing_alg_values_supported: ['ES256'],
         authorization_details_types_supported: ['payment_initiation'],
         authorization_details_catalog_endpoint: `${resource.resourceUrl}/authorization-details`,
@@ -724,7 +726,16 @@ describe('authorization CRUD and assignment policy', () => {
         ownerOrganizationId: organization.id,
         authorizationDetails: [{ type: 'project_access', project_id: 'project-1' }],
       }),
-    ).rejects.toThrow('Authorization details require an external API resource connector.')
+    ).rejects.toMatchObject({
+      details: {
+        checks: expect.arrayContaining([
+          expect.objectContaining({
+            requirement: 'RICH-AUTHORIZATION',
+            message: 'Authorization details require an external API resource connector.',
+          }),
+        ]),
+      },
+    })
     await createResource(deps, {
       identifier: 'external',
       resourceUrl: resource.resourceUrl,
@@ -754,7 +765,11 @@ describe('authorization CRUD and assignment policy', () => {
       updateResource(deps, resource.id, {
         authorizationDetails: [{ type: 'project_access', project_id: 'project-1' }],
       }),
-    ).rejects.toThrow('Authorization details require an external API resource connector.')
+    ).rejects.toMatchObject({
+      details: {
+        checks: expect.arrayContaining([expect.objectContaining({ requirement: 'RICH-AUTHORIZATION' })]),
+      },
+    })
     authorization.findResource.mockResolvedValue({
       ...resource,
       connectorId: 'connector-1',
@@ -860,6 +875,8 @@ describe('authorization CRUD and assignment policy', () => {
               'urn:ietf:params:oauth:grant-type:jwt-bearer',
               'urn:ietf:params:oauth:grant-type:token-exchange',
             ],
+            code_challenge_methods_supported: ['S256'],
+            token_endpoint_auth_methods_supported: ['client_secret_basic'],
             dpop_signing_alg_values_supported: ['ES256'],
           },
         }),
@@ -875,9 +892,16 @@ describe('authorization CRUD and assignment policy', () => {
       },
     } as unknown as Deps
 
-    await expect(refreshResourceScopeRegistry(deps, resource.id)).rejects.toThrow(
-      'authorization server does not match the selected OIDC connector',
-    )
+    await expect(refreshResourceScopeRegistry(deps, resource.id)).rejects.toMatchObject({
+      details: {
+        checks: expect.arrayContaining([
+          expect.objectContaining({
+            requirement: 'AS-METADATA',
+            message: expect.stringContaining('authorization server does not match the selected OIDC connector'),
+          }),
+        ]),
+      },
+    })
     expect(authorization.replaceResourceDiscovery).toHaveBeenCalledWith(resource.id, {
       name: resource.name,
       description: resource.description,
@@ -957,6 +981,8 @@ describe('authorization CRUD and assignment policy', () => {
         'urn:ietf:params:oauth:grant-type:jwt-bearer',
         'urn:ietf:params:oauth:grant-type:token-exchange',
       ],
+      code_challenge_methods_supported: ['S256'],
+      token_endpoint_auth_methods_supported: ['client_secret_basic'],
       dpop_signing_alg_values_supported: ['ES256'],
       authorization_details_types_supported: ['workspace'],
       pushed_authorization_request_endpoint: 'https://issuer.example.com/par',
@@ -1272,7 +1298,7 @@ describe('authorization CRUD and assignment policy', () => {
         request.url.includes('/.well-known/oauth-protected-resource')
           ? Response.json({
               resource: resourceUrlFromMetadataUrl(request.url),
-              scopes_supported: ['projects:read'],
+              scopes_supported: [],
             })
           : new Response('<html></html>'),
       ),
@@ -1288,20 +1314,25 @@ describe('authorization CRUD and assignment policy', () => {
       ownerOrganizationId: organization.id,
     }
 
-    await expect(createResource(deps, input)).rejects.toThrow('Business resource must advertise its OpenAPI document')
+    await expect(createResource(deps, input)).rejects.toMatchObject({
+      status: 400,
+      details: {
+        checks: expect.arrayContaining([
+          expect.objectContaining({ requirement: 'RESOURCE-METADATA', status: 'failed' }),
+          expect.objectContaining({ requirement: 'API-SERVICE-DESC', status: 'failed' }),
+          expect.objectContaining({ requirement: 'API-OPENAPI', status: 'blocked' }),
+        ]),
+      },
+    })
     expect(authorization.createResource).not.toHaveBeenCalled()
 
-    await expect(createResource(deps, { ...input, enabled: false })).rejects.toThrow(
-      'Business resource must advertise its OpenAPI document',
-    )
+    await expect(createResource(deps, { ...input, enabled: false })).rejects.toMatchObject({ status: 400 })
     expect(authorization.createResource).not.toHaveBeenCalled()
 
-    await expect(updateResource(deps, resource.id, { enabled: true })).rejects.toThrow(
-      'Business resource must advertise its OpenAPI document',
-    )
-    await expect(updateResource(deps, resource.id, { resourceUrl: 'https://wrong.example.com/api' })).rejects.toThrow(
-      'Business resource must advertise its OpenAPI document',
-    )
+    await expect(updateResource(deps, resource.id, { enabled: true })).rejects.toMatchObject({ status: 400 })
+    await expect(
+      updateResource(deps, resource.id, { resourceUrl: 'https://wrong.example.com/api' }),
+    ).rejects.toMatchObject({ status: 400 })
     expect(authorization.updateResource).not.toHaveBeenCalled()
   })
 })

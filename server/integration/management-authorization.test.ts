@@ -531,6 +531,17 @@ describe('authorization management over real D1', () => {
       body: JSON.stringify({ name: 'missing identifier' }),
     })
     expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toMatchObject({
+      error: {
+        details: {
+          issues: expect.arrayContaining([
+            expect.objectContaining({ path: 'identifier' }),
+            expect.objectContaining({ path: 'resourceUrl' }),
+            expect.objectContaining({ path: 'ownerOrganizationId' }),
+          ]),
+        },
+      },
+    })
   })
 
   it('[spec: admin-console/admin-resource-scope-grants] manages direct grants below each subject', async () => {
@@ -691,6 +702,8 @@ describe('authorization management over real D1', () => {
           'urn:ietf:params:oauth:grant-type:jwt-bearer',
           'urn:ietf:params:oauth:grant-type:token-exchange',
         ],
+        code_challenge_methods_supported: ['S256'],
+        token_endpoint_auth_methods_supported: ['client_secret_basic'],
         dpop_signing_alg_values_supported: ['ES256'],
         authorization_details_types_supported: ['project_access'],
         authorization_details_catalog_endpoint: 'https://projects.example.com/authorization-details',
@@ -768,7 +781,7 @@ describe('authorization management over real D1', () => {
       headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({ ...input, enabled: false }),
     })
-    expect(disabled.status).toBe(400)
+    expect(disabled.status).toBe(502)
   })
 
   it('requires authorization reconfiguration when an external resource URL changes [spec: agent-identity/external-api-resource-reconfiguration]', async () => {
@@ -804,6 +817,8 @@ describe('authorization management over real D1', () => {
           'urn:ietf:params:oauth:grant-type:jwt-bearer',
           'urn:ietf:params:oauth:grant-type:token-exchange',
         ],
+        code_challenge_methods_supported: ['S256'],
+        token_endpoint_auth_methods_supported: ['client_secret_basic'],
         dpop_signing_alg_values_supported: ['ES256'],
       },
       createdAt: now,
@@ -838,7 +853,17 @@ describe('authorization management over real D1', () => {
 
     expect(response.status).toBe(400)
     await expect(response.json()).resolves.toMatchObject({
-      error: { message: 'External API resource authorization server does not match the selected OIDC connector.' },
+      error: {
+        message: 'Resource Server does not satisfy the Realmroot integration profile.',
+        details: {
+          checks: expect.arrayContaining([
+            expect.objectContaining({
+              requirement: 'AS-METADATA',
+              message: 'External API resource authorization server does not match the selected OIDC connector.',
+            }),
+          ]),
+        },
+      },
     })
   })
 
@@ -1095,6 +1120,8 @@ describe('authorization management over real D1', () => {
           'urn:ietf:params:oauth:grant-type:jwt-bearer',
           'urn:ietf:params:oauth:grant-type:token-exchange',
         ],
+        code_challenge_methods_supported: ['S256'],
+        token_endpoint_auth_methods_supported: ['client_secret_basic'],
         dpop_signing_alg_values_supported: ['ES256'],
       },
       createdAt: now,

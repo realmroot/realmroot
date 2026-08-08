@@ -8,6 +8,7 @@ export class ApiRequestError extends Error {
   constructor(
     message: string,
     readonly status: number,
+    readonly details?: Record<string, unknown>,
   ) {
     super(message)
     this.name = 'ApiRequestError'
@@ -30,7 +31,8 @@ export async function readRpcResponse<RpcRequest extends Promise<ClientResponse<
 ): Promise<SuccessResponseBody<RpcRequest>> {
   const response = await request
   if (!response.ok) {
-    throw new ApiRequestError(await responseMessage(response), response.status)
+    const error = await responseError(response)
+    throw new ApiRequestError(error.message, response.status, error.details)
   }
 
   if (response.status === 204) return undefined as SuccessResponseBody<RpcRequest>
@@ -38,29 +40,36 @@ export async function readRpcResponse<RpcRequest extends Promise<ClientResponse<
   return (await response.json()) as SuccessResponseBody<RpcRequest>
 }
 
-async function responseMessage(response: Pick<Response, 'status' | 'text'>): Promise<string> {
+async function responseError(
+  response: Pick<Response, 'status' | 'text'>,
+): Promise<{ message: string; details?: Record<string, unknown> }> {
   const text = await response.text()
-  if (!text) return `Request failed with status ${response.status}.`
+  if (!text) return { message: `Request failed with status ${response.status}.` }
 
   try {
-    const parsed = JSON.parse(text) as { message?: string; error?: string | { message?: string } }
-    if (typeof parsed.error === 'string') return parsed.error
-    return parsed.message ?? parsed.error?.message ?? text
+    const parsed = JSON.parse(text) as {
+      message?: string
+      error?: string | { message?: string; details?: Record<string, unknown> }
+    }
+    if (typeof parsed.error === 'string') return { message: parsed.error }
+    return { message: parsed.message ?? parsed.error?.message ?? text, details: parsed.error?.details }
   } catch {
-    return text
+    return { message: text }
   }
 }
 
 export async function readJsonResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
-    throw new ApiRequestError(await responseMessage(response), response.status)
+    const error = await responseError(response)
+    throw new ApiRequestError(error.message, response.status, error.details)
   }
   return response.json() as Promise<T>
 }
 
 export async function readNoContentResponse(response: Response): Promise<void> {
   if (!response.ok) {
-    throw new ApiRequestError(await responseMessage(response), response.status)
+    const error = await responseError(response)
+    throw new ApiRequestError(error.message, response.status, error.details)
   }
 }
 

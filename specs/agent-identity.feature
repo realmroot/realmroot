@@ -218,6 +218,9 @@ Feature: Agent identity and delegated API authorization
       When an administrator creates or enables the API resource, including a disabled registration
       Then Realmroot rejects the request without enabling the resource
       And a network failure identifies whether the resource or its OpenAPI document was unreachable
+      And the response lists every independently detectable missing or invalid profile requirement
+      And a check blocked by a failed prerequisite identifies that prerequisite
+      And Console and Restish present the same requirement identifiers and messages
       When the administrator enables an existing draft or changes an enabled resource URL
       Then Realmroot validates the exact resource URL before saving the change
 

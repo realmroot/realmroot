@@ -19,6 +19,7 @@ const db = new DatabaseSync(process.env.DATABASE_PATH ?? ':memory:')
 const { publicKey, privateKey } = await generateKeyPair('ES256', { extractable: true })
 const publicJwk = { ...(await exportJWK(publicKey)), kid: 'target-signing-key', use: 'sig', alg: 'ES256' }
 const usedDpopProofs = new Map<string, number>()
+const usedAgentAssertions = new Map<string, number>()
 const projects = [{ id: 'project-1', name: 'Agent-ready project' }]
 
 db.exec(`
@@ -314,8 +315,18 @@ async function tokenExchangeGrant(request: Request, response: Response, client: 
   const requestedScope = normalizeScopes(requiredString(request.body.scope, 'scope'))
   const requestedResource = requiredString(request.body.resource, 'resource')
   if (requestedResource !== resource) throw oauthError('invalid_target', 'Resource audience does not match.')
-  const subject = await jwtVerify(subjectToken, publicKey, { issuer, audience: resource })
-  const actor = await jwtVerify(actorToken, publicKey, { issuer, audience: issuer })
+  const subject = await jwtVerify(subjectToken, publicKey, {
+    issuer,
+    audience: resource,
+    typ: 'at+jwt',
+    algorithms: ['ES256'],
+  })
+  const actor = await jwtVerify(actorToken, publicKey, {
+    issuer,
+    audience: issuer,
+    typ: 'at+jwt',
+    algorithms: ['ES256'],
+  })
   if (actor.payload.client_id !== client.client_id) {
     throw oauthError('invalid_grant', 'Actor access token was not issued to this client.')
   }
@@ -362,14 +373,23 @@ async function jwtBearerGrant(request: Request, response: Response, client: Clie
   const assertion = requiredString(request.body.assertion, 'assertion')
   const verified = await jwtVerify(assertion, createRemoteJWKSet(new URL(client.jwks_uri)), {
     audience: `${origin}/token`,
+    algorithms: ['ES256'],
   })
   if (
     typeof verified.payload.iss !== 'string' ||
     typeof verified.payload.sub !== 'string' ||
-    typeof verified.payload.jti !== 'string'
+    typeof verified.payload.jti !== 'string' ||
+    typeof verified.payload.exp !== 'number'
   ) {
-    throw oauthError('invalid_grant', 'JWT bearer assertion requires iss, sub, and jti claims.')
+    throw oauthError('invalid_grant', 'JWT bearer assertion requires iss, sub, jti, and exp claims.')
   }
+  const now = Math.floor(Date.now() / 1000)
+  for (const [candidate, expiresAt] of usedAgentAssertions) {
+    if (expiresAt <= now) usedAgentAssertions.delete(candidate)
+  }
+  const assertionKey = `${verified.payload.iss}:${verified.payload.jti}`
+  if (usedAgentAssertions.has(assertionKey)) throw oauthError('invalid_grant', 'JWT bearer assertion was already used.')
+  usedAgentAssertions.set(assertionKey, verified.payload.exp)
   const accessToken = await new SignJWT({
     client_id: client.client_id,
     agent_iss: verified.payload.iss,
@@ -393,14 +413,20 @@ async function jwtBearerGrant(request: Request, response: Response, client: Clie
 async function requireDpopAccess(request: Request, response: Response, next: NextFunction) {
   try {
     const token = dpopBearer(request)
-    const verified = await jwtVerify(token, publicKey, { issuer, audience: resource })
+    const verified = await jwtVerify(token, publicKey, {
+      issuer,
+      audience: resource,
+      typ: 'at+jwt',
+      algorithms: ['ES256'],
+    })
     if (typeof verified.payload.jti !== 'string') throw oauthError('invalid_token', 'Access token has no jti.', 401)
     const row = db.prepare('SELECT revoked_at FROM access_credential WHERE jti = ?').get(verified.payload.jti) as
       | { revoked_at: number | null }
       | undefined
     if (!row || row.revoked_at) throw oauthError('invalid_token', 'Access token is revoked.', 401)
     const proof = await verifyDpop(request, `${origin}${request.originalUrl}`, request.method)
-    if (verified.payload.cnf && (verified.payload.cnf as { jkt?: string }).jkt !== proof.jkt) {
+    const confirmation = verified.payload.cnf as { jkt?: string } | undefined
+    if (typeof confirmation?.jkt !== 'string' || confirmation.jkt !== proof.jkt) {
       throw oauthError('invalid_token', 'DPoP key does not match the access token.', 401)
     }
     if (proof.payload.ath !== sha256Base64Url(token)) throw oauthError('invalid_dpop_proof', 'DPoP ath is invalid.', 401)

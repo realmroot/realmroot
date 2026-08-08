@@ -35,6 +35,30 @@ describe('onboarding API client', () => {
       message: 'Top-level message',
     } satisfies Partial<ApiRequestError>)
     await expect(
+      readRpcResponse(
+        Promise.resolve(
+          jsonResponse(
+            {
+              error: {
+                message: 'Profile incomplete',
+                details: {
+                  checks: [
+                    { requirement: 'RESOURCE-METADATA', status: 'failed', message: 'Metadata is missing.' },
+                    { requirement: 'API-OPENAPI', status: 'blocked', message: 'OpenAPI could not be checked.' },
+                  ],
+                },
+              },
+            },
+            400,
+          ),
+        ) as never,
+      ),
+    ).rejects.toMatchObject({
+      status: 400,
+      message: 'Profile incomplete',
+      details: { checks: expect.arrayContaining([expect.objectContaining({ requirement: 'RESOURCE-METADATA' })]) },
+    } satisfies Partial<ApiRequestError>)
+    await expect(
       readRpcResponse(Promise.resolve(jsonResponse({ error: { message: 'Nested message' } }, 423)) as never),
     ).rejects.toMatchObject({
       status: 423,

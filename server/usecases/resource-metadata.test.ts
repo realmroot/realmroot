@@ -96,6 +96,17 @@ describe('protected resource scope discovery', () => {
     )
   })
 
+  it('reports all invalid protected-resource metadata fields together', async () => {
+    const deps = createTestDeps()
+    vi.mocked(deps.externalHttp.fetch).mockResolvedValue(
+      Response.json({ resource: 'https://wrong.example.com', scopes_supported: [] }),
+    )
+
+    await expect(readProtectedResourceMetadata(deps, resourceUrl)).rejects.toThrow(
+      'Protected resource metadata does not match the configured resource URL. Protected resource metadata must advertise at least one valid scope.',
+    )
+  })
+
   it.each([
     ['an HTTP failure', new Response(null, { status: 503 })],
     ['the wrong media type', new Response('{}', { headers: { 'content-type': 'text/application/json-evil' } })],

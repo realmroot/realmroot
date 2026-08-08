@@ -54,7 +54,9 @@ import {
   paginationQuerySchema,
   replaceMemberRolesRequestSchema,
   replaceRedirectUrisRequestSchema,
+  resourceServerConformanceErrorResponseSchema,
   resourceServerIdParam,
+  resourceServerMutationErrorResponseSchema,
   roleKeyParam,
   roleResponseSchema,
   rotateClientSecretResponseSchema,
@@ -237,6 +239,16 @@ export const applicationAuthorizationRoutes: ManagementRouteConfig[] = [
     response: resourceServerSchema,
     status: 201,
     responseHeaders: locationResponseHeader,
+    errors: {
+      400: {
+        description: 'The Resource Server does not satisfy the Realmroot integration profile.',
+        schema: resourceServerMutationErrorResponseSchema,
+      },
+      502: {
+        description: 'The Resource Server could not be reached for conformance validation.',
+        schema: resourceServerConformanceErrorResponseSchema,
+      },
+    },
   },
   {
     method: 'get',
@@ -267,8 +279,14 @@ export const applicationAuthorizationRoutes: ManagementRouteConfig[] = [
     response: resourceServerSchema,
     noBody: true,
     errors: {
-      400: 'The Resource Server is inactive or system-managed.',
-      502: 'The Resource Server scope registry could not be synchronized.',
+      400: {
+        description: 'The Resource Server is inactive, system-managed, or does not satisfy the integration profile.',
+        schema: resourceServerMutationErrorResponseSchema,
+      },
+      502: {
+        description: 'The Resource Server scope registry could not be synchronized.',
+        schema: resourceServerConformanceErrorResponseSchema,
+      },
     },
   },
   {
@@ -278,6 +296,16 @@ export const applicationAuthorizationRoutes: ManagementRouteConfig[] = [
     summary: 'Update a Resource Server',
     request: { params: resourceServerIdParam, body: jsonBody(updateApiResourceSchema) },
     response: resourceServerSchema,
+    errors: {
+      400: {
+        description: 'The Resource Server does not satisfy the Realmroot integration profile.',
+        schema: resourceServerMutationErrorResponseSchema,
+      },
+      502: {
+        description: 'The Resource Server could not be reached for conformance validation.',
+        schema: resourceServerConformanceErrorResponseSchema,
+      },
+    },
   },
   {
     method: 'delete',

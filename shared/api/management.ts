@@ -52,6 +52,47 @@ export const managementErrorResponseSchema = z.object({
   }),
 })
 
+export const resourceServerRequirementSchema = z.enum([
+  'RESOURCE-HTTPS',
+  'RESOURCE-METADATA',
+  'API-SERVICE-DESC',
+  'API-OPENAPI',
+  'AS-METADATA',
+  'OIDC-CONNECTION',
+  'OAUTH-CODE',
+  'OAUTH-REFRESH',
+  'OAUTH-PKCE',
+  'ACTOR-ASSERTION',
+  'TOKEN-EXCHANGE',
+  'DPOP',
+  'TOKEN-REVOCATION',
+  'RICH-AUTHORIZATION',
+  'PUSHED-AUTHORIZATION',
+  'AUTHORIZATION-CATALOG',
+])
+
+export const resourceServerConformanceCheckSchema = z.object({
+  requirement: resourceServerRequirementSchema,
+  status: z.enum(['failed', 'blocked']),
+  message: z.string(),
+})
+
+export const resourceServerConformanceErrorResponseSchema = z.object({
+  error: z.object({
+    code: z.enum(['bad_request', 'bad_gateway']),
+    message: z.string(),
+    requestId: z.string().optional(),
+    details: z.object({ checks: z.array(resourceServerConformanceCheckSchema).min(1) }),
+  }),
+})
+
+export const resourceServerMutationErrorResponseSchema = z.union([
+  resourceServerConformanceErrorResponseSchema,
+  managementErrorResponseSchema,
+])
+
+export type ResourceServerConformanceCheck = z.infer<typeof resourceServerConformanceCheckSchema>
+
 export const managementBuiltInProviderSettingsSchema = z.object({
   email: z.object({
     enabled: z.boolean(),

@@ -36,13 +36,16 @@ export async function readProtectedResourceMetadata(
     })
   }
   const values = metadata as Record<string, unknown>
+  const issues: string[] = []
   if (values.resource !== resourceUrl) {
-    throw badRequest('Protected resource metadata does not match the configured resource URL.')
+    issues.push('Protected resource metadata does not match the configured resource URL.')
   }
   const scopesSupported = scopeArray(values.scopes_supported)
   if (!scopesSupported) {
-    throw badRequest('Protected resource metadata must advertise at least one valid scope.')
+    issues.push('Protected resource metadata must advertise at least one valid scope.')
   }
+  if (issues.length) throw badRequest(issues.join(' '))
+  if (!scopesSupported) throw new Error('Validated protected resource metadata has no scopes.')
   return {
     sourceUrl,
     resource: resourceUrl,
@@ -63,6 +66,15 @@ export async function synchronizeResourceDiscovery(
   const contract = await readResourceContract(deps, resourceUrl)
   if (!contract) throw new Error('Unconditional Resource Server contract read returned no document.')
 
+  return buildResourceDiscovery(metadata, contract, previousRegistry, now)
+}
+
+export async function buildResourceDiscovery(
+  metadata: ProtectedResourceMetadata,
+  contract: NonNullable<Awaited<ReturnType<typeof readResourceContract>>>,
+  previousRegistry: ResourceScopeRegistry | null,
+  now = new Date(),
+): Promise<{ name: string; description: string | null; scopeRegistry: ResourceScopeRegistry }> {
   const descriptions = new Map(contract.scopes.map((scope) => [scope.value, scope.description]))
   const previousModes = new Map(previousRegistry?.scopes.map((scope) => [scope.value, scope.grantMode]))
   const scopes = metadata.scopesSupported.map((value) => ({

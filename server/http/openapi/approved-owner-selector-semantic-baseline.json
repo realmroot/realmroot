@@ -26,7 +26,7 @@
   {"method":"GET","path":"/resource-servers/{resourceServerId}","operationId":"getResourceServer","semanticHash":"82fffc87d3d99ef32824e5d146d5e356765bde9822ac6841420463f6ddaa7d13"},
   {"method":"PATCH","path":"/resource-servers/{resourceServerId}","operationId":"updateResourceServer","semanticHash":"b654f6a1121dff8ac929dba6ef8eda45738a0fea03264de7cb5d64dab3b34013"},
   {"method":"GET","path":"/resource-servers/{resourceServerId}/contract","operationId":"getResourceServerContract","semanticHash":"f089ad1b817a2fa5ba6288907013b8a28e12df7202570820b5f51537899fa179"},
-  {"method":"PUT","path":"/resource-servers/{resourceServerId}/scope-registry","operationId":"replaceResourceServerScopeRegistry","semanticHash":"010a5caaf994361af3112c64bfbbc77bf59c03b851bdefec1bdccda081455479"},
+  {"method":"PUT","path":"/resource-servers/{resourceServerId}/scope-registry","operationId":"replaceResourceServerScopeRegistry","semanticHash":"f1cb806cd34a263a94da155b013f138d0d51f410f7f8447d14602b7a2d2b5d25"},
   {"method":"POST","path":"/users","operationId":"createUser","semanticHash":"58847eced299d28a64a9e4f4b9200065e71f6aa0ff6d98903a78d5744a5fb754"},
   {"method":"PATCH","path":"/users/{userId}","operationId":"updateUser","semanticHash":"3ce1d11b5a08ce00d43eaf61f08f6b51955bf21b289e1ac7f049697647539fce"},
   {"method":"GET","path":"/users/{userId}/scope-grants","operationId":"listUserScopeGrants","semanticHash":"ac3110ae1929ec850c5adcfb52f2b8aa4abef7b601c6aa9261fd502613ba9177"},
