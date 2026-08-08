@@ -1,3 +1,45 @@
+PRAGMA foreign_keys=OFF;--> statement-breakpoint
+CREATE TABLE `__new_resource_account_connection` (
+	`id` text PRIMARY KEY NOT NULL,
+	`resource_id` text NOT NULL,
+	`owner_user_id` text,
+	`owner_organization_id` text,
+	`external_subject` text NOT NULL,
+	`display_name` text NOT NULL,
+	`credential_custody` text DEFAULT 'realmroot' NOT NULL,
+	`encrypted_tokens` text,
+	`broker_reference` text,
+	`granted_scopes` text NOT NULL,
+	`authorization_details` text DEFAULT '[]' NOT NULL,
+	`client_generation` integer DEFAULT 1 NOT NULL,
+	`status` text DEFAULT 'active' NOT NULL,
+	`credential_expires_at` integer,
+	`revoked_at` integer,
+	`created_at` integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)) NOT NULL,
+	`updated_at` integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)) NOT NULL,
+	FOREIGN KEY (`resource_id`) REFERENCES `api_resource`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`owner_user_id`) REFERENCES `user`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`owner_organization_id`) REFERENCES `organization`(`id`) ON UPDATE no action ON DELETE restrict,
+	CONSTRAINT "resourceAccountConnection_exactly_one_owner_check" CHECK((("__new_resource_account_connection"."owner_user_id" IS NOT NULL) + ("__new_resource_account_connection"."owner_organization_id" IS NOT NULL)) = 1),
+	CONSTRAINT "resourceAccountConnection_credential_custody_check" CHECK((
+        ("__new_resource_account_connection"."credential_custody" = 'realmroot' AND "__new_resource_account_connection"."encrypted_tokens" IS NOT NULL AND "__new_resource_account_connection"."broker_reference" IS NULL)
+        OR
+        ("__new_resource_account_connection"."credential_custody" = 'resource_server' AND "__new_resource_account_connection"."encrypted_tokens" IS NULL AND "__new_resource_account_connection"."broker_reference" IS NOT NULL)
+      ))
+);
+--> statement-breakpoint
+INSERT INTO `__new_resource_account_connection`("id", "resource_id", "owner_user_id", "owner_organization_id", "external_subject", "display_name", "credential_custody", "encrypted_tokens", "broker_reference", "granted_scopes", "authorization_details", "client_generation", "status", "credential_expires_at", "revoked_at", "created_at", "updated_at") SELECT "id", "resource_id", "owner_user_id", "owner_organization_id", "external_subject", "display_name", 'realmroot', "encrypted_tokens", NULL, "granted_scopes", "authorization_details", "client_generation", "status", "credential_expires_at", "revoked_at", "created_at", "updated_at" FROM `resource_account_connection`;--> statement-breakpoint
+DROP TABLE `resource_account_connection`;--> statement-breakpoint
+ALTER TABLE `__new_resource_account_connection` RENAME TO `resource_account_connection`;--> statement-breakpoint
+PRAGMA foreign_keys=ON;--> statement-breakpoint
+CREATE UNIQUE INDEX `resourceAccountConnection_resource_user_unique` ON `resource_account_connection` (`resource_id`,`owner_user_id`) WHERE "resource_account_connection"."owner_user_id" IS NOT NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX `resourceAccountConnection_resource_org_unique` ON `resource_account_connection` (`resource_id`,`owner_organization_id`) WHERE "resource_account_connection"."owner_organization_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX `resourceAccountConnection_resourceId_idx` ON `resource_account_connection` (`resource_id`);--> statement-breakpoint
+CREATE INDEX `resourceAccountConnection_ownerUserId_idx` ON `resource_account_connection` (`owner_user_id`);--> statement-breakpoint
+CREATE INDEX `resourceAccountConnection_ownerOrganizationId_idx` ON `resource_account_connection` (`owner_organization_id`);--> statement-breakpoint
+CREATE INDEX `resourceAccountConnection_status_idx` ON `resource_account_connection` (`status`);--> statement-breakpoint
+ALTER TABLE `resource_connection_intent` ADD `authorization_mode` text DEFAULT 'oauth' NOT NULL;
+
 ALTER TABLE `resource_account_connection` RENAME TO `provider_resource_authorization`;--> statement-breakpoint
 CREATE TABLE `provider_connection` (
 	`id` text PRIMARY KEY NOT NULL,
@@ -306,3 +348,6 @@ BEGIN
 			WHERE a.`provider_connection_id` = `provider_connection`.`id`
 		);
 END;
+
+CREATE UNIQUE INDEX `apiResource_providerConnectionAuthority_unique` ON `api_resource` (`connector_id`) WHERE "api_resource"."deleted_at" is null and "api_resource"."connector_id" is not null and json_extract("api_resource"."scope_registry", '$.accountConnection.mode') = 'brokered';
+

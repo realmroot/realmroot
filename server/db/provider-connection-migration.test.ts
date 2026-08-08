@@ -2,8 +2,7 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { DatabaseSync } from 'node:sqlite'
 import { describe, expect, it } from 'vitest'
 
-const providerConnectionMigration = '20260808144344_abnormal_newton_destine.sql'
-const providerConnectionAuthorityMigration = '20260808160850_lowly_norman_osborn.sql'
+const providerConnectionMigration = '20260808175918_brokered_provider_connections.sql'
 
 describe('Provider Connection migration', () => {
   it('[spec: platform-onboarding/existing-d1-upgrade] preserves one provider subject and removes incompatible resource authority', () => {
@@ -33,9 +32,6 @@ describe('Provider Connection migration', () => {
       `)
 
       database.exec(readFileSync(new URL(`../../migrations/${providerConnectionMigration}`, import.meta.url), 'utf8'))
-      database.exec(
-        readFileSync(new URL(`../../migrations/${providerConnectionAuthorityMigration}`, import.meta.url), 'utf8'),
-      )
 
       expect(
         database
