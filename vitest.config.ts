@@ -19,6 +19,7 @@ export default defineConfig({
   // edge layers it proves (adapters/repos, composition, worker, http full-flow,
   // the real JWKS verify path) are excluded — counting them here is a false 0%.
   test: {
+    maxWorkers: 4,
     coverage: {
       provider: 'v8',
       // text hides fully-covered files; json-summary exposes the real per-file data.
@@ -67,7 +68,6 @@ export default defineConfig({
         test: {
           name: 'unit',
           environment: 'node',
-          fileParallelism: false,
           include: ['server/**/*.test.ts', 'shared/**/*.test.ts'],
           exclude: [...configDefaults.exclude, 'server/integration/**'],
         },
@@ -87,11 +87,6 @@ export default defineConfig({
         test: {
           name: 'web',
           environment: 'jsdom',
-          fileParallelism: false,
-          // A long multi-step console test occasionally misses a React Query
-          // `waitFor` window under load; a bounded retry keeps the suite
-          // deterministic without masking real regressions.
-          retry: 2,
           include: ['src/**/*.test.{ts,tsx}'],
           setupFiles: ['src/test/web-lifecycle.ts'],
         },

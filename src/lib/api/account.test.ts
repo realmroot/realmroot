@@ -336,6 +336,7 @@ describe('account API client over the real network boundary', () => {
 })
 
 async function loadAccountApi() {
+  vi.resetModules()
   const calls: Array<[string, ...unknown[]]> = []
   const endpoint = (key: string) =>
     vi.fn((input?: unknown) => {
