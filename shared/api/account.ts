@@ -4,6 +4,68 @@ import type { PaginationMetadata } from './pagination'
 import { accountProfileLinkSchema } from './public-profiles'
 import { usernameSchema } from './users'
 
+const providerCapabilitySchema = z.object({ available: z.boolean(), active: z.boolean() })
+
+export const accountProviderConnectorSchema = z.object({
+  id: z.string(),
+  slug: z.string(),
+  providerId: z.string(),
+  providerType: z.string(),
+  displayName: z.string(),
+  capabilities: z.object({
+    signIn: z.object({ available: z.boolean() }),
+    agentAccess: z.object({ available: z.boolean() }),
+    connection: z.object({ method: z.enum(['provider_authorization', 'sign_in']).nullable() }),
+  }),
+})
+
+export const createProviderConnectionIntentSchema = z.object({ connectorId: z.string().trim().min(1) })
+
+export const providerConnectionIntentSchema = z.object({
+  id: z.string(),
+  connectorId: z.string(),
+  authorizationUrl: z.url(),
+  expiresAt: z.iso.datetime(),
+  createdAt: z.iso.datetime(),
+})
+
+export const accountProviderConnectionSchema = z.object({
+  id: z.string(),
+  connector: accountProviderConnectorSchema,
+  displayName: z.string(),
+  externalSubject: z.string(),
+  capabilities: z.object({
+    signIn: providerCapabilitySchema,
+    agentAccess: providerCapabilitySchema.extend({
+      authorizationCount: z.number().int().nonnegative(),
+      resourceNames: z.array(z.string()),
+    }),
+  }),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
+})
+
+export const accountProviderConnectorsResponseSchema = z.object({
+  items: z.array(accountProviderConnectorSchema),
+  pagination: z.object({
+    limit: z.number().int().positive(),
+    offset: z.number().int().nonnegative(),
+    total: z.number().int().nonnegative(),
+    hasMore: z.boolean(),
+    nextOffset: z.number().int().nonnegative().nullable(),
+  }),
+})
+
+export const accountProviderConnectionsResponseSchema = z.object({
+  items: z.array(accountProviderConnectionSchema),
+  pagination: accountProviderConnectorsResponseSchema.shape.pagination,
+})
+
+export type AccountProviderConnector = z.infer<typeof accountProviderConnectorSchema>
+export type AccountProviderConnection = z.infer<typeof accountProviderConnectionSchema>
+export type CreateProviderConnectionIntentInput = z.infer<typeof createProviderConnectionIntentSchema>
+export type ProviderConnectionIntent = z.infer<typeof providerConnectionIntentSchema>
+
 export const accountProfileUpdateSchema = z.object({
   displayName: z.string().min(1).optional(),
   username: usernameSchema.nullable().optional(),

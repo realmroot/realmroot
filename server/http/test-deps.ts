@@ -1,5 +1,6 @@
 import { platformOrganization } from '@server/domain/platform-organization'
 import type { Deps } from '@server/usecases/deps'
+import type { ProviderConnectionRecord } from '@server/usecases/ports'
 import type { SecurityPolicy } from '@shared/api/security'
 import { vi } from 'vitest'
 
@@ -40,6 +41,7 @@ function emptyPage() {
  * benign default; tests override only the slices they exercise via `overrides`.
  */
 export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> = {}): Deps {
+  let currentProviderConnection: ProviderConnectionRecord | null = null
   const policy = testSecurityPolicy()
   const platformOwnerMembership = {
     id: 'member-platform-owner',
@@ -188,7 +190,23 @@ export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> =
       delete: vi.fn(),
     },
     externalResources: {
-      createConnection: vi.fn().mockImplementation(async (input) => input),
+      connectAuthenticationAccount: vi.fn().mockResolvedValue(null),
+      disconnectAuthenticationAccount: vi.fn(),
+      upsertProviderConnection: vi.fn().mockImplementation(async (input) => {
+        currentProviderConnection = input
+        return input
+      }),
+      findProviderConnectionByOwnerConnector: vi.fn().mockResolvedValue(null),
+      findProviderConnection: vi.fn().mockResolvedValue(null),
+      listProviderConnectionsByUser: vi.fn().mockResolvedValue([]),
+      revokeProviderConnection: vi.fn().mockResolvedValue(false),
+      createConnection: vi.fn().mockImplementation(async (input) => ({
+        ...input,
+        ownerUserId: currentProviderConnection ? currentProviderConnection.ownerUserId : 'user-1',
+        ownerOrganizationId: currentProviderConnection ? currentProviderConnection.ownerOrganizationId : null,
+        externalSubject: currentProviderConnection?.externalSubject ?? 'external-user-1',
+        displayName: currentProviderConnection?.displayName ?? 'External User',
+      })),
       findConnectionByOwnerResource: vi.fn().mockResolvedValue(null),
       replaceConnectionAuthorization: vi.fn().mockResolvedValue(null),
       listConnectionsByUser: vi.fn().mockResolvedValue([]),

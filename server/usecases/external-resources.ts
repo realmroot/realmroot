@@ -6,7 +6,7 @@ import type {
   AgentAccessRequestRecord,
   AgentConnectionRequestRecord,
   ExternalResourceAuthorizationRecord,
-  ResourceAccountConnectionRecord,
+  ProviderResourceAuthorizationRecord,
 } from '@server/usecases/ports'
 import type {
   AccessRequest,
@@ -105,6 +105,7 @@ export async function createResourceConnectionIntent(
   if (!candidate) throw notFound('External API resource was not found.')
   if (!candidate.enabled) throw notFound('Enabled external API resource was not found.')
   const resource = await requireEnabledResource(deps, resourceId)
+  if (!resource.connectorId) throw badRequest('API resource account connections require a Provider Connector.')
   const broker = brokeredAccountConnection(resource)
   await requireConnectionOwnerControl(deps, input.owner, actorUserId)
   const scopes = input.scopes
@@ -118,8 +119,8 @@ export async function createResourceConnectionIntent(
     const expiresAt = new Date(now.getTime() + 10 * 60 * 1000)
     const callbackUri = resourceConnectionCallbackUrl(callbackOrigin)
     const authorizationDetails = input.authorizationDetails ?? resource.authorizationDetails
-    const existing = await deps.externalResources.findConnectionByOwnerResource({
-      resourceId,
+    const existing = await deps.externalResources.findProviderConnectionByOwnerConnector({
+      connectorId: resource.connectorId,
       ownerUserId: input.owner.type === 'user' ? actorUserId : null,
       ownerOrganizationId: input.owner.type === 'organization' ? input.owner.organizationId : null,
     })
@@ -180,7 +181,6 @@ export async function createResourceConnectionIntent(
       updatedAt: now.toISOString(),
     }
   }
-  if (!resource.connectorId) throw badRequest('Native API resource does not support account connections.')
   const currentAuthorization = await requireActiveExternalAuthorization(deps, resourceId)
   const requestedScopes = [
     ...new Set([
@@ -318,19 +318,16 @@ export async function completeResourceConnectionIntent(
   const displayName =
     optionalString(profile, 'name') ?? optionalString(profile, 'preferred_username') ?? externalSubject
   const expiresAt = tokenExpiry(token, now)
+  const resource = await requireEnabledResource(deps, intent.resourceId)
+  const provider = await ensureProviderConnection(deps, resource, intent, externalSubject, displayName, now)
   const existing = await deps.externalResources.findConnectionByOwnerResource({
     resourceId: intent.resourceId,
     ownerUserId: intent.ownerUserId,
     ownerOrganizationId: intent.ownerOrganizationId,
   })
-  if (existing?.status === 'active' && existing.externalSubject !== externalSubject) {
-    throw badRequest('Disconnect the current resource account before connecting another account.')
-  }
   const connectionId = existing?.id ?? intent.id
   const grantedScopes = scopeString(token.scope) ?? intent.scopes
   const authorizationInput = {
-    externalSubject,
-    displayName,
     credentialCustody: 'realmroot' as const,
     encryptedTokens: await deps.secrets.seal(
       JSON.stringify({ accessToken, refreshToken, scope: grantedScopes.join(' ') }),
@@ -349,9 +346,8 @@ export async function completeResourceConnectionIntent(
     ? await deps.externalResources.replaceConnectionAuthorization(existing.id, intent.resourceId, authorizationInput)
     : await deps.externalResources.createConnection({
         id: connectionId,
+        providerConnectionId: provider.id,
         resourceId: intent.resourceId,
-        ownerUserId: intent.ownerUserId,
-        ownerOrganizationId: intent.ownerOrganizationId,
         ...authorizationInput,
         createdAt: now,
       })
@@ -399,19 +395,15 @@ async function completeBrokeredResourceConnectionIntent(
   } else if (authorizationDetails.length > 0) {
     throw invalidAuthorizationDetails('Brokered connection returned unsupported authorization details.')
   }
+  const now = new Date()
+  const provider = await ensureProviderConnection(deps, resource, intent, externalSubject, displayName, now)
   const existing = await deps.externalResources.findConnectionByOwnerResource({
     resourceId: intent.resourceId,
     ownerUserId: intent.ownerUserId,
     ownerOrganizationId: intent.ownerOrganizationId,
   })
-  if (existing?.status === 'active' && existing.externalSubject !== externalSubject) {
-    throw badRequest('Disconnect the current resource account before connecting another account.')
-  }
-  const now = new Date()
   const connectionId = existing?.id ?? intent.id
   const authorizationInput = {
-    externalSubject,
-    displayName,
     credentialCustody: 'resource_server' as const,
     encryptedTokens: null,
     brokerReference,
@@ -427,9 +419,8 @@ async function completeBrokeredResourceConnectionIntent(
     ? await deps.externalResources.replaceConnectionAuthorization(existing.id, intent.resourceId, authorizationInput)
     : await deps.externalResources.createConnection({
         id: connectionId,
+        providerConnectionId: provider.id,
         resourceId: intent.resourceId,
-        ownerUserId: intent.ownerUserId,
-        ownerOrganizationId: intent.ownerOrganizationId,
         ...authorizationInput,
         createdAt: now,
       })
@@ -438,6 +429,37 @@ async function completeBrokeredResourceConnectionIntent(
     await revokeUncoveredGrants(deps, connection, intent.authorizationDetails.length > 0, intent.initiatedByUserId, now)
   }
   return { ...toResourceConnection(connection), returnTo: intent.returnTo }
+}
+
+async function ensureProviderConnection(
+  deps: Deps,
+  resource: ApiResourceResponse,
+  intent: import('@server/usecases/ports').ResourceConnectionIntentRecord,
+  externalSubject: string,
+  displayName: string,
+  now: Date,
+) {
+  if (!resource.connectorId) throw badRequest('API resource no longer has a Provider Connector.')
+  const existing = await deps.externalResources.findProviderConnectionByOwnerConnector({
+    connectorId: resource.connectorId,
+    ownerUserId: intent.ownerUserId,
+    ownerOrganizationId: intent.ownerOrganizationId,
+  })
+  if (existing?.status === 'active' && existing.externalSubject !== externalSubject) {
+    throw badRequest('Disconnect the current Provider account before connecting another account.')
+  }
+  return deps.externalResources.upsertProviderConnection({
+    id: existing?.id ?? createId('provconn'),
+    connectorId: resource.connectorId,
+    ownerUserId: intent.ownerUserId,
+    ownerOrganizationId: intent.ownerOrganizationId,
+    authenticationAccountId: existing?.authenticationAccountId ?? null,
+    externalSubject,
+    displayName,
+    status: 'active',
+    createdAt: existing?.createdAt ?? now,
+    updatedAt: now,
+  })
 }
 
 export async function failResourceConnectionIntent(deps: Deps, state: string) {
@@ -534,7 +556,7 @@ export async function createAccountConnection(
 }
 
 function expandedConnectionScopes(
-  connection: ResourceAccountConnectionRecord | null,
+  connection: ProviderResourceAuthorizationRecord | null,
   requestedScopes: string[],
   scopeRegistry: ResourceScopeRegistry | null,
 ) {
@@ -591,7 +613,7 @@ export async function getAccountConnection(
 
 export async function listConnectableExternalResources(deps: Deps) {
   const resources = (await deps.authorization.listEnabledResources()).filter(
-    (resource) => resource.connectorId !== null || brokeredAccountConnection(resource) !== null,
+    (resource) => resource.connectorId !== null,
   )
   const connectable = []
   for (const resource of resources) {
@@ -614,6 +636,178 @@ export async function listConnectableExternalResources(deps: Deps) {
     })
   }
   return { resources: connectable }
+}
+
+export async function listAccountProviderConnectors(deps: Deps, pagination: PaginationInput) {
+  const connectors = await deps.connectors.listEnabled()
+  const resources = await deps.authorization.listEnabledResources()
+  const items = connectors.map((connector) => providerConnectorProjection(connector, resources))
+  return {
+    items: items.slice(pagination.offset, pagination.offset + pagination.limit),
+    pagination: paginationMetadata({ ...pagination, total: items.length }),
+  }
+}
+
+export async function listAccountProviderConnections(deps: Deps, actorUserId: string, pagination: PaginationInput) {
+  const connections = await deps.externalResources.listProviderConnectionsByUser(actorUserId)
+  const resources = await deps.authorization.listEnabledResources()
+  const items = connections.map((connection) => {
+    const connector = providerConnectorProjection(connection.connector, resources)
+    return {
+      id: connection.id,
+      connector,
+      displayName: connection.displayName,
+      externalSubject: connection.externalSubject,
+      capabilities: {
+        signIn: {
+          available: connector.capabilities.signIn.available,
+          active: connection.authenticationAccountId !== null,
+        },
+        agentAccess: {
+          available: connector.capabilities.agentAccess.available,
+          active: connection.resourceAuthorizationCount > 0,
+          authorizationCount: connection.resourceAuthorizationCount,
+          resourceNames: connection.resourceNames,
+        },
+      },
+      createdAt: connection.createdAt.toISOString(),
+      updatedAt: connection.updatedAt.toISOString(),
+    }
+  })
+  return {
+    items: items.slice(pagination.offset, pagination.offset + pagination.limit),
+    pagination: paginationMetadata({ ...pagination, total: items.length }),
+  }
+}
+
+function providerConnectorProjection(
+  connector: import('@server/usecases/ports').ProviderConnectorSummary,
+  resources: ApiResourceResponse[],
+) {
+  const providerResources = resources.filter(
+    (resource) => resource.connectorId === connector.id && resource.availableToAgents,
+  )
+  const providerAuthorizationAvailable = providerResources.some((resource) => brokeredAccountConnection(resource))
+  return {
+    id: connector.id,
+    slug: connector.slug,
+    providerId: connector.providerId,
+    providerType: connector.providerType,
+    displayName: connector.displayName,
+    capabilities: {
+      signIn: { available: connector.loginEnabled },
+      agentAccess: { available: providerResources.length > 0 },
+      connection: {
+        method: providerAuthorizationAvailable
+          ? ('provider_authorization' as const)
+          : connector.loginEnabled
+            ? ('sign_in' as const)
+            : null,
+      },
+    },
+  }
+}
+
+export async function createProviderConnectionIntent(
+  deps: Deps,
+  connectorId: string,
+  actorUserId: string,
+  callbackOrigin: string,
+  signer?: AgentAssertionSigner,
+) {
+  const connector = await deps.connectors.findById(connectorId)
+  if (!connector?.enabled) throw notFound('Enabled Provider Connector was not found.')
+  const resources = (await deps.authorization.listEnabledResources()).filter(
+    (resource) => resource.connectorId === connectorId && brokeredAccountConnection(resource),
+  )
+  if (resources.length === 0) throw badRequest('Provider Connector does not support direct account connection.')
+  if (resources.length > 1) {
+    throw badRequest('Provider Connector has more than one account connection authority.')
+  }
+  const resource = resources[0]!
+  const scopes = resource.scopeRegistry?.scopes.map((scope) => scope.value) ?? []
+  if (scopes.length === 0) throw badRequest('Provider account connection authority does not declare any scopes.')
+  const intent = await createResourceConnectionIntent(
+    deps,
+    resource.id,
+    { owner: { type: 'user' }, scopes, returnTo: 'account-center' },
+    actorUserId,
+    callbackOrigin,
+    signer,
+  )
+  return {
+    id: intent.id,
+    connectorId,
+    authorizationUrl: intent.authorizationUrl,
+    expiresAt: intent.expiresAt,
+    createdAt: intent.createdAt,
+  }
+}
+
+export async function disconnectProviderConnection(
+  deps: Deps,
+  connectionId: string,
+  actorUserId: string,
+  signer?: AgentAssertionSigner,
+) {
+  const connection = await deps.externalResources.findProviderConnection(connectionId)
+  if (!connection || connection.ownerUserId !== actorUserId) throw notFound('Provider Connection was not found.')
+  if (connection.authenticationAccountId) {
+    const accounts = await deps.users.listLinkedAccounts(actorUserId, { limit: 2, offset: 0 })
+    if (accounts.total <= 1) throw badRequest('Add another sign-in method before disconnecting this Provider.')
+  }
+  const authorizations = (await deps.externalResources.listConnectionsByUser(actorUserId)).filter(
+    (authorization) => authorization.providerConnectionId === connectionId && authorization.status === 'active',
+  )
+  for (const authorization of authorizations) {
+    await revokeBrokeredProviderAuthorization(deps, authorization, connection, actorUserId, signer)
+  }
+  for (const authorization of authorizations) await revokeResourceConnection(deps, authorization.id, actorUserId)
+  if (!(await deps.externalResources.revokeProviderConnection(connectionId, actorUserId, new Date()))) {
+    throw badRequest('Provider Connection is already disconnected.')
+  }
+}
+
+async function revokeBrokeredProviderAuthorization(
+  deps: Deps,
+  authorization: ProviderResourceAuthorizationRecord,
+  connection: import('@server/usecases/ports').ProviderConnectionRecord,
+  actorUserId: string,
+  signer?: AgentAssertionSigner,
+) {
+  if (authorization.credentialCustody !== 'resource_server' || !authorization.brokerReference) return
+  const resource = await deps.authorization.findResource(authorization.resourceId)
+  const endpoint = resource && brokeredAccountConnection(resource)?.revocationEndpoint
+  if (!resource || !endpoint) return
+  if (!signer) throw new Error('Brokered account connection revocation requires Realmroot signing.')
+  const now = new Date()
+  const request = await signer.sign(
+    {
+      iss: signer.issuer,
+      sub: actorUserId,
+      aud: resource.resourceUrl,
+      jti: createId('resconnrev'),
+      iat: Math.floor(now.getTime() / 1000),
+      exp: Math.floor(now.getTime() / 1000) + 60,
+      connection_id: connection.id,
+      resource_authorization_id: authorization.id,
+      broker_reference: authorization.brokerReference,
+    },
+    'JWT',
+  )
+  let response: Response
+  try {
+    response = await deps.externalHttp.fetch(
+      new Request(endpoint, {
+        method: 'POST',
+        headers: { accept: 'application/json', 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ request }),
+      }),
+    )
+  } catch {
+    throw badGateway('Brokered account connection revocation service is unavailable.')
+  }
+  if (!response.ok) throw badGateway('Resource Server rejected brokered account connection revocation.')
 }
 
 export async function revokeResourceConnection(deps: Deps, connectionId: string, actorUserId: string) {
@@ -1351,7 +1545,7 @@ export async function decideAgentAccessRequest(
     : await userEffectiveResourceScopes(deps, actorUserId, resource)
   assertScopeSubset(request.scopes, grantorScopes, 'controller effective scope')
   const connectionId = request.connectionId
-  let connection: ResourceAccountConnectionRecord | null = null
+  let connection: ProviderResourceAuthorizationRecord | null = null
   if (requiresAccountConnection(resource)) {
     if (!connectionId) throw badRequest('An account connection is required to approve external API access.')
     connection = await requireControlledConnection(deps, connectionId, actorUserId)
@@ -1888,7 +2082,7 @@ async function revokeTokenLeaseAtTarget(
 async function readAuthorizationDetailCatalog(
   deps: Deps,
   resource: NonNullable<Awaited<ReturnType<Deps['authorization']['findResource']>>>,
-  connection: ResourceAccountConnectionRecord,
+  connection: ProviderResourceAuthorizationRecord,
   agentIdentityId: string,
   pagination: PaginationInput,
 ) {
@@ -2007,7 +2201,7 @@ async function readAuthorizationDetailCatalog(
 async function readResourceCatalog(
   deps: Deps,
   resource: NonNullable<Awaited<ReturnType<Deps['authorization']['findResource']>>>,
-  connection: ResourceAccountConnectionRecord,
+  connection: ProviderResourceAuthorizationRecord,
   agentIdentityId: string,
   pagination: PaginationInput,
 ) {
@@ -2241,7 +2435,7 @@ function toResourceServer(
 async function resolveResourceReferences(
   deps: Deps,
   resourceServer: NonNullable<Awaited<ReturnType<Deps['authorization']['findResource']>>>,
-  connection: ResourceAccountConnectionRecord | null,
+  connection: ProviderResourceAuthorizationRecord | null,
   references: Array<{ href: string }>,
   identity: Awaited<ReturnType<typeof requireActiveIdentityAndBinding>>,
   apiOrigin: string,
@@ -2289,7 +2483,7 @@ async function resolveResourceReferences(
 async function serviceResourceFallbackAuthorization(
   deps: Deps,
   resource: NonNullable<Awaited<ReturnType<Deps['authorization']['findResource']>>>,
-  connection: ResourceAccountConnectionRecord,
+  connection: ProviderResourceAuthorizationRecord,
 ) {
   if (connection.authorizationDetails.length > 0) return null
   if (brokeredAccountConnection(resource)) return { authorizationDetailsCatalogScope: null }
@@ -2352,7 +2546,7 @@ function authorizationDetailDisplay(detail: AuthorizationDetail) {
 }
 
 function connectionCoversRequest(
-  connection: ResourceAccountConnectionRecord | null,
+  connection: ProviderResourceAuthorizationRecord | null,
   request: AgentConnectionRequestRecord,
 ) {
   return Boolean(
@@ -2365,7 +2559,7 @@ function connectionCoversRequest(
 async function isConnectionUsable(
   deps: Deps,
   resourceId: string,
-  connection: ResourceAccountConnectionRecord,
+  connection: ProviderResourceAuthorizationRecord,
 ): Promise<boolean> {
   const resource = await deps.authorization.findResource(resourceId)
   if (resource && brokeredAccountConnection(resource)) return true
@@ -2390,7 +2584,7 @@ function mergeAuthorizationDetails(current: AuthorizationDetail[], requested: Au
 
 async function refreshConnectionToken(
   deps: Deps,
-  connection: ResourceAccountConnectionRecord,
+  connection: ProviderResourceAuthorizationRecord,
   authorization: ExternalResourceAuthorizationRecord,
 ) {
   if (connection.credentialCustody === 'resource_server' || !connection.encryptedTokens) {
@@ -2592,7 +2786,7 @@ function requiresAccountConnection(resource: NonNullable<Awaited<ReturnType<Deps
 async function requireEnabledResource(deps: Deps, resourceId: string) {
   const resource = await deps.authorization.findResource(resourceId)
   if (!resource?.enabled) throw notFound('Enabled Resource Server was not found.')
-  if (resource.connectorId !== null) {
+  if (resource.connectorId !== null && !brokeredAccountConnection(resource)) {
     await requireActiveExternalAuthorization(deps, resourceId)
   }
   return resource
@@ -2650,7 +2844,7 @@ async function requireConnectionOwnerControl(
 }
 
 function assertConnectionInHomeSpace(
-  connection: ResourceAccountConnectionRecord,
+  connection: ProviderResourceAuthorizationRecord,
   ownerUserId: string | null,
   ownerOrganizationId: string | null,
 ) {
@@ -2671,7 +2865,7 @@ async function resourceAuditRecord(
     principal?: AgentResourcePrincipal
     request?: AgentAccessRequestRecord
     resourceId: string
-    connection: ResourceAccountConnectionRecord | null
+    connection: ProviderResourceAuthorizationRecord | null
     grantId: string | null
     controllerUserId?: string
     scopes: string[]
@@ -2714,7 +2908,7 @@ async function resolveAuditTenant(
   input: {
     principal?: AgentResourcePrincipal
     request?: AgentAccessRequestRecord
-    connection: ResourceAccountConnectionRecord | null
+    connection: ProviderResourceAuthorizationRecord | null
   },
 ) {
   if (input.connection?.ownerUserId) return { type: 'user' as const, id: input.connection.ownerUserId }
@@ -2732,7 +2926,7 @@ async function resolveAuditTenant(
 
 async function revokeUncoveredGrants(
   deps: Deps,
-  connection: ResourceAccountConnectionRecord,
+  connection: ProviderResourceAuthorizationRecord,
   authorizationDetailsRequired: boolean,
   controllerUserId: string,
   now: Date,
@@ -2776,7 +2970,7 @@ function assertAuthorizationDetailsSupported(
 
 function assertAuthorizationDetailsSelection(
   resource: NonNullable<Awaited<ReturnType<Deps['authorization']['findResource']>>>,
-  connection: ResourceAccountConnectionRecord | null,
+  connection: ProviderResourceAuthorizationRecord | null,
   authorizationDetails: AuthorizationDetail[],
 ) {
   if (!requiresAccountConnection(resource)) {
@@ -2808,7 +3002,7 @@ function assertAuthorizationDetailsSelection(
 
 function assertAccessRequestAuthorizationDetails(
   resource: NonNullable<Awaited<ReturnType<Deps['authorization']['findResource']>>>,
-  connection: ResourceAccountConnectionRecord | null,
+  connection: ProviderResourceAuthorizationRecord | null,
   authorizationDetails: AuthorizationDetail[],
 ) {
   if (!requiresAccountConnection(resource)) {
@@ -3202,7 +3396,7 @@ function omitResourceId(value: ReturnType<typeof toExternalAuthorization>) {
   return authorization
 }
 
-function toResourceConnection(record: ResourceAccountConnectionRecord) {
+function toResourceConnection(record: ProviderResourceAuthorizationRecord) {
   return {
     id: record.id,
     resourceId: record.resourceId,
@@ -3240,7 +3434,7 @@ function toAgentAccessRequest(record: AgentAccessRequestRecord, hostId: string, 
   }
 }
 
-function toAccountConnection(record: ResourceAccountConnectionRecord): AccountConnection {
+function toAccountConnection(record: ProviderResourceAuthorizationRecord): AccountConnection {
   return {
     id: record.id,
     apiResourceId: record.resourceId,

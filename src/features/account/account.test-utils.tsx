@@ -189,6 +189,18 @@ export function accountHandlers(store: AccountStore, config: ReturnType<typeof c
     http.get(`${base}/api/account/security/passkeys`, () => HttpResponse.json({ passkeys: store.passkeys })),
     http.get(`${base}/api/account/sessions`, () => HttpResponse.json({ sessions: store.sessions })),
     http.get(`${base}/api/account/linked-accounts`, () => HttpResponse.json({ accounts: store.linkedAccounts })),
+    http.get(`${base}/api/account/provider-connectors`, () =>
+      HttpResponse.json({
+        items: [],
+        pagination: { limit: 50, offset: 0, total: 0, hasMore: false, nextOffset: null },
+      }),
+    ),
+    http.get(`${base}/api/account/provider-connections`, () =>
+      HttpResponse.json({
+        items: [],
+        pagination: { limit: 50, offset: 0, total: 0, hasMore: false, nextOffset: null },
+      }),
+    ),
     http.get(`${base}/api/account/applications`, () => HttpResponse.json({ applications: store.applications })),
     http.get(`${base}/api/account/agents`, () =>
       HttpResponse.json({

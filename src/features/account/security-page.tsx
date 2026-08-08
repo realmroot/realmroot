@@ -1,12 +1,19 @@
-import { Fingerprint, Laptop, ShieldCheck } from 'lucide-react'
+import type { AccountProviderConnection } from '@shared/api/account'
+import { Link } from '@tanstack/react-router'
+import { Fingerprint, Laptop, Link2, ShieldCheck, Wallet } from 'lucide-react'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { deletePasskey, revokeOtherSessions, revokeSession } from '@/lib/api/account'
+import { deletePasskey, revokeOtherSessions, revokeSession, unlinkWalletAddress } from '@/lib/api/account'
 import { tt } from '@/lib/i18n'
 import { AccountPageHeader, AccountTabContent, AccountTabs } from './account-page'
 import { AccountPageError, AccountPageLoading, AccountPageShell } from './account-shell'
-import { ConnectionsSection } from './connections-page'
-import { DestructiveConfirmationDialog, ItemList, SettingsAction, useDestructiveConfirmation } from './primitives'
+import {
+  DestructiveConfirmationDialog,
+  ItemList,
+  SettingsAction,
+  SubsectionTitle,
+  useDestructiveConfirmation,
+} from './primitives'
 import { ProfilePasswordPanel } from './profile-page'
 import {
   accountQueryKeys,
@@ -14,6 +21,7 @@ import {
   useAccountMutation,
   useAccountPasskeys,
   useAccountProfile,
+  useAccountProviderConnections,
   useAccountSecurity,
   useAccountSessions,
   useDeveloperConsoleAccess,
@@ -22,7 +30,7 @@ import {
 import { PasskeyDialog, TotpDialogs } from './security-dialogs'
 import { defaultAccountCenterSettings } from './settings'
 import type { ConfirmDestructiveHandler, MutationHandler, Passkey, SecurityState, UserSessionDevice } from './types'
-import { formatDate, formatSessionDevice, type TotpEnrollmentDisplay } from './utils'
+import { enrollWallet, formatDate, formatSessionDevice, type TotpEnrollmentDisplay } from './utils'
 
 export function AccountSecurityPage() {
   const configQuery = useAccountConfig()
@@ -34,6 +42,7 @@ export function AccountSecurityPage() {
   const accountCenter = config?.accountCenter ?? defaultAccountCenterSettings
   const sessionsQuery = useAccountSessions(accountCenter.sessionsViewEnabled)
   const linkedAccountsQuery = useLinkedAccounts(accountCenter.connectedAccountsEnabled)
+  const providerConnectionsQuery = useAccountProviderConnections()
   const mutate = useAccountMutation()
   const [confirmation, setConfirmation] = useDestructiveConfirmation()
   const queries = [
@@ -44,6 +53,7 @@ export function AccountSecurityPage() {
     passkeysQuery,
     sessionsQuery,
     linkedAccountsQuery,
+    providerConnectionsQuery,
   ]
   const error = queries.find((query) => query.error)?.error
   if (queries.some((query) => query.isLoading)) return <AccountPageLoading config={config} />
@@ -66,7 +76,8 @@ export function AccountSecurityPage() {
       />
       <SecuritySections
         confirm={setConfirmation}
-        linkedAccounts={linkedAccountsQuery.data?.accounts ?? []}
+        providerConnections={providerConnectionsQuery.data?.items ?? []}
+        walletAccounts={(linkedAccountsQuery.data?.accounts ?? []).filter((account) => account.providerId === 'siwe')}
         mutate={mutate}
         passkeys={passkeysQuery.data?.passkeys ?? []}
         passwordEnabled={accountCenter.passwordChangeEnabled}
@@ -74,7 +85,6 @@ export function AccountSecurityPage() {
         security={securityQuery.data?.security ?? null}
         sessions={sessionsQuery.data?.sessions ?? []}
         sessionsEnabled={accountCenter.sessionsViewEnabled}
-        providers={config?.identityProviders ?? []}
         walletProvider={config?.builtInProviders.web3Wallet}
       />
       <DestructiveConfirmationDialog confirmation={confirmation} onClose={() => setConfirmation(null)} />
@@ -84,7 +94,7 @@ export function AccountSecurityPage() {
 
 function SecuritySections({
   confirm,
-  linkedAccounts,
+  providerConnections,
   mutate,
   passkeys,
   passwordEnabled,
@@ -92,11 +102,11 @@ function SecuritySections({
   security,
   sessions,
   sessionsEnabled,
-  providers,
+  walletAccounts,
   walletProvider,
 }: {
   confirm: ConfirmDestructiveHandler
-  linkedAccounts: import('./types').LinkedAccount[]
+  providerConnections: AccountProviderConnection[]
   mutate: MutationHandler
   passkeys: Passkey[]
   passwordEnabled: boolean
@@ -104,7 +114,7 @@ function SecuritySections({
   security: SecurityState | null
   sessions: UserSessionDevice[]
   sessionsEnabled: boolean
-  providers: import('./types').IdentityProvider[]
+  walletAccounts: import('./types').LinkedAccount[]
   walletProvider?: import('./types').Web3WalletProvider
 }) {
   const [tab, setTab] = useState('sign-in')
@@ -135,15 +145,18 @@ function SecuritySections({
               </div>
             ) : null}
             <div className="accountTabPanel">
-              <ConnectionsSection
-                accounts={linkedAccounts}
-                compactEmpty
-                confirm={confirm}
-                mutate={mutate}
-                providers={providers}
-                walletProvider={walletProvider}
-              />
+              <ExternalSignInSummary connections={providerConnections} />
             </div>
+            {walletProvider?.enabled ? (
+              <div className="accountTabPanel">
+                <WalletSignInPanel
+                  accounts={walletAccounts}
+                  confirm={confirm}
+                  mutate={mutate}
+                  walletProvider={walletProvider}
+                />
+              </div>
+            ) : null}
           </div>
         </AccountTabContent>
         <AccountTabContent surface value="mfa">
@@ -184,6 +197,100 @@ function SecuritySections({
         setPasskeyName={setPasskeyName}
       />
     </>
+  )
+}
+
+function ExternalSignInSummary({ connections }: { connections: AccountProviderConnection[] }) {
+  const signInConnections = connections.filter((connection) => connection.capabilities.signIn.active)
+  return (
+    <section aria-label={tt('External sign-in')}>
+      <SubsectionTitle
+        description={tt('Provider identities that can authenticate this account are managed in Connections.')}
+        title={tt('External sign-in')}
+      />
+      <ItemList
+        compactEmpty
+        empty={tt('No external sign-in Providers')}
+        emptyDescription={tt('Connect an available Provider from Connections.')}
+        emptyIcon={<Link2 size={18} />}
+        items={signInConnections.map((connection) => ({
+          id: connection.id,
+          icon: <Link2 size={16} />,
+          title: connection.connector.displayName,
+          meta: connection.displayName,
+          status: tt('Enabled'),
+        }))}
+      />
+      <div className="accountPanelActions">
+        <Button asChild variant="outline">
+          <Link to="/connections">{tt('Manage Connections')}</Link>
+        </Button>
+      </div>
+    </section>
+  )
+}
+
+function WalletSignInPanel({
+  accounts,
+  confirm,
+  mutate,
+  walletProvider,
+}: {
+  accounts: import('./types').LinkedAccount[]
+  confirm: ConfirmDestructiveHandler
+  mutate: MutationHandler
+  walletProvider: import('./types').Web3WalletProvider
+}) {
+  async function connectWallet() {
+    await mutate('Wallet linked.', () => enrollWallet(walletProvider.chains ?? [1]), {
+      invalidate: [accountQueryKeys.linkedAccounts],
+    })
+  }
+  return (
+    <section aria-label={tt('Web3 wallet')}>
+      <SubsectionTitle
+        description={tt('A cryptographic credential used directly for Realmroot sign-in.')}
+        title={tt('Web3 wallet')}
+      />
+      <ItemList
+        compactEmpty
+        empty={tt('No wallet linked')}
+        emptyDescription={tt('Link a wallet after signing in with an email-based account.')}
+        emptyIcon={<Wallet size={18} />}
+        items={accounts.map((account) => ({
+          id: account.id,
+          icon: <Wallet size={16} />,
+          title: account.accountId,
+          meta: tt('Linked {{date}}', { date: formatDate(account.createdAt) }),
+          status: tt('Enabled'),
+          action: (
+            <Button
+              onClick={() =>
+                confirm({
+                  title: tt('Unlink wallet'),
+                  description: tt('This wallet will no longer sign in to your account.'),
+                  actionLabel: tt('Unlink wallet'),
+                  onConfirm: () =>
+                    mutate('Wallet removed.', () => unlinkWalletAddress(account.accountId), {
+                      invalidate: [accountQueryKeys.linkedAccounts],
+                    }),
+                })
+              }
+              variant="ghost"
+            >
+              {tt('Unlink')}
+            </Button>
+          ),
+        }))}
+      />
+      {!accounts.length ? (
+        <div className="accountPanelActions">
+          <Button onClick={() => void connectWallet()} variant="outline">
+            {tt('Link wallet')}
+          </Button>
+        </div>
+      ) : null}
+    </section>
   )
 }
 

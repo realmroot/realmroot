@@ -6,6 +6,17 @@ const resourceUrl = 'https://orders.example.com/api'
 const metadataUrl = 'https://orders.example.com/.well-known/oauth-protected-resource/api'
 
 describe('protected resource scope discovery', () => {
+  it('rejects mismatched resources and missing scope authority', async () => {
+    const deps = createTestDeps()
+    vi.mocked(deps.externalHttp.fetch).mockResolvedValueOnce(
+      Response.json({ resource: 'https://other.example.com/api', scopes_supported: ['orders:read'] }),
+    )
+    await expect(readProtectedResourceMetadata(deps, resourceUrl)).rejects.toThrow('does not match')
+
+    vi.mocked(deps.externalHttp.fetch).mockResolvedValueOnce(Response.json({ resource: resourceUrl }))
+    await expect(readProtectedResourceMetadata(deps, resourceUrl)).rejects.toThrow('must advertise at least one')
+  })
+
   it('[spec: agent-identity/brokered-native-account-connection] discovers complete brokered connection endpoints', async () => {
     const deps = createTestDeps()
     vi.mocked(deps.externalHttp.fetch).mockResolvedValue(
@@ -15,6 +26,7 @@ describe('protected resource scope discovery', () => {
         account_connection_modes_supported: ['brokered'],
         account_connection_authorization_endpoint: 'https://orders.example.com/api/account-connection-authorizations',
         account_connection_token_endpoint: 'https://orders.example.com/api/account-connection-credentials',
+        account_connection_revocation_endpoint: 'https://orders.example.com/api/account-connection-revocations',
       }),
     )
 
@@ -23,6 +35,7 @@ describe('protected resource scope discovery', () => {
         mode: 'brokered',
         authorizationEndpoint: 'https://orders.example.com/api/account-connection-authorizations',
         tokenEndpoint: 'https://orders.example.com/api/account-connection-credentials',
+        revocationEndpoint: 'https://orders.example.com/api/account-connection-revocations',
       },
     })
   })
@@ -40,6 +53,51 @@ describe('protected resource scope discovery', () => {
     await expect(readProtectedResourceMetadata(deps, resourceUrl)).rejects.toThrow(
       'Brokered account connection metadata is incomplete.',
     )
+  })
+
+  it('rejects unsafe brokered connection endpoints', async () => {
+    const deps = createTestDeps()
+    vi.mocked(deps.externalHttp.fetch).mockResolvedValue(
+      Response.json({
+        resource: resourceUrl,
+        scopes_supported: ['orders:read'],
+        account_connection_modes_supported: ['brokered'],
+        account_connection_authorization_endpoint: 'http://internal.example.com/authorize',
+        account_connection_token_endpoint: 'https://orders.example.com/token',
+      }),
+    )
+    await expect(readProtectedResourceMetadata(deps, resourceUrl)).rejects.toThrow('must use HTTPS or loopback HTTP')
+  })
+
+  it('accepts loopback HTTP broker endpoints for development', async () => {
+    const deps = createTestDeps()
+    vi.mocked(deps.externalHttp.fetch).mockResolvedValue(
+      Response.json({
+        resource: resourceUrl,
+        scopes_supported: ['orders:read'],
+        account_connection_modes_supported: ['brokered'],
+        account_connection_authorization_endpoint: 'http://127.0.0.1:4103/orders/authorize',
+        account_connection_token_endpoint: 'http://localhost:4103/orders/token',
+      }),
+    )
+    await expect(readProtectedResourceMetadata(deps, resourceUrl)).resolves.toMatchObject({
+      accountConnection: { mode: 'brokered' },
+    })
+  })
+
+  it('rejects a non-string broker revocation endpoint', async () => {
+    const deps = createTestDeps()
+    vi.mocked(deps.externalHttp.fetch).mockResolvedValue(
+      Response.json({
+        resource: resourceUrl,
+        scopes_supported: ['orders:read'],
+        account_connection_modes_supported: ['brokered'],
+        account_connection_authorization_endpoint: 'https://orders.example.com/authorize',
+        account_connection_token_endpoint: 'https://orders.example.com/token',
+        account_connection_revocation_endpoint: 42,
+      }),
+    )
+    await expect(readProtectedResourceMetadata(deps, resourceUrl)).rejects.toThrow('revocation endpoint is invalid')
   })
 
   it('[spec: admin-console/admin-create-api-resource] uses RFC 9728 scopes as authority and OpenAPI only for descriptions', async () => {

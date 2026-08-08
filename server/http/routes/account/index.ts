@@ -18,7 +18,9 @@ import { getConfig } from '@server/usecases/configz'
 import { resolveDeveloperAccess } from '@server/usecases/developer-access'
 import {
   createAccountConnection,
+  createProviderConnectionIntent,
   decideAccessRequest,
+  disconnectProviderConnection,
   getAccountAccessRequest,
   getAccountAccessRequestByToken,
   getAccountConnection,
@@ -27,6 +29,8 @@ import {
   listAccountAccessRequestAuthorizationDetailCatalog,
   listAccountAccessRequests,
   listAccountConnections,
+  listAccountProviderConnections,
+  listAccountProviderConnectors,
   listConnectableExternalResources,
   revokeResourceConnection,
 } from '@server/usecases/external-resources'
@@ -36,7 +40,11 @@ import {
   accountEmailChangeSchema,
   accountPasswordChangeSchema,
   accountProfileUpdateSchema,
+  accountProviderConnectionsResponseSchema,
+  accountProviderConnectorsResponseSchema,
   accountWalletAddressLinkSchema,
+  createProviderConnectionIntentSchema,
+  providerConnectionIntentSchema,
 } from '@shared/api/account'
 import {
   accessRequestApprovalsResponseSchema,
@@ -460,6 +468,46 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
     )
   })
 
+  app.get('/provider-connectors', async (c) => {
+    return c.json(
+      accountProviderConnectorsResponseSchema.parse(
+        await listAccountProviderConnectors(getDeps(c), readQuery(c, paginationQuerySchema)),
+      ),
+    )
+  })
+
+  app.get('/provider-connections', async (c) => {
+    return c.json(
+      accountProviderConnectionsResponseSchema.parse(
+        await listAccountProviderConnections(getDeps(c), getPrincipal(c).user!.id, readQuery(c, paginationQuerySchema)),
+      ),
+    )
+  })
+
+  app.post('/provider-connection-intents', async (c) => {
+    const origin = canonicalOrigin ?? new URL(c.req.url).origin
+    const input = await readJson(c, createProviderConnectionIntentSchema)
+    const result = await createProviderConnectionIntent(
+      getDeps(c),
+      input.connectorId,
+      getPrincipal(c).user!.id,
+      origin,
+      accountConnectionSigner(authApi, origin),
+    )
+    return c.json(providerConnectionIntentSchema.parse(result), 201)
+  })
+
+  app.delete('/provider-connections/:connectionId', async (c) => {
+    const origin = canonicalOrigin ?? new URL(c.req.url).origin
+    await disconnectProviderConnection(
+      getDeps(c),
+      c.req.param('connectionId'),
+      getPrincipal(c).user!.id,
+      accountConnectionSigner(authApi, origin),
+    )
+    return c.body(null, 204)
+  })
+
   app.get('/api-resources', async (c) => {
     const resources = (await listConnectableExternalResources(getDeps(c))).resources
     return c.json(
@@ -483,15 +531,7 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
       await readJson(c, createAccountConnectionSchema),
       getPrincipal(c).user!.id,
       origin,
-      authApi.signJWT
-        ? {
-            issuer: `${origin.replace(/\/$/, '')}/api/auth`,
-            sign: (payload, type) =>
-              authApi.signJWT!({ body: { payload, overrideOptions: { jwt: { type } } }, asResponse: false }).then(
-                ({ token }) => token,
-              ),
-          }
-        : undefined,
+      accountConnectionSigner(authApi, origin),
     )
     c.header('Location', `/api/account/account-connections/${encodeURIComponent(result.id)}`)
     return c.json(accountConnectionSchema.parse(result), 201)
@@ -584,6 +624,17 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
   )
 
   return app
+}
+
+function accountConnectionSigner(authApi: ManagementAuthApi, origin: string) {
+  if (!authApi.signJWT) return undefined
+  return {
+    issuer: `${origin.replace(/\/$/, '')}/api/auth`,
+    sign: (payload: Record<string, unknown>, type: 'JWT' | 'at+jwt') =>
+      authApi.signJWT!({ body: { payload, overrideOptions: { jwt: { type } } }, asResponse: false }).then(
+        ({ token }) => token,
+      ),
+  }
 }
 
 async function accountProfile(c: Context) {

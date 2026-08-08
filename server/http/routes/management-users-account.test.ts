@@ -184,7 +184,7 @@ describe('management users and account routes', () => {
     expect(users.deleteSessions).toHaveBeenCalledWith('user-1', 'session-1')
   })
 
-  it('updates account profile at the request boundary and delegates email and password flows [spec: account-center/email-update] [spec: account-center/password-update] [spec: account-center/linked-account-unlink]', async () => {
+  it('updates account profile at the request boundary and delegates email and password flows [spec: account-center/email-update] [spec: account-center/password-update]', async () => {
     const auth = createAuthMock()
     auth.api.changePassword.mockResolvedValueOnce(
       Response.json(

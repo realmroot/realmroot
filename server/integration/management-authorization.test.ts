@@ -10,9 +10,11 @@ import {
   apiResource,
   application,
   externalTokenLease,
+  identityProviderConnector,
   member,
   organizationRole,
-  resourceAccountConnection,
+  providerConnection,
+  providerResourceAuthorization,
   resourceConnectionIntent,
   user,
 } from '@server/db/schema'
@@ -950,12 +952,28 @@ describe('authorization management over real D1', () => {
       createdAt: now,
       updatedAt: now,
     })
-    await harness.db.insert(resourceAccountConnection).values({
-      id: 'connection-history',
-      resourceId: resource.id,
+    await harness.db.insert(identityProviderConnector).values({
+      id: 'connector-resource-history',
+      slug: 'resource-history',
+      providerType: 'generic_oauth',
+      providerId: 'resource-history',
+      displayName: 'Resource history',
+      createdAt: now,
+      updatedAt: now,
+    })
+    await harness.db.insert(providerConnection).values({
+      id: 'provider-connection-history',
+      connectorId: 'connector-resource-history',
       ownerUserId: admin.id,
       externalSubject: 'admin@example.com',
       displayName: 'Admin connection',
+      createdAt: now,
+      updatedAt: now,
+    })
+    await harness.db.insert(providerResourceAuthorization).values({
+      id: 'connection-history',
+      providerConnectionId: 'provider-connection-history',
+      resourceId: resource.id,
       encryptedTokens: 'encrypted-tokens',
       grantedScopes: ['files:read'],
       createdAt: now,
@@ -976,9 +994,9 @@ describe('authorization management over real D1', () => {
     ).resolves.toEqual([{ id: resource.id, deletedAt: expect.any(Date) }])
     await expect(
       harness.db
-        .select({ id: resourceAccountConnection.id, status: resourceAccountConnection.status })
-        .from(resourceAccountConnection)
-        .where(eq(resourceAccountConnection.id, 'connection-history')),
+        .select({ id: providerResourceAuthorization.id, status: providerResourceAuthorization.status })
+        .from(providerResourceAuthorization)
+        .where(eq(providerResourceAuthorization.id, 'connection-history')),
     ).resolves.toEqual([{ id: 'connection-history', status: 'revoked' }])
     await expect(
       harness.db
@@ -1181,12 +1199,28 @@ describe('authorization management over real D1', () => {
       createdAt: now,
       updatedAt: now,
     })
-    await harness.db.insert(resourceAccountConnection).values({
-      id: 'deleted-connection',
-      resourceId: resource.id,
+    await harness.db.insert(identityProviderConnector).values({
+      id: 'connector-deleted-history',
+      slug: 'deleted-history',
+      providerType: 'generic_oauth',
+      providerId: 'deleted-history',
+      displayName: 'Deleted history',
+      createdAt: now,
+      updatedAt: now,
+    })
+    await harness.db.insert(providerConnection).values({
+      id: 'provider-connection-deleted',
+      connectorId: 'connector-deleted-history',
       ownerUserId: admin.id,
       externalSubject: 'admin@example.com',
       displayName: 'Deleted connection',
+      createdAt: now,
+      updatedAt: now,
+    })
+    await harness.db.insert(providerResourceAuthorization).values({
+      id: 'deleted-connection',
+      providerConnectionId: 'provider-connection-deleted',
+      resourceId: resource.id,
       encryptedTokens: 'encrypted-tokens',
       grantedScopes: ['files:read'],
       status: 'active',
@@ -1307,7 +1341,10 @@ describe('authorization management over real D1', () => {
 
     const [[resourceRow], [connection], [intent], [request], [grant], [lease]] = await Promise.all([
       harness.db.select().from(apiResource).where(eq(apiResource.id, resource.id)),
-      harness.db.select().from(resourceAccountConnection).where(eq(resourceAccountConnection.id, 'deleted-connection')),
+      harness.db
+        .select()
+        .from(providerResourceAuthorization)
+        .where(eq(providerResourceAuthorization.id, 'deleted-connection')),
       harness.db.select().from(resourceConnectionIntent).where(eq(resourceConnectionIntent.id, 'deleted-intent')),
       harness.db.select().from(agentAccessRequest).where(eq(agentAccessRequest.id, 'deleted-request')),
       harness.db.select().from(agentAccessGrant).where(eq(agentAccessGrant.id, 'deleted-grant')),
@@ -1412,8 +1449,8 @@ describe('authorization management over real D1', () => {
 
     const [preservedConnection] = await harness.db
       .select()
-      .from(resourceAccountConnection)
-      .where(eq(resourceAccountConnection.id, 'deleted-connection'))
+      .from(providerResourceAuthorization)
+      .where(eq(providerResourceAuthorization.id, 'deleted-connection'))
     const [preservedGrant] = await harness.db
       .select()
       .from(agentAccessGrant)

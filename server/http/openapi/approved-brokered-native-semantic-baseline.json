@@ -1,6 +1,6 @@
 [
-  {"method":"GET","path":"/resource-servers","operationId":"listResourceServers","semanticHash":"e2c70475066017d38c84c805725eebd49a868a5416cc3074f85c3b201e9c0345"},
-  {"method":"POST","path":"/resource-servers","operationId":"createResourceServer","semanticHash":"b5ae9007ec734e35eca70583ff4f8f77fbc1a9952792114bbfc891b26e4dae16"},
-  {"method":"GET","path":"/resource-servers/{resourceServerId}","operationId":"getResourceServer","semanticHash":"afed9741c453d73bf63f9dc9b823c419864c9d38f0db1c6538925d563ec93434"},
-  {"method":"PATCH","path":"/resource-servers/{resourceServerId}","operationId":"updateResourceServer","semanticHash":"7e43db5e85c8ea7fcdf14a8a8071a15a9b2a644f95729c547366acd9d03715ba"}
+  {"method":"GET","path":"/resource-servers","operationId":"listResourceServers","semanticHash":"be17875d920d96613adf71efc30eddfa6a549ad035676d4ceea97cd28b876b54"},
+  {"method":"POST","path":"/resource-servers","operationId":"createResourceServer","semanticHash":"123fd9fe4ffc311da927a31492ca802b9c88b94b68e622569c2cc26b98138c0e"},
+  {"method":"GET","path":"/resource-servers/{resourceServerId}","operationId":"getResourceServer","semanticHash":"c3eff2ef75430f942b68577618b73a77156c72a7e3cdf678b623e46bfdb105c1"},
+  {"method":"PATCH","path":"/resource-servers/{resourceServerId}","operationId":"updateResourceServer","semanticHash":"c0da0ab1c74dd27628bfbf4047971251b12177fadb9d43742d57bf8812908f56"}
 ]

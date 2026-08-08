@@ -7,6 +7,7 @@ import {
   Gauge,
   HelpCircle,
   LayoutDashboard,
+  Link2,
   LoaderCircle,
   Menu,
   Shield,
@@ -41,6 +42,7 @@ const accountNavGroups = [
   {
     label: 'Access & authority',
     items: [
+      { section: 'connections' as const, href: '/connections', label: 'Connections', icon: Link2 },
       { section: 'applications' as const, href: '/applications', label: 'Applications', icon: AppWindow },
       { section: 'agents' as const, href: '/agents', label: 'Agents', icon: Bot },
       { section: 'organizations' as const, href: '/organizations', label: 'Organizations', icon: Building2 },

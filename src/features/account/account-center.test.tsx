@@ -78,6 +78,7 @@ describe('account pages', () => {
         '/api/account/security/passkeys',
         '/api/account/sessions',
         '/api/account/linked-accounts',
+        '/api/account/provider-connections?limit=100&offset=0',
       ]),
     )
   })
@@ -86,17 +87,15 @@ describe('account pages', () => {
     const requests = mockAccountFetch()
     renderWithClient(<AccountConnectionsPage />)
 
-    expect(await screen.findByText('GitHub')).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'Connections' })).toBeTruthy()
     await waitFor(() =>
       expect(requests).toEqual([
         '/api/configz',
         '/api/account/profile',
         '/api/account/developer-console-access',
-        '/api/account/linked-accounts',
-        '/api/account/applications',
-        '/api/account/agents',
-        '/api/account/api-resources',
-        '/api/account/account-connections',
+        '/api/account/organization-context',
+        '/api/account/provider-connectors?limit=100&offset=0',
+        '/api/account/provider-connections?limit=100&offset=0',
       ]),
     )
   })
@@ -133,9 +132,15 @@ function mockAccountFetch() {
     if (path === '/api/account/security') return Promise.resolve(jsonResponse({ security }))
     if (path === '/api/account/security/passkeys') return Promise.resolve(jsonResponse({ passkeys: [] }))
     if (path === '/api/account/sessions') return Promise.resolve(jsonResponse({ sessions: [] }))
-    if (path === '/api/account/linked-accounts') return Promise.resolve(jsonResponse({ accounts: linkedAccounts }))
-    if (path === '/api/account/applications') return Promise.resolve(jsonResponse({ applications: [] }))
     const pagination = { limit: 50, offset: 0, total: 0, hasMore: false, nextOffset: null }
+    if (path === '/api/account/linked-accounts') return Promise.resolve(jsonResponse({ accounts: linkedAccounts }))
+    if (path.startsWith('/api/account/provider-connectors')) {
+      return Promise.resolve(jsonResponse({ items: [], pagination }))
+    }
+    if (path.startsWith('/api/account/provider-connections')) {
+      return Promise.resolve(jsonResponse({ items: [], pagination }))
+    }
+    if (path === '/api/account/applications') return Promise.resolve(jsonResponse({ applications: [] }))
     if (path === '/api/account/agents') return Promise.resolve(jsonResponse({ items: [], pagination }))
     if (path === '/api/account/api-resources') return Promise.resolve(jsonResponse({ items: [], pagination }))
     if (path === '/api/account/account-connections') return Promise.resolve(jsonResponse({ items: [], pagination }))

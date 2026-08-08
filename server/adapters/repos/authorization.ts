@@ -19,7 +19,7 @@ import {
   member,
   organization,
   organizationRole,
-  resourceAccountConnection,
+  providerResourceAuthorization,
   resourceConnectionIntent,
   tokenExchangeAccessToken,
   tokenExchangeRefreshToken,
@@ -676,9 +676,11 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
           .where(and(eq(apiResource.id, id), isNull(apiResource.deletedAt)))
           .returning({ id: apiResource.id }),
         db
-          .update(resourceAccountConnection)
+          .update(providerResourceAuthorization)
           .set({ status: 'revoked', revokedAt: now, updatedAt: now })
-          .where(and(eq(resourceAccountConnection.resourceId, id), eq(resourceAccountConnection.status, 'active'))),
+          .where(
+            and(eq(providerResourceAuthorization.resourceId, id), eq(providerResourceAuthorization.status, 'active')),
+          ),
         db
           .update(resourceConnectionIntent)
           .set({ status: 'cancelled', completedAt: now, updatedAt: now })

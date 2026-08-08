@@ -10,7 +10,12 @@ export interface ProtectedResourceMetadata {
   resource: string
   authorizationServers: string[]
   scopesSupported: string[]
-  accountConnection: { mode: 'brokered'; authorizationEndpoint: string; tokenEndpoint: string } | null
+  accountConnection: {
+    mode: 'brokered'
+    authorizationEndpoint: string
+    tokenEndpoint: string
+    revocationEndpoint?: string | null
+  } | null
   etag: string | null
 }
 
@@ -93,15 +98,37 @@ function readAccountConnection(values: Record<string, unknown>) {
   const modes = stringArray(values.account_connection_modes_supported)
   const authorizationEndpoint = values.account_connection_authorization_endpoint
   const tokenEndpoint = values.account_connection_token_endpoint
-  if (modes.length === 0 && authorizationEndpoint === undefined && tokenEndpoint === undefined) return null
+  const revocationEndpoint = values.account_connection_revocation_endpoint
+  if (
+    modes.length === 0 &&
+    authorizationEndpoint === undefined &&
+    tokenEndpoint === undefined &&
+    revocationEndpoint === undefined
+  ) {
+    return null
+  }
   if (!modes.includes('brokered') || typeof authorizationEndpoint !== 'string' || typeof tokenEndpoint !== 'string') {
     throw badRequest('Brokered account connection metadata is incomplete.')
   }
+  if (revocationEndpoint !== undefined && typeof revocationEndpoint !== 'string') {
+    throw badRequest('Brokered account connection revocation endpoint is invalid.')
+  }
   return brokeredAccountConnectionSchema.parse({
     mode: 'brokered',
-    authorizationEndpoint,
-    tokenEndpoint,
+    authorizationEndpoint: brokerEndpoint(authorizationEndpoint),
+    tokenEndpoint: brokerEndpoint(tokenEndpoint),
+    revocationEndpoint: revocationEndpoint ? brokerEndpoint(revocationEndpoint) : null,
   })
+}
+
+function brokerEndpoint(value: string) {
+  if (!URL.canParse(value)) throw badRequest('Brokered account connection endpoint is invalid.')
+  const url = new URL(value)
+  const loopback = url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '::1'
+  if ((url.protocol !== 'https:' && !(loopback && url.protocol === 'http:')) || url.username || url.password) {
+    throw badRequest('Brokered account connection endpoints must use HTTPS or loopback HTTP and contain no userinfo.')
+  }
+  return url.toString()
 }
 
 export function protectedResourceMetadataUrl(resourceUrl: string) {

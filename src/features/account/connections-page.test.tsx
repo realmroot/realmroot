@@ -1,9 +1,8 @@
-import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import {
   base,
-  configz,
   createAccountServer,
   createAccountStore,
   HttpResponse,
@@ -13,9 +12,8 @@ import {
 import { AccountConnectionsPage } from './connections-page'
 
 const success = vi.fn()
-const errorToast = vi.fn()
 vi.mock('sonner', () => ({
-  toast: { success: (...a: unknown[]) => success(...a), error: (...a: unknown[]) => errorToast(...a) },
+  toast: { success: (...args: unknown[]) => success(...args), error: vi.fn() },
 }))
 
 vi.mock('@tanstack/react-router', () => ({
@@ -29,345 +27,406 @@ vi.mock('@tanstack/react-router', () => ({
 
 const store = createAccountStore()
 const server = createAccountServer(store)
+const pagination = { limit: 50, offset: 0, total: 1, hasMore: false, nextOffset: null }
+const githubConnector = {
+  id: 'connector-github',
+  slug: 'github',
+  providerType: 'social',
+  providerId: 'github',
+  displayName: 'GitHub',
+  capabilities: {
+    signIn: { available: true },
+    agentAccess: { available: true, resourceCount: 1 },
+    connection: { method: 'provider_authorization' as const },
+  },
+}
 
-beforeAll(() => server.listen({ onUnhandledRequest: 'bypass' }))
+beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
 afterEach(() => {
   cleanup()
   server.resetHandlers()
   success.mockClear()
-  errorToast.mockClear()
-  Object.assign(store, createAccountStore())
   vi.unstubAllGlobals()
 })
 afterAll(() => server.close())
 
 describe('AccountConnectionsPage', () => {
-  it('renders connectors, authorized apps, and agents panels', async () => {
+  it('[spec: account-center/provider-connections] presents one Provider Connection with both capabilities', async () => {
+    server.use(
+      http.get(`${base}/api/account/provider-connectors`, () =>
+        HttpResponse.json({ items: [githubConnector], pagination }),
+      ),
+      http.get(`${base}/api/account/provider-connections`, () =>
+        HttpResponse.json({
+          items: [
+            {
+              id: 'provider-connection-github',
+              connector: githubConnector,
+              externalSubject: 'octocat',
+              displayName: 'The Octocat',
+              status: 'active',
+              capabilities: {
+                signIn: { available: true, active: true },
+                agentAccess: {
+                  available: true,
+                  active: true,
+                  authorizationCount: 1,
+                  resourceNames: ['GitHub Adapter'],
+                },
+              },
+              createdAt: '2026-08-08T00:00:00.000Z',
+              updatedAt: '2026-08-08T00:00:00.000Z',
+            },
+          ],
+          pagination,
+        }),
+      ),
+    )
+
     renderWithClient(<AccountConnectionsPage />)
     expect(await screen.findByText('GitHub')).toBeTruthy()
-    expect(screen.getAllByRole('heading', { name: 'Authorized apps' }).length).toBeGreaterThan(0)
-    expect(screen.getAllByRole('heading', { name: 'Agent identities' }).length).toBeGreaterThan(0)
-    expect(screen.getByText('Web3 wallet')).toBeTruthy()
+    expect(screen.getByText(/^The Octocat · Connected /).closest('.providerLabel')).toBeTruthy()
+    expect(screen.getByText('Sign-in')).toBeTruthy()
+    expect(screen.getByText('Agent resource access')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Manage' }))
+    expect(await screen.findByRole('heading', { name: 'GitHub' })).toBeTruthy()
+    expect(screen.getAllByText('octocat')).toHaveLength(2)
+    expect(screen.getByText('GitHub Adapter')).toBeTruthy()
   })
 
-  it('does not start an unscoped external API connection from the account page', async () => {
-    server.use(
-      http.get(`${base}/api/account/api-resources`, () =>
-        HttpResponse.json({
-          items: [
-            {
-              id: 'resource-1',
-              identifier: 'projects',
-              name: 'Projects API',
-              resourceUrl: 'https://projects.example.com/api',
-              scopes: [{ value: 'projects:read', description: 'Read projects' }],
-            },
-          ],
-          pagination: { limit: 50, offset: 0, total: 1, hasMore: false, nextOffset: null },
-        }),
-      ),
-    )
-
-    renderWithClient(<AccountConnectionsPage />)
-    expect(await screen.findByText('No connected resource accounts.')).toBeTruthy()
-    expect(screen.queryByText('Projects API')).toBeNull()
-    expect(
-      screen.getByText(
-        'Approve an Agent resource access request to connect this account through its scoped OAuth flow.',
-      ),
-    ).toBeTruthy()
-  })
-
-  it('disconnects an active external API resource account', async () => {
-    server.use(
-      http.get(`${base}/api/account/api-resources`, () =>
-        HttpResponse.json({
-          items: [
-            {
-              id: 'resource-1',
-              identifier: 'projects',
-              name: 'Projects API',
-              resourceUrl: 'https://projects.example.com/api',
-              scopes: [{ value: 'projects:read', description: null }],
-            },
-          ],
-          pagination: { limit: 50, offset: 0, total: 1, hasMore: false, nextOffset: null },
-        }),
-      ),
-      http.get(`${base}/api/account/account-connections`, () =>
-        HttpResponse.json({
-          items: [
-            {
-              id: 'connection-1',
-              apiResourceId: 'resource-1',
-              owner: { type: 'user', userId: 'user-1' },
-              displayName: 'Project Owner',
-              subjectHint: '••••er-1',
-              scopes: ['projects:read'],
-              status: 'active',
-              credentialExpiresAt: null,
-              authorizationUrl: null,
-              expiresAt: null,
-              createdAt: '2026-08-01T00:00:00.000Z',
-              updatedAt: '2026-08-01T00:00:00.000Z',
-            },
-            {
-              id: 'connection-unknown',
-              apiResourceId: 'missing-resource',
-              owner: { type: 'user', userId: 'user-1' },
-              displayName: 'Unknown owner',
-              subjectHint: '••••nown',
-              scopes: [],
-              status: 'active',
-              credentialExpiresAt: '2026-08-01T01:00:00.000Z',
-              authorizationUrl: null,
-              expiresAt: null,
-              createdAt: '2026-08-01T00:00:00.000Z',
-              updatedAt: '2026-08-01T00:00:00.000Z',
-            },
-            {
-              id: 'connection-revoked',
-              apiResourceId: 'resource-1',
-              owner: { type: 'user', userId: 'user-1' },
-              displayName: 'Revoked owner',
-              subjectHint: '••••oked',
-              scopes: ['projects:read'],
-              status: 'revoked',
-              credentialExpiresAt: null,
-              authorizationUrl: null,
-              expiresAt: null,
-              createdAt: '2026-08-01T00:00:00.000Z',
-              updatedAt: '2026-08-01T00:00:00.000Z',
-            },
-          ],
-          pagination: { limit: 50, offset: 0, total: 3, hasMore: false, nextOffset: null },
-        }),
-      ),
-      http.delete(
-        `${base}/api/account/account-connections/:connectionId`,
-        () => new HttpResponse(null, { status: 204 }),
-      ),
-    )
-
-    renderWithClient(<AccountConnectionsPage />)
-    expect(await screen.findByText('API resource · Unknown owner')).toBeTruthy()
-    expect(screen.queryByText('Revoked owner')).toBeNull()
-    fireEvent.click((await screen.findAllByRole('button', { name: 'Disconnect' }))[0]!)
-    const disconnectButtons = await screen.findAllByRole('button', { name: 'Disconnect' })
-    fireEvent.click(disconnectButtons.at(-1)!)
-    await waitFor(() => expect(success).toHaveBeenCalledWith('Resource account disconnected.'))
-  })
-
-  it('presents personal stable Agent identities in Account Center', async () => {
-    const withIdentity = createAccountStore()
-    withIdentity.agentIdentities = [
-      {
-        id: 'identity-1',
-        issuer: 'https://auth.example.com',
-        subject: 'agt_stable',
-        name: 'Personal Build Agent',
-        homeSpace: { type: 'personal', userId: 'user-1' },
-        status: 'active',
-        createdAt: '2026-01-01T00:00:00.000Z',
-        updatedAt: '2026-01-01T00:00:00.000Z',
-        bindings: [],
-      },
-      {
-        id: 'identity-inactive',
-        issuer: 'https://auth.example.com',
-        subject: 'agt_inactive',
-        name: 'Inactive Agent',
-        homeSpace: { type: 'personal', userId: 'user-1' },
-        status: 'inactive',
-        createdAt: '2026-01-01T00:00:00.000Z',
-        updatedAt: '2026-02-01T00:00:00.000Z',
-        bindings: [],
-      },
-    ]
-    Object.assign(store, withIdentity)
-    server.use(
-      http.put(`${base}/api/account/agents/:agentId/activation`, () => new HttpResponse(null, { status: 204 })),
-      http.delete(`${base}/api/account/agents/:agentId/activation`, () => new HttpResponse(null, { status: 204 })),
-      http.delete(`${base}/api/account/agents/:agentId`, () => new HttpResponse(null, { status: 204 })),
-    )
-
-    renderWithClient(<AccountConnectionsPage />)
-
-    expect(await screen.findByText('Personal Build Agent')).toBeTruthy()
-    expect(screen.getByText('Inactive Agent')).toBeTruthy()
-    expect(screen.getByText(/https:\/\/auth\.example\.com · agt_stable/)).toBeTruthy()
-    const activeAgent = screen.getByText('Personal Build Agent').closest('article') as HTMLElement
-    fireEvent.click(within(activeAgent).getByRole('button', { name: 'Deactivate' }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Deactivate' }))
-    await waitFor(() => expect(success).toHaveBeenCalledWith('Agent deactivated.'))
-    const inactiveAgent = screen.getByText('Inactive Agent').closest('article') as HTMLElement
-    fireEvent.click(within(inactiveAgent).getByRole('button', { name: 'Activate' }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Activate' }))
-    await waitFor(() => expect(success).toHaveBeenCalledWith('Agent activated.'))
-    fireEvent.click(screen.getAllByRole('button', { name: 'Delete' })[0]!)
-    fireEvent.click(await screen.findByRole('button', { name: 'Delete identity' }))
-    await waitFor(() => expect(success).toHaveBeenCalledWith('Agent deleted.'))
-  })
-
-  it('renders an error state when a connections request fails', async () => {
-    server.use(
-      http.get(`${base}/api/account/linked-accounts`, () => HttpResponse.json({ error: 'fail' }, { status: 500 })),
-    )
-    renderWithClient(<AccountConnectionsPage />)
-    expect(await screen.findByText('fail')).toBeTruthy()
-  })
-
-  it('connects a social provider and redirects to its URL', async () => {
+  it('[spec: account-center/provider-connections] starts an available Provider authorization flow', async () => {
     const assign = vi.fn()
     vi.stubGlobal('location', { ...window.location, origin: 'http://localhost:3000', assign })
-    server.use(http.post(`${base}/api/auth/link-social`, () => HttpResponse.json({ url: '/social-redirect' })))
+    server.use(
+      http.get(`${base}/api/account/provider-connectors`, () =>
+        HttpResponse.json({ items: [githubConnector], pagination }),
+      ),
+      http.get(`${base}/api/account/provider-connections`, () =>
+        HttpResponse.json({ items: [], pagination: { ...pagination, total: 0 } }),
+      ),
+      http.post(`${base}/api/account/provider-connection-intents`, () =>
+        HttpResponse.json(
+          {
+            id: 'provider-intent-github',
+            connectorId: githubConnector.id,
+            authorizationUrl: 'https://github.com/apps/realmroot/installations/new',
+            expiresAt: '2026-08-08T00:10:00.000Z',
+            createdAt: '2026-08-08T00:00:00.000Z',
+          },
+          { status: 201 },
+        ),
+      ),
+    )
+
     renderWithClient(<AccountConnectionsPage />)
-    expect(await screen.findByText('GitHub')).toBeTruthy()
-    const githubRow = screen.getByText('GitHub').closest('article') as HTMLElement
-    fireEvent.click(githubRow.querySelector('button') as HTMLElement)
-    await waitFor(() => expect(assign).toHaveBeenCalledWith('/social-redirect'))
+    expect((await screen.findByText('Sign-in and Agent resource access')).closest('.providerLabel')).toBeTruthy()
+    fireEvent.click(await screen.findByRole('button', { name: 'Connect' }))
+    await waitFor(() => expect(assign).toHaveBeenCalledWith('https://github.com/apps/realmroot/installations/new'))
   })
 
-  it('connects a generic oauth provider and ignores a missing redirect', async () => {
+  it('stays on the page when a Provider authorization intent cannot be created', async () => {
     const assign = vi.fn()
     vi.stubGlobal('location', { ...window.location, origin: 'http://localhost:3000', assign })
-    const oauthConfig = configz()
-    oauthConfig.identityProviders = [
-      { slug: 'okta', providerType: 'generic_oauth', providerId: 'okta', displayName: 'Okta', icon: 'okta' },
-    ]
     server.use(
-      http.get(`${base}/api/configz`, () => HttpResponse.json(oauthConfig)),
-      http.post(`${base}/api/auth/oauth2/link`, () => HttpResponse.json({})),
+      http.get(`${base}/api/account/provider-connectors`, () =>
+        HttpResponse.json({ items: [githubConnector], pagination }),
+      ),
+      http.get(`${base}/api/account/provider-connections`, () =>
+        HttpResponse.json({ items: [], pagination: { ...pagination, total: 0 } }),
+      ),
+      http.post(`${base}/api/account/provider-connection-intents`, () =>
+        HttpResponse.json({ message: 'Provider authorization unavailable.' }, { status: 503 }),
+      ),
     )
+
     renderWithClient(<AccountConnectionsPage />)
-    expect(await screen.findByText('Okta')).toBeTruthy()
-    const oktaRow = screen.getByText('Okta').closest('article') as HTMLElement
-    fireEvent.click(oktaRow.querySelector('button') as HTMLElement)
-    await waitFor(() => expect(success).toHaveBeenCalledWith('Redirecting to Okta.'))
-    expect(assign).not.toHaveBeenCalled()
+    fireEvent.click(await screen.findByRole('button', { name: 'Connect' }))
+    await waitFor(() => expect(assign).not.toHaveBeenCalled())
   })
 
-  it('unlinks a connected provider', async () => {
-    const linked = createAccountStore()
-    linked.linkedAccounts = [
-      { id: 'la-1', accountId: 'acct-1', providerId: 'github', createdAt: '2026-01-01T00:00:00.000Z' },
-    ]
-    Object.assign(store, linked)
-    server.use(http.delete(`${base}/api/account/linked-accounts/:providerId`, () => HttpResponse.json({ ok: true })))
+  it('offers direct connection for an Agent-only Provider', async () => {
+    const assign = vi.fn()
+    vi.stubGlobal('location', { ...window.location, origin: 'http://localhost:3000', assign })
+    server.use(
+      http.get(`${base}/api/account/provider-connectors`, () =>
+        HttpResponse.json({
+          items: [
+            {
+              ...githubConnector,
+              capabilities: {
+                signIn: { available: false },
+                agentAccess: { available: true, resourceCount: 1 },
+                connection: { method: 'provider_authorization' },
+              },
+            },
+          ],
+          pagination,
+        }),
+      ),
+      http.get(`${base}/api/account/provider-connections`, () =>
+        HttpResponse.json({ items: [], pagination: { ...pagination, total: 0 } }),
+      ),
+      http.post(`${base}/api/account/provider-connection-intents`, () =>
+        HttpResponse.json(
+          {
+            id: 'provider-intent-github',
+            connectorId: githubConnector.id,
+            authorizationUrl: 'https://github.com/apps/realmroot/installations/new',
+            expiresAt: '2026-08-08T00:10:00.000Z',
+            createdAt: '2026-08-08T00:00:00.000Z',
+          },
+          { status: 201 },
+        ),
+      ),
+    )
+
     renderWithClient(<AccountConnectionsPage />)
-    expect(await screen.findByText('Linked')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Unlink' }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Unlink account' }))
-    await waitFor(() => expect(success).toHaveBeenCalledWith('Linked account removed.'))
+    expect((await screen.findByText('Agent resource access only')).closest('.providerLabel')).toBeTruthy()
+    fireEvent.click(await screen.findByRole('button', { name: 'Connect' }))
+    await waitFor(() => expect(assign).toHaveBeenCalledWith('https://github.com/apps/realmroot/installations/new'))
   })
 
-  it('shows the empty connectors state when no providers are configured', async () => {
-    const noProviders = configz()
-    noProviders.identityProviders = []
-    noProviders.builtInProviders = {
-      ...noProviders.builtInProviders,
-      web3Wallet: { ...noProviders.builtInProviders.web3Wallet, enabled: false },
+  it('uses the Connector sign-in flow when no Provider authorization authority exists', async () => {
+    const assign = vi.fn()
+    vi.stubGlobal('location', { ...window.location, origin: 'http://localhost:3000', assign })
+    let linkedBody: unknown
+    const signInConnector = {
+      ...githubConnector,
+      providerType: 'generic_oauth',
+      capabilities: {
+        signIn: { available: true },
+        agentAccess: { available: false },
+        connection: { method: 'sign_in' as const },
+      },
     }
-    server.use(http.get(`${base}/api/configz`, () => HttpResponse.json(noProviders)))
-    renderWithClient(<AccountConnectionsPage />)
-    expect(await screen.findByText('No additional sign-in methods')).toBeTruthy()
-  })
-
-  it('unlinks a linked wallet', async () => {
-    const withWallet = createAccountStore()
-    withWallet.linkedAccounts = [
-      { id: 'w-1', accountId: 'wallet-acct', providerId: 'siwe', createdAt: '2026-01-01T00:00:00.000Z' },
-    ]
-    Object.assign(store, withWallet)
-    server.use(http.delete(`${base}/api/account/wallet-addresses/:accountId`, () => HttpResponse.json({ ok: true })))
-    renderWithClient(<AccountConnectionsPage />)
-    expect(await screen.findByText('1 wallet linked.')).toBeTruthy()
-    const walletRow = screen.getByText('Web3 wallet').closest('article') as HTMLElement
-    fireEvent.click(walletRow.querySelector('button') as HTMLElement)
-    fireEvent.click(await screen.findByRole('button', { name: 'Unlink wallet' }))
-    await waitFor(() => expect(success).toHaveBeenCalledWith('Wallet removed.'))
-  })
-
-  it('revokes an authorized application', async () => {
-    const withApp = createAccountStore()
-    withApp.applications = [
-      { id: 'app-1', applicationName: 'Portal', scopes: ['openid', 'email'], grantedAt: '2026-01-01T00:00:00.000Z' },
-    ]
-    Object.assign(store, withApp)
-    server.use(http.delete(`${base}/api/account/applications/:consentId`, () => HttpResponse.json({ ok: true })))
-    renderWithClient(<AccountConnectionsPage />)
-    expect(await screen.findByText('Portal')).toBeTruthy()
-    const appRow = screen.getByText('Portal').closest('article') as HTMLElement
-    fireEvent.click(appRow.querySelector('button') as HTMLElement)
-    fireEvent.click(await screen.findByRole('button', { name: 'Revoke access' }))
-    await waitFor(() => expect(success).toHaveBeenCalledWith('Application access revoked.'))
-  })
-
-  it('connects a wallet through the enroll flow', async () => {
-    vi.stubGlobal(
-      'window',
-      Object.assign(window, {
-        ethereum: {
-          request: vi.fn(async ({ method }: { method: string }) => {
-            if (method === 'eth_requestAccounts') return ['0x1111111111111111111111111111111111111111']
-            if (method === 'eth_chainId') return '0x1'
-            if (method === 'personal_sign') return '0xsignature'
-            return null
-          }),
-        },
-      }),
-    )
     server.use(
-      http.get(`${base}/api/configz`, () => {
-        const walletConfig = configz()
-        walletConfig.builtInProviders.web3Wallet = {
-          ...walletConfig.builtInProviders.web3Wallet,
-          chains: undefined as unknown as number[],
-        }
-        return HttpResponse.json(walletConfig)
+      http.get(`${base}/api/account/provider-connectors`, () =>
+        HttpResponse.json({ items: [signInConnector], pagination }),
+      ),
+      http.get(`${base}/api/account/provider-connections`, () =>
+        HttpResponse.json({ items: [], pagination: { ...pagination, total: 0 } }),
+      ),
+      http.post(`${base}/api/auth/oauth2/link`, async ({ request }) => {
+        linkedBody = await request.json()
+        return HttpResponse.json({ url: 'https://provider.example.com/authorize' })
       }),
-      http.post(`${base}/api/auth/siwe/nonce`, () => HttpResponse.json({ nonce: 'nonce12345' })),
-      http.post(`${base}/api/account/wallet-addresses`, () => HttpResponse.json({ id: 'wallet-1' })),
     )
-    renderWithClient(<AccountConnectionsPage />)
-    const walletRow = (await screen.findByText('Web3 wallet')).closest('article') as HTMLElement
-    fireEvent.click(walletRow.querySelector('button') as HTMLElement)
-    await waitFor(() => expect(success).toHaveBeenCalledWith('Wallet linked.'))
-  })
 
-  it('shows an account-center error when the profile is absent', async () => {
-    server.use(http.get(`${base}/api/account/profile`, () => HttpResponse.json({ user: null })))
     renderWithClient(<AccountConnectionsPage />)
-    expect(await screen.findByText('Unable to load account center.')).toBeTruthy()
-  })
-
-  it('still renders the panels when connected accounts queries are disabled', async () => {
-    const disabled = configz()
-    disabled.accountCenter = { ...disabled.accountCenter, connectedAccountsEnabled: false }
-    server.use(http.get(`${base}/api/configz`, () => HttpResponse.json(disabled)))
-    renderWithClient(<AccountConnectionsPage />)
-    expect((await screen.findAllByRole('heading', { name: 'Agent identities' })).length).toBeGreaterThan(0)
-  })
-
-  it('shows the generic error message when a query rejects with a non-Error', async () => {
-    const mswFetch = window.fetch
-    const fetchSpy = vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
-      if (String(input).endsWith('/api/account/agents')) return Promise.reject('string failure')
-      return mswFetch(input, init)
+    expect(await screen.findByText('Sign-in only')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Connect' }))
+    await waitFor(() => expect(assign).toHaveBeenCalledWith('https://provider.example.com/authorize'))
+    expect(linkedBody).toMatchObject({
+      providerId: 'github',
+      callbackURL: 'http://localhost:3000/connections',
     })
-    renderWithClient(<AccountConnectionsPage />)
-    expect(await screen.findByText('Unable to load.')).toBeTruthy()
-    fetchSpy.mockRestore()
   })
 
-  it('falls back to empty collections when responses omit their keys', async () => {
+  it('uses social account linking for a social sign-in Connector', async () => {
+    const assign = vi.fn()
+    vi.stubGlobal('location', { ...window.location, origin: 'http://localhost:3000', assign })
+    const socialConnector = {
+      ...githubConnector,
+      capabilities: {
+        signIn: { available: true },
+        agentAccess: { available: false },
+        connection: { method: 'sign_in' as const },
+      },
+    }
     server.use(
-      http.get(`${base}/api/account/linked-accounts`, () => HttpResponse.json({})),
-      http.get(`${base}/api/account/applications`, () => HttpResponse.json({})),
-      http.get(`${base}/api/account/agents`, () => HttpResponse.json({})),
+      http.get(`${base}/api/account/provider-connectors`, () =>
+        HttpResponse.json({ items: [socialConnector], pagination }),
+      ),
+      http.get(`${base}/api/account/provider-connections`, () =>
+        HttpResponse.json({ items: [], pagination: { ...pagination, total: 0 } }),
+      ),
+      http.post(`${base}/api/auth/link-social`, () => HttpResponse.json({ url: 'https://github.com/login/oauth' })),
+    )
+
+    renderWithClient(<AccountConnectionsPage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Connect' }))
+    await waitFor(() => expect(assign).toHaveBeenCalledWith('https://github.com/login/oauth'))
+  })
+
+  it('stays on the page when account linking returns no redirect URL', async () => {
+    const assign = vi.fn()
+    vi.stubGlobal('location', { ...window.location, origin: 'http://localhost:3000', assign })
+    const socialConnector = {
+      ...githubConnector,
+      capabilities: {
+        signIn: { available: true },
+        agentAccess: { available: false },
+        connection: { method: 'sign_in' as const },
+      },
+    }
+    server.use(
+      http.get(`${base}/api/account/provider-connectors`, () =>
+        HttpResponse.json({ items: [socialConnector], pagination }),
+      ),
+      http.get(`${base}/api/account/provider-connections`, () =>
+        HttpResponse.json({ items: [], pagination: { ...pagination, total: 0 } }),
+      ),
+      http.post(`${base}/api/auth/link-social`, () => HttpResponse.json({})),
+    )
+
+    renderWithClient(<AccountConnectionsPage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Connect' }))
+    await waitFor(() => expect(assign).not.toHaveBeenCalled())
+  })
+
+  it('renders unavailable and empty Provider states without a connection action', async () => {
+    server.use(
+      http.get(`${base}/api/account/provider-connectors`, () =>
+        HttpResponse.json({
+          items: [
+            {
+              ...githubConnector,
+              capabilities: {
+                signIn: { available: false },
+                agentAccess: { available: false },
+                connection: { method: null },
+              },
+            },
+          ],
+          pagination,
+        }),
+      ),
+      http.get(`${base}/api/account/provider-connections`, () =>
+        HttpResponse.json({ items: [], pagination: { ...pagination, total: 0 } }),
+      ),
+    )
+
+    renderWithClient(<AccountConnectionsPage />)
+    expect(await screen.findByText('No available capabilities')).toBeTruthy()
+    expect(screen.getByText('No Provider Connections')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Connect' })).toBeNull()
+  })
+
+  it('shows a connection that needs attention and has no Agent resources', async () => {
+    server.use(
+      http.get(`${base}/api/account/provider-connectors`, () =>
+        HttpResponse.json({ items: [githubConnector], pagination }),
+      ),
+      http.get(`${base}/api/account/provider-connections`, () =>
+        HttpResponse.json({
+          items: [
+            {
+              id: 'provider-connection-github',
+              connector: githubConnector,
+              externalSubject: 'octocat',
+              displayName: 'The Octocat',
+              capabilities: {
+                signIn: { available: true, active: false },
+                agentAccess: { available: true, active: false, authorizationCount: 0, resourceNames: [] },
+              },
+              createdAt: '2026-08-08T00:00:00.000Z',
+              updatedAt: '2026-08-08T00:00:00.000Z',
+            },
+          ],
+          pagination,
+        }),
+      ),
+    )
+
+    renderWithClient(<AccountConnectionsPage />)
+    expect(await screen.findByText('Needs attention')).toBeTruthy()
+    expect(screen.getByText('All Providers connected')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Manage' }))
+    expect(await screen.findByText('No Agent resource access')).toBeTruthy()
+    expect(screen.getAllByText('Not enabled')).toHaveLength(2)
+    fireEvent.click(screen.getAllByRole('button', { name: 'Close' })[1]!)
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'GitHub' })).toBeNull())
+  })
+
+  it('disconnects the whole Provider Connection', async () => {
+    let disconnected = false
+    server.use(
+      http.get(`${base}/api/account/provider-connectors`, () =>
+        HttpResponse.json({ items: [githubConnector], pagination }),
+      ),
+      http.get(`${base}/api/account/provider-connections`, () =>
+        HttpResponse.json({
+          items: [
+            {
+              id: 'provider-connection-github',
+              connector: githubConnector,
+              externalSubject: 'octocat',
+              displayName: 'The Octocat',
+              status: 'active',
+              capabilities: {
+                signIn: { available: true, active: false },
+                agentAccess: {
+                  available: true,
+                  active: true,
+                  authorizationCount: 1,
+                  resourceNames: ['GitHub Adapter'],
+                },
+              },
+              createdAt: '2026-08-08T00:00:00.000Z',
+              updatedAt: '2026-08-08T00:00:00.000Z',
+            },
+          ],
+          pagination,
+        }),
+      ),
+      http.delete(`${base}/api/account/provider-connections/provider-connection-github`, () => {
+        disconnected = true
+        return new HttpResponse(null, { status: 204 })
+      }),
+    )
+
+    renderWithClient(<AccountConnectionsPage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Manage' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Disconnect Provider' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Disconnect' }))
+    await waitFor(() => expect(disconnected).toBe(true))
+    expect(success).toHaveBeenCalledWith('GitHub disconnected.')
+  })
+
+  it('keeps the Provider sheet open when disconnection fails', async () => {
+    server.use(
+      http.get(`${base}/api/account/provider-connectors`, () =>
+        HttpResponse.json({ items: [githubConnector], pagination }),
+      ),
+      http.get(`${base}/api/account/provider-connections`, () =>
+        HttpResponse.json({
+          items: [
+            {
+              id: 'provider-connection-github',
+              connector: githubConnector,
+              externalSubject: 'octocat',
+              displayName: 'The Octocat',
+              capabilities: {
+                signIn: { available: true, active: false },
+                agentAccess: { available: true, active: true, authorizationCount: 1, resourceNames: [] },
+              },
+              createdAt: '2026-08-08T00:00:00.000Z',
+              updatedAt: '2026-08-08T00:00:00.000Z',
+            },
+          ],
+          pagination,
+        }),
+      ),
+      http.delete(`${base}/api/account/provider-connections/provider-connection-github`, () =>
+        HttpResponse.json({ message: 'Revocation unavailable.' }, { status: 502 }),
+      ),
+    )
+
+    renderWithClient(<AccountConnectionsPage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Manage' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Disconnect Provider' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Disconnect' }))
+    expect(await screen.findByRole('heading', { name: 'GitHub' })).toBeTruthy()
+  })
+
+  it('renders a Provider Connection error state', async () => {
+    server.use(
+      http.get(`${base}/api/account/provider-connectors`, () =>
+        HttpResponse.json({ message: 'Providers unavailable.' }, { status: 500 }),
+      ),
     )
     renderWithClient(<AccountConnectionsPage />)
-    expect(await screen.findByText('No authorized applications yet.')).toBeTruthy()
-    expect(screen.getByText('No Agent identities yet.')).toBeTruthy()
+    expect((await screen.findByRole('alert')).textContent).toBe('Providers unavailable.')
   })
 })

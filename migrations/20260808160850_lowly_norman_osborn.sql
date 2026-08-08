@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX `apiResource_providerConnectionAuthority_unique` ON `api_resource` (`connector_id`) WHERE "api_resource"."deleted_at" is null and "api_resource"."connector_id" is not null and json_extract("api_resource"."scope_registry", '$.accountConnection.mode') = 'brokered';

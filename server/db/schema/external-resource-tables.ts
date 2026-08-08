@@ -4,18 +4,18 @@ import { check, index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-o
 import { agentIdentity, agentIdentityBinding } from './agent-identity-tables'
 import { user } from './auth-tables'
 import { apiResource, organization } from './authorization-tables'
+import { providerConnection } from './provider-connection-tables'
 
-export const resourceAccountConnection = sqliteTable(
-  'resource_account_connection',
+export const providerResourceAuthorization = sqliteTable(
+  'provider_resource_authorization',
   {
     id: text('id').primaryKey(),
+    providerConnectionId: text('provider_connection_id')
+      .notNull()
+      .references(() => providerConnection.id, { onDelete: 'cascade' }),
     resourceId: text('resource_id')
       .notNull()
       .references(() => apiResource.id, { onDelete: 'restrict' }),
-    ownerUserId: text('owner_user_id').references(() => user.id, { onDelete: 'restrict' }),
-    ownerOrganizationId: text('owner_organization_id').references(() => organization.id, { onDelete: 'restrict' }),
-    externalSubject: text('external_subject').notNull(),
-    displayName: text('display_name').notNull(),
     credentialCustody: text('credential_custody', { enum: ['realmroot', 'resource_server'] })
       .notNull()
       .default('realmroot'),
@@ -39,27 +39,20 @@ export const resourceAccountConnection = sqliteTable(
   },
   (table) => [
     check(
-      'resourceAccountConnection_exactly_one_owner_check',
-      sql`((${table.ownerUserId} IS NOT NULL) + (${table.ownerOrganizationId} IS NOT NULL)) = 1`,
-    ),
-    check(
-      'resourceAccountConnection_credential_custody_check',
+      'providerResourceAuthorization_credential_custody_check',
       sql`(
         (${table.credentialCustody} = 'realmroot' AND ${table.encryptedTokens} IS NOT NULL AND ${table.brokerReference} IS NULL)
         OR
         (${table.credentialCustody} = 'resource_server' AND ${table.encryptedTokens} IS NULL AND ${table.brokerReference} IS NOT NULL)
       )`,
     ),
-    uniqueIndex('resourceAccountConnection_resource_user_unique')
-      .on(table.resourceId, table.ownerUserId)
-      .where(sql`${table.ownerUserId} IS NOT NULL`),
-    uniqueIndex('resourceAccountConnection_resource_org_unique')
-      .on(table.resourceId, table.ownerOrganizationId)
-      .where(sql`${table.ownerOrganizationId} IS NOT NULL`),
-    index('resourceAccountConnection_resourceId_idx').on(table.resourceId),
-    index('resourceAccountConnection_ownerUserId_idx').on(table.ownerUserId),
-    index('resourceAccountConnection_ownerOrganizationId_idx').on(table.ownerOrganizationId),
-    index('resourceAccountConnection_status_idx').on(table.status),
+    uniqueIndex('providerResourceAuthorization_connection_resource_unique').on(
+      table.providerConnectionId,
+      table.resourceId,
+    ),
+    index('providerResourceAuthorization_providerConnectionId_idx').on(table.providerConnectionId),
+    index('providerResourceAuthorization_resourceId_idx').on(table.resourceId),
+    index('providerResourceAuthorization_status_idx').on(table.status),
   ],
 )
 
@@ -154,7 +147,7 @@ export const agentAccessRequest = sqliteTable(
     resourceId: text('resource_id')
       .notNull()
       .references(() => apiResource.id, { onDelete: 'restrict' }),
-    connectionId: text('connection_id').references(() => resourceAccountConnection.id, { onDelete: 'restrict' }),
+    connectionId: text('connection_id').references(() => providerResourceAuthorization.id, { onDelete: 'restrict' }),
     agentIdentityId: text('agent_identity_id')
       .notNull()
       .references(() => agentIdentity.id, { onDelete: 'restrict' }),
@@ -196,7 +189,7 @@ export const agentAccessGrant = sqliteTable(
     resourceId: text('resource_id')
       .notNull()
       .references(() => apiResource.id, { onDelete: 'restrict' }),
-    connectionId: text('connection_id').references(() => resourceAccountConnection.id, { onDelete: 'restrict' }),
+    connectionId: text('connection_id').references(() => providerResourceAuthorization.id, { onDelete: 'restrict' }),
     agentIdentityId: text('agent_identity_id')
       .notNull()
       .references(() => agentIdentity.id, { onDelete: 'restrict' }),

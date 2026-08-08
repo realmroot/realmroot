@@ -13,6 +13,8 @@ import {
   listAccountOrganizationInvitations,
   listAccountOrganizationRoles,
   listAccountOrganizations,
+  listAccountProviderConnections,
+  listAccountProviderConnectors,
   listAccountSessions,
   listAgentResourceRequests,
   listConsentedApplications,
@@ -29,6 +31,8 @@ export const accountQueryKeys = {
   linkedAccounts: ['account', 'linked-accounts'] as const,
   externalApiResources: ['account', 'api-resources'] as const,
   accountConnections: ['account', 'account-connections'] as const,
+  providerConnections: ['account', 'provider-connections'] as const,
+  providerConnectors: ['account', 'provider-connectors'] as const,
   accessRequests: ['account', 'access-requests'] as const,
   passkeys: ['account', 'passkeys'] as const,
   profile: ['account', 'profile'] as const,
@@ -149,6 +153,22 @@ export function useLinkedAccounts(enabled: boolean) {
     enabled,
     queryKey: accountQueryKeys.linkedAccounts,
     queryFn: listLinkedAccounts,
+    ...accountQueryOptions,
+  })
+}
+
+export function useAccountProviderConnectors() {
+  return useQuery({
+    queryKey: accountQueryKeys.providerConnectors,
+    queryFn: listAccountProviderConnectors,
+    ...accountQueryOptions,
+  })
+}
+
+export function useAccountProviderConnections() {
+  return useQuery({
+    queryKey: accountQueryKeys.providerConnections,
+    queryFn: listAccountProviderConnections,
     ...accountQueryOptions,
   })
 }

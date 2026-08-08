@@ -130,7 +130,8 @@ these members to its RFC 9728 protected-resource metadata:
 
 - `account_connection_modes_supported: ["brokered"]`;
 - `account_connection_authorization_endpoint`;
-- `account_connection_token_endpoint`.
+- `account_connection_token_endpoint`;
+- `account_connection_revocation_endpoint` (recommended during the 0.1 compatibility window).
 
 Realmroot sends the authorization endpoint a signed JWT request object in the
 `request` query parameter. The Resource Server MUST validate its signature from
@@ -145,6 +146,19 @@ exchanges that code with the verifier at the advertised token endpoint. The
 response contains the stable external subject, display label, broker reference,
 granted scopes, and concrete authorization details; it never contains provider
 access or refresh credentials.
+
+When the revocation endpoint is advertised, Realmroot sends it a short-lived
+signed JWT request before removing the local Connection. The request binds the
+Realmroot issuer, Resource audience, owner, Connection, Resource Authorization,
+and opaque broker reference. The Resource Server validates it with the same
+issuer JWKS and permanently invalidates the referenced provider credential.
+Adapters SHOULD implement this endpoint; a later profile version may require it.
+
+The API Resource selects the Provider Connector whose account identity it
+represents. Realmroot allows one brokered account-connection authority per
+Connector and one Provider Connection per owner and Connector. Connector type
+is deliberately outside this extension: social, generic OAuth, and future
+Connectors use the same wire contract without provider-specific Realmroot code.
 
 - **Purpose:** keep provider OAuth and installation credentials inside a thin
   compatibility Worker while Realmroot owns the Connection and Agent grants.

@@ -8,6 +8,7 @@ import { createDrizzleAgentRepository } from '@server/adapters/repos/agents'
 import { createDrizzleApplicationRepository } from '@server/adapters/repos/applications'
 import { createDrizzleAuthorizationRepository } from '@server/adapters/repos/authorization'
 import { createDrizzleConfigzRepository } from '@server/adapters/repos/configz'
+import { createExternalResourceRepository } from '@server/adapters/repos/external-resources'
 import { platformOrganization } from '@server/domain/platform-organization'
 import type { AuthConnectorConfig } from '@server/usecases/connectors'
 import type { Deps } from '@server/usecases/deps'
@@ -77,6 +78,7 @@ export function createAuth(
 ) {
   const applications = createDrizzleApplicationRepository(db)
   const configz = createDrizzleConfigzRepository(db)
+  const externalResources = createExternalResourceRepository(db)
   // The better-auth boundary builds its own repos; only the slices the token-claim
   // and agent-capability usecases read are populated here.
   const deps = {
@@ -110,9 +112,9 @@ export function createAuth(
           ]
         : []),
     ],
-    databaseHooks: options.publishWebhookEvent
-      ? {
-          user: {
+    databaseHooks: {
+      user: options.publishWebhookEvent
+        ? {
             create: {
               after: async (user) =>
                 options.publishWebhookEvent?.('user.created', {
@@ -149,8 +151,10 @@ export function createAuth(
                   user: webhookRecord(user, ['id', 'email', 'name', 'username', 'role', 'createdAt', 'updatedAt']),
                 }),
             },
-          },
-          session: {
+          }
+        : undefined,
+      session: options.publishWebhookEvent
+        ? {
             create: {
               after: async (session) =>
                 options.publishWebhookEvent?.('session.created', {
@@ -179,9 +183,26 @@ export function createAuth(
                   ]),
                 }),
             },
+          }
+        : undefined,
+      account: {
+        create: {
+          after: async (account) => {
+            if (account.providerId === 'credential') return
+            await externalResources.connectAuthenticationAccount({
+              authenticationAccountId: account.id,
+              providerId: account.providerId,
+              userId: account.userId,
+              externalSubject: account.accountId,
+              now: account.createdAt,
+            })
           },
-        }
-      : undefined,
+        },
+        delete: {
+          after: async (account) => externalResources.disconnectAuthenticationAccount(account.id),
+        },
+      },
+    },
     trustedOrigins,
     socialProviders: connectors.socialProviders,
     account: {

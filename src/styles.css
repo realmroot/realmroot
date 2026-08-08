@@ -2399,6 +2399,12 @@ textarea {
   min-width: 0;
 }
 
+.accountSectionStackFlat > .accountObjectSection + .accountObjectSection {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
 .accountProfileSummary {
   grid-template-columns: minmax(0, 1fr) minmax(280px, 380px);
   align-items: center;
@@ -2603,6 +2609,18 @@ textarea {
   border-top: 0;
 }
 
+.accountRow.is-value-empty {
+  grid-template-columns: minmax(150px, 1fr) minmax(88px, auto);
+}
+
+.accountRow.is-action-empty {
+  grid-template-columns: minmax(150px, 1fr) minmax(130px, 0.75fr);
+}
+
+.accountRow.is-value-empty.is-action-empty {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .accountRowLabel {
   display: grid;
   min-width: 0;
@@ -2638,6 +2656,34 @@ textarea {
   min-width: 0;
   align-items: center;
   justify-content: flex-end;
+}
+
+.providerLabel {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+}
+
+.providerLabelText {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.providerLabelName,
+.providerLabelDetail {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.providerLabelDetail {
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.4;
 }
 
 .accountObjectSection {
@@ -2850,6 +2896,12 @@ textarea {
   justify-content: flex-end;
   gap: 8px;
   max-width: min(100%, 520px);
+}
+
+.accountPanelActions {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 18px 18px;
 }
 
 .accountTabPanel {
@@ -4359,16 +4411,38 @@ textarea {
   }
 
   .settingsAction {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
     padding: 16px;
   }
 
-  .settingsActionButtons {
-    justify-content: flex-start;
+  .settingsAction .accountRowLabel,
+  .settingsAction .accountRowValue,
+  .settingsAction .accountRowAction {
+    grid-column: 1;
+    grid-row: auto;
   }
 
-  .settingsAction .uiButton,
-  .settingsActionButtons .uiButton {
+  .settingsAction .accountRowAction,
+  .settingsActionButtons {
     width: 100%;
+    justify-content: stretch;
+  }
+
+  .settingsAction .accountRowAction > *,
+  .settingsActionButtons > *,
+  .accountPanelActions > * {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .settingsActionButtons {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  }
+
+  .accountPanelActions {
+    padding: 0 16px 16px;
   }
 
   .dialogFormBody {
