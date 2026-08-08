@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { HttpResponse, http } from 'msw'
 import { setupServer } from 'msw/node'
 import type { ReactNode } from 'react'
@@ -72,7 +72,26 @@ describe('Public profile pages', () => {
     fireEvent.pointerDown(screen.getByRole('button', { name: 'Account menu' }), { button: 0, ctrlKey: false })
     expect((await screen.findByRole('link', { name: 'Account Center' })).getAttribute('href')).toBe('/profile')
     expect(screen.getByText('jane@example.com')).toBeTruthy()
-    expect(screen.getByText('Sign out')).toBeTruthy()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Sign out' }))
+
+    await waitFor(() => expect(signOut).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith({ to: '/auth/sign-in' }))
+  })
+
+  it('does not redirect a signed-in visitor when sign out fails', async () => {
+    authState.data = {
+      user: { email: 'jane@example.com', id: 'user-1', image: null, name: 'Jane Stone' },
+    }
+    signOut.mockRejectedValueOnce(new Error('Sign out failed.'))
+
+    renderProfile(<PublicUserProfilePage username="jane" />)
+
+    expect(await screen.findByRole('heading', { name: 'Jane Stone' })).toBeTruthy()
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Account menu' }), { button: 0, ctrlKey: false })
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Sign out' }))
+
+    await waitFor(() => expect(signOut).toHaveBeenCalledTimes(1))
+    expect(navigate).not.toHaveBeenCalled()
   })
 
   it('shows overview, heatmap, and recent activity on the Agent profile', async () => {
