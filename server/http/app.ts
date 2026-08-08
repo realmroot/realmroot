@@ -19,7 +19,7 @@ import { agentBootstrapScopes, realmrootOAuthScopes, resourceByRoutePrefix } fro
 import type { Context } from 'hono'
 import { Hono } from 'hono'
 import {
-  isPublicOAuthMetadataPath,
+  isPublicCorsPath,
   mountAgentConfiguration,
   oauthClientCorsOrigins,
   requireHostedAuthMethodEnabled,
@@ -37,7 +37,6 @@ import { requestContext } from './middleware/request-context'
 import { requireSecurityPolicy } from './middleware/security-policy'
 import { unifiedOpenApi, unifiedOpenApiLinkHeader, unifiedOpenApiPath } from './openapi/management'
 import { accountRoutes } from './routes/account'
-import { createAgentInfoRoutes } from './routes/agent-info'
 import { createAgentProtocolRoutes } from './routes/agent-protocol'
 import { createAccountAssetRoutes, createAssetRoutes, createProtectedResourceAssetRoutes } from './routes/assets'
 import type { ManagementAuthApi } from './routes/auth-api'
@@ -45,6 +44,7 @@ import { createConfigzRoutes } from './routes/configz'
 import { createProtectedResourceRoutes } from './routes/management'
 import { oauthConsentRoute } from './routes/oauth/consent'
 import { onboardingRoutes } from './routes/onboarding'
+import { createPublicProfileRoutes } from './routes/public-profiles'
 import { createResourceConnectionRoutes } from './routes/resource-connections'
 import { trustedRequestUrl } from './trusted-request-origin'
 
@@ -87,7 +87,7 @@ export function createApp(auth: AuthHandler, deps: Deps, config: AppConfig = {})
   app.use(
     '/api/*',
     trustedOriginCors(config.trustedOrigins ?? [], {
-      isPublicPath: isPublicOAuthMetadataPath,
+      isPublicPath: isPublicCorsPath,
       resolveAllowedOrigins: oauthClientCorsOrigins(),
     }),
   )
@@ -126,18 +126,12 @@ export function createApp(auth: AuthHandler, deps: Deps, config: AppConfig = {})
         agent_identity_issuer: issuer,
         agent_enrollment_endpoint: new URL('/api/agent/enrollments', issuer).toString(),
         agent_endpoint: new URL('/api/agent/status', issuer).toString(),
-        agentinfo_endpoint: `${issuer}/agentinfo`,
-        agentinfo_claims_supported: agentInfoClaimsSupported,
         agent_token_endpoint: `${issuer}/oauth2/token`,
         agent_bootstrap_scopes_supported: agentBootstrapScopes,
         agent_jwks_uri: `${issuer}/jwks`,
       })
     })
   })
-  app.route(
-    '/api/auth/agentinfo',
-    createAgentInfoRoutes((requestUrl) => oauthIssuer(config, requestUrl)),
-  )
   app.on(['GET', 'POST'], '/api/auth/*', async (c) => {
     if (isBetterAuthRoleMutationPath(c.req.path)) throw notFound()
     await requireOnboardingComplete(c.get('deps'))
@@ -214,6 +208,10 @@ function mountApiRoutes(app: Hono, auth: AuthHandler, config: AppConfig) {
     .route('/api/configz', createConfigzRoutes(config.securityPolicy))
     .route('/api/assets', createAssetRoutes())
     .use('/api/*', unifiedOpenApiDiscoveryHeader())
+    .route(
+      '/api/public',
+      createPublicProfileRoutes((requestUrl) => oauthIssuer(config, requestUrl)),
+    )
   protectResourceRoutes(api, auth, config)
   api.use('/api/agent/status', authn(auth, { allowAgent: true, required: true, oauth: agentOAuth(config) }))
   return api
@@ -444,8 +442,6 @@ async function extendAgentOAuthMetadata(response: Response) {
         ]),
       ],
       dpop_signing_alg_values_supported: ['ES256', 'EdDSA'],
-      agentinfo_endpoint: `${issuer.replace(/\/$/, '')}/agentinfo`,
-      agentinfo_claims_supported: agentInfoClaimsSupported,
     },
     { status: response.status, headers },
   )
@@ -467,8 +463,6 @@ function protectedResourceMetadataUrl(config: AppConfig, requestUrl: string) {
   const origin = (config.baseURL ?? new URL(requestUrl).origin).replace(/\/$/, '')
   return `${origin}/.well-known/oauth-protected-resource/api`
 }
-
-const agentInfoClaimsSupported = ['iss', 'sub', 'sub_profile', 'name', 'picture', 'updated_at'] as const
 
 function oauthIssuer(config: AppConfig, requestUrl: string) {
   return `${(config.baseURL ?? new URL(requestUrl).origin).replace(/\/$/, '')}/api/auth`

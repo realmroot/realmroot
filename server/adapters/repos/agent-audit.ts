@@ -1,5 +1,5 @@
 import type { AgentAuditRepository } from '@server/usecases/ports'
-import { and, count, desc, eq, inArray, or } from 'drizzle-orm'
+import { and, count, desc, eq, gte, inArray, or, sql } from 'drizzle-orm'
 import type { Database } from '../../db/client'
 import { agentAuditEvent } from '../../db/schema'
 
@@ -35,5 +35,28 @@ export function createAgentAuditRepository(db: Database): AgentAuditRepository {
       ])
       return { items, total: totals[0]?.value ?? 0, limit: page.limit, offset: page.offset }
     },
+
+    async summarizeByDay(since, filter) {
+      const condition = and(activityCondition(filter), gte(agentAuditEvent.occurredAt, since))
+      const date = sql<string>`date(${agentAuditEvent.occurredAt} / 1000, 'unixepoch')`
+      return db.select({ date, count: count() }).from(agentAuditEvent).where(condition).groupBy(date).orderBy(date)
+    },
   }
+}
+
+function activityCondition(filter?: {
+  agentIdentityId?: string
+  ownerUserId?: string
+  ownerOrganizationIds?: string[]
+}) {
+  const tenantCondition = or(
+    filter?.ownerUserId ? eq(agentAuditEvent.ownerUserId, filter.ownerUserId) : undefined,
+    filter?.ownerOrganizationIds?.length
+      ? inArray(agentAuditEvent.ownerOrganizationId, filter.ownerOrganizationIds)
+      : undefined,
+  )
+  return and(
+    filter?.agentIdentityId ? eq(agentAuditEvent.agentIdentityId, filter.agentIdentityId) : undefined,
+    tenantCondition,
+  )
 }

@@ -25,6 +25,9 @@ export function createAccountStore() {
       username: 'jane' as string | null,
       avatarAssetId: null as string | null,
       image: null as string | null,
+      bio: null as string | null,
+      location: null as string | null,
+      links: [] as Array<{ type: 'website' | 'social'; label: string; url: string }>,
       role: 'user' as string | null,
     },
     security: {

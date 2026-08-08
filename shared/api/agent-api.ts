@@ -79,17 +79,6 @@ export const listAgentsQuerySchema = paginationQuerySchema.extend({
   organizationId: nonEmptyString.optional(),
 })
 export type ListAgentsQuery = z.infer<typeof listAgentsQuerySchema>
-export const agentInfoQuerySchema = z.object({
-  sub: nonEmptyString,
-})
-export const agentInfoSchema = z.object({
-  iss: z.url(),
-  sub: z.string(),
-  sub_profile: z.literal('ai_agent'),
-  name: z.string(),
-  picture: z.url().optional(),
-  updated_at: z.number().int().nonnegative(),
-})
 export const auditEventsResponseSchema = z.object({
   items: z.array(agentAuditEventSchema),
   pagination: paginationMetadataSchema,
@@ -530,7 +519,6 @@ export type ManagementAgentInstallation = z.infer<typeof managementAgentInstalla
 export type ManagementAgentAccessRequest = z.infer<typeof managementAgentAccessRequestSchema>
 export type ListManagementAgentAccessRequestsQuery = z.infer<typeof listManagementAgentAccessRequestsQuerySchema>
 export type ListAgentAccessGrantsQuery = z.infer<typeof listAgentAccessGrantsQuerySchema>
-export type AgentInfo = z.infer<typeof agentInfoSchema>
 export type AgentEnrollment = z.infer<typeof agentEnrollmentSchema>
 export type ApiResource = ResourceServer
 export type ConnectableApiResourcesResponse = z.infer<typeof connectableApiResourcesResponseSchema>

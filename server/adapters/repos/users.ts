@@ -14,12 +14,22 @@ import {
   session,
   uploadedAsset,
   user,
+  userProfile,
 } from '../../db/schema'
 
 export function createUserRepository(db: Database): UserRepository {
   return {
     async getUser(userId) {
       return findUser(db, userId)
+    },
+
+    async getPublicProfile(userId) {
+      return loadPublicProfile(db, await findUser(db, userId))
+    },
+
+    async findPublicProfileByUsername(username) {
+      const [row] = await db.select().from(user).where(eq(user.username, username)).limit(1)
+      return row ? loadPublicProfile(db, mapUser(row)) : null
     },
 
     async listManagedUsers(query, userIds) {
@@ -120,14 +130,24 @@ export function createUserRepository(db: Database): UserRepository {
       }
 
       await assertAccountAvatarReference(db, userId, input.avatarAssetId)
-      const update = profileUpdate(input)
-      const [updated] = await db.update(user).set(update).where(eq(user.id, userId)).returning()
-
-      if (!updated) {
-        throw notFound('User not found.')
+      await findUser(db, userId)
+      const identityUpdate = profileUpdate(input)
+      const publicUpdate = publicProfileUpdate(input)
+      const statements: BatchItem<'sqlite'>[] = []
+      if (Object.keys(identityUpdate).length > 0) {
+        statements.push(db.update(user).set(identityUpdate).where(eq(user.id, userId)))
       }
-
-      return mapUser(updated)
+      if (Object.keys(publicUpdate).length > 0) {
+        const now = new Date()
+        statements.push(
+          db
+            .insert(userProfile)
+            .values({ userId, ...publicUpdate, createdAt: now, updatedAt: now })
+            .onConflictDoUpdate({ target: userProfile.userId, set: { ...publicUpdate, updatedAt: now } }),
+        )
+      }
+      await db.batch(statements as [BatchItem<'sqlite'>, ...BatchItem<'sqlite'>[]])
+      return findUser(db, userId)
     },
 
     async assertAccountAvatarReference(userId, avatarAssetId) {
@@ -358,6 +378,25 @@ function profileUpdate(input: AccountProfileUpdateInput) {
     ...(input.displayName !== undefined ? { name: input.displayName } : {}),
     ...(input.username !== undefined ? { username: input.username } : {}),
     ...(input.avatarAssetId !== undefined ? { avatarAssetId: input.avatarAssetId } : {}),
+  }
+}
+
+function publicProfileUpdate(input: AccountProfileUpdateInput) {
+  return {
+    ...(input.bio !== undefined ? { bio: input.bio } : {}),
+    ...(input.location !== undefined ? { location: input.location } : {}),
+    ...(input.links !== undefined ? { links: input.links } : {}),
+  }
+}
+
+async function loadPublicProfile(db: Database, profile: UserProfile) {
+  const [details] = await db.select().from(userProfile).where(eq(userProfile.userId, profile.id)).limit(1)
+  return {
+    user: profile,
+    bio: details?.bio ?? null,
+    location: details?.location ?? null,
+    links: details?.links ?? [],
+    profileUpdatedAt: details?.updatedAt ?? null,
   }
 }
 

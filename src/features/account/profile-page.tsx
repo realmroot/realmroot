@@ -1,7 +1,7 @@
-import { ChevronsUpDown, Download, LockKeyhole, Mail, UserRound } from 'lucide-react'
+import { ChevronsUpDown, Download, Globe2, LockKeyhole, Mail, Plus, Trash2, UserRound } from 'lucide-react'
 import { type FormEvent, useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { Field, SelectInput } from '@/components/product-form'
+import { Field, SelectInput, TextArea, TextInput } from '@/components/product-form'
 import { Button } from '@/components/ui/button'
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
 import {
@@ -310,11 +310,15 @@ function ProfileSections({
   mutate: MutationHandler
 }) {
   const [dialog, setDialog] = useState<'avatar' | 'displayName' | 'username' | 'email' | 'password' | null>(null)
+  const [publicProfileOpen, setPublicProfileOpen] = useState(false)
   const [displayName, setDisplayName] = useState(profile.displayName)
   const [username, setUsername] = useState(profile.username ?? '')
   const [avatarAssetId, setAvatarAssetId] = useState(profile.avatarAssetId ?? '')
   const [avatarPreview, setAvatarPreview] = useState(profile.image ?? '')
   const [email, setEmail] = useState(profile.email)
+  const [bio, setBio] = useState(profile.bio ?? '')
+  const [location, setLocation] = useState(profile.location ?? '')
+  const [links, setLinks] = useState(() => publicProfileLinkDrafts(profile.links))
   const [emailOtp, setEmailOtp] = useState('')
   const [emailStep, setEmailStep] = useState<'request' | 'confirm'>('request')
   const [currentPassword, setCurrentPassword] = useState('')
@@ -327,6 +331,9 @@ function ProfileSections({
     setAvatarAssetId(profile.avatarAssetId ?? '')
     setAvatarPreview(profile.image ?? '')
     setEmail(profile.email)
+    setBio(profile.bio ?? '')
+    setLocation(profile.location ?? '')
+    setLinks(publicProfileLinkDrafts(profile.links))
     setEmailOtp('')
     setEmailStep('request')
   }, [profile])
@@ -337,6 +344,9 @@ function ProfileSections({
     setAvatarAssetId(profile.avatarAssetId ?? '')
     setAvatarPreview(profile.image ?? '')
     setEmail(profile.email)
+    setBio(profile.bio ?? '')
+    setLocation(profile.location ?? '')
+    setLinks(publicProfileLinkDrafts(profile.links))
     setEmailOtp('')
     setEmailStep('request')
     setCurrentPassword('')
@@ -359,6 +369,20 @@ function ProfileSections({
       invalidate: [accountQueryKeys.profile],
     })
     if (result) setDialog(null)
+  }
+  async function savePublicProfile(event: FormEvent) {
+    event.preventDefault()
+    const result = await mutate(
+      'Public profile updated.',
+      () =>
+        updateAccountProfile({
+          bio: bio || null,
+          location: location || null,
+          links: links.map(({ key: _key, ...link }) => link),
+        }),
+      { invalidate: [accountQueryKeys.profile] },
+    )
+    if (result) setPublicProfileOpen(false)
   }
   async function changeEmail(event: FormEvent) {
     event.preventDefault()
@@ -415,6 +439,25 @@ function ProfileSections({
         <>
           <ProfileIdentityRows accountCenter={accountCenter} profile={profile} setDialog={setDialog} />
           <ProfileIdentifierRows accountCenter={accountCenter} profile={profile} setDialog={setDialog} />
+          <section className="settingsPanel">
+            <SettingsAction
+              action={
+                <Button
+                  aria-label={tt('Edit public profile')}
+                  onClick={() => setPublicProfileOpen(true)}
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                >
+                  {tt('Edit')}
+                </Button>
+              }
+              icon={<Globe2 size={18} />}
+              meta={tt('Bio, location, and links shown on your public profile.')}
+              title={tt('Public profile')}
+              value={profile.username ? `/users/${profile.username}` : tt('Set a username to publish')}
+            />
+          </section>
         </>
       ) : null}
       {accountCenter.passwordChangeEnabled && mode === 'password' ? (
@@ -465,6 +508,87 @@ function ProfileSections({
         uploadAvatar={uploadAvatar}
         username={username}
       />
+      <Dialog onOpenChange={setPublicProfileOpen} open={publicProfileOpen}>
+        <DialogContent className="sm:max-w-xl">
+          <form onSubmit={savePublicProfile}>
+            <DialogHeader>
+              <DialogTitle>{tt('Edit public profile')}</DialogTitle>
+              <DialogDescription>{tt('Only these fields are visible to external visitors.')}</DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-5 py-5">
+              <Field label={tt('Bio')}>
+                <TextArea maxLength={500} onChange={(event) => setBio(event.target.value)} rows={4} value={bio} />
+              </Field>
+              <Field label={tt('Location')}>
+                <TextInput maxLength={100} onChange={(event) => setLocation(event.target.value)} value={location} />
+              </Field>
+              <div className="grid gap-3">
+                <div className="flex items-center justify-between gap-3">
+                  <strong className="text-sm">{tt('Links & identities')}</strong>
+                  <Button
+                    disabled={links.length >= 10}
+                    onClick={() =>
+                      setLinks([...links, { key: crypto.randomUUID(), type: 'website', label: '', url: '' }])
+                    }
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    <Plus /> {tt('Add link')}
+                  </Button>
+                </div>
+                {links.map((link, index) => (
+                  <div className="grid grid-cols-[120px_minmax(0,1fr)_40px] gap-2" key={link.key}>
+                    <TextInput
+                      aria-label={tt('Link label')}
+                      maxLength={40}
+                      onChange={(event) =>
+                        setLinks(
+                          links.map((item, itemIndex) =>
+                            itemIndex === index ? { ...item, label: event.target.value } : item,
+                          ),
+                        )
+                      }
+                      placeholder={tt('Label')}
+                      required
+                      value={link.label}
+                    />
+                    <TextInput
+                      aria-label={tt('Link URL')}
+                      onChange={(event) =>
+                        setLinks(
+                          links.map((item, itemIndex) =>
+                            itemIndex === index ? { ...item, url: event.target.value } : item,
+                          ),
+                        )
+                      }
+                      placeholder="https://example.com"
+                      required
+                      type="url"
+                      value={link.url}
+                    />
+                    <Button
+                      aria-label={tt('Remove link')}
+                      onClick={() => setLinks(links.filter((_, itemIndex) => itemIndex !== index))}
+                      size="icon"
+                      type="button"
+                      variant="ghost"
+                    >
+                      <Trash2 />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <DialogFooter>
+              <Button onClick={() => setPublicProfileOpen(false)} type="button" variant="outline">
+                {tt('Cancel')}
+              </Button>
+              <Button type="submit">{tt('Save')}</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }
@@ -526,6 +650,10 @@ function ProfileIdentityRows({
       ) : null}
     </section>
   )
+}
+
+function publicProfileLinkDrafts(links: UserProfile['links']) {
+  return links.map((link) => ({ ...link, key: crypto.randomUUID() }))
 }
 
 function ProfileIdentifierRows({

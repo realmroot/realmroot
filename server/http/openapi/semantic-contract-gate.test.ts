@@ -20,6 +20,9 @@ describe('OpenAPI semantic contract gate', () => {
     const resourceDiscoveryContract = JSON.parse(
       readFileSync(new URL('./approved-resource-discovery-semantic-baseline.json', import.meta.url), 'utf8'),
     ) as typeof unchanged
+    const publicProfilesContract = JSON.parse(
+      readFileSync(new URL('./approved-public-profiles-semantic-baseline.json', import.meta.url), 'utf8'),
+    ) as typeof unchanged
     const resourceDiscoveryChanges = new Set(resourceDiscoveryContract.map(({ method, path }) => `${method}:${path}`))
     const approvedChanges = new Set(
       [...ownerSelectorContract, ...documentationContract, ...resourceDiscoveryContract].map(
@@ -41,6 +44,7 @@ describe('OpenAPI semantic contract gate', () => {
       ...ownerSelectorContract.filter(({ method, path }) => !resourceDiscoveryChanges.has(`${method}:${path}`)),
       ...documentationContract,
       ...resourceDiscoveryContract,
+      ...publicProfilesContract,
     ].sort((left, right) => `${left.path}:${left.method}`.localeCompare(`${right.path}:${right.method}`))
 
     expect(openApiSemanticSnapshot(unifiedOpenApi as unknown as Record<string, unknown>, () => true)).toEqual(baseline)

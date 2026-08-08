@@ -12,7 +12,6 @@ import type {
 import type {
   Agent,
   AgentEnrollment,
-  AgentInfo,
   ListAgentAccessGrantsQuery,
   ListManagementAgentAccessRequestsQuery,
 } from '@shared/api/agent-api'
@@ -47,19 +46,6 @@ export async function getPersonalAgent(deps: Deps, agentId: string, actorUserId:
 
 export async function getAgent(deps: Deps, agentId: string): Promise<Agent> {
   return toAgent(await requireIdentity(deps, agentId))
-}
-
-export async function getAgentInfo(deps: Deps, issuer: string, subject: string): Promise<AgentInfo> {
-  const identity = await deps.agentIdentities.findByIssuerSubject(issuer, subject)
-  if (!identity) throw notFound('Agent information was not found.')
-  return {
-    iss: identity.issuer,
-    sub: identity.subject,
-    sub_profile: 'ai_agent',
-    name: identity.name,
-    picture: new URL('/agent-picture-v1.svg', issuer).toString(),
-    updated_at: Math.floor(identity.updatedAt.getTime() / 1000),
-  }
 }
 
 export async function listOrganizationAgentIdentities(

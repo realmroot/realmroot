@@ -89,7 +89,7 @@ support.
 | `ACTOR-CHAIN` | Preserve the controlling subject in `sub` and the stable Agent in the JWT `act` claim with exact `iss` and `sub` values. | [RFC 8693](https://www.rfc-editor.org/rfc/rfc8693.html) plus Realmroot profile constraint | MUST | MUST | Implemented |
 | `ACTOR-PROFILE` | Classify the Agent actor with `act.sub_profile: "ai_agent"`; never treat this classification alone as proof of identity or permission. | [OAuth 2.0 Entity Profiles draft-01](https://datatracker.ietf.org/doc/draft-mora-oauth-entity-profiles/01/) and [OAuth Actor Profile draft-00](https://datatracker.ietf.org/doc/draft-mcguinness-oauth-actor-profile/00/) | MUST | MUST | Draft-aligned implementation |
 | `ACTOR-NATIVE` | Represent the stable Agent as a distinct non-human actor in the provider's own authorization or identity model and preserve it in provider audit records. A shared App actor or content footer does not satisfy this capability. | Realmroot profile requirement; tracked by [AI Agent Authentication and Authorization draft-02](https://datatracker.ietf.org/doc/draft-klrc-aiagent-auth/02/) | MUST | MUST | Implemented by Realmroot-native Resources; provider-dependent |
-| `AGENT-DISPLAY` | Resolve safe Agent display metadata using the verified actor identifier, while keeping display data outside authorization decisions. | [Realmroot AgentInfo extension](#agentinfo-extension) | SHOULD | SHOULD | Implemented extension |
+| `AGENT-DISPLAY` | Resolve safe Agent display metadata using the verified actor identifier, while keeping display data outside authorization decisions. | Realmroot public Agent resource | SHOULD | SHOULD | Implemented |
 | `ACTOR-ASSERTION` | Accept a signed Agent assertion at the token endpoint using the JWT bearer grant. | [RFC 7523](https://www.rfc-editor.org/rfc/rfc7523.html) | — | MUST | Implemented |
 | `TOKEN-EXCHANGE` | Exchange the connected user's subject token and target-issued Agent actor token, preserving both in the final access token. | [RFC 8693](https://www.rfc-editor.org/rfc/rfc8693.html) | — | MUST | Implemented |
 
@@ -121,31 +121,6 @@ separate product capabilities.
 Extensions are compatibility debt, not strategic differentiation. Every
 extension must have a narrow purpose, an owner, a replacement direction, and a
 removal condition.
-
-### AgentInfo extension
-
-Realmroot adds these issuer metadata members:
-
-- `agentinfo_endpoint`;
-- `agentinfo_claims_supported`.
-
-The endpoint accepts the exact verified Agent `sub` and returns public,
-cacheable display metadata: `iss`, `sub`, `sub_profile`, `name`, `picture`, and
-`updated_at`. A consumer MUST match `iss` and `sub` to the verified actor before
-display and MUST NOT use the response for authorization.
-
-No adopted RFC or current IETF Internet-Draft defines this AgentInfo endpoint.
-The `sub_profile: "ai_agent"` value is separately aligned with the active Entity
-Profiles and Actor Profile drafts; that alignment does not standardize the
-AgentInfo wire contract.
-
-- **Purpose:** resolve mutable public display data without bloating or
-  reissuing access tokens.
-- **Owner:** Realmroot Agent identity.
-- **Replacement direction:** an adopted, interoperable Agent/entity metadata
-  discovery specification, or sufficient platform-native actor metadata.
-- **Removal condition:** all supported consumers can resolve equivalent
-  verified display metadata without `agentinfo_endpoint`.
 
 ### Authorization-details catalog extension
 

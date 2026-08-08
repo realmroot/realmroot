@@ -261,6 +261,14 @@ function createAuthMock() {
 function createUserRepositoryMock(): UserRepository {
   return {
     getUser: vi.fn().mockResolvedValue({ id: 'user-1' }),
+    getPublicProfile: vi.fn().mockResolvedValue({
+      user: { id: 'user-1' },
+      bio: null,
+      location: null,
+      links: [],
+      profileUpdatedAt: null,
+    }),
+    findPublicProfileByUsername: vi.fn().mockResolvedValue(null),
     listManagedUsers: vi.fn().mockImplementation((page) => Promise.resolve(createPage(page))),
     createManagedUser: vi.fn().mockResolvedValue({ id: 'user-1' }),
     updateManagedUser: vi.fn().mockResolvedValue({ id: 'user-1' }),

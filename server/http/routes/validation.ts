@@ -18,6 +18,10 @@ export function readQuery<T extends z.ZodType>(c: Context, schema: T): z.infer<T
   return parse(schema, c.req.query())
 }
 
+export function readParam<T extends z.ZodType>(c: Context, name: string, schema: T): z.infer<T> {
+  return parse(schema, c.req.param(name))
+}
+
 function parse<T extends z.ZodType>(schema: T, value: unknown): z.infer<T> {
   const result = schema.safeParse(value)
 

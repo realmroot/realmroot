@@ -13,11 +13,11 @@ to Realmroot's four user-facing surfaces.
   verifiable public claims and privacy-conscious information boundaries.
 
 Public User profiles use only display-safe identity fields and activity attributed
-to the User as controller. Public Agent profiles map identity to the current
-AgentInfo contract and activity to the stable Agent identity. Both variants use a
+to the User as controller. Public Agent profiles map identity and activity to the
+stable Agent subject. Both variants use a
 GitHub-inspired annual heatmap and a recent activity timeline. Private activity
 may contribute anonymized counts, but never exposes its Resource, grant, scope,
-Host, controller, or authorization details. AgentInfo remains display metadata,
+Host, controller, or authorization details. Public profiles remain display metadata,
 never an authentication or authorization decision.
 
 The User profile intentionally focuses on Public Agents and Recent activity; the
@@ -28,8 +28,8 @@ and the current User profile has no website field. Production support therefore
 needs explicit public link metadata and a safe provider profile URL/display-name
 projection; credentials and provider tokens must never enter the public model.
 
-The Agent Owner link and the User's Public Agents section are also proposed
-public projections rather than fields in AgentInfo. Publishing ownership must
+The Agent Owner link and the User's Public Agents section are public projections.
+Publishing ownership must
 be explicit and must not expose or imply the Agent's controller, Host, grants,
 scopes, or current authorization state.
 

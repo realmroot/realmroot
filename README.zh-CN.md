@@ -126,7 +126,7 @@ Runtime 会话、API Profile 和密钥相互独立。控制者可以绑定替代
 被攻破的 Host，而无需改变 Agent Subject，也不会影响其他 Host。
 
 资源服务器在 RFC 8693 `act` Claim 中看到的是稳定 Agent，而不是发起请求的运行环境。
-公开的 AgentInfo 只提供可缓存的展示信息，永远不参与授权。
+公开 Agent Profile 只提供可缓存的展示信息，永远不参与授权。
 
 Realmroot 用同一套申请、批准、撤销和审计模型支持两种资源边界：
 
@@ -269,7 +269,7 @@ Realmroot 在 Cloudflare Worker 内运行 Better Auth。Hono 提供 HTTP 接口�
   身份和信任基础设施组合在一起；
 - [Agent 访问指南](docs/guides/agent-access.md)：身份、批准、账户连接、Token 和撤销旅程；
 - [Agent 身份架构](docs/architecture/agent-identity.md)：稳定身份、Host 绑定、权限、凭证、
-  AgentInfo 和审计；
+  公开 Profile 和审计；
 - [授权边界](docs/architecture/authorization-boundaries.md)：资源自有 Scope、角色语义、
   签发策略和最终执行；
 - [资源服务器集成](docs/integrations/resource-servers.md)：发布并验证 Native 或 External

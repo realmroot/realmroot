@@ -1,12 +1,16 @@
 import { z } from 'zod'
 import type { Agent } from './agent-api'
 import type { PaginationMetadata } from './pagination'
+import { publicProfileLinkSchema } from './public-profiles'
 import { usernameSchema } from './users'
 
 export const accountProfileUpdateSchema = z.object({
   displayName: z.string().min(1).optional(),
   username: usernameSchema.nullable().optional(),
   avatarAssetId: z.string().min(1).nullable().optional(),
+  bio: z.string().trim().max(500).nullable().optional(),
+  location: z.string().trim().max(100).nullable().optional(),
+  links: z.array(publicProfileLinkSchema).max(10).optional(),
 })
 
 export const accountEmailChangeSchema = z.object({
@@ -51,6 +55,9 @@ export type AccountProfileResponse = {
     username: string | null
     avatarAssetId: string | null
     image: string | null
+    bio: string | null
+    location: string | null
+    links: Array<{ type: 'website' | 'social'; label: string; url: string }>
     role: string | null
   }
 }
