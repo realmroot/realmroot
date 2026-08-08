@@ -105,10 +105,10 @@ export function createApp(auth: AuthHandler, deps: Deps, config: AppConfig = {})
   mountApiRoutes(app, auth, config)
 
   app.get('/api/auth/.well-known/openid-configuration', async (c) =>
-    extendAgentOAuthMetadata(await oauthProviderOpenIdConfigMetadata(auth)(c.req.raw)),
+    extendAgentOAuthMetadata(await oauthProviderOpenIdConfigMetadata(auth)(c.req.raw), 'openid'),
   )
   app.get('/.well-known/openid-configuration/api/auth', async (c) =>
-    extendAgentOAuthMetadata(await oauthProviderOpenIdConfigMetadata(auth)(c.req.raw)),
+    extendAgentOAuthMetadata(await oauthProviderOpenIdConfigMetadata(auth)(c.req.raw), 'openid'),
   )
   app.get('/.well-known/agent-configuration', (c) => {
     if (!auth.api.getAgentConfiguration) throw notFound('Agent configuration is not available.')
@@ -126,7 +126,6 @@ export function createApp(auth: AuthHandler, deps: Deps, config: AppConfig = {})
         agent_identity_issuer: issuer,
         agent_enrollment_endpoint: new URL('/api/agent/enrollments', issuer).toString(),
         agent_endpoint: new URL('/api/agent/status', issuer).toString(),
-        agentinfo_endpoint: publicAgentInfoEndpoint(issuer),
         agent_token_endpoint: `${issuer}/oauth2/token`,
         agent_bootstrap_scopes_supported: agentBootstrapScopes,
         agent_jwks_uri: `${issuer}/jwks`,
@@ -146,7 +145,7 @@ export function createApp(auth: AuthHandler, deps: Deps, config: AppConfig = {})
     return auth.handler(c.req.raw)
   })
   app.get('/.well-known/oauth-authorization-server/api/auth', async (c) =>
-    extendAgentOAuthMetadata(await oauthProviderAuthServerMetadata(auth)(c.req.raw)),
+    extendAgentOAuthMetadata(await oauthProviderAuthServerMetadata(auth)(c.req.raw), 'authorization-server'),
   )
   app.get('/.well-known/oauth-protected-resource/api', (c) => {
     c.header('Access-Control-Allow-Origin', '*')
@@ -427,7 +426,7 @@ async function issueAgentToken(c: Context, issuer: string, auth: AuthHandler, fo
   return c.json(response)
 }
 
-async function extendAgentOAuthMetadata(response: Response) {
+async function extendAgentOAuthMetadata(response: Response, metadataType: 'openid' | 'authorization-server') {
   const metadata = (await response.json()) as Record<string, unknown>
   const issuer = metadata.issuer
   if (typeof issuer !== 'string') throw new Error('OAuth metadata has no issuer.')
@@ -443,7 +442,7 @@ async function extendAgentOAuthMetadata(response: Response) {
         ]),
       ],
       dpop_signing_alg_values_supported: ['ES256', 'EdDSA'],
-      agentinfo_endpoint: publicAgentInfoEndpoint(issuer),
+      ...(metadataType === 'authorization-server' ? { agentinfo_endpoint: publicAgentInfoEndpoint(issuer) } : {}),
     },
     { status: response.status, headers },
   )

@@ -128,12 +128,13 @@ describe('app.test 1', () => {
     const response = await createApp(auth, createTestDeps()).request('/.well-known/openid-configuration/api/auth')
 
     expect(response.status).toBe(200)
-    await expect(response.json()).resolves.toMatchObject({
+    const metadata = await response.json()
+    expect(metadata).toMatchObject({
       issuer: 'https://auth.example.com/api/auth',
-      agentinfo_endpoint: 'https://auth.example.com/api/public/agents/{subject}',
       userinfo_endpoint: 'https://auth.example.com/api/auth/oauth2/userinfo',
       end_session_endpoint: 'https://auth.example.com/api/auth/oauth2/end-session',
     })
+    expect(metadata).not.toHaveProperty('agentinfo_endpoint')
     expect(getOpenIdConfig).toHaveBeenCalledWith({
       request: expect.any(Request),
       asResponse: false,
@@ -170,12 +171,12 @@ describe('app.test 1', () => {
     )
 
     expect(response.status).toBe(200)
-    await expect(response.json()).resolves.toMatchObject({
+    const metadata = await response.json()
+    expect(metadata).toMatchObject({
       issuer: 'https://tenant.example.net/api/auth',
       agent_identity_issuer: 'https://tenant.example.net/api/auth',
       agent_endpoint: 'https://tenant.example.net/api/agent/status',
       agent_enrollment_endpoint: 'https://tenant.example.net/api/agent/enrollments',
-      agentinfo_endpoint: 'https://tenant.example.net/api/public/agents/{subject}',
       modes: ['delegated'],
       approval_methods: ['device_authorization'],
       endpoints: {
@@ -183,6 +184,7 @@ describe('app.test 1', () => {
         status: 'https://tenant.example.net/api/auth/agent/status',
       },
     })
+    expect(metadata).not.toHaveProperty('agentinfo_endpoint')
     expect(getAgentConfiguration).toHaveBeenCalledWith({
       request: expect.any(Request),
       asResponse: false,

@@ -121,7 +121,7 @@ Feature: Agent identity and delegated API authorization
       And picture resolves to the Realmroot static file "/agent-picture-v1.svg" until the Agent has a custom picture
       And the default summary omits owner and activity
       And the full view includes the public owner, activity overview, annual heatmap, and sanitized recent activity
-      And Agent and OAuth discovery publish the AgentInfo URI template keyed by subject
+      And OAuth authorization-server discovery publishes the AgentInfo URI template keyed by subject
       And permits each view to be cached and revalidated independently
       But the public profile never returns Host, role, scope, grant, Resource, or authorization state
       And the public profile is never authoritative for authentication or authorization

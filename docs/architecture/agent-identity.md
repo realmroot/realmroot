@@ -138,9 +138,10 @@ display fields; `view=full` adds intentionally public ownership and sanitized
 activity projections. Agents without a custom picture use Realmroot's versioned
 static placeholder at `/agent-picture-v1.svg`.
 
-Agent configuration and OAuth/OIDC discovery publish this URI template as
-`agentinfo_endpoint`; clients replace `{subject}` with the verified Agent
-actor subject.
+OAuth authorization-server metadata publishes this URI template as
+`agentinfo_endpoint`; clients replace `{subject}` with the verified Agent actor
+subject. Agent configuration and OIDC discovery do not duplicate this
+Realmroot-specific extension.
 
 Public profiles exclude Hosts, roles, scopes, grants, Resources, and
 authorization state. They are never authentication, authorization, or
