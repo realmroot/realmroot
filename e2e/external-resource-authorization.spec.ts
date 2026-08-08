@@ -50,6 +50,7 @@ test.describe('external API resource authorization', () => {
         data: {
           identifier: 'e2e-projects',
           resourceUrl: externalResource,
+          accessMode: 'external_oauth',
           ownerOrganizationId: 'org_platform',
           connectorId: connector.id,
           visibility: 'public',
@@ -184,6 +185,7 @@ test.describe('external API resource authorization', () => {
         data: {
           identifier: 'e2e-realmroot-projects',
           resourceUrl: realmrootResource,
+          accessMode: 'realmroot',
           ownerOrganizationId: 'org_platform',
           visibility: 'public',
         },
