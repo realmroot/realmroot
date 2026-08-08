@@ -51,6 +51,7 @@ export const zhAccountTranslations: Record<string, string> = {
   Developer: '开发者',
   Disconnect: '断开连接',
   'Disconnect resource account': '断开资源账户',
+  'Update authorization': '更新授权',
   'Download data': '下载数据',
   'Each code can be used once if you lose access to your authenticator app.':
     '如果无法使用认证器应用，每个备份码可使用一次。',

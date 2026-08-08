@@ -31,12 +31,16 @@ export function AccountConnectionsPage() {
   const loading = connectorsQuery.isLoading || connectionsQuery.isLoading
   const error = connectorsQuery.error ?? connectionsQuery.error
 
+  async function authorizeProvider(connector: AccountProviderConnector) {
+    const intent = await mutate(tt('Redirecting to {{providerName}}.', { providerName: connector.displayName }), () =>
+      createProviderConnectionIntent(connector.id),
+    )
+    if (intent) window.location.assign(intent.authorizationUrl)
+  }
+
   async function connect(connector: AccountProviderConnector) {
     if (connector.capabilities.connection.method === 'provider_authorization') {
-      const intent = await mutate(tt('Redirecting to {{providerName}}.', { providerName: connector.displayName }), () =>
-        createProviderConnectionIntent(connector.id),
-      )
-      if (intent) window.location.assign(intent.authorizationUrl)
+      await authorizeProvider(connector)
       return
     }
     if (connector.capabilities.connection.method !== 'sign_in') return
@@ -160,7 +164,12 @@ export function AccountConnectionsPage() {
               </AccountObjectSection>
             </div>
           ) : null}
-          <ConnectionSheet connection={selected} onClose={() => setSelected(null)} onDisconnect={disconnect} />
+          <ConnectionSheet
+            connection={selected}
+            onClose={() => setSelected(null)}
+            onDisconnect={disconnect}
+            onReauthorize={(connection) => authorizeProvider(connection.connector)}
+          />
           <DestructiveConfirmationDialog confirmation={confirmation} onClose={() => setConfirmation(null)} />
         </>
       )}
@@ -205,10 +214,12 @@ function ConnectionSheet({
   connection,
   onClose,
   onDisconnect,
+  onReauthorize,
 }: {
   connection: AccountProviderConnection | null
   onClose: () => void
   onDisconnect: (connection: AccountProviderConnection) => void
+  onReauthorize: (connection: AccountProviderConnection) => Promise<void>
 }) {
   return (
     <Sheet onOpenChange={(open) => !open && onClose()} open={connection !== null}>
@@ -269,9 +280,14 @@ function ConnectionSheet({
               {tt('Disconnect Provider')}
             </Button>
           ) : null}
-          <Button onClick={onClose} variant="outline">
-            {tt('Close')}
-          </Button>
+          <div className="flex gap-2">
+            {connection?.connector.capabilities.connection.method === 'provider_authorization' ? (
+              <Button onClick={() => void onReauthorize(connection)}>{tt('Update authorization')}</Button>
+            ) : null}
+            <Button onClick={onClose} variant="outline">
+              {tt('Close')}
+            </Button>
+          </div>
         </SheetFooter>
       </SheetContent>
     </Sheet>

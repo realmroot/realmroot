@@ -128,6 +128,8 @@ Feature: Account Center
     Then Account Center shows one Provider Connection for that provider
     And the connection shows its sign-in and Agent access capabilities
     And Sign-in & security links to the connection without offering a second management surface
+    When I update authorization for that Provider Connection
+    Then Realmroot reopens the Provider authorization flow without creating a second connection
     When I disconnect the Provider Connection
     Then its sign-in binding and external Resource authorizations are revoked together
 
