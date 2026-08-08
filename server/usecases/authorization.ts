@@ -352,13 +352,16 @@ export async function refreshResourceScopeRegistry(deps: Deps, id: string) {
   try {
     const metadata = await readProtectedResourceMetadata(deps, resource.resourceUrl)
     if (resource.connectorId) {
-      await refreshDynamicConnectorMetadata(deps, resource.connectorId)
-      await validateExternalResourceConnector(
+      if (metadata.accountConnection?.mode !== 'brokered') {
+        await refreshDynamicConnectorMetadata(deps, resource.connectorId)
+      }
+      await validateResourceProviderBoundary(
         deps,
         resource.resourceUrl,
         resource.connectorId,
         resource.authorizationDetails,
         metadata,
+        resource.id,
       )
     }
     const discovery = await synchronizeResourceDiscovery(deps, resource.resourceUrl, resource.scopeRegistry, metadata)

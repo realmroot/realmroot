@@ -241,6 +241,7 @@ Feature: Admin Console
     Then Realmroot rejects the Resource Server
     When I register it with an enabled Provider Connector
     Then Realmroot accepts any Connector provider type without requiring an external OIDC authorization server
+    And refreshing discovery preserves the brokered account connection endpoints
     And Realmroot rejects another account connection authority for the same Provider Connector
 
   @entrypoint:product-ui @journey:admin-authorization-inventory

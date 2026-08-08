@@ -991,6 +991,55 @@ describe('authorization CRUD and assignment policy', () => {
     })
   })
 
+  it('[spec: admin-console/provider-connection-authority] refreshes brokered discovery with a social Provider Connector', async () => {
+    const authorization = repository()
+    const existingRegistry = scopeRegistry(['projects:read'])
+    const brokeredResource = {
+      ...resource,
+      connectorId: 'connector-1',
+      scopeRegistry: existingRegistry,
+    }
+    authorization.findResource.mockResolvedValue(brokeredResource)
+    authorization.listEnabledResources.mockResolvedValue([brokeredResource])
+    const connectors = {
+      findById: vi.fn().mockResolvedValue({ id: 'connector-1', providerType: 'social', enabled: true }),
+    }
+    const openApiFetch = resourceOpenApiFetch(resource.resourceUrl)
+    const deps = {
+      authorization,
+      connectors,
+      externalHttp: {
+        fetch: vi.fn((request: Request) =>
+          request.url.includes('/.well-known/oauth-protected-resource')
+            ? Promise.resolve(
+                Response.json({
+                  resource: resource.resourceUrl,
+                  scopes_supported: ['projects:read'],
+                  account_connection_modes_supported: ['brokered'],
+                  account_connection_authorization_endpoint: `${resource.resourceUrl}/account-connection-authorizations`,
+                  account_connection_token_endpoint: `${resource.resourceUrl}/account-connection-credentials`,
+                  account_connection_revocation_endpoint: `${resource.resourceUrl}/account-connection-revocations`,
+                }),
+              )
+            : openApiFetch(request),
+        ),
+      },
+    } as unknown as Deps
+
+    await expect(refreshResourceScopeRegistry(deps, resource.id)).resolves.toBe(brokeredResource)
+    expect(authorization.replaceResourceDiscovery).toHaveBeenCalledWith(
+      resource.id,
+      expect.objectContaining({
+        scopeRegistry: expect.objectContaining({
+          accountConnection: expect.objectContaining({
+            mode: 'brokered',
+            revocationEndpoint: `${resource.resourceUrl}/account-connection-revocations`,
+          }),
+        }),
+      }),
+    )
+  })
+
   it('refreshes active scope registries and continues after an isolated failure', async () => {
     const authorization = repository()
     const active = { ...resource, scopeRegistry: scopeRegistry(['projects:read']) }
