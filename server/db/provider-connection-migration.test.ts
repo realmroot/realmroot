@@ -29,8 +29,16 @@ describe('Provider Connection migration', () => {
         ) VALUES
           ('authorization-matching', 'resource-1', 'user-1', 'subject-login', 'Login Subject', 'sealed-1', '["provider:read"]'),
           ('authorization-mismatch', 'resource-2', 'user-1', 'subject-other', 'Other Subject', 'sealed-2', '["provider:read"]');
+        INSERT INTO agent_identity (id, issuer, subject, name, owner_user_id, created_at, updated_at)
+        VALUES ('agent-1', 'https://issuer.example.test', 'agent-1', 'Agent', 'user-1', 1, 1);
+        INSERT INTO agent_access_grant (
+          id, resource_id, connection_id, agent_identity_id, scopes, mode, granted_by_user_id
+        ) VALUES (
+          'grant-1', 'resource-1', 'authorization-matching', 'agent-1', '["provider:read"]', 'external', 'user-1'
+        );
       `)
 
+      database.exec('PRAGMA foreign_keys = ON')
       database.exec(readFileSync(new URL(`../../migrations/${providerConnectionMigration}`, import.meta.url), 'utf8'))
 
       expect(
@@ -50,6 +58,9 @@ describe('Provider Connection migration', () => {
       expect(database.prepare('SELECT id FROM provider_resource_authorization').all()).toEqual([
         { id: 'authorization-matching' },
       ])
+      expect(database.prepare("SELECT connection_id FROM agent_access_grant WHERE id = 'grant-1'").get()).toEqual({
+        connection_id: 'authorization-matching',
+      })
       expect(() =>
         database.exec(
           "INSERT INTO account (id, account_id, provider_id, user_id) VALUES ('account-2', 'subject-other', 'provider', 'user-1')",

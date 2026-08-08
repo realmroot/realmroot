@@ -1,43 +1,5 @@
-PRAGMA foreign_keys=OFF;--> statement-breakpoint
-CREATE TABLE `__new_resource_account_connection` (
-	`id` text PRIMARY KEY NOT NULL,
-	`resource_id` text NOT NULL,
-	`owner_user_id` text,
-	`owner_organization_id` text,
-	`external_subject` text NOT NULL,
-	`display_name` text NOT NULL,
-	`credential_custody` text DEFAULT 'realmroot' NOT NULL,
-	`encrypted_tokens` text,
-	`broker_reference` text,
-	`granted_scopes` text NOT NULL,
-	`authorization_details` text DEFAULT '[]' NOT NULL,
-	`client_generation` integer DEFAULT 1 NOT NULL,
-	`status` text DEFAULT 'active' NOT NULL,
-	`credential_expires_at` integer,
-	`revoked_at` integer,
-	`created_at` integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)) NOT NULL,
-	`updated_at` integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)) NOT NULL,
-	FOREIGN KEY (`resource_id`) REFERENCES `api_resource`(`id`) ON UPDATE no action ON DELETE restrict,
-	FOREIGN KEY (`owner_user_id`) REFERENCES `user`(`id`) ON UPDATE no action ON DELETE restrict,
-	FOREIGN KEY (`owner_organization_id`) REFERENCES `organization`(`id`) ON UPDATE no action ON DELETE restrict,
-	CONSTRAINT "resourceAccountConnection_exactly_one_owner_check" CHECK((("__new_resource_account_connection"."owner_user_id" IS NOT NULL) + ("__new_resource_account_connection"."owner_organization_id" IS NOT NULL)) = 1),
-	CONSTRAINT "resourceAccountConnection_credential_custody_check" CHECK((
-        ("__new_resource_account_connection"."credential_custody" = 'realmroot' AND "__new_resource_account_connection"."encrypted_tokens" IS NOT NULL AND "__new_resource_account_connection"."broker_reference" IS NULL)
-        OR
-        ("__new_resource_account_connection"."credential_custody" = 'resource_server' AND "__new_resource_account_connection"."encrypted_tokens" IS NULL AND "__new_resource_account_connection"."broker_reference" IS NOT NULL)
-      ))
-);
---> statement-breakpoint
-INSERT INTO `__new_resource_account_connection`("id", "resource_id", "owner_user_id", "owner_organization_id", "external_subject", "display_name", "credential_custody", "encrypted_tokens", "broker_reference", "granted_scopes", "authorization_details", "client_generation", "status", "credential_expires_at", "revoked_at", "created_at", "updated_at") SELECT "id", "resource_id", "owner_user_id", "owner_organization_id", "external_subject", "display_name", 'realmroot', "encrypted_tokens", NULL, "granted_scopes", "authorization_details", "client_generation", "status", "credential_expires_at", "revoked_at", "created_at", "updated_at" FROM `resource_account_connection`;--> statement-breakpoint
-DROP TABLE `resource_account_connection`;--> statement-breakpoint
-ALTER TABLE `__new_resource_account_connection` RENAME TO `resource_account_connection`;--> statement-breakpoint
-PRAGMA foreign_keys=ON;--> statement-breakpoint
-CREATE UNIQUE INDEX `resourceAccountConnection_resource_user_unique` ON `resource_account_connection` (`resource_id`,`owner_user_id`) WHERE "resource_account_connection"."owner_user_id" IS NOT NULL;--> statement-breakpoint
-CREATE UNIQUE INDEX `resourceAccountConnection_resource_org_unique` ON `resource_account_connection` (`resource_id`,`owner_organization_id`) WHERE "resource_account_connection"."owner_organization_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX `resourceAccountConnection_resourceId_idx` ON `resource_account_connection` (`resource_id`);--> statement-breakpoint
-CREATE INDEX `resourceAccountConnection_ownerUserId_idx` ON `resource_account_connection` (`owner_user_id`);--> statement-breakpoint
-CREATE INDEX `resourceAccountConnection_ownerOrganizationId_idx` ON `resource_account_connection` (`owner_organization_id`);--> statement-breakpoint
-CREATE INDEX `resourceAccountConnection_status_idx` ON `resource_account_connection` (`status`);--> statement-breakpoint
+ALTER TABLE `resource_account_connection` ADD `credential_custody` text DEFAULT 'realmroot' NOT NULL;--> statement-breakpoint
+ALTER TABLE `resource_account_connection` ADD `broker_reference` text;--> statement-breakpoint
 ALTER TABLE `resource_connection_intent` ADD `authorization_mode` text DEFAULT 'oauth' NOT NULL;
 
 ALTER TABLE `resource_account_connection` RENAME TO `provider_resource_authorization`;--> statement-breakpoint
@@ -185,7 +147,15 @@ WHERE `id` IN (
 		AND p.`owner_organization_id` IS c.`owner_organization_id`
 	WHERE c.`external_subject` <> p.`external_subject`
 );--> statement-breakpoint
-PRAGMA foreign_keys=OFF;--> statement-breakpoint
+PRAGMA defer_foreign_keys=ON;--> statement-breakpoint
+CREATE TABLE `__provider_grant_connection` (`id` text PRIMARY KEY NOT NULL, `connection_id` text NOT NULL);--> statement-breakpoint
+INSERT INTO `__provider_grant_connection` (`id`, `connection_id`)
+SELECT `id`, `connection_id` FROM `agent_access_grant` WHERE `connection_id` IS NOT NULL;--> statement-breakpoint
+CREATE TABLE `__provider_request_connection` (`id` text PRIMARY KEY NOT NULL, `connection_id` text NOT NULL);--> statement-breakpoint
+INSERT INTO `__provider_request_connection` (`id`, `connection_id`)
+SELECT `id`, `connection_id` FROM `agent_access_request` WHERE `connection_id` IS NOT NULL;--> statement-breakpoint
+UPDATE `agent_access_grant` SET `connection_id` = NULL WHERE `connection_id` IS NOT NULL;--> statement-breakpoint
+UPDATE `agent_access_request` SET `connection_id` = NULL WHERE `connection_id` IS NOT NULL;--> statement-breakpoint
 CREATE TABLE `__new_provider_resource_authorization` (
 	`id` text PRIMARY KEY NOT NULL,
 	`provider_connection_id` text NOT NULL,
@@ -228,71 +198,19 @@ SELECT
 FROM `provider_resource_authorization` c;--> statement-breakpoint
 DROP TABLE `provider_resource_authorization`;--> statement-breakpoint
 ALTER TABLE `__new_provider_resource_authorization` RENAME TO `provider_resource_authorization`;--> statement-breakpoint
-PRAGMA foreign_keys=ON;--> statement-breakpoint
+UPDATE `agent_access_grant`
+SET `connection_id` = (SELECT m.`connection_id` FROM `__provider_grant_connection` m WHERE m.`id` = `agent_access_grant`.`id`)
+WHERE `id` IN (SELECT `id` FROM `__provider_grant_connection`);--> statement-breakpoint
+UPDATE `agent_access_request`
+SET `connection_id` = (SELECT m.`connection_id` FROM `__provider_request_connection` m WHERE m.`id` = `agent_access_request`.`id`)
+WHERE `id` IN (SELECT `id` FROM `__provider_request_connection`);--> statement-breakpoint
+DROP TABLE `__provider_grant_connection`;--> statement-breakpoint
+DROP TABLE `__provider_request_connection`;--> statement-breakpoint
+PRAGMA defer_foreign_keys=OFF;--> statement-breakpoint
 CREATE UNIQUE INDEX `providerResourceAuthorization_connection_resource_unique` ON `provider_resource_authorization` (`provider_connection_id`,`resource_id`);--> statement-breakpoint
 CREATE INDEX `providerResourceAuthorization_providerConnectionId_idx` ON `provider_resource_authorization` (`provider_connection_id`);--> statement-breakpoint
 CREATE INDEX `providerResourceAuthorization_resourceId_idx` ON `provider_resource_authorization` (`resource_id`);--> statement-breakpoint
 CREATE INDEX `providerResourceAuthorization_status_idx` ON `provider_resource_authorization` (`status`);--> statement-breakpoint
-CREATE TABLE `__new_agent_access_grant` (
-	`id` text PRIMARY KEY NOT NULL,
-	`resource_id` text NOT NULL,
-	`connection_id` text,
-	`agent_identity_id` text NOT NULL,
-	`scopes` text NOT NULL,
-	`authorization_details` text DEFAULT '[]' NOT NULL,
-	`mode` text NOT NULL,
-	`status` text DEFAULT 'active' NOT NULL,
-	`granted_by_user_id` text NOT NULL,
-	`expires_at` integer,
-	`revoked_at` integer,
-	`created_at` integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)) NOT NULL,
-	`updated_at` integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)) NOT NULL,
-	FOREIGN KEY (`resource_id`) REFERENCES `api_resource`(`id`) ON UPDATE no action ON DELETE restrict,
-	FOREIGN KEY (`connection_id`) REFERENCES `provider_resource_authorization`(`id`) ON UPDATE no action ON DELETE restrict,
-	FOREIGN KEY (`agent_identity_id`) REFERENCES `agent_identity`(`id`) ON UPDATE no action ON DELETE restrict,
-	FOREIGN KEY (`granted_by_user_id`) REFERENCES `user`(`id`) ON UPDATE no action ON DELETE restrict
-);
---> statement-breakpoint
-INSERT INTO `__new_agent_access_grant`("id", "resource_id", "connection_id", "agent_identity_id", "scopes", "authorization_details", "mode", "status", "granted_by_user_id", "expires_at", "revoked_at", "created_at", "updated_at") SELECT "id", "resource_id", "connection_id", "agent_identity_id", "scopes", "authorization_details", "mode", "status", "granted_by_user_id", "expires_at", "revoked_at", "created_at", "updated_at" FROM `agent_access_grant`;--> statement-breakpoint
-DROP TABLE `agent_access_grant`;--> statement-breakpoint
-ALTER TABLE `__new_agent_access_grant` RENAME TO `agent_access_grant`;--> statement-breakpoint
-CREATE INDEX `agentAccessGrant_resourceId_idx` ON `agent_access_grant` (`resource_id`);--> statement-breakpoint
-CREATE INDEX `agentAccessGrant_connectionId_idx` ON `agent_access_grant` (`connection_id`);--> statement-breakpoint
-CREATE INDEX `agentAccessGrant_agentIdentityId_idx` ON `agent_access_grant` (`agent_identity_id`);--> statement-breakpoint
-CREATE INDEX `agentAccessGrant_status_idx` ON `agent_access_grant` (`status`);--> statement-breakpoint
-CREATE TABLE `__new_agent_access_request` (
-	`id` text PRIMARY KEY NOT NULL,
-	`resource_id` text NOT NULL,
-	`connection_id` text,
-	`agent_identity_id` text NOT NULL,
-	`binding_id` text NOT NULL,
-	`scopes` text NOT NULL,
-	`authorization_details` text DEFAULT '[]' NOT NULL,
-	`reason` text,
-	`status` text DEFAULT 'pending' NOT NULL,
-	`approval_token_hash` text NOT NULL,
-	`encrypted_approval_token` text NOT NULL,
-	`grant_id` text,
-	`expires_at` integer NOT NULL,
-	`decided_at` integer,
-	`created_at` integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)) NOT NULL,
-	`updated_at` integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)) NOT NULL,
-	FOREIGN KEY (`resource_id`) REFERENCES `api_resource`(`id`) ON UPDATE no action ON DELETE restrict,
-	FOREIGN KEY (`connection_id`) REFERENCES `provider_resource_authorization`(`id`) ON UPDATE no action ON DELETE restrict,
-	FOREIGN KEY (`agent_identity_id`) REFERENCES `agent_identity`(`id`) ON UPDATE no action ON DELETE restrict,
-	FOREIGN KEY (`binding_id`) REFERENCES `agent_identity_binding`(`id`) ON UPDATE no action ON DELETE restrict
-);
---> statement-breakpoint
-INSERT INTO `__new_agent_access_request`("id", "resource_id", "connection_id", "agent_identity_id", "binding_id", "scopes", "authorization_details", "reason", "status", "approval_token_hash", "encrypted_approval_token", "grant_id", "expires_at", "decided_at", "created_at", "updated_at") SELECT "id", "resource_id", "connection_id", "agent_identity_id", "binding_id", "scopes", "authorization_details", "reason", "status", "approval_token_hash", "encrypted_approval_token", "grant_id", "expires_at", "decided_at", "created_at", "updated_at" FROM `agent_access_request`;--> statement-breakpoint
-DROP TABLE `agent_access_request`;--> statement-breakpoint
-ALTER TABLE `__new_agent_access_request` RENAME TO `agent_access_request`;--> statement-breakpoint
-CREATE UNIQUE INDEX `agent_access_request_approval_token_hash_unique` ON `agent_access_request` (`approval_token_hash`);--> statement-breakpoint
-CREATE INDEX `agentAccessRequest_resourceId_idx` ON `agent_access_request` (`resource_id`);--> statement-breakpoint
-CREATE INDEX `agentAccessRequest_connectionId_idx` ON `agent_access_request` (`connection_id`);--> statement-breakpoint
-CREATE INDEX `agentAccessRequest_agentIdentityId_idx` ON `agent_access_request` (`agent_identity_id`);--> statement-breakpoint
-CREATE INDEX `agentAccessRequest_status_idx` ON `agent_access_request` (`status`);--> statement-breakpoint
-CREATE INDEX `agentAccessRequest_expiresAt_idx` ON `agent_access_request` (`expires_at`);
---> statement-breakpoint
 CREATE TRIGGER `account_provider_connection_subject_guard`
 BEFORE INSERT ON `account`
 WHEN NEW.`provider_id` <> 'credential'
@@ -350,4 +268,3 @@ BEGIN
 END;
 
 CREATE UNIQUE INDEX `apiResource_providerConnectionAuthority_unique` ON `api_resource` (`connector_id`) WHERE "api_resource"."deleted_at" is null and "api_resource"."connector_id" is not null and json_extract("api_resource"."scope_registry", '$.accountConnection.mode') = 'brokered';
-
