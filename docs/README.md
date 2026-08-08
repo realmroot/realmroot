@@ -49,6 +49,9 @@ inventory into prose documentation.
 - [Resource server integration](integrations/resource-servers.md): connect
   Realmroot-native or external protected APIs, publish discovery metadata, and
   validate access tokens and DPoP proofs.
+- [Agent-native Resource Server Profile](integrations/agent-native-resource-server-profile.md):
+  the versioned RFC, open-specification, draft, and Realmroot-extension
+  capability inventory for direct Agent integration.
 
 ## Deployment
 

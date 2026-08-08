@@ -199,7 +199,9 @@ Choose `native` when the API trusts Realmroot as its authorization server.
 Choose `external` when the target owns its users and OAuth server. There is no
 Agent-specific endpoint or per-runtime adapter to maintain.
 
-The protocol and validation checklist is in
+The normative standards and extension inventory is the
+[Agent-native Resource Server Profile](docs/integrations/agent-native-resource-server-profile.md).
+The implementation and validation checklist is in
 [Resource server integration](docs/integrations/resource-servers.md). Runnable
 [native](examples/native-resource-server/README.md) and
 [external](examples/external-resource-server/README.md) examples implement both

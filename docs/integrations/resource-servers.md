@@ -10,6 +10,10 @@ what the resource server must publish and validate in both authorization modes:
 Realmroot never proxies business API requests. After authorization, the client
 calls the registered resource URL directly with a DPoP-bound access token.
 
+The normative capability inventory and extension lifecycle live in the
+[Agent-native Resource Server Profile](agent-native-resource-server-profile.md).
+This guide explains how to implement that profile with Realmroot.
+
 ## Shared Resource Contract
 
 Both modes register one protected resource URL:
@@ -162,6 +166,10 @@ Treat `scope` as the granted API authority. `roles`, `groups`, `sub`, and `act`
 provide policy and audit context; they do not expand the token's scopes.
 
 ### Resolve Agent Display Information
+
+`agentinfo_endpoint` is a Realmroot extension, not an adopted RFC or current
+IETF Internet-Draft endpoint. The `act.sub_profile: ai_agent` classification is
+separately aligned with active OAuth Entity Profiles and Actor Profile drafts.
 
 Read `agentinfo_endpoint` from issuer metadata and query it with the verified
 Agent actor subject:
