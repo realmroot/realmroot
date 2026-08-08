@@ -65,10 +65,16 @@ export function isPublicCorsPath(path: string) {
   return path.startsWith('/api/public/') || publicOAuthMetadataPaths.has(path)
 }
 
+export const publicIssuerMetadataPaths = [
+  '/.well-known/openid-configuration/api/auth',
+  '/.well-known/oauth-authorization-server/api/auth',
+] as const
+
 const publicOAuthMetadataPaths = new Set([
   '/api/auth/.well-known/openid-configuration',
   '/api/auth/.well-known/oauth-authorization-server',
   '/api/auth/jwks',
+  ...publicIssuerMetadataPaths,
 ])
 
 const oauthClientCorsPaths = new Set([

@@ -48,9 +48,14 @@ describe('app.test 1', () => {
       handler: async () => new Response(null, { status: 204 }),
     }
 
-    const response = await createApp(auth, createTestDeps()).request('/.well-known/oauth-authorization-server/api/auth')
+    const response = await createApp(auth, createTestDeps()).request(
+      '/.well-known/oauth-authorization-server/api/auth',
+      { headers: { origin: 'https://wallet.example.com' } },
+    )
 
     expect(response.status).toBe(200)
+    expect(response.headers.get('access-control-allow-origin')).toBe('https://wallet.example.com')
+    expect(response.headers.get('access-control-allow-credentials')).toBeNull()
     await expect(response.json()).resolves.toMatchObject({
       issuer: 'https://auth.example.com/api/auth',
       agent_profile_uri_template: 'https://auth.example.com/api/public/agents/{subject}',
@@ -125,9 +130,13 @@ describe('app.test 1', () => {
       handler: async () => new Response(null, { status: 204 }),
     }
 
-    const response = await createApp(auth, createTestDeps()).request('/.well-known/openid-configuration/api/auth')
+    const response = await createApp(auth, createTestDeps()).request('/.well-known/openid-configuration/api/auth', {
+      headers: { origin: 'https://wallet.example.com' },
+    })
 
     expect(response.status).toBe(200)
+    expect(response.headers.get('access-control-allow-origin')).toBe('https://wallet.example.com')
+    expect(response.headers.get('access-control-allow-credentials')).toBeNull()
     const metadata = await response.json()
     expect(metadata).toMatchObject({
       issuer: 'https://auth.example.com/api/auth',
@@ -139,6 +148,28 @@ describe('app.test 1', () => {
       request: expect.any(Request),
       asResponse: false,
     })
+  })
+
+  it('answers issuer-path OAuth metadata preflights from any browser origin', async () => {
+    const app = createApp(createAuthMock(), createTestDeps())
+
+    for (const path of [
+      '/.well-known/openid-configuration/api/auth',
+      '/.well-known/oauth-authorization-server/api/auth',
+    ]) {
+      const response = await app.request(path, {
+        method: 'OPTIONS',
+        headers: {
+          origin: 'https://wallet.example.com',
+          'access-control-request-method': 'GET',
+        },
+      })
+
+      expect(response.status).toBe(204)
+      expect(response.headers.get('access-control-allow-origin')).toBe('https://wallet.example.com')
+      expect(response.headers.get('access-control-allow-methods')).toBe('GET,OPTIONS')
+      expect(response.headers.get('access-control-allow-credentials')).toBeNull()
+    }
   })
 
   it('publishes one canonical Agent and OAuth issuer on the requested host', async () => {

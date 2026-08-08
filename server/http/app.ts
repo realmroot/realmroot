@@ -22,6 +22,7 @@ import {
   isPublicCorsPath,
   mountAgentConfiguration,
   oauthClientCorsOrigins,
+  publicIssuerMetadataPaths,
   requireHostedAuthMethodEnabled,
   requireLinkedSiweWallet,
 } from './app-auth-mounts'
@@ -84,13 +85,12 @@ export function createApp(auth: AuthHandler, deps: Deps, config: AppConfig = {})
   app.use('*', requestContext())
   app.use('*', accessLog())
   app.on(['GET', 'HEAD'], ['/.well-known/jwks.json', '/api/auth/jwks'], (c) => publishJwks(c, auth))
-  app.use(
-    '/api/*',
-    trustedOriginCors(config.trustedOrigins ?? [], {
-      isPublicPath: isPublicCorsPath,
-      resolveAllowedOrigins: oauthClientCorsOrigins(),
-    }),
-  )
+  const cors = trustedOriginCors(config.trustedOrigins ?? [], {
+    isPublicPath: isPublicCorsPath,
+    resolveAllowedOrigins: oauthClientCorsOrigins(),
+  })
+  app.use('/api/*', cors)
+  for (const path of publicIssuerMetadataPaths) app.use(path, cors)
   app.use('/api/*', authn(auth))
   app.use('/api/*', requireSecurityPolicy(deps.security))
 

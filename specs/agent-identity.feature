@@ -122,6 +122,7 @@ Feature: Agent identity and delegated API authorization
       And the default summary omits owner and activity
       And the full view includes the public owner, activity overview, annual heatmap, and sanitized recent activity
       And Agent configuration and OAuth authorization-server discovery publish the public Agent Profile URI template keyed by subject
+      And browser clients can read issuer-path OAuth and OpenID discovery across origins
       And permits each view to be cached and revalidated independently
       But the public profile never returns Host, role, scope, grant, Resource, or authorization state
       And the public profile is never authoritative for authentication or authorization
