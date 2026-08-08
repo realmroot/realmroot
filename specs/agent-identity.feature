@@ -26,6 +26,7 @@ Feature: Agent identity and delegated API authorization
       Given a new Agent connects Restish to the Realmroot OpenAPI contract
       When the Agent invokes whoami without a local Realmroot identity
       Then the transparent Restish authentication adapter registers locally generated host and Agent keys
+      And the adapter names the Agent after its detected runtime and the Host after its local device
       And whoami waits while an authorized controller approves the Agent once from the hosted verification page
       And the adapter creates a personal stable identity through the approved Agent session
       Then Realmroot creates an Agent with a stable issuer and subject
@@ -52,9 +53,10 @@ Feature: Agent identity and delegated API authorization
       Given the plugin detects the current Agent runtime or reads an explicit runtime declaration
       And one Realmroot issuer is connected through multiple Restish API names or profiles
       When the Agent invokes Realmroot operations across those connections and later runtime sessions
-      Then the plugin reuses one host registration and stable Agent issuer and subject for that runtime
+      Then the plugin reuses one stable Agent issuer and subject for that runtime
       And Restish API names, profiles, and runtime session identifiers do not create another Agent identity
-      And another runtime uses a separately secured local identity
+      And another runtime on the same device and Realmroot issuer shares the Host registration
+      But each runtime keeps a separately secured Agent key and stable Agent identity
       And another Realmroot issuer uses a separately secured local identity
       And an explicitly supplied AGENT runtime selects that runtime identity instead of the detected runtime
 

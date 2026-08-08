@@ -8,7 +8,10 @@ import (
 	"strings"
 )
 
-const defaultAgentRuntime = "restish"
+const (
+	defaultAgentRuntime            = "restish"
+	defaultAgentRuntimeDisplayName = "Restish"
+)
 
 var sessionEnvironmentNames = []string{
 	"AGENT_SESSION_ID",
@@ -19,23 +22,24 @@ var sessionEnvironmentNames = []string{
 type environmentLookup func(string) (string, bool)
 
 type runtimeDetector struct {
-	name    string
-	matches func(environmentLookup) bool
+	name        string
+	displayName string
+	matches     func(environmentLookup) bool
 }
 
 var runtimeDetectors = []runtimeDetector{
-	{name: "antigravity", matches: hasEnvironment("ANTIGRAVITY_AGENT")},
-	{name: "opencode", matches: hasEnvironment("OPENCODE")},
-	{name: "goose", matches: hasEnvironment("GOOSE_TERMINAL")},
-	{name: "qwen", matches: hasEnvironment("QWEN_CODE")},
-	{name: "cursor", matches: hasEnvironment("CURSOR_AGENT")},
-	{name: "kiro", matches: hasEnvironments("AGENT_DISPLAY_OUT", "AGENT_CONTEXT_OUT")},
-	{name: "pi", matches: hasEnvironment("PI_CODING_AGENT")},
-	{name: "codex", matches: hasEnvironment("CODEX_CI")},
-	{name: "copilot", matches: hasEnvironment("COPILOT_CLI")},
-	{name: "gemini", matches: hasEnvironment("GEMINI_CLI")},
-	{name: "claude", matches: hasEnvironment("CLAUDECODE")},
-	{name: "hermes", matches: hasAnyEnvironment("HERMES_INTERACTIVE", "HERMES_SESSION_KEY")},
+	{name: "antigravity", displayName: "Antigravity", matches: hasEnvironment("ANTIGRAVITY_AGENT")},
+	{name: "opencode", displayName: "OpenCode", matches: hasEnvironment("OPENCODE")},
+	{name: "goose", displayName: "Goose", matches: hasEnvironment("GOOSE_TERMINAL")},
+	{name: "qwen", displayName: "Qwen", matches: hasEnvironment("QWEN_CODE")},
+	{name: "cursor", displayName: "Cursor", matches: hasEnvironment("CURSOR_AGENT")},
+	{name: "kiro", displayName: "Kiro", matches: hasEnvironments("AGENT_DISPLAY_OUT", "AGENT_CONTEXT_OUT")},
+	{name: "pi", displayName: "Pi", matches: hasEnvironment("PI_CODING_AGENT")},
+	{name: "codex", displayName: "Codex", matches: hasEnvironment("CODEX_CI")},
+	{name: "copilot", displayName: "Copilot", matches: hasEnvironment("COPILOT_CLI")},
+	{name: "gemini", displayName: "Gemini", matches: hasEnvironment("GEMINI_CLI")},
+	{name: "claude", displayName: "Claude", matches: hasEnvironment("CLAUDECODE")},
+	{name: "hermes", displayName: "Hermes", matches: hasAnyEnvironment("HERMES_INTERACTIVE", "HERMES_SESSION_KEY")},
 }
 
 func agentRuntime() (string, error) {
@@ -66,6 +70,21 @@ func detectAgentRuntime(lookup environmentLookup) (string, error) {
 		}
 	}
 	return defaultAgentRuntime, nil
+}
+
+func agentDisplayName(runtime string) string {
+	if value := strings.TrimSpace(os.Getenv("REALMROOT_AGENT_NAME")); value != "" {
+		return value
+	}
+	if runtime == defaultAgentRuntime {
+		return defaultAgentRuntimeDisplayName
+	}
+	for _, detector := range runtimeDetectors {
+		if detector.name == runtime {
+			return detector.displayName
+		}
+	}
+	return runtime
 }
 
 func normalizeAgentRuntime(value string) (string, error) {

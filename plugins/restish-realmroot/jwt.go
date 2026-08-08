@@ -26,6 +26,7 @@ func newSigningKey(prefix string) (ed25519.PublicKey, ed25519.PrivateKey, string
 
 func signRegistrationJWT(
 	issuer string,
+	hostID string,
 	hostPrivateKey ed25519.PrivateKey,
 	hostKeyID string,
 	hostPublicKey ed25519.PublicKey,
@@ -34,11 +35,15 @@ func signRegistrationJWT(
 	hostName string,
 	now time.Time,
 ) (string, error) {
+	hostIssuer := hostID
+	if hostIssuer == "" {
+		hostIssuer = hostKeyID
+	}
 	claims := map[string]any{
 		"host_public_key":  publicJWK(hostKeyID, hostPublicKey),
 		"agent_public_key": publicJWK(agentKeyID, agentPublicKey),
 		"host_name":        hostName,
-		"iss":              hostKeyID,
+		"iss":              hostIssuer,
 		"aud":              issuer,
 	}
 	return signJWT(hostPrivateKey, hostKeyID, "host+jwt", claims, now)
@@ -56,7 +61,7 @@ func signAgentJWT(state agentState, issuer string, now time.Time) (string, error
 	}, now)
 }
 
-func signHostJWT(state agentState, issuer string, now time.Time) (string, error) {
+func signHostJWT(state hostState, issuer string, now time.Time) (string, error) {
 	privateKey, err := decodePrivateKey(state.HostPrivateKey)
 	if err != nil {
 		return "", err

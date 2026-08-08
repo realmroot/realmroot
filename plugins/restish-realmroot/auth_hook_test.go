@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/base64"
@@ -27,6 +28,10 @@ func TestAuthHookIgnoresUnmarkedProfiles(t *testing.T) {
 
 func TestAuthHookEnrollsOnceThenSignsOriginalRequest(t *testing.T) {
 	t.Setenv("REALMROOT_AGENT_NAME", "Build Agent")
+	expectedHostName, err := hostDisplayName()
+	if err != nil {
+		t.Fatal(err)
+	}
 	requests := 0
 	states := &memoryStateStore{}
 	prompt := &promptRecorder{}
@@ -36,6 +41,16 @@ func TestAuthHookEnrollsOnceThenSignsOriginalRequest(t *testing.T) {
 		case 1, 6:
 			return jsonResponse(http.StatusOK, testAgentConfiguration()), nil
 		case 2:
+			var registration struct {
+				Name     string `json:"name"`
+				HostName string `json:"host_name"`
+			}
+			if err := json.NewDecoder(request.Body).Decode(&registration); err != nil {
+				t.Fatal(err)
+			}
+			if registration.Name != "Build Agent" || registration.HostName != expectedHostName {
+				t.Fatalf("registration names = %#v", registration)
+			}
 			return jsonResponse(http.StatusOK, map[string]any{
 				"agent_id": "agent-123", "host_id": "host-123",
 				"approval": map[string]any{
@@ -99,6 +114,60 @@ func TestAuthHookEnrollsOnceThenSignsOriginalRequest(t *testing.T) {
 	}
 }
 
+func TestRegisterAgentSharesHostAcrossRuntimes(t *testing.T) {
+	states := &memoryStateStore{}
+	target := agentTarget{
+		Runtime: "codex", Origin: "https://auth.example.com", Issuer: "https://auth.example.com/api/auth",
+	}
+	configuration := agentConfiguration{
+		Issuer: target.Issuer, Endpoints: map[string]string{"register": target.Issuer + "/agent/register"},
+	}
+	var hostKeyIDs []string
+	var hostIssuers []string
+	var hostPublicKeys []string
+	var agentPublicKeys []string
+	client := roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		token := strings.TrimPrefix(request.Header.Get("Authorization"), "Bearer ")
+		parts := strings.Split(token, ".")
+		if len(parts) != 3 {
+			t.Fatalf("registration JWT has %d segments", len(parts))
+		}
+		var header map[string]any
+		var claims map[string]any
+		decodeJWTPart(t, parts[0], &header)
+		decodeJWTPart(t, parts[1], &claims)
+		hostKeyIDs = append(hostKeyIDs, header["kid"].(string))
+		hostIssuers = append(hostIssuers, claims["iss"].(string))
+		hostPublicKeys = append(hostPublicKeys, claims["host_public_key"].(map[string]any)["x"].(string))
+		agentPublicKeys = append(agentPublicKeys, claims["agent_public_key"].(map[string]any)["x"].(string))
+		return jsonResponse(http.StatusOK, map[string]any{
+			"agent_id": "agent-" + target.Runtime, "host_id": "host-123",
+			"approval": map[string]any{
+				"verification_uri_complete": "https://auth.example.com/agent/approve?code=" + target.Runtime,
+				"expires_in":                600, "interval": 1,
+			},
+		}), nil
+	})
+
+	if _, err := registerAgent(context.Background(), states, client, target, "Codex", false, configuration); err != nil {
+		t.Fatal(err)
+	}
+	target.Runtime = "claude"
+	if _, err := registerAgent(context.Background(), states, client, target, "Claude", false, configuration); err != nil {
+		t.Fatal(err)
+	}
+
+	if hostKeyIDs[0] != hostKeyIDs[1] || hostPublicKeys[0] != hostPublicKeys[1] {
+		t.Fatal("runtimes did not share the Host key")
+	}
+	if hostIssuers[0] == "host-123" || hostIssuers[1] != "host-123" {
+		t.Fatalf("registration Host issuers = %#v", hostIssuers)
+	}
+	if agentPublicKeys[0] == agentPublicKeys[1] {
+		t.Fatal("runtimes shared an Agent key")
+	}
+}
+
 func testCredential(_ *testing.T, _ string, _ time.Time) dpopCredential {
 	return dpopCredential{
 		ResourceHref:       "https://auth.example.com/api/resource-servers/zpan/resources/workspace-1",
@@ -116,10 +185,6 @@ func newCredentialState(t *testing.T, credential dpopCredential) *memoryStateSto
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, hostPrivate, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatal(err)
-	}
 	protocolExpiresAt := time.Now().Add(time.Minute)
 	protocolKey, err := newDPoPPrivateKey()
 	if err != nil {
@@ -127,8 +192,8 @@ func newCredentialState(t *testing.T, credential dpopCredential) *memoryStateSto
 	}
 	return &memoryStateStore{exists: true, state: agentState{
 		Version: agentStateVersion, Origin: "https://auth.example.com", Issuer: "https://auth.example.com/api/auth",
-		Runtime: defaultAgentRuntime, AgentID: "agent-123", HostID: "host-123", AgentKeyID: "agent-key", HostKeyID: "host-key",
-		AgentPrivateKey: encodePrivateKey(agentPrivate), HostPrivateKey: encodePrivateKey(hostPrivate),
+		Runtime: defaultAgentRuntime, AgentID: "agent-123", HostID: "host-123", AgentKeyID: "agent-key",
+		AgentPrivateKey:      encodePrivateKey(agentPrivate),
 		Identity:             &stableIdentity{ID: "identity-1", Issuer: "https://auth.example.com/api/auth", Subject: "agt_123"},
 		DPoPCredentialOffers: map[string][]dpopCredential{credential.ResourceHref: {credential}},
 		ProtocolCredential: &dpopCredential{
@@ -172,8 +237,10 @@ func jsonResponse(status int, body any) *http.Response {
 }
 
 type memoryStateStore struct {
-	state  agentState
-	exists bool
+	state      agentState
+	exists     bool
+	host       hostState
+	hostExists bool
 }
 
 func (s *memoryStateStore) Create(_ agentTarget, state agentState) (string, error) {
@@ -191,6 +258,18 @@ func (s *memoryStateStore) Load(_ agentTarget) (agentState, error) {
 func (s *memoryStateStore) Update(_ agentTarget, state agentState) error {
 	s.state, s.exists = state, true
 	return nil
+}
+
+func (s *memoryStateStore) CreateHost(_ agentTarget, state hostState) (string, error) {
+	s.host, s.hostExists = state, true
+	return "/private/host.json", nil
+}
+
+func (s *memoryStateStore) LoadHost(_ agentTarget) (hostState, error) {
+	if !s.hostExists {
+		return hostState{}, os.ErrNotExist
+	}
+	return s.host, nil
 }
 
 func (s *memoryStateStore) FindByOriginAndAgentID(origin, agentID string) (agentState, error) {

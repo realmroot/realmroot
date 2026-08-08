@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -169,7 +170,7 @@ func ensureAgentIdentity(
 		if !errors.Is(err, os.ErrNotExist) {
 			return agentState{}, err
 		}
-		state, err = registerAgent(ctx, states, client, target, agentDisplayName(), false, configuration)
+		state, err = registerAgent(ctx, states, client, target, agentDisplayName(target.Runtime), false, configuration)
 		if err != nil {
 			return agentState{}, err
 		}
@@ -188,7 +189,11 @@ func ensureAgentIdentity(
 	if err := prompt.Show(state.RegistrationApproval.VerificationURIComplete); err != nil {
 		return agentState{}, err
 	}
-	if err := waitForAgentApproval(ctx, client, state, configuration); err != nil {
+	host, err := states.LoadHost(target)
+	if err != nil {
+		return agentState{}, err
+	}
+	if err := waitForAgentApproval(ctx, client, state, host, configuration); err != nil {
 		return agentState{}, err
 	}
 
@@ -376,9 +381,28 @@ func registerAgent(
 	replace bool,
 	configuration agentConfiguration,
 ) (agentState, error) {
-	hostPublicKey, hostPrivateKey, hostKeyID, err := newSigningKey("host")
+	hostName, err := hostDisplayName()
 	if err != nil {
 		return agentState{}, err
+	}
+	sharedHost, err := states.LoadHost(target)
+	newHost := errors.Is(err, os.ErrNotExist)
+	if err != nil && !newHost {
+		return agentState{}, err
+	}
+	var hostPublicKey ed25519.PublicKey
+	var hostPrivateKey ed25519.PrivateKey
+	if newHost {
+		hostPublicKey, hostPrivateKey, sharedHost.HostKeyID, err = newSigningKey("host")
+		if err != nil {
+			return agentState{}, err
+		}
+	} else {
+		hostPrivateKey, err = decodePrivateKey(sharedHost.HostPrivateKey)
+		if err != nil {
+			return agentState{}, err
+		}
+		hostPublicKey = hostPrivateKey.Public().(ed25519.PublicKey)
 	}
 	agentPublicKey, agentPrivateKey, agentKeyID, err := newSigningKey("agent")
 	if err != nil {
@@ -386,12 +410,13 @@ func registerAgent(
 	}
 	registrationJWT, err := signRegistrationJWT(
 		configuration.Issuer,
+		sharedHost.HostID,
 		hostPrivateKey,
-		hostKeyID,
+		sharedHost.HostKeyID,
 		hostPublicKey,
 		agentKeyID,
 		agentPublicKey,
-		name+" Host",
+		hostName,
 		time.Now(),
 	)
 	if err != nil {
@@ -406,7 +431,7 @@ func registerAgent(
 		registrationJWT,
 		map[string]any{
 			"name":             name,
-			"host_name":        name + " Host",
+			"host_name":        hostName,
 			"mode":             "delegated",
 			"capabilities":     []string{},
 			"preferred_method": "device_authorization",
@@ -418,6 +443,18 @@ func registerAgent(
 	}
 	if registration.AgentID == "" || registration.HostID == "" {
 		return agentState{}, errors.New("Agent registration response is missing agent_id or host_id")
+	}
+	if !newHost && registration.HostID != sharedHost.HostID {
+		return agentState{}, errors.New("Agent registration response changed the shared Host")
+	}
+	if newHost {
+		sharedHost = hostState{
+			Version: hostStateVersion, Issuer: target.Issuer, HostID: registration.HostID,
+			HostKeyID: sharedHost.HostKeyID, HostPrivateKey: encodePrivateKey(hostPrivateKey),
+		}
+		if _, err := states.CreateHost(target, sharedHost); err != nil {
+			return agentState{}, err
+		}
 	}
 	if registration.Approval.VerificationURIComplete == "" {
 		return agentState{}, errors.New("Agent registration response is missing the controller approval URL")
@@ -439,9 +476,7 @@ func registerAgent(
 		AgentID:         registration.AgentID,
 		HostID:          registration.HostID,
 		AgentKeyID:      agentKeyID,
-		HostKeyID:       hostKeyID,
 		AgentPrivateKey: encodePrivateKey(agentPrivateKey),
-		HostPrivateKey:  encodePrivateKey(hostPrivateKey),
 		RegistrationApproval: &pendingApproval{
 			VerificationURIComplete: registration.Approval.VerificationURIComplete,
 			ExpiresAt:               &expiresAt,
@@ -460,6 +495,7 @@ func waitForAgentApproval(
 	ctx context.Context,
 	client httpDoer,
 	state agentState,
+	host hostState,
 	configuration agentConfiguration,
 ) error {
 	interval := time.Duration(state.RegistrationApproval.IntervalSeconds) * time.Second
@@ -473,7 +509,7 @@ func waitForAgentApproval(
 			client,
 			http.MethodGet,
 			configuration.Endpoints["status"]+"?agent_id="+url.QueryEscape(state.AgentID),
-			mustHostJWT(state, configuration.Issuer),
+			mustHostJWT(host, configuration.Issuer),
 			nil,
 			&status,
 		); err != nil {
@@ -644,17 +680,6 @@ func realmrootOrigin(requestURI string) (string, error) {
 	return strings.TrimSuffix(parsed.String(), "/"), nil
 }
 
-func agentDisplayName() string {
-	if value := strings.TrimSpace(os.Getenv("REALMROOT_AGENT_NAME")); value != "" {
-		return value
-	}
-	host, err := os.Hostname()
-	if err != nil || strings.TrimSpace(host) == "" {
-		return "Restish Agent"
-	}
-	return host + " Agent"
-}
-
 func mustAgentJWT(state agentState, issuer string) string {
 	token, err := signAgentJWT(state, issuer, time.Now())
 	if err != nil {
@@ -663,7 +688,7 @@ func mustAgentJWT(state agentState, issuer string) string {
 	return token
 }
 
-func mustHostJWT(state agentState, issuer string) string {
+func mustHostJWT(state hostState, issuer string) string {
 	token, err := signHostJWT(state, issuer, time.Now())
 	if err != nil {
 		panic(err)

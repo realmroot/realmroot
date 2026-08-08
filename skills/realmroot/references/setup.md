@@ -59,7 +59,10 @@ restish plugin install "$PLUGIN_BIN_DIR/restish-realmroot" --yes
 restish plugin list
 ```
 
-Optionally name a new Agent before its first protected operation:
+New Agents use the detected runtime name by default, while each Host uses the
+local device name. Runtimes on the same device share one Host key for each
+Realmroot issuer, but keep separate Agent keys and identities. Optionally
+override the Agent name before its first protected operation:
 
 ```bash
 export REALMROOT_AGENT_NAME="Build Agent"

@@ -110,15 +110,18 @@ is removed and a new access request is required.
 
 ## State
 
-Identity state is keyed by the discovered issuer and Agent runtime. Restish API
-aliases and profiles reuse that identity. Active Resource selection is isolated
-by a hashed Agent session identifier when the runtime exposes one, allowing
-concurrent sessions to use different Resources at the same service URL.
+Host state is keyed by the discovered issuer, so runtimes on the same device
+share one Host registration and Host key. Agent state is additionally keyed by
+runtime, so each runtime keeps its own Agent key and stable identity. Restish
+API aliases and profiles reuse that runtime identity. Active Resource selection
+is isolated by a hashed Agent session identifier when the runtime exposes one,
+allowing concurrent sessions to use different Resources at the same service
+URL.
 
 State files contain private keys and short-lived credentials. They are regular
 files with mode `0600`; symlinks and files accessible to group or other users
-are rejected. Legacy grant-oriented credential caches are discarded during
-schema upgrade. Never commit, log, or copy state files.
+are rejected. State created before the shared-Host layout must be removed and
+enrolled again. Never commit, log, or copy state files.
 
 Set `AGENT` to override runtime detection. Set
 `REALMROOT_PLUGIN_STATE_DIR` only when an explicitly isolated cleanroom is

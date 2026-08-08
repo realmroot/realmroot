@@ -13,8 +13,10 @@ import (
 
 const (
 	stateDirectoryEnv = "REALMROOT_PLUGIN_STATE_DIR"
-	agentStateVersion = 12
+	agentStateVersion = 13
+	hostStateVersion  = 1
 	identityDirectory = "identities"
+	hostDirectory     = "hosts"
 )
 
 type agentTarget struct {
@@ -57,9 +59,7 @@ type agentState struct {
 	AgentID                  string                      `json:"agent_id"`
 	HostID                   string                      `json:"host_id"`
 	AgentKeyID               string                      `json:"agent_key_id"`
-	HostKeyID                string                      `json:"host_key_id"`
 	AgentPrivateKey          string                      `json:"agent_private_key"`
-	HostPrivateKey           string                      `json:"host_private_key"`
 	RegistrationApproval     *pendingApproval            `json:"registration_approval,omitempty"`
 	Identity                 *stableIdentity             `json:"identity,omitempty"`
 	DPoPCredentials          map[string]dpopCredential   `json:"dpop_credentials,omitempty"`
@@ -69,10 +69,20 @@ type agentState struct {
 	LegacyPlatformCredential *dpopCredential             `json:"platform_credential,omitempty"`
 }
 
+type hostState struct {
+	Version        int    `json:"version"`
+	Issuer         string `json:"issuer"`
+	HostID         string `json:"host_id"`
+	HostKeyID      string `json:"host_key_id"`
+	HostPrivateKey string `json:"host_private_key"`
+}
+
 type stateStore interface {
 	Create(target agentTarget, state agentState) (string, error)
 	Load(target agentTarget) (agentState, error)
 	Update(target agentTarget, state agentState) error
+	CreateHost(target agentTarget, state hostState) (string, error)
+	LoadHost(target agentTarget) (hostState, error)
 }
 
 type agentStateFinder interface {
@@ -170,7 +180,64 @@ func (s *fileStateStore) Load(target agentTarget) (agentState, error) {
 	if !errors.Is(err, os.ErrNotExist) {
 		return agentState{}, err
 	}
-	return s.migrateLegacy(target)
+	return agentState{}, os.ErrNotExist
+}
+
+func (s *fileStateStore) CreateHost(target agentTarget, state hostState) (string, error) {
+	state.Version = hostStateVersion
+	state.Issuer = target.Issuer
+	if err := validateHostState(state, target); err != nil {
+		return "", err
+	}
+	return s.createHostPath(s.hostPath(target), state)
+}
+
+func (s *fileStateStore) LoadHost(target agentTarget) (hostState, error) {
+	path := s.hostPath(target)
+	info, err := os.Lstat(path)
+	if err != nil {
+		return hostState{}, fmt.Errorf("read Host state metadata: %w", err)
+	}
+	if !info.Mode().IsRegular() {
+		return hostState{}, errors.New("Host state must be a regular file")
+	}
+	if info.Mode().Perm()&0o077 != 0 {
+		return hostState{}, fmt.Errorf("Host state %s must not be accessible by group or other users", path)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return hostState{}, fmt.Errorf("read Host state: %w", err)
+	}
+	var state hostState
+	if err := json.Unmarshal(data, &state); err != nil {
+		return hostState{}, fmt.Errorf("decode Host state: %w", err)
+	}
+	if err := validateHostState(state, target); err != nil {
+		return hostState{}, err
+	}
+	return state, nil
+}
+
+func (s *fileStateStore) createHostPath(path string, state hostState) (string, error) {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return "", fmt.Errorf("create Host state directory: %w", err)
+	}
+	data, err := json.MarshalIndent(state, "", "  ")
+	if err != nil {
+		return "", fmt.Errorf("encode Host state: %w", err)
+	}
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return "", fmt.Errorf("create Host state: %w", err)
+	}
+	if _, err := file.Write(append(data, '\n')); err != nil {
+		_ = file.Close()
+		return "", fmt.Errorf("write Host state: %w", err)
+	}
+	if err := file.Close(); err != nil {
+		return "", fmt.Errorf("close Host state: %w", err)
+	}
+	return path, nil
 }
 
 func (s *fileStateStore) loadPath(path string) (agentState, error) {
@@ -192,42 +259,6 @@ func (s *fileStateStore) loadPath(path string) (agentState, error) {
 	if err := json.Unmarshal(data, &state); err != nil {
 		return agentState{}, fmt.Errorf("decode Agent state: %w", err)
 	}
-	if state.Version > 0 && state.Version < agentStateVersion {
-		if state.Version < 7 {
-			state.DPoPCredentials = nil
-			state.ActiveDPoPCredentials = nil
-		}
-		if state.Version == 8 {
-			state.ProtocolCredential = state.LegacyPlatformCredential
-		}
-		if state.Version < 10 {
-			state.DPoPCredentials = nil
-			state.ActiveDPoPCredentials = nil
-		}
-		if state.Version < 11 {
-			for resourceHref, credential := range state.DPoPCredentials {
-				credential.PrivateKey = ""
-				credential.AccessToken = ""
-				credential.ExpiresAt = nil
-				state.DPoPCredentials[resourceHref] = credential
-			}
-			state.ActiveDPoPCredentials = nil
-		}
-		if state.Version < 12 {
-			if len(state.DPoPCredentials) > 0 {
-				state.DPoPCredentialOffers = make(map[string][]dpopCredential, len(state.DPoPCredentials))
-				for resourceHref, credential := range state.DPoPCredentials {
-					state.DPoPCredentialOffers[resourceHref] = []dpopCredential{credential}
-				}
-			}
-			state.DPoPCredentials = nil
-		}
-		state.LegacyPlatformCredential = nil
-		state.Version = agentStateVersion
-		if err := s.updatePath(path, state); err != nil {
-			return agentState{}, fmt.Errorf("upgrade Agent state: %w", err)
-		}
-	}
 	return state, nil
 }
 
@@ -237,112 +268,6 @@ func (s *fileStateStore) Update(target agentTarget, state agentState) error {
 	state.Issuer = target.Issuer
 	state.Runtime = target.Runtime
 	return s.updatePath(s.path(target), state)
-}
-
-type legacyState struct {
-	path  string
-	state agentState
-}
-
-func (s *fileStateStore) migrateLegacy(target agentTarget) (agentState, error) {
-	states, err := s.legacyStates()
-	if err != nil {
-		return agentState{}, err
-	}
-	exactPath := s.legacyPath(target)
-	var exactPending *legacyState
-	var completed []legacyState
-	var pending []legacyState
-	for _, candidate := range states {
-		if candidate.state.Identity != nil && candidate.state.Identity.Issuer == target.Issuer {
-			if candidate.path == exactPath {
-				return s.migrateState(target, candidate)
-			}
-			completed = append(completed, candidate)
-			continue
-		}
-		if candidate.state.Identity == nil && candidate.state.Origin == target.Origin {
-			if candidate.path == exactPath {
-				value := candidate
-				exactPending = &value
-			}
-			pending = append(pending, candidate)
-		}
-	}
-	if len(completed) == 1 {
-		return s.migrateState(target, completed[0])
-	}
-	if len(completed) > 1 {
-		return agentState{}, fmt.Errorf(
-			"multiple local Agent identities match issuer %q; invoke an existing Restish API name first to select its identity",
-			target.Issuer,
-		)
-	}
-	if exactPending != nil {
-		return s.migrateState(target, *exactPending)
-	}
-	if len(pending) == 1 {
-		return s.migrateState(target, pending[0])
-	}
-	if len(pending) > 1 {
-		return agentState{}, fmt.Errorf("multiple pending local Agent registrations match origin %q", target.Origin)
-	}
-	return agentState{}, os.ErrNotExist
-}
-
-func (s *fileStateStore) migrateState(target agentTarget, candidate legacyState) (agentState, error) {
-	state := candidate.state
-	state.Version = agentStateVersion
-	state.Origin = target.Origin
-	state.Issuer = target.Issuer
-	state.Runtime = target.Runtime
-	if _, err := s.createPath(s.path(target), state); err != nil {
-		return agentState{}, fmt.Errorf("migrate Agent state: %w", err)
-	}
-	if err := os.Remove(candidate.path); err != nil {
-		return agentState{}, fmt.Errorf("remove migrated Agent state %s: %w", candidate.path, err)
-	}
-	if err := validateAgentState(state, target); err != nil {
-		return agentState{}, err
-	}
-	return state, nil
-}
-
-func (s *fileStateStore) legacyStates() ([]legacyState, error) {
-	var states []legacyState
-	err := filepath.WalkDir(s.root, func(path string, entry os.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			if errors.Is(walkErr, os.ErrNotExist) {
-				return nil
-			}
-			return walkErr
-		}
-		if entry.IsDir() {
-			if path == filepath.Join(s.root, identityDirectory) {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if filepath.Ext(path) != ".json" {
-			return nil
-		}
-		state, err := s.loadPath(path)
-		if err != nil {
-			return err
-		}
-		if state.Version != 2 && state.Version != agentStateVersion {
-			return fmt.Errorf("unsupported Agent state version %d", state.Version)
-		}
-		if err := validateAgentStateCredentials(state); err != nil {
-			return err
-		}
-		states = append(states, legacyState{path: path, state: state})
-		return nil
-	})
-	if err != nil {
-		return nil, fmt.Errorf("read legacy Agent states: %w", err)
-	}
-	return states, nil
 }
 
 func (s *fileStateStore) updatePath(path string, state agentState) error {
@@ -545,13 +470,8 @@ func (s *fileStateStore) path(target agentTarget) string {
 	)
 }
 
-func (s *fileStateStore) legacyPath(target agentTarget) string {
-	return filepath.Join(
-		s.root,
-		encodeStatePathPart(target.API),
-		encodeStatePathPart(target.Profile),
-		encodeStatePathPart("default")+".json",
-	)
+func (s *fileStateStore) hostPath(target agentTarget) string {
+	return filepath.Join(s.root, hostDirectory, encodeStatePathPart(target.Issuer)+".json")
 }
 
 func encodeStatePathPart(value string) string {
@@ -572,17 +492,12 @@ func validateAgentState(state agentState, target agentTarget) error {
 }
 
 func validateAgentStateCredentials(state agentState) error {
-	if state.AgentID == "" || state.HostID == "" || state.AgentKeyID == "" || state.HostKeyID == "" {
+	if state.AgentID == "" || state.HostID == "" || state.AgentKeyID == "" {
 		return errors.New("Agent state is missing protocol identifiers")
 	}
-	for label, encoded := range map[string]string{
-		"Agent private key": state.AgentPrivateKey,
-		"Host private key":  state.HostPrivateKey,
-	} {
-		key, err := base64.RawURLEncoding.DecodeString(encoded)
-		if err != nil || len(key) != ed25519.PrivateKeySize {
-			return fmt.Errorf("%s is invalid", label)
-		}
+	key, err := base64.RawURLEncoding.DecodeString(state.AgentPrivateKey)
+	if err != nil || len(key) != ed25519.PrivateKeySize {
+		return errors.New("Agent private key is invalid")
 	}
 	if len(state.DPoPCredentials) > 0 {
 		return errors.New("Agent state contains legacy DPoP credential storage")
@@ -627,6 +542,23 @@ func validateAgentStateCredentials(state agentState) error {
 	}
 	if len(state.ActiveDPoPCredentials) > 0 {
 		return errors.New("Agent state contains legacy active DPoP credential bindings")
+	}
+	return nil
+}
+
+func validateHostState(state hostState, target agentTarget) error {
+	if state.Version != hostStateVersion {
+		return fmt.Errorf("unsupported Host state version %d", state.Version)
+	}
+	if state.Issuer != target.Issuer {
+		return fmt.Errorf("Host state issuer %q does not match discovered issuer %q", state.Issuer, target.Issuer)
+	}
+	if state.HostID == "" || state.HostKeyID == "" {
+		return errors.New("Host state is missing protocol identifiers")
+	}
+	key, err := base64.RawURLEncoding.DecodeString(state.HostPrivateKey)
+	if err != nil || len(key) != ed25519.PrivateKeySize {
+		return errors.New("Host private key is invalid")
 	}
 	return nil
 }

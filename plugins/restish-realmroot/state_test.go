@@ -4,8 +4,10 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -23,10 +25,6 @@ func TestFileStateStoreProtectsAndValidatesAgentKeys(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, hostPrivateKey, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatal(err)
-	}
 	state := agentState{
 		Version:         agentStateVersion,
 		Origin:          target.Origin,
@@ -34,9 +32,7 @@ func TestFileStateStoreProtectsAndValidatesAgentKeys(t *testing.T) {
 		AgentID:         "agent-123",
 		HostID:          "host-123",
 		AgentKeyID:      "agent-key",
-		HostKeyID:       "host-key",
 		AgentPrivateKey: encodePrivateKey(agentPrivateKey),
-		HostPrivateKey:  encodePrivateKey(hostPrivateKey),
 	}
 
 	path, err := store.Create(target, state)
@@ -73,7 +69,43 @@ func TestFileStateStoreProtectsAndValidatesAgentKeys(t *testing.T) {
 	}
 }
 
-func TestFileStateStoreUpgradeDropsLegacyGrantCredentialCache(t *testing.T) {
+func TestFileStateStoreSharesProtectedHostByIssuer(t *testing.T) {
+	store := &fileStateStore{root: t.TempDir()}
+	target := agentTarget{Runtime: "codex", Issuer: "https://auth.example.com/api/auth"}
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path, err := store.CreateHost(target, hostState{
+		HostID: "host-123", HostKeyID: "host-key", HostPrivateKey: encodePrivateKey(privateKey),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Fatalf("Host state permissions = %o", info.Mode().Perm())
+	}
+	otherRuntime := target
+	otherRuntime.Runtime = "claude"
+	loaded, err := store.LoadHost(otherRuntime)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.HostID != "host-123" || loaded.HostPrivateKey != encodePrivateKey(privateKey) {
+		t.Fatalf("loaded unexpected Host state: %#v", loaded)
+	}
+	otherIssuer := target
+	otherIssuer.Issuer = "https://staging-auth.example.com/api/auth"
+	if _, err := store.LoadHost(otherIssuer); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("different issuer reused Host state: %v", err)
+	}
+}
+
+func TestFileStateStoreRejectsLegacyGrantCredentialCache(t *testing.T) {
 	store := &fileStateStore{root: t.TempDir()}
 	target := agentTarget{
 		API:     "realmroot-local",
@@ -111,26 +143,12 @@ func TestFileStateStoreUpgradeDropsLegacyGrantCredentialCache(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	upgraded, err := store.Load(target)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if upgraded.Version != agentStateVersion || len(upgraded.DPoPCredentials) != 0 {
-		t.Fatalf("legacy credential cache was retained: %#v", upgraded)
-	}
-	reloaded, err := store.Load(target)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if reloaded.Version != agentStateVersion || len(reloaded.DPoPCredentials) != 0 {
-		t.Fatalf("upgraded state was not persisted: %#v", reloaded)
-	}
-	if _, err := os.Stat(legacyPath); err != nil {
-		t.Fatalf("upgraded state was not persisted: %v", err)
+	if _, err := store.Load(target); err == nil || !strings.Contains(err.Error(), "unsupported Agent state version") {
+		t.Fatalf("legacy Agent state was not rejected: %v", err)
 	}
 }
 
-func TestFileStateStoreUpgradeRenamesProtocolCredential(t *testing.T) {
+func TestFileStateStoreRejectsLegacyProtocolCredential(t *testing.T) {
 	store := &fileStateStore{root: t.TempDir()}
 	target := agentTarget{
 		API:     "realmroot-local",
@@ -178,29 +196,8 @@ func TestFileStateStoreUpgradeRenamesProtocolCredential(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	upgraded, err := store.Load(target)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if upgraded.Version != agentStateVersion || upgraded.ProtocolCredential == nil {
-		t.Fatalf("protocol credential was not migrated: %#v", upgraded)
-	}
-	if upgraded.ProtocolCredential.AccessToken != "protocol-token" || upgraded.LegacyPlatformCredential != nil {
-		t.Fatalf("protocol credential migration was incomplete: %#v", upgraded)
-	}
-	persisted, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var representation map[string]any
-	if err := json.Unmarshal(persisted, &representation); err != nil {
-		t.Fatal(err)
-	}
-	if _, exists := representation["platform_credential"]; exists {
-		t.Fatal("legacy platform credential field was retained")
-	}
-	if _, exists := representation["protocol_credential"]; !exists {
-		t.Fatal("protocol credential field was not persisted")
+	if _, err := store.Load(target); err == nil || !strings.Contains(err.Error(), "unsupported Agent state version") {
+		t.Fatalf("legacy Agent state was not rejected: %v", err)
 	}
 }
 
@@ -217,10 +214,6 @@ func TestFileStateStoreFindsCredentialOfferByOpaqueReference(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, hostPrivateKey, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatal(err)
-	}
 	credential := testCredential(t, "", time.Time{})
 	state := agentState{
 		Version:              agentStateVersion,
@@ -231,9 +224,7 @@ func TestFileStateStoreFindsCredentialOfferByOpaqueReference(t *testing.T) {
 		AgentID:              "agent-123",
 		HostID:               "host-123",
 		AgentKeyID:           "agent-key",
-		HostKeyID:            "host-key",
 		AgentPrivateKey:      encodePrivateKey(agentPrivateKey),
-		HostPrivateKey:       encodePrivateKey(hostPrivateKey),
 		DPoPCredentialOffers: map[string][]dpopCredential{credential.ResourceHref: {credential}},
 	}
 	path := store.path(target)
@@ -305,6 +296,12 @@ func TestFileStateStoreKeysIdentityByIssuerAndRuntime(t *testing.T) {
 		}
 		if store.path(first) == store.path(otherEnvironment) {
 			t.Fatal("different Realmroot issuers shared an Agent identity path")
+		}
+		if store.hostPath(first) != store.hostPath(otherRuntime) {
+			t.Fatal("runtimes on one issuer did not share a Host state path")
+		}
+		if store.hostPath(first) == store.hostPath(otherEnvironment) {
+			t.Fatal("different Realmroot issuers shared a Host state path")
 		}
 	})
 }

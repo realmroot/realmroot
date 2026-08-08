@@ -62,6 +62,28 @@ func TestDetectAgentRuntimeRejectsInvalidExplicitRuntime(t *testing.T) {
 	}
 }
 
+func TestAgentDisplayNameDefaultsToDetectedRuntime(t *testing.T) {
+	t.Run("[spec: agent-identity/agent-identity-enrollment]", func(t *testing.T) {
+		t.Setenv("REALMROOT_AGENT_NAME", "")
+		if name := agentDisplayName("codex"); name != "Codex" {
+			t.Fatalf("Agent display name = %q", name)
+		}
+	})
+}
+
+func TestAgentDisplayNameUsesExplicitOverride(t *testing.T) {
+	t.Setenv("REALMROOT_AGENT_NAME", "  Build Agent  ")
+	if name := agentDisplayName("codex"); name != "Build Agent" {
+		t.Fatalf("Agent display name = %q", name)
+	}
+}
+
+func TestNormalizeDeviceDisplayNameRejectsMissingDeviceName(t *testing.T) {
+	if _, err := normalizeDeviceDisplayName("  "); err == nil {
+		t.Fatal("expected an empty device name to fail")
+	}
+}
+
 func TestDetectAgentSessionIsolatesConcurrentSessionsWithoutPersistingRawIdentifiers(t *testing.T) {
 	first := detectAgentSession(testEnvironment(map[string]string{"CODEX_THREAD_ID": "thread-secret-1"}))
 	again := detectAgentSession(testEnvironment(map[string]string{"CODEX_THREAD_ID": "thread-secret-1"}))
