@@ -32,7 +32,7 @@ describe('auth.test 2', () => {
       agent_identity_issuer: 'https://auth.example.com/api/auth',
       agent_endpoint: 'https://auth.example.com/api/agent/status',
       agent_enrollment_endpoint: 'https://auth.example.com/api/agent/enrollments',
-      agentinfo_endpoint: 'https://auth.example.com/api/public/agents/{subject}',
+      agent_profile_uri_template: 'https://auth.example.com/api/public/agents/{subject}',
       agent_token_endpoint: 'https://auth.example.com/api/auth/oauth2/token',
       agent_bootstrap_scopes_supported: [
         'agent:read',

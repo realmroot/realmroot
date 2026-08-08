@@ -137,8 +137,8 @@ Public profile: REALMROOT_ORIGIN/api/public/agents/{subject}
 ```
 
 Agent configuration and OAuth authorization-server metadata publish that
-template as `agentinfo_endpoint`. Replace `{subject}` with the URL-encoded,
-verified `act.sub` value.
+template as `agent_profile_uri_template`. Replace `{subject}` with the
+URL-encoded, verified `act.sub` value.
 
 For every protected request, require both headers:
 
