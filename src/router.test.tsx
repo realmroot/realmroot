@@ -5,7 +5,7 @@ import { AppRouter, queryClient } from '@/router'
 vi.mock('@/features/account/account-center', () => ({
   AccountAgentsPage: () => <h1>Agents route</h1>,
   AccountApplicationsPage: () => <h1>Applications route</h1>,
-  AccountConnectionsPage: () => <h1>Profile route</h1>,
+  AccountConnectionsPage: () => <h1>Connections route</h1>,
   AccountOrganizationDetailPage: () => <h1>Organization route</h1>,
   AccountOrganizationsPage: () => <h1>Organizations route</h1>,
   AccountOverviewPage: () => <h1>Account overview route</h1>,
@@ -69,6 +69,21 @@ describe('root route', () => {
 
     expect(await screen.findByRole('heading', { name: 'Profile route' })).toBeTruthy()
     expect(window.location.pathname).toBe('/profile')
+    expect(fetchSpy).toHaveBeenCalledWith('/api/account/profile', {
+      body: undefined,
+      headers: expect.any(Headers),
+      method: 'GET',
+    })
+  })
+
+  it('routes completed account connections to their Account Center page [spec: account-center/account-section-routes]', async () => {
+    const fetchSpy = vi.spyOn(window, 'fetch').mockImplementation(accountRouteResponse)
+    window.history.pushState(null, '', '/connections?resource_connection=connected')
+
+    render(<AppRouter />)
+
+    expect(await screen.findByRole('heading', { name: 'Connections route' })).toBeTruthy()
+    expect(window.location.pathname).toBe('/connections')
     expect(fetchSpy).toHaveBeenCalledWith('/api/account/profile', {
       body: undefined,
       headers: expect.any(Headers),

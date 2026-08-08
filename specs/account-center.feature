@@ -15,7 +15,7 @@ Feature: Account Center
 
   @entrypoint:product-ui @journey:account-section-routes
   Scenario: Account Center groups related sections into route-backed pages
-    When I open /, /profile, /security, /applications, /agents, or /organizations
+    When I open /, /profile, /security, /applications, /connections, /agents, or /organizations
     Then I see only the grouped account page in the account content area
     And every Account Center section is a root-level sibling route
 

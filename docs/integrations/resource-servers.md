@@ -219,6 +219,60 @@ Agent -> Resource API: Authorization: DPoP ... + request DPoP proof
 Resource API: validate JWT, scopes, cnf.jkt, proof target, ath, and replay state
 ```
 
+## Brokered Native Account Connection
+
+Use this transitional mode when the API can validate Realmroot-issued native
+tokens but must keep a provider OAuth or installation credential behind its own
+boundary. It is a Realmroot extension, not an adopted RFC. The Resource Server
+remains native: omit `connectorId`, and Realmroot never stores the provider
+credential.
+
+Advertise all three extension members with the RFC 9728 metadata:
+
+```json
+{
+  "resource": "https://adapter.example.com/github",
+  "scopes_supported": ["github:metadata:read", "github:issues:write"],
+  "account_connection_modes_supported": ["brokered"],
+  "account_connection_authorization_endpoint": "https://adapter.example.com/github/account-connection-authorizations",
+  "account_connection_token_endpoint": "https://adapter.example.com/github/account-connection-credentials"
+}
+```
+
+Realmroot calls the authorization endpoint with `request=SIGNED_JWT`. Validate
+the request against Realmroot's published JWKS and require exact issuer,
+Resource audience, expiry, and one-use `jti`. The signed claims bind:
+
+- the owner and canonical `connection_id`;
+- `expected_external_subject` during same-account reconnection;
+- Realmroot's callback URI and state;
+- an S256 PKCE challenge;
+- requested scopes and RFC 9396 authorization details.
+
+After the provider flow, redirect the browser to the signed callback URI with
+`code` and `state`. Realmroot exchanges the one-use code and `code_verifier` at
+the token endpoint. Return only connection metadata:
+
+```json
+{
+  "external_subject": "8208",
+  "display_name": "Jasper Van",
+  "broker_reference": "connection-opaque-id",
+  "scope": "github:metadata:read github:issues:write",
+  "authorization_details": [
+    { "type": "github_installation", "installation_id": "152097080" }
+  ]
+}
+```
+
+One owner has at most one Connection for the Resource Server. A Connection may
+contain multiple provider contexts. The Resource Server resolves the context
+only from Realmroot-signed `connection_id` and `authorization_details` claims;
+callers cannot select a provider account or installation through the request
+URL. Reauthorization may update that Connection only for the same external
+subject. Realmroot stores no provider token and deactivating the Connection
+immediately prevents new target tokens.
+
 ## External Authorization
 
 Use external mode when the target platform owns its users, OAuth client

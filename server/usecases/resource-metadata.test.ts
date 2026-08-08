@@ -6,6 +6,42 @@ const resourceUrl = 'https://orders.example.com/api'
 const metadataUrl = 'https://orders.example.com/.well-known/oauth-protected-resource/api'
 
 describe('protected resource scope discovery', () => {
+  it('[spec: agent-identity/brokered-native-account-connection] discovers complete brokered connection endpoints', async () => {
+    const deps = createTestDeps()
+    vi.mocked(deps.externalHttp.fetch).mockResolvedValue(
+      Response.json({
+        resource: resourceUrl,
+        scopes_supported: ['orders:read'],
+        account_connection_modes_supported: ['brokered'],
+        account_connection_authorization_endpoint: 'https://orders.example.com/api/account-connection-authorizations',
+        account_connection_token_endpoint: 'https://orders.example.com/api/account-connection-credentials',
+      }),
+    )
+
+    await expect(readProtectedResourceMetadata(deps, resourceUrl)).resolves.toMatchObject({
+      accountConnection: {
+        mode: 'brokered',
+        authorizationEndpoint: 'https://orders.example.com/api/account-connection-authorizations',
+        tokenEndpoint: 'https://orders.example.com/api/account-connection-credentials',
+      },
+    })
+  })
+
+  it('rejects incomplete brokered connection metadata', async () => {
+    const deps = createTestDeps()
+    vi.mocked(deps.externalHttp.fetch).mockResolvedValue(
+      Response.json({
+        resource: resourceUrl,
+        scopes_supported: ['orders:read'],
+        account_connection_modes_supported: ['brokered'],
+        account_connection_authorization_endpoint: 'https://orders.example.com/api/account-connection-authorizations',
+      }),
+    )
+    await expect(readProtectedResourceMetadata(deps, resourceUrl)).rejects.toThrow(
+      'Brokered account connection metadata is incomplete.',
+    )
+  })
+
   it('[spec: admin-console/admin-create-api-resource] uses RFC 9728 scopes as authority and OpenAPI only for descriptions', async () => {
     const deps = createTestDeps()
     vi.mocked(deps.externalHttp.fetch).mockImplementation(

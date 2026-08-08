@@ -477,11 +477,21 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
   })
 
   app.post('/account-connections', async (c) => {
+    const origin = canonicalOrigin ?? new URL(c.req.url).origin
     const result = await createAccountConnection(
       getDeps(c),
       await readJson(c, createAccountConnectionSchema),
       getPrincipal(c).user!.id,
-      canonicalOrigin ?? new URL(c.req.url).origin,
+      origin,
+      authApi.signJWT
+        ? {
+            issuer: `${origin.replace(/\/$/, '')}/api/auth`,
+            sign: (payload, type) =>
+              authApi.signJWT!({ body: { payload, overrideOptions: { jwt: { type } } }, asResponse: false }).then(
+                ({ token }) => token,
+              ),
+          }
+        : undefined,
     )
     c.header('Location', `/api/account/account-connections/${encodeURIComponent(result.id)}`)
     return c.json(accountConnectionSchema.parse(result), 201)

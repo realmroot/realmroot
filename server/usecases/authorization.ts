@@ -205,16 +205,18 @@ export async function createResource(deps: Deps, input: CreateApiResourceRequest
   }
   await requireActiveOrganization(deps, ownerOrganizationId)
   validateResourceUrl(input.resourceUrl)
+  const authorizationDetails = input.authorizationDetails ?? []
   const protectedMetadata = input.connectorId
-    ? await validateExternalResourceConnector(
-        deps,
-        input.resourceUrl,
-        input.connectorId,
-        input.authorizationDetails ?? [],
-      )
-    : null
-  if (!input.connectorId && (input.authorizationDetails?.length ?? 0) > 0) {
-    throw badRequest('Authorization details require an external API resource connector.')
+    ? await validateExternalResourceConnector(deps, input.resourceUrl, input.connectorId, authorizationDetails)
+    : enabled || authorizationDetails.length > 0
+      ? await readProtectedResourceMetadata(deps, input.resourceUrl)
+      : null
+  if (
+    !input.connectorId &&
+    authorizationDetails.length > 0 &&
+    protectedMetadata?.accountConnection?.mode !== 'brokered'
+  ) {
+    throw badRequest('Authorization details require an external connector or brokered Native account connection.')
   }
   const synchronized = enabled
     ? await synchronizeResourceDiscovery(
@@ -232,7 +234,7 @@ export async function createResource(deps: Deps, input: CreateApiResourceRequest
     name: contract.name,
     resourceUrl: input.resourceUrl,
     connectorId: input.connectorId ?? null,
-    authorizationDetails: input.authorizationDetails ?? [],
+    authorizationDetails,
     description: contract.description,
     enabled,
     ownerOrganizationId,
@@ -422,12 +424,18 @@ export async function updateResource(deps: Deps, id: string, input: UpdateApiRes
   const enabled = input.enabled ?? resource.enabled
   const boundaryChanged =
     input.connectorId !== undefined || input.resourceUrl !== undefined || input.authorizationDetails !== undefined
-  const protectedMetadata =
-    connectorId && (boundaryChanged || input.enabled === true)
+  const protectedMetadata = connectorId
+    ? boundaryChanged || input.enabled === true
       ? await validateExternalResourceConnector(deps, resourceUrl, connectorId, authorizationDetails)
       : null
-  if (!connectorId && authorizationDetails.length > 0) {
-    throw badRequest('Authorization details require an external API resource connector.')
+    : authorizationDetails.length > 0 && (boundaryChanged || input.enabled === true)
+      ? await readProtectedResourceMetadata(deps, resourceUrl)
+      : null
+  const brokeredNative =
+    protectedMetadata?.accountConnection?.mode === 'brokered' ||
+    (input.resourceUrl === undefined && resource.scopeRegistry?.accountConnection?.mode === 'brokered')
+  if (!connectorId && authorizationDetails.length > 0 && !brokeredNative) {
+    throw badRequest('Authorization details require an external connector or brokered Native account connection.')
   }
   const shouldSynchronize = enabled && (input.enabled === true || input.resourceUrl !== undefined)
   const synchronized = shouldSynchronize

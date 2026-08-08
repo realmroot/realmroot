@@ -96,6 +96,13 @@ export const resourceScopeSchema = z
     grantMode: resourceScopeGrantModeSchema,
   })
   .strict()
+export const brokeredAccountConnectionSchema = z
+  .object({
+    mode: z.literal('brokered'),
+    authorizationEndpoint: z.url(),
+    tokenEndpoint: z.url(),
+  })
+  .strict()
 export const resourceScopeRegistrySchema = z
   .object({
     discovery: z
@@ -114,6 +121,7 @@ export const resourceScopeRegistrySchema = z
       })
       .strict(),
     scopes: z.array(resourceScopeSchema),
+    accountConnection: brokeredAccountConnectionSchema.nullable().optional(),
   })
   .strict()
 

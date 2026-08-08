@@ -1,7 +1,7 @@
 import { badGateway, badRequest } from '@server/domain/errors'
 import type { Deps } from '@server/usecases/deps'
 import { readResourceContract } from '@server/usecases/resource-openapi'
-import type { ResourceScopeRegistry } from '@shared/api/authorization'
+import { brokeredAccountConnectionSchema, type ResourceScopeRegistry } from '@shared/api/authorization'
 
 const discoveryTimeoutMs = 5_000
 
@@ -10,6 +10,7 @@ export interface ProtectedResourceMetadata {
   resource: string
   authorizationServers: string[]
   scopesSupported: string[]
+  accountConnection: { mode: 'brokered'; authorizationEndpoint: string; tokenEndpoint: string } | null
   etag: string | null
 }
 
@@ -48,6 +49,7 @@ export async function readProtectedResourceMetadata(
     resource: resourceUrl,
     authorizationServers: stringArray(values.authorization_servers),
     scopesSupported,
+    accountConnection: readAccountConnection(values),
     etag: response.headers.get('etag'),
   }
 }
@@ -82,8 +84,24 @@ export async function synchronizeResourceDiscovery(
         lastError: null,
       },
       scopes,
+      accountConnection: metadata.accountConnection,
     },
   }
+}
+
+function readAccountConnection(values: Record<string, unknown>) {
+  const modes = stringArray(values.account_connection_modes_supported)
+  const authorizationEndpoint = values.account_connection_authorization_endpoint
+  const tokenEndpoint = values.account_connection_token_endpoint
+  if (modes.length === 0 && authorizationEndpoint === undefined && tokenEndpoint === undefined) return null
+  if (!modes.includes('brokered') || typeof authorizationEndpoint !== 'string' || typeof tokenEndpoint !== 'string') {
+    throw badRequest('Brokered account connection metadata is incomplete.')
+  }
+  return brokeredAccountConnectionSchema.parse({
+    mode: 'brokered',
+    authorizationEndpoint,
+    tokenEndpoint,
+  })
 }
 
 export function protectedResourceMetadataUrl(resourceUrl: string) {

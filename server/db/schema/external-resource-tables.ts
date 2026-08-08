@@ -16,7 +16,11 @@ export const resourceAccountConnection = sqliteTable(
     ownerOrganizationId: text('owner_organization_id').references(() => organization.id, { onDelete: 'restrict' }),
     externalSubject: text('external_subject').notNull(),
     displayName: text('display_name').notNull(),
-    encryptedTokens: text('encrypted_tokens').notNull(),
+    credentialCustody: text('credential_custody', { enum: ['realmroot', 'resource_server'] })
+      .notNull()
+      .default('realmroot'),
+    encryptedTokens: text('encrypted_tokens'),
+    brokerReference: text('broker_reference'),
     grantedScopes: text('granted_scopes', { mode: 'json' }).$type<string[]>().notNull(),
     authorizationDetails: text('authorization_details', { mode: 'json' })
       .$type<AuthorizationDetail[]>()
@@ -37,6 +41,14 @@ export const resourceAccountConnection = sqliteTable(
     check(
       'resourceAccountConnection_exactly_one_owner_check',
       sql`((${table.ownerUserId} IS NOT NULL) + (${table.ownerOrganizationId} IS NOT NULL)) = 1`,
+    ),
+    check(
+      'resourceAccountConnection_credential_custody_check',
+      sql`(
+        (${table.credentialCustody} = 'realmroot' AND ${table.encryptedTokens} IS NOT NULL AND ${table.brokerReference} IS NULL)
+        OR
+        (${table.credentialCustody} = 'resource_server' AND ${table.encryptedTokens} IS NULL AND ${table.brokerReference} IS NOT NULL)
+      )`,
     ),
     uniqueIndex('resourceAccountConnection_resource_user_unique')
       .on(table.resourceId, table.ownerUserId)
@@ -70,6 +82,9 @@ export const resourceConnectionIntent = sqliteTable(
       .notNull()
       .default(sql`'[]'`),
     encryptedPkceVerifier: text('encrypted_pkce_verifier').notNull(),
+    authorizationMode: text('authorization_mode', { enum: ['oauth', 'brokered'] })
+      .notNull()
+      .default('oauth'),
     clientGeneration: integer('client_generation').default(1).notNull(),
     returnTo: text('return_to').notNull().default('account-center'),
     status: text('status').notNull().default('pending'),

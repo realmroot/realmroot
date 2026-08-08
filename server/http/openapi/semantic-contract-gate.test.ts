@@ -23,11 +23,19 @@ describe('OpenAPI semantic contract gate', () => {
     const publicProfilesContract = JSON.parse(
       readFileSync(new URL('./approved-public-profiles-semantic-baseline.json', import.meta.url), 'utf8'),
     ) as typeof unchanged
+    const brokeredNativeContract = JSON.parse(
+      readFileSync(new URL('./approved-brokered-native-semantic-baseline.json', import.meta.url), 'utf8'),
+    ) as typeof unchanged
+    const brokeredNativeChanges = new Set(brokeredNativeContract.map(({ method, path }) => `${method}:${path}`))
     const resourceDiscoveryChanges = new Set(resourceDiscoveryContract.map(({ method, path }) => `${method}:${path}`))
     const approvedChanges = new Set(
-      [...ownerSelectorContract, ...documentationContract, ...resourceDiscoveryContract].map(
-        ({ method, path }) => `${method}:${path}`,
-      ),
+      [
+        ...ownerSelectorContract,
+        ...documentationContract,
+        ...resourceDiscoveryContract,
+        ...brokeredNativeContract,
+        ...publicProfilesContract,
+      ].map(({ method, path }) => `${method}:${path}`),
     )
     const approvedRemovals = new Set([
       ...['DELETE', 'GET', 'PUT'].flatMap((method) => [
@@ -41,9 +49,13 @@ describe('OpenAPI semantic contract gate', () => {
         ({ method, path }) => !approvedChanges.has(`${method}:${path}`) && !approvedRemovals.has(`${method}:${path}`),
       ),
       ...authorizationContract,
-      ...ownerSelectorContract.filter(({ method, path }) => !resourceDiscoveryChanges.has(`${method}:${path}`)),
+      ...ownerSelectorContract.filter(
+        ({ method, path }) =>
+          !resourceDiscoveryChanges.has(`${method}:${path}`) && !brokeredNativeChanges.has(`${method}:${path}`),
+      ),
       ...documentationContract,
-      ...resourceDiscoveryContract,
+      ...resourceDiscoveryContract.filter(({ method, path }) => !brokeredNativeChanges.has(`${method}:${path}`)),
+      ...brokeredNativeContract,
       ...publicProfilesContract,
     ].sort((left, right) => `${left.path}:${left.method}`.localeCompare(`${right.path}:${right.method}`))
 

@@ -31,7 +31,11 @@ export function createExternalResourceRepository(db: Database): ExternalResource
               ownerOrganizationId: sql<string | null>`${input.ownerOrganizationId}`.as('owner_organization_id'),
               externalSubject: sql<string>`${input.externalSubject}`.as('external_subject'),
               displayName: sql<string>`${input.displayName}`.as('display_name'),
-              encryptedTokens: sql<string>`${input.encryptedTokens}`.as('encrypted_tokens'),
+              credentialCustody: sql<'realmroot' | 'resource_server'>`${input.credentialCustody ?? 'realmroot'}`.as(
+                'credential_custody',
+              ),
+              encryptedTokens: sql<string | null>`${input.encryptedTokens}`.as('encrypted_tokens'),
+              brokerReference: sql<string | null>`${input.brokerReference ?? null}`.as('broker_reference'),
               grantedScopes: sql<string[]>`${JSON.stringify(input.grantedScopes)}`.as('granted_scopes'),
               authorizationDetails: sql<
                 typeof input.authorizationDetails
@@ -140,6 +144,9 @@ export function createExternalResourceRepository(db: Database): ExternalResource
                 typeof input.authorizationDetails
               >`${JSON.stringify(input.authorizationDetails)}`.as('authorization_details'),
               encryptedPkceVerifier: sql<string>`${input.encryptedPkceVerifier}`.as('encrypted_pkce_verifier'),
+              authorizationMode: sql<'oauth' | 'brokered'>`${input.authorizationMode ?? 'oauth'}`.as(
+                'authorization_mode',
+              ),
               clientGeneration: sql<number>`${input.clientGeneration ?? 1}`.as('client_generation'),
               returnTo: sql<string>`${input.returnTo}`.as('return_to'),
               status: sql<string>`${input.status}`.as('status'),

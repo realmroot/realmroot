@@ -510,7 +510,9 @@ export interface ResourceAccountConnectionRecord {
   ownerOrganizationId: string | null
   externalSubject: string
   displayName: string
-  encryptedTokens: string
+  credentialCustody?: 'realmroot' | 'resource_server'
+  encryptedTokens: string | null
+  brokerReference?: string | null
   grantedScopes: string[]
   authorizationDetails: AuthorizationDetail[]
   clientGeneration?: number
@@ -531,6 +533,7 @@ export interface ResourceConnectionIntentRecord {
   scopes: string[]
   authorizationDetails: AuthorizationDetail[]
   encryptedPkceVerifier: string
+  authorizationMode?: 'oauth' | 'brokered'
   clientGeneration?: number
   returnTo: string
   status: string
@@ -644,7 +647,9 @@ export interface ExternalResourceRepository {
     input: {
       externalSubject: string
       displayName: string
-      encryptedTokens: string
+      credentialCustody?: 'realmroot' | 'resource_server'
+      encryptedTokens: string | null
+      brokerReference?: string | null
       grantedScopes: string[]
       authorizationDetails: AuthorizationDetail[]
       clientGeneration?: number

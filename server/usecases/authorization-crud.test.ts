@@ -668,6 +668,7 @@ describe('authorization CRUD and assignment policy', () => {
     }
     const connectors = { findById: vi.fn().mockResolvedValue(connector) }
     const openApiFetch = resourceOpenApiFetch(resource.resourceUrl)
+    let brokeredNative = false
     const deps = {
       authorization,
       connectors,
@@ -679,6 +680,13 @@ describe('authorization CRUD and assignment policy', () => {
                   resource: resource.resourceUrl,
                   authorization_servers: [resource.resourceUrl],
                   scopes_supported: ['projects:read'],
+                  ...(brokeredNative
+                    ? {
+                        account_connection_modes_supported: ['brokered'],
+                        account_connection_authorization_endpoint: `${resource.resourceUrl}/account-connection-authorizations`,
+                        account_connection_token_endpoint: `${resource.resourceUrl}/account-connection-credentials`,
+                      }
+                    : {}),
                 }),
               )
             : openApiFetch(request),
@@ -724,7 +732,22 @@ describe('authorization CRUD and assignment policy', () => {
         ownerOrganizationId: organization.id,
         authorizationDetails: [{ type: 'project_access', project_id: 'project-1' }],
       }),
-    ).rejects.toThrow('Authorization details require an external API resource connector.')
+    ).rejects.toThrow('Authorization details require an external connector or brokered Native account connection.')
+    brokeredNative = true
+    await createResource(deps, {
+      identifier: 'brokered-native-rar',
+      resourceUrl: resource.resourceUrl,
+      ownerOrganizationId: organization.id,
+      authorizationDetails: [{ type: 'project_access', project_id: 'project-1' }],
+    })
+    expect(authorization.createResource).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        connectorId: null,
+        authorizationDetails: [{ type: 'project_access', project_id: 'project-1' }],
+        scopeRegistry: expect.objectContaining({ accountConnection: expect.objectContaining({ mode: 'brokered' }) }),
+      }),
+    )
+    brokeredNative = false
     await createResource(deps, {
       identifier: 'external',
       resourceUrl: resource.resourceUrl,
@@ -754,7 +777,7 @@ describe('authorization CRUD and assignment policy', () => {
       updateResource(deps, resource.id, {
         authorizationDetails: [{ type: 'project_access', project_id: 'project-1' }],
       }),
-    ).rejects.toThrow('Authorization details require an external API resource connector.')
+    ).rejects.toThrow('Authorization details require an external connector or brokered Native account connection.')
     authorization.findResource.mockResolvedValue({
       ...resource,
       connectorId: 'connector-1',

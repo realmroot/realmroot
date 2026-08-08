@@ -269,6 +269,73 @@ describe('external API resource authorization', () => {
     ).rejects.toThrow('deleted while completing the connection')
   })
 
+  it('[spec: agent-identity/brokered-native-account-connection] connects one brokered native account without storing provider tokens', async () => {
+    const deps = createTestDeps()
+    const native = {
+      ...resource(),
+      connectorId: null,
+      authorizationDetails: [{ type: 'github_installation' }],
+      scopeRegistry: {
+        ...resource().scopeRegistry!,
+        accountConnection: {
+          mode: 'brokered' as const,
+          authorizationEndpoint: 'https://adapter.example/github/account-connection-authorizations',
+          tokenEndpoint: 'https://adapter.example/github/account-connection-credentials',
+        },
+      },
+    }
+    vi.mocked(deps.authorization.findResource).mockResolvedValue(native)
+    let intent: ResourceConnectionIntentRecord | null = null
+    vi.mocked(deps.externalResources.createConnectionIntent).mockImplementation(async (record) => {
+      intent = record
+      return record
+    })
+    vi.mocked(deps.externalResources.consumeConnectionIntent).mockImplementation(async () => intent)
+    vi.mocked(deps.externalResources.createConnection).mockImplementation(async (record) => record)
+
+    const pending = await createResourceConnectionIntent(
+      deps,
+      native.id,
+      { owner: { type: 'user' }, scopes: ['projects:read'] },
+      'user-1',
+      'https://auth.example.com',
+      { issuer: 'https://auth.example.com/api/auth', sign: vi.fn(async () => 'signed-request-object') },
+    )
+    expect(new URL(pending.authorizationUrl).searchParams.get('request')).toBe('signed-request-object')
+    expect(intent).toMatchObject({ authorizationMode: 'brokered', ownerUserId: 'user-1' })
+
+    vi.mocked(deps.externalHttp.fetch).mockImplementation(async (request) => {
+      expect(request.url).toBe('https://adapter.example/github/account-connection-credentials')
+      const form = new URLSearchParams(await request.text())
+      expect(form.get('code')).toBe('adapter-code')
+      expect(form.get('code_verifier')).toBeTruthy()
+      return Response.json({
+        external_subject: 'github-user-7',
+        display_name: 'GitHub Controller',
+        broker_reference: 'connection-1',
+        scope: 'projects:read',
+        authorization_details: [
+          { type: 'github_installation', installation_id: '152097080', account_login: 'realmroot' },
+        ],
+      })
+    })
+
+    const connection = await completeResourceConnectionIntent(
+      deps,
+      { state: 'realmroot-state', code: 'adapter-code' },
+      'https://auth.example.com',
+    )
+    expect(connection).toMatchObject({
+      externalSubject: 'github-user-7',
+      authorizationDetails: [{ type: 'github_installation', installation_id: '152097080' }],
+    })
+    expect(vi.mocked(deps.externalResources.createConnection).mock.calls[0]?.[0]).toMatchObject({
+      credentialCustody: 'resource_server',
+      encryptedTokens: null,
+      brokerReference: 'connection-1',
+    })
+  })
+
   it('preserves a same-subject connection identity while switching only it to a new client generation', async () => {
     const deps = createTestDeps()
     authorizationDeps(deps)
