@@ -126,6 +126,7 @@ export function createApp(auth: AuthHandler, deps: Deps, config: AppConfig = {})
         agent_identity_issuer: issuer,
         agent_enrollment_endpoint: new URL('/api/agent/enrollments', issuer).toString(),
         agent_endpoint: new URL('/api/agent/status', issuer).toString(),
+        agentinfo_endpoint: publicAgentInfoEndpoint(issuer),
         agent_token_endpoint: `${issuer}/oauth2/token`,
         agent_bootstrap_scopes_supported: agentBootstrapScopes,
         agent_jwks_uri: `${issuer}/jwks`,
@@ -442,9 +443,14 @@ async function extendAgentOAuthMetadata(response: Response) {
         ]),
       ],
       dpop_signing_alg_values_supported: ['ES256', 'EdDSA'],
+      agentinfo_endpoint: publicAgentInfoEndpoint(issuer),
     },
     { status: response.status, headers },
   )
+}
+
+function publicAgentInfoEndpoint(issuer: string) {
+  return `${new URL(issuer).origin}/api/public/agents/{subject}`
 }
 
 function protectedResourceMetadata(config: AppConfig, requestUrl: string) {

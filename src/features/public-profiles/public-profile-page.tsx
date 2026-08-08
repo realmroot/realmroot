@@ -65,7 +65,6 @@ function PublicProfileShell({
           <RealmrootWordmark context="Profiles" />
         </Link>
         <nav aria-label="Public profile navigation">
-          <a href="/api/auth/.well-known/openid-configuration">OpenID configuration</a>
           <Button asChild size="sm" variant="outline">
             <Link to="/auth/sign-in">Sign in</Link>
           </Button>
@@ -191,7 +190,7 @@ function AgentOwner({ profile }: { profile: Extract<PublicAgentResponse, { view:
     <section className="publicProfileOwner">
       <h2>Owner</h2>
       {profile.owner.type === 'user' && profile.owner.username ? (
-        <Link params={{ username: profile.owner.username }} to="/users/$username">
+        <Link params={{ username: profile.owner.username }} to="/u/$username">
           {content}
         </Link>
       ) : (

@@ -46,6 +46,7 @@ describe('Public profile pages', () => {
     expect(screen.getByLabelText('Agent activity heatmap')).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Recent activity' })).toBeTruthy()
     expect(screen.getByText('Jane Stone')).toBeTruthy()
+    expect(screen.getByRole('link', { name: /Jane Stone/ }).getAttribute('href')).toBe('/u/jane')
   })
 
   it('renders empty User sections without an optional public presence block', async () => {

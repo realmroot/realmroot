@@ -53,6 +53,7 @@ describe('app.test 1', () => {
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toMatchObject({
       issuer: 'https://auth.example.com/api/auth',
+      agentinfo_endpoint: 'https://auth.example.com/api/public/agents/{subject}',
       grant_types_supported: [
         'authorization_code',
         'refresh_token',
@@ -129,6 +130,7 @@ describe('app.test 1', () => {
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toMatchObject({
       issuer: 'https://auth.example.com/api/auth',
+      agentinfo_endpoint: 'https://auth.example.com/api/public/agents/{subject}',
       userinfo_endpoint: 'https://auth.example.com/api/auth/oauth2/userinfo',
       end_session_endpoint: 'https://auth.example.com/api/auth/oauth2/end-session',
     })
@@ -173,6 +175,7 @@ describe('app.test 1', () => {
       agent_identity_issuer: 'https://tenant.example.net/api/auth',
       agent_endpoint: 'https://tenant.example.net/api/agent/status',
       agent_enrollment_endpoint: 'https://tenant.example.net/api/agent/enrollments',
+      agentinfo_endpoint: 'https://tenant.example.net/api/public/agents/{subject}',
       modes: ['delegated'],
       approval_methods: ['device_authorization'],
       endpoints: {

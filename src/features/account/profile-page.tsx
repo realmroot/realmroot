@@ -463,7 +463,7 @@ function ProfileSections({
               icon={<Globe2 size={18} />}
               meta={tt('Bio, location, and links shown on your public profile.')}
               title={tt('Public profile')}
-              value={profile.username ? `/users/${profile.username}` : tt('Set a username to publish')}
+              value={profile.username ? `/u/${profile.username}` : tt('Set a username to publish')}
             />
           </section>
         </>
