@@ -177,6 +177,7 @@ describe('app.test 1', () => {
       agent_identity_issuer: 'https://tenant.example.net/api/auth',
       agent_endpoint: 'https://tenant.example.net/api/agent/status',
       agent_enrollment_endpoint: 'https://tenant.example.net/api/agent/enrollments',
+      agentinfo_endpoint: 'https://tenant.example.net/api/public/agents/{subject}',
       modes: ['delegated'],
       approval_methods: ['device_authorization'],
       endpoints: {
@@ -184,7 +185,6 @@ describe('app.test 1', () => {
         status: 'https://tenant.example.net/api/auth/agent/status',
       },
     })
-    expect(metadata).not.toHaveProperty('agentinfo_endpoint')
     expect(getAgentConfiguration).toHaveBeenCalledWith({
       request: expect.any(Request),
       asResponse: false,

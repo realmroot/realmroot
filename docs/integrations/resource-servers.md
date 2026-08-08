@@ -136,9 +136,9 @@ JWKS:           REALMROOT_ORIGIN/api/auth/jwks
 Public profile: REALMROOT_ORIGIN/api/public/agents/{subject}
 ```
 
-OAuth authorization-server metadata publishes that template as
-`agentinfo_endpoint`. Replace `{subject}` with the URL-encoded, verified
-`act.sub` value.
+Agent configuration and OAuth authorization-server metadata publish that
+template as `agentinfo_endpoint`. Replace `{subject}` with the URL-encoded,
+verified `act.sub` value.
 
 For every protected request, require both headers:
 
