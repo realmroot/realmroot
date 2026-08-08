@@ -780,8 +780,27 @@ describe('authorization CRUD and assignment policy', () => {
     ).rejects.toThrow('Authorization details require an external connector or brokered Native account connection.')
     authorization.findResource.mockResolvedValue({
       ...resource,
+      authorizationDetails: [{ type: 'project_access', project_id: 'project-1' }],
+      scopeRegistry: {
+        ...resource.scopeRegistry!,
+        accountConnection: {
+          mode: 'brokered',
+          authorizationEndpoint: `${resource.resourceUrl}/account-connection-authorizations`,
+          tokenEndpoint: `${resource.resourceUrl}/account-connection-credentials`,
+        },
+      },
+    })
+    await expect(updateResource(deps, resource.id, { identifier: 'brokered-projects' })).resolves.toMatchObject({
+      id: resource.id,
+      scopeRegistry: expect.objectContaining({ accountConnection: expect.objectContaining({ mode: 'brokered' }) }),
+    })
+    authorization.findResource.mockResolvedValue({
+      ...resource,
       connectorId: 'connector-1',
       ownerOrganizationId: 'org_platform',
+    })
+    await expect(updateResource(deps, resource.id, { identifier: 'external-renamed' })).resolves.toMatchObject({
+      connectorId: 'connector-1',
     })
     await expect(
       updateResource(deps, resource.id, {
