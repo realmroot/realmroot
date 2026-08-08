@@ -740,6 +740,32 @@ describe('authorization CRUD and assignment policy', () => {
         authorizationDetails: [{ type: 'project_access', project_id: 'project-1' }],
       }),
     ).rejects.toThrow('Authorization details require external OAuth or brokered provider access.')
+    await expect(
+      createResource(deps, {
+        identifier: 'brokered-without-metadata',
+        resourceUrl: resource.resourceUrl,
+        accessMode: 'brokered',
+        connectorId: 'connector-1',
+        ownerOrganizationId: 'org_platform',
+      }),
+    ).rejects.toThrow('must advertise brokered account connection metadata')
+    await expect(
+      createResource(deps, {
+        identifier: 'external-without-connector',
+        resourceUrl: resource.resourceUrl,
+        accessMode: 'external_oauth',
+        ownerOrganizationId: 'org_platform',
+      }),
+    ).rejects.toThrow('External OAuth access requires a Provider Connector')
+    await expect(
+      createResource(deps, {
+        identifier: 'realmroot-with-connector',
+        resourceUrl: resource.resourceUrl,
+        accessMode: 'realmroot',
+        connectorId: 'connector-1',
+        ownerOrganizationId: 'org_platform',
+      }),
+    ).rejects.toThrow('Realmroot access cannot select a Provider Connector')
     brokeredNative = true
     await expect(
       createResource(deps, {
