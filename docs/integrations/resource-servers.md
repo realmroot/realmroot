@@ -91,7 +91,42 @@ An enabled Resource Server whose contract is temporarily unavailable remains vis
 to Agents with `availability.status: unavailable` and no requestable scopes; it does not
 block discovery of other resources. Access requests and token issuance still
 fail closed because Realmroot revalidates the selected resource contract. An
-administrator may save an unreachable resource only as a disabled draft.
+administrator cannot register an unreachable resource, including as a disabled
+draft, because disabled registrations must satisfy the same discovery contract.
+
+If registration, enablement, configuration change, or scope refresh fails, the
+management API returns every independently detectable issue in
+`error.details.checks`. Each check uses the stable requirement ID defined in the
+[Agent-native Resource Server Profile](./agent-native-resource-server-profile.md),
+plus `failed` or `blocked` status and a remediation message. The Console and
+Restish expose this same checklist; callers should use the ID for automation and
+the message for people.
+If the submitted representation itself omits or misformats multiple fields,
+`error.details.issues` likewise returns every schema issue with its field path
+and message in one response.
+
+```json
+{
+  "error": {
+    "code": "bad_request",
+    "message": "Resource Server does not satisfy the Realmroot integration profile.",
+    "details": {
+      "checks": [
+        {
+          "requirement": "RESOURCE-METADATA",
+          "status": "failed",
+          "message": "Protected resource metadata must advertise at least one valid scope."
+        },
+        {
+          "requirement": "API-OPENAPI",
+          "status": "blocked",
+          "message": "OpenAPI validation is blocked until API-SERVICE-DESC passes."
+        }
+      ]
+    }
+  }
+}
+```
 
 ## Native Authorization
 

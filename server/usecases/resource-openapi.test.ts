@@ -365,6 +365,17 @@ describe('business resource OpenAPI scope annotations', () => {
     )
   })
 
+  it('reports all independently invalid OpenAPI sections in one response', async () => {
+    const deps = createTestDeps()
+    vi.mocked(deps.externalHttp.fetch).mockResolvedValueOnce(
+      Response.json({ openapi: '2.0', info: null, components: null, paths: null }),
+    )
+
+    await expect(readResourceContractDocument(deps, 'https://orders.example.com/openapi.json')).rejects.toThrow(
+      'Business resource must publish an OpenAPI 3.x document.',
+    )
+  })
+
   it('requires OpenAPI info title and normalizes discovered display metadata', () => {
     expect(
       extractResourceInfo({

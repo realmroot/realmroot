@@ -103,6 +103,7 @@ async function requireRealmrootDpopAccess(request: Request, response: Response, 
       issuer: realmrootIssuer,
       audience: resource,
       typ: 'at+jwt',
+      algorithms: ['RS256'],
     })
     const proof = await verifyDpop(request, `${origin}${request.originalUrl}`, request.method)
     if ((verified.payload.cnf as { jkt?: string } | undefined)?.jkt !== proof.jkt) {
@@ -110,6 +111,9 @@ async function requireRealmrootDpopAccess(request: Request, response: Response, 
     }
     if (proof.payload.ath !== sha256Base64Url(token)) {
       throw oauthError('invalid_dpop_proof', 'DPoP ath is invalid.', 401)
+    }
+    if (!String(verified.payload.scope ?? '').split(/\s+/).includes('projects:read')) {
+      throw oauthError('insufficient_scope', 'OAuth scope "projects:read" is required.', 403)
     }
     response.locals.authorization = {
       sub: verified.payload.sub,

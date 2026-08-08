@@ -1,6 +1,9 @@
 import type { ConnectorRow } from '@server/adapters/repos/connectors'
 import type { Deps } from '@server/usecases/deps'
-import { validateExternalResourceConnector } from '@server/usecases/resource-connectors'
+import {
+  inspectExternalResourceConnector,
+  validateExternalResourceConnector,
+} from '@server/usecases/resource-connectors'
 import { describe, expect, it, vi } from 'vitest'
 
 const resourceUrl = 'https://api.example.com/v1?tenant=acme'
@@ -9,6 +12,91 @@ const jwtBearerGrant = 'urn:ietf:params:oauth:grant-type:jwt-bearer'
 const tokenExchangeGrant = 'urn:ietf:params:oauth:grant-type:token-exchange'
 
 describe('external resource connector validation', () => {
+  it('reports every independently detectable missing provider capability', async () => {
+    const deps = createDeps({
+      connector: connector({
+        authorizationEndpoint: null,
+        revocationEndpoint: null,
+        providerMetadata: {},
+      }),
+    })
+
+    const checks = await inspectExternalResourceConnector(deps, 'connector-1', [], {
+      sourceUrl: 'https://api.example.com/.well-known/oauth-protected-resource/v1',
+      resource: resourceUrl,
+      authorizationServers: [issuer],
+      scopesSupported: ['projects:read'],
+      etag: null,
+    })
+
+    expect(checks.map((item) => item.requirement)).toEqual(
+      expect.arrayContaining([
+        'AS-METADATA',
+        'OAUTH-CODE',
+        'OAUTH-REFRESH',
+        'OAUTH-PKCE',
+        'ACTOR-ASSERTION',
+        'TOKEN-EXCHANGE',
+        'DPOP',
+        'TOKEN-REVOCATION',
+      ]),
+    )
+  })
+
+  it('blocks authorization-server matching while protected resource metadata is unavailable', async () => {
+    const checks = await inspectExternalResourceConnector(createDeps(), 'connector-1', [], null)
+
+    expect(checks).toContainEqual({
+      requirement: 'AS-METADATA',
+      status: 'blocked',
+      message: 'Authorization server validation is blocked until RESOURCE-METADATA passes.',
+    })
+  })
+
+  it.each([
+    [
+      'pushed authorization request',
+      {
+        pushed_authorization_request_endpoint: 'http://remote.example.com/par',
+      },
+      'PUSHED-AUTHORIZATION',
+    ],
+    [
+      'authorization detail catalog',
+      {
+        pushed_authorization_request_endpoint: `${issuer}/par`,
+        authorization_details_catalog_endpoint: 'http://remote.example.com/authorization-details',
+        authorization_details_catalog_scope: 'authorization-details:read',
+        authorization_details_catalog_version: 1,
+      },
+      'AUTHORIZATION-CATALOG',
+    ],
+  ])('reports an unsafe %s endpoint', async (_label, metadataOverrides, requirement) => {
+    const deps = createDeps({
+      connector: connector({
+        providerMetadata: providerMetadata({
+          authorization_details_types_supported: ['project_access'],
+          ...metadataOverrides,
+        }),
+      }),
+    })
+
+    const checks = await inspectExternalResourceConnector(
+      deps,
+      'connector-1',
+      [{ type: 'project_access', actions: ['read'] }],
+      {
+        sourceUrl: 'https://api.example.com/.well-known/oauth-protected-resource/v1',
+        resource: resourceUrl,
+        authorizationServers: [issuer],
+        scopesSupported: ['projects:read'],
+        etag: null,
+      },
+    )
+
+    expect(checks).toContainEqual(expect.objectContaining({ requirement, status: 'failed' }))
+  })
+
   it('accepts a complete OIDC connector and preserves the resource path in metadata discovery', async () => {
     const deps = createDeps()
 
@@ -37,31 +125,39 @@ describe('external resource connector validation', () => {
   })
 
   it.each([
-    ['disabled', { enabled: false }],
-    ['client ID', { clientId: null }],
-    ['client secret', { clientSecret: null }],
-    ['issuer', { issuer: null }],
-  ])('rejects a connector without complete %s configuration', async (_label, overrides) => {
+    ['disabled', { enabled: false }, 'OIDC connector must be enabled.'],
+    ['client ID', { clientId: null }, 'OIDC connector is missing its client ID.'],
+    ['client secret', { clientSecret: null }, 'OIDC connector is missing its client secret.'],
+    ['issuer', { issuer: null }, 'OIDC connector is missing its issuer.'],
+  ])('rejects a connector without complete %s configuration', async (_label, overrides, message) => {
     const deps = createDeps({ connector: connector(overrides) })
 
     await expect(validateExternalResourceConnector(deps, resourceUrl, 'connector-1')).rejects.toMatchObject({
       status: 400,
-      message: 'OIDC connector must be enabled and have complete client credentials.',
+      message,
     })
   })
 
   it.each([
-    'authorizationEndpoint',
-    'tokenEndpoint',
-    'userInfoEndpoint',
-    'jwksEndpoint',
-    'revocationEndpoint',
-  ] as const)('rejects a connector without %s', async (field) => {
+    ['authorizationEndpoint', 'OIDC connector is missing its authorization endpoint.'],
+    ['tokenEndpoint', 'OIDC connector is missing its token endpoint.'],
+    ['userInfoEndpoint', 'OIDC connector is missing its UserInfo endpoint.'],
+    ['jwksEndpoint', 'OIDC connector is missing its JWKS endpoint.'],
+  ] as const)('rejects a connector without %s', async (field, message) => {
     const deps = createDeps({ connector: connector({ [field]: null }) })
 
     await expect(validateExternalResourceConnector(deps, resourceUrl, 'connector-1')).rejects.toMatchObject({
       status: 400,
-      message: 'OIDC connector is missing endpoints required for external API access.',
+      message,
+    })
+  })
+
+  it('requires a token revocation endpoint', async () => {
+    const deps = createDeps({ connector: connector({ revocationEndpoint: null }) })
+
+    await expect(validateExternalResourceConnector(deps, resourceUrl, 'connector-1')).rejects.toMatchObject({
+      status: 400,
+      message: 'OIDC connector must advertise a token revocation endpoint.',
     })
   })
 
@@ -167,7 +263,7 @@ describe('external resource connector validation', () => {
 
     await expect(validateExternalResourceConnector(deps, resourceUrl, 'connector-1')).rejects.toMatchObject({
       status: 400,
-      message: 'OIDC connector must advertise RFC 9449 DPoP support for external API access.',
+      message: 'OIDC connector must advertise ES256 for RFC 9449 DPoP.',
     })
   })
 
@@ -276,6 +372,8 @@ function protectedMetadata(overrides: Record<string, unknown> = {}) {
 function providerMetadata(overrides: Record<string, unknown> = {}) {
   return {
     grant_types_supported: ['authorization_code', 'refresh_token', jwtBearerGrant, tokenExchangeGrant],
+    code_challenge_methods_supported: ['S256'],
+    token_endpoint_auth_methods_supported: ['client_secret_basic'],
     dpop_signing_alg_values_supported: ['ES256'],
     ...overrides,
   }

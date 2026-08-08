@@ -217,6 +217,64 @@ describe('console API resources and roles', () => {
     )
   })
 
+  it('shows every failed Resource Server requirement after one submission [spec: agent-identity/api-resource-contract-validation]', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
+      const request = requestParts(input, init)
+      if (request.url === '/api/resource-servers' && request.method === 'POST') {
+        return jsonResponse(
+          {
+            error: {
+              code: 'bad_request',
+              message: 'Resource Server does not satisfy the Realmroot integration profile.',
+              details: {
+                checks: [
+                  {
+                    requirement: 'RESOURCE-METADATA',
+                    status: 'failed',
+                    message: 'Protected resource metadata is missing.',
+                  },
+                  {
+                    requirement: 'API-SERVICE-DESC',
+                    status: 'failed',
+                    message: 'A service-desc Link is required.',
+                  },
+                  {
+                    requirement: 'API-OPENAPI',
+                    status: 'blocked',
+                    message: 'OpenAPI validation is blocked until API-SERVICE-DESC passes.',
+                  },
+                ],
+              },
+            },
+          },
+          400,
+        )
+      }
+      if (request.url === '/api/resource-servers') {
+        return jsonResponse({ items: [], pagination: emptyPagination })
+      }
+      if (request.url === '/api/connectors') return jsonResponse({ connectors: [], pagination: emptyPagination })
+      if (request.url === '/api/organizations') {
+        return jsonResponse({ organizations: [organization], pagination })
+      }
+      throw new Error(`Unexpected request: ${request.method} ${request.url}`)
+    })
+
+    renderWithQuery(<ApiResourcesPage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'New resource server' }))
+    fireEvent.change(screen.getByLabelText('Identifier'), { target: { value: 'projects' } })
+    fireEvent.change(screen.getByLabelText('Protected resource URL'), {
+      target: { value: 'https://projects.example.com/api' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    const alert = await screen.findByRole('alert', { name: 'Resource Server requirements' })
+    expect(within(alert).getByText(/^RESOURCE-METADATA$/)).toBeTruthy()
+    expect(within(alert).getByText(/^API-SERVICE-DESC$/)).toBeTruthy()
+    expect(within(alert).getByText(/^API-OPENAPI$/)).toBeTruthy()
+    expect((screen.getByLabelText('Identifier') as HTMLInputElement).value).toBe('projects')
+  })
+
   it('filters active lifecycle states and creates a Resource server for selected Organizations', async () => {
     const betaOrganization = {
       ...organization,

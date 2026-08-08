@@ -51,6 +51,26 @@ Requirement values in the inventory are:
 - **MAY** — optional interoperability capability;
 - **—** — not required for that class.
 
+## Registration conformance report
+
+Realmroot validates the machine-checkable subset of this profile when a
+Resource Server is created (including a disabled registration), enabled, has
+its protected Resource URL or external authorization configuration changed, or
+has its scope registry refreshed. A failing management API response contains
+`error.details.checks`; every item carries the stable capability ID from this
+document, a `failed` or `blocked` status, and a complete remediation message.
+Realmroot runs independent discovery checks together, so one response reports
+all problems it can determine safely. `blocked` means a prerequisite failed —
+for example, `API-OPENAPI` cannot be inspected until `API-SERVICE-DESC` locates
+the document.
+
+The Console renders this array as a checklist. Restish receives the same array
+from the management API and can display or process the stable IDs without
+parsing prose. Registration checks prove discovery and advertised provider
+capabilities; token contents, DPoP proofs, replay prevention, scope enforcement,
+and provider policy remain runtime requirements that the Resource Server MUST
+enforce on every request.
+
 ## Normative capability inventory
 
 Stable capability IDs let provider reports and future conformance tests refer

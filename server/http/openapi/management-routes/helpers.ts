@@ -86,6 +86,8 @@ export {
   replaceDeveloperConsoleAccessPolicyRequestSchema,
   replaceEmailDeliveryConfigurationRequestSchema,
   replaceOrganizationCreationPolicyRequestSchema,
+  resourceServerConformanceErrorResponseSchema,
+  resourceServerMutationErrorResponseSchema,
   updateManagementAccountCenterSettingsRequestSchema,
   updateManagementBrandingSettingsRequestSchema,
   updateManagementConnectorRequestSchema,

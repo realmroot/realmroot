@@ -1,4 +1,4 @@
-import { badGateway, badRequest } from '@server/domain/errors'
+import { ApiError, badGateway, badRequest } from '@server/domain/errors'
 import type { Deps } from '@server/usecases/deps'
 import type { ResourceScopeRegistry } from '@shared/api/authorization'
 import { parse as parseYaml } from 'yaml'
@@ -67,7 +67,13 @@ export async function readResourceContract(
     'resource',
     'Business resource could not be reached during OpenAPI discovery.',
   )
-  if (!resourceResponse.ok) throw badRequest('Business resource discovery failed.')
+  if (!resourceResponse.ok) {
+    throw new ApiError(400, 'bad_request', 'Business resource discovery failed.', {
+      stage: 'resource',
+      url: resourceUrl,
+      status: resourceResponse.status,
+    })
+  }
   const documentUrl = serviceDescriptionUrl(resourceResponse.headers.get('link'), resourceUrl)
   return readResourceContractDocument(deps, documentUrl, previousRegistry)
 }
@@ -91,13 +97,22 @@ export async function readResourceContractDocument(
     'Business resource OpenAPI document could not be reached.',
   )
   if (documentResponse.status === 304) return null
-  if (!documentResponse.ok) throw badRequest('Business resource OpenAPI discovery failed.')
+  if (!documentResponse.ok) {
+    throw new ApiError(400, 'bad_request', 'Business resource OpenAPI discovery failed.', {
+      stage: 'openapi_document',
+      url: documentUrl,
+      status: documentResponse.status,
+    })
+  }
 
   const source = await documentResponse.text()
   const document = parseDocument(source, documentResponse.headers.get('content-type'))
-  const info = extractResourceInfo(document)
-  const scopes = extractResourceScopes(document)
-  const operations = extractProtectedOperations(document)
+  const issues: string[] = []
+  const info = inspectDocumentSection(() => extractResourceInfo(document), issues)
+  const scopes = inspectDocumentSection(() => extractResourceScopes(document), issues)
+  const operations = inspectDocumentSection(() => extractProtectedOperations(document), issues)
+  if (issues.length) throw badRequest([...new Set(issues)].join(' '))
+  if (!info || !scopes || !operations) throw new Error('Validated OpenAPI document has incomplete inspection results.')
   return {
     sourceUrl: documentUrl,
     etag: documentResponse.headers.get('etag'),
@@ -105,6 +120,16 @@ export async function readResourceContractDocument(
     ...info,
     scopes,
     operations,
+  }
+}
+
+function inspectDocumentSection<T>(inspect: () => T, issues: string[]): T | null {
+  try {
+    return inspect()
+  } catch (error) {
+    if (!(error instanceof ApiError)) throw error
+    issues.push(error.message)
+    return null
   }
 }
 

@@ -8,6 +8,7 @@ import {
 } from '@shared/api/authorization'
 import { authorizationDetailsSchema } from '@shared/api/authorization-details'
 import type { ConnectorResponse } from '@shared/api/connectors'
+import { type ResourceServerConformanceCheck, resourceServerConformanceCheckSchema } from '@shared/api/management'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { ArrowLeft, Plus, RotateCw } from 'lucide-react'
@@ -33,6 +34,7 @@ import { ListToolbar, navigateConsoleTab, ResourcePage } from '@/features/manage
 import type { ApiResourceDetailSection, FormState } from '@/features/management/shared'
 import { emptyForm } from '@/features/management/shared'
 import { formatDate, parseForm, setValue, useAdminMutation } from '@/features/management/utils'
+import { ApiRequestError } from '@/lib/api'
 import {
   consoleQueryKeys,
   createApiResource,
@@ -107,6 +109,7 @@ export function ApiResourcesPage({ organizationId }: { organizationId?: string }
           defaultOwnerOrganizationId={organizationId}
           fixedOwnerOrganizationId={organizationId}
           error={createMutation.errorMessage}
+          failure={createMutation.error}
           key={organizationId ?? 'realm'}
           onClose={() => setDialogOpen(false)}
           onSubmit={createMutation.mutate}
@@ -259,6 +262,7 @@ function ApiResourceCreateDialog({
   defaultOwnerOrganizationId,
   fixedOwnerOrganizationId,
   error,
+  failure,
   onClose,
   onSubmit,
   open,
@@ -269,6 +273,7 @@ function ApiResourceCreateDialog({
   defaultOwnerOrganizationId?: string
   fixedOwnerOrganizationId?: string
   error: string | null
+  failure: Error | null
   onClose: () => void
   onSubmit: (input: Parameters<typeof createApiResource>[0]) => void
   open: boolean
@@ -281,6 +286,7 @@ function ApiResourceCreateDialog({
   const [availableToAgents, setAvailableToAgents] = useState(true)
   const [authorizationDetails, setAuthorizationDetails] = useState('[]')
   const [validationError, setValidationError] = useState<string | null>(null)
+  const checks = conformanceChecks(failure)
   useEffect(() => {
     if (!open || ownerOrganizationId) return
     setOwnerOrganizationId(fixedOwnerOrganizationId ?? defaultOwnerOrganizationId ?? organizations[0]?.id ?? '')
@@ -289,7 +295,7 @@ function ApiResourceCreateDialog({
     <Dialog open={open}>
       <FormDialog
         description={tt('Register a protected API and choose how its actors become eligible for authority.')}
-        error={validationError ?? error}
+        error={validationError ?? (checks.length ? null : error)}
         onClose={onClose}
         onSubmit={(event) => {
           event.preventDefault()
@@ -311,6 +317,7 @@ function ApiResourceCreateDialog({
         pending={pending}
         title={tt('New resource server')}
       >
+        <ResourceServerConformanceIssues checks={checks} />
         <Field label={tt('Identifier')}>
           <TextInput
             name="identifier"
@@ -510,6 +517,9 @@ export function ApiResourceDetailPage({
             </span>
           </div>
         </header>
+        <ResourceServerConformanceIssues
+          checks={conformanceChecks(refreshScopesMutation.error ?? updateMutation.error)}
+        />
         <Tabs
           onValueChange={(value) => {
             const next = value as ApiResourceDetailSection
@@ -793,6 +803,37 @@ function ScopeRequirements({ scopeSets }: { scopeSets: string[][] }) {
       ))}
     </div>
   )
+}
+
+function ResourceServerConformanceIssues({ checks }: { checks: ResourceServerConformanceCheck[] }) {
+  if (!checks.length) return null
+  return (
+    <section
+      aria-label={tt('Resource Server requirements')}
+      className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm"
+      role="alert"
+    >
+      <p className="font-medium text-destructive">{tt('Resource Server requirements are incomplete')}</p>
+      <ul className="mt-2 list-disc space-y-1 pl-5">
+        {checks.map((item) => (
+          <li key={`${item.requirement}:${item.status}:${item.message}`}>
+            <code>{item.requirement}</code> — {tt(item.message)}
+            {item.status === 'blocked' ? ` (${tt('blocked')})` : null}
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+}
+
+function conformanceChecks(error: Error | null): ResourceServerConformanceCheck[] {
+  if (!(error instanceof ApiRequestError)) return []
+  const checks = error.details?.checks
+  if (!Array.isArray(checks)) return []
+  return checks.flatMap((item) => {
+    const parsed = resourceServerConformanceCheckSchema.safeParse(item)
+    return parsed.success ? [parsed.data] : []
+  })
 }
 
 function ResourceSettings({

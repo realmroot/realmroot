@@ -1,4 +1,4 @@
-import { badRequest } from '@server/domain/errors'
+import { ApiError, badRequest } from '@server/domain/errors'
 import type { Context } from 'hono'
 import type { z } from 'zod'
 
@@ -22,7 +22,16 @@ function parse<T extends z.ZodType>(schema: T, value: unknown): z.infer<T> {
   const result = schema.safeParse(value)
 
   if (!result.success) {
-    throw badRequest(result.error.issues[0]?.message ?? 'Invalid request.')
+    const issues = result.error.issues.map((issue) => ({
+      path: issue.path.map(String).join('.'),
+      message: issue.message,
+    }))
+    throw new ApiError(
+      400,
+      'bad_request',
+      issues.map((issue) => (issue.path ? `${issue.path}: ${issue.message}` : issue.message)).join(' '),
+      { issues },
+    )
   }
 
   return result.data

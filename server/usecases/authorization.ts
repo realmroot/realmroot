@@ -10,15 +10,14 @@ import { type AuthorizationTokenClaimInput, createId, toTokenClaims } from '@ser
 import { refreshDynamicConnectorMetadata } from '@server/usecases/connectors'
 import type { Deps } from '@server/usecases/deps'
 import { resolveOrganizationMembershipScopes } from '@server/usecases/organization-membership-scopes'
-import { validateExternalResourceConnector } from '@server/usecases/resource-connectors'
-import { readProtectedResourceMetadata, synchronizeResourceDiscovery } from '@server/usecases/resource-metadata'
+import { buildResourceDiscovery } from '@server/usecases/resource-metadata'
 import {
   projectResourceOperations,
   readResourceContract,
   readResourceContractDocument,
   validateRequestedScopes,
-  validateResourceUrl,
 } from '@server/usecases/resource-openapi'
+import { requireResourceServerConformance } from '@server/usecases/resource-server-conformance'
 import { activeResourceVisibleToOrganization } from '@server/usecases/resource-visibility'
 
 export type { AuthorizationTokenClaimInput } from '@server/usecases/authorization-utils'
@@ -204,36 +203,20 @@ export async function createResource(deps: Deps, input: CreateApiResourceRequest
     throw badRequest('External Resource Servers must be owned by the built-in platform Organization.')
   }
   await requireActiveOrganization(deps, ownerOrganizationId)
-  validateResourceUrl(input.resourceUrl)
-  const protectedMetadata = input.connectorId
-    ? await validateExternalResourceConnector(
-        deps,
-        input.resourceUrl,
-        input.connectorId,
-        input.authorizationDetails ?? [],
-      )
-    : null
-  if (!input.connectorId && (input.authorizationDetails?.length ?? 0) > 0) {
-    throw badRequest('Authorization details require an external API resource connector.')
-  }
-  const synchronized = enabled
-    ? await synchronizeResourceDiscovery(
-        deps,
-        input.resourceUrl,
-        null,
-        protectedMetadata ?? (await readProtectedResourceMetadata(deps, input.resourceUrl)),
-      )
-    : null
-  const contract = synchronized ?? (await readResourceContract(deps, input.resourceUrl))
-  if (!contract) throw new Error('Unconditional Resource Server contract read returned no document.')
-  return deps.authorization.createResource({
-    id: createId('res'),
-    identifier: input.identifier,
-    name: contract.name,
+  const conformance = await requireResourceServerConformance(deps, {
     resourceUrl: input.resourceUrl,
     connectorId: input.connectorId ?? null,
     authorizationDetails: input.authorizationDetails ?? [],
-    description: contract.description,
+  })
+  const synchronized = enabled ? await buildResourceDiscovery(conformance.metadata, conformance.contract, null) : null
+  return deps.authorization.createResource({
+    id: createId('res'),
+    identifier: input.identifier,
+    name: conformance.contract.name,
+    resourceUrl: input.resourceUrl,
+    connectorId: input.connectorId ?? null,
+    authorizationDetails: input.authorizationDetails ?? [],
+    description: conformance.contract.description,
     enabled,
     ownerOrganizationId,
     visibility: input.visibility ?? 'private',
@@ -354,18 +337,15 @@ export async function refreshResourceScopeRegistry(deps: Deps, id: string) {
     return getResource(deps, id)
   }
   try {
-    const metadata = await readProtectedResourceMetadata(deps, resource.resourceUrl)
     if (resource.connectorId) {
       await refreshDynamicConnectorMetadata(deps, resource.connectorId)
-      await validateExternalResourceConnector(
-        deps,
-        resource.resourceUrl,
-        resource.connectorId,
-        resource.authorizationDetails,
-        metadata,
-      )
     }
-    const discovery = await synchronizeResourceDiscovery(deps, resource.resourceUrl, resource.scopeRegistry, metadata)
+    const conformance = await requireResourceServerConformance(deps, {
+      resourceUrl: resource.resourceUrl,
+      connectorId: resource.connectorId,
+      authorizationDetails: resource.authorizationDetails,
+    })
+    const discovery = await buildResourceDiscovery(conformance.metadata, conformance.contract, resource.scopeRegistry)
     if (!(await deps.authorization.replaceResourceDiscovery(id, discovery))) {
       throw badRequest('Resource Server is no longer active.')
     }
@@ -407,7 +387,6 @@ function synchronizationError(error: unknown) {
 export async function updateResource(deps: Deps, id: string, input: UpdateApiResourceRequest) {
   const resource = await getResource(deps, id)
   if (isRealmrootResourceServer(id)) throw badRequest('The Realmroot Resource Server is system-managed.')
-  if (input.resourceUrl !== undefined) validateResourceUrl(input.resourceUrl)
   if (input.ownerOrganizationId) await requireActiveOrganization(deps, input.ownerOrganizationId)
   if (input.connectorId !== undefined && (input.connectorId === null) !== (resource.connectorId === null)) {
     throw badRequest('API resource authorization mode cannot change after creation.')
@@ -422,20 +401,16 @@ export async function updateResource(deps: Deps, id: string, input: UpdateApiRes
   const enabled = input.enabled ?? resource.enabled
   const boundaryChanged =
     input.connectorId !== undefined || input.resourceUrl !== undefined || input.authorizationDetails !== undefined
-  const protectedMetadata =
-    connectorId && (boundaryChanged || input.enabled === true)
-      ? await validateExternalResourceConnector(deps, resourceUrl, connectorId, authorizationDetails)
-      : null
-  if (!connectorId && authorizationDetails.length > 0) {
-    throw badRequest('Authorization details require an external API resource connector.')
-  }
   const shouldSynchronize = enabled && (input.enabled === true || input.resourceUrl !== undefined)
+  const shouldValidate = boundaryChanged || input.enabled === true
+  const conformance = shouldValidate
+    ? await requireResourceServerConformance(deps, { resourceUrl, connectorId, authorizationDetails })
+    : null
   const synchronized = shouldSynchronize
-    ? await synchronizeResourceDiscovery(
-        deps,
-        resourceUrl,
+    ? await buildResourceDiscovery(
+        conformance!.metadata,
+        conformance!.contract,
         input.resourceUrl ? null : resource.scopeRegistry,
-        protectedMetadata ?? (await readProtectedResourceMetadata(deps, resourceUrl)),
       )
     : null
   const scopeRegistry = input.scopeGrantModes
