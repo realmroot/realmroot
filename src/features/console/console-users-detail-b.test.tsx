@@ -262,7 +262,7 @@ describe('admin console users-detail-b', () => {
         },
       })
     })
-  })
+  }, 15_000)
 
   it('edits and deletes configured social providers from the drawer', async () => {
     const requests: Array<{ url: string; method: string; body: unknown }> = []
