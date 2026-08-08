@@ -1,7 +1,7 @@
 # Realmroot complete product layouts
 
 This interactive artifact applies the selected **C · Clear Aqua** design system
-to Realmroot's three user-facing surfaces.
+to Realmroot's four user-facing surfaces.
 
 - Console: separate Realm and Organization contexts plus application, user,
   organization, Agent, Resource server, and role detail layouts.
@@ -9,6 +9,29 @@ to Realmroot's three user-facing surfaces.
   journeys.
 - Account Center: overview, profile, sign-in and security, applications,
   delegated Agents, authorization activity, and organization management.
+- Public Profiles: externally browsable User and Agent identity pages with
+  verifiable public claims and privacy-conscious information boundaries.
+
+Public User profiles use only display-safe identity fields and activity attributed
+to the User as controller. Public Agent profiles map identity to the current
+AgentInfo contract and activity to the stable Agent identity. Both variants use a
+GitHub-inspired annual heatmap and a recent activity timeline. Private activity
+may contribute anonymized counts, but never exposes its Resource, grant, scope,
+Host, controller, or authorization details. AgentInfo remains display metadata,
+never an authentication or authorization decision.
+
+The User profile intentionally focuses on Public Agents and Recent activity; the
+streak overview and annual heatmap are reserved for Agent profiles. The User
+mockup also explores an opt-in public “Links & identities” projection.
+The current linked-account record only contains `providerId` and `accountId`,
+and the current User profile has no website field. Production support therefore
+needs explicit public link metadata and a safe provider profile URL/display-name
+projection; credentials and provider tokens must never enter the public model.
+
+The Agent Owner link and the User's Public Agents section are also proposed
+public projections rather than fields in AgentInfo. Publishing ownership must
+be explicit and must not expose or imply the Agent's controller, Host, grants,
+scopes, or current authorization state.
 
 Open `index.html` directly or serve the repository and visit
 `/design/product-layouts/`.
