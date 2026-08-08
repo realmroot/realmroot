@@ -131,6 +131,7 @@ export function createUserRepository(db: Database): UserRepository {
 
       await assertAccountAvatarReference(db, userId, input.avatarAssetId)
       await findUser(db, userId)
+      await assertPublicLinkedAccounts(db, userId, input.links)
       const identityUpdate = profileUpdate(input)
       const publicUpdate = publicProfileUpdate(input)
       const statements: BatchItem<'sqlite'>[] = []
@@ -391,13 +392,48 @@ function publicProfileUpdate(input: AccountProfileUpdateInput) {
 
 async function loadPublicProfile(db: Database, profile: UserProfile) {
   const [details] = await db.select().from(userProfile).where(eq(userProfile.userId, profile.id)).limit(1)
+  const links = details?.links ?? []
+  const linkedAccountIds = links.flatMap((link) => (link.type === 'linked-account' ? [link.accountId] : []))
+  const linkedAccounts =
+    linkedAccountIds.length > 0
+      ? await db
+          .select({ id: account.id, providerId: account.providerId })
+          .from(account)
+          .where(and(eq(account.userId, profile.id), inArray(account.id, linkedAccountIds)))
+      : []
+  const availableAccounts = new Map(linkedAccounts.map((linkedAccount) => [linkedAccount.id, linkedAccount.providerId]))
   return {
     user: profile,
     bio: details?.bio ?? null,
     location: details?.location ?? null,
-    links: details?.links ?? [],
+    links: links.filter(
+      (link) =>
+        link.type === 'website' ||
+        (availableAccounts.get(link.accountId) === link.providerId && link.providerId !== 'credential'),
+    ),
     profileUpdatedAt: details?.updatedAt ?? null,
   }
+}
+
+async function assertPublicLinkedAccounts(db: Database, userId: string, links: AccountProfileUpdateInput['links']) {
+  if (!links) return
+  const projections = links.filter((link) => link.type === 'linked-account')
+  if (projections.length === 0) return
+  if (new Set(projections.map((link) => link.accountId)).size !== projections.length) {
+    throw badRequest('A linked account can appear only once on a public profile.')
+  }
+
+  const accountIds = projections.map((link) => link.accountId)
+  const rows = await db
+    .select({ id: account.id, providerId: account.providerId })
+    .from(account)
+    .where(and(eq(account.userId, userId), inArray(account.id, accountIds)))
+  const providers = new Map(rows.map((row) => [row.id, row.providerId]))
+  const invalid = projections.some(
+    (projection) =>
+      projection.providerId === 'credential' || providers.get(projection.accountId) !== projection.providerId,
+  )
+  if (invalid) throw badRequest('A public linked account must belong to the current user and match its provider.')
 }
 
 function mapUser(row: typeof user.$inferSelect): UserProfile {

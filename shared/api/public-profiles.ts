@@ -8,14 +8,29 @@ export const publicProfileQuerySchema = z.object({
   view: publicProfileViewSchema,
 })
 
-export const publicProfileLinkSchema = z.object({
-  type: z.enum(['website', 'social']),
+const publicProfileLinkBaseSchema = z.object({
   label: z.string().trim().min(1).max(40),
-  url: z.url(),
+  url: z.url({ protocol: /^https$/ }),
 })
 
+export const publicProfileLinkSchema = z.discriminatedUnion('type', [
+  publicProfileLinkBaseSchema.extend({ type: z.literal('website') }),
+  publicProfileLinkBaseSchema.extend({
+    type: z.literal('linked-account'),
+    providerId: z.string().trim().min(1).max(100),
+  }),
+])
+
+export const accountProfileLinkSchema = z.discriminatedUnion('type', [
+  publicProfileLinkBaseSchema.extend({ type: z.literal('website') }),
+  publicProfileLinkBaseSchema.extend({
+    type: z.literal('linked-account'),
+    accountId: z.string().trim().min(1),
+    providerId: z.string().trim().min(1).max(100),
+  }),
+])
+
 export const publicActivitySchema = z.object({
-  id: z.string(),
   action: z.string(),
   title: z.string(),
   description: z.string(),
@@ -106,6 +121,7 @@ export const publicAgentResponseSchema = z.discriminatedUnion('view', [
 ])
 
 export type PublicProfileLink = z.infer<typeof publicProfileLinkSchema>
+export type AccountProfileLink = z.infer<typeof accountProfileLinkSchema>
 export type PublicProfileView = z.infer<typeof publicProfileViewSchema>
 export type PublicActivity = z.infer<typeof publicActivitySchema>
 export type PublicActivityOverview = z.infer<typeof publicActivityOverviewSchema>

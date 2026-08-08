@@ -14,8 +14,8 @@ to Realmroot's four user-facing surfaces.
 
 Public User profiles use only display-safe identity fields and activity attributed
 to the User as controller. Public Agent profiles map identity and activity to the
-stable Agent subject. Both variants use a
-GitHub-inspired annual heatmap and a recent activity timeline. Private activity
+stable Agent subject. Agent profiles use a GitHub-inspired annual heatmap, and
+both variants use a recent activity timeline. Private activity
 may contribute anonymized counts, but never exposes its Resource, grant, scope,
 Host, controller, or authorization details. Public profiles remain display metadata,
 never an authentication or authorization decision.
@@ -23,10 +23,12 @@ never an authentication or authorization decision.
 The User profile intentionally focuses on Public Agents and Recent activity; the
 streak overview and annual heatmap are reserved for Agent profiles. The User
 mockup also explores an opt-in public “Links & identities” projection.
-The current linked-account record only contains `providerId` and `accountId`,
-and the current User profile has no website field. Production support therefore
-needs explicit public link metadata and a safe provider profile URL/display-name
-projection; credentials and provider tokens must never enter the public model.
+Production stores opt-in website and linked-account projections in the User
+profile's bounded JSON links field. A linked-account projection references a
+currently linked account internally, requires an explicit HTTPS profile URL, and
+omits the internal account reference publicly. Credentials, provider account IDs,
+and provider tokens never enter the public model; unlinking an account removes its
+projection from subsequent public reads.
 
 The Agent Owner link and the User's Public Agents section are public projections.
 Publishing ownership must

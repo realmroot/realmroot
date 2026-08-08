@@ -20,6 +20,7 @@ export function createAgentAuditRepository(db: Database): AgentAuditRepository {
           : undefined,
       )
       const condition = and(
+        filter?.actions ? inArray(agentAuditEvent.action, filter.actions) : undefined,
         filter?.agentIdentityId ? eq(agentAuditEvent.agentIdentityId, filter.agentIdentityId) : undefined,
         tenantCondition,
       )

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { HttpResponse, http } from 'msw'
 import { setupServer } from 'msw/node'
 import type { ReactNode } from 'react'
@@ -35,6 +35,7 @@ describe('Public profile pages', () => {
     expect(screen.getByRole('heading', { name: 'Recent activity' })).toBeTruthy()
     expect(screen.queryByRole('heading', { name: 'Activity overview' })).toBeNull()
     expect(screen.queryByLabelText('Agent activity heatmap')).toBeNull()
+    expect(screen.getByRole('link', { name: /GitHub/ }).getAttribute('href')).toBe('https://github.com/jane')
   })
 
   it('shows overview, heatmap, and recent activity on the Agent profile', async () => {
@@ -45,6 +46,118 @@ describe('Public profile pages', () => {
     expect(screen.getByLabelText('Agent activity heatmap')).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Recent activity' })).toBeTruthy()
     expect(screen.getByText('Jane Stone')).toBeTruthy()
+  })
+
+  it('renders empty User sections without an optional public presence block', async () => {
+    server.use(
+      http.get('/api/public/users/empty', () =>
+        HttpResponse.json({
+          ...userProfile,
+          username: 'empty',
+          bio: null,
+          location: null,
+          links: [],
+          agentCount: 0,
+          agents: [],
+          recentActivity: [],
+        }),
+      ),
+    )
+
+    renderProfile(<PublicUserProfilePage username="empty" />)
+
+    expect(await screen.findByText('No public Agents yet.')).toBeTruthy()
+    expect(screen.getByText('No public activity yet.')).toBeTruthy()
+    expect(screen.queryByRole('heading', { name: 'Links & identities' })).toBeNull()
+  })
+
+  it('renders organization ownership, no current streak, pictures, and every heatmap intensity', async () => {
+    const today = new Date().toISOString().slice(0, 10)
+    server.use(
+      http.get('/api/public/agents/agt_org', () =>
+        HttpResponse.json({
+          ...agentProfile,
+          subject: 'agt_org',
+          picture: 'https://identity.example.com/api/assets/agent-avatar',
+          updatedAt: new Date().toISOString(),
+          owner: {
+            type: 'organization',
+            id: 'org-1',
+            slug: 'builders',
+            displayName: 'Builders',
+            picture: 'https://identity.example.com/api/assets/org-avatar',
+          },
+          activity: { total: 19, activeDays: 4, currentStreak: 0, longestStreak: 4 },
+          activityDays: [
+            { date: today, count: 1 },
+            { date: offsetUtcDate(today, -1), count: 3 },
+            { date: offsetUtcDate(today, -2), count: 6 },
+            { date: offsetUtcDate(today, -3), count: 10 },
+          ],
+          recentActivity: [],
+        }),
+      ),
+    )
+
+    renderProfile(<PublicAgentProfilePage subject="agt_org" />)
+
+    expect(await screen.findByText('Builders')).toBeTruthy()
+    expect(screen.getByText('No active streak')).toBeTruthy()
+    expect(screen.getByText('No public activity yet.')).toBeTruthy()
+    expect(screen.getByText('Today')).toBeTruthy()
+    expect(document.querySelectorAll('.heatLevel4').length).toBeGreaterThan(1)
+    expect(screen.queryByRole('link', { name: /Builders/ })).toBeNull()
+  })
+
+  it('renders a User owner without a public username as non-navigable', async () => {
+    server.use(
+      http.get('/api/public/agents/agt_private_owner', () =>
+        HttpResponse.json({
+          ...agentProfile,
+          subject: 'agt_private_owner',
+          owner: { ...agentProfile.owner, username: null },
+        }),
+      ),
+    )
+
+    renderProfile(<PublicAgentProfilePage subject="agt_private_owner" />)
+
+    expect(await screen.findByText('Jane Stone')).toBeTruthy()
+    expect(screen.queryByRole('link', { name: /Jane Stone/ })).toBeNull()
+  })
+
+  it('shows not found only for a 404 response', async () => {
+    server.use(http.get('/api/public/users/missing', () => HttpResponse.json({ error: 'missing' }, { status: 404 })))
+
+    renderProfile(<PublicUserProfilePage username="missing" />)
+
+    expect(await screen.findByRole('heading', { name: 'User profile not found' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull()
+  })
+
+  it('shows a retryable load failure for server and protocol errors', async () => {
+    let attempts = 0
+    server.use(
+      http.get('/api/public/users/retry', () => {
+        attempts += 1
+        return attempts === 1
+          ? HttpResponse.json({ error: 'unavailable' }, { status: 503 })
+          : HttpResponse.json(userProfile)
+      }),
+    )
+
+    renderProfile(<PublicUserProfilePage username="retry" />)
+    expect(await screen.findByRole('heading', { name: 'Unable to load User profile' })).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+
+    expect(await screen.findByRole('heading', { name: 'Jane Stone' })).toBeTruthy()
+    expect(attempts).toBe(2)
+
+    cleanup()
+    server.use(http.get('/api/public/agents/broken', () => HttpResponse.json({ type: 'agent', view: 'full' })))
+    renderProfile(<PublicAgentProfilePage subject="broken" />)
+    expect(await screen.findByRole('heading', { name: 'Unable to load Agent profile' })).toBeTruthy()
   })
 })
 
@@ -74,7 +187,10 @@ const userProfile = {
   updatedAt: '2026-08-07T12:00:00.000Z',
   bio: 'Building useful Agents.',
   location: 'Toronto',
-  links: [{ type: 'website', label: 'Website', url: 'https://jane.example.com' }],
+  links: [
+    { type: 'website', label: 'Website', url: 'https://jane.example.com' },
+    { type: 'linked-account', providerId: 'github', label: 'GitHub', url: 'https://github.com/jane' },
+  ],
   agentCount: 1,
   agents: [
     {
@@ -102,3 +218,9 @@ const agentProfile = {
   activityDays: [{ date: '2026-08-07', count: 2 }],
   recentActivity: commonActivity,
 } as const
+
+function offsetUtcDate(value: string, days: number) {
+  const date = new Date(`${value}T00:00:00.000Z`)
+  date.setUTCDate(date.getUTCDate() + days)
+  return date.toISOString().slice(0, 10)
+}

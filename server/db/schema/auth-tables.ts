@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm'
 import { index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
-import type { PublicProfileLink } from '../../../shared/api/public-profiles'
+import type { AccountProfileLink } from '../../../shared/api/public-profiles'
 
 export const user = sqliteTable('user', {
   id: text('id').primaryKey(),
@@ -31,7 +31,7 @@ export const userProfile = sqliteTable('user_profile', {
     .references(() => user.id, { onDelete: 'cascade' }),
   bio: text('bio'),
   location: text('location'),
-  links: text('links', { mode: 'json' }).$type<PublicProfileLink[]>().notNull().default([]),
+  links: text('links', { mode: 'json' }).$type<AccountProfileLink[]>().notNull().default([]),
   createdAt: integer('created_at', { mode: 'timestamp_ms' })
     .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
     .notNull(),

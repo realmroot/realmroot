@@ -234,6 +234,9 @@ function profile() {
     username: 'jane',
     avatarAssetId: null,
     image: null,
+    bio: null,
+    location: null,
+    links: [],
     role: 'user',
   }
 }

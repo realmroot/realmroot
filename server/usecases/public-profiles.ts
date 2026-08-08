@@ -2,6 +2,7 @@ import { notFound } from '@server/domain/errors'
 import type { Deps } from '@server/usecases/deps'
 import type { AgentAuditEventRecord, AgentIdentityRecord } from '@server/usecases/ports'
 import type {
+  AccountProfileLink,
   PublicActivity,
   PublicActivityDay,
   PublicActivityOverview,
@@ -35,6 +36,7 @@ const publicActivityCopy: Record<string, { title: string; description: string }>
     description: 'An installation was removed from the stable Agent identity.',
   },
 }
+const publicActivityActions = Object.keys(publicActivityCopy)
 
 export async function getPublicUserProfile(
   deps: Deps,
@@ -58,14 +60,17 @@ export async function getPublicUserProfile(
 
   const [identities, activity] = await Promise.all([
     deps.agentIdentities.listOwned({ ownerUserId: profile.user.id }, { limit: publicAgentLimit, offset: 0 }),
-    deps.agentAudit.list({ limit: 30, offset: 0 }, { ownerUserId: profile.user.id }),
+    deps.agentAudit.list(
+      { limit: recentActivityLimit, offset: 0 },
+      { actions: publicActivityActions, ownerUserId: profile.user.id },
+    ),
   ])
   return {
     ...base,
     view,
     bio: profile.bio,
     location: profile.location,
-    links: profile.links,
+    links: profile.links.map(publicLink),
     agentCount: identities.total,
     agents: identities.items.map(({ identity }) => agentSummary(identity)),
     recentActivity: sanitizeRecentActivity(activity.items),
@@ -77,6 +82,7 @@ export async function getPublicAgentProfile(
   issuer: string,
   subject: string,
   view: PublicProfileView,
+  now = new Date(),
 ): Promise<PublicAgentResponse> {
   const identity = await deps.agentIdentities.findByIssuerSubject(issuer, subject)
   if (!identity) throw notFound('Public Agent profile was not found.')
@@ -88,17 +94,20 @@ export async function getPublicAgentProfile(
   }
   if (view === 'summary') return { ...base, view }
 
-  const since = activityYearStart()
+  const since = activityYearStart(now)
   const [owner, activityDays, recent] = await Promise.all([
     publicOwner(deps, identity),
     deps.agentAudit.summarizeByDay(since, { agentIdentityId: identity.id }),
-    deps.agentAudit.list({ limit: 30, offset: 0 }, { agentIdentityId: identity.id }),
+    deps.agentAudit.list(
+      { limit: recentActivityLimit, offset: 0 },
+      { actions: publicActivityActions, agentIdentityId: identity.id },
+    ),
   ])
   return {
     ...base,
     view,
     owner,
-    activity: activityOverview(activityDays),
+    activity: activityOverview(activityDays, now),
     activityDays,
     recentActivity: sanitizeRecentActivity(recent.items),
   }
@@ -144,7 +153,6 @@ function sanitizeRecentActivity(events: AgentAuditEventRecord[]): PublicActivity
       if (!copy) return []
       return [
         {
-          id: event.id,
           action: event.action,
           title: copy.title,
           description: copy.description,
@@ -155,7 +163,7 @@ function sanitizeRecentActivity(events: AgentAuditEventRecord[]): PublicActivity
     .slice(0, recentActivityLimit)
 }
 
-function activityOverview(days: PublicActivityDay[]): PublicActivityOverview {
+function activityOverview(days: PublicActivityDay[], now: Date): PublicActivityOverview {
   const activeDates = new Set(days.filter((day) => day.count > 0).map((day) => day.date))
   let longestStreak = 0
   let runningStreak = 0
@@ -168,7 +176,7 @@ function activityOverview(days: PublicActivityDay[]): PublicActivityOverview {
   }
 
   let currentStreak = 0
-  const cursor = new Date()
+  const cursor = new Date(now)
   cursor.setUTCHours(0, 0, 0, 0)
   while (activeDates.has(cursor.toISOString().slice(0, 10))) {
     currentStreak += 1
@@ -182,11 +190,17 @@ function activityOverview(days: PublicActivityDay[]): PublicActivityOverview {
   }
 }
 
-function activityYearStart() {
-  const since = new Date()
+function activityYearStart(now: Date) {
+  const since = new Date(now)
   since.setUTCHours(0, 0, 0, 0)
   since.setUTCDate(since.getUTCDate() - 364)
   return since
+}
+
+function publicLink(link: AccountProfileLink) {
+  if (link.type === 'website') return link
+  const { accountId: _accountId, ...projection } = link
+  return projection
 }
 
 function absoluteUrl(value: string | null, origin: string) {

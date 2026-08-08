@@ -39,7 +39,7 @@ import type {
 } from '@shared/api/management'
 import type { OnboardingAdminRequest } from '@shared/api/onboarding'
 import type { PaginatedResult, PaginationInput } from '@shared/api/pagination'
-import type { PublicProfileLink } from '@shared/api/public-profiles'
+import type { AccountProfileLink } from '@shared/api/public-profiles'
 import type { SecurityPolicy, UpdateSecurityPolicyInput } from '@shared/api/security'
 import type { AdminCreateUserInput, AdminUpdateUserInput, AdminUserListQuery } from '@shared/api/users'
 import type {
@@ -202,7 +202,7 @@ export interface UserPublicProfile {
   user: UserProfile
   bio: string | null
   location: string | null
-  links: PublicProfileLink[]
+  links: AccountProfileLink[]
   profileUpdatedAt: Date | null
 }
 
@@ -464,7 +464,12 @@ export interface AgentAuditRepository {
   append(input: AgentAuditEventRecord): Promise<void>
   list(
     page: PaginationInput,
-    filter?: { agentIdentityId?: string; ownerUserId?: string; ownerOrganizationIds?: string[] },
+    filter?: {
+      actions?: string[]
+      agentIdentityId?: string
+      ownerUserId?: string
+      ownerOrganizationIds?: string[]
+    },
   ): Promise<PaginatedResult<AgentAuditEventRecord>>
   summarizeByDay(
     since: Date,

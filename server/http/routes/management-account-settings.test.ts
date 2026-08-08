@@ -58,7 +58,6 @@ describe('management account settings routes', () => {
     const linkedAccounts = await app.request('/api/account/linked-accounts', { headers })
     const applications = await app.request('/api/account/applications', { headers })
     const sessions = await app.request('/api/account/sessions', { headers })
-
     expect(profile.status).toBe(403)
     expect(email.status).toBe(403)
     expect(password.status).toBe(403)
@@ -203,7 +202,7 @@ describe('management account settings routes', () => {
     const applications = await app.request('/api/account/applications?limit=3&offset=6', { headers })
     const sessions = await app.request('/api/account/sessions?limit=4&offset=8', { headers })
 
-    expect(users.getUser).toHaveBeenCalledWith('user-1')
+    expect(users.getPublicProfile).toHaveBeenCalledWith('user-1')
     expect(users.listLinkedAccounts).toHaveBeenCalledWith('user-1', { limit: 2, offset: 4 })
     expect(users.listConsentedApplications).toHaveBeenCalledWith('user-1', { limit: 3, offset: 6 })
     expect(users.listSessions).toHaveBeenCalledWith('user-1', { limit: 4, offset: 8 })

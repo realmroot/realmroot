@@ -130,6 +130,40 @@ describe('account security policy routes', () => {
     expect(enrollmentResponse.status).toBe(201)
   })
 
+  it('keeps public profiles readable for signed-in visitors who still need to enroll MFA', async () => {
+    const policy = securityPolicy({ mfa: { mode: 'required' } })
+    const security = createSecurityRepositoryMock(policy, { mfaEnabled: false })
+    const users = createUserRepositoryMock()
+    vi.mocked(users.findPublicProfileByUsername).mockResolvedValue({
+      user: {
+        id: 'user-2',
+        email: 'public@example.com',
+        emailVerified: true,
+        displayName: 'Public User',
+        username: 'public-user',
+        avatarAssetId: null,
+        image: null,
+        role: 'user',
+        banned: false,
+        banReason: null,
+        banExpires: null,
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      },
+      bio: null,
+      location: null,
+      links: [],
+      profileUpdatedAt: null,
+    })
+    const app = createApp(createAuthMock(), createTestDeps({ users, security }), { securityPolicy: policy })
+
+    const response = await app.request('/api/public/users/public-user', { headers: userHeaders() })
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toMatchObject({ username: 'public-user', view: 'summary' })
+    expect(security.getSecurityState).not.toHaveBeenCalled()
+  })
+
   it('mounts account avatar uploads with account-center config in the full RPC app', async () => {
     const uploadAsset = vi.spyOn(assets, 'uploadAsset').mockResolvedValue({ asset: assetFixture() })
     const updateUserAvatar = vi.spyOn(assets, 'updateUserAvatar').mockResolvedValue(undefined)

@@ -21,6 +21,7 @@ import {
 import { type ReactNode, useEffect } from 'react'
 import { RealmrootWordmark } from '@/components/realmroot-brand'
 import { Button } from '@/components/ui/button'
+import { ApiRequestError } from '@/lib/api'
 import { getPublicAgentProfile, getPublicUserProfile } from './api'
 import './public-profiles.css'
 
@@ -30,9 +31,8 @@ export function PublicUserProfilePage({ username }: { username: string }) {
     queryFn: () => getPublicUserProfile(username),
   })
   if (query.isLoading) return <PublicProfileState title="Loading public profile…" />
-  if (query.error || !query.data || query.data.view !== 'full') {
-    return <PublicProfileState title="User profile not found" />
-  }
+  if (query.error) return <PublicProfileFailure error={query.error} kind="User" retry={() => void query.refetch()} />
+  if (!query.data || query.data.view !== 'full') return <PublicProfileState title="Unable to load User profile" />
   return <PublicProfileShell profile={query.data} />
 }
 
@@ -42,9 +42,8 @@ export function PublicAgentProfilePage({ subject }: { subject: string }) {
     queryFn: () => getPublicAgentProfile(subject),
   })
   if (query.isLoading) return <PublicProfileState title="Loading public profile…" />
-  if (query.error || !query.data || query.data.view !== 'full') {
-    return <PublicProfileState title="Agent profile not found" />
-  }
+  if (query.error) return <PublicProfileFailure error={query.error} kind="Agent" retry={() => void query.refetch()} />
+  if (!query.data || query.data.view !== 'full') return <PublicProfileState title="Unable to load Agent profile" />
   return <PublicProfileShell profile={query.data} />
 }
 
@@ -336,7 +335,7 @@ function ActivityFeed({ activity }: { activity: PublicActivity[] }) {
             <h3>{month}</h3>
             <div>
               {items.map((item) => (
-                <article key={item.id}>
+                <article key={`${item.action}:${item.occurredAt}`}>
                   <span className="publicActivityIcon">
                     <CalendarDays />
                   </span>
@@ -404,6 +403,25 @@ function PublicProfileState({ title }: { title: string }) {
         <CircleUserRound />
         <h1>{title}</h1>
         <p>The profile may be unavailable or no longer public.</p>
+      </main>
+    </div>
+  )
+}
+
+function PublicProfileFailure({ error, kind, retry }: { error: Error; kind: 'Agent' | 'User'; retry: () => void }) {
+  if (error instanceof ApiRequestError && error.status === 404) {
+    return <PublicProfileState title={`${kind} profile not found`} />
+  }
+  return (
+    <div className="publicProfileShell">
+      <header className="publicProfileTopbar">
+        <RealmrootWordmark context="Profiles" />
+      </header>
+      <main className="publicProfileState">
+        <CircleUserRound />
+        <h1>Unable to load {kind} profile</h1>
+        <p>The profile could not be loaded. Try again.</p>
+        <Button onClick={retry}>Retry</Button>
       </main>
     </div>
   )

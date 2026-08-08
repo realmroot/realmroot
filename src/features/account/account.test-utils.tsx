@@ -27,7 +27,7 @@ export function createAccountStore() {
       image: null as string | null,
       bio: null as string | null,
       location: null as string | null,
-      links: [] as Array<{ type: 'website' | 'social'; label: string; url: string }>,
+      links: [] as import('@shared/api/public-profiles').AccountProfileLink[],
       role: 'user' as string | null,
     },
     security: {

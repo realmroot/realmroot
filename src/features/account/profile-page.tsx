@@ -36,6 +36,7 @@ import {
   useAccountMutation,
   useAccountProfile,
   useDeveloperConsoleAccess,
+  useLinkedAccounts,
 } from './queries'
 import { defaultAccountCenterSettings } from './settings'
 import type { MutationHandler, UserProfile } from './types'
@@ -325,6 +326,13 @@ function ProfileSections({
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [passwordError, setPasswordError] = useState<string | null>(null)
+  const linkedAccountsQuery = useLinkedAccounts(publicProfileOpen && accountCenter.connectedAccountsEnabled)
+  const projectableAccounts = (linkedAccountsQuery.data?.accounts ?? []).filter(
+    (account) => account.providerId !== 'credential',
+  )
+  const availableAccounts = projectableAccounts.filter(
+    (account) => !links.some((link) => link.type === 'linked-account' && link.accountId === account.id),
+  )
   useEffect(() => {
     setDisplayName(profile.displayName)
     setUsername(profile.username ?? '')
@@ -525,20 +533,89 @@ function ProfileSections({
               <div className="grid gap-3">
                 <div className="flex items-center justify-between gap-3">
                   <strong className="text-sm">{tt('Links & identities')}</strong>
-                  <Button
-                    disabled={links.length >= 10}
-                    onClick={() =>
-                      setLinks([...links, { key: crypto.randomUUID(), type: 'website', label: '', url: '' }])
-                    }
-                    size="sm"
-                    type="button"
-                    variant="outline"
-                  >
-                    <Plus /> {tt('Add link')}
-                  </Button>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      disabled={links.length >= 10}
+                      onClick={() =>
+                        setLinks([...links, { key: crypto.randomUUID(), type: 'website', label: '', url: '' }])
+                      }
+                      size="sm"
+                      type="button"
+                      variant="outline"
+                    >
+                      <Plus /> {tt('Add website')}
+                    </Button>
+                    {accountCenter.connectedAccountsEnabled ? (
+                      <Button
+                        disabled={links.length >= 10 || availableAccounts.length === 0}
+                        onClick={() => {
+                          const account = availableAccounts[0]!
+                          setLinks([
+                            ...links,
+                            {
+                              key: crypto.randomUUID(),
+                              type: 'linked-account',
+                              accountId: account.id,
+                              providerId: account.providerId,
+                              label: providerLabel(account.providerId),
+                              url: '',
+                            },
+                          ])
+                        }}
+                        size="sm"
+                        type="button"
+                        variant="outline"
+                      >
+                        <Plus /> {tt('Add linked account')}
+                      </Button>
+                    ) : null}
+                  </div>
                 </div>
+                {linkedAccountsQuery.error ? (
+                  <p className="text-sm text-destructive">{tt('Unable to load linked accounts.')}</p>
+                ) : null}
                 {links.map((link, index) => (
-                  <div className="grid grid-cols-[120px_minmax(0,1fr)_40px] gap-2" key={link.key}>
+                  <div className="grid gap-2 sm:grid-cols-[140px_120px_minmax(0,1fr)_40px]" key={link.key}>
+                    {link.type === 'linked-account' && accountCenter.connectedAccountsEnabled ? (
+                      <SelectInput
+                        aria-label={tt('Linked account')}
+                        onChange={(event) => {
+                          const account = projectableAccounts.find((candidate) => candidate.id === event.target.value)!
+                          setLinks(
+                            links.map((item, itemIndex) =>
+                              itemIndex === index && item.type === 'linked-account'
+                                ? {
+                                    ...item,
+                                    accountId: account.id,
+                                    providerId: account.providerId,
+                                    label: providerLabel(account.providerId),
+                                  }
+                                : item,
+                            ),
+                          )
+                        }}
+                        value={link.accountId}
+                      >
+                        {projectableAccounts.map((account) => (
+                          <option
+                            disabled={links.some(
+                              (item, itemIndex) =>
+                                itemIndex !== index && item.type === 'linked-account' && item.accountId === account.id,
+                            )}
+                            key={account.id}
+                            value={account.id}
+                          >
+                            {providerLabel(account.providerId)}
+                          </option>
+                        ))}
+                      </SelectInput>
+                    ) : link.type === 'linked-account' ? (
+                      <span className="flex items-center text-sm text-muted-foreground">
+                        {providerLabel(link.providerId)}
+                      </span>
+                    ) : (
+                      <span className="flex items-center text-sm text-muted-foreground">{tt('Website')}</span>
+                    )}
                     <TextInput
                       aria-label={tt('Link label')}
                       maxLength={40}
@@ -562,7 +639,9 @@ function ProfileSections({
                           ),
                         )
                       }
-                      placeholder="https://example.com"
+                      placeholder={
+                        link.type === 'linked-account' ? 'https://provider.example/your-profile' : 'https://example.com'
+                      }
                       required
                       type="url"
                       value={link.url}
@@ -654,6 +733,16 @@ function ProfileIdentityRows({
 
 function publicProfileLinkDrafts(links: UserProfile['links']) {
   return links.map((link) => ({ ...link, key: crypto.randomUUID() }))
+}
+
+function providerLabel(providerId: string) {
+  const brands: Record<string, string> = { github: 'GitHub', google: 'Google', linkedin: 'LinkedIn' }
+  if (brands[providerId]) return brands[providerId]
+  return providerId
+    .split(/[-_]/)
+    .filter(Boolean)
+    .map((part) => `${part[0]?.toUpperCase() ?? ''}${part.slice(1)}`)
+    .join(' ')
 }
 
 function ProfileIdentifierRows({

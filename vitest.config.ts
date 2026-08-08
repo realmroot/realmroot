@@ -93,6 +93,7 @@ export default defineConfig({
           // deterministic without masking real regressions.
           retry: 2,
           include: ['src/**/*.test.{ts,tsx}'],
+          setupFiles: ['src/test/web-lifecycle.ts'],
         },
       },
       {

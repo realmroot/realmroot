@@ -39,6 +39,7 @@ function isMfaExemptPath(path: string): boolean {
   return (
     path.startsWith('/api/auth/') ||
     path.startsWith('/api/assets/') ||
+    path.startsWith('/api/public/') ||
     path === '/api/health' ||
     path === '/api/configz' ||
     path === '/api/account/profile' ||

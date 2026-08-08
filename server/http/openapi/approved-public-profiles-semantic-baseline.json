@@ -3,12 +3,12 @@
     "method": "GET",
     "path": "/public/agents/{subject}",
     "operationId": "getPublicAgent",
-    "semanticHash": "e09e5e78e9c91e423851cca04589f6fc0bf1a52f5f3a6d4e0a8f91d91720de03"
+    "semanticHash": "4582f083a3078178cd4a3627b29b574940df7b5943db4a6cfeeacd234d344d5b"
   },
   {
     "method": "GET",
     "path": "/public/users/{username}",
     "operationId": "getPublicUser",
-    "semanticHash": "ef4c8604adaaac9922c69dabfb1970a9a0ac1074e42f22e3225b4e2451b57bff"
+    "semanticHash": "996c77ab83d579f480767d119634725bca35f77b3b5c1a5edc155a7e1ebc2621"
   }
 ]
