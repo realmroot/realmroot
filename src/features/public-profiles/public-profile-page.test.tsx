@@ -1,10 +1,25 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { HttpResponse, http } from 'msw'
 import { setupServer } from 'msw/node'
 import type { ReactNode } from 'react'
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { PublicAgentProfilePage, PublicUserProfilePage } from './public-profile-page'
+
+const authState = vi.hoisted(() => ({
+  data: null as null | { user: { email: string; id: string; image: string | null; name: string } },
+  error: null,
+  isPending: false,
+}))
+const navigate = vi.hoisted(() => vi.fn())
+const signOut = vi.hoisted(() => vi.fn())
+
+vi.mock('@/lib/auth-client', () => ({
+  authClient: {
+    useSession: () => ({ ...authState, isRefetching: false, refetch: vi.fn() }),
+  },
+  signOut,
+}))
 
 vi.mock('@tanstack/react-router', () => ({
   Link: ({ children, params, to }: { children: ReactNode; params?: Record<string, string>; to: string }) => (
@@ -12,6 +27,7 @@ vi.mock('@tanstack/react-router', () => ({
       {children}
     </a>
   ),
+  useNavigate: () => navigate,
 }))
 
 const server = setupServer(
@@ -23,6 +39,11 @@ beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
 afterEach(() => {
   cleanup()
   server.resetHandlers()
+  authState.data = null
+  authState.error = null
+  authState.isPending = false
+  navigate.mockReset()
+  signOut.mockReset()
 })
 afterAll(() => server.close())
 
@@ -36,6 +57,41 @@ describe('Public profile pages', () => {
     expect(screen.queryByRole('heading', { name: 'Activity overview' })).toBeNull()
     expect(screen.queryByLabelText('Agent activity heatmap')).toBeNull()
     expect(screen.getByRole('link', { name: /GitHub/ }).getAttribute('href')).toBe('https://github.com/jane')
+    expect(screen.getByRole('link', { name: 'Sign in' }).getAttribute('href')).toBe('/auth/sign-in')
+  })
+
+  it('shows the shared account menu instead of Sign in to a signed-in visitor [spec: account-center/public-user-profile]', async () => {
+    authState.data = {
+      user: { email: 'jane@example.com', id: 'user-1', image: null, name: 'Jane Stone' },
+    }
+
+    renderProfile(<PublicUserProfilePage username="jane" />)
+
+    expect(await screen.findByRole('heading', { name: 'Jane Stone' })).toBeTruthy()
+    expect(screen.queryByRole('link', { name: 'Sign in' })).toBeNull()
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Account menu' }), { button: 0, ctrlKey: false })
+    expect((await screen.findByRole('link', { name: 'Account Center' })).getAttribute('href')).toBe('/profile')
+    expect(screen.getByText('jane@example.com')).toBeTruthy()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Sign out' }))
+
+    await waitFor(() => expect(signOut).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith({ to: '/auth/sign-in' }))
+  })
+
+  it('does not redirect a signed-in visitor when sign out fails', async () => {
+    authState.data = {
+      user: { email: 'jane@example.com', id: 'user-1', image: null, name: 'Jane Stone' },
+    }
+    signOut.mockRejectedValueOnce(new Error('Sign out failed.'))
+
+    renderProfile(<PublicUserProfilePage username="jane" />)
+
+    expect(await screen.findByRole('heading', { name: 'Jane Stone' })).toBeTruthy()
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Account menu' }), { button: 0, ctrlKey: false })
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Sign out' }))
+
+    await waitFor(() => expect(signOut).toHaveBeenCalledTimes(1))
+    expect(navigate).not.toHaveBeenCalled()
   })
 
   it('shows overview, heatmap, and recent activity on the Agent profile', async () => {

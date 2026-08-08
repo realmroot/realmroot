@@ -40,8 +40,10 @@ Feature: Account Center
   Scenario: A public User profile exposes an intentionally public representation
     Given a User has a username, public profile details, and linked accounts
     And the User explicitly chooses which linked accounts to publish with HTTPS profile URLs
-    When an external visitor opens the User profile
+    When a visitor opens the User profile
     Then Realmroot returns the User's public identity
+    And a signed-in visitor sees the shared account avatar menu with an Account Center action in the public topbar
+    And a signed-out visitor sees Sign in in the public topbar
     And the default summary omits Public Agents and recent activity
     And the full view includes Public Agents, sanitized recent activity, and only the chosen accounts that remain linked
     But the public profile never returns email, credentials, sessions, grants, or private activity details

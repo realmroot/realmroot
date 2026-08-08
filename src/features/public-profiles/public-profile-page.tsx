@@ -5,7 +5,7 @@ import type {
   PublicUserResponse,
 } from '@shared/api/public-profiles'
 import { useQuery } from '@tanstack/react-query'
-import { Link } from '@tanstack/react-router'
+import { Link, useNavigate } from '@tanstack/react-router'
 import {
   ArrowUpRight,
   Bot,
@@ -17,11 +17,16 @@ import {
   MapPin,
   ShieldCheck,
   Sparkles,
+  UserRound,
 } from 'lucide-react'
 import { type ReactNode, useEffect } from 'react'
+import { toast } from 'sonner'
+import { ProductAccountMenu } from '@/components/product-account-menu'
 import { RealmrootWordmark } from '@/components/realmroot-brand'
 import { Button } from '@/components/ui/button'
 import { ApiRequestError } from '@/lib/api'
+import { authClient, signOut } from '@/lib/auth-client'
+import { tt } from '@/lib/i18n'
 import { getPublicAgentProfile, getPublicUserProfile } from './api'
 import './public-profiles.css'
 
@@ -64,11 +69,7 @@ function PublicProfileShell({
         <Link aria-label="Realmroot home" to="/">
           <RealmrootWordmark context="Profiles" />
         </Link>
-        <nav aria-label="Public profile navigation">
-          <Button asChild size="sm" variant="outline">
-            <Link to="/auth/sign-in">Sign in</Link>
-          </Button>
-        </nav>
+        <PublicProfileNavigation />
       </header>
       <main className="publicProfileMain" id="public-profile-content">
         <div className={`publicProfileCover ${profile.type}`} aria-hidden="true">
@@ -100,6 +101,46 @@ function PublicProfileShell({
         <span>Powered by Realmroot</span>
       </footer>
     </div>
+  )
+}
+
+function PublicProfileNavigation() {
+  const navigate = useNavigate()
+  const session = authClient.useSession()
+  if (session.isPending || session.error) return null
+
+  async function signOutFromPublicProfile() {
+    try {
+      await signOut()
+      toast.success(tt('Signed out'))
+      await navigate({ to: '/auth/sign-in' })
+    } catch (mutationError) {
+      toast.error(mutationError instanceof Error ? tt(mutationError.message) : tt('Account update failed.'))
+    }
+  }
+
+  if (session.data?.user) {
+    return (
+      <nav aria-label="Public profile navigation">
+        <ProductAccountMenu
+          onSignOut={() => void signOutFromPublicProfile()}
+          primaryAction={{ icon: UserRound, label: 'Account Center', to: '/profile' }}
+          profile={{
+            displayName: session.data.user.name,
+            email: session.data.user.email,
+            image: session.data.user.image,
+          }}
+        />
+      </nav>
+    )
+  }
+
+  return (
+    <nav aria-label="Public profile navigation">
+      <Button asChild size="sm" variant="outline">
+        <Link to="/auth/sign-in">Sign in</Link>
+      </Button>
+    </nav>
   )
 }
 
