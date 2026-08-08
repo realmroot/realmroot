@@ -9,6 +9,7 @@ const consentScopeMigrationName = '20260806190437_brown_sabra.sql'
 const rfc9728ScopeRegistryMigrationName = '20260806214840_rfc9728_scope_registry.sql'
 const lifecycleMigrationName = '20260807004611_unique_weapon_omega.sql'
 const providerConnectionMigrationName = '20260808175918_brokered_provider_connections.sql'
+const resourceAccessModeMigrationName = '20260808205043_talented_the_call.sql'
 
 describe('tenant ownership migration', () => {
   it('rebuilds legacy ownership into the final schema and quarantines ambiguity', () => {
@@ -24,6 +25,7 @@ describe('tenant ownership migration', () => {
             rfc9728ScopeRegistryMigrationName,
             lifecycleMigrationName,
             providerConnectionMigrationName,
+            resourceAccessModeMigrationName,
           ].includes(name),
       )) {
         database.exec(readFileSync(new URL(`../../migrations/${name}`, import.meta.url), 'utf8'))
@@ -46,6 +48,9 @@ describe('tenant ownership migration', () => {
       database.exec(readFileSync(new URL(`../../migrations/${lifecycleMigrationName}`, import.meta.url), 'utf8'))
       database.exec(
         readFileSync(new URL(`../../migrations/${providerConnectionMigrationName}`, import.meta.url), 'utf8'),
+      )
+      database.exec(
+        readFileSync(new URL(`../../migrations/${resourceAccessModeMigrationName}`, import.meta.url), 'utf8'),
       )
 
       expect(columnNames(database, 'application')).not.toContain('owner_user_id')

@@ -13,6 +13,7 @@ const externalResource: ApiResourceResponse = {
   identifier: 'contacts',
   name: 'Contacts',
   resourceUrl: 'https://contacts.example.com',
+  accessMode: 'realmroot',
   connectorId: null,
   authorizationDetails: [],
   description: null,

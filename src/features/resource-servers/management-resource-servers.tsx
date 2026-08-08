@@ -1,5 +1,6 @@
 import type { ApiResource } from '@shared/api/agent-api'
 import {
+  type ApiResourceAccessMode,
   type ApiResourceContractResponse,
   type ApiResourceVisibility,
   createApiResourceRequestSchema,
@@ -10,7 +11,7 @@ import { authorizationDetailsSchema } from '@shared/api/authorization-details'
 import type { ConnectorResponse } from '@shared/api/connectors'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
-import { ArrowLeft, Plus, RotateCw } from 'lucide-react'
+import { ArrowLeft, CircleHelp, Plus, RotateCw } from 'lucide-react'
 import { type FormEvent, type ReactNode, useEffect, useState } from 'react'
 import { Field, SelectInput, TextArea, TextInput } from '@/components/product-form'
 import { TableEmptyRow } from '@/components/table-empty-row'
@@ -21,6 +22,7 @@ import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetT
 import { Switch } from '@/components/ui/switch'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { FormDialog } from '@/features/management/create-dialogs'
 import { DangerConfirmDialog, ErrorState, LoadingState, StatusBadge } from '@/features/management/dialogs'
 import {
@@ -47,7 +49,43 @@ import {
 } from '@/lib/api/management'
 import { tt } from '@/lib/i18n'
 
-type ResourceEditor = 'details' | 'visibility' | 'connector' | null
+type ResourceEditor = 'details' | 'visibility' | 'authorization' | null
+
+const accessModePresentation: Record<ApiResourceAccessMode, { label: string; description: string }> = {
+  realmroot: {
+    label: 'Native',
+    description: 'The Resource Server accepts access issued directly by Realmroot.',
+  },
+  external_oauth: {
+    label: 'OAuth',
+    description: 'The Resource Server delegates authorization to an external OAuth provider.',
+  },
+  brokered: {
+    label: 'Adapter',
+    description: 'Realmroot uses a provider adapter to connect accounts and authorize access.',
+  },
+}
+
+function AccessModeValue({ badge = false, mode }: { badge?: boolean; mode: ApiResourceAccessMode }) {
+  const presentation = accessModePresentation[mode]
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      {badge ? <Badge variant="outline">{tt(presentation.label)}</Badge> : tt(presentation.label)}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            aria-label={tt('{{mode}} access model help', { mode: presentation.label })}
+            className="text-muted-foreground transition-colors hover:text-foreground"
+            type="button"
+          >
+            <CircleHelp className="size-3.5" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>{tt(presentation.description)}</TooltipContent>
+      </Tooltip>
+    </span>
+  )
+}
 
 export function ApiResourcesPage({ organizationId }: { organizationId?: string } = {}) {
   const [owner, setOwner] = useState(organizationId ?? '')
@@ -70,9 +108,7 @@ export function ApiResourcesPage({ organizationId }: { organizationId?: string }
       return queryClient.invalidateQueries({ queryKey: consoleQueryKeys.apiResources })
     },
   })
-  const connectors = (connectorsQuery.data?.connectors ?? []).filter(
-    (connector) => connector.providerType === 'generic_oauth' && connector.enabled,
-  )
+  const connectors = (connectorsQuery.data?.connectors ?? []).filter((connector) => connector.enabled)
   const organizations = organizationsQuery.data?.organizations ?? []
   const resources = query.data?.items ?? []
   const visibleResources = resources.filter((resource) => {
@@ -82,7 +118,7 @@ export function ApiResourcesPage({ organizationId }: { organizationId?: string }
     const resourceStatus = resource.enabled ? 'enabled' : 'disabled'
     return (
       matchesSearch &&
-      (!authorization || (resource.connectorId ? 'external' : 'native') === authorization) &&
+      (!authorization || resource.accessMode === authorization) &&
       (!status || resourceStatus === status) &&
       (!owner || resource.ownerOrganizationId === owner)
     )
@@ -135,8 +171,9 @@ export function ApiResourcesPage({ organizationId }: { organizationId?: string }
             value={authorization}
           >
             <option value="">{tt('Any authorization')}</option>
-            <option value="native">{tt('Native')}</option>
-            <option value="external">{tt('External')}</option>
+            <option value="realmroot">{tt(accessModePresentation.realmroot.label)}</option>
+            <option value="external_oauth">{tt(accessModePresentation.external_oauth.label)}</option>
+            <option value="brokered">{tt(accessModePresentation.brokered.label)}</option>
           </SelectInput>
           <SelectInput
             aria-label={tt('Filter status')}
@@ -203,7 +240,7 @@ export function ApiResourcesPage({ organizationId }: { organizationId?: string }
                   </span>
                 </TableCell>
                 <TableCell>
-                  <Badge variant="outline">{resource.connectorId ? tt('External') : tt('Native')}</Badge>
+                  <AccessModeValue badge mode={resource.accessMode} />
                 </TableCell>
                 <TableCell className="truncate font-mono text-xs" title={resource.resourceUrl}>
                   {resource.resourceUrl}
@@ -265,7 +302,7 @@ function ApiResourceCreateDialog({
   organizations,
   pending,
 }: {
-  connectors: Array<{ id: string; displayName: string; issuer: string | null }>
+  connectors: Array<{ id: string; displayName: string; issuer: string | null; providerType: string }>
   defaultOwnerOrganizationId?: string
   fixedOwnerOrganizationId?: string
   error: string | null
@@ -278,6 +315,7 @@ function ApiResourceCreateDialog({
   const [form, setForm] = useState<FormState>(emptyForm)
   const [ownerOrganizationId, setOwnerOrganizationId] = useState('')
   const [visibility, setVisibility] = useState<ApiResourceVisibility>('private')
+  const [accessMode, setAccessMode] = useState<ApiResourceAccessMode>('realmroot')
   const [availableToAgents, setAvailableToAgents] = useState(true)
   const [authorizationDetails, setAuthorizationDetails] = useState('[]')
   const [validationError, setValidationError] = useState<string | null>(null)
@@ -298,7 +336,9 @@ function ApiResourceCreateDialog({
             onSubmit(
               parseForm(createApiResourceRequestSchema, {
                 ...form,
-                authorizationDetails: form.connectorId ? parseAuthorizationDetails(authorizationDetails) : [],
+                accessMode,
+                connectorId: accessMode === 'realmroot' ? undefined : form.connectorId,
+                authorizationDetails: accessMode === 'realmroot' ? [] : parseAuthorizationDetails(authorizationDetails),
                 ownerOrganizationId,
                 visibility,
                 availableToAgents,
@@ -333,26 +373,41 @@ function ApiResourceCreateDialog({
             value={ownerOrganizationId}
           />
         )}
-        <Field
-          help={tt(
-            'Native uses Realmroot authorization. Selecting a connector delegates authorization to that provider. This cannot be changed after creation.',
-          )}
-          label={tt('Authorization model')}
-        >
+        <Field label={tt('Access model')} tooltip={tt(accessModePresentation[accessMode].description)}>
           <SelectInput
-            name="connectorId"
-            onChange={(event) => setValue(setForm, 'connectorId', event.target.value)}
-            value={form.connectorId ?? ''}
+            name="accessMode"
+            onChange={(event) => {
+              setAccessMode(event.target.value as ApiResourceAccessMode)
+              setValue(setForm, 'connectorId', '')
+            }}
+            value={accessMode}
           >
-            <option value="">{tt('Native (Realmroot)')}</option>
-            {connectors.map((connector) => (
-              <option key={connector.id} value={connector.id}>
-                {tt('External')} · {connector.displayName} — {connector.issuer}
-              </option>
-            ))}
+            <option value="realmroot">{tt(accessModePresentation.realmroot.label)}</option>
+            <option value="external_oauth">{tt(accessModePresentation.external_oauth.label)}</option>
+            <option value="brokered">{tt(accessModePresentation.brokered.label)}</option>
           </SelectInput>
         </Field>
-        {form.connectorId ? (
+        {accessMode !== 'realmroot' ? (
+          <Field label={tt('Provider connector')}>
+            <SelectInput
+              name="connectorId"
+              onChange={(event) => setValue(setForm, 'connectorId', event.target.value)}
+              required
+              value={form.connectorId ?? ''}
+            >
+              <option value="">{tt('Select a connector')}</option>
+              {connectors
+                .filter((connector) => accessMode === 'brokered' || connector.providerType === 'generic_oauth')
+                .map((connector) => (
+                  <option key={connector.id} value={connector.id}>
+                    {connector.displayName}
+                    {connector.issuer ? ` — ${connector.issuer}` : ''}
+                  </option>
+                ))}
+            </SelectInput>
+          </Field>
+        ) : null}
+        {accessMode !== 'realmroot' ? (
           <Field
             help={tt(
               'Opaque RFC 9396 templates sent to the authorization server. Each array entry must contain a non-empty type.',
@@ -477,7 +532,7 @@ export function ApiResourceDetailPage({
     return <ErrorState error={new Error(tt('Resource server does not belong to this Organization.'))} />
   }
   const organizations = organizationsQuery.data?.organizations ?? []
-  const mode = resource.connectorId ? 'external' : 'native'
+  const mode = resource.accessMode
   return (
     <>
       <div className="consoleDetailStack">
@@ -506,7 +561,7 @@ export function ApiResourceDetailPage({
             </div>
             <p>{resource.description ?? tt('Protected API registered in this Realm.')}</p>
             <span className="consoleDetailMeta">
-              {mode === 'native' ? tt('Native authorization') : tt('External authorization')} · {resource.id}
+              <AccessModeValue mode={mode} /> · {resource.id}
             </span>
           </div>
         </header>
@@ -555,7 +610,7 @@ export function ApiResourceDetailPage({
               connectors={connectorsQuery.data?.connectors ?? []}
               mode={mode}
               onDelete={() => setDeleteOpen(true)}
-              onEditConnector={() => setEditor('connector')}
+              onEditAuthorization={() => setEditor('authorization')}
               onEditDetails={() => setEditor('details')}
               onEditVisibility={() => setEditor('visibility')}
               onToggle={() => updateMutation.mutate({ enabled: !resource.enabled })}
@@ -566,9 +621,6 @@ export function ApiResourceDetailPage({
         </Tabs>
       </div>
       <ResourceEditorSheet
-        connectors={(connectorsQuery.data?.connectors ?? []).filter(
-          (connector) => connector.providerType === 'generic_oauth',
-        )}
         editor={editor}
         error={updateMutation.errorMessage}
         fixedOwnerOrganizationId={organizationId}
@@ -599,22 +651,19 @@ function ResourceOverview({
   organizations,
   resource,
 }: {
-  mode: 'native' | 'external'
+  mode: ApiResourceAccessMode
   organizations: OrganizationResponse[]
   resource: ApiResource
 }) {
   return (
     <div className="detailFlatRows">
       <DetailRow label="Owner" value={ownerLabel(resource.ownerOrganizationId, organizations)} />
-      <DetailRow
-        label="Authorization"
-        value={mode === 'native' ? tt('Native · Realmroot') : tt('External OIDC provider')}
-      />
+      <DetailRow label="Access model" value={<AccessModeValue mode={mode} />} />
       <DetailRow label="Visibility" value={resourceVisibilityLabel(resource.visibility)} />
       <DetailRow label="Available to Agents" value={resource.availableToAgents ? tt('Yes') : tt('No')} />
       <DetailRow label="Protected resource URL" value={<code>{resource.resourceUrl}</code>} />
       <DetailRow label="Identifier" value={<code>{resource.identifier}</code>} />
-      {mode === 'external' ? (
+      {mode === 'external_oauth' ? (
         <>
           <DetailRow label="Issuer" value={<code>{resource.authorization?.issuer ?? tt('Not configured')}</code>} />
           <DetailRow
@@ -799,7 +848,7 @@ function ResourceSettings({
   connectors,
   mode,
   onDelete,
-  onEditConnector,
+  onEditAuthorization,
   onEditDetails,
   onEditVisibility,
   onToggle,
@@ -807,9 +856,9 @@ function ResourceSettings({
   resource,
 }: {
   connectors: ConnectorResponse[]
-  mode: 'native' | 'external'
+  mode: ApiResourceAccessMode
   onDelete: () => void
-  onEditConnector: () => void
+  onEditAuthorization: () => void
   onEditDetails: () => void
   onEditVisibility: () => void
   onToggle: () => void
@@ -834,15 +883,15 @@ function ResourceSettings({
         <DetailRow label="Protected resource URL" value={<code>{resource.resourceUrl}</code>} />
         <DetailRow label="Description" value={resource.description ?? tt('Not configured')} />
       </DetailSection>
-      {mode === 'external' ? (
+      {mode !== 'realmroot' ? (
         <DetailSection
           action={
-            <Button onClick={onEditConnector} variant="outline">
+            <Button onClick={onEditAuthorization} variant="outline">
               {tt('Edit')}
             </Button>
           }
-          description="Reusable OIDC connection used for account authorization and Agent token exchange."
-          title="Authorization provider"
+          description="Provider association and authorization detail templates for this immutable access model."
+          title="Provider access"
         >
           <DetailRow
             label="Connector"
@@ -857,7 +906,9 @@ function ResourceSettings({
               )
             }
           />
-          <DetailRow label="Issuer" value={resource.authorization?.issuer ?? '—'} />
+          {mode === 'external_oauth' ? (
+            <DetailRow label="Issuer" value={resource.authorization?.issuer ?? '—'} />
+          ) : null}
           <DetailRow
             label="Authorization detail templates"
             value={
@@ -870,7 +921,9 @@ function ResourceSettings({
               )
             }
           />
-          <DetailRow label="Connection status" value={resource.authorization?.status ?? tt('Pending validation')} />
+          {mode === 'external_oauth' ? (
+            <DetailRow label="Connection status" value={resource.authorization?.status ?? tt('Pending validation')} />
+          ) : null}
         </DetailSection>
       ) : null}
       <DetailSection
@@ -923,7 +976,6 @@ function ResourceSettings({
 }
 
 function ResourceEditorSheet({
-  connectors,
   editor,
   error,
   fixedOwnerOrganizationId,
@@ -933,7 +985,6 @@ function ResourceEditorSheet({
   pending,
   resource,
 }: {
-  connectors: Array<{ id: string; displayName: string; issuer: string | null; enabled: boolean }>
   editor: ResourceEditor
   error?: string | null
   fixedOwnerOrganizationId?: string
@@ -972,8 +1023,8 @@ function ResourceEditorSheet({
             {tt(
               editor === 'details'
                 ? 'Edit resource server'
-                : editor === 'connector'
-                  ? 'Change authorization provider'
+                : editor === 'authorization'
+                  ? 'Edit provider access'
                   : 'Edit ownership & access',
             )}
           </SheetTitle>
@@ -981,8 +1032,8 @@ function ResourceEditorSheet({
             {tt(
               editor === 'details'
                 ? 'Update the protected API identity and URL.'
-                : editor === 'connector'
-                  ? 'Choose the configured OIDC connector used by this external server.'
+                : editor === 'authorization'
+                  ? 'Update authorization detail templates without changing the access model or Provider Connector.'
                   : 'Set the responsible Organization and who may request access without changing their permissions.',
             )}
           </SheetDescription>
@@ -1013,7 +1064,7 @@ function ResourceEditorSheet({
             </p>
           </form>
         ) : null}
-        {editor === 'connector' ? (
+        {editor === 'authorization' ? (
           <form
             className="grid min-h-0 flex-1 content-start gap-4 overflow-y-auto px-4 py-5"
             id={formId}
@@ -1022,7 +1073,6 @@ function ResourceEditorSheet({
               try {
                 setValidationError(null)
                 onSave({
-                  connectorId: String(new FormData(event.currentTarget).get('connectorId') ?? ''),
                   authorizationDetails: parseAuthorizationDetails(authorizationDetails),
                 })
               } catch (submitError) {
@@ -1030,15 +1080,6 @@ function ResourceEditorSheet({
               }
             }}
           >
-            <Field label={tt('OIDC connector')}>
-              <SelectInput defaultValue={resource.connectorId ?? ''} name="connectorId" required>
-                {connectors.map((connector) => (
-                  <option disabled={!connector.enabled} key={connector.id} value={connector.id}>
-                    {connector.displayName} — {connector.issuer}
-                  </option>
-                ))}
-              </SelectInput>
-            </Field>
             <Field
               help={tt(
                 'Opaque RFC 9396 templates sent to the authorization server. Each array entry must contain a non-empty type.',

@@ -1,4 +1,13 @@
-import { ApiError, badGateway, badRequest, forbidden, notFound, oauthError, unauthorized } from '@server/domain/errors'
+import {
+  ApiError,
+  badGateway,
+  badRequest,
+  conflict,
+  forbidden,
+  notFound,
+  oauthError,
+  unauthorized,
+} from '@server/domain/errors'
 import { isRealmrootResourceServer } from '@server/domain/realmroot-resource-server'
 import type { Deps } from '@server/usecases/deps'
 import type {
@@ -105,7 +114,9 @@ export async function createResourceConnectionIntent(
   if (!candidate) throw notFound('External API resource was not found.')
   if (!candidate.enabled) throw notFound('Enabled external API resource was not found.')
   const resource = await requireEnabledResource(deps, resourceId)
-  if (!resource.connectorId) throw badRequest('API resource account connections require a Provider Connector.')
+  if (!requiresAccountConnection(resource))
+    throw badRequest('Realmroot-issued access does not use account connections.')
+  if (!resource.connectorId) throw new Error('Provider-connected access requires a Provider Connector.')
   const broker = brokeredAccountConnection(resource)
   await requireConnectionOwnerControl(deps, input.owner, actorUserId)
   const scopes = input.scopes
@@ -448,6 +459,15 @@ async function ensureProviderConnection(
   if (existing?.status === 'active' && existing.externalSubject !== externalSubject) {
     throw badRequest('Disconnect the current Provider account before connecting another account.')
   }
+  if (intent.ownerUserId) {
+    const subjectOwner = await deps.externalResources.findActiveUserProviderConnectionBySubject({
+      connectorId: resource.connectorId,
+      externalSubject,
+    })
+    if (subjectOwner && subjectOwner.ownerUserId !== intent.ownerUserId) {
+      throw conflict('This Provider account is already connected to another Realmroot account.')
+    }
+  }
   return deps.externalResources.upsertProviderConnection({
     id: existing?.id ?? createId('provconn'),
     connectorId: resource.connectorId,
@@ -516,7 +536,7 @@ export async function createAccountConnection(
     if (request.id !== input.accessRequestId) throw notFound('Agent access request was not found.')
     const controlledConnection = await requireControlledRequestTarget(deps, request, actorUserId)
     const resource = await requireEnabledResource(deps, request.resourceId)
-    if (!resource.connectorId && !brokeredAccountConnection(resource)) {
+    if (resource.accessMode === 'realmroot') {
       throw badRequest('Native API resources do not use account connections.')
     }
     const identity = await deps.agentIdentities.findIdentity(request.agentIdentityId)
@@ -613,7 +633,7 @@ export async function getAccountConnection(
 
 export async function listConnectableExternalResources(deps: Deps) {
   const resources = (await deps.authorization.listEnabledResources()).filter(
-    (resource) => resource.connectorId !== null,
+    (resource) => resource.accessMode !== 'realmroot',
   )
   const connectable = []
   for (const resource of resources) {
@@ -839,7 +859,7 @@ export async function discoverAgentResources(deps: Deps, principal: AgentResourc
         !resource?.enabled ||
         !resource.availableToAgents ||
         !activeResourceVisibleToAgent(resource, visibleOrganizationIds) ||
-        (resource.connectorId !== null && authorization?.status !== 'active')
+        (resource.accessMode === 'external_oauth' && authorization?.status !== 'active')
       ) {
         return null
       }
@@ -1060,7 +1080,7 @@ export async function createAgentConnectionRequest(
   const identity = await requireActiveIdentityAndBinding(deps, principal)
   const resource = await requireEnabledResource(deps, resourceServerId)
   if (!requiresAccountConnection(resource)) throw badRequest('Native Resource Servers do not use account connections.')
-  if (resource.connectorId) await refreshDynamicConnectorMetadata(deps, resource.connectorId)
+  if (resource.accessMode === 'external_oauth') await refreshDynamicConnectorMetadata(deps, resource.connectorId!)
   validateResourceRequestedScopes(resource, input.scopes)
   await requireAgentResourceVisibility(deps, resource, identity.identity)
   const connection = await deps.externalResources.findConnectionByOwnerResource({
@@ -1185,7 +1205,9 @@ export async function listAccountAccessRequestAuthorizationDetailCatalog(
   if (!connection || connection.status !== 'active') {
     throw notFound('Active resource account connection was not found.')
   }
-  return readAuthorizationDetailCatalog(deps, resource, connection, request.agentIdentityId, pagination)
+  return brokeredAccountConnection(resource)
+    ? readResourceCatalog(deps, resource, connection, request.agentIdentityId, pagination)
+    : readAuthorizationDetailCatalog(deps, resource, connection, request.agentIdentityId, pagination)
 }
 
 export async function createAgentAccessRequest(
@@ -1662,7 +1684,7 @@ export async function issueTargetAccessToken(
   if (!authorizationDetailsMatchRequest(grant.authorizationDetails, request.authorizationDetails)) {
     throw forbidden('Agent access grant authorization details do not match the approved request.')
   }
-  if (resource.connectorId === null) {
+  if (resource.accessMode !== 'external_oauth') {
     const connection = request.connectionId ? await deps.externalResources.findConnection(request.connectionId) : null
     assertAuthorizationDetailsSelection(resource, connection, grant.authorizationDetails)
     return issueNativeAccessToken(
@@ -1680,11 +1702,12 @@ export async function issueTargetAccessToken(
     throw forbidden('Active external API resource grant is required.')
   }
   const connectionClientGeneration = connection.clientGeneration ?? 1
-  const connector = await deps.connectors.findById(resource.connectorId)
+  const connectorId = resource.connectorId!
+  const connector = await deps.connectors.findById(connectorId)
   if ((connector?.clientGeneration ?? 1) === connectionClientGeneration) {
     const activeClientGeneration = await ensureDynamicConnectorScopes(
       deps,
-      resource.connectorId,
+      connectorId,
       connection.grantedScopes,
       new URL(tokenRequestUrl).origin,
     )
@@ -2056,17 +2079,13 @@ async function revokeTokenLeaseAtTarget(
 ) {
   const resource = await deps.authorization.findResource(grant.resourceId)
   if (!resource) throw notFound('API resource was not found.')
-  if (resource.connectorId === null) {
+  const connection = grant.connectionId ? await deps.externalResources.findConnection(grant.connectionId) : null
+  const authorization = await externalOAuthAuthorization(deps, resource, connection?.clientGeneration ?? 1)
+  if (!authorization) {
     if (persist) await deps.externalResources.revokeTokenLease(lease.id, now)
     return
   }
-  const connection = grant.connectionId ? await deps.externalResources.findConnection(grant.connectionId) : null
   if (!connection) throw notFound('Resource account connection was not found.')
-  const authorization = await requireActiveExternalAuthorization(
-    deps,
-    grant.resourceId,
-    connection.clientGeneration ?? 1,
-  )
   const clientSecret = authorizationClientSecret(authorization)
   const token = await deps.secrets.open(lease.encryptedAccessToken, tokenLeaseContext(lease.id))
   await postEmptyForm(
@@ -2205,9 +2224,7 @@ async function readResourceCatalog(
   agentIdentityId: string,
   pagination: PaginationInput,
 ) {
-  const authorization = resource.connectorId
-    ? await requireActiveExternalAuthorization(deps, resource.id, connection.clientGeneration ?? 1)
-    : null
+  const authorization = await externalOAuthAuthorization(deps, resource, connection.clientGeneration ?? 1)
   if (authorization?.authorizationDetailsCatalogEndpoint && authorization.authorizationDetailsCatalogScope) {
     return readAuthorizationDetailCatalog(deps, resource, connection, agentIdentityId, pagination)
   }
@@ -2241,6 +2258,7 @@ async function readResourceCatalog(
       }
     }),
     pagination: paginationMetadata({ ...pagination, total: connection.authorizationDetails.length }),
+    connection: { status: 'connected' as const },
   }
 }
 
@@ -2486,8 +2504,8 @@ async function serviceResourceFallbackAuthorization(
   connection: ProviderResourceAuthorizationRecord,
 ) {
   if (connection.authorizationDetails.length > 0) return null
-  if (brokeredAccountConnection(resource)) return { authorizationDetailsCatalogScope: null }
-  const authorization = await requireActiveExternalAuthorization(deps, resource.id, connection.clientGeneration ?? 1)
+  const authorization = await externalOAuthAuthorization(deps, resource, connection.clientGeneration ?? 1)
+  if (!authorization) return { authorizationDetailsCatalogScope: null }
   return authorization.authorizationDetailsCatalogEndpoint ? null : authorization
 }
 
@@ -2689,7 +2707,7 @@ async function requestHostId(deps: Deps, request: AgentAccessRequestRecord) {
 
 async function requireExternalResource(deps: Deps, resourceId: string) {
   const resource = await deps.authorization.findResource(resourceId)
-  if (!resource?.connectorId) throw notFound('External API resource was not found.')
+  if (resource?.accessMode !== 'external_oauth') throw notFound('External OAuth Resource Server was not found.')
   return resource
 }
 
@@ -2707,7 +2725,7 @@ async function findExternalAuthorization(
   clientGeneration?: number,
 ): Promise<ResolvedExternalAuthorization | null> {
   const resource = await deps.authorization.findResource(resourceId)
-  if (!resource?.connectorId) return null
+  if (resource?.accessMode !== 'external_oauth' || !resource.connectorId) return null
   const connector = await deps.connectors.findById(resource.connectorId)
   if (
     !connector ||
@@ -2774,21 +2792,28 @@ function authorizationClientSecret(authorization: ResolvedExternalAuthorization)
 }
 
 function brokeredAccountConnection(resource: NonNullable<Awaited<ReturnType<Deps['authorization']['findResource']>>>) {
-  return resource.scopeRegistry?.accountConnection?.mode === 'brokered'
+  return resource.accessMode === 'brokered' && resource.scopeRegistry?.accountConnection?.mode === 'brokered'
     ? resource.scopeRegistry.accountConnection
     : null
 }
 
 function requiresAccountConnection(resource: NonNullable<Awaited<ReturnType<Deps['authorization']['findResource']>>>) {
-  return resource.connectorId !== null || brokeredAccountConnection(resource) !== null
+  return resource.accessMode !== 'realmroot'
+}
+
+async function externalOAuthAuthorization(
+  deps: Deps,
+  resource: NonNullable<Awaited<ReturnType<Deps['authorization']['findResource']>>>,
+  clientGeneration?: number,
+) {
+  if (resource.accessMode !== 'external_oauth') return null
+  return requireActiveExternalAuthorization(deps, resource.id, clientGeneration)
 }
 
 async function requireEnabledResource(deps: Deps, resourceId: string) {
   const resource = await deps.authorization.findResource(resourceId)
   if (!resource?.enabled) throw notFound('Enabled Resource Server was not found.')
-  if (resource.connectorId !== null && !brokeredAccountConnection(resource)) {
-    await requireActiveExternalAuthorization(deps, resourceId)
-  }
+  await externalOAuthAuthorization(deps, resource)
   return resource
 }
 
@@ -3560,16 +3585,13 @@ async function agentAccessRequestRepresentation(
   const representation = toAccessRequest(request, apiOrigin)
   if ((request.status !== 'approved' && request.status !== 'consumed') || !request.grantId) return representation
   const resourceServer = await requireEnabledResource(deps, request.resourceId)
-  const authorization =
-    resourceServer.connectorId === null
-      ? null
-      : await requireActiveExternalAuthorization(
-          deps,
-          request.resourceId,
-          request.connectionId
-            ? ((await deps.externalResources.findConnection(request.connectionId))?.clientGeneration ?? 1)
-            : 1,
-        )
+  const authorization = await externalOAuthAuthorization(
+    deps,
+    resourceServer,
+    request.connectionId
+      ? ((await deps.externalResources.findConnection(request.connectionId))?.clientGeneration ?? 1)
+      : 1,
+  )
   const credentials = representation.links.credentials!
   return {
     ...representation,

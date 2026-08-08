@@ -14,6 +14,7 @@ const resource: ApiResourceResponse = {
   identifier: 'projects',
   name: 'Projects',
   resourceUrl: 'https://api.example.com',
+  accessMode: 'realmroot',
   connectorId: null,
   authorizationDetails: [],
   description: null,

@@ -5,7 +5,7 @@ import type {
   ProviderConnectionRecord,
   ProviderResourceAuthorizationRecord,
 } from '@server/usecases/ports'
-import { and, count, desc, eq, exists, gt, inArray, isNull, lte, ne, or, sql } from 'drizzle-orm'
+import { and, count, desc, eq, exists, gt, inArray, isNotNull, isNull, lte, ne, or, sql } from 'drizzle-orm'
 import type { Database } from '../../db/client'
 import {
   account,
@@ -93,6 +93,39 @@ export function createExternalResourceRepository(db: Database): ExternalResource
         .where(and(eq(providerConnection.connectorId, input.connectorId), ownerCondition))
         .limit(1)
       return row ?? null
+    },
+
+    async findActiveUserProviderConnectionBySubject(input) {
+      const [row] = await db
+        .select()
+        .from(providerConnection)
+        .where(
+          and(
+            eq(providerConnection.connectorId, input.connectorId),
+            eq(providerConnection.externalSubject, input.externalSubject),
+            eq(providerConnection.status, 'active'),
+            isNotNull(providerConnection.ownerUserId),
+          ),
+        )
+        .limit(1)
+      return row ?? null
+    },
+
+    async findActiveUserProviderConnectionByProviderSubject(input) {
+      const [row] = await db
+        .select({ connection: providerConnection })
+        .from(providerConnection)
+        .innerJoin(identityProviderConnector, eq(identityProviderConnector.id, providerConnection.connectorId))
+        .where(
+          and(
+            eq(identityProviderConnector.providerId, input.providerId),
+            eq(providerConnection.externalSubject, input.externalSubject),
+            eq(providerConnection.status, 'active'),
+            isNotNull(providerConnection.ownerUserId),
+          ),
+        )
+        .limit(1)
+      return row?.connection ?? null
     },
 
     async findProviderConnection(id) {

@@ -211,10 +211,12 @@ Feature: Admin Console
     Then it appears in authorization inventory
     And it records an explicit owner Organization
     And its visibility is private by default and can be changed to public
-    And selecting an OIDC connector makes a standard federated Resource Server externally authorized
-    And a brokered Resource Server selects its Provider Connector without changing native token validation
-    And omitting a connector makes a non-brokered Resource Server natively authorized
-    And its authorization mode cannot change after creation
+    And I explicitly select Realmroot, external OAuth, or brokered provider access
+    And Realmroot access forbids a Provider Connector
+    And external OAuth access requires a standard OIDC Connector
+    And brokered provider access requires its Provider Connector without changing Realmroot token validation
+    And the Connector association no longer determines the Resource Server access mode
+    And its access mode and Provider Connector cannot change after creation
     And its protected resource URL is the OAuth resource identifier and access-token audience
     And its name and description are synchronized from the OpenAPI contract and cannot be edited manually
     And OAuth scopes advertised by the business resource server protected-resource metadata remain the scope authority

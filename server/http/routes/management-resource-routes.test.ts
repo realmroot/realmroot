@@ -118,6 +118,7 @@ describe('management resource routes', () => {
       {
         identifier: 'contacts',
         resourceUrl: 'https://api.example.com',
+        accessMode: 'realmroot',
         ownerOrganizationId: 'org-1',
       },
       201,
@@ -262,6 +263,7 @@ async function loadAuthorizationRoutes(agentMode: 'authority' | 'bootstrap' | nu
     name: 'Contacts',
     resourceUrl: 'https://api.example.com',
     description: null,
+    accessMode: 'realmroot' as const,
     connectorId: null,
     authorizationDetails: [],
     enabled: true,

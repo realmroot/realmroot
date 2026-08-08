@@ -239,6 +239,7 @@ export const apiResource = {
   name: 'Management API',
   description: 'Management surface',
   resourceUrl: 'https://auth.example.com/api',
+  accessMode: 'realmroot' as const,
   connectorId: null,
   authorizationDetails: [],
   enabled: true,

@@ -679,6 +679,14 @@ export interface ExternalResourceRepository {
     ownerUserId: string | null
     ownerOrganizationId: string | null
   }): Promise<ProviderConnectionRecord | null>
+  findActiveUserProviderConnectionBySubject(input: {
+    connectorId: string
+    externalSubject: string
+  }): Promise<ProviderConnectionRecord | null>
+  findActiveUserProviderConnectionByProviderSubject(input: {
+    providerId: string
+    externalSubject: string
+  }): Promise<ProviderConnectionRecord | null>
   findProviderConnection(id: string): Promise<ProviderConnectionRecord | null>
   listProviderConnectionsByUser(userId: string): Promise<ProviderConnectionProjection[]>
   revokeProviderConnection(id: string, ownerUserId: string, now: Date): Promise<boolean>

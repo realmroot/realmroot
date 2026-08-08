@@ -313,6 +313,7 @@ describe('federated credential management over real D1', () => {
       body: JSON.stringify({
         identifier: 'https://api.example.com',
         resourceUrl: 'https://api.example.com',
+        accessMode: 'realmroot',
         ownerOrganizationId: 'org_platform',
       }),
     })

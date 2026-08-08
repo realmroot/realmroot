@@ -3,6 +3,7 @@ import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } fr
 import { render, screen, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { expect } from 'vitest'
+import { TooltipProvider } from '@/components/ui/tooltip'
 export function renderWithQuery(children: ReactNode) {
   const routeTree = createRootRoute({ component: () => children })
   const router = createRouter({
@@ -11,7 +12,9 @@ export function renderWithQuery(children: ReactNode) {
   })
   const result = render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-      <RouterProvider router={router} />
+      <TooltipProvider>
+        <RouterProvider router={router} />
+      </TooltipProvider>
     </QueryClientProvider>,
   )
   return { ...result, router }
