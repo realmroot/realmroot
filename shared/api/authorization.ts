@@ -88,6 +88,7 @@ export const createInvitationRequestSchema = z.object({
 })
 
 export const apiResourceVisibilitySchema = z.enum(['private', 'public'])
+export const apiResourceAccessModeSchema = z.enum(['realmroot', 'external_oauth', 'brokered'])
 export const resourceScopeGrantModeSchema = z.enum(['automatic', 'assigned'])
 export const resourceScopeSchema = z
   .object({
@@ -131,6 +132,7 @@ export const apiResourceResponseSchema = z.object({
   identifier: z.string(),
   name: z.string(),
   resourceUrl: z.url(),
+  accessMode: apiResourceAccessModeSchema,
   connectorId: z.string().nullable(),
   authorizationDetails: authorizationDetailsSchema,
   description: z.string().nullable(),
@@ -147,6 +149,7 @@ export const createApiResourceRequestSchema = z
   .object({
     identifier: nonEmptyString,
     resourceUrl: z.url(),
+    accessMode: apiResourceAccessModeSchema,
     connectorId: nonEmptyString.optional(),
     authorizationDetails: authorizationDetailsSchema.default([]),
     enabled: z.boolean().optional(),
@@ -160,7 +163,6 @@ export const updateApiResourceRequestSchema = z
   .object({
     identifier: nonEmptyString.optional(),
     resourceUrl: z.url().optional(),
-    connectorId: nonEmptyString.nullable().optional(),
     authorizationDetails: authorizationDetailsSchema.optional(),
     enabled: z.boolean().optional(),
     ownerOrganizationId: nonEmptyString.optional(),
@@ -317,6 +319,7 @@ export type ListMembersResponse = z.infer<typeof listMembersResponseSchema>
 export type ListInvitationsResponse = z.infer<typeof listInvitationsResponseSchema>
 export type ApiResourceResponse = z.infer<typeof apiResourceResponseSchema>
 export type ApiResourceVisibility = z.infer<typeof apiResourceVisibilitySchema>
+export type ApiResourceAccessMode = z.infer<typeof apiResourceAccessModeSchema>
 export type ResourceScope = z.infer<typeof resourceScopeSchema>
 export type ResourceScopeRegistry = z.infer<typeof resourceScopeRegistrySchema>
 export type ListApiResourcesResponse = z.infer<typeof listApiResourcesResponseSchema>

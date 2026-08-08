@@ -131,6 +131,14 @@ Feature: Account Center
     When I disconnect the Provider Connection
     Then its sign-in binding and external Resource authorizations are revoked together
 
+  @entrypoint:product-ui @journey:provider-identity-ownership
+  Scenario: A Provider identity belongs to one Realmroot account
+    Given my Provider identity is already connected to another Realmroot account
+    When I authorize that same Provider identity from this account
+    Then Realmroot rejects the connection with a Provider identity conflict
+    And it does not reveal the other Realmroot account
+    And it does not create another Provider Connection or Resource authorization
+
   @entrypoint:product-ui @journey:session-revocation
   Scenario: Sessions can be revoked
     Given my account has multiple sessions

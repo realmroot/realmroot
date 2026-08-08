@@ -275,6 +275,7 @@ describe('external API resource authorization', () => {
     const deps = createTestDeps()
     const native = {
       ...resource(),
+      accessMode: 'brokered' as const,
       connectorId: 'connector-1',
       authorizationDetails: [{ type: 'github_installation' }],
       scopeRegistry: {
@@ -351,6 +352,7 @@ describe('external API resource authorization', () => {
     const deps = createTestDeps()
     const brokered = {
       ...resource(),
+      accessMode: 'brokered' as const,
       authorizationDetails: [{ type: 'github_installation' }],
       scopeRegistry: {
         ...resource().scopeRegistry!,
@@ -406,6 +408,7 @@ describe('external API resource authorization', () => {
 
     const brokered = {
       ...resource(),
+      accessMode: 'brokered' as const,
       scopeRegistry: {
         ...resource().scopeRegistry!,
         accountConnection: {
@@ -439,6 +442,7 @@ describe('external API resource authorization', () => {
       { ...resource(), connectorId: 'connector-1', availableToAgents: false },
       {
         ...resource(),
+        accessMode: 'brokered',
         connectorId: 'connector-broker',
         scopeRegistry: {
           ...resource().scopeRegistry!,
@@ -503,6 +507,7 @@ describe('external API resource authorization', () => {
     }
     const brokered = {
       ...resource(),
+      accessMode: 'brokered' as const,
       scopeRegistry: {
         ...resource().scopeRegistry!,
         accountConnection: {
@@ -611,11 +616,13 @@ describe('external API resource authorization', () => {
     await expect(disconnectProviderConnection(deps, provider.id, 'user-1')).resolves.toBeUndefined()
   })
 
-  it('enforces brokered native connection exchange boundaries and preserves a reconnect', async () => {
+  it(`enforces brokered native connection exchange boundaries and preserves a reconnect
+      [spec: account-center/provider-identity-ownership]`, async () => {
     const deps = createTestDeps()
     authorizationDeps(deps)
     const native = {
       ...resource(),
+      accessMode: 'brokered' as const,
       connectorId: 'connector-1',
       authorizationDetails: [{ type: 'github_installation' }],
       scopeRegistry: {
@@ -733,6 +740,7 @@ describe('external API resource authorization', () => {
 
     const unbrokeredNative = {
       ...native,
+      accessMode: 'realmroot' as const,
       connectorId: null,
       scopeRegistry: { ...native.scopeRegistry!, accountConnection: null },
     }
@@ -748,7 +756,7 @@ describe('external API resource authorization', () => {
         'https://auth.example.com',
         signer,
       ),
-    ).rejects.toThrow('API resource account connections require a Provider Connector.')
+    ).rejects.toThrow('Realmroot-issued access does not use account connections.')
 
     vi.mocked(deps.authorization.findResource).mockResolvedValueOnce({
       ...native,
@@ -809,6 +817,27 @@ describe('external API resource authorization', () => {
     await expect(
       completeResourceConnectionIntent(deps, { state: 'state', code: 'code' }, 'https://auth.example.com'),
     ).rejects.toThrow('Disconnect the current Provider account')
+
+    vi.mocked(deps.externalResources.findProviderConnectionByOwnerConnector).mockResolvedValueOnce(null)
+    vi.mocked(deps.externalResources.findActiveUserProviderConnectionBySubject).mockResolvedValueOnce({
+      id: 'other-provider-connection',
+      connectorId: 'connector-1',
+      ownerUserId: 'other-user',
+      ownerOrganizationId: null,
+      authenticationAccountId: 'other-auth-account',
+      externalSubject: existing.externalSubject,
+      displayName: 'GitHub Controller',
+      status: 'active',
+      createdAt: now,
+      updatedAt: now,
+    })
+    vi.mocked(deps.externalResources.findConnectionByOwnerResource).mockResolvedValueOnce(null)
+    vi.mocked(deps.externalHttp.fetch).mockResolvedValueOnce(brokerResponse(existing.externalSubject))
+    vi.mocked(deps.externalResources.createConnection).mockClear()
+    await expect(
+      completeResourceConnectionIntent(deps, { state: 'state', code: 'code' }, 'https://auth.example.com'),
+    ).rejects.toMatchObject({ status: 409, code: 'conflict' })
+    expect(deps.externalResources.createConnection).not.toHaveBeenCalled()
 
     vi.mocked(deps.externalResources.replaceConnectionAuthorization).mockImplementation(
       async (id, resourceId, input) => ({ ...existing, ...input, id, resourceId }),
@@ -1733,7 +1762,11 @@ describe('external API resource authorization', () => {
       }),
     )
 
-    vi.mocked(deps.authorization.findResource).mockResolvedValue({ ...resource(), connectorId: null })
+    vi.mocked(deps.authorization.findResource).mockResolvedValue({
+      ...resource(),
+      accessMode: 'realmroot',
+      connectorId: null,
+    })
     await expect(
       createAgentAccessRequest(
         deps,
@@ -4789,6 +4822,8 @@ describe('external API resource authorization', () => {
     ]
     const native = {
       ...nativeResource(),
+      accessMode: 'brokered' as const,
+      connectorId: 'connector-1',
       authorizationDetails: [{ type: 'github_installation' }],
       scopeRegistry: {
         ...nativeResource().scopeRegistry!,
@@ -4802,6 +4837,8 @@ describe('external API resource authorization', () => {
     const connection: ProviderResourceAuthorizationRecord = {
       ...connectionRecord(),
       resourceId: native.id,
+      ownerUserId: 'user-1',
+      ownerOrganizationId: null,
       credentialCustody: 'resource_server',
       encryptedTokens: null,
       brokerReference: 'connection-1',
@@ -4822,7 +4859,18 @@ describe('external API resource authorization', () => {
       grantId: 'grant-1',
       authorizationDetails,
     })
+    vi.mocked(deps.externalResources.findAccessRequest).mockResolvedValue({
+      ...requestRecord(),
+      connectionId: connection.id,
+      status: 'approved',
+      grantId: 'grant-1',
+      authorizationDetails,
+    })
     vi.mocked(deps.externalResources.findConnection).mockResolvedValue(connection)
+    vi.mocked(deps.externalResources.findConnectionByOwnerResource).mockResolvedValue(connection)
+    vi.mocked(deps.externalResources.listActiveGrantsByAgent).mockResolvedValue([
+      { ...grantRecord(), connectionId: connection.id, authorizationDetails },
+    ])
     const { privateKey, publicKey } = await generateKeyPair('ES256', { extractable: true })
     const publicJwk = await exportJWK(publicKey)
     const tokenUrl = 'https://auth.example.com/api/access-grants/grant-1/tokens'
@@ -4836,6 +4884,44 @@ describe('external API resource authorization', () => {
       .sign(privateKey)
     const sign = vi.fn().mockResolvedValue('brokered-native-access-token')
     const signer = { issuer: principal().issuer, sign }
+
+    await expect(getAccessRequest(deps, 'request-1', principal(), 'https://auth.example.com')).resolves.toMatchObject({
+      credentialOffer: {
+        proof: { uri: 'https://auth.example.com/api/access/requests/request-1/credentials' },
+      },
+    })
+    await expect(
+      listAgentAuthorizationDetailCatalog(
+        deps,
+        native.id,
+        principal(),
+        { limit: 10, offset: 0 },
+        'https://auth.example.com',
+      ),
+    ).resolves.toMatchObject({
+      items: [{ id: expect.stringMatching(/^resource_/), type: 'github_installation' }],
+    })
+    vi.mocked(deps.externalResources.findAccessRequestByApprovalTokenHash).mockResolvedValue({
+      ...requestRecord(),
+      id: 'request-1',
+      connectionId: connection.id,
+      status: 'pending',
+      authorizationDetails,
+    })
+    await expect(
+      listAccountAccessRequestAuthorizationDetailCatalog(deps, 'request-1', 'approval-token', 'user-1', {
+        limit: 10,
+        offset: 0,
+      }),
+    ).resolves.toMatchObject({
+      items: [
+        {
+          authorizationDetail: authorizationDetails[0],
+          connectionStatus: 'authorized',
+        },
+      ],
+      connection: { status: 'connected' },
+    })
 
     await expect(issueTargetAccessToken(deps, 'grant-1', proof, tokenUrl, principal(), signer)).resolves.toMatchObject({
       accessToken: 'brokered-native-access-token',
@@ -5734,6 +5820,7 @@ function resource(): ApiResourceResponse {
     identifier: 'projects',
     name: 'Projects API',
     resourceUrl: 'https://projects.example.com/api',
+    accessMode: 'external_oauth',
     connectorId: 'connector-1',
     authorizationDetails: [],
     description: 'Manage private projects',
@@ -5775,6 +5862,7 @@ const resourceScopeValues = [
 function nativeResource(): ApiResourceResponse {
   return {
     ...resource(),
+    accessMode: 'realmroot',
     connectorId: null,
     resourceUrl: 'https://auth.example.com/api/projects',
   }

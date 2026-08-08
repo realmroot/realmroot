@@ -84,7 +84,7 @@ describe('admin console authorization creation and Organization detail', () => {
     fireEvent.change(screen.getByLabelText('Protected resource URL'), {
       target: { value: 'https://billing.example.com' },
     })
-    expect(screen.getByLabelText('Authorization model')).toHaveProperty('value', '')
+    expect(screen.getByLabelText('Access model')).toHaveProperty('value', 'realmroot')
     expect(screen.getByLabelText('Visibility')).toHaveProperty('value', 'private')
     expect(screen.getByRole('switch', { name: 'Available to Agents' }).getAttribute('aria-checked')).toBe('true')
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
@@ -101,6 +101,7 @@ describe('admin console authorization creation and Organization detail', () => {
           body: {
             identifier: 'billing-api',
             resourceUrl: 'https://billing.example.com',
+            accessMode: 'realmroot',
             authorizationDetails: [],
             ownerOrganizationId: 'org-1',
             visibility: 'private',

@@ -64,7 +64,7 @@ export function createManagementApiResourcesRoute(config: Pick<AppConfig, 'baseU
 
   app.post('/', async (c) => {
     const input = await readJson(c, createApiResourceSchema)
-    if (input.connectorId && input.ownerOrganizationId !== platformOrganization.id) {
+    if (input.accessMode !== 'realmroot' && input.ownerOrganizationId !== platformOrganization.id) {
       throw badRequest('External Resource Servers must be owned by the built-in platform Organization.')
     }
     const owner = await authorizeOrganizationOwner(c, input.ownerOrganizationId, 'resource-servers:write')
@@ -106,7 +106,11 @@ export function createManagementApiResourcesRoute(config: Pick<AppConfig, 'baseU
   app.patch('/:resourceId', async (c) => {
     const resource = await requireResourceAccess(c, config)
     const input = await readJson(c, updateApiResourceSchema)
-    if (resource.connectorId && input.ownerOrganizationId && input.ownerOrganizationId !== platformOrganization.id) {
+    if (
+      resource.accessMode !== 'realmroot' &&
+      input.ownerOrganizationId &&
+      input.ownerOrganizationId !== platformOrganization.id
+    ) {
       throw badRequest('External Resource Servers must be owned by the built-in platform Organization.')
     }
     const owner = input.ownerOrganizationId

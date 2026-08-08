@@ -9,6 +9,7 @@ const resource: ApiResourceResponse = {
   identifier: 'orders',
   name: 'Orders',
   resourceUrl: 'https://api.example.com/orders',
+  accessMode: 'realmroot',
   connectorId: null,
   authorizationDetails: [],
   description: null,

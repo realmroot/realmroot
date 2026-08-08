@@ -197,6 +197,8 @@ export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> =
         return input
       }),
       findProviderConnectionByOwnerConnector: vi.fn().mockResolvedValue(null),
+      findActiveUserProviderConnectionBySubject: vi.fn().mockResolvedValue(null),
+      findActiveUserProviderConnectionByProviderSubject: vi.fn().mockResolvedValue(null),
       findProviderConnection: vi.fn().mockResolvedValue(null),
       listProviderConnectionsByUser: vi.fn().mockResolvedValue([]),
       revokeProviderConnection: vi.fn().mockResolvedValue(false),

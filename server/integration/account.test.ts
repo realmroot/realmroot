@@ -218,6 +218,7 @@ describe('account self-service over real D1', () => {
       body: JSON.stringify({
         identifier: 'household-api',
         resourceUrl: 'https://household.example.com/api',
+        accessMode: 'realmroot',
         enabled: false,
         ownerOrganizationId: organizationId,
       }),
@@ -355,6 +356,7 @@ describe('account self-service over real D1', () => {
       identifier: 'provider-api',
       name: 'Provider API',
       resourceUrl: 'https://adapter.example.com/provider',
+      accessMode: 'brokered',
       connectorId: 'connector-provider',
       authorizationDetails: [],
       enabled: true,
@@ -408,6 +410,7 @@ describe('account self-service over real D1', () => {
         identifier: 'provider-api-duplicate',
         name: 'Duplicate Provider API',
         resourceUrl: 'https://adapter.example.com/provider-duplicate',
+        accessMode: 'brokered',
         connectorId: 'connector-provider',
         authorizationDetails: [],
         enabled: true,

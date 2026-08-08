@@ -102,7 +102,10 @@ export const account = sqliteTable(
       .$onUpdate(() => new Date())
       .notNull(),
   },
-  (table) => [index('account_userId_idx').on(table.userId)],
+  (table) => [
+    uniqueIndex('account_providerId_accountId_unique').on(table.providerId, table.accountId),
+    index('account_userId_idx').on(table.userId),
+  ],
 )
 
 export const verification = sqliteTable(

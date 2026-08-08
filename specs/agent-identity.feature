@@ -342,8 +342,8 @@ Feature: Agent identity and delegated API authorization
   Rule: External API resources use target-issued authorization
 
     @entrypoint:product-ui @journey:brokered-native-account-connection
-    Scenario: A native Resource Server brokers one provider account connection
-      Given a native Resource Server advertises brokered account connection endpoints
+    Scenario: A brokered Resource Server connects one provider account
+      Given a Resource Server uses brokered provider access and advertises account connection endpoints
       And one controller owns at most one account connection for that Resource Server
       When the controller connects the provider account
       Then Realmroot signs a short-lived connection request for the Resource Server

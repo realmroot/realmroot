@@ -187,6 +187,19 @@ export function createAuth(
         : undefined,
       account: {
         create: {
+          before: async (account) => {
+            if (account.providerId === 'credential') return { data: account }
+            const existing = await externalResources.findActiveUserProviderConnectionByProviderSubject({
+              providerId: account.providerId,
+              externalSubject: account.accountId,
+            })
+            if (existing && existing.ownerUserId !== account.userId) {
+              throw new APIError('CONFLICT', {
+                message: 'This Provider account is already connected to another Realmroot account.',
+              })
+            }
+            return { data: account }
+          },
           after: async (account) => {
             if (account.providerId === 'credential') return
             await externalResources.connectAuthenticationAccount({
