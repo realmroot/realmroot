@@ -151,8 +151,8 @@ keys. A controller can bind a replacement Host or revoke one compromised Host
 without changing the Agent subject or affecting its other Hosts.
 
 Resource servers see the stable Agent in the RFC 8693 `act` claim rather than
-the runtime installation that presented it. Public AgentInfo provides cacheable
-display metadata only; it never participates in authorization.
+the runtime installation that presented it. Public Agent profiles provide
+cacheable display metadata only; they never participate in authorization.
 
 Realmroot supports two resource boundaries with the same request, approval,
 revocation, and audit model:
@@ -320,7 +320,7 @@ deployed by the workflow. See [Deployment upgrades](docs/deploy/upgrades.md),
 - [Agent access guide](docs/guides/agent-access.md): the product-level identity,
   approval, account connection, token, and revocation journey.
 - [Agent identity architecture](docs/architecture/agent-identity.md): stable
-  identity, Host bindings, authority, credentials, AgentInfo, and audit.
+  identity, Host bindings, authority, credentials, public profiles, and audit.
 - [Authorization boundaries](docs/architecture/authorization-boundaries.md):
   resource-owned scopes, role semantics, issuance policy, and enforcement.
 - [Resource server integration](docs/integrations/resource-servers.md): publish

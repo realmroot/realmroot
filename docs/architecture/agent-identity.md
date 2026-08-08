@@ -127,21 +127,25 @@ needed and submits a stable-Agent assertion using RFC 7523. The target issues an
 Agent actor token, then intersects the subject's scopes with the approved Agent
 scopes during RFC 8693 token exchange. The target authorization server issues
 the final DPoP-bound token with the connected user as `sub` and the Agent in
-`act`. Targets that support Realmroot AgentInfo preserve the Agent's original
-issuer, subject, and `ai_agent` subject profile.
+`act`. Targets preserve the Agent's original issuer, subject, and `ai_agent`
+subject profile.
 
-## Agent Display Information
+## Public Agent Profiles
 
-Resource servers discover `agentinfo_endpoint` from the Agent issuer's OIDC or
-OAuth metadata and resolve the exact `(act.iss, act.sub)` pair. AgentInfo is a
-public, cacheable presentation projection containing the stable identifier,
-name, picture, and update time. Agents without a custom picture use Realmroot's
-versioned static placeholder at `/agent-picture-v1.svg`. AgentInfo excludes
-controllers, home spaces, Hosts, roles, scopes, grants, and authorization state.
+Realmroot exposes the stable Agent as a public, cacheable resource at
+`/api/public/agents/{subject}`. The default summary contains only identity
+display fields; `view=full` adds intentionally public ownership and sanitized
+activity projections. Agents without a custom picture use Realmroot's versioned
+static placeholder at `/agent-picture-v1.svg`.
 
-AgentInfo remains available for retired subjects so historical audit records
-keep a useful display name. It is never an authentication, authorization, or
-revocation input.
+Agent configuration and OAuth authorization-server metadata publish this URI
+template as `agent_profile_uri_template`; clients replace `{subject}` with the
+verified Agent actor subject. OIDC discovery does not duplicate this
+Realmroot-specific extension.
+
+Public profiles exclude Hosts, roles, scopes, grants, Resources, and
+authorization state. They are never authentication, authorization, or
+revocation inputs, and soft-deleted Agent subjects no longer resolve.
 
 Realmroot returns no target refresh token to the Agent. Revoking the grant,
 connection, credential, Agent, or host stops new issuance; active external

@@ -9,6 +9,12 @@ import {
   resourceServerResourcesResponseSchema,
 } from '@shared/api/agent-api'
 import { paginationQuerySchema } from '@shared/api/pagination'
+import {
+  publicAgentResponseSchema,
+  publicProfileQuerySchema,
+  publicUserResponseSchema,
+} from '@shared/api/public-profiles'
+import { usernameSchema } from '@shared/api/users'
 import { requiredProtectedScope } from '@shared/authz'
 import { z } from 'zod'
 import { agentGovernanceRoutes } from './management-routes/agent-governance'
@@ -64,9 +70,67 @@ const managementOpenApiTags = [
   { name: 'Security', description: 'Realm-wide authentication and security policy.' },
   { name: 'Webhooks', description: 'Webhook endpoints, deliveries, attempts, and secrets.' },
   { name: 'Audit Events', description: 'Immutable Realmroot governance audit events.' },
+  { name: 'Public Profiles', description: 'Public representations of User and Agent identities.' },
 ] as const
 
+const publicProfileResponseHeaders = {
+  ETag: { description: 'Validator for the selected public representation.', schema: { type: 'string' } },
+  'Cache-Control': {
+    description: 'Shared-cache policy for the selected public representation.',
+    schema: { type: 'string' },
+  },
+}
+
+const publicProfileRequestHeaders = z.object({
+  'If-None-Match': z
+    .string()
+    .optional()
+    .openapi({
+      param: { name: 'If-None-Match', in: 'header' },
+      example: '"representation-version"',
+    }),
+})
+
+const publicProfileAdditionalResponses = {
+  304: {
+    description: 'The selected public representation has not changed.',
+    headers: publicProfileResponseHeaders,
+  },
+}
+
 const managementRoutes: ManagementRouteConfig[] = [
+  {
+    method: 'get',
+    path: '/public/users/{username}',
+    operationId: 'getPublicUser',
+    summary: 'Get a public User representation',
+    security: [],
+    request: {
+      params: z.object({ username: usernameSchema }),
+      query: publicProfileQuerySchema,
+      headers: publicProfileRequestHeaders,
+    },
+    response: publicUserResponseSchema,
+    responseHeaders: publicProfileResponseHeaders,
+    additionalResponses: publicProfileAdditionalResponses,
+    errors: { 400: 'The username or view is invalid.', 404: 'The public User was not found.' },
+  },
+  {
+    method: 'get',
+    path: '/public/agents/{subject}',
+    operationId: 'getPublicAgent',
+    summary: 'Get a public Agent representation',
+    security: [],
+    request: {
+      params: z.object({ subject: z.string().regex(/^agt_[a-zA-Z0-9_-]+$/) }),
+      query: publicProfileQuerySchema,
+      headers: publicProfileRequestHeaders,
+    },
+    response: publicAgentResponseSchema,
+    responseHeaders: publicProfileResponseHeaders,
+    additionalResponses: publicProfileAdditionalResponses,
+    errors: { 400: 'The subject or view is invalid.', 404: 'The public Agent was not found.' },
+  },
   {
     method: 'post',
     path: '/assets',
@@ -241,6 +305,7 @@ function createManagementRoute(routeConfig: ManagementRouteConfig) {
 }
 
 function managementTagForPath(path: string): (typeof managementOpenApiTags)[number]['name'] {
+  if (path.startsWith('/public/')) return 'Public Profiles'
   if (path.startsWith('/assets')) return 'Assets'
   if (path === '/agent/status' || path.startsWith('/agents')) return 'Agents'
   if (path.startsWith('/access/requests')) return 'Agent Access'
@@ -266,17 +331,20 @@ function routeResponses(routeConfig: ManagementRouteConfig) {
       ...(routeConfig.responseHeaders ? { headers: routeConfig.responseHeaders } : {}),
       content: { [jsonContentType]: { schema: routeConfig.response } },
     }
-  if (routeConfig.security !== undefined && routeConfig.security.length === 0) return responses
+  const expectedErrors = Object.fromEntries(
+    Object.entries(routeConfig.errors ?? {}).map(([status, error]) => [
+      status,
+      typeof error === 'string' ? errorResponse(error) : errorResponse(error.description, error.schema, error.headers),
+    ]),
+  )
+  const additionalResponses = routeConfig.additionalResponses ?? {}
+  if (routeConfig.security !== undefined && routeConfig.security.length === 0) {
+    return { ...responses, ...additionalResponses, ...expectedErrors }
+  }
   return {
     ...responses,
-    ...Object.fromEntries(
-      Object.entries(routeConfig.errors ?? {}).map(([status, error]) => [
-        status,
-        typeof error === 'string'
-          ? errorResponse(error)
-          : errorResponse(error.description, error.schema, error.headers),
-      ]),
-    ),
+    ...additionalResponses,
+    ...expectedErrors,
     401: errorResponse('Authentication is required.'),
     403: errorResponse('Administrator access is required.'),
   }

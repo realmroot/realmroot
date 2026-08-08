@@ -25,6 +25,9 @@ export function createAccountStore() {
       username: 'jane' as string | null,
       avatarAssetId: null as string | null,
       image: null as string | null,
+      bio: null as string | null,
+      location: null as string | null,
+      links: [] as import('@shared/api/public-profiles').AccountProfileLink[],
       role: 'user' as string | null,
     },
     security: {

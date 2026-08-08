@@ -1,7 +1,7 @@
-import { ChevronsUpDown, Download, LockKeyhole, Mail, UserRound } from 'lucide-react'
+import { ChevronsUpDown, Download, Globe2, LockKeyhole, Mail, Plus, Trash2, UserRound } from 'lucide-react'
 import { type FormEvent, useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { Field, SelectInput } from '@/components/product-form'
+import { Field, SelectInput, TextArea, TextInput } from '@/components/product-form'
 import { Button } from '@/components/ui/button'
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
 import {
@@ -36,6 +36,7 @@ import {
   useAccountMutation,
   useAccountProfile,
   useDeveloperConsoleAccess,
+  useLinkedAccounts,
 } from './queries'
 import { defaultAccountCenterSettings } from './settings'
 import type { MutationHandler, UserProfile } from './types'
@@ -310,23 +311,37 @@ function ProfileSections({
   mutate: MutationHandler
 }) {
   const [dialog, setDialog] = useState<'avatar' | 'displayName' | 'username' | 'email' | 'password' | null>(null)
+  const [publicProfileOpen, setPublicProfileOpen] = useState(false)
   const [displayName, setDisplayName] = useState(profile.displayName)
   const [username, setUsername] = useState(profile.username ?? '')
   const [avatarAssetId, setAvatarAssetId] = useState(profile.avatarAssetId ?? '')
   const [avatarPreview, setAvatarPreview] = useState(profile.image ?? '')
   const [email, setEmail] = useState(profile.email)
+  const [bio, setBio] = useState(profile.bio ?? '')
+  const [location, setLocation] = useState(profile.location ?? '')
+  const [links, setLinks] = useState(() => publicProfileLinkDrafts(profile.links))
   const [emailOtp, setEmailOtp] = useState('')
   const [emailStep, setEmailStep] = useState<'request' | 'confirm'>('request')
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [passwordError, setPasswordError] = useState<string | null>(null)
+  const linkedAccountsQuery = useLinkedAccounts(publicProfileOpen && accountCenter.connectedAccountsEnabled)
+  const projectableAccounts = (linkedAccountsQuery.data?.accounts ?? []).filter(
+    (account) => account.providerId !== 'credential',
+  )
+  const availableAccounts = projectableAccounts.filter(
+    (account) => !links.some((link) => link.type === 'linked-account' && link.accountId === account.id),
+  )
   useEffect(() => {
     setDisplayName(profile.displayName)
     setUsername(profile.username ?? '')
     setAvatarAssetId(profile.avatarAssetId ?? '')
     setAvatarPreview(profile.image ?? '')
     setEmail(profile.email)
+    setBio(profile.bio ?? '')
+    setLocation(profile.location ?? '')
+    setLinks(publicProfileLinkDrafts(profile.links))
     setEmailOtp('')
     setEmailStep('request')
   }, [profile])
@@ -337,6 +352,9 @@ function ProfileSections({
     setAvatarAssetId(profile.avatarAssetId ?? '')
     setAvatarPreview(profile.image ?? '')
     setEmail(profile.email)
+    setBio(profile.bio ?? '')
+    setLocation(profile.location ?? '')
+    setLinks(publicProfileLinkDrafts(profile.links))
     setEmailOtp('')
     setEmailStep('request')
     setCurrentPassword('')
@@ -359,6 +377,20 @@ function ProfileSections({
       invalidate: [accountQueryKeys.profile],
     })
     if (result) setDialog(null)
+  }
+  async function savePublicProfile(event: FormEvent) {
+    event.preventDefault()
+    const result = await mutate(
+      'Public profile updated.',
+      () =>
+        updateAccountProfile({
+          bio: bio || null,
+          location: location || null,
+          links: links.map(({ key: _key, ...link }) => link),
+        }),
+      { invalidate: [accountQueryKeys.profile] },
+    )
+    if (result) setPublicProfileOpen(false)
   }
   async function changeEmail(event: FormEvent) {
     event.preventDefault()
@@ -415,6 +447,25 @@ function ProfileSections({
         <>
           <ProfileIdentityRows accountCenter={accountCenter} profile={profile} setDialog={setDialog} />
           <ProfileIdentifierRows accountCenter={accountCenter} profile={profile} setDialog={setDialog} />
+          <section className="settingsPanel">
+            <SettingsAction
+              action={
+                <Button
+                  aria-label={tt('Edit public profile')}
+                  onClick={() => setPublicProfileOpen(true)}
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                >
+                  {tt('Edit')}
+                </Button>
+              }
+              icon={<Globe2 size={18} />}
+              meta={tt('Bio, location, and links shown on your public profile.')}
+              title={tt('Public profile')}
+              value={profile.username ? `/u/${profile.username}` : tt('Set a username to publish')}
+            />
+          </section>
         </>
       ) : null}
       {accountCenter.passwordChangeEnabled && mode === 'password' ? (
@@ -465,6 +516,158 @@ function ProfileSections({
         uploadAvatar={uploadAvatar}
         username={username}
       />
+      <Dialog onOpenChange={setPublicProfileOpen} open={publicProfileOpen}>
+        <DialogContent className="sm:max-w-xl">
+          <form onSubmit={savePublicProfile}>
+            <DialogHeader>
+              <DialogTitle>{tt('Edit public profile')}</DialogTitle>
+              <DialogDescription>{tt('Only these fields are visible to external visitors.')}</DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-5 py-5">
+              <Field label={tt('Bio')}>
+                <TextArea maxLength={500} onChange={(event) => setBio(event.target.value)} rows={4} value={bio} />
+              </Field>
+              <Field label={tt('Location')}>
+                <TextInput maxLength={100} onChange={(event) => setLocation(event.target.value)} value={location} />
+              </Field>
+              <div className="grid gap-3">
+                <div className="flex items-center justify-between gap-3">
+                  <strong className="text-sm">{tt('Links & identities')}</strong>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      disabled={links.length >= 10}
+                      onClick={() =>
+                        setLinks([...links, { key: crypto.randomUUID(), type: 'website', label: '', url: '' }])
+                      }
+                      size="sm"
+                      type="button"
+                      variant="outline"
+                    >
+                      <Plus /> {tt('Add website')}
+                    </Button>
+                    {accountCenter.connectedAccountsEnabled ? (
+                      <Button
+                        disabled={links.length >= 10 || availableAccounts.length === 0}
+                        onClick={() => {
+                          const account = availableAccounts[0]!
+                          setLinks([
+                            ...links,
+                            {
+                              key: crypto.randomUUID(),
+                              type: 'linked-account',
+                              accountId: account.id,
+                              providerId: account.providerId,
+                              label: providerLabel(account.providerId),
+                              url: '',
+                            },
+                          ])
+                        }}
+                        size="sm"
+                        type="button"
+                        variant="outline"
+                      >
+                        <Plus /> {tt('Add linked account')}
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
+                {linkedAccountsQuery.error ? (
+                  <p className="text-sm text-destructive">{tt('Unable to load linked accounts.')}</p>
+                ) : null}
+                {links.map((link, index) => (
+                  <div className="grid gap-2 sm:grid-cols-[140px_120px_minmax(0,1fr)_40px]" key={link.key}>
+                    {link.type === 'linked-account' && accountCenter.connectedAccountsEnabled ? (
+                      <SelectInput
+                        aria-label={tt('Linked account')}
+                        onChange={(event) => {
+                          const account = projectableAccounts.find((candidate) => candidate.id === event.target.value)!
+                          setLinks(
+                            links.map((item, itemIndex) =>
+                              itemIndex === index && item.type === 'linked-account'
+                                ? {
+                                    ...item,
+                                    accountId: account.id,
+                                    providerId: account.providerId,
+                                    label: providerLabel(account.providerId),
+                                  }
+                                : item,
+                            ),
+                          )
+                        }}
+                        value={link.accountId}
+                      >
+                        {projectableAccounts.map((account) => (
+                          <option
+                            disabled={links.some(
+                              (item, itemIndex) =>
+                                itemIndex !== index && item.type === 'linked-account' && item.accountId === account.id,
+                            )}
+                            key={account.id}
+                            value={account.id}
+                          >
+                            {providerLabel(account.providerId)}
+                          </option>
+                        ))}
+                      </SelectInput>
+                    ) : link.type === 'linked-account' ? (
+                      <span className="flex items-center text-sm text-muted-foreground">
+                        {providerLabel(link.providerId)}
+                      </span>
+                    ) : (
+                      <span className="flex items-center text-sm text-muted-foreground">{tt('Website')}</span>
+                    )}
+                    <TextInput
+                      aria-label={tt('Link label')}
+                      maxLength={40}
+                      onChange={(event) =>
+                        setLinks(
+                          links.map((item, itemIndex) =>
+                            itemIndex === index ? { ...item, label: event.target.value } : item,
+                          ),
+                        )
+                      }
+                      placeholder={tt('Label')}
+                      required
+                      value={link.label}
+                    />
+                    <TextInput
+                      aria-label={tt('Link URL')}
+                      onChange={(event) =>
+                        setLinks(
+                          links.map((item, itemIndex) =>
+                            itemIndex === index ? { ...item, url: event.target.value } : item,
+                          ),
+                        )
+                      }
+                      placeholder={
+                        link.type === 'linked-account' ? 'https://provider.example/your-profile' : 'https://example.com'
+                      }
+                      required
+                      type="url"
+                      value={link.url}
+                    />
+                    <Button
+                      aria-label={tt('Remove link')}
+                      onClick={() => setLinks(links.filter((_, itemIndex) => itemIndex !== index))}
+                      size="icon"
+                      type="button"
+                      variant="ghost"
+                    >
+                      <Trash2 />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <DialogFooter>
+              <Button onClick={() => setPublicProfileOpen(false)} type="button" variant="outline">
+                {tt('Cancel')}
+              </Button>
+              <Button type="submit">{tt('Save')}</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }
@@ -526,6 +729,20 @@ function ProfileIdentityRows({
       ) : null}
     </section>
   )
+}
+
+function publicProfileLinkDrafts(links: UserProfile['links']) {
+  return links.map((link) => ({ ...link, key: crypto.randomUUID() }))
+}
+
+function providerLabel(providerId: string) {
+  const brands: Record<string, string> = { github: 'GitHub', google: 'Google', linkedin: 'LinkedIn' }
+  if (brands[providerId]) return brands[providerId]
+  return providerId
+    .split(/[-_]/)
+    .filter(Boolean)
+    .map((part) => `${part[0]?.toUpperCase() ?? ''}${part.slice(1)}`)
+    .join(' ')
 }
 
 function ProfileIdentifierRows({

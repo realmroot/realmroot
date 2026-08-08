@@ -36,6 +36,16 @@ Feature: Account Center
     When I update my display profile
     Then Account Center shows the saved profile values
 
+  @entrypoint:product-ui @journey:public-user-profile
+  Scenario: A public User profile exposes an intentionally public representation
+    Given a User has a username, public profile details, and linked accounts
+    And the User explicitly chooses which linked accounts to publish with HTTPS profile URLs
+    When an external visitor opens the User profile
+    Then Realmroot returns the User's public identity
+    And the default summary omits Public Agents and recent activity
+    And the full view includes Public Agents, sanitized recent activity, and only the chosen accounts that remain linked
+    But the public profile never returns email, credentials, sessions, grants, or private activity details
+
   @entrypoint:product-ui @journey:profile-avatar-upload
   Scenario: Avatar upload stores a profile image
     When I upload an avatar image

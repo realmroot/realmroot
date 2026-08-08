@@ -13,7 +13,6 @@ import {
   getAgent,
   getAgentEnrollmentIntent,
   getAgentIdentityByProtocolAgent,
-  getAgentInfo,
   getManagementAgent,
   getManagementAgentAccessGrant,
   getManagementAgentAccessRequest,
@@ -58,29 +57,6 @@ describe('Agent login identity', () => {
       }),
     ).toMatchObject({ id: 'identity-1', createdAt: '2026-08-01T00:00:00.000Z' })
   })
-  it('returns public display information for a stable Agent subject [spec: agent-identity/agent-info-resolution]', async () => {
-    const deps = createTestDeps()
-    vi.mocked(deps.agentIdentities.findByIssuerSubject).mockResolvedValue(identity({ status: 'inactive' }))
-
-    await expect(getAgentInfo(deps, 'https://auth.example.com', 'agt_stable')).resolves.toEqual({
-      iss: 'https://auth.example.com',
-      sub: 'agt_stable',
-      sub_profile: 'ai_agent',
-      name: 'Build Agent',
-      picture: 'https://auth.example.com/agent-picture-v1.svg',
-      updated_at: 1785542400,
-    })
-    expect(deps.agentIdentities.findByIssuerSubject).toHaveBeenCalledWith('https://auth.example.com', 'agt_stable')
-  })
-
-  it('does not resolve an unknown Agent subject', async () => {
-    const deps = createTestDeps()
-
-    await expect(getAgentInfo(deps, 'https://auth.example.com', 'agt_unknown')).rejects.toMatchObject({
-      status: 404,
-    })
-  })
-
   it('creates, binds, and audits one personal stable identity after controller approval [spec: agent-identity/agent-governance-audit]', async () => {
     const deps = createTestDeps()
     vi.mocked(deps.agentIdentities.findProtocolAgent).mockResolvedValue({

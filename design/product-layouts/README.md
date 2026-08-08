@@ -1,7 +1,7 @@
 # Realmroot complete product layouts
 
 This interactive artifact applies the selected **C · Clear Aqua** design system
-to Realmroot's three user-facing surfaces.
+to Realmroot's four user-facing surfaces.
 
 - Console: separate Realm and Organization contexts plus application, user,
   organization, Agent, Resource server, and role detail layouts.
@@ -9,6 +9,31 @@ to Realmroot's three user-facing surfaces.
   journeys.
 - Account Center: overview, profile, sign-in and security, applications,
   delegated Agents, authorization activity, and organization management.
+- Public Profiles: externally browsable User and Agent identity pages with
+  verifiable public claims and privacy-conscious information boundaries.
+
+Public User profiles use only display-safe identity fields and activity attributed
+to the User as controller. Public Agent profiles map identity and activity to the
+stable Agent subject. Agent profiles use a GitHub-inspired annual heatmap, and
+both variants use a recent activity timeline. Private activity
+may contribute anonymized counts, but never exposes its Resource, grant, scope,
+Host, controller, or authorization details. Public profiles remain display metadata,
+never an authentication or authorization decision.
+
+The User profile intentionally focuses on Public Agents and Recent activity; the
+streak overview and annual heatmap are reserved for Agent profiles. The User
+mockup also explores an opt-in public “Links & identities” projection.
+Production stores opt-in website and linked-account projections in the User
+profile's bounded JSON links field. A linked-account projection references a
+currently linked account internally, requires an explicit HTTPS profile URL, and
+omits the internal account reference publicly. Credentials, provider account IDs,
+and provider tokens never enter the public model; unlinking an account removes its
+projection from subsequent public reads.
+
+The Agent Owner link and the User's Public Agents section are public projections.
+Publishing ownership must
+be explicit and must not expose or imply the Agent's controller, Host, grants,
+scopes, or current authorization state.
 
 Open `index.html` directly or serve the repository and visit
 `/design/product-layouts/`.

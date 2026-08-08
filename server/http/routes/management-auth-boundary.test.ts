@@ -74,7 +74,7 @@ describe('management routes 1', () => {
         continue
       }
 
-      if (operation.key !== 'GET /assets/{param}') {
+      if (operation.key !== 'GET /assets/{param}' && !operation.key.startsWith('GET /public/')) {
         expect(operation.responses, operation.key).toHaveProperty('401')
         expect(operation.responses, operation.key).toHaveProperty('403')
       }

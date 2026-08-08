@@ -132,6 +132,13 @@ export interface ManagementRouteConfig {
   response?: ZodType
   noBody?: boolean
   responseHeaders?: Record<string, { description: string; schema: Record<string, unknown> }>
+  additionalResponses?: Record<
+    number,
+    {
+      description: string
+      headers?: Record<string, { description: string; schema: Record<string, unknown> }>
+    }
+  >
   errors?: Partial<
     Record<
       400 | 404 | 409 | 412 | 422 | 428 | 429 | 502,

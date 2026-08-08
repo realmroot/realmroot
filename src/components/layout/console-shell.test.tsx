@@ -18,6 +18,9 @@ const profile = {
   username: 'admin',
   avatarAssetId: null,
   image: null,
+  bio: null,
+  location: null,
+  links: [],
   role: 'admin',
 }
 function TestConsoleShell({ children }: { children: ReactNode }) {

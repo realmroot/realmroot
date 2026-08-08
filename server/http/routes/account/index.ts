@@ -578,8 +578,15 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
 
 async function accountProfile(c: Context) {
   const deps = getDeps(c)
-  const user = await deps.users.getUser(getPrincipal(c).user!.id)
-  return { user }
+  const profile = await deps.users.getPublicProfile(getPrincipal(c).user!.id)
+  return {
+    user: {
+      ...profile.user,
+      bio: profile.bio,
+      location: profile.location,
+      links: profile.links,
+    },
+  }
 }
 
 async function accountCenterSettings(c: Context, securityPolicy?: SecurityPolicy): Promise<ConfigzAccountCenter> {

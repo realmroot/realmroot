@@ -26,11 +26,13 @@ describe('auth.test 2', () => {
 
     const discovery = await app.request('https://auth.example.com/.well-known/agent-configuration')
     expect(discovery.status).toBe(200)
-    await expect(discovery.json()).resolves.toMatchObject({
+    const metadata = await discovery.json()
+    expect(metadata).toMatchObject({
       issuer: 'https://auth.example.com/api/auth',
       agent_identity_issuer: 'https://auth.example.com/api/auth',
       agent_endpoint: 'https://auth.example.com/api/agent/status',
       agent_enrollment_endpoint: 'https://auth.example.com/api/agent/enrollments',
+      agent_profile_uri_template: 'https://auth.example.com/api/public/agents/{subject}',
       agent_token_endpoint: 'https://auth.example.com/api/auth/oauth2/token',
       agent_bootstrap_scopes_supported: [
         'agent:read',
@@ -48,7 +50,6 @@ describe('auth.test 2', () => {
         register: 'https://auth.example.com/api/auth/agent/register',
       },
     })
-
     const capabilitiesResponse = await app.request('https://auth.example.com/api/auth/capability/list')
     expect(capabilitiesResponse.status).toBe(404)
   })

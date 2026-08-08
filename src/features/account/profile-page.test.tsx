@@ -145,6 +145,12 @@ describe('AccountProfilePage', () => {
     expect(await screen.findByText('denied')).toBeTruthy()
   })
 
+  it('renders an error state when Account Center access is unavailable', async () => {
+    server.use(http.get(`${base}/api/account/developer-console-access`, () => HttpResponse.json(null)))
+    renderWithClient(<AccountProfilePage />)
+    expect(await screen.findByText('Unable to load account center.')).toBeTruthy()
+  })
+
   it('shows the unavailable section when profile editing is disabled', async () => {
     const disabled = configz()
     disabled.accountCenter = { ...disabled.accountCenter, profileEditingEnabled: false }
@@ -163,6 +169,169 @@ describe('AccountProfilePage', () => {
     await waitFor(() => expect(success).toHaveBeenCalledWith('Profile updated.'))
     await waitFor(() => expect(screen.getAllByText('Jane Updated').length).toBeGreaterThan(0))
     expect(store.profile.displayName).toBe('Jane Updated')
+  })
+
+  it('publishes only an explicitly selected linked account with its HTTPS profile URL [spec: account-center/public-user-profile]', async () => {
+    store.linkedAccounts = [
+      {
+        id: 'credential-1',
+        accountId: 'user-1',
+        providerId: 'credential',
+        createdAt: '2026-01-01T00:00:00.000Z',
+      },
+      {
+        id: 'github-1',
+        accountId: 'private-provider-account-id',
+        providerId: 'github',
+        createdAt: '2026-01-01T00:00:00.000Z',
+      },
+    ]
+    const patches: Array<Record<string, unknown>> = []
+    server.use(
+      http.patch(`${base}/api/account/profile`, async ({ request }) => {
+        const body = (await request.json()) as Record<string, unknown>
+        patches.push(body)
+        Object.assign(store.profile, body)
+        return HttpResponse.json({ user: store.profile })
+      }),
+    )
+    renderWithClient(<AccountProfilePage />)
+
+    const editPublicProfile = await screen.findByRole('button', { name: 'Edit public profile' })
+    fireEvent.click(editPublicProfile)
+    const addLinkedAccount = await screen.findByRole('button', { name: 'Add linked account' })
+    await waitFor(() => expect((addLinkedAccount as HTMLButtonElement).disabled).toBe(false))
+    fireEvent.click(addLinkedAccount)
+    expect((screen.getByLabelText('Link label') as HTMLInputElement).value).toBe('GitHub')
+    fireEvent.change(screen.getByLabelText('Link URL'), { target: { value: 'https://github.com/jane' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(success).toHaveBeenCalledWith('Public profile updated.'))
+    expect(patches).toEqual([
+      {
+        bio: null,
+        location: null,
+        links: [
+          {
+            type: 'linked-account',
+            accountId: 'github-1',
+            providerId: 'github',
+            label: 'GitHub',
+            url: 'https://github.com/jane',
+          },
+        ],
+      },
+    ])
+    expect(JSON.stringify(patches)).not.toContain('private-provider-account-id')
+  })
+
+  it('edits websites and multiple linked-account projections', async () => {
+    store.linkedAccounts = [
+      {
+        id: 'github-1',
+        accountId: 'github-private',
+        providerId: 'github',
+        createdAt: '2026-01-01T00:00:00.000Z',
+      },
+      {
+        id: 'custom-1',
+        accountId: 'custom-private',
+        providerId: 'custom_oauth',
+        createdAt: '2026-01-01T00:00:00.000Z',
+      },
+    ]
+    renderWithClient(<AccountProfilePage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit public profile' }))
+    const addLinkedAccount = await screen.findByRole('button', { name: 'Add linked account' })
+    await waitFor(() => expect((addLinkedAccount as HTMLButtonElement).disabled).toBe(false))
+
+    fireEvent.change(screen.getByLabelText('Bio'), { target: { value: 'Agent builder' } })
+    fireEvent.change(screen.getByLabelText('Location'), { target: { value: 'Toronto' } })
+    fireEvent.click(addLinkedAccount)
+    fireEvent.change(screen.getByRole('combobox', { name: 'Linked account' }), { target: { value: 'custom-1' } })
+    expect((screen.getByLabelText('Link label') as HTMLInputElement).value).toBe('Custom Oauth')
+    fireEvent.change(screen.getByLabelText('Link URL'), { target: { value: 'https://accounts.example.com/jane' } })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add linked account' }))
+    expect(screen.getAllByRole('combobox', { name: 'Linked account' })).toHaveLength(2)
+    fireEvent.change(screen.getAllByRole('combobox', { name: 'Linked account' })[0]!, {
+      target: { value: 'custom-1' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Add website' }))
+    const labels = screen.getAllByLabelText('Link label')
+    const urls = screen.getAllByLabelText('Link URL')
+    fireEvent.change(labels[2]!, { target: { value: 'Blog' } })
+    fireEvent.change(urls[1]!, { target: { value: 'https://github.com/jane' } })
+    fireEvent.change(urls[2]!, { target: { value: 'https://jane.example.com' } })
+    fireEvent.click(screen.getAllByRole('button', { name: 'Remove link' })[2]!)
+
+    expect(screen.queryByDisplayValue('Blog')).toBeNull()
+    expect(screen.getAllByRole('button', { name: 'Remove link' })).toHaveLength(2)
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Edit public profile' })).toBeNull())
+  })
+
+  it('preserves an existing public projection when connected-account management is disabled', async () => {
+    const limited = configz()
+    limited.accountCenter = { ...limited.accountCenter, connectedAccountsEnabled: false }
+    let linkedAccountRequests = 0
+    server.use(
+      http.get(`${base}/api/configz`, () => HttpResponse.json(limited)),
+      http.get(`${base}/api/account/linked-accounts`, () => {
+        linkedAccountRequests += 1
+        return HttpResponse.json({ accounts: [] })
+      }),
+    )
+    store.profile.links = [
+      {
+        type: 'linked-account',
+        accountId: 'github-1',
+        providerId: 'github',
+        label: 'GitHub profile',
+        url: 'https://github.com/jane',
+      },
+    ]
+
+    renderWithClient(<AccountProfilePage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit public profile' }))
+
+    expect(screen.queryByRole('button', { name: 'Add linked account' })).toBeNull()
+    expect(screen.getByText('GitHub')).toBeTruthy()
+    expect((screen.getByLabelText('Link label') as HTMLInputElement).value).toBe('GitHub profile')
+    expect(linkedAccountRequests).toBe(0)
+  })
+
+  it('shows linked-account loading errors and disables additions at the public-link limit', async () => {
+    store.profile.links = Array.from({ length: 10 }, (_, index) => ({
+      type: 'website' as const,
+      label: `Website ${index + 1}`,
+      url: `https://example.com/${index + 1}`,
+    }))
+    server.use(
+      http.get(`${base}/api/account/linked-accounts`, () =>
+        HttpResponse.json({ error: 'Accounts unavailable.' }, { status: 503 }),
+      ),
+    )
+    renderWithClient(<AccountProfilePage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit public profile' }))
+
+    expect(await screen.findByText('Unable to load linked accounts.')).toBeTruthy()
+    expect((screen.getByRole('button', { name: 'Add website' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: 'Add linked account' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('keeps the public-profile dialog open when saving fails', async () => {
+    server.use(
+      http.patch(`${base}/api/account/profile`, () =>
+        HttpResponse.json({ error: 'Public profile rejected.' }, { status: 400 }),
+      ),
+    )
+    renderWithClient(<AccountProfilePage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit public profile' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(errorToast).toHaveBeenCalledWith('Public profile rejected.'))
+    expect(screen.getByRole('dialog', { name: 'Edit public profile' })).toBeTruthy()
   })
 
   it('edits the username through its dialog', async () => {
@@ -316,6 +485,9 @@ describe('AccountProfilePage', () => {
     renderWithClient(<AccountProfilePage />)
     expect(await screen.findByText('Unverified')).toBeTruthy()
     expect(screen.getByText('No username set')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /Edit display name/ }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByLabelText('Display name')).toBeNull())
   })
 
   it('renders a custom avatar image and label', async () => {

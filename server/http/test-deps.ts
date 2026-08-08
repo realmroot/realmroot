@@ -69,6 +69,7 @@ export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> =
     agentAudit: {
       append: vi.fn(),
       list: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+      summarizeByDay: vi.fn().mockResolvedValue([]),
     },
     agentIdentities: {
       listPersonal: vi.fn().mockResolvedValue([]),
@@ -279,6 +280,19 @@ export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> =
           role: 'user',
         }),
       ),
+      getPublicProfile: vi.fn().mockImplementation(async (id: string) => ({
+        user: {
+          id,
+          email: `${id}@example.com`,
+          emailVerified: true,
+          role: 'user',
+        },
+        bio: null,
+        location: null,
+        links: [],
+        profileUpdatedAt: null,
+      })),
+      findPublicProfileByUsername: vi.fn().mockResolvedValue(null),
       listManagedUsers: vi.fn().mockResolvedValue(emptyPage()),
       createManagedUser: vi.fn(),
       updateManagedUser: vi.fn(),

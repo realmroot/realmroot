@@ -47,6 +47,14 @@ export function createAuthMock() {
 export function createUserRepositoryMock(): UserRepository {
   return {
     getUser: vi.fn().mockResolvedValue({ id: 'user-1', email: 'ada@example.com' }),
+    getPublicProfile: vi.fn().mockResolvedValue({
+      user: { id: 'user-1', email: 'ada@example.com' },
+      bio: null,
+      location: null,
+      links: [],
+      profileUpdatedAt: null,
+    }),
+    findPublicProfileByUsername: vi.fn().mockResolvedValue(null),
     listManagedUsers: vi.fn().mockImplementation((page) => Promise.resolve(createPage(page))),
     createManagedUser: vi.fn().mockResolvedValue({ id: 'user-1' }),
     updateManagedUser: vi.fn().mockResolvedValue({ id: 'user-1' }),
@@ -163,7 +171,7 @@ export function toManagementOperationKey(route: HonoRoute) {
     return `${route.method} /openapi.json`
   }
   if (route.path === '/api/agent/enrollments' || route.path.startsWith('/api/agent/enrollments/')) return null
-  const agentResourcePaths = ['/api/agent', '/api/resource-servers', '/api/access', '/api/assets']
+  const agentResourcePaths = ['/api/agent', '/api/resource-servers', '/api/access', '/api/assets', '/api/public']
   if (agentResourcePaths.some((path) => route.path === path || route.path.startsWith(`${path}/`))) {
     return `${route.method} ${normalizeManagementPath(route.path.replace('/api', ''))}`
   }

@@ -72,6 +72,11 @@ const accountVariants = [
   ['organizations', 'Organizations', 'building'],
 ]
 
+const publicProfileVariants = [
+  ['user', 'User Profile'],
+  ['agent', 'Agent Profile'],
+]
+
 const accountNavGroups = [
   { label: 'Your account', pages: ['overview', 'profile', 'security'] },
   { label: 'Access & authority', pages: ['applications', 'agents', 'organizations'] },
@@ -83,6 +88,7 @@ const state = {
   authVariant: 'sign-in',
   resourceLifetime: 'date',
   accountPage: 'overview',
+  publicProfile: 'user',
   consoleContext: 'realm',
   consoleFilters: {},
   resourceMode: 'native',
@@ -151,6 +157,7 @@ function render() {
   if (state.surface === 'console') renderConsole()
   if (state.surface === 'auth') renderAuth()
   if (state.surface === 'account') renderAccount()
+  if (state.surface === 'profiles') renderPublicProfile()
   renderVariantPicker()
 }
 
@@ -159,18 +166,114 @@ function renderVariantPicker() {
     variantPicker.innerHTML = ''
     return
   }
-  const variants = state.surface === 'auth' ? authVariants : accountVariants
-  const selected = state.surface === 'auth' ? state.authVariant : state.accountPage
+  const variants = state.surface === 'auth' ? authVariants : state.surface === 'profiles' ? publicProfileVariants : accountVariants
+  const selected = state.surface === 'auth' ? state.authVariant : state.surface === 'profiles' ? state.publicProfile : state.accountPage
   variantPicker.innerHTML = variants
     .map(([id, label]) => `<button class="${id === selected ? 'is-active' : ''}" data-variant="${id}" type="button">${label}</button>`)
     .join('')
   variantPicker.querySelectorAll('[data-variant]').forEach((button) => {
     button.addEventListener('click', () => {
       if (state.surface === 'auth') state.authVariant = button.dataset.variant
+      else if (state.surface === 'profiles') state.publicProfile = button.dataset.variant
       else state.accountPage = button.dataset.variant
       render()
     })
   })
+}
+
+function publicProfileTopbar() {
+  return `<header class="public-profile-topbar">
+    <a class="public-profile-brand" href="#" aria-label="Realmroot home">${productBrand('Profiles')}</a>
+    <nav aria-label="Public profile navigation"><a href="#">OpenID configuration</a><button class="button" type="button">Sign in</button></nav>
+  </header>`
+}
+
+function publicProfileDetail(label, value) {
+  return `<div><dt>${label}</dt><dd>${value}</dd></div>`
+}
+
+function profileRailMeta(firstLabel, firstValue) {
+  return `<dl class="rail-meta"><div><dt>${firstLabel}</dt><dd>${firstValue}</dd></div><div><dt>Last activity</dt><dd><i></i>Today</dd></div></dl>`
+}
+
+function profileOwner() {
+  return `<section class="rail-owner"><h2>Owner</h2><a href="#" data-public-user><span class="rail-owner-avatar">JS</span><span><strong>Jane Stone</strong><small>@jane</small></span>${icon('arrow')}</a></section>`
+}
+
+function profileAgents() {
+  return `<section class="profile-agents"><header><div><h2>Public Agents</h2><p>Agent identities owned by this User</p></div><span>2 Agents</span></header><div><a href="#" data-public-agent><span class="profile-agent-avatar">${icon('bot')}</span><span><strong>Sales Copilot</strong><small class="mono">agt_01J8A2</small><em>247 activities this year</em></span>${icon('arrow')}</a><a href="#" data-public-agent><span class="profile-agent-avatar">${icon('bot')}</span><span><strong>Research Assistant</strong><small class="mono">agt_01J7Q9</small><em>86 activities this year</em></span>${icon('arrow')}</a></div></section>`
+}
+
+function profileHeatmap(total, seed) {
+  const cells = Array.from({ length: 371 }, (_, index) => {
+    const score = (index * seed + Math.floor(index / 7) * 5 + (index % 7) * 3) % 23
+    const level = index % 17 === 0 || score < 5 ? 0 : score < 10 ? 1 : score < 15 ? 2 : score < 20 ? 3 : 4
+    return `<span class="heat-level-${level}" title="${level === 0 ? 'No public activity' : `${level} activity level`}"></span>`
+  }).join('')
+  return `<section class="profile-heatmap"><header><div><h2>${total} activities in the last year</h2><p>Public activity and anonymized private counts</p></div><button class="button" type="button">2026 ${icon('arrow')}</button></header><div class="heatmap-scroll"><div class="heatmap-months"><span>Sep</span><span>Oct</span><span>Nov</span><span>Dec</span><span>Jan</span><span>Feb</span><span>Mar</span><span>Apr</span><span>May</span><span>Jun</span><span>Jul</span><span>Aug</span></div><div class="heatmap-body"><div class="heatmap-days"><span>Mon</span><span>Wed</span><span>Fri</span></div><div class="heatmap-grid" aria-label="Activity heatmap">${cells}</div></div></div><footer><span>Activity is aggregated in UTC.</span><div class="heatmap-legend"><span>Less</span>${[0, 1, 2, 3, 4].map((level) => `<i class="heat-level-${level}"></i>`).join('')}<span>More</span></div></footer></section>`
+}
+
+function profileActivityOverview(items) {
+  return `<section class="activity-overview"><header><h2>Activity overview</h2><p>Consistency across public activity</p></header><div>${items.map(([label, value, unit, range, note, iconName]) => `<article class="${label === 'Current streak' ? 'is-current' : ''}"><header><span>${label}</span><i>${icon(iconName)}</i></header><div class="activity-stat-value"><strong>${value}</strong><span>${unit}</span></div><p>${range}</p><footer>${label === 'Current streak' ? '<i></i>' : ''}${note}</footer></article>`).join('')}</div></section>`
+}
+
+function profileActivityTimeline(groups) {
+  return `<section class="profile-activity-feed"><header><div><h2>Recent activity</h2><p>Public details only; private activity contributes counts without context.</p></div></header>${groups.map(([month, items]) => `<div class="activity-month"><h3>${month}</h3><div>${items.map(([title, description, date, iconName]) => `<article><span class="activity-feed-icon">${icon(iconName)}</span><div><strong>${title}</strong><p>${description}</p></div><time>${date}</time></article>`).join('')}</div></div>`).join('')}<button class="button activity-more" type="button">Show more activity</button></section>`
+}
+
+function renderPublicProfile() {
+  prototype.innerHTML = `<div class="public-profile-shell">${publicProfileTopbar()}${state.publicProfile === 'agent' ? publicAgentProfile() : publicUserProfile()}<footer class="public-profile-footer"><span>Powered by Realmroot</span><nav><a href="#">Report profile</a><a href="#">Privacy</a><a href="#">Terms</a></nav></footer></div>`
+  prototype.querySelectorAll('[data-public-agent]').forEach((link) => link.addEventListener('click', (event) => {
+    event.preventDefault()
+    state.publicProfile = 'agent'
+    render()
+  }))
+  prototype.querySelectorAll('[data-public-user]').forEach((link) => link.addEventListener('click', (event) => {
+    event.preventDefault()
+    state.publicProfile = 'user'
+    render()
+  }))
+}
+
+function publicUserProfile() {
+  return `<main class="public-profile-main">
+    <div class="public-profile-cover user"><span></span><span></span><span></span></div>
+    <article class="public-profile-card activity-profile-card"><div class="profile-activity-layout">
+      <aside class="profile-identity-rail">
+        <div class="public-profile-avatar user" aria-label="Jane Stone avatar">JS</div>
+        <div class="rail-heading"><span class="rail-type">${icon('users')}User profile</span><h1>Jane Stone</h1><p>@jane</p></div>
+        ${profileRailMeta('Joined', 'Jun 18, 2024')}
+        <section class="rail-presence"><h2>Links &amp; identities</h2><a href="#"><span class="rail-presence-icon">${icon('link')}</span><span><strong>jane.dev</strong><small>Personal website</small></span>${icon('arrow')}</a><a href="#"><span class="rail-presence-icon">${icon('users')}</span><span><strong>@janestone <em>${icon('shield')}Linked</em></strong><small>GitHub</small></span>${icon('arrow')}</a></section>
+        <details class="rail-technical"><summary>Technical identity ${icon('arrow')}</summary><dl>${publicProfileDetail('Subject', '<code>usr_01J8A2K7</code>')}${publicProfileDetail('Updated', 'Aug 7, 2026')}</dl></details>
+      </aside>
+      <div class="profile-activity-content">
+        ${profileAgents()}
+        ${profileActivityTimeline([['August 2026', [['Approved a new Agent identity', 'Sales Copilot was enrolled in the personal space.', 'Aug 7', 'bot'], ['Updated Agent access', 'Access configuration changed for a private Resource.', 'Aug 5', 'key'], ['Revoked Resource access', 'An Agent grant was revoked.', 'Aug 2', 'lock']]], ['July 2026', [['Recovered an Agent identity', 'A stable identity was recovered without changing its subject.', 'Jul 28', 'shield'], ['Updated an Organization role', 'A public Organization role definition changed.', 'Jul 19', 'role']]]])}
+      </div>
+    </div>
+    </article>
+  </main>`
+}
+
+function publicAgentProfile() {
+  return `<main class="public-profile-main agent-profile">
+    <div class="public-profile-cover agent"><span></span><span></span><span></span></div>
+    <article class="public-profile-card activity-profile-card"><div class="profile-activity-layout">
+      <aside class="profile-identity-rail">
+        <div class="public-profile-avatar agent" aria-label="Sales Copilot avatar">${icon('bot')}</div>
+        <div class="rail-heading"><span class="rail-type">${icon('bot')}Agent identity</span><h1>Sales Copilot</h1><p class="mono">agt_01J8A2</p></div>
+        ${profileRailMeta('Created', 'Jun 18, 2026')}
+        ${profileOwner()}
+        <details class="rail-technical"><summary>Stable identity ${icon('arrow')}</summary><dl>${publicProfileDetail('Issuer', '<code>identity.acme.dev/api/auth</code>')}${publicProfileDetail('Subject', '<code>agt_01J8A2</code>')}${publicProfileDetail('Profile', '<code>ai_agent</code>')}</dl></details>
+      </aside>
+      <div class="profile-activity-content">
+        ${profileActivityOverview([['Total activity', '247', 'activities', 'Past 12 months', '112 active days', 'grid'], ['Current streak', '14', 'days', 'Jul 26 – Today', 'Active today', 'link'], ['Longest streak', '32', 'days', 'Apr 8 – May 9', 'Spring 2026', 'shield']])}
+        ${profileHeatmap(247, 11)}
+        ${profileActivityTimeline([['August 2026', [['Agent identity activated', 'The stable Agent identity became active.', 'Aug 7', 'bot'], ['Access configuration changed', 'Approved authority changed for a private Resource.', 'Aug 6', 'key'], ['Additional installation approved', 'A new installation joined this stable identity.', 'Aug 3', 'app']]], ['July 2026', [['Resource access revoked', 'Previously approved access was revoked.', 'Jul 28', 'lock'], ['Agent identity recovered', 'Credentials changed while the stable subject was preserved.', 'Jul 14', 'shield']]]])}
+      </div>
+    </div>
+    </article>
+  </main>`
 }
 
 function renderConsole() {

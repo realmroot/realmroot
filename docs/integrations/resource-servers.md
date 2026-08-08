@@ -133,8 +133,12 @@ Discover the issuer metadata rather than hard-coding protocol endpoints:
 Issuer:         REALMROOT_ORIGIN/api/auth
 OIDC discovery: REALMROOT_ORIGIN/api/auth/.well-known/openid-configuration
 JWKS:           REALMROOT_ORIGIN/api/auth/jwks
-AgentInfo:      discovered as agentinfo_endpoint
+Public profile: REALMROOT_ORIGIN/api/public/agents/{subject}
 ```
+
+Agent configuration and OAuth authorization-server metadata publish that
+template as `agent_profile_uri_template`. Replace `{subject}` with the
+URL-encoded, verified `act.sub` value.
 
 For every protected request, require both headers:
 
@@ -165,29 +169,25 @@ Native Agent tokens may also contain:
 Treat `scope` as the granted API authority. `roles`, `groups`, `sub`, and `act`
 provide policy and audit context; they do not expand the token's scopes.
 
-### Resolve Agent Display Information
+### Resolve Optional Agent Display Information
 
-`agentinfo_endpoint` is a Realmroot extension, not an adopted RFC or current
-IETF Internet-Draft endpoint. The `act.sub_profile: ai_agent` classification is
-separately aligned with active OAuth Entity Profiles and Actor Profile drafts.
-
-Read `agentinfo_endpoint` from issuer metadata and query it with the verified
+Display clients may query Realmroot's public Agent resource with the verified
 Agent actor subject:
 
 ```http
-GET AGENTINFO_ENDPOINT?sub=ACT_SUB
+GET REALMROOT_ORIGIN/api/public/agents/ACT_SUB
 Accept: application/json
 ```
 
 Agents without a custom picture return Realmroot's versioned static placeholder
-(`/agent-picture-v1.svg`) in the `picture` claim, so clients can always render a
+(`/agent-picture-v1.svg`) in the `picture` field, so clients can always render a
 valid image URL without calling another API.
 
-Require the response `iss` and `sub` to exactly match the verified
+Require the response `issuer` and `subject` to exactly match the verified
 `(act.iss, act.sub)` pair before displaying `name` or `picture`. Cache the
 response according to its `Cache-Control` and `ETag` headers.
 
-AgentInfo is public display metadata. Never use its availability, name,
+The public profile is display metadata. Never use its availability, name,
 picture, or update time to authorize a request; continue to enforce the
 validated access token, scope, audience, DPoP binding, and local policy.
 

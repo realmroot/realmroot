@@ -113,17 +113,18 @@ Feature: Agent identity and delegated API authorization
       And hosted Agent approval URLs use the configured deployment origin
       And Realmroot does not publish a second Agent-only OIDC issuer
 
-    @entrypoint:agent-protocol @journey:agent-info-resolution
-    Scenario: Resource servers resolve stable Agent display information
+    @entrypoint:product-ui @journey:public-agent-profile
+    Scenario: External visitors resolve a stable public Agent profile
       Given a non-deleted Agent has a stable issuer and subject
-      When a resource server discovers the issuer metadata
-      Then Realmroot advertises the public AgentInfo endpoint and supported display claims
-      When the resource server requests AgentInfo for the stable subject
-      Then Realmroot returns the issuer, subject, Agent profile, name, picture, and last update time
+      When an external visitor requests the Agent by its stable subject
+      Then Realmroot returns the Agent's public identity
       And picture resolves to the Realmroot static file "/agent-picture-v1.svg" until the Agent has a custom picture
-      And permits the response to be cached and revalidated
-      But AgentInfo never returns controller, home space, Host, role, scope, grant, or authorization state
-      And AgentInfo is never authoritative for authentication or authorization
+      And the default summary omits owner and activity
+      And the full view includes the public owner, activity overview, annual heatmap, and sanitized recent activity
+      And Agent configuration and OAuth authorization-server discovery publish the public Agent Profile URI template keyed by subject
+      And permits each view to be cached and revalidated independently
+      But the public profile never returns Host, role, scope, grant, Resource, or authorization state
+      And the public profile is never authoritative for authentication or authorization
 
   Rule: Resource Servers expose provider-owned Resources through one Agent access workflow
 
