@@ -103,7 +103,7 @@ async function requireRealmrootDpopAccess(request: Request, response: Response, 
       issuer: realmrootIssuer,
       audience: resource,
       typ: 'at+jwt',
-      algorithms: ['ES256'],
+      algorithms: ['RS256'],
     })
     const proof = await verifyDpop(request, `${origin}${request.originalUrl}`, request.method)
     if ((verified.payload.cnf as { jkt?: string } | undefined)?.jkt !== proof.jkt) {

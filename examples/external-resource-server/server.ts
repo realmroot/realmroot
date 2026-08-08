@@ -373,7 +373,7 @@ async function jwtBearerGrant(request: Request, response: Response, client: Clie
   const assertion = requiredString(request.body.assertion, 'assertion')
   const verified = await jwtVerify(assertion, createRemoteJWKSet(new URL(client.jwks_uri)), {
     audience: `${origin}/token`,
-    algorithms: ['ES256'],
+    algorithms: ['RS256'],
   })
   if (
     typeof verified.payload.iss !== 'string' ||
