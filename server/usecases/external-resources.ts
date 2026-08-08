@@ -20,7 +20,7 @@ import type {
   ResourceConnectionApproval,
   ResourceConnectionRequest,
 } from '@shared/api/agent-api'
-import type { ApiResourceResponse } from '@shared/api/authorization'
+import type { ApiResourceResponse, ResourceScopeRegistry } from '@shared/api/authorization'
 import {
   type AuthorizationDetail,
   authorizationDetailCatalogSchema,
@@ -305,7 +305,11 @@ export async function createAccountConnection(
     const owner = approval.identity.identity.ownerOrganizationId
       ? { type: 'organization' as const, organizationId: approval.identity.identity.ownerOrganizationId }
       : { type: 'user' as const }
-    const connectionScopes = expandedConnectionScopes(approval.connection, approval.request.scopes)
+    const connectionScopes = expandedConnectionScopes(
+      approval.connection,
+      approval.request.scopes,
+      approval.resource.scopeRegistry,
+    )
     const pending = await createResourceConnectionIntent(
       deps,
       approval.request.resourceId,
@@ -344,7 +348,11 @@ export async function createAccountConnection(
       ownerUserId: identity.identity.ownerUserId,
       ownerOrganizationId: identity.identity.ownerOrganizationId,
     })
-    const connectionScopes = expandedConnectionScopes(controlledConnection ?? ownerConnection, request.scopes)
+    const connectionScopes = expandedConnectionScopes(
+      controlledConnection ?? ownerConnection,
+      request.scopes,
+      resource.scopeRegistry,
+    )
     const pending = await createResourceConnectionIntent(
       deps,
       request.resourceId,
@@ -364,11 +372,14 @@ export async function createAccountConnection(
   return toPendingAccountConnection(pending, input.scopes)
 }
 
-function expandedConnectionScopes(connection: ResourceAccountConnectionRecord | null, requestedScopes: string[]) {
+function expandedConnectionScopes(
+  connection: ResourceAccountConnectionRecord | null,
+  requestedScopes: string[],
+  scopeRegistry: ResourceScopeRegistry | null,
+) {
+  const declaredScopes = new Set(scopeRegistry?.scopes.map((scope) => scope.value) ?? [])
   const existingScopes =
-    connection?.status === 'active'
-      ? connection.grantedScopes.filter((scope) => scope !== 'openid' && scope !== 'offline_access')
-      : []
+    connection?.status === 'active' ? connection.grantedScopes.filter((scope) => declaredScopes.has(scope)) : []
   return [...new Set([...existingScopes, ...requestedScopes])].sort()
 }
 
