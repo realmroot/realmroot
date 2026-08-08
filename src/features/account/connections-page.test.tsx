@@ -125,6 +125,60 @@ describe('AccountConnectionsPage', () => {
     await waitFor(() => expect(assign).toHaveBeenCalledWith('https://github.com/apps/realmroot/installations/new'))
   })
 
+  it('[spec: account-center/provider-connections] updates authorization for an existing Provider Connection', async () => {
+    const assign = vi.fn()
+    vi.stubGlobal('location', { ...window.location, origin: 'http://localhost:3000', assign })
+    server.use(
+      http.get(`${base}/api/account/provider-connectors`, () =>
+        HttpResponse.json({ items: [githubConnector], pagination }),
+      ),
+      http.get(`${base}/api/account/provider-connections`, () =>
+        HttpResponse.json({
+          items: [
+            {
+              id: 'provider-connection-github',
+              connector: githubConnector,
+              externalSubject: 'octocat',
+              displayName: 'The Octocat',
+              capabilities: {
+                signIn: { available: true, active: true },
+                agentAccess: {
+                  available: true,
+                  active: true,
+                  authorizationCount: 1,
+                  resourceNames: ['GitHub Adapter'],
+                },
+              },
+              createdAt: '2026-08-08T00:00:00.000Z',
+              updatedAt: '2026-08-08T00:00:00.000Z',
+            },
+          ],
+          pagination,
+        }),
+      ),
+      http.post(`${base}/api/account/provider-connection-intents`, async ({ request }) => {
+        expect(await request.json()).toEqual({ connectorId: githubConnector.id })
+        return HttpResponse.json(
+          {
+            id: 'provider-intent-github-reauthorize',
+            connectorId: githubConnector.id,
+            authorizationUrl: 'https://github.com/login/oauth/authorize?reauthorize=true',
+            expiresAt: '2026-08-08T00:10:00.000Z',
+            createdAt: '2026-08-08T00:00:00.000Z',
+          },
+          { status: 201 },
+        )
+      }),
+    )
+
+    renderWithClient(<AccountConnectionsPage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Manage' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Update authorization' }))
+    await waitFor(() =>
+      expect(assign).toHaveBeenCalledWith('https://github.com/login/oauth/authorize?reauthorize=true'),
+    )
+  })
+
   it('stays on the page when a Provider authorization intent cannot be created', async () => {
     const assign = vi.fn()
     vi.stubGlobal('location', { ...window.location, origin: 'http://localhost:3000', assign })
