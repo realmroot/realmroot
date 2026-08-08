@@ -860,9 +860,19 @@ describe('external API resource authorization', () => {
     authorizationDeps(deps)
     const existingConnection = {
       ...connectionRecord(),
-      grantedScopes: ['openid', 'offline_access', 'projects:read'],
+      grantedScopes: ['openid', 'offline_access', 'workspaces:discover', 'projects:read'],
       authorizationDetails: [{ type: 'project_access', identifier: 'project-1', actions: ['read'] }],
     }
+    vi.mocked(deps.connectors.findById).mockResolvedValue(
+      connectorRecord({
+        providerMetadata: {
+          ...metadata(),
+          authorization_details_catalog_endpoint: 'https://projects.example.com/authorization-details',
+          authorization_details_catalog_scope: 'workspaces:discover',
+          authorization_details_types_supported: ['project_access'],
+        },
+      }),
+    )
     mockResourceOpenApi(deps, resource().resourceUrl, ['projects:read', 'projects:write'])
     vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
     vi.mocked(deps.externalResources.findConnectionByOwnerResource).mockResolvedValue(existingConnection)
@@ -893,7 +903,7 @@ describe('external API resource authorization', () => {
     })
     expect(deps.externalResources.createConnectionIntent).toHaveBeenCalledWith(
       expect.objectContaining({
-        scopes: ['offline_access', 'openid', 'projects:read', 'projects:write'],
+        scopes: ['offline_access', 'openid', 'projects:read', 'projects:write', 'workspaces:discover'],
       }),
     )
 
@@ -2567,7 +2577,14 @@ describe('external API resource authorization', () => {
     }
     const existingConnection = {
       ...connectionRecord(),
-      grantedScopes: ['openid', 'offline_access', 'objects:create', 'quota:purchase', 'shares:create'],
+      grantedScopes: [
+        'openid',
+        'offline_access',
+        'workspaces:discover',
+        'objects:create',
+        'quota:purchase',
+        'shares:create',
+      ],
       authorizationDetails: [existingDetail],
     }
     vi.mocked(deps.authorization.findResource).mockResolvedValue({
@@ -2577,7 +2594,7 @@ describe('external API resource authorization', () => {
     vi.mocked(deps.connectors.findById).mockResolvedValue(
       connectorRecord({
         registeredScopes: [
-          'authorization-details:read',
+          'workspaces:discover',
           'objects:create',
           'offline_access',
           'openid',
@@ -2590,7 +2607,7 @@ describe('external API resource authorization', () => {
           authorization_details_types_supported: ['project_access'],
           pushed_authorization_request_endpoint: 'https://projects.example.com/par',
           authorization_details_catalog_endpoint: 'https://projects.example.com/authorization-details',
-          authorization_details_catalog_scope: 'authorization-details:read',
+          authorization_details_catalog_scope: 'workspaces:discover',
           authorization_details_catalog_version: 1,
         },
       }),
@@ -2607,7 +2624,7 @@ describe('external API resource authorization', () => {
         const form = new URLSearchParams(await fetchRequest.text())
         expect(form.get('scope')?.split(' ')).toEqual(
           [
-            'authorization-details:read',
+            'workspaces:discover',
             'objects:create',
             'offline_access',
             'openid',
@@ -2651,13 +2668,13 @@ describe('external API resource authorization', () => {
     expect(deps.externalResources.createConnectionIntent).toHaveBeenCalledWith(
       expect.objectContaining({
         scopes: [
-          'authorization-details:read',
           'objects:create',
           'offline_access',
           'openid',
           'quota:purchase',
           'shares:create',
           'teams:read',
+          'workspaces:discover',
         ],
         authorizationDetails: [template],
         returnTo: 'access-approval',
