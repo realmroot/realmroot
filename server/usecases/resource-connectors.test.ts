@@ -43,6 +43,60 @@ describe('external resource connector validation', () => {
     )
   })
 
+  it('blocks authorization-server matching while protected resource metadata is unavailable', async () => {
+    const checks = await inspectExternalResourceConnector(createDeps(), 'connector-1', [], null)
+
+    expect(checks).toContainEqual({
+      requirement: 'AS-METADATA',
+      status: 'blocked',
+      message: 'Authorization server validation is blocked until RESOURCE-METADATA passes.',
+    })
+  })
+
+  it.each([
+    [
+      'pushed authorization request',
+      {
+        pushed_authorization_request_endpoint: 'http://remote.example.com/par',
+      },
+      'PUSHED-AUTHORIZATION',
+    ],
+    [
+      'authorization detail catalog',
+      {
+        pushed_authorization_request_endpoint: `${issuer}/par`,
+        authorization_details_catalog_endpoint: 'http://remote.example.com/authorization-details',
+        authorization_details_catalog_scope: 'authorization-details:read',
+        authorization_details_catalog_version: 1,
+      },
+      'AUTHORIZATION-CATALOG',
+    ],
+  ])('reports an unsafe %s endpoint', async (_label, metadataOverrides, requirement) => {
+    const deps = createDeps({
+      connector: connector({
+        providerMetadata: providerMetadata({
+          authorization_details_types_supported: ['project_access'],
+          ...metadataOverrides,
+        }),
+      }),
+    })
+
+    const checks = await inspectExternalResourceConnector(
+      deps,
+      'connector-1',
+      [{ type: 'project_access', actions: ['read'] }],
+      {
+        sourceUrl: 'https://api.example.com/.well-known/oauth-protected-resource/v1',
+        resource: resourceUrl,
+        authorizationServers: [issuer],
+        scopesSupported: ['projects:read'],
+        etag: null,
+      },
+    )
+
+    expect(checks).toContainEqual(expect.objectContaining({ requirement, status: 'failed' }))
+  })
+
   it('accepts a complete OIDC connector and preserves the resource path in metadata discovery', async () => {
     const deps = createDeps()
 

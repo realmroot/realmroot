@@ -1058,6 +1058,15 @@ describe('authorization CRUD and assignment policy', () => {
     authorization.findResource.mockResolvedValueOnce(registered)
     authorization.findOrganization.mockResolvedValueOnce(organization)
     await expect(updateResource(deps, resource.id, { ownerOrganizationId: organization.id })).resolves.toBe(registered)
+    authorization.findResource.mockResolvedValueOnce({
+      ...registered,
+      connectorId: 'connector-1',
+      ownerOrganizationId: 'org_platform',
+    })
+    authorization.findOrganization.mockResolvedValueOnce(organization)
+    await expect(updateResource(deps, resource.id, { ownerOrganizationId: organization.id })).rejects.toThrow(
+      'must be owned by the built-in platform Organization',
+    )
     authorization.findResource.mockResolvedValueOnce(registered)
     authorization.replaceResourceDiscovery.mockResolvedValueOnce(false)
     await expect(
