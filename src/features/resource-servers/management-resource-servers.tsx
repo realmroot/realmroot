@@ -11,7 +11,7 @@ import { authorizationDetailsSchema } from '@shared/api/authorization-details'
 import type { ConnectorResponse } from '@shared/api/connectors'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
-import { ArrowLeft, Plus, RotateCw } from 'lucide-react'
+import { ArrowLeft, CircleHelp, Plus, RotateCw } from 'lucide-react'
 import { type FormEvent, type ReactNode, useEffect, useState } from 'react'
 import { Field, SelectInput, TextArea, TextInput } from '@/components/product-form'
 import { TableEmptyRow } from '@/components/table-empty-row'
@@ -22,6 +22,7 @@ import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetT
 import { Switch } from '@/components/ui/switch'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { FormDialog } from '@/features/management/create-dialogs'
 import { DangerConfirmDialog, ErrorState, LoadingState, StatusBadge } from '@/features/management/dialogs'
 import {
@@ -50,10 +51,40 @@ import { tt } from '@/lib/i18n'
 
 type ResourceEditor = 'details' | 'visibility' | 'authorization' | null
 
-const accessModeLabels: Record<ApiResourceAccessMode, string> = {
-  realmroot: 'Realmroot-issued access',
-  external_oauth: 'External OAuth access',
-  brokered: 'Brokered provider access',
+const accessModePresentation: Record<ApiResourceAccessMode, { label: string; description: string }> = {
+  realmroot: {
+    label: 'Native',
+    description: 'The Resource Server accepts access issued directly by Realmroot.',
+  },
+  external_oauth: {
+    label: 'OAuth',
+    description: 'The Resource Server delegates authorization to an external OAuth provider.',
+  },
+  brokered: {
+    label: 'Adapter',
+    description: 'Realmroot uses a provider adapter to connect accounts and authorize access.',
+  },
+}
+
+function AccessModeValue({ badge = false, mode }: { badge?: boolean; mode: ApiResourceAccessMode }) {
+  const presentation = accessModePresentation[mode]
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      {badge ? <Badge variant="outline">{tt(presentation.label)}</Badge> : tt(presentation.label)}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            aria-label={tt('{{mode}} access model help', { mode: presentation.label })}
+            className="text-muted-foreground transition-colors hover:text-foreground"
+            type="button"
+          >
+            <CircleHelp className="size-3.5" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>{tt(presentation.description)}</TooltipContent>
+      </Tooltip>
+    </span>
+  )
 }
 
 export function ApiResourcesPage({ organizationId }: { organizationId?: string } = {}) {
@@ -140,9 +171,9 @@ export function ApiResourcesPage({ organizationId }: { organizationId?: string }
             value={authorization}
           >
             <option value="">{tt('Any authorization')}</option>
-            <option value="realmroot">{tt(accessModeLabels.realmroot)}</option>
-            <option value="external_oauth">{tt(accessModeLabels.external_oauth)}</option>
-            <option value="brokered">{tt(accessModeLabels.brokered)}</option>
+            <option value="realmroot">{tt(accessModePresentation.realmroot.label)}</option>
+            <option value="external_oauth">{tt(accessModePresentation.external_oauth.label)}</option>
+            <option value="brokered">{tt(accessModePresentation.brokered.label)}</option>
           </SelectInput>
           <SelectInput
             aria-label={tt('Filter status')}
@@ -209,7 +240,7 @@ export function ApiResourcesPage({ organizationId }: { organizationId?: string }
                   </span>
                 </TableCell>
                 <TableCell>
-                  <Badge variant="outline">{tt(accessModeLabels[resource.accessMode])}</Badge>
+                  <AccessModeValue badge mode={resource.accessMode} />
                 </TableCell>
                 <TableCell className="truncate font-mono text-xs" title={resource.resourceUrl}>
                   {resource.resourceUrl}
@@ -342,10 +373,7 @@ function ApiResourceCreateDialog({
             value={ownerOrganizationId}
           />
         )}
-        <Field
-          help={tt('The access model is explicit and cannot be changed after creation.')}
-          label={tt('Access model')}
-        >
+        <Field label={tt('Access model')} tooltip={tt(accessModePresentation[accessMode].description)}>
           <SelectInput
             name="accessMode"
             onChange={(event) => {
@@ -354,9 +382,9 @@ function ApiResourceCreateDialog({
             }}
             value={accessMode}
           >
-            <option value="realmroot">{tt(accessModeLabels.realmroot)}</option>
-            <option value="external_oauth">{tt(accessModeLabels.external_oauth)}</option>
-            <option value="brokered">{tt(accessModeLabels.brokered)}</option>
+            <option value="realmroot">{tt(accessModePresentation.realmroot.label)}</option>
+            <option value="external_oauth">{tt(accessModePresentation.external_oauth.label)}</option>
+            <option value="brokered">{tt(accessModePresentation.brokered.label)}</option>
           </SelectInput>
         </Field>
         {accessMode !== 'realmroot' ? (
@@ -533,7 +561,7 @@ export function ApiResourceDetailPage({
             </div>
             <p>{resource.description ?? tt('Protected API registered in this Realm.')}</p>
             <span className="consoleDetailMeta">
-              {tt(accessModeLabels[mode])} · {resource.id}
+              <AccessModeValue mode={mode} /> · {resource.id}
             </span>
           </div>
         </header>
@@ -630,7 +658,7 @@ function ResourceOverview({
   return (
     <div className="detailFlatRows">
       <DetailRow label="Owner" value={ownerLabel(resource.ownerOrganizationId, organizations)} />
-      <DetailRow label="Access model" value={tt(accessModeLabels[mode])} />
+      <DetailRow label="Access model" value={<AccessModeValue mode={mode} />} />
       <DetailRow label="Visibility" value={resourceVisibilityLabel(resource.visibility)} />
       <DetailRow label="Available to Agents" value={resource.availableToAgents ? tt('Yes') : tt('No')} />
       <DetailRow label="Protected resource URL" value={<code>{resource.resourceUrl}</code>} />

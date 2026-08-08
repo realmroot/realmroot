@@ -152,7 +152,7 @@ describe('console API resources and roles', () => {
     expect(screen.getByRole('columnheader', { name: 'Protected resource' })).toBeTruthy()
     expect(screen.getByRole('columnheader', { name: 'Status' })).toBeTruthy()
     expect(screen.getByRole('columnheader', { name: 'Owner' })).toBeTruthy()
-    expect(screen.getAllByText('External OAuth access').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('OAuth').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Disabled').length).toBeGreaterThan(0)
     fireEvent.change(screen.getByLabelText('Filter authorization'), { target: { value: 'realmroot' } })
     expect(screen.queryByText('Projects API')).toBeNull()
@@ -191,7 +191,16 @@ describe('console API resources and roles', () => {
     fireEvent.change(screen.getByLabelText('Protected resource URL'), {
       target: { value: 'https://projects.example.com/api' },
     })
+    fireEvent.focus(screen.getByRole('button', { name: 'Access model help' }))
+    expect((await screen.findByRole('tooltip')).textContent).toBe(
+      'The Resource Server accepts access issued directly by Realmroot.',
+    )
     fireEvent.change(screen.getByLabelText('Access model'), { target: { value: 'external_oauth' } })
+    await waitFor(() =>
+      expect(screen.getByRole('tooltip').textContent).toBe(
+        'The Resource Server delegates authorization to an external OAuth provider.',
+      ),
+    )
     fireEvent.change(screen.getByLabelText('Provider connector'), { target: { value: 'connector-1' } })
     fireEvent.change(screen.getByLabelText('Authorization detail templates'), { target: { value: '{' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
@@ -400,7 +409,7 @@ describe('console API resources and roles', () => {
     })
 
     renderWithQuery(<ApiResourceDetailPage resourceId="resource-1" />)
-    expect(await screen.findByText('Realmroot-issued access · resource-1')).toBeTruthy()
+    expect((await screen.findAllByRole('button', { name: 'Native access model help' })).length).toBeGreaterThan(0)
     fireEvent.mouseDown(screen.getByRole('tab', { name: 'Endpoints' }), { button: 0, ctrlKey: false })
     fireEvent.click(await screen.findByRole('button', { name: 'Retry' }))
 
@@ -506,7 +515,11 @@ describe('console API resources and roles', () => {
     })
 
     renderWithQuery(<ApiResourceDetailPage resourceId="resource-1" />)
-    expect(await screen.findByText('External OAuth access')).toBeTruthy()
+    expect((await screen.findAllByText('OAuth')).length).toBeGreaterThan(0)
+    fireEvent.focus(screen.getAllByRole('button', { name: 'OAuth access model help' })[0])
+    expect((await screen.findByRole('tooltip')).textContent).toBe(
+      'The Resource Server delegates authorization to an external OAuth provider.',
+    )
     expect(screen.getAllByText('Not configured')).toHaveLength(3)
     expect(await screen.findByText('Visibility')).toBeTruthy()
     fireEvent.mouseDown(screen.getByRole('tab', { name: 'Settings' }), { button: 0, ctrlKey: false })
@@ -540,7 +553,7 @@ describe('console API resources and roles', () => {
     })
 
     renderWithQuery(<ApiResourceDetailPage organizationId="org-1" resourceId="resource-1" section="settings" />)
-    expect(await screen.findByText('Realmroot-issued access · resource-1')).toBeTruthy()
+    expect((await screen.findAllByRole('button', { name: 'Native access model help' })).length).toBeGreaterThan(0)
     expect(screen.queryByRole('heading', { name: 'Provider access' })).toBeNull()
     const details = screen.getByRole('heading', { name: 'Resource server details' }).closest('section') as HTMLElement
     fireEvent.click(within(details).getByRole('button', { name: 'Edit' }))
@@ -594,7 +607,7 @@ describe('console API resources and roles', () => {
       },
     }
     renderWithQuery(<ApiResourceDetailPage resourceId="resource-1" section="settings" />)
-    expect(await screen.findByText('External OAuth access · resource-1')).toBeTruthy()
+    expect((await screen.findAllByRole('button', { name: 'OAuth access model help' })).length).toBeGreaterThan(0)
     const provider = screen.getByRole('heading', { name: 'Provider access' }).closest('section') as HTMLElement
     fireEvent.click(within(provider).getByRole('button', { name: 'Edit' }))
     fireEvent.change(screen.getByLabelText('Authorization detail templates'), { target: { value: '{}' } })

@@ -1,3 +1,4 @@
+import { CircleHelp } from 'lucide-react'
 import {
   type ChangeEvent,
   Children,
@@ -17,15 +18,17 @@ import { FieldDescription, FieldLabel, Field as ShadcnField } from '@/components
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 
 type ProductFieldProps = {
   children: ReactNode
   help?: string
   label: string
+  tooltip?: string
 }
 
-export function Field({ children, help, label }: ProductFieldProps) {
+export function Field({ children, help, label, tooltip }: ProductFieldProps) {
   const generatedId = useId()
   const child = Children.only(children)
   const control = isValidElement<{ id?: string }>(child)
@@ -35,7 +38,23 @@ export function Field({ children, help, label }: ProductFieldProps) {
 
   return (
     <ShadcnField className="field">
-      <FieldLabel htmlFor={controlId}>{label}</FieldLabel>
+      <div className="flex items-center gap-1.5">
+        <FieldLabel htmlFor={controlId}>{label}</FieldLabel>
+        {tooltip ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                aria-label={`${label} help`}
+                className="text-muted-foreground transition-colors hover:text-foreground"
+                type="button"
+              >
+                <CircleHelp className="size-3.5" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>{tooltip}</TooltipContent>
+          </Tooltip>
+        ) : null}
+      </div>
       {control}
       {help ? <FieldDescription>{help}</FieldDescription> : null}
     </ShadcnField>
