@@ -267,6 +267,13 @@
       "when": 1786169441963,
       "tag": "20260808061041_remarkable_master_mold",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "6",
+      "when": 1786211958558,
+      "tag": "20260808175918_brokered_provider_connections",
+      "breakpoints": true
     }
   ]
 }

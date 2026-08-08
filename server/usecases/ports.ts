@@ -503,14 +503,46 @@ export interface ExternalResourceAuthorizationRecord {
   updatedAt: Date
 }
 
-export interface ResourceAccountConnectionRecord {
+export interface ProviderConnectionRecord {
   id: string
+  connectorId: string
+  ownerUserId: string | null
+  ownerOrganizationId: string | null
+  authenticationAccountId: string | null
+  externalSubject: string
+  displayName: string
+  status: 'active' | 'revoked'
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface ProviderConnectorSummary {
+  id: string
+  slug: string
+  providerType: string
+  providerId: string
+  displayName: string
+  enabled: boolean
+  loginEnabled: boolean
+}
+
+export interface ProviderConnectionProjection extends ProviderConnectionRecord {
+  connector: ProviderConnectorSummary
+  resourceAuthorizationCount: number
+  resourceNames: string[]
+}
+
+export interface ProviderResourceAuthorizationRecord {
+  id: string
+  providerConnectionId: string
   resourceId: string
   ownerUserId: string | null
   ownerOrganizationId: string | null
   externalSubject: string
   displayName: string
-  encryptedTokens: string
+  credentialCustody?: 'realmroot' | 'resource_server'
+  encryptedTokens: string | null
+  brokerReference?: string | null
   grantedScopes: string[]
   authorizationDetails: AuthorizationDetail[]
   clientGeneration?: number
@@ -531,6 +563,7 @@ export interface ResourceConnectionIntentRecord {
   scopes: string[]
   authorizationDetails: AuthorizationDetail[]
   encryptedPkceVerifier: string
+  authorizationMode?: 'oauth' | 'brokered'
   clientGeneration?: number
   returnTo: string
   status: string
@@ -632,19 +665,41 @@ export interface ExternalTokenLeaseRecord {
 }
 
 export interface ExternalResourceRepository {
-  createConnection(input: ResourceAccountConnectionRecord): Promise<ResourceAccountConnectionRecord | null>
+  connectAuthenticationAccount(input: {
+    authenticationAccountId: string
+    providerId: string
+    userId: string
+    externalSubject: string
+    now: Date
+  }): Promise<ProviderConnectionRecord | null>
+  disconnectAuthenticationAccount(authenticationAccountId: string): Promise<void>
+  upsertProviderConnection(input: ProviderConnectionRecord): Promise<ProviderConnectionRecord>
+  findProviderConnectionByOwnerConnector(input: {
+    connectorId: string
+    ownerUserId: string | null
+    ownerOrganizationId: string | null
+  }): Promise<ProviderConnectionRecord | null>
+  findProviderConnection(id: string): Promise<ProviderConnectionRecord | null>
+  listProviderConnectionsByUser(userId: string): Promise<ProviderConnectionProjection[]>
+  revokeProviderConnection(id: string, ownerUserId: string, now: Date): Promise<boolean>
+  createConnection(
+    input: Omit<
+      ProviderResourceAuthorizationRecord,
+      'ownerUserId' | 'ownerOrganizationId' | 'externalSubject' | 'displayName'
+    >,
+  ): Promise<ProviderResourceAuthorizationRecord | null>
   findConnectionByOwnerResource(input: {
     resourceId: string
     ownerUserId: string | null
     ownerOrganizationId: string | null
-  }): Promise<ResourceAccountConnectionRecord | null>
+  }): Promise<ProviderResourceAuthorizationRecord | null>
   replaceConnectionAuthorization(
     id: string,
     resourceId: string,
     input: {
-      externalSubject: string
-      displayName: string
-      encryptedTokens: string
+      credentialCustody?: 'realmroot' | 'resource_server'
+      encryptedTokens: string | null
+      brokerReference?: string | null
       grantedScopes: string[]
       authorizationDetails: AuthorizationDetail[]
       clientGeneration?: number
@@ -653,14 +708,14 @@ export interface ExternalResourceRepository {
       revokedAt: null
       updatedAt: Date
     },
-  ): Promise<ResourceAccountConnectionRecord | null>
-  listConnectionsByUser(userId: string): Promise<ResourceAccountConnectionRecord[]>
-  listConnectionsByOrganizations(organizationIds: string[]): Promise<ResourceAccountConnectionRecord[]>
-  findConnection(id: string): Promise<ResourceAccountConnectionRecord | null>
+  ): Promise<ProviderResourceAuthorizationRecord | null>
+  listConnectionsByUser(userId: string): Promise<ProviderResourceAuthorizationRecord[]>
+  listConnectionsByOrganizations(organizationIds: string[]): Promise<ProviderResourceAuthorizationRecord[]>
+  findConnection(id: string): Promise<ProviderResourceAuthorizationRecord | null>
   updateConnectionTokens(
     id: string,
     input: { encryptedTokens: string; credentialExpiresAt: Date | null; updatedAt: Date },
-  ): Promise<ResourceAccountConnectionRecord | null>
+  ): Promise<ProviderResourceAuthorizationRecord | null>
   revokeConnection(id: string, now: Date): Promise<boolean>
   createConnectionIntent(input: ResourceConnectionIntentRecord): Promise<ResourceConnectionIntentRecord | null>
   consumeConnectionIntent(stateHash: string, now: Date): Promise<ResourceConnectionIntentRecord | null>

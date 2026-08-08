@@ -48,6 +48,7 @@ describe('AccountSecurityPage', () => {
   it('renders the security panels with password, MFA, passkeys, and sessions', async () => {
     renderWithClient(<AccountSecurityPage />)
     expect(await screen.findByRole('button', { name: /Change password/ })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Manage Connections' }).closest('.accountPanelActions')).toBeTruthy()
     await openSecurityTab('MFA')
     expect(screen.getByText('Multi-factor authentication')).toBeTruthy()
     expect(screen.getByRole('button', { name: /Set up authenticator app/ })).toBeTruthy()
@@ -55,6 +56,67 @@ describe('AccountSecurityPage', () => {
     expect(screen.getByText('No passkeys have been added yet.')).toBeTruthy()
     await openSecurityTab('Sessions')
     expect(screen.getByText('No other active sessions.')).toBeTruthy()
+  })
+
+  it('shows active Provider sign-in and unlinks a wallet credential', async () => {
+    store.linkedAccounts = [
+      {
+        id: 'wallet-1',
+        accountId: '0x1111111111111111111111111111111111111111',
+        providerId: 'siwe',
+        createdAt: '2026-08-08T00:00:00.000Z',
+      },
+    ]
+    let unlinked = false
+    server.use(
+      http.get(`${base}/api/account/provider-connections`, () =>
+        HttpResponse.json({
+          items: [
+            {
+              id: 'provider-connection-1',
+              connector: {
+                id: 'connector-1',
+                slug: 'github',
+                providerId: 'github',
+                providerType: 'social',
+                displayName: 'GitHub',
+                capabilities: {
+                  signIn: { available: true },
+                  agentAccess: { available: false },
+                  connection: { method: 'sign_in' },
+                },
+              },
+              displayName: 'Octocat',
+              externalSubject: 'octocat',
+              capabilities: {
+                signIn: { available: true, active: true },
+                agentAccess: { available: false, active: false, authorizationCount: 0, resourceNames: [] },
+              },
+              createdAt: '2026-08-08T00:00:00.000Z',
+              updatedAt: '2026-08-08T00:00:00.000Z',
+            },
+          ],
+          pagination: { limit: 50, offset: 0, total: 1, hasMore: false, nextOffset: null },
+        }),
+      ),
+      http.delete(`${base}/api/account/wallet-addresses/:accountId`, () => {
+        unlinked = true
+        return new HttpResponse(null, { status: 204 })
+      }),
+    )
+
+    renderWithClient(<AccountSecurityPage />)
+    expect(await screen.findByText('GitHub')).toBeTruthy()
+    expect(screen.getByText('Octocat')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Unlink' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Unlink wallet' }))
+    await waitFor(() => expect(unlinked).toBe(true))
+  })
+
+  it('surfaces a missing wallet provider when linking a wallet', async () => {
+    renderWithClient(<AccountSecurityPage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Link wallet' }))
+    await waitFor(() => expect(errorToast).toHaveBeenCalled())
   })
 
   it('renders an error state when a security request fails', async () => {
@@ -472,7 +534,7 @@ describe('AccountSecurityPage', () => {
       http.get(`${base}/api/account/linked-accounts`, () => HttpResponse.json({})),
     )
     renderWithClient(<AccountSecurityPage />)
-    expect(await screen.findByText('No additional sign-in methods')).toBeTruthy()
+    expect(await screen.findByText('No external sign-in Providers')).toBeTruthy()
     await openSecurityTab('Passkeys')
     expect(screen.getByText('No passkeys have been added yet.')).toBeTruthy()
     await openSecurityTab('Sessions')

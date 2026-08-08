@@ -219,6 +219,74 @@ Agent -> Resource API: Authorization: DPoP ... + request DPoP proof
 Resource API: validate JWT, scopes, cnf.jkt, proof target, ath, and replay state
 ```
 
+## Brokered Native Account Connection
+
+Use this transitional mode when the API can validate Realmroot-issued native
+tokens but must keep a provider OAuth or installation credential behind its own
+boundary. It is a Realmroot extension, not an adopted RFC. The Resource Server
+remains native for token validation, but its API Resource MUST select the
+Provider Connector whose account identity it represents. The Connector is the
+stable provider key used to enforce one user-visible Connection; it does not
+turn this Resource Server into an external OAuth authorization server.
+Realmroot never stores the provider credential.
+
+Advertise the connection endpoints with the RFC 9728 metadata. The revocation
+endpoint is recommended during the 0.1 compatibility window:
+
+```json
+{
+  "resource": "https://adapter.example.com/github",
+  "scopes_supported": ["github:metadata:read", "github:issues:write"],
+  "account_connection_modes_supported": ["brokered"],
+  "account_connection_authorization_endpoint": "https://adapter.example.com/github/account-connection-authorizations",
+  "account_connection_token_endpoint": "https://adapter.example.com/github/account-connection-credentials",
+  "account_connection_revocation_endpoint": "https://adapter.example.com/github/account-connection-revocations"
+}
+```
+
+Realmroot calls the authorization endpoint with `request=SIGNED_JWT`. Validate
+the request against Realmroot's published JWKS and require exact issuer,
+Resource audience, expiry, and one-use `jti`. The signed claims bind:
+
+- the owner and canonical `connection_id`;
+- `expected_external_subject` during same-account reconnection;
+- Realmroot's callback URI and state;
+- an S256 PKCE challenge;
+- requested scopes and RFC 9396 authorization details.
+
+After the provider flow, redirect the browser to the signed callback URI with
+`code` and `state`. Realmroot exchanges the one-use code and `code_verifier` at
+the token endpoint. Return only connection metadata:
+
+```json
+{
+  "external_subject": "8208",
+  "display_name": "Jasper Van",
+  "broker_reference": "connection-opaque-id",
+  "scope": "github:metadata:read github:issues:write",
+  "authorization_details": [
+    { "type": "github_installation", "installation_id": "152097080" }
+  ]
+}
+```
+
+One owner has at most one Connection for a Provider Connector. Each connected
+Resource Server receives its own Resource Authorization beneath that
+Connection. A Connector may have exactly one brokered account-connection
+authority, so Account Center never has to choose among Adapter-specific entry
+points. The Resource Server resolves the context only from Realmroot-signed
+`connection_id` and `authorization_details` claims;
+callers cannot select a provider account or installation through the request
+URL. Reauthorization may update that Connection only for the same external
+subject. Realmroot stores no provider token and deactivating the Connection
+immediately prevents new target tokens.
+
+When `account_connection_revocation_endpoint` is advertised, Realmroot first
+posts a short-lived signed JWT as the form field `request`. Validate the same
+issuer, Resource audience, expiry, and one-use `jti` rules, then invalidate the
+bound `broker_reference`. Return a successful 2xx response only after the
+provider credential can no longer be used.
+
 ## External Authorization
 
 Use external mode when the target platform owns its users, OAuth client
@@ -240,9 +308,10 @@ Then register the API Resource and select that Connector:
 }
 ```
 
-The presence of `connectorId` makes the resource externally authorized. Its
-authorization mode cannot change after creation, although it may switch to
-another compatible OIDC Connector.
+For a Resource Server that does not advertise the brokered account-connection
+extension, the presence of `connectorId` makes the resource externally
+authorized. Its authorization mode cannot change after creation, although it
+may switch to another compatible OIDC Connector.
 
 ### Bind Protected Resource Metadata To The Authorization Server
 

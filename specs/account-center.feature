@@ -15,7 +15,7 @@ Feature: Account Center
 
   @entrypoint:product-ui @journey:account-section-routes
   Scenario: Account Center groups related sections into route-backed pages
-    When I open /, /profile, /security, /applications, /agents, or /organizations
+    When I open /, /profile, /security, /applications, /connections, /agents, or /organizations
     Then I see only the grouped account page in the account content area
     And every Account Center section is a root-level sibling route
 
@@ -119,11 +119,17 @@ Feature: Account Center
     Then Realmroot requires the external wallet signature boundary
     And the bound account can sign in
 
-  @entrypoint:product-ui @journey:linked-account-unlink
-  Scenario: Social accounts can be linked and unlinked
-    Given an OAuth connector is available
-    When I connect and then unlink the provider account
-    Then the connection list reflects the change
+  @entrypoint:product-ui @journey:provider-connections
+  Scenario: External provider accounts have one unified connection
+    Given a Provider Connector is available for sign-in and Agent access
+    When I connect the provider account
+    Then Realmroot redirects me through the Provider authorization or application installation flow
+    And I return to Account Center Connections
+    Then Account Center shows one Provider Connection for that provider
+    And the connection shows its sign-in and Agent access capabilities
+    And Sign-in & security links to the connection without offering a second management surface
+    When I disconnect the Provider Connection
+    Then its sign-in binding and external Resource authorizations are revoked together
 
   @entrypoint:product-ui @journey:session-revocation
   Scenario: Sessions can be revoked
@@ -137,12 +143,14 @@ Feature: Account Center
     When I revoke the grant
     Then the application is removed from authorized apps
 
-  @entrypoint:product-ui @journey:resource-account-connections
-  Scenario: Connected API resource accounts appear with authorized applications
-    Given I connected an external API resource account for Agent access
-    When I open /applications and choose the Resource accounts tab
-    Then I see the API resource and connected external account
-    And I can disconnect it separately from OAuth application grants
+  @entrypoint:product-ui @journey:authorized-app-separation
+  Scenario: Authorized applications remain separate from Provider Connections
+    Given I connected an external Provider account for Agent access
+    And I granted an application access to my Realmroot identity
+    When I open /applications
+    Then I see only applications authorized to access my Realmroot identity
+    When I open /connections
+    Then I see the external Provider account and its Resource authorization summary
 
   @entrypoint:product-ui @journey:account-organization-management
   Scenario: Organization members manage their shared context

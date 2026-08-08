@@ -202,6 +202,11 @@ export const apiResource = sqliteTable(
   },
   (table) => [
     uniqueIndex('apiResource_resourceUrl_unique').on(table.resourceUrl),
+    uniqueIndex('apiResource_providerConnectionAuthority_unique')
+      .on(table.connectorId)
+      .where(
+        sql`${table.deletedAt} is null and ${table.connectorId} is not null and json_extract(${table.scopeRegistry}, '$.accountConnection.mode') = 'brokered'`,
+      ),
     index('apiResource_enabled_idx').on(table.enabled),
     index('apiResource_connectorId_idx').on(table.connectorId),
     index('apiResource_ownerOrganizationId_idx').on(table.ownerOrganizationId),

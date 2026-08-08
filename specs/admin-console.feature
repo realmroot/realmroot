@@ -211,8 +211,9 @@ Feature: Admin Console
     Then it appears in authorization inventory
     And it records an explicit owner Organization
     And its visibility is private by default and can be changed to public
-    And selecting an OIDC connector during creation makes it externally authorized
-    And omitting a connector makes it natively authorized
+    And selecting an OIDC connector makes a standard federated Resource Server externally authorized
+    And a brokered Resource Server selects its Provider Connector without changing native token validation
+    And omitting a connector makes a non-brokered Resource Server natively authorized
     And its authorization mode cannot change after creation
     And its protected resource URL is the OAuth resource identifier and access-token audience
     And its name and description are synchronized from the OpenAPI contract and cannot be edited manually
@@ -232,6 +233,16 @@ Feature: Admin Console
     Then the Console removes it from resource lists and details
     And the deleted resource remains only in the database for incident investigation
     And the Console offers no restoration
+
+  @entrypoint:product-ui @journey:provider-connection-authority
+  Scenario: A Provider Connector has one generic account connection authority
+    Given a Resource Server advertises brokered account connection metadata
+    When I register it without a Provider Connector
+    Then Realmroot rejects the Resource Server
+    When I register it with an enabled Provider Connector
+    Then Realmroot accepts any Connector provider type without requiring an external OIDC authorization server
+    And refreshing discovery preserves the brokered account connection endpoints
+    And Realmroot rejects another account connection authority for the same Provider Connector
 
   @entrypoint:product-ui @journey:admin-authorization-inventory
   Scenario: Authorization inventory lists organizations, Organization Roles, and Resource servers

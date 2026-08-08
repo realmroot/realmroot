@@ -4,8 +4,12 @@ import {
   agentAccessRequest,
   agentIdentity,
   agentIdentityBinding,
+  apiResource,
+  identityProviderConnector,
+  resourceConnectionIntent,
   verification,
 } from '@server/db/schema'
+import { eq } from 'drizzle-orm'
 import { privateKeyToAccount } from 'viem/accounts'
 import { createSiweMessage } from 'viem/siwe'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -330,6 +334,105 @@ describe('account self-service over real D1', () => {
 
     const apps = await harness.request('/api/account/applications', { headers: { cookie } })
     expect(apps.status).toBe(200)
+  })
+
+  it('[spec: account-center/provider-connections] creates a provider connection intent through real HTTP and D1', async () => {
+    const { cookie, userId } = await signedInUser(harness)
+    const now = new Date()
+    await harness.db.insert(identityProviderConnector).values({
+      id: 'connector-provider',
+      slug: 'provider',
+      providerType: 'social',
+      providerId: 'provider',
+      displayName: 'Provider',
+      enabled: true,
+      loginEnabled: false,
+      createdAt: now,
+      updatedAt: now,
+    })
+    await harness.db.insert(apiResource).values({
+      id: 'resource-provider',
+      identifier: 'provider-api',
+      name: 'Provider API',
+      resourceUrl: 'https://adapter.example.com/provider',
+      connectorId: 'connector-provider',
+      authorizationDetails: [],
+      enabled: true,
+      ownerOrganizationId: 'org_platform',
+      visibility: 'public',
+      availableToAgents: true,
+      scopeRegistry: {
+        discovery: {
+          sourceUrl: 'https://adapter.example.com/.well-known/oauth-protected-resource/provider',
+          etag: null,
+          documentHash: 'provider-contract',
+          syncedAt: now.toISOString(),
+          lastError: null,
+        },
+        scopes: [{ value: 'provider:read', description: null, grantMode: 'assigned' }],
+        accountConnection: {
+          mode: 'brokered',
+          authorizationEndpoint: 'https://adapter.example.com/provider/account-connection-authorizations',
+          tokenEndpoint: 'https://adapter.example.com/provider/account-connection-credentials',
+        },
+      },
+      createdAt: now,
+      updatedAt: now,
+    })
+
+    const response = await harness.request('/api/account/provider-connection-intents', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ connectorId: 'connector-provider' }),
+    })
+
+    expect(response.status, await response.clone().text()).toBe(201)
+    expect(response.headers.get('location')).toBeNull()
+    const body = (await response.json()) as { id: string; connectorId: string; authorizationUrl: string }
+    expect(body.connectorId).toBe('connector-provider')
+    expect(new URL(body.authorizationUrl).searchParams.get('request')).toBeTruthy()
+    const [persisted] = await harness.db
+      .select()
+      .from(resourceConnectionIntent)
+      .where(eq(resourceConnectionIntent.id, body.id))
+    expect(persisted).toMatchObject({
+      resourceId: 'resource-provider',
+      ownerUserId: userId,
+      authorizationMode: 'brokered',
+      status: 'pending',
+    })
+
+    await expect(
+      harness.db.insert(apiResource).values({
+        id: 'resource-provider-duplicate',
+        identifier: 'provider-api-duplicate',
+        name: 'Duplicate Provider API',
+        resourceUrl: 'https://adapter.example.com/provider-duplicate',
+        connectorId: 'connector-provider',
+        authorizationDetails: [],
+        enabled: true,
+        ownerOrganizationId: 'org_platform',
+        visibility: 'public',
+        availableToAgents: true,
+        scopeRegistry: {
+          discovery: {
+            sourceUrl: 'https://adapter.example.com/.well-known/oauth-protected-resource/provider-duplicate',
+            etag: null,
+            documentHash: 'duplicate-contract',
+            syncedAt: now.toISOString(),
+            lastError: null,
+          },
+          scopes: [{ value: 'provider:read', description: null, grantMode: 'assigned' }],
+          accountConnection: {
+            mode: 'brokered',
+            authorizationEndpoint: 'https://adapter.example.com/provider-duplicate/authorizations',
+            tokenEndpoint: 'https://adapter.example.com/provider-duplicate/credentials',
+          },
+        },
+        createdAt: now,
+        updatedAt: now,
+      }),
+    ).rejects.toThrow()
   })
 
   it('links and unlinks a SIWE wallet address through real SQL', async () => {

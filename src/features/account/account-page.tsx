@@ -79,14 +79,16 @@ export function AccountRow({
   label: ReactNode
   value?: ReactNode
 }) {
+  const hasValue = value !== undefined && value !== null
+  const hasAction = action !== undefined && action !== null
   return (
-    <div className="accountRow">
+    <div className={cn('accountRow', !hasValue && 'is-value-empty', !hasAction && 'is-action-empty')}>
       <div className="accountRowLabel">
         <strong>{label}</strong>
         {description ? <span>{description}</span> : null}
       </div>
-      <div className="accountRowValue">{value}</div>
-      <div className="accountRowAction">{action}</div>
+      {hasValue ? <div className="accountRowValue">{value}</div> : null}
+      {hasAction ? <div className="accountRowAction">{action}</div> : null}
     </div>
   )
 }

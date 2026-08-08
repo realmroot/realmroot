@@ -34,7 +34,7 @@ import {
   organization,
   organizationRole,
   passkey,
-  resourceAccountConnection,
+  providerResourceAuthorization,
   resourceConnectionIntent,
   session,
   signInExperience,
@@ -265,14 +265,13 @@ describe('schema.test 1', () => {
   })
 
   it('separates signing, credential custody, grants, OAuth state, and audit storage', () => {
-    expect(indexNames(resourceAccountConnection)).toEqual(
+    expect(indexNames(apiResource)).toContain('apiResource_providerConnectionAuthority_unique')
+    expect(indexNames(providerResourceAuthorization)).toEqual(
       expect.arrayContaining([
-        'resourceAccountConnection_resourceId_idx',
-        'resourceAccountConnection_resource_user_unique',
-        'resourceAccountConnection_resource_org_unique',
-        'resourceAccountConnection_ownerUserId_idx',
-        'resourceAccountConnection_ownerOrganizationId_idx',
-        'resourceAccountConnection_status_idx',
+        'providerResourceAuthorization_connection_resource_unique',
+        'providerResourceAuthorization_providerConnectionId_idx',
+        'providerResourceAuthorization_resourceId_idx',
+        'providerResourceAuthorization_status_idx',
       ]),
     )
     expect(indexNames(agentAccessGrant)).toEqual(

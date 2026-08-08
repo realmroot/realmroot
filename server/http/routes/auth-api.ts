@@ -4,6 +4,10 @@ export type AuthEndpoint<TInput, TOutput> = (input: TInput) => Promise<TOutput>
 export type AuthResponseEndpoint<TInput> = (input: TInput & { asResponse: true }) => Promise<Response>
 
 export interface ManagementAuthApi {
+  signJWT?: (context: {
+    body: { payload: Record<string, unknown>; overrideOptions?: { jwt?: { type?: string } } }
+    asResponse: false
+  }) => Promise<{ token: string }>
   listSessions: AuthEndpoint<{ headers: Headers }, unknown>
   revokeSession: AuthEndpoint<{ body: { token: string }; headers: Headers }, unknown>
   revokeSessions: AuthEndpoint<{ headers: Headers }, unknown>

@@ -1,506 +1,288 @@
-import { AppWindow, Bot, KeyRound, Link2, Wallet } from 'lucide-react'
+import type { AccountProviderConnection, AccountProviderConnector } from '@shared/api/account'
+import { Check, Link2, ShieldCheck } from 'lucide-react'
+import { useState } from 'react'
 import { ProviderIcon } from '@/components/provider-icon'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import {
-  activateAgent,
-  deactivateAgent,
-  deleteAgent,
-  linkAccount,
-  revokeAccountConnection,
-  revokeApplicationConsent,
-  unlinkAccount,
-  unlinkWalletAddress,
-} from '@/lib/api/account'
+import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { createProviderConnectionIntent, disconnectAccountProviderConnection, linkAccount } from '@/lib/api/account'
 import { tt } from '@/lib/i18n'
-import { AccountPageError, AccountPageLoading, AccountPageShell } from './account-shell'
-import {
-  DestructiveConfirmationDialog,
-  ItemList,
-  PanelTitle,
-  SubsectionTitle,
-  useDestructiveConfirmation,
-} from './primitives'
+import { AccountEmptyState, AccountObjectSection, AccountPageHeader, AccountRow, AccountRows } from './account-page'
+import { AccountSurface } from './account-surface'
+import { DestructiveConfirmationDialog, useDestructiveConfirmation } from './primitives'
 import {
   accountQueryKeys,
-  useAccountAgents,
-  useAccountConfig,
-  useAccountConnections,
   useAccountMutation,
-  useAccountProfile,
-  useConsentedApplications,
-  useDeveloperConsoleAccess,
-  useExternalApiResources,
-  useLinkedAccounts,
+  useAccountProviderConnections,
+  useAccountProviderConnectors,
 } from './queries'
-import { defaultAccountCenterSettings } from './settings'
-import type {
-  ConfirmDestructiveHandler,
-  ConsentedApplication,
-  IdentityProvider,
-  LinkedAccount,
-  MutationHandler,
-  Web3WalletProvider,
-} from './types'
-import { enrollWallet, formatDate, readRedirectUrl } from './utils'
+import { formatDate, readRedirectUrl } from './utils'
 
 export function AccountConnectionsPage() {
-  const configQuery = useAccountConfig()
-  const profileQuery = useAccountProfile()
-  const accessQuery = useDeveloperConsoleAccess()
-  const config = configQuery.data ?? null
-  const accountCenter = config?.accountCenter ?? defaultAccountCenterSettings
-  const linkedAccountsQuery = useLinkedAccounts(accountCenter.connectedAccountsEnabled)
-  const applicationsQuery = useConsentedApplications(accountCenter.connectedAccountsEnabled)
-  const agentsQuery = useAccountAgents()
-  const externalResourcesQuery = useExternalApiResources()
-  const accountConnectionsQuery = useAccountConnections()
+  const connectorsQuery = useAccountProviderConnectors()
+  const connectionsQuery = useAccountProviderConnections()
   const mutate = useAccountMutation()
+  const [selected, setSelected] = useState<AccountProviderConnection | null>(null)
   const [confirmation, setConfirmation] = useDestructiveConfirmation()
-  const queries = [
-    configQuery,
-    profileQuery,
-    accessQuery,
-    linkedAccountsQuery,
-    applicationsQuery,
-    agentsQuery,
-    externalResourcesQuery,
-    accountConnectionsQuery,
-  ]
-  const error = queries.find((query) => query.error)?.error
-  if (queries.some((query) => query.isLoading)) return <AccountPageLoading config={config} />
-  if (error)
-    return <AccountPageError config={config} message={error instanceof Error ? error.message : tt('Unable to load.')} />
-  const profile = profileQuery.data?.user ?? null
-  const access = accessQuery.data
-  if (!profile || !access) return <AccountPageError config={config} message={tt('Unable to load account center.')} />
-  return (
-    <AccountPageShell
-      access={access}
-      accountCenter={accountCenter}
-      config={config}
-      profile={profile}
-      section="applications"
-    >
-      <div className="accountSectionStackFlat">
-        <ConnectionsPanel
-          accounts={linkedAccountsQuery.data?.accounts ?? []}
-          confirm={setConfirmation}
-          mutate={mutate}
-          providers={config?.identityProviders ?? []}
-          walletProvider={config?.builtInProviders.web3Wallet}
-        />
-        <ResourceConnectionsPanel
-          connections={accountConnectionsQuery.data?.items ?? []}
-          confirm={setConfirmation}
-          mutate={mutate}
-          resources={externalResourcesQuery.data?.items ?? []}
-        />
-        <ApplicationsPanel
-          applications={applicationsQuery.data?.applications ?? []}
-          confirm={setConfirmation}
-          mutate={mutate}
-        />
-        <AgentIdentitiesPanel identities={agentsQuery.data?.items ?? []} confirm={setConfirmation} mutate={mutate} />
-      </div>
-      <DestructiveConfirmationDialog confirmation={confirmation} onClose={() => setConfirmation(null)} />
-    </AccountPageShell>
-  )
-}
+  const connections = connectionsQuery.data?.items ?? []
+  const connectors = connectorsQuery.data?.items ?? []
+  const connectedConnectorIds = new Set(connections.map((connection) => connection.connector.id))
+  const available = connectors.filter((connector) => !connectedConnectorIds.has(connector.id))
+  const loading = connectorsQuery.isLoading || connectionsQuery.isLoading
+  const error = connectorsQuery.error ?? connectionsQuery.error
 
-function ResourceConnectionsPanel({
-  resources,
-  connections,
-  confirm,
-  mutate,
-}: {
-  resources: import('@shared/api/agent-api').ConnectableApiResourcesResponse['items']
-  connections: import('@shared/api/agent-api').AccountConnection[]
-  confirm: ConfirmDestructiveHandler
-  mutate: MutationHandler
-}) {
-  return (
-    <section className="accountPanelGroup" aria-label={tt('API resource accounts')}>
-      <div className="accountPanelHeader">
-        <PanelTitle
-          description={tt('Accounts used to authorize direct Agent access to external APIs.')}
-          icon={<KeyRound size={18} />}
-          title={tt('API resource accounts')}
-        />
-      </div>
-      <section className="settingsPanel">
-        <SubsectionTitle
-          title={tt('Connected resource accounts')}
-          description={tt(
-            'A connection authorizes the resource’s current Agent-delegable scope catalog. Each Agent grant remains limited to its separately approved exact scopes and lifetime.',
-          )}
-        />
-        <ItemList
-          empty={tt('No connected resource accounts.')}
-          emptyDescription={tt(
-            'Approve an Agent resource access request to connect this account through its scoped OAuth flow.',
-          )}
-          items={connections
-            .filter((connection) => connection.status === 'active')
-            .map((connection) => {
-              const resource = resources.find((candidate) => candidate.id === connection.apiResourceId)
-              return {
-                id: connection.id,
-                icon: <KeyRound size={16} />,
-                title: `${resource?.name ?? tt('API resource')} · ${connection.displayName}`,
-                meta: connection.scopes.join(', '),
-                status: tt('Connected'),
-                action: (
-                  <Button
-                    onClick={() =>
-                      confirm({
-                        title: tt('Disconnect resource account'),
-                        description: tt('Active Agent grants and token leases for this account will be revoked.'),
-                        actionLabel: tt('Disconnect'),
-                        onConfirm: () =>
-                          mutate('Resource account disconnected.', () => revokeAccountConnection(connection.id), {
-                            invalidate: [accountQueryKeys.accountConnections],
-                          }),
-                      })
-                    }
-                    variant="ghost"
-                  >
-                    {tt('Disconnect')}
-                  </Button>
-                ),
-              }
-            })}
-        />
-      </section>
-    </section>
-  )
-}
-
-function AgentIdentitiesPanel({
-  identities,
-  confirm,
-  mutate,
-}: {
-  identities: import('@shared/api/agent-api').Agent[]
-  confirm: ConfirmDestructiveHandler
-  mutate: MutationHandler
-}) {
-  return (
-    <section className="accountPanelGroup" aria-label={tt('Agent identities')}>
-      <div className="accountPanelHeader">
-        <PanelTitle
-          description={tt('Stable Agent identities owned by your personal space.')}
-          icon={<Bot size={18} />}
-          title={tt('Agent identities')}
-        />
-      </div>
-      <section className="settingsPanel">
-        <SubsectionTitle
-          title={tt('Stable identities')}
-          description={tt('Issuer and subject remain stable when hosts change.')}
-        />
-        <ItemList
-          empty={tt('No Agent identities yet.')}
-          items={identities.map((identity) => ({
-            id: identity.id,
-            icon: <Bot size={16} />,
-            title: identity.name,
-            meta: `${identity.issuer} · ${identity.subject}`,
-            status: identity.status,
-            action: (
-              <span className="flex gap-2">
-                <Button
-                  onClick={() =>
-                    confirm({
-                      title: tt(identity.status === 'active' ? 'Deactivate Agent identity' : 'Activate Agent identity'),
-                      description: tt(
-                        identity.status === 'active'
-                          ? 'The Agent remains visible but cannot be used until it is activated again.'
-                          : 'The Agent can authenticate and use its retained authority again.',
-                      ),
-                      actionLabel: tt(identity.status === 'active' ? 'Deactivate' : 'Activate'),
-                      onConfirm: () =>
-                        mutate(
-                          identity.status === 'active' ? 'Agent deactivated.' : 'Agent activated.',
-                          () =>
-                            identity.status === 'active' ? deactivateAgent(identity.id) : activateAgent(identity.id),
-                          {
-                            invalidate: [accountQueryKeys.agents],
-                          },
-                        ),
-                    })
-                  }
-                  type="button"
-                  variant="outline"
-                >
-                  {tt(identity.status === 'active' ? 'Deactivate' : 'Activate')}
-                </Button>
-                <Button
-                  onClick={() =>
-                    confirm({
-                      title: tt('Delete Agent identity'),
-                      description: tt('This Agent disappears from every interface and cannot be restored.'),
-                      actionLabel: tt('Delete identity'),
-                      onConfirm: () =>
-                        mutate('Agent deleted.', () => deleteAgent(identity.id), {
-                          invalidate: [accountQueryKeys.agents],
-                        }),
-                    })
-                  }
-                  type="button"
-                  variant="destructive"
-                >
-                  {tt('Delete')}
-                </Button>
-              </span>
-            ),
-          }))}
-        />
-      </section>
-    </section>
-  )
-}
-
-function ConnectionsPanel({
-  accounts,
-  confirm,
-  mutate,
-  providers,
-  walletProvider,
-}: {
-  accounts: LinkedAccount[]
-  confirm: ConfirmDestructiveHandler
-  mutate: MutationHandler
-  providers: IdentityProvider[]
-  walletProvider?: Web3WalletProvider
-}) {
-  return (
-    <section className="accountPanelGroup" aria-label={tt('Linked accounts')}>
-      <div className="accountPanelHeader">
-        <PanelTitle
-          description={tt('External sign-in identities connected to this account.')}
-          icon={<Link2 size={18} />}
-          title={tt('Linked accounts')}
-        />
-      </div>
-      <ConnectionsSection
-        accounts={accounts}
-        confirm={confirm}
-        mutate={mutate}
-        providers={providers}
-        showHeading={false}
-        walletProvider={walletProvider}
-      />
-    </section>
-  )
-}
-
-export function ConnectionsSection({
-  accounts,
-  compactEmpty = false,
-  confirm,
-  mutate,
-  providers,
-  showHeading = true,
-  walletProvider,
-}: {
-  accounts: LinkedAccount[]
-  compactEmpty?: boolean
-  confirm: ConfirmDestructiveHandler
-  mutate: MutationHandler
-  providers: IdentityProvider[]
-  showHeading?: boolean
-  walletProvider?: Web3WalletProvider
-}) {
-  const externalAccounts = accounts.filter((account) => account.providerId !== 'credential')
-  const accountByProvider = new Map(externalAccounts.map((account) => [account.providerId, account]))
-  const walletAccounts = externalAccounts.filter((account) => account.providerId === 'siwe')
-  const walletEnabled = Boolean(walletProvider?.enabled)
-  async function connectProvider(provider: IdentityProvider) {
-    const result = await mutate(tt('Redirecting to {{providerName}}.', { providerName: provider.displayName }), () =>
+  async function connect(connector: AccountProviderConnector) {
+    if (connector.capabilities.connection.method === 'provider_authorization') {
+      const intent = await mutate(tt('Redirecting to {{providerName}}.', { providerName: connector.displayName }), () =>
+        createProviderConnectionIntent(connector.id),
+      )
+      if (intent) window.location.assign(intent.authorizationUrl)
+      return
+    }
+    if (connector.capabilities.connection.method !== 'sign_in') return
+    const result = await mutate(tt('Redirecting to {{providerName}}.', { providerName: connector.displayName }), () =>
       linkAccount({
-        providerType: provider.providerType === 'generic_oauth' ? 'generic_oauth' : 'social',
-        providerId: provider.providerId,
-        callbackURL: `${window.location.origin}/security`,
-        errorCallbackURL: `${window.location.origin}/security`,
+        providerType: connector.providerType === 'generic_oauth' ? 'generic_oauth' : 'social',
+        providerId: connector.providerId,
+        callbackURL: `${window.location.origin}/connections`,
+        errorCallbackURL: `${window.location.origin}/connections`,
       }),
     )
     const redirectUrl = readRedirectUrl(result)
     if (redirectUrl) window.location.assign(redirectUrl)
   }
-  async function connectWallet() {
-    await mutate('Wallet linked.', () => enrollWallet(walletProvider?.chains ?? [1]), {
-      invalidate: [accountQueryKeys.linkedAccounts],
+
+  function disconnect(connection: AccountProviderConnection) {
+    setConfirmation({
+      title: tt('Disconnect {{providerName}}?', { providerName: connection.connector.displayName }),
+      description: tt(
+        'This removes the Provider from sign-in and revokes its active Agent Resource authorizations and token leases.',
+      ),
+      actionLabel: tt('Disconnect'),
+      onConfirm: async () => {
+        let failed = false
+        await mutate(
+          tt('{{providerName}} disconnected.', { providerName: connection.connector.displayName }),
+          () => disconnectAccountProviderConnection(connection.id),
+          {
+            invalidate: [accountQueryKeys.providerConnections, accountQueryKeys.linkedAccounts],
+            onError: () => {
+              failed = true
+            },
+          },
+        )
+        if (!failed) setSelected(null)
+      },
     })
   }
-  const list = (
-    <ItemList
-      compactEmpty={compactEmpty}
-      empty={tt('No additional sign-in methods')}
-      emptyDescription={tt('Your organization has not enabled social or OAuth sign-in for this account.')}
-      emptyIcon={<Link2 size={18} />}
-      items={[
-        ...providers.map((provider) =>
-          linkedProviderItem(provider, accountByProvider.get(provider.providerId), confirm, mutate, connectProvider),
-        ),
-        ...(walletEnabled ? [walletProviderItem(walletAccounts, walletProvider, confirm, mutate, connectWallet)] : []),
-      ]}
-    />
-  )
-  if (!showHeading) return <div className="settingsPanel">{list}</div>
+
   return (
-    <section aria-label={tt('Linked accounts')} className="settingsPanel">
-      <SubsectionTitle
-        title={tt('Linked accounts')}
-        description={tt('External sign-in identities connected to this account.')}
-      />
-      {list}
-    </section>
+    <AccountSurface section="connections">
+      {() => (
+        <>
+          <AccountPageHeader
+            description={tt('Connect external accounts once for sign-in and delegated Agent access.')}
+            title={tt('Connections')}
+          />
+          {loading ? <p className="text-sm text-muted-foreground">{tt('Loading Provider Connections…')}</p> : null}
+          {error ? (
+            <p className="text-sm text-destructive" role="alert">
+              {error instanceof Error ? error.message : tt('Unable to load Provider Connections.')}
+            </p>
+          ) : null}
+          {!loading && !error ? (
+            <div className="accountSectionStackFlat">
+              <AccountObjectSection
+                description={tt('External Provider accounts connected to your Realmroot identity.')}
+                surface
+                title={tt('Connected')}
+              >
+                <AccountRows>
+                  {connections.map((connection) => (
+                    <AccountRow
+                      action={
+                        <Button onClick={() => setSelected(connection)} variant="outline">
+                          {tt('Manage')}
+                        </Button>
+                      }
+                      key={connection.id}
+                      label={
+                        <ProviderLabel
+                          connector={connection.connector}
+                          details={[
+                            tt('{{displayName}} · Connected {{date}}', {
+                              displayName: connection.displayName,
+                              date: formatDate(connection.createdAt),
+                            }),
+                          ]}
+                        />
+                      }
+                      value={<CapabilityBadges connection={connection} />}
+                    />
+                  ))}
+                  {!connections.length ? (
+                    <AccountEmptyState
+                      description={tt('Connect an available Provider or approve an Agent Resource request.')}
+                      icon={<Link2 />}
+                      title={tt('No Provider Connections')}
+                    />
+                  ) : null}
+                </AccountRows>
+              </AccountObjectSection>
+              <AccountObjectSection
+                description={tt('Providers made available by your Realm administrator.')}
+                surface
+                title={tt('Available')}
+              >
+                <AccountRows>
+                  {available.map((connector) => (
+                    <AccountRow
+                      action={
+                        connector.capabilities.connection.method ? (
+                          <Button onClick={() => void connect(connector)} variant="outline">
+                            {tt('Connect')}
+                          </Button>
+                        ) : undefined
+                      }
+                      key={connector.id}
+                      label={<ProviderLabel connector={connector} details={[capabilityDescription(connector)]} />}
+                      value={undefined}
+                    />
+                  ))}
+                  {!available.length ? (
+                    <AccountEmptyState
+                      description={tt('Every available Provider is already connected.')}
+                      icon={<Check />}
+                      title={tt('All Providers connected')}
+                    />
+                  ) : null}
+                </AccountRows>
+              </AccountObjectSection>
+            </div>
+          ) : null}
+          <ConnectionSheet connection={selected} onClose={() => setSelected(null)} onDisconnect={disconnect} />
+          <DestructiveConfirmationDialog confirmation={confirmation} onClose={() => setConfirmation(null)} />
+        </>
+      )}
+    </AccountSurface>
   )
 }
 
-function linkedProviderItem(
-  provider: IdentityProvider,
-  account: LinkedAccount | undefined,
-  confirm: ConfirmDestructiveHandler,
-  mutate: MutationHandler,
-  connectProvider: (provider: IdentityProvider) => void,
-) {
-  return {
-    id: provider.slug,
-    icon: <ProviderIcon className="providerIcon providerIconLarge" provider={provider} />,
-    title: provider.displayName,
-    meta: account ? tt('Linked {{date}}', { date: formatDate(account.createdAt) }) : tt('Not linked to this account.'),
-    status: account ? tt('Linked') : undefined,
-    action: account ? (
-      <Button
-        onClick={() =>
-          confirm({
-            title: tt('Unlink account'),
-            description: tt('{{providerName}} will no longer be connected to your account.', {
-              providerName: provider.displayName,
-            }),
-            actionLabel: tt('Unlink account'),
-            onConfirm: () =>
-              mutate('Linked account removed.', () => unlinkAccount(provider.providerId, account.accountId), {
-                invalidate: [accountQueryKeys.linkedAccounts],
-              }),
-          })
-        }
-        type="button"
-        variant="ghost"
-      >
-        {tt('Unlink')}
-      </Button>
-    ) : (
-      <Button onClick={() => void connectProvider(provider)} size="sm" type="button" variant="outline">
-        {tt('Connect')}
-      </Button>
-    ),
-  }
+function ProviderLabel({ connector, details = [] }: { connector: AccountProviderConnector; details?: string[] }) {
+  return (
+    <span className="providerLabel">
+      <ProviderIcon
+        className="providerIcon providerIconLarge"
+        provider={{ displayName: connector.displayName, icon: connector.providerId, providerId: connector.providerId }}
+      />
+      <span className="providerLabelText">
+        <span className="providerLabelName">{connector.displayName}</span>
+        {details.map((detail) => (
+          <span className="providerLabelDetail" key={detail}>
+            {detail}
+          </span>
+        ))}
+      </span>
+    </span>
+  )
 }
 
-function walletProviderItem(
-  walletAccounts: LinkedAccount[],
-  walletProvider: Web3WalletProvider | undefined,
-  confirm: ConfirmDestructiveHandler,
-  mutate: MutationHandler,
-  connectWallet: () => void,
-) {
-  return {
-    id: 'web3-wallet',
-    icon: <Wallet size={16} />,
-    title: tt('Web3 wallet'),
-    meta: walletAccounts.length
-      ? tt('{{count}} wallet linked.', { count: walletAccounts.length })
-      : tt('Link a wallet after signing in with an email-based account.'),
-    status: walletAccounts.length ? tt('Linked') : undefined,
-    action: walletAccounts.length ? (
-      <Button
-        onClick={() =>
-          confirm({
-            title: tt('Unlink wallet'),
-            description: tt('This wallet will no longer sign in to your account.'),
-            actionLabel: tt('Unlink wallet'),
-            onConfirm: () =>
-              mutate('Wallet removed.', () => unlinkWalletAddress(walletAccounts[0].accountId), {
-                invalidate: [accountQueryKeys.linkedAccounts],
-              }),
-          })
-        }
-        type="button"
-        variant="ghost"
-      >
-        {tt('Unlink')}
-      </Button>
-    ) : (
-      <Button
-        disabled={!walletProvider?.enabled}
-        onClick={() => void connectWallet()}
-        size="sm"
-        type="button"
-        variant="outline"
-      >
-        {tt('Connect')}
-      </Button>
-    ),
-  }
+function CapabilityBadges({ connection }: { connection: AccountProviderConnection }) {
+  return (
+    <span className="flex flex-wrap justify-end gap-2">
+      {connection.capabilities.signIn.active ? <Badge variant="secondary">{tt('Sign-in')}</Badge> : null}
+      {connection.capabilities.agentAccess.active ? (
+        <Badge variant="secondary">{tt('Agent resource access')}</Badge>
+      ) : null}
+      {!connection.capabilities.signIn.active && !connection.capabilities.agentAccess.active ? (
+        <Badge variant="outline">{tt('Needs attention')}</Badge>
+      ) : null}
+    </span>
+  )
 }
 
-function ApplicationsPanel({
-  applications,
-  confirm,
-  mutate,
+function ConnectionSheet({
+  connection,
+  onClose,
+  onDisconnect,
 }: {
-  applications: ConsentedApplication[]
-  confirm: ConfirmDestructiveHandler
-  mutate: MutationHandler
+  connection: AccountProviderConnection | null
+  onClose: () => void
+  onDisconnect: (connection: AccountProviderConnection) => void
 }) {
   return (
-    <section className="accountPanelGroup" aria-label={tt('Authorized apps')}>
-      <div className="accountPanelHeader">
-        <PanelTitle
-          description={tt('Applications with consent to access this account.')}
-          icon={<AppWindow size={18} />}
-          title={tt('Authorized apps')}
-        />
-      </div>
-      <section className="settingsPanel">
-        <SubsectionTitle
-          title={tt('Authorized apps')}
-          description={tt('Applications with consent to access this account.')}
-        />
-        <ItemList
-          empty={tt('No authorized applications yet.')}
-          items={applications.map((application) => ({
-            id: application.id,
-            icon: <Link2 size={16} />,
-            title: application.applicationName,
-            meta: `${tt('Scopes:')} ${application.scopes.join(', ')} ${tt('/ Granted {{date}}', { date: formatDate(application.grantedAt) })}`,
-            action: (
-              <Button
-                onClick={() =>
-                  confirm({
-                    title: tt('Revoke application access'),
-                    description: tt(
-                      '{{applicationName}} will lose access to this account until you approve it again.',
-                      { applicationName: application.applicationName },
-                    ),
-                    actionLabel: tt('Revoke access'),
-                    onConfirm: () =>
-                      mutate('Application access revoked.', () => revokeApplicationConsent(application.id), {
-                        invalidate: [accountQueryKeys.applications],
-                      }),
-                  })
-                }
-                type="button"
-                variant="ghost"
-              >
-                {tt('Revoke')}
-              </Button>
-            ),
-          }))}
-        />
-      </section>
-    </section>
+    <Sheet onOpenChange={(open) => !open && onClose()} open={connection !== null}>
+      <SheetContent className="flex h-full flex-col overflow-hidden sm:max-w-xl">
+        <SheetHeader className="border-b">
+          <SheetTitle>{connection?.connector.displayName ?? tt('Provider Connection')}</SheetTitle>
+          <SheetDescription>
+            {connection
+              ? tt('{{displayName}} · Connected {{date}}', {
+                  displayName: connection.displayName,
+                  date: formatDate(connection.createdAt),
+                })
+              : ''}
+          </SheetDescription>
+        </SheetHeader>
+        {connection ? (
+          <div className="flex-1 space-y-6 overflow-y-auto px-4 py-5">
+            <AccountObjectSection description={connection.externalSubject} title={tt('Provider account')}>
+              <AccountRows>
+                <AccountRow label={tt('Account')} value={connection.displayName} />
+                <AccountRow label={tt('Provider subject')} value={<code>{connection.externalSubject}</code>} />
+              </AccountRows>
+            </AccountObjectSection>
+            <AccountObjectSection title={tt('Capabilities')}>
+              <AccountRows>
+                <AccountRow
+                  description={tt('Use this Provider identity to authenticate to Realmroot.')}
+                  label={tt('Sign-in')}
+                  value={connection.capabilities.signIn.active ? tt('Enabled') : tt('Not enabled')}
+                />
+                <AccountRow
+                  description={tt('Authorize Agents to access external Resources through this Provider.')}
+                  label={tt('Agent resource access')}
+                  value={connection.capabilities.agentAccess.active ? tt('Enabled') : tt('Not enabled')}
+                />
+              </AccountRows>
+            </AccountObjectSection>
+            <AccountObjectSection title={tt('Used by')}>
+              {connection.capabilities.agentAccess.resourceNames.length ? (
+                <AccountRows>
+                  {connection.capabilities.agentAccess.resourceNames.map((name) => (
+                    <AccountRow key={name} label={name} value={tt('Agent Resource access')} />
+                  ))}
+                </AccountRows>
+              ) : (
+                <AccountEmptyState
+                  description={tt('Agent Resource authorizations will appear here.')}
+                  icon={<ShieldCheck />}
+                  title={tt('No Agent resource access')}
+                />
+              )}
+            </AccountObjectSection>
+          </div>
+        ) : null}
+        <SheetFooter className="border-t sm:justify-between">
+          {connection ? (
+            <Button onClick={() => onDisconnect(connection)} variant="destructive">
+              {tt('Disconnect Provider')}
+            </Button>
+          ) : null}
+          <Button onClick={onClose} variant="outline">
+            {tt('Close')}
+          </Button>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   )
+}
+
+function capabilityDescription(connector: AccountProviderConnector) {
+  if (connector.capabilities.signIn.available && connector.capabilities.agentAccess.available) {
+    return tt('Sign-in and Agent resource access')
+  }
+  if (connector.capabilities.signIn.available) return tt('Sign-in only')
+  if (connector.capabilities.agentAccess.available) return tt('Agent resource access only')
+  return tt('No available capabilities')
 }

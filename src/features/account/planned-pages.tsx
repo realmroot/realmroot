@@ -1,10 +1,4 @@
-import type {
-  AccessRequestApproval,
-  AccountConnection,
-  Agent,
-  ConnectableApiResourcesResponse,
-  DecideAccessRequest,
-} from '@shared/api/agent-api'
+import type { AccessRequestApproval, Agent, DecideAccessRequest } from '@shared/api/agent-api'
 import type { OrganizationAccessLevel } from '@shared/organization-access'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { Plus } from 'lucide-react'
@@ -35,7 +29,6 @@ import {
   leaveAccountOrganization,
   rejectAccountOrganizationInvitation,
   removeAccountOrganizationMember,
-  revokeAccountConnection,
   revokeApplicationConsent,
   setActiveAccountOrganization,
   updateAccountOrganization,
@@ -58,7 +51,6 @@ import {
   accountQueryKeys,
   useAccountAccessRequests,
   useAccountAgents,
-  useAccountConnections,
   useAccountMutation,
   useAccountOrganization,
   useAccountOrganizationAgents,
@@ -68,7 +60,6 @@ import {
   useAccountSecurity,
   useAccountSessions,
   useConsentedApplications,
-  useExternalApiResources,
 } from './queries'
 import type { ConsentedApplication } from './types'
 import { formatDate, formatSessionDevice } from './utils'
@@ -234,11 +225,8 @@ function AccountMetric({ detail, label, value }: { detail: string; label: string
 
 export function AccountApplicationsPage() {
   const applicationsQuery = useConsentedApplications(true)
-  const resourcesQuery = useExternalApiResources()
-  const connectionsQuery = useAccountConnections()
   const mutate = useAccountMutation()
   const [selected, setSelected] = useState<ConsentedApplication | null>(null)
-  const [tab, setTab] = useState('authorized')
   const [confirmation, setConfirmation] = useDestructiveConfirmation()
   const applications = applicationsQuery.data?.applications ?? []
   return (
@@ -246,72 +234,48 @@ export function AccountApplicationsPage() {
       {() => (
         <>
           <AccountPageHeader
-            description={tt('Review applications you have authorized to act with your identity.')}
-            title={tt('Applications')}
+            description={tt('Review applications authorized to access your Realmroot identity.')}
+            title={tt('Authorized applications')}
           />
-          <AccountTabs
-            onValueChange={setTab}
-            tabs={[
-              { value: 'authorized', label: tt('Authorized apps') },
-              { value: 'resources', label: tt('Resource accounts') },
-            ]}
-            value={tab}
+          <AccountObjectSection
+            description={tt('Provider accounts used by Realmroot and Agents are managed separately in Connections.')}
+            surface
+            title={tt('Authorized applications')}
           >
-            <AccountTabContent surface value="authorized">
-              {applicationsQuery.isLoading ? (
-                <p className="text-sm text-muted-foreground">{tt('Loading authorized applications…')}</p>
-              ) : null}
-              {applicationsQuery.error ? (
-                <p className="text-sm text-destructive" role="alert">
-                  {applicationsQuery.error instanceof Error
-                    ? applicationsQuery.error.message
-                    : tt('Unable to load authorized applications.')}
-                </p>
-              ) : null}
-              {!applicationsQuery.isLoading && !applicationsQuery.error ? (
-                <AccountRows>
-                  {applications.map((application) => (
-                    <AccountRow
-                      action={
-                        <Button onClick={() => setSelected(application)} variant="outline">
-                          {tt('Review')}
-                        </Button>
-                      }
-                      description={tt('Authorized {{date}}', { date: formatDate(application.grantedAt) })}
-                      key={application.id}
-                      label={application.applicationName}
-                      value={<code>{application.scopes.join(' ')}</code>}
-                    />
-                  ))}
-                  {!applications.length ? (
-                    <AccountEmptyState
-                      description={tt('Applications you approve will appear here.')}
-                      title={tt('No authorized applications')}
-                    />
-                  ) : null}
-                </AccountRows>
-              ) : null}
-            </AccountTabContent>
-            <AccountTabContent surface value="resources">
-              <ResourceAccountConnections
-                connections={connectionsQuery.data?.items ?? []}
-                error={connectionsQuery.error ?? resourcesQuery.error}
-                loading={connectionsQuery.isLoading || resourcesQuery.isLoading}
-                onDisconnect={(connection) => {
-                  setConfirmation({
-                    title: tt('Disconnect resource account'),
-                    description: tt('Active Agent grants and token leases for this account will be revoked.'),
-                    actionLabel: tt('Disconnect'),
-                    onConfirm: () =>
-                      mutate('Resource account disconnected.', () => revokeAccountConnection(connection.id), {
-                        invalidate: [accountQueryKeys.accountConnections],
-                      }),
-                  })
-                }}
-                resources={resourcesQuery.data?.items ?? []}
-              />
-            </AccountTabContent>
-          </AccountTabs>
+            {applicationsQuery.isLoading ? (
+              <p className="text-sm text-muted-foreground">{tt('Loading authorized applications…')}</p>
+            ) : null}
+            {applicationsQuery.error ? (
+              <p className="text-sm text-destructive" role="alert">
+                {applicationsQuery.error instanceof Error
+                  ? applicationsQuery.error.message
+                  : tt('Unable to load authorized applications.')}
+              </p>
+            ) : null}
+            {!applicationsQuery.isLoading && !applicationsQuery.error ? (
+              <AccountRows>
+                {applications.map((application) => (
+                  <AccountRow
+                    action={
+                      <Button onClick={() => setSelected(application)} variant="outline">
+                        {tt('Review')}
+                      </Button>
+                    }
+                    description={tt('Authorized {{date}}', { date: formatDate(application.grantedAt) })}
+                    key={application.id}
+                    label={application.applicationName}
+                    value={<code>{application.scopes.join(' ')}</code>}
+                  />
+                ))}
+                {!applications.length ? (
+                  <AccountEmptyState
+                    description={tt('Applications you approve will appear here.')}
+                    title={tt('No authorized applications')}
+                  />
+                ) : null}
+              </AccountRows>
+            ) : null}
+          </AccountObjectSection>
           <ApplicationReviewDialog
             application={selected}
             onClose={() => setSelected(null)}
@@ -339,61 +303,6 @@ export function AccountApplicationsPage() {
         </>
       )}
     </AccountSurface>
-  )
-}
-
-function ResourceAccountConnections({
-  connections,
-  error,
-  loading,
-  onDisconnect,
-  resources,
-}: {
-  connections: AccountConnection[]
-  error: Error | null
-  loading: boolean
-  onDisconnect: (connection: AccountConnection) => void
-  resources: ConnectableApiResourcesResponse['items']
-}) {
-  const activeConnections = connections.filter((connection) => connection.status === 'active')
-  return (
-    <AccountObjectSection
-      description={tt('Accounts used to authorize direct Agent access to external APIs.')}
-      title={tt('Connected resource accounts')}
-    >
-      {loading ? <p className="text-sm text-muted-foreground">{tt('Loading connected resource accounts…')}</p> : null}
-      {error ? (
-        <p className="text-sm text-destructive" role="alert">
-          {error.message}
-        </p>
-      ) : null}
-      {!loading && !error ? (
-        <AccountRows>
-          {activeConnections.map((connection) => {
-            const resource = resources.find((candidate) => candidate.id === connection.apiResourceId)
-            return (
-              <AccountRow
-                action={
-                  <Button onClick={() => onDisconnect(connection)} variant="outline">
-                    {tt('Disconnect')}
-                  </Button>
-                }
-                description={connection.displayName ?? connection.subjectHint ?? tt('Unknown owner')}
-                key={connection.id}
-                label={resource?.name ?? tt('API resource')}
-                value={<code>{connection.scopes.join(' ')}</code>}
-              />
-            )
-          })}
-          {!activeConnections.length ? (
-            <AccountEmptyState
-              description={tt('Resource accounts connected for Agent access will appear here.')}
-              title={tt('No connected resource accounts')}
-            />
-          ) : null}
-        </AccountRows>
-      ) : null}
-    </AccountObjectSection>
   )
 }
 

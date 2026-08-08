@@ -103,6 +103,7 @@ describe('authorization CRUD and assignment policy', () => {
   it(`persists one immutable built-in Realmroot Resource Server and reconciles its deployment contract
       [spec: management-api/management-realmroot-resource-server-origin]`, async () => {
     const authorization = repository()
+    authorization.listEnabledResources.mockResolvedValue([])
     authorization.createResource.mockImplementation(async (input) => ({
       ...input,
       createdAt: timestamp,
@@ -633,8 +634,9 @@ describe('authorization CRUD and assignment policy', () => {
     )
   })
 
-  it('manages native and external API resources', async () => {
+  it('[spec: admin-console/provider-connection-authority] manages native, brokered, and external API resources', async () => {
     const authorization = repository()
+    authorization.listEnabledResources.mockResolvedValue([])
     authorization.findOrganization.mockResolvedValue(organization)
     authorization.createResource.mockResolvedValue(resource)
     authorization.listResources.mockResolvedValue({ items: [resource], pagination })
@@ -668,6 +670,7 @@ describe('authorization CRUD and assignment policy', () => {
     }
     const connectors = { findById: vi.fn().mockResolvedValue(connector) }
     const openApiFetch = resourceOpenApiFetch(resource.resourceUrl)
+    let brokeredNative = false
     const deps = {
       authorization,
       connectors,
@@ -679,6 +682,13 @@ describe('authorization CRUD and assignment policy', () => {
                   resource: resource.resourceUrl,
                   authorization_servers: [resource.resourceUrl],
                   scopes_supported: ['projects:read'],
+                  ...(brokeredNative
+                    ? {
+                        account_connection_modes_supported: ['brokered'],
+                        account_connection_authorization_endpoint: `${resource.resourceUrl}/account-connection-authorizations`,
+                        account_connection_token_endpoint: `${resource.resourceUrl}/account-connection-credentials`,
+                      }
+                    : {}),
                 }),
               )
             : openApiFetch(request),
@@ -724,7 +734,75 @@ describe('authorization CRUD and assignment policy', () => {
         ownerOrganizationId: organization.id,
         authorizationDetails: [{ type: 'project_access', project_id: 'project-1' }],
       }),
-    ).rejects.toThrow('Authorization details require an external API resource connector.')
+    ).rejects.toThrow('Authorization details require a Provider Connector.')
+    brokeredNative = true
+    await expect(
+      createResource(deps, {
+        identifier: 'brokered-native-rar',
+        resourceUrl: resource.resourceUrl,
+        ownerOrganizationId: organization.id,
+        authorizationDetails: [{ type: 'project_access', project_id: 'project-1' }],
+      }),
+    ).rejects.toThrow('must select a Provider Connector')
+    connectors.findById.mockResolvedValue(null)
+    await expect(
+      createResource(deps, {
+        identifier: 'brokered-missing-connector',
+        resourceUrl: resource.resourceUrl,
+        connectorId: 'connector-1',
+        ownerOrganizationId: 'org_platform',
+      }),
+    ).rejects.toThrow('Provider Connector must be enabled')
+    connectors.findById.mockResolvedValue({ ...connector, enabled: false })
+    await expect(
+      createResource(deps, {
+        identifier: 'brokered-disabled-connector',
+        resourceUrl: resource.resourceUrl,
+        connectorId: 'connector-1',
+        ownerOrganizationId: 'org_platform',
+      }),
+    ).rejects.toThrow('Provider Connector must be enabled')
+    connectors.findById.mockResolvedValue({ ...connector, providerType: 'social' })
+    await createResource(deps, {
+      identifier: 'brokered-native-rar',
+      resourceUrl: resource.resourceUrl,
+      connectorId: 'connector-1',
+      ownerOrganizationId: 'org_platform',
+      authorizationDetails: [{ type: 'project_access', project_id: 'project-1' }],
+    })
+    expect(authorization.createResource).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        connectorId: 'connector-1',
+        authorizationDetails: [{ type: 'project_access', project_id: 'project-1' }],
+        scopeRegistry: expect.objectContaining({ accountConnection: expect.objectContaining({ mode: 'brokered' }) }),
+      }),
+    )
+    authorization.listEnabledResources.mockResolvedValue([
+      {
+        ...resource,
+        connectorId: 'connector-1',
+        scopeRegistry: {
+          ...resource.scopeRegistry!,
+          accountConnection: {
+            mode: 'brokered',
+            authorizationEndpoint: `${resource.resourceUrl}/account-connection-authorizations`,
+            tokenEndpoint: `${resource.resourceUrl}/account-connection-credentials`,
+          },
+        },
+      },
+    ])
+    connectors.findById.mockResolvedValue({ ...connector, providerType: 'social' })
+    await expect(
+      createResource(deps, {
+        identifier: 'second-brokered-authority',
+        resourceUrl: resource.resourceUrl,
+        connectorId: 'connector-1',
+        ownerOrganizationId: 'org_platform',
+      }),
+    ).rejects.toThrow('already has an account connection authority')
+    authorization.listEnabledResources.mockResolvedValue([])
+    brokeredNative = false
+    connectors.findById.mockResolvedValue(connector)
     await createResource(deps, {
       identifier: 'external',
       resourceUrl: resource.resourceUrl,
@@ -754,12 +832,34 @@ describe('authorization CRUD and assignment policy', () => {
       updateResource(deps, resource.id, {
         authorizationDetails: [{ type: 'project_access', project_id: 'project-1' }],
       }),
-    ).rejects.toThrow('Authorization details require an external API resource connector.')
+    ).rejects.toThrow('Authorization details require a Provider Connector.')
+    authorization.findResource.mockResolvedValue({
+      ...resource,
+      authorizationDetails: [{ type: 'project_access', project_id: 'project-1' }],
+      scopeRegistry: {
+        ...resource.scopeRegistry!,
+        accountConnection: {
+          mode: 'brokered',
+          authorizationEndpoint: `${resource.resourceUrl}/account-connection-authorizations`,
+          tokenEndpoint: `${resource.resourceUrl}/account-connection-credentials`,
+        },
+      },
+    })
+    await expect(updateResource(deps, resource.id, { identifier: 'brokered-projects' })).resolves.toMatchObject({
+      id: resource.id,
+      scopeRegistry: expect.objectContaining({ accountConnection: expect.objectContaining({ mode: 'brokered' }) }),
+    })
     authorization.findResource.mockResolvedValue({
       ...resource,
       connectorId: 'connector-1',
       ownerOrganizationId: 'org_platform',
     })
+    await expect(updateResource(deps, resource.id, { identifier: 'external-renamed' })).resolves.toMatchObject({
+      connectorId: 'connector-1',
+    })
+    await expect(updateResource(deps, resource.id, { ownerOrganizationId: organization.id })).rejects.toThrow(
+      'must be owned by the built-in platform Organization',
+    )
     await expect(
       updateResource(deps, resource.id, {
         authorizationDetails: [
@@ -889,6 +989,55 @@ describe('authorization CRUD and assignment policy', () => {
         },
       },
     })
+  })
+
+  it('[spec: admin-console/provider-connection-authority] refreshes brokered discovery with a social Provider Connector', async () => {
+    const authorization = repository()
+    const existingRegistry = scopeRegistry(['projects:read'])
+    const brokeredResource = {
+      ...resource,
+      connectorId: 'connector-1',
+      scopeRegistry: existingRegistry,
+    }
+    authorization.findResource.mockResolvedValue(brokeredResource)
+    authorization.listEnabledResources.mockResolvedValue([brokeredResource])
+    const connectors = {
+      findById: vi.fn().mockResolvedValue({ id: 'connector-1', providerType: 'social', enabled: true }),
+    }
+    const openApiFetch = resourceOpenApiFetch(resource.resourceUrl)
+    const deps = {
+      authorization,
+      connectors,
+      externalHttp: {
+        fetch: vi.fn((request: Request) =>
+          request.url.includes('/.well-known/oauth-protected-resource')
+            ? Promise.resolve(
+                Response.json({
+                  resource: resource.resourceUrl,
+                  scopes_supported: ['projects:read'],
+                  account_connection_modes_supported: ['brokered'],
+                  account_connection_authorization_endpoint: `${resource.resourceUrl}/account-connection-authorizations`,
+                  account_connection_token_endpoint: `${resource.resourceUrl}/account-connection-credentials`,
+                  account_connection_revocation_endpoint: `${resource.resourceUrl}/account-connection-revocations`,
+                }),
+              )
+            : openApiFetch(request),
+        ),
+      },
+    } as unknown as Deps
+
+    await expect(refreshResourceScopeRegistry(deps, resource.id)).resolves.toBe(brokeredResource)
+    expect(authorization.replaceResourceDiscovery).toHaveBeenCalledWith(
+      resource.id,
+      expect.objectContaining({
+        scopeRegistry: expect.objectContaining({
+          accountConnection: expect.objectContaining({
+            mode: 'brokered',
+            revocationEndpoint: `${resource.resourceUrl}/account-connection-revocations`,
+          }),
+        }),
+      }),
+    )
   })
 
   it('refreshes active scope registries and continues after an isolated failure', async () => {

@@ -63,7 +63,7 @@ export const resourceConnectionCallbackQuerySchema = z.union([
   }),
 ])
 
-export const resourceAccountConnectionSchema = z.object({
+export const providerResourceAuthorizationSchema = z.object({
   id: z.string(),
   resourceId: z.string(),
   owner: z.discriminatedUnion('type', [
@@ -81,7 +81,7 @@ export const resourceAccountConnectionSchema = z.object({
 })
 
 export const listResourceConnectionsResponseSchema = z.object({
-  connections: z.array(resourceAccountConnectionSchema),
+  connections: z.array(providerResourceAuthorizationSchema),
 })
 
 export const connectableExternalResourcesResponseSchema = z.object({

@@ -6,6 +6,11 @@ import type {
   AccountProfileUpdateInput,
   AccountWalletAddressLinkInput,
 } from '@shared/api/account'
+import {
+  accountProviderConnectionsResponseSchema,
+  accountProviderConnectorsResponseSchema,
+  providerConnectionIntentSchema,
+} from '@shared/api/account'
 import type {
   AccessRequest,
   AccessRequestApproval,
@@ -139,6 +144,40 @@ export function changeAccountPassword(input: AccountPasswordChangeInput) {
 
 export function listLinkedAccounts() {
   return readRpcResponse(apiClient.api.account['linked-accounts'].$get())
+}
+
+export async function listAccountProviderConnectors() {
+  return accountProviderConnectorsResponseSchema.parse(
+    await readJsonResponse<unknown>(
+      await fetch('/api/account/provider-connectors?limit=100&offset=0', { credentials: 'same-origin' }),
+    ),
+  )
+}
+
+export async function listAccountProviderConnections() {
+  return accountProviderConnectionsResponseSchema.parse(
+    await readJsonResponse<unknown>(
+      await fetch('/api/account/provider-connections?limit=100&offset=0', { credentials: 'same-origin' }),
+    ),
+  )
+}
+
+export async function disconnectAccountProviderConnection(connectionId: string) {
+  const response = await fetch(`/api/account/provider-connections/${encodeURIComponent(connectionId)}`, {
+    method: 'DELETE',
+    credentials: 'same-origin',
+  })
+  if (!response.ok) await readJsonResponse<never>(response)
+}
+
+export async function createProviderConnectionIntent(connectorId: string) {
+  const response = await fetch('/api/account/provider-connection-intents', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ connectorId }),
+  })
+  return providerConnectionIntentSchema.parse(await readJsonResponse<unknown>(response))
 }
 
 export function linkAccount(input: {

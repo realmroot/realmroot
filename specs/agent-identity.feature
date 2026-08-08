@@ -341,6 +341,19 @@ Feature: Agent identity and delegated API authorization
 
   Rule: External API resources use target-issued authorization
 
+    @entrypoint:product-ui @journey:brokered-native-account-connection
+    Scenario: A native Resource Server brokers one provider account connection
+      Given a native Resource Server advertises brokered account connection endpoints
+      And one controller owns at most one account connection for that Resource Server
+      When the controller connects the provider account
+      Then Realmroot signs a short-lived connection request for the Resource Server
+      And the Resource Server completes provider authorization without exposing provider credentials to Realmroot
+      And Realmroot stores one resource-server-custodied connection with every granted provider context
+      When an Agent receives access through that connection
+      Then the Realmroot-issued DPoP token binds the Agent to the connection and approved authorization details
+      And the Resource Server selects provider credentials only from that signed connection boundary
+      And reconnecting updates the existing connection instead of creating another connection
+
     @entrypoint:product-ui @journey:external-api-resource-registration
     Scenario: An administrator creates an external API resource with an OIDC connector
       Given a target resource publishes protected-resource and authorization-server metadata
