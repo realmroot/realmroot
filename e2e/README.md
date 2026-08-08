@@ -21,8 +21,9 @@ local D1 + Better Auth — with NO external dependency.
 
 `pnpm run e2e` boots `vite dev --mode e2e` against the isolated D1
 (`CF_PERSIST_STATE_PATH`), waits on `/api/health`, then runs the serial chromium
-suite. The suite is stateful (it drives onboarding), so it never runs in
-parallel and each spec re-seeds its own starting state.
+suite. Each spec re-seeds its own starting state. CI shards files across two
+independent runners, each with its own Worker processes and D1 state; tests
+within one shard remain serial so they never mutate the same D1 concurrently.
 
 ## Scope discipline
 

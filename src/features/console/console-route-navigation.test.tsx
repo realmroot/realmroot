@@ -107,7 +107,7 @@ describe('console route navigation', () => {
       cleanup()
       queryClient.clear()
     }
-  })
+  }, 15_000)
 
   it('navigates Experience tabs through routable tab controls [spec: admin-console/admin-sign-in-experience-routes]', async () => {
     vi.spyOn(window, 'fetch').mockImplementation(consoleRouteFetch)

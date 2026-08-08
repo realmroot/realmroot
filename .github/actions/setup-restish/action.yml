@@ -14,19 +14,37 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Install Restish
+    - name: Cache Restish
+      id: cache-restish
+      uses: actions/cache@v4
+      with:
+        path: ${{ runner.temp }}/restish/${{ inputs.revision }}
+        key: restish-${{ runner.os }}-${{ runner.arch }}-${{ inputs.revision }}
+
+    - name: Build Restish
+      if: steps.cache-restish.outputs.cache-hit != 'true'
       shell: bash
       env:
         RESTISH_REPOSITORY: ${{ inputs.repository }}
         RESTISH_REVISION: ${{ inputs.revision }}
+        RESTISH_INSTALL_DIR: ${{ runner.temp }}/restish/${{ inputs.revision }}
       run: |
         set -euo pipefail
-        install_dir="${RUNNER_TEMP}/restish-setup"
-        git init "$install_dir"
-        git -C "$install_dir" remote add origin "$RESTISH_REPOSITORY"
-        git -C "$install_dir" fetch --depth 1 origin "$RESTISH_REVISION"
-        git -C "$install_dir" checkout --detach FETCH_HEAD
-        test "$(git -C "$install_dir" rev-parse HEAD)" = "$RESTISH_REVISION"
-        go -C "$install_dir" build -trimpath -o "$install_dir/restish" ./cmd/restish
-        sudo install "$install_dir/restish" /usr/local/bin/restish
+        source_dir="${RUNNER_TEMP}/restish-source"
+        mkdir -p "$RESTISH_INSTALL_DIR"
+        git init "$source_dir"
+        git -C "$source_dir" remote add origin "$RESTISH_REPOSITORY"
+        git -C "$source_dir" fetch --depth 1 origin "$RESTISH_REVISION"
+        git -C "$source_dir" checkout --detach FETCH_HEAD
+        test "$(git -C "$source_dir" rev-parse HEAD)" = "$RESTISH_REVISION"
+        go -C "$source_dir" build -trimpath -o "$RESTISH_INSTALL_DIR/restish" ./cmd/restish
+
+    - name: Install Restish
+      shell: bash
+      env:
+        RESTISH_INSTALL_DIR: ${{ runner.temp }}/restish/${{ inputs.revision }}
+      run: |
+        set -euo pipefail
+        test -x "$RESTISH_INSTALL_DIR/restish"
+        sudo install "$RESTISH_INSTALL_DIR/restish" /usr/local/bin/restish
         restish --version

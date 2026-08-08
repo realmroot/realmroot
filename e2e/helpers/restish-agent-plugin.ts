@@ -39,22 +39,30 @@ export interface RestishAgentPlugin {
 
 const repoRoot = fileURLToPath(new URL('../..', import.meta.url))
 const pluginRoot = join(repoRoot, 'plugins', 'restish-realmroot')
+let pluginBinary: string | undefined
+
+function getPluginBinary() {
+  if (pluginBinary) return pluginBinary
+
+  const buildRoot = mkdtempSync(join(tmpdir(), 'realmroot-restish-plugin-build-'))
+  process.once('exit', () => rmSync(buildRoot, { recursive: true, force: true }))
+  pluginBinary = join(buildRoot, 'restish-realmroot')
+  execFileSync('go', ['build', '-o', pluginBinary, '.'], {
+    cwd: pluginRoot,
+    encoding: 'utf8',
+  })
+  return pluginBinary
+}
 
 export function createRestishAgentPlugin(origin: string): RestishAgentPlugin {
   const root = mkdtempSync(join(tmpdir(), 'realmroot-restish-e2e-'))
   const configDir = join(root, 'config')
   const stateDir = join(root, 'state')
-  const binary = join(root, 'restish-realmroot')
   const apiName = 'realmroot'
   const approvalFile = join(root, 'approval-url')
   const targetURLs = new Map<string, string>()
   mkdirSync(configDir)
   mkdirSync(stateDir)
-
-  execFileSync('go', ['build', '-o', binary, '.'], {
-    cwd: pluginRoot,
-    encoding: 'utf8',
-  })
 
   const environment = {
     ...process.env,
@@ -62,7 +70,7 @@ export function createRestishAgentPlugin(origin: string): RestishAgentPlugin {
     REALMROOT_PLUGIN_STATE_DIR: stateDir,
     REALMROOT_PLUGIN_APPROVAL_FILE: approvalFile,
   }
-  execFileSync('restish', ['plugin', 'install', binary, '--yes'], {
+  execFileSync('restish', ['plugin', 'install', getPluginBinary(), '--yes'], {
     cwd: repoRoot,
     env: environment,
     encoding: 'utf8',
