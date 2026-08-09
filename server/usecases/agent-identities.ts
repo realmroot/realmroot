@@ -9,6 +9,7 @@ import type {
   AgentIdentityAggregate,
   AgentIdentityRecord,
 } from '@server/usecases/ports'
+import { resourceScopeEntitlementLifecycle } from '@server/usecases/resource-scope-entitlements'
 import type {
   Agent,
   AgentEnrollment,
@@ -166,15 +167,10 @@ export async function listManagementAgentScopeEntitlements(
       scope: entitlement.scope,
       authorizationDetails: entitlement.authorizationDetails,
       mode: entitlement.mode,
-      status: entitlement.endedAt
-        ? entitlement.endReason!
-        : entitlement.expiresAt && entitlement.expiresAt.getTime() <= Date.now()
-          ? ('expired' as const)
-          : ('active' as const),
+      ...resourceScopeEntitlementLifecycle(entitlement),
       sourceAccessRequestId: entitlement.sourceAccessRequestId,
       expiresAt: entitlement.expiresAt?.toISOString() ?? null,
       endedAt: entitlement.endedAt?.toISOString() ?? null,
-      endReason: entitlement.endReason,
       createdAt: entitlement.createdAt.toISOString(),
       updatedAt: entitlement.updatedAt.toISOString(),
       links: {
@@ -192,6 +188,7 @@ export async function getManagementAgentScopeEntitlement(deps: Deps, entitlement
   const result = await listManagementAgentScopeEntitlements(deps, {
     agentId: entitlement.agentIdentityId,
     resourceId: entitlement.resourceServerId,
+    ...(resourceScopeEntitlementLifecycle(entitlement).status === 'ended' ? { status: 'inactive' as const } : {}),
     limit: 100,
     offset: 0,
   })

@@ -40,6 +40,7 @@ import {
   resourceConnectionIntent,
   resourceScopeEntitlement,
 } from '../../db/schema'
+import { scopeEntitlementStatusCondition } from './resource-scope-entitlement-filters'
 
 export function createExternalResourceRepository(db: Database): ExternalResourceRepository {
   async function upsertProviderConnection(input: ProviderConnectionRecord) {
@@ -886,19 +887,7 @@ export function createExternalResourceRepository(db: Database): ExternalResource
 
     async listAgentScopeEntitlements(query, scope) {
       const now = new Date()
-      const statusCondition =
-        query.status === 'expired'
-          ? or(eq(resourceScopeEntitlement.endReason, 'expired'), lte(resourceScopeEntitlement.expiresAt, now))
-          : query.status === 'active'
-            ? and(
-                isNull(resourceScopeEntitlement.endedAt),
-                or(isNull(resourceScopeEntitlement.expiresAt), gt(resourceScopeEntitlement.expiresAt, now)),
-              )
-            : query.status === 'consumed'
-              ? eq(resourceScopeEntitlement.endReason, 'consumed')
-              : query.status
-                ? eq(resourceScopeEntitlement.endReason, query.status)
-                : undefined
+      const statusCondition = scopeEntitlementStatusCondition(query.status, now)
       const where = and(
         query.agentId ? eq(resourceScopeEntitlement.agentIdentityId, query.agentId) : undefined,
         query.resourceId ? eq(resourceScopeEntitlement.resourceServerId, query.resourceId) : undefined,

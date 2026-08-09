@@ -1,7 +1,7 @@
 import type { AgentAuditRepository } from '@server/usecases/ports'
 import { and, count, desc, eq, gte, inArray, or, sql } from 'drizzle-orm'
 import type { Database } from '../../db/client'
-import { agentAuditEvent } from '../../db/schema'
+import { agentAuditEvent, apiResource } from '../../db/schema'
 
 export function createAgentAuditRepository(db: Database): AgentAuditRepository {
   return {
@@ -21,6 +21,9 @@ export function createAgentAuditRepository(db: Database): AgentAuditRepository {
       )
       const condition = and(
         filter?.actions ? inArray(agentAuditEvent.action, filter.actions) : undefined,
+        filter?.action ? eq(agentAuditEvent.action, filter.action) : undefined,
+        filter?.result ? eq(agentAuditEvent.result, filter.result) : undefined,
+        filter?.search ? auditSearchCondition(filter.search) : undefined,
         filter?.agentIdentityId ? eq(agentAuditEvent.agentIdentityId, filter.agentIdentityId) : undefined,
         tenantCondition,
       )
@@ -43,6 +46,24 @@ export function createAgentAuditRepository(db: Database): AgentAuditRepository {
       return db.select({ date, count: count() }).from(agentAuditEvent).where(condition).groupBy(date).orderBy(date)
     },
   }
+}
+
+function auditSearchCondition(search: string) {
+  const pattern = `%${search.replaceAll('\\', '\\\\').replaceAll('%', '\\%').replaceAll('_', '\\_')}%`
+  return or(
+    sql`${agentAuditEvent.action} like ${pattern} escape '\\'`,
+    sql`${agentAuditEvent.resourceId} like ${pattern} escape '\\'`,
+    sql`${agentAuditEvent.accessRequestId} like ${pattern} escape '\\'`,
+    sql`${agentAuditEvent.hostId} like ${pattern} escape '\\'`,
+    sql`${agentAuditEvent.controllerUserId} like ${pattern} escape '\\'`,
+    sql`${agentAuditEvent.reasonCode} like ${pattern} escape '\\'`,
+    sql`cast(${agentAuditEvent.scopes} as text) like ${pattern} escape '\\'`,
+    sql`exists (
+      select 1 from ${apiResource}
+      where ${apiResource.id} = ${agentAuditEvent.resourceId}
+        and (${apiResource.name} like ${pattern} escape '\\' or ${apiResource.identifier} like ${pattern} escape '\\')
+    )`,
+  )
 }
 
 function activityCondition(filter?: {

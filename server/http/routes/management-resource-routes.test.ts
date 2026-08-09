@@ -41,7 +41,13 @@ describe('management resource routes', () => {
     )
     await expectJson(app, '/applications/app-1/client-secrets', 'GET', undefined, 200)
     await expectJson(app, '/applications/app-1/client-secrets', 'POST', undefined, 201)
-    await expectJson(app, '/application-authorizations?applicationId=app-1&limit=10&offset=0', 'GET', undefined, 200)
+    await expectJson(
+      app,
+      '/application-authorizations?applicationId=app-1&userId=user-1&status=active&limit=10&offset=0',
+      'GET',
+      undefined,
+      200,
+    )
     await expectJson(app, '/application-authorizations/authorization-1', 'GET', undefined, 200)
     await expectJson(app, '/application-authorizations/authorization-1/revocation', 'PUT', undefined, 200)
 
@@ -59,7 +65,13 @@ describe('management resource routes', () => {
       redirectUris: ['https://next.example.com/callback'],
     })
     expect(applicationService.rotateSecret).toHaveBeenCalledWith('app-1', 'admin-1')
-    expect(applicationService.listAuthorizations).toHaveBeenCalledWith({ applicationId: 'app-1', limit: 10, offset: 0 })
+    expect(applicationService.listAuthorizations).toHaveBeenCalledWith({
+      applicationId: 'app-1',
+      userId: 'user-1',
+      status: 'active',
+      limit: 10,
+      offset: 0,
+    })
     expect(applicationService.revokeAuthorization).toHaveBeenCalledWith('authorization-1')
   })
 

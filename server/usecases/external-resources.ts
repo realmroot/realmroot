@@ -49,7 +49,7 @@ import { ensureDynamicConnectorScopes, refreshDynamicConnectorMetadata } from '.
 import { validateDpopTokenProof } from './dpop'
 import { organizationUserHasScope, resolveOrganizationMembershipScopes } from './organization-membership-scopes'
 import { validateRequestedScopes } from './resource-openapi'
-import { userEffectiveResourceScopes } from './resource-scope-entitlements'
+import { resourceScopeEntitlementLifecycle, userEffectiveResourceScopes } from './resource-scope-entitlements'
 import { activePublicResource, activeResourceVisibleToOrganization } from './resource-visibility'
 
 const tokenExchangeGrantType = 'urn:ietf:params:oauth:grant-type:token-exchange'
@@ -3796,15 +3796,10 @@ function toScopeEntitlement(
     scope: record.scope,
     authorizationDetails: record.authorizationDetails,
     mode: record.mode as AgentScopeEntitlement['mode'],
-    status: record.endedAt
-      ? record.endReason!
-      : record.expiresAt && record.expiresAt.getTime() <= Date.now()
-        ? 'expired'
-        : 'active',
+    ...resourceScopeEntitlementLifecycle(record),
     sourceAccessRequestId: record.sourceAccessRequestId,
     expiresAt: record.expiresAt?.toISOString() ?? null,
     endedAt: record.endedAt?.toISOString() ?? null,
-    endReason: record.endReason,
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
     links: {

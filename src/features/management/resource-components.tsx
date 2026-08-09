@@ -173,7 +173,7 @@ export function userDetailTabs(): DetailTab[] {
     },
     {
       value: 'scope-entitlements',
-      label: 'Resource access',
+      label: 'Permissions',
     },
     {
       value: 'agents',

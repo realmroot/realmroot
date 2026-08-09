@@ -1,8 +1,9 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { ArrowLeft, Search, Trash2 } from 'lucide-react'
-import { type ReactNode, useEffect, useMemo, useState } from 'react'
+import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from 'react'
 import { DestructiveConfirmation } from '@/components/destructive-confirmation'
+import { SelectInput } from '@/components/product-form'
 import { TableEmptyRow } from '@/components/table-empty-row'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -19,13 +20,12 @@ import {
   deleteAgentScopeEntitlement,
   getAgent,
   getAgentAuditEvents,
-  listAgentAccessRequests,
   listAgentInstallations,
   listAgentScopeEntitlements,
 } from '@/lib/api/management'
 import { tt } from '@/lib/i18n'
 
-export type AgentDetailSection = 'overview' | 'hosts' | 'requests' | 'grants' | 'activity' | 'settings'
+export type AgentDetailSection = 'overview' | 'hosts' | 'grants' | 'activity' | 'settings'
 
 export function AgentDetailPage({
   agentId,
@@ -42,14 +42,15 @@ export function AgentDetailPage({
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [revokeEntitlementId, setRevokeEntitlementId] = useState<string | null>(null)
   const [selectedGrantResourceId, setSelectedGrantResourceId] = useState('')
+  const [auditSearchInput, setAuditSearchInput] = useState('')
+  const [auditSearch, setAuditSearch] = useState('')
+  const [auditAction, setAuditAction] = useState('')
+  const [auditResult, setAuditResult] = useState('')
+  const [auditOffset, setAuditOffset] = useState(0)
   const agentQuery = useQuery({ queryKey: [...consoleQueryKeys.agents, agentId], queryFn: () => getAgent(agentId) })
   const hosts = useQuery({
     queryKey: [...consoleQueryKeys.agents, agentId, 'hosts'],
     queryFn: () => listAgentInstallations(agentId, { limit: 100 }),
-  })
-  const requests = useQuery({
-    queryKey: [...consoleQueryKeys.agents, agentId, 'requests'],
-    queryFn: () => listAgentAccessRequests({ agentId, limit: 100 }),
   })
   const grantInventory = useQuery({
     queryKey: [...consoleQueryKeys.agents, agentId, 'grants', 'resources'],
@@ -72,8 +73,23 @@ export function AgentDetailPage({
       }),
   })
   const audit = useQuery({
-    queryKey: [...consoleQueryKeys.agents, agentId, 'audit', { organizationId }],
-    queryFn: () => getAgentAuditEvents({ agentId, organizationId }),
+    queryKey: [
+      ...consoleQueryKeys.agents,
+      agentId,
+      'audit',
+      { action: auditAction, organizationId, result: auditResult, search: auditSearch, offset: auditOffset },
+    ],
+    queryFn: () =>
+      getAgentAuditEvents({
+        agentId,
+        organizationId,
+        limit: 50,
+        offset: auditOffset,
+        ...(auditSearch ? { search: auditSearch } : {}),
+        ...(auditAction ? { action: auditAction } : {}),
+        ...(auditResult ? { result: auditResult as 'allowed' | 'denied' | 'pending' } : {}),
+      }),
+    placeholderData: keepPreviousData,
   })
   const agent = agentQuery.data?.agent
   const deletion = useMutation({
@@ -116,7 +132,7 @@ export function AgentDetailPage({
     }
   }, [grantResources, selectedGrantResourceId])
 
-  const detailQueries = [agentQuery, hosts, requests, grantInventory, audit]
+  const detailQueries = [agentQuery, hosts, grantInventory, audit]
   if (detailQueries.some((query) => query.isLoading)) return <LoadingState label={tt('Loading Agent')} />
   const loadError = detailQueries.find((query) => query.error)?.error
   if (loadError)
@@ -125,15 +141,8 @@ export function AgentDetailPage({
   if (organizationId && (agent.owner.type !== 'organization' || agent.owner.id !== organizationId)) {
     return <ErrorState error={new Error(tt('Agent does not belong to this Organization.'))} />
   }
-  const events = (audit.data?.items ?? []).filter((event) => event.agentIdentityId === agent.id)
-  const resources = new Map(
-    [...(requests.data?.items ?? []), ...(grantInventory.data?.items ?? [])].map((item) => [
-      item.resource.id,
-      item.resource,
-    ]),
-  )
   const owner = `${agent.owner.displayName} · ${agent.owner.id}`
-  const tabs: AgentDetailSection[] = ['overview', 'hosts', 'requests', 'grants', 'activity', 'settings']
+  const tabs: AgentDetailSection[] = ['overview', 'hosts', 'grants', 'activity', 'settings']
 
   return (
     <>
@@ -189,7 +198,6 @@ export function AgentDetailPage({
                 ['Stable subject', agent.subject],
                 ['Issuer', agent.issuer],
                 ['Installations', agent.installationCount.toLocaleString()],
-                ['Pending access requests', agent.pendingRequestCount.toLocaleString()],
                 ['Active Resources', agent.activeResourceCount.toLocaleString()],
                 ['Active scopes', agent.activeScopeCount.toLocaleString()],
                 ['Created', new Date(agent.createdAt).toLocaleString()],
@@ -199,9 +207,6 @@ export function AgentDetailPage({
           </TabsContent>
           <TabsContent className="mt-5" value="hosts">
             <AgentInstallationsTable items={hosts.data?.items ?? []} />
-          </TabsContent>
-          <TabsContent className="mt-5" value="requests">
-            <AgentRequestsTable items={requests.data?.items ?? []} />
           </TabsContent>
           <TabsContent className="mt-5" value="grants">
             <AgentGrantsPanel
@@ -220,7 +225,29 @@ export function AgentDetailPage({
             />
           </TabsContent>
           <TabsContent className="mt-5" value="activity">
-            <AgentActivityTable events={events} resources={resources} />
+            <AgentActivityTable
+              action={auditAction}
+              events={audit.data?.items ?? []}
+              onActionChange={(value) => {
+                setAuditAction(value)
+                setAuditOffset(0)
+              }}
+              onNext={() => setAuditOffset(auditOffset + 50)}
+              onPrevious={() => setAuditOffset(Math.max(0, auditOffset - 50))}
+              onResultChange={(value) => {
+                setAuditResult(value)
+                setAuditOffset(0)
+              }}
+              onSearch={(event) => {
+                event.preventDefault()
+                setAuditSearch(auditSearchInput.trim())
+                setAuditOffset(0)
+              }}
+              onSearchInputChange={setAuditSearchInput}
+              pagination={audit.data?.pagination}
+              result={auditResult}
+              searchInput={auditSearchInput}
+            />
           </TabsContent>
           <TabsContent className="mt-5" value="settings">
             <div className="detailFlatRows">
@@ -283,8 +310,7 @@ function agentTabLabel(value: AgentDetailSection) {
   return {
     overview: 'Overview',
     hosts: 'Installations',
-    requests: 'Access requests',
-    grants: 'Resource access',
+    grants: 'Permissions',
     activity: 'Activity',
     settings: 'Settings',
   }[value]
@@ -326,33 +352,6 @@ function AgentInstallationsTable({ items }: { items: Awaited<ReturnType<typeof l
       }))}
       emptyDescription="No installations have been authorized for this Agent yet."
       emptyTitle="No installations"
-    />
-  )
-}
-
-function AgentRequestsTable({ items }: { items: Awaited<ReturnType<typeof listAgentAccessRequests>>['items'] }) {
-  return (
-    <DetailTable
-      emptyDescription="No resource access requests have been submitted for this Agent."
-      emptyTitle="No access requests"
-      headers={['Request', 'Target', 'Scopes', 'Status', 'Created']}
-      rows={items.map((request) => ({
-        id: request.id,
-        cells: [
-          <span className="font-mono text-xs" key="request">
-            {request.id}
-          </span>,
-          <div key="resource">
-            <strong>{request.resource.name}</strong>
-            <span className="block font-mono text-xs text-muted-foreground">{request.resource.identifier}</span>
-          </div>,
-          <ScopeList key="scopes" scopes={request.scopes} />,
-          <Badge key="status" variant={request.status === 'pending' ? 'secondary' : 'outline'}>
-            {request.status}
-          </Badge>,
-          new Date(request.createdAt).toLocaleString(),
-        ],
-      }))}
     />
   )
 }
@@ -497,8 +496,8 @@ function AgentGrantsTable({
             : entitlement.mode === 'once'
               ? tt('One use')
               : tt('Until revoked'),
-          <Badge key="status" variant="secondary">
-            {entitlement.status}
+          <Badge key="status" variant={entitlement.status === 'active' ? 'secondary' : 'outline'}>
+            {entitlement.status === 'active' ? tt('Active') : tt('Ended')}
           </Badge>,
           entitlement.status === 'active' ? (
             <Button
@@ -518,11 +517,29 @@ function AgentGrantsTable({
 }
 
 function AgentActivityTable({
+  action,
   events,
-  resources,
+  onActionChange,
+  onNext,
+  onPrevious,
+  onResultChange,
+  onSearch,
+  onSearchInputChange,
+  pagination,
+  result,
+  searchInput,
 }: {
+  action: string
   events: Awaited<ReturnType<typeof getAgentAuditEvents>>['items']
-  resources: Map<string, { id: string; name: string; identifier: string }>
+  onActionChange: (value: string) => void
+  onNext: () => void
+  onPrevious: () => void
+  onResultChange: (value: string) => void
+  onSearch: (event: FormEvent<HTMLFormElement>) => void
+  onSearchInputChange: (value: string) => void
+  pagination: Awaited<ReturnType<typeof getAgentAuditEvents>>['pagination'] | undefined
+  result: string
+  searchInput: string
 }) {
   const rows = events.map((event) => ({
     id: event.id,
@@ -531,23 +548,119 @@ function AgentActivityTable({
       <Badge key="result" variant={event.result === 'allowed' ? 'secondary' : 'outline'}>
         {tt(agentResultLabel(event.result))}
       </Badge>,
-      <AgentEventTarget
-        key="target"
-        resource={event.resourceId ? resources.get(event.resourceId) : undefined}
-        resourceId={event.resourceId}
-      />,
+      <AgentEventTarget key="target" resource={event.resource ?? undefined} resourceId={event.resourceId} />,
+      <AgentEventDetails event={event} key="details" />,
       new Date(event.occurredAt).toLocaleString(),
     ],
   }))
   return (
-    <DetailTable
-      emptyDescription="No Agent activity has been recorded yet."
-      emptyTitle="No Agent activity"
-      headers={['Event', 'Result', 'Target', 'Time']}
-      rows={rows}
-    />
+    <div className="space-y-3">
+      <form className="flex flex-wrap items-center gap-2" onSubmit={onSearch}>
+        <div className="relative min-w-64 flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            aria-label={tt('Search audit activity')}
+            className="pl-9"
+            onChange={(event) => onSearchInputChange(event.target.value)}
+            placeholder={tt('Search event, Resource, Request, scope, or actor')}
+            value={searchInput}
+          />
+        </div>
+        <SelectInput
+          aria-label={tt('Filter by event')}
+          className="w-52"
+          onChange={(event) => onActionChange(event.target.value)}
+          value={action}
+        >
+          <option value="">{tt('All events')}</option>
+          {agentAuditActionOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {tt(option.label)}
+            </option>
+          ))}
+        </SelectInput>
+        <SelectInput
+          aria-label={tt('Filter by result')}
+          className="w-36"
+          onChange={(event) => onResultChange(event.target.value)}
+          value={result}
+        >
+          <option value="">{tt('All results')}</option>
+          <option value="allowed">{tt('Allowed')}</option>
+          <option value="denied">{tt('Denied')}</option>
+          <option value="pending">{tt('Pending')}</option>
+        </SelectInput>
+        <Button type="submit" variant="outline">
+          {tt('Search')}
+        </Button>
+      </form>
+      <DetailTable
+        emptyDescription="No Agent activity matches the current filters."
+        emptyTitle="No Agent activity"
+        headers={['Event', 'Result', 'Target', 'Details', 'Time']}
+        rows={rows}
+      />
+      {pagination && pagination.total > pagination.limit ? (
+        <div className="flex items-center justify-between">
+          <p className="text-xs text-muted-foreground">
+            {tt('{{start}}–{{end}} of {{total}}', {
+              start: pagination.offset + 1,
+              end: Math.min(pagination.offset + pagination.limit, pagination.total),
+              total: pagination.total,
+            })}
+          </p>
+          <div className="flex gap-2">
+            <Button disabled={pagination.offset === 0} onClick={onPrevious} size="sm" variant="outline">
+              {tt('Previous')}
+            </Button>
+            <Button
+              disabled={pagination.offset + pagination.limit >= pagination.total}
+              onClick={onNext}
+              size="sm"
+              variant="outline"
+            >
+              {tt('Next')}
+            </Button>
+          </div>
+        </div>
+      ) : null}
+    </div>
   )
 }
+
+function AgentEventDetails({ event }: { event: Awaited<ReturnType<typeof getAgentAuditEvents>>['items'][number] }) {
+  const details = [
+    event.accessRequestId ? tt('Request {{id}}', { id: event.accessRequestId }) : null,
+    event.scopes?.length ? tt('Scopes: {{scopes}}', { scopes: event.scopes.join(', ') }) : null,
+    event.controllerUserId ? tt('Actor {{id}}', { id: event.controllerUserId }) : null,
+    event.hostId ? tt('Host {{id}}', { id: event.hostId }) : null,
+    event.reasonCode ? tt('Reason: {{reason}}', { reason: event.reasonCode }) : null,
+  ].filter((detail): detail is string => detail !== null)
+  if (details.length === 0) return <span className="text-muted-foreground">—</span>
+  return (
+    <div className="max-w-80 space-y-0.5 text-xs text-muted-foreground">
+      {details.map((detail) => (
+        <div className="break-all" key={detail}>
+          {detail}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+const agentAuditActionOptions = [
+  { value: 'agent.identity_enrolled', label: 'Agent enrolled' },
+  { value: 'agent.identity_recovered', label: 'Agent recovered' },
+  { value: 'agent.identity_activated', label: 'Agent activated' },
+  { value: 'agent.identity_deactivated', label: 'Agent deactivated' },
+  { value: 'agent.identity_deleted', label: 'Agent deleted' },
+  { value: 'agent.host_revoked', label: 'Host revoked' },
+  { value: 'agent.capability_decided', label: 'Agent permissions decided' },
+  { value: 'api_resource.access_requested', label: 'Resource access requested' },
+  { value: 'api_resource.access_decided', label: 'Resource access decided' },
+  { value: 'api_resource.access_revoked', label: 'Resource access revoked' },
+  { value: 'api_resource.token_issued', label: 'Access token issued' },
+] as const
 
 function AgentEventTarget({
   resource,
@@ -587,18 +700,6 @@ function agentEventLabel(action: string, result: string) {
 
 function agentResultLabel(result: 'allowed' | 'denied' | 'pending') {
   return { allowed: 'Allowed', denied: 'Denied', pending: 'Pending' }[result]
-}
-
-function ScopeList({ scopes }: { scopes: string[] }) {
-  return (
-    <div className="flex max-w-80 flex-wrap gap-1">
-      {scopes.map((scope) => (
-        <Badge key={scope} variant="outline">
-          {scope}
-        </Badge>
-      ))}
-    </div>
-  )
 }
 
 function DetailTable({

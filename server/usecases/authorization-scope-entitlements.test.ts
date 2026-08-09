@@ -159,7 +159,8 @@ describe('direct scope Entitlements', () => {
     )
     await expect(subject.getApplicationScopeEntitlement(deps, 'ent_1')).resolves.toMatchObject({
       applicationId: 'app-1',
-      status: 'revoked',
+      status: 'ended',
+      endReason: 'revoked',
     })
     await expect(
       subject.listApplicationScopeEntitlements(deps, 'app-1', { limit: 20, offset: 0 }),
@@ -302,6 +303,9 @@ describe('direct scope Entitlements', () => {
         expiresAt: new Date('2020-01-01T00:00:00.000Z'),
       }),
     )
-    await expect(subject.getApplicationScopeEntitlement(deps, 'ent_1')).resolves.toMatchObject({ status: 'expired' })
+    await expect(subject.getApplicationScopeEntitlement(deps, 'ent_1')).resolves.toMatchObject({
+      status: 'ended',
+      endReason: 'expired',
+    })
   })
 })

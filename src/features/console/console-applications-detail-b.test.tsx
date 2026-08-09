@@ -203,7 +203,7 @@ describe('admin console applications-detail-b', () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
       if (url === '/api/applications/app-1') return Promise.resolve(jsonResponse(application))
-      if (url === '/api/access/consents?applicationId=app-1&limit=50&offset=0') {
+      if (url === '/api/access/consents?applicationId=app-1&status=active&limit=50&offset=0') {
         attempts += 1
         if (attempts === 1) {
           return Promise.resolve(jsonResponse({ error: { message: 'Authorizations unavailable.' } }, 503))

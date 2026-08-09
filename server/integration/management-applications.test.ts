@@ -216,6 +216,14 @@ describe('applications management over real D1', () => {
       authorizations: [{ id: consentId, scopes: ['openid'], user: { email: 'admin@example.com' } }],
       pagination: { total: 1 },
     })
+    const unrelatedUser = await harness.request('/api/access/consents?userId=user-without-consent&status=active', {
+      headers: { cookie },
+    })
+    expect(unrelatedUser.status, await unrelatedUser.clone().text()).toBe(200)
+    await expect(unrelatedUser.json()).resolves.toMatchObject({
+      authorizations: [],
+      pagination: { total: 0 },
+    })
     const authorizationInventory = await harness.request('/api/access/consents', {
       headers: { cookie },
     })

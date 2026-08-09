@@ -148,7 +148,7 @@ export function ScopeEntitlementsPanel({ subject }: { subject: ScopeEntitlementS
                       <TableCell>{entitlement.mode}</TableCell>
                       <TableCell>
                         <Badge variant={entitlement.status === 'active' ? 'secondary' : 'outline'}>
-                          {entitlement.status}
+                          {entitlement.status === 'active' ? tt('Active') : tt('Ended')}
                         </Badge>
                       </TableCell>
                       <TableCell>

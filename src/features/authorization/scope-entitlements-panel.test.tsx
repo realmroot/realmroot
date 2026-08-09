@@ -162,7 +162,8 @@ describe('Scope Entitlements panel', () => {
     const expiringGrant = {
       ...entitlement,
       resourceServerId: 'missing-resource',
-      status: 'expired',
+      status: 'ended',
+      endReason: 'expired',
       expiresAt: '2027-01-01T00:00:00.000Z',
     }
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
@@ -178,7 +179,7 @@ describe('Scope Entitlements panel', () => {
 
     renderWithQuery(<ScopeEntitlementsPanel subject={{ type: 'user', id: 'user-2', label: 'Alex' }} />)
     expect((await screen.findAllByText('missing-resource')).length).toBeGreaterThan(0)
-    expect(screen.getByText('expired')).toBeTruthy()
+    expect(screen.getByText('Ended')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Revoke' })).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: 'Add scope' }))

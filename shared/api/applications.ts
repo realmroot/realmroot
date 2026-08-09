@@ -224,6 +224,7 @@ export const applicationAuthorizationSchema = z.object({
 
 export const listApplicationAuthorizationsQuerySchema = paginationQuerySchema.extend({
   applicationId: nonEmptyString.optional(),
+  userId: nonEmptyString.optional(),
   status: z.enum(['active', 'expired', 'revoked']).optional(),
 })
 

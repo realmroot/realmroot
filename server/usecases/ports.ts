@@ -467,6 +467,9 @@ export interface AgentAuditRepository {
     page: PaginationInput,
     filter?: {
       actions?: string[]
+      action?: string
+      result?: 'allowed' | 'denied' | 'pending'
+      search?: string
       agentIdentityId?: string
       ownerUserId?: string
       ownerOrganizationIds?: string[]
@@ -861,7 +864,7 @@ export interface ExternalResourceRepository {
       agentId?: string
       organizationId?: string
       resourceId?: string
-      status?: 'active' | 'revoked' | 'consumed' | 'expired' | 'merged'
+      status?: 'active' | 'inactive'
     },
     scope?: AgentAuthorityInventoryScope,
   ): Promise<PaginatedResult<AgentScopeEntitlementProjection>>
@@ -1250,7 +1253,7 @@ export interface ApplicationRepository {
     secret: Omit<ClientSecretRecord, 'createdAt' | 'expiresAt' | 'revokedAt'>
   }): Promise<ClientSecretRecord>
   listAuthorizations(
-    query: PaginationQuery & { applicationId?: string; status?: 'active' | 'expired' | 'revoked' },
+    query: PaginationQuery & { applicationId?: string; userId?: string; status?: 'active' | 'expired' | 'revoked' },
     ownerOrganizationIds?: string[],
   ): Promise<ApplicationPaginatedResult<ApplicationAuthorizationRecord>>
   findAuthorization(authorizationId: string): Promise<ApplicationAuthorizationRecord | null>

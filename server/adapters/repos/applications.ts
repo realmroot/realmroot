@@ -286,6 +286,7 @@ export function createDrizzleApplicationRepository(db: Database): ApplicationRep
               : undefined
       const where = and(
         query.applicationId ? eq(applicationConsent.applicationId, query.applicationId) : undefined,
+        query.userId ? eq(applicationConsent.userId, query.userId) : undefined,
         ownerOrganizationIds ? inArray(application.ownerOrganizationId, ownerOrganizationIds) : undefined,
         statusCondition,
       )
