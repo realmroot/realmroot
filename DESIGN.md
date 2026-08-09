@@ -120,7 +120,7 @@ layout:
       - Agents are established only through Agent enrollment. Console never offers a New Agent action; it governs enrolled identities, Hosts, access requests, grants, and lifecycle.
       - Better Auth Organization Roles are the only human Role system. Each Role maps to scopes and is meaningful only within its Organization.
       - Assign human Roles only through Better Auth membership. Agents, Applications, and workloads receive tenant-bound scopes directly and never receive or inherit Roles.
-      - Keep OAuth consent with Applications, human authority with Organization membership Roles, and delegated authority with each Agent's access grants.
+      - Keep OAuth consent with Applications, human authority with Organization membership Roles, and delegated authority with each Agent's scope Entitlements.
       - Role permissions list scopes with a Resource server column and filter. Membership changes and direct workload grants retain audit metadata.
       - Keep Role metadata editing separate from permission maintenance. New Roles create metadata only; permissions are added later through the dedicated permission selector. The selector supports keyword search and Resource server filtering. Permissions come from Resource server scopes and are never free-form.
       - Keep ownership, access eligibility, and authority independent. Audience eligibility controls which tenant may request access; membership Roles and direct workload grants control what eligible actors may do.

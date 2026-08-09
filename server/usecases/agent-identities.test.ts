@@ -14,16 +14,16 @@ import {
   getAgentEnrollmentIntent,
   getAgentIdentityByProtocolAgent,
   getManagementAgent,
-  getManagementAgentAccessGrant,
   getManagementAgentAccessRequest,
+  getManagementAgentScopeEntitlement,
   getPersonalAgent,
   getProtocolAgentEnrollment,
   getPublicAgentEnrollment,
   listAllAgentIdentities,
   listAllAgents,
-  listManagementAgentAccessGrants,
   listManagementAgentAccessRequests,
   listManagementAgentInstallations,
+  listManagementAgentScopeEntitlements,
   listOrganizationAgentIdentities,
   listPersonalAgentIdentities,
   listPersonalAgents,
@@ -241,7 +241,7 @@ describe('Agent identity lifecycle', () => {
     await expect(getProtocolAgentEnrollment(deps, 'intent-1', 'another-agent')).rejects.toMatchObject({ status: 403 })
   })
 
-  it('maps management summaries, installations, access requests, and access grants [spec: admin-console/admin-agent-governance-detail]', async () => {
+  it('maps management summaries, installations, access requests, and scope Entitlements [spec: admin-console/admin-agent-governance-detail]', async () => {
     const deps = managementDeps()
     const stored = aggregate()
     vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(stored)
@@ -257,7 +257,8 @@ describe('Agent identity lifecycle', () => {
         owner: { id: 'user-1', type: 'user', displayName: 'user-1@example.com' },
         installationCount: 1,
         pendingRequestCount: 0,
-        activeGrantCount: 0,
+        activeResourceCount: 1,
+        activeScopeCount: 1,
       },
     })
 
@@ -325,30 +326,48 @@ describe('Agent identity lifecycle', () => {
     const grants = [
       {
         id: 'grant-expired',
+        userId: null,
+        applicationId: null,
         agentIdentityId: 'identity-1',
-        resourceId: 'resource-1',
-        scopes: ['projects:read'],
-        mode: 'native',
-        status: 'active',
+        organizationId: null,
+        resourceServerId: 'resource-1',
+        connectionId: null,
+        authorizationDetails: [],
+        authorizationContextHash: 'hash',
+        scope: 'projects:read',
+        mode: 'until',
+        grantedByUserId: 'user-1',
+        sourceAccessRequestId: 'request-1',
         expiresAt: new Date('2020-01-01T00:00:00.000Z'),
+        endedAt: null,
+        endReason: null,
         createdAt: new Date('2026-08-01T00:00:00.000Z'),
         updatedAt: new Date('2026-08-01T00:00:00.000Z'),
       },
       {
         id: 'grant-active',
+        userId: null,
+        applicationId: null,
         agentIdentityId: 'identity-1',
-        resourceId: 'resource-1',
-        scopes: ['projects:write'],
-        mode: 'external',
-        status: 'active',
+        organizationId: null,
+        resourceServerId: 'resource-1',
+        connectionId: null,
+        authorizationDetails: [],
+        authorizationContextHash: 'hash',
+        scope: 'projects:write',
+        mode: 'persistent',
+        grantedByUserId: 'user-1',
+        sourceAccessRequestId: 'request-1',
         expiresAt: null,
+        endedAt: null,
+        endReason: null,
         createdAt: new Date('2026-08-01T00:00:00.000Z'),
         updatedAt: new Date('2026-08-01T00:00:00.000Z'),
       },
     ]
-    vi.mocked(deps.externalResources.listGrants).mockResolvedValue({
-      items: grants.map((grant) => ({
-        grant,
+    vi.mocked(deps.externalResources.listAgentScopeEntitlements).mockResolvedValue({
+      items: grants.map((entitlement) => ({
+        entitlement,
         resource: { id: 'resource-1', identifier: 'projects', name: 'Projects API' },
       })),
       total: 2,
@@ -356,7 +375,7 @@ describe('Agent identity lifecycle', () => {
       offset: 0,
     } as never)
     await expect(
-      listManagementAgentAccessGrants(deps, { agentId: 'agent-1', limit: 20, offset: 0 }),
+      listManagementAgentScopeEntitlements(deps, { agentId: 'agent-1', limit: 20, offset: 0 }),
     ).resolves.toMatchObject({
       items: [
         { id: 'grant-expired', status: 'expired', expiresAt: '2020-01-01T00:00:00.000Z' },
@@ -364,15 +383,15 @@ describe('Agent identity lifecycle', () => {
       ],
       pagination: { total: 2 },
     })
-    vi.mocked(deps.externalResources.findGrant).mockResolvedValue(grants[1] as never)
-    await expect(getManagementAgentAccessGrant(deps, 'grant-active')).resolves.toMatchObject({
+    vi.mocked(deps.externalResources.findEntitlement).mockResolvedValue(grants[1] as never)
+    await expect(getManagementAgentScopeEntitlement(deps, 'grant-active')).resolves.toMatchObject({
       id: 'grant-active',
       status: 'active',
       expiresAt: null,
     })
 
-    vi.mocked(deps.externalResources.findGrant).mockResolvedValue(grants[0] as never)
-    await expect(getManagementAgentAccessGrant(deps, 'grant-expired')).resolves.toMatchObject({
+    vi.mocked(deps.externalResources.findEntitlement).mockResolvedValue(grants[0] as never)
+    await expect(getManagementAgentScopeEntitlement(deps, 'grant-expired')).resolves.toMatchObject({
       status: 'expired',
       expiresAt: '2020-01-01T00:00:00.000Z',
     })
@@ -433,7 +452,7 @@ describe('Agent identity lifecycle', () => {
     )
 
     await expect(getManagementAgentAccessRequest(deps, 'missing')).rejects.toMatchObject({ status: 404 })
-    await expect(getManagementAgentAccessGrant(deps, 'missing')).rejects.toMatchObject({ status: 404 })
+    await expect(getManagementAgentScopeEntitlement(deps, 'missing')).rejects.toMatchObject({ status: 404 })
 
     vi.mocked(deps.externalResources.findAccessRequest).mockResolvedValue({
       id: 'deleted-resource-request',
@@ -443,13 +462,15 @@ describe('Agent identity lifecycle', () => {
     await expect(getManagementAgentAccessRequest(deps, 'deleted-resource-request')).rejects.toMatchObject({
       status: 404,
     })
-    vi.mocked(deps.externalResources.findGrant).mockResolvedValue({
+    vi.mocked(deps.externalResources.findEntitlement).mockResolvedValue({
       id: 'deleted-resource-grant',
       resourceId: 'deleted-resource',
       agentIdentityId: 'identity-1',
       status: 'active',
     } as never)
-    await expect(getManagementAgentAccessGrant(deps, 'deleted-resource-grant')).rejects.toMatchObject({ status: 404 })
+    await expect(getManagementAgentScopeEntitlement(deps, 'deleted-resource-grant')).rejects.toMatchObject({
+      status: 404,
+    })
 
     vi.mocked(deps.agentIdentities.findIntent).mockResolvedValue(null)
     await expect(getProtocolAgentEnrollment(deps, 'missing', 'protocol-agent-1')).rejects.toMatchObject({ status: 404 })
@@ -490,7 +511,7 @@ describe('Agent identity lifecycle', () => {
     vi.mocked(deps.externalResources.summarizeAgentAccess).mockResolvedValue(new Map())
     await expect(listAllAgents(deps, { limit: 20, offset: 0 })).rejects.toThrow('access summary was not resolved')
     vi.mocked(deps.externalResources.summarizeAgentAccess).mockResolvedValue(
-      new Map([['identity-1', { pendingRequestCount: 0, activeGrantCount: 0 }]]),
+      new Map([['identity-1', { pendingRequestCount: 0, activeResourceCount: 0, activeScopeCount: 0 }]]),
     )
     await expect(listAllAgents(deps, { limit: 20, offset: 0 })).resolves.toMatchObject({
       items: [{ installationCount: 1 }],
@@ -801,7 +822,12 @@ function identityDeps() {
         .fn()
         .mockImplementation((agentIds: string[]) =>
           Promise.resolve(
-            new Map(agentIds.map((agentId) => [agentId, { pendingRequestCount: 0, activeGrantCount: 0 }])),
+            new Map(
+              agentIds.map((agentId) => [
+                agentId,
+                { pendingRequestCount: 0, activeResourceCount: 0, activeScopeCount: 0 },
+              ]),
+            ),
           ),
         ),
     },
@@ -811,7 +837,11 @@ function identityDeps() {
 function managementDeps() {
   const deps = createTestDeps()
   vi.mocked(deps.externalResources.summarizeAgentAccess).mockImplementation((agentIds) =>
-    Promise.resolve(new Map(agentIds.map((agentId) => [agentId, { pendingRequestCount: 0, activeGrantCount: 0 }]))),
+    Promise.resolve(
+      new Map(
+        agentIds.map((agentId) => [agentId, { pendingRequestCount: 0, activeResourceCount: 1, activeScopeCount: 1 }]),
+      ),
+    ),
   )
   return deps
 }

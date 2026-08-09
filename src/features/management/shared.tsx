@@ -140,12 +140,12 @@ type DetailTab = {
   value: string
   label: string
 }
-type ApplicationDetailSection = 'overview' | 'oauth' | 'access-grants' | 'authorizations' | 'settings'
+type ApplicationDetailSection = 'overview' | 'oauth' | 'scope-entitlements' | 'authorizations' | 'settings'
 type UserDetailSection =
   | 'overview'
   | 'authentication'
   | 'sessions'
-  | 'access-grants'
+  | 'scope-entitlements'
   | 'agents'
   | 'authorized-apps'
   | 'settings'

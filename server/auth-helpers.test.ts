@@ -69,10 +69,10 @@ function createDeps(input?: {
           ...membership,
         })),
       ),
-      listActiveUserScopeGrants: vi
+      listActiveUserScopeEntitlements: vi
         .fn()
         .mockResolvedValue(
-          input?.directScopes ? [{ id: 'grant_1', scopes: input.directScopes, expiresAt: null, revokedAt: null }] : [],
+          input?.directScopes ? input.directScopes.map((scope) => ({ id: `ent_${scope}`, scope })) : [],
         ),
       listOrganizationRoleScopes: vi.fn().mockResolvedValue(new Map()),
       findResource: vi.fn().mockResolvedValue(resource),
@@ -103,7 +103,7 @@ describe('filterOAuthAccessTokenScopes', () => {
     ).resolves.toEqual(['openid'])
   })
 
-  it('combines direct grants with effective scopes without treating public visibility as authority [spec: admin-console/admin-resource-scope-grants]', async () => {
+  it('combines direct Entitlements with effective scopes without treating public visibility as authority [spec: admin-console/admin-resource-scope-entitlements]', async () => {
     await expect(
       filterOAuthAccessTokenScopes(createDeps({ directScopes: ['orders:admin'] }), {
         user: { id: 'user_1' },

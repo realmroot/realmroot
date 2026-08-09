@@ -8,10 +8,10 @@ export const zhFlatTranslationsExtraA: Record<string, string> = {
   '; expires': '；过期时间',
   'API resource detail sections': 'API 资源详情分区',
   'Access token': '访问令牌',
-  'Access grants': '访问授权',
+  'Resource access': '资源访问权限',
   'Account status': '账户状态',
   'Add passkey': '添加通行密钥',
-  'Add access grant': '添加访问授权',
+  'Add scope': '添加范围',
   'Adding…': '正在添加…',
   'Advanced options': '高级选项',
   'Allow email verification codes as a second factor when email delivery is configured.':
@@ -29,10 +29,10 @@ export const zhFlatTranslationsExtraA: Record<string, string> = {
   'Allow users to receive a one-time sign-in code by email.': '允许用户通过邮箱接收一次性登录验证码。',
   'Allow users without an email': '允许无邮箱用户',
   'Leave empty for a grant that lasts until revoked.': '留空表示授权持续有效，直到被撤销。',
-  'Loading access grants': '正在加载访问授权',
-  'No access grants': '暂无访问授权',
-  'Revoke access grant': '撤销访问授权',
-  'Revoke access grant?': '撤销访问授权？',
+  'Loading Resource access': '正在加载资源访问权限',
+  'No Resource access': '暂无资源访问权限',
+  'Revoke scope': '撤销范围',
+  'Revoke scope?': '撤销范围？',
   'The assigned scopes stop applying immediately. Existing audit history is preserved.':
     '已分配的范围将立即停止生效，现有审计历史会被保留。',
   'Allow wallets to participate in the registration path. If a new user has no account information, they will be asked to sign in with another method first and then bind a wallet.':

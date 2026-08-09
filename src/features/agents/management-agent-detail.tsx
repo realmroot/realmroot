@@ -17,9 +17,9 @@ import {
   deleteAgent,
   getAgent,
   getAgentAuditEvents,
-  listAgentAccessGrants,
   listAgentAccessRequests,
   listAgentInstallations,
+  listAgentScopeEntitlements,
 } from '@/lib/api/management'
 import { tt } from '@/lib/i18n'
 
@@ -49,7 +49,7 @@ export function AgentDetailPage({
   })
   const grants = useQuery({
     queryKey: [...consoleQueryKeys.agents, agentId, 'grants'],
-    queryFn: () => listAgentAccessGrants(agentId, { limit: 100 }),
+    queryFn: () => listAgentScopeEntitlements(agentId, { limit: 100 }),
   })
   const audit = useQuery({
     queryKey: [...consoleQueryKeys.agents, agentId, 'audit', { organizationId }],
@@ -151,7 +151,8 @@ export function AgentDetailPage({
                 ['Issuer', agent.issuer],
                 ['Installations', agent.installationCount.toLocaleString()],
                 ['Pending access requests', agent.pendingRequestCount.toLocaleString()],
-                ['Active access grants', agent.activeGrantCount.toLocaleString()],
+                ['Active Resources', agent.activeResourceCount.toLocaleString()],
+                ['Active scopes', agent.activeScopeCount.toLocaleString()],
                 ['Created', new Date(agent.createdAt).toLocaleString()],
                 ['Last updated', new Date(agent.updatedAt).toLocaleString()],
               ]}
@@ -221,7 +222,7 @@ function agentTabLabel(value: AgentDetailSection) {
     overview: 'Overview',
     hosts: 'Installations',
     requests: 'Access requests',
-    grants: 'Access grants',
+    grants: 'Resource access',
     activity: 'Activity',
     settings: 'Settings',
   }[value]
@@ -294,27 +295,28 @@ function AgentRequestsTable({ items }: { items: Awaited<ReturnType<typeof listAg
   )
 }
 
-function AgentGrantsTable({ items }: { items: Awaited<ReturnType<typeof listAgentAccessGrants>>['items'] }) {
+function AgentGrantsTable({ items }: { items: Awaited<ReturnType<typeof listAgentScopeEntitlements>>['items'] }) {
   return (
     <DetailTable
-      emptyDescription="This Agent has no active resource access grants."
-      emptyTitle="No active access grants"
-      headers={['Target', 'Scopes', 'Lifetime', 'Status']}
-      rows={items.map((grant) => ({
-        id: grant.id,
+      emptyDescription="This Agent has no Resource access."
+      emptyTitle="No Resource access"
+      headers={['Resource Server', 'Scope', 'Source', 'Lifetime', 'Status']}
+      rows={items.map((entitlement) => ({
+        id: entitlement.id,
         cells: [
           <div key="resource">
-            <strong>{grant.resource.name}</strong>
-            <span className="block font-mono text-xs text-muted-foreground">{grant.resource.identifier}</span>
+            <strong>{entitlement.resource.name}</strong>
+            <span className="block font-mono text-xs text-muted-foreground">{entitlement.resource.identifier}</span>
           </div>,
-          <ScopeList key="scopes" scopes={grant.scopes} />,
-          grant.mode === 'until' && grant.expiresAt
-            ? tt('Until {{date}}', { date: new Date(grant.expiresAt).toLocaleString() })
-            : grant.mode === 'once'
+          <ScopeList key="scope" scopes={[entitlement.scope]} />,
+          entitlement.sourceAccessRequestId ? tt('Access request') : tt('Direct'),
+          entitlement.mode === 'until' && entitlement.expiresAt
+            ? tt('Until {{date}}', { date: new Date(entitlement.expiresAt).toLocaleString() })
+            : entitlement.mode === 'once'
               ? tt('One use')
               : tt('Until revoked'),
           <Badge key="status" variant="secondary">
-            {grant.status}
+            {entitlement.status}
           </Badge>,
         ],
       }))}

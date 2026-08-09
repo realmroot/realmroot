@@ -172,8 +172,8 @@ export function userDetailTabs(): DetailTab[] {
       label: 'Sessions',
     },
     {
-      value: 'access-grants',
-      label: 'Access grants',
+      value: 'scope-entitlements',
+      label: 'Resource access',
     },
     {
       value: 'agents',

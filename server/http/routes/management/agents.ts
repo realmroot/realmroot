@@ -4,27 +4,27 @@ import {
   emergencyDeleteAgentIdentity,
   getAgent,
   getManagementAgent,
-  getManagementAgentAccessGrant,
   getManagementAgentAccessRequest,
+  getManagementAgentScopeEntitlement,
   listAllAgents,
-  listManagementAgentAccessGrants,
   listManagementAgentAccessRequests,
   listManagementAgentInstallations,
+  listManagementAgentScopeEntitlements,
 } from '@server/usecases/agent-identities'
 import {
   decideAccessRequest,
   getAccessRequest,
-  getAgentAccessGrant,
-  listAgentAccessGrants,
-  revokeAgentAccessGrant,
+  getAgentScopeEntitlement,
+  listAgentScopeEntitlements,
+  revokeAgentScopeEntitlement,
 } from '@server/usecases/external-resources'
 import {
   accessRequestSchema,
-  agentAccessGrantSchema,
-  agentAccessGrantsResponseSchema,
+  agentScopeEntitlementSchema,
+  agentScopeEntitlementsResponseSchema,
   decideAccessRequestSchema,
-  listAgentAccessGrantsQuerySchema,
   listAgentAuditEventsQuerySchema,
+  listAgentScopeEntitlementsQuerySchema,
   listAgentsQuerySchema,
   listManagementAgentAccessRequestsQuerySchema,
   managementAgentAccessRequestSchema,
@@ -120,22 +120,22 @@ managementAgentsRoute.put('/access/requests/:requestId/decision', async (c) => {
   return c.json({ accessRequestId: decided.id, status: decided.status, decidedAt: decided.decidedAt })
 })
 
-managementAgentsRoute.get('/agents/:agentId/access-grants', async (c) => {
+managementAgentsRoute.get('/agents/:agentId/scope-entitlements', async (c) => {
   const principal = getPrincipal(c).agent
   if (principal) {
     if (principal.identityId !== c.req.param('agentId')) return c.notFound()
-    requireAgentScope(c, 'access-grants:read')
+    requireAgentScope(c, 'scope-entitlements:read')
     return c.json(
-      agentAccessGrantsResponseSchema.parse(
-        await listAgentAccessGrants(getDeps(c), principal, readQuery(c, listAgentAccessGrantsQuerySchema)),
+      agentScopeEntitlementsResponseSchema.parse(
+        await listAgentScopeEntitlements(getDeps(c), principal, readQuery(c, listAgentScopeEntitlementsQuerySchema)),
       ),
     )
   }
-  await requireAgentByIdConsoleAccess(c, c.req.param('agentId'))
-  const query = readQuery(c, listAgentAccessGrantsQuerySchema)
+  await requireAgentByIdEntitlementAccess(c, c.req.param('agentId'))
+  const query = readQuery(c, listAgentScopeEntitlementsQuerySchema)
   return c.json(
-    agentAccessGrantsResponseSchema.parse(
-      await listManagementAgentAccessGrants(
+    agentScopeEntitlementsResponseSchema.parse(
+      await listManagementAgentScopeEntitlements(
         getDeps(c),
         { ...query, agentId: c.req.param('agentId') },
         await authorityInventoryScope(c),
@@ -144,28 +144,30 @@ managementAgentsRoute.get('/agents/:agentId/access-grants', async (c) => {
   )
 })
 
-managementAgentsRoute.get('/agents/:agentId/access-grants/:grantId', async (c) => {
+managementAgentsRoute.get('/agents/:agentId/scope-entitlements/:entitlementId', async (c) => {
   const principal = getPrincipal(c).agent
   if (principal) {
     if (principal.identityId !== c.req.param('agentId')) return c.notFound()
-    requireAgentScope(c, 'access-grants:read')
+    requireAgentScope(c, 'scope-entitlements:read')
     return c.json(
-      agentAccessGrantSchema.parse(await getAgentAccessGrant(getDeps(c), c.req.param('grantId'), principal)),
+      agentScopeEntitlementSchema.parse(
+        await getAgentScopeEntitlement(getDeps(c), c.req.param('entitlementId'), principal),
+      ),
     )
   }
-  const grant = await getManagementAgentAccessGrant(getDeps(c), c.req.param('grantId'))
+  const grant = await getManagementAgentScopeEntitlement(getDeps(c), c.req.param('entitlementId'))
   if (grant.agentId !== c.req.param('agentId')) return c.notFound()
-  await requireAgentByIdAccess(c, grant.agentId)
-  return c.json(agentAccessGrantSchema.parse(grant))
+  await requireAgentByIdEntitlementAccess(c, grant.agentId)
+  return c.json(agentScopeEntitlementSchema.parse(grant))
 })
 
-managementAgentsRoute.delete('/agents/:agentId/access-grants/:grantId', async (c) => {
+managementAgentsRoute.delete('/agents/:agentId/scope-entitlements/:entitlementId', async (c) => {
   const actorUserId = getActorUserId(c)
   if (!actorUserId) return c.notFound()
-  const grant = await getManagementAgentAccessGrant(getDeps(c), c.req.param('grantId'))
+  const grant = await getManagementAgentScopeEntitlement(getDeps(c), c.req.param('entitlementId'))
   if (grant.agentId !== c.req.param('agentId')) return c.notFound()
-  await requireAgentByIdAccess(c, grant.agentId)
-  await revokeAgentAccessGrant(getDeps(c), grant.id, actorUserId)
+  await requireAgentByIdEntitlementAccess(c, grant.agentId, true)
+  await revokeAgentScopeEntitlement(getDeps(c), grant.id, actorUserId)
   return c.body(null, 204)
 })
 
@@ -238,8 +240,20 @@ async function requireAgentByIdAccess(c: Parameters<typeof getDeps>[0], agentId:
   await requireAgentAccess(c, agent, c.req.method !== 'GET' && c.req.method !== 'HEAD')
 }
 
+async function requireAgentByIdEntitlementAccess(c: Parameters<typeof getDeps>[0], agentId: string, write = false) {
+  const agent = await getAgent(getDeps(c), agentId)
+  const scope = write ? 'scope-entitlements:write' : 'scope-entitlements:read'
+  if (agent.homeSpace.type === 'organization') await authorizeOrganization(c, agent.homeSpace.organizationId, scope)
+  else await authorizeUser(c, agent.homeSpace.userId, scope)
+}
+
 async function authorityInventoryScope(c: Parameters<typeof getDeps>[0], requestedOrganizationId?: string) {
-  return agentInventoryScope(c, requestedOrganizationId)
+  const tenants = await authorizedTenantInventory(c, 'scope-entitlements:read')
+  if (!tenants) return requestedOrganizationId ? { ownerOrganizationIds: [requestedOrganizationId] } : undefined
+  const ownerOrganizationIds = tenants.filter((tenant) => tenant.type === 'organization').map((tenant) => tenant.id)
+  return requestedOrganizationId
+    ? { ownerOrganizationIds: ownerOrganizationIds.includes(requestedOrganizationId) ? [requestedOrganizationId] : [] }
+    : { ownerOrganizationIds, ownerUserId: tenants.find((tenant) => tenant.type === 'user')?.id }
 }
 
 async function agentInventoryScope(c: Parameters<typeof getDeps>[0], requestedOrganizationId?: string) {

@@ -160,7 +160,7 @@ export const connectableExternalResourcesResponseSchema = z.object({
   ),
 })
 
-export const agentAccessGrantModeSchema = z.enum(['once', 'until', 'persistent'])
+export const resourceScopeEntitlementModeSchema = z.enum(['once', 'until', 'persistent'])
 export const agentAccessRequestStatusSchema = z.enum(['pending', 'approved', 'denied', 'consumed', 'expired'])
 
 export const createAgentAccessRequestSchema = z.object({
@@ -181,7 +181,6 @@ export const agentAccessRequestSchema = z.object({
   reason: z.string().nullable(),
   status: agentAccessRequestStatusSchema,
   approvalUrl: z.url().nullable(),
-  grantId: z.string().nullable(),
   expiresAt: z.iso.datetime(),
   decidedAt: z.iso.datetime().nullable(),
   createdAt: z.iso.datetime(),
@@ -190,7 +189,7 @@ export const agentAccessRequestSchema = z.object({
 
 export const decideAgentAccessRequestSchema = z.object({
   decision: z.enum(['approve', 'deny']),
-  mode: agentAccessGrantModeSchema.optional(),
+  mode: resourceScopeEntitlementModeSchema.optional(),
   expiresAt: z.iso.datetime().optional(),
   authorizationDetails: authorizationDetailsSchema.default([]),
 })
@@ -207,14 +206,14 @@ export const decideAgentAccessRequestByTokenSchema = decideAgentAccessRequestSch
     }
   })
 
-export const agentAccessGrantSchema = z.object({
+export const agentScopeEntitlementSchema = z.object({
   id: z.string(),
   resourceId: z.string(),
   connectionId: z.string().nullable(),
   agentIdentityId: z.string(),
   scopes: z.array(z.string()),
   authorizationDetails: authorizationDetailsSchema,
-  mode: agentAccessGrantModeSchema,
+  mode: resourceScopeEntitlementModeSchema,
   status: z.enum(['active', 'revoked', 'consumed', 'expired']),
   grantedByUserId: z.string(),
   expiresAt: z.iso.datetime().nullable(),
@@ -241,7 +240,7 @@ export const agentResourceDiscoverySchema = z.object({
           authorizationDetails: authorizationDetailsSchema,
         }),
       ),
-      grants: z.array(agentAccessGrantSchema),
+      grants: z.array(agentScopeEntitlementSchema),
     }),
   ),
 })

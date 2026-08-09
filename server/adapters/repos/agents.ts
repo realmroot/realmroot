@@ -298,7 +298,7 @@ function agentAuditProjection(audit: Parameters<AgentRepository['decideApproval'
     hostId: sql<string | null>`${audit.hostId}`.as('host_id'),
     resourceId: sql<string | null>`${audit.resourceId}`.as('resource_id'),
     resourceConnectionId: sql<string | null>`${audit.resourceConnectionId}`.as('resource_connection_id'),
-    accessGrantId: sql<string | null>`${audit.accessGrantId}`.as('access_grant_id'),
+    accessRequestId: sql<string | null>`${audit.accessRequestId}`.as('access_request_id'),
     scopes: sql<string[] | null>`${audit.scopes === null ? null : JSON.stringify(audit.scopes)}`.as('scopes'),
     reasonCode: sql<string | null>`${audit.reasonCode}`.as('reason_code'),
     metadata: sql<Record<string, unknown> | null>`${

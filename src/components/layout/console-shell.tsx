@@ -280,7 +280,7 @@ const breadcrumbRouteSegmentLabels: Record<string, Record<string, string>> = {
   '/console/agents': {
     hosts: 'Installations',
     requests: 'Access requests',
-    grants: 'Access grants',
+    grants: 'Resource access',
   },
 }
 

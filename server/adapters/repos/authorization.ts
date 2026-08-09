@@ -1,18 +1,16 @@
 import { conflict } from '@server/domain/errors'
-import type { AuthorizationRepository } from '@server/usecases/ports'
+import type { AuthorizationRepository, ResourceScopeEntitlementRecord } from '@server/usecases/ports'
 import { decodeRoleScope, encodeRoleScope } from '@shared/organization-access'
 import { and, count, desc, eq, gt, inArray, isNotNull, isNull, lte, notExists, or, sql } from 'drizzle-orm'
 import type { BatchItem } from 'drizzle-orm/batch'
 import type { Database } from '../../db/client'
 import {
-  agentAccessGrant,
   agentAccessRequest,
   agentAuditEvent,
   agentIdentity,
   apiResource,
   application,
   applicationConsent,
-  applicationScopeGrant,
   externalTokenLease,
   federatedCredential,
   invitation,
@@ -21,9 +19,9 @@ import {
   organizationRole,
   providerResourceAuthorization,
   resourceConnectionIntent,
+  resourceScopeEntitlement,
   tokenExchangeAccessToken,
   tokenExchangeRefreshToken,
-  userScopeGrant,
 } from '../../db/schema'
 import {
   serializeRoles,
@@ -346,17 +344,14 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
       const [resource] = await db.select().from(apiResource).where(eq(apiResource.id, id)).limit(1)
       if (!resource) return false
       const ownerOrganizationId = patch.ownerOrganizationId ?? resource.ownerOrganizationId
-      const [members, applications, userGrants, applicationGrants, roles, consents, identities, agentGrants] =
-        await Promise.all([
-          db.select().from(member).where(eq(member.organizationId, ownerOrganizationId)),
-          db.select().from(application),
-          db.select().from(userScopeGrant).where(eq(userScopeGrant.resourceServerId, id)),
-          db.select().from(applicationScopeGrant).where(eq(applicationScopeGrant.resourceServerId, id)),
-          db.select().from(organizationRole),
-          db.select().from(applicationConsent).where(eq(applicationConsent.resourceServerId, id)),
-          db.select().from(agentIdentity),
-          db.select().from(agentAccessGrant).where(eq(agentAccessGrant.resourceId, id)),
-        ])
+      const [members, applications, entitlements, roles, consents, identities] = await Promise.all([
+        db.select().from(member).where(eq(member.organizationId, ownerOrganizationId)),
+        db.select().from(application),
+        db.select().from(resourceScopeEntitlement).where(eq(resourceScopeEntitlement.resourceServerId, id)),
+        db.select().from(organizationRole),
+        db.select().from(applicationConsent).where(eq(applicationConsent.resourceServerId, id)),
+        db.select().from(agentIdentity),
+      ])
       const ownerUsers = new Set(members.map((membership) => membership.userId))
       const applicationOwners = new Map(applications.map((app) => [app.id, app.ownerOrganizationId]))
       const identityOwners = new Map(identities.map((identity) => [identity.id, identity.ownerOrganizationId]))
@@ -370,15 +365,18 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
           )
         }
       }
-      for (const grant of userGrants) {
-        if (!ownerUsers.has(grant.userId) && !grant.revokedAt) {
-          statements.push(db.update(userScopeGrant).set({ revokedAt: now }).where(eq(userScopeGrant.id, grant.id)))
-        }
-      }
-      for (const grant of applicationGrants) {
-        if (applicationOwners.get(grant.applicationId) !== ownerOrganizationId && !grant.revokedAt) {
+      for (const entitlement of entitlements) {
+        const remainsVisible = entitlement.userId
+          ? ownerUsers.has(entitlement.userId)
+          : entitlement.applicationId
+            ? applicationOwners.get(entitlement.applicationId) === ownerOrganizationId
+            : identityOwners.get(entitlement.agentIdentityId!) === ownerOrganizationId
+        if (!remainsVisible && !entitlement.endedAt) {
           statements.push(
-            db.update(applicationScopeGrant).set({ revokedAt: now }).where(eq(applicationScopeGrant.id, grant.id)),
+            db
+              .update(resourceScopeEntitlement)
+              .set({ endedAt: now, endReason: 'revoked', updatedAt: now })
+              .where(eq(resourceScopeEntitlement.id, entitlement.id)),
           )
         }
       }
@@ -402,16 +400,6 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
           )
         }
       }
-      for (const grant of agentGrants) {
-        if (identityOwners.get(grant.agentIdentityId) !== ownerOrganizationId && grant.status === 'active') {
-          statements.push(
-            db
-              .update(agentAccessGrant)
-              .set({ status: 'revoked', revokedAt: now, updatedAt: now })
-              .where(eq(agentAccessGrant.id, grant.id)),
-          )
-        }
-      }
       const [rows] = await db.batch(statements)
       return rows.length > 0
     },
@@ -423,13 +411,11 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
         registry.scopes.filter((scope) => scope.grantMode === 'assigned').map((scope) => scope.value),
       )
       const oidcScopes = new Set(['openid', 'profile', 'email', 'offline_access'])
-      const [applications, userGrants, applicationGrants, roles, consents, agentGrants] = await Promise.all([
+      const [applications, entitlements, roles, consents] = await Promise.all([
         db.select().from(application),
-        db.select().from(userScopeGrant).where(eq(userScopeGrant.resourceServerId, id)),
-        db.select().from(applicationScopeGrant).where(eq(applicationScopeGrant.resourceServerId, id)),
+        db.select().from(resourceScopeEntitlement).where(eq(resourceScopeEntitlement.resourceServerId, id)),
         db.select().from(organizationRole),
         db.select().from(applicationConsent).where(eq(applicationConsent.resourceServerId, id)),
-        db.select().from(agentAccessGrant).where(eq(agentAccessGrant.resourceId, id)),
       ])
       const statements: [BatchItem<'sqlite'>, ...BatchItem<'sqlite'>[]] = [
         db
@@ -451,23 +437,15 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
           )
         }
       }
-      for (const grant of userGrants) {
-        const scopes = grant.scopes.filter((scope) => assigned.has(scope))
-        statements.push(
-          db
-            .update(userScopeGrant)
-            .set(scopes.length > 0 ? { scopes } : { revokedAt: now })
-            .where(eq(userScopeGrant.id, grant.id)),
-        )
-      }
-      for (const grant of applicationGrants) {
-        const scopes = grant.scopes.filter((scope) => assigned.has(scope))
-        statements.push(
-          db
-            .update(applicationScopeGrant)
-            .set(scopes.length > 0 ? { scopes } : { revokedAt: now })
-            .where(eq(applicationScopeGrant.id, grant.id)),
-        )
+      for (const entitlement of entitlements) {
+        if (!assigned.has(entitlement.scope) && !entitlement.endedAt) {
+          statements.push(
+            db
+              .update(resourceScopeEntitlement)
+              .set({ endedAt: now, endReason: 'revoked', updatedAt: now })
+              .where(eq(resourceScopeEntitlement.id, entitlement.id)),
+          )
+        }
       }
       for (const role of roles) {
         const encodedScopes = role.permission.scope ?? []
@@ -494,122 +472,147 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
             .where(eq(applicationConsent.id, consent.id)),
         )
       }
-      for (const grant of agentGrants) {
-        const scopes = grant.scopes.filter((scope) => declared.has(scope))
-        statements.push(
-          db
-            .update(agentAccessGrant)
-            .set(scopes.length > 0 ? { scopes, updatedAt: now } : { status: 'revoked', revokedAt: now, updatedAt: now })
-            .where(eq(agentAccessGrant.id, grant.id)),
-        )
-      }
       await db.batch(statements)
       return true
     },
 
-    async createUserScopeGrant(input) {
-      await db.insert(userScopeGrant).values(input)
-      return input
+    async createScopeEntitlement(input, now) {
+      const [existing] = await db
+        .select()
+        .from(resourceScopeEntitlement)
+        .where(activeEquivalentEntitlement(input))
+        .limit(1)
+      if (!existing) {
+        await db.insert(resourceScopeEntitlement).values(input)
+        return input
+      }
+      if (existing.expiresAt && existing.expiresAt.getTime() <= now.getTime()) {
+        await db.batch([
+          db
+            .update(resourceScopeEntitlement)
+            .set({ endedAt: now, endReason: 'expired', updatedAt: now })
+            .where(eq(resourceScopeEntitlement.id, existing.id)),
+          db.insert(resourceScopeEntitlement).values(input),
+        ])
+        return input
+      }
+      const lifetime = strongerLifetime(existing, input)
+      const normalizedHash =
+        existing.authorizationContextHash === input.authorizationContextHash ? null : input.authorizationContextHash
+      if (!lifetime && !normalizedHash) return existing
+      const [updated] = await db
+        .update(resourceScopeEntitlement)
+        .set({
+          ...lifetime,
+          authorizationContextHash: normalizedHash ?? existing.authorizationContextHash,
+          updatedAt: now,
+        })
+        .where(eq(resourceScopeEntitlement.id, existing.id))
+        .returning()
+      return updated!
     },
 
-    async findUserScopeGrant(id) {
-      const [row] = await db.select().from(userScopeGrant).where(eq(userScopeGrant.id, id)).limit(1)
+    async findScopeEntitlement(id) {
+      const [row] = await db.select().from(resourceScopeEntitlement).where(eq(resourceScopeEntitlement.id, id)).limit(1)
       return row ?? null
     },
 
-    async listUserScopeGrants(userId, query, ownerOrganizationIds) {
+    async listUserScopeEntitlements(userId, query, ownerOrganizationIds) {
       const now = new Date()
       const statusCondition =
         query.status === 'expired'
-          ? and(isNotNull(userScopeGrant.expiresAt), lte(userScopeGrant.expiresAt, now))
+          ? or(
+              eq(resourceScopeEntitlement.endReason, 'expired'),
+              and(
+                isNull(resourceScopeEntitlement.endedAt),
+                isNotNull(resourceScopeEntitlement.expiresAt),
+                lte(resourceScopeEntitlement.expiresAt, now),
+              ),
+            )
           : query.status === 'active'
-            ? or(isNull(userScopeGrant.expiresAt), gt(userScopeGrant.expiresAt, now))
-            : undefined
-      const effectiveOwnerOrganizationId = sql<string>`coalesce(${userScopeGrant.organizationId}, ${apiResource.ownerOrganizationId})`
+            ? and(
+                isNull(resourceScopeEntitlement.endedAt),
+                or(isNull(resourceScopeEntitlement.expiresAt), gt(resourceScopeEntitlement.expiresAt, now)),
+              )
+            : query.status
+              ? eq(resourceScopeEntitlement.endReason, query.status)
+              : undefined
+      const effectiveOwnerOrganizationId = sql<string>`coalesce(${resourceScopeEntitlement.organizationId}, ${apiResource.ownerOrganizationId})`
       const where = and(
-        eq(userScopeGrant.userId, userId),
-        isNull(userScopeGrant.revokedAt),
-        query.resourceServerId ? eq(userScopeGrant.resourceServerId, query.resourceServerId) : undefined,
+        eq(resourceScopeEntitlement.userId, userId),
+        query.resourceServerId ? eq(resourceScopeEntitlement.resourceServerId, query.resourceServerId) : undefined,
         ownerOrganizationIds ? inArray(effectiveOwnerOrganizationId, ownerOrganizationIds) : undefined,
         statusCondition,
       )
       const [items, totals] = await Promise.all([
         db
-          .select({ grant: userScopeGrant })
-          .from(userScopeGrant)
-          .innerJoin(apiResource, eq(userScopeGrant.resourceServerId, apiResource.id))
+          .select({ entitlement: resourceScopeEntitlement })
+          .from(resourceScopeEntitlement)
+          .innerJoin(apiResource, eq(resourceScopeEntitlement.resourceServerId, apiResource.id))
           .where(where)
-          .orderBy(desc(userScopeGrant.createdAt), desc(userScopeGrant.id))
+          .orderBy(desc(resourceScopeEntitlement.createdAt), desc(resourceScopeEntitlement.id))
           .limit(query.limit)
           .offset(query.offset),
         db
           .select({ value: count() })
-          .from(userScopeGrant)
-          .innerJoin(apiResource, eq(userScopeGrant.resourceServerId, apiResource.id))
+          .from(resourceScopeEntitlement)
+          .innerJoin(apiResource, eq(resourceScopeEntitlement.resourceServerId, apiResource.id))
           .where(where),
       ])
       return {
-        items: items.map(({ grant }) => grant),
+        items: items.map(({ entitlement }) => entitlement),
         pagination: toPagination(query, totals[0]?.value ?? 0),
       }
     },
 
-    async listActiveUserScopeGrants(userId, resourceServerId, now) {
+    async listActiveUserScopeEntitlements(userId, resourceServerId, now) {
       return db
         .select()
-        .from(userScopeGrant)
+        .from(resourceScopeEntitlement)
         .where(
           and(
-            eq(userScopeGrant.userId, userId),
-            eq(userScopeGrant.resourceServerId, resourceServerId),
-            isNull(userScopeGrant.revokedAt),
-            or(isNull(userScopeGrant.expiresAt), gt(userScopeGrant.expiresAt, now)),
+            eq(resourceScopeEntitlement.userId, userId),
+            eq(resourceScopeEntitlement.resourceServerId, resourceServerId),
+            isNull(resourceScopeEntitlement.endedAt),
+            or(isNull(resourceScopeEntitlement.expiresAt), gt(resourceScopeEntitlement.expiresAt, now)),
           ),
         )
     },
 
-    async revokeUserScopeGrant(id, now) {
-      const rows = await db
-        .update(userScopeGrant)
-        .set({ revokedAt: now })
-        .where(and(eq(userScopeGrant.id, id), isNull(userScopeGrant.revokedAt)))
-        .returning({ id: userScopeGrant.id })
-      return rows.length > 0
-    },
-
-    async createApplicationScopeGrant(input) {
-      await db.insert(applicationScopeGrant).values(input)
-      return input
-    },
-
-    async findApplicationScopeGrant(id) {
-      const [row] = await db.select().from(applicationScopeGrant).where(eq(applicationScopeGrant.id, id)).limit(1)
-      return row ?? null
-    },
-
-    async listApplicationScopeGrants(applicationId, query) {
+    async listApplicationScopeEntitlements(applicationId, query) {
       const now = new Date()
       const statusCondition =
         query.status === 'expired'
-          ? and(isNotNull(applicationScopeGrant.expiresAt), lte(applicationScopeGrant.expiresAt, now))
+          ? or(
+              eq(resourceScopeEntitlement.endReason, 'expired'),
+              and(
+                isNull(resourceScopeEntitlement.endedAt),
+                isNotNull(resourceScopeEntitlement.expiresAt),
+                lte(resourceScopeEntitlement.expiresAt, now),
+              ),
+            )
           : query.status === 'active'
-            ? or(isNull(applicationScopeGrant.expiresAt), gt(applicationScopeGrant.expiresAt, now))
-            : undefined
+            ? and(
+                isNull(resourceScopeEntitlement.endedAt),
+                or(isNull(resourceScopeEntitlement.expiresAt), gt(resourceScopeEntitlement.expiresAt, now)),
+              )
+            : query.status
+              ? eq(resourceScopeEntitlement.endReason, query.status)
+              : undefined
       const where = and(
-        eq(applicationScopeGrant.applicationId, applicationId),
-        isNull(applicationScopeGrant.revokedAt),
-        query.resourceServerId ? eq(applicationScopeGrant.resourceServerId, query.resourceServerId) : undefined,
+        eq(resourceScopeEntitlement.applicationId, applicationId),
+        query.resourceServerId ? eq(resourceScopeEntitlement.resourceServerId, query.resourceServerId) : undefined,
         statusCondition,
       )
       const [items, totals] = await Promise.all([
         db
           .select()
-          .from(applicationScopeGrant)
+          .from(resourceScopeEntitlement)
           .where(where)
-          .orderBy(desc(applicationScopeGrant.createdAt), desc(applicationScopeGrant.id))
+          .orderBy(desc(resourceScopeEntitlement.createdAt), desc(resourceScopeEntitlement.id))
           .limit(query.limit)
           .offset(query.offset),
-        db.select({ value: count() }).from(applicationScopeGrant).where(where),
+        db.select({ value: count() }).from(resourceScopeEntitlement).where(where),
       ])
       return {
         items,
@@ -617,26 +620,26 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
       }
     },
 
-    async listActiveApplicationScopeGrants(applicationId, resourceServerId, now) {
+    async listActiveApplicationScopeEntitlements(applicationId, resourceServerId, now) {
       return db
         .select()
-        .from(applicationScopeGrant)
+        .from(resourceScopeEntitlement)
         .where(
           and(
-            eq(applicationScopeGrant.applicationId, applicationId),
-            eq(applicationScopeGrant.resourceServerId, resourceServerId),
-            isNull(applicationScopeGrant.revokedAt),
-            or(isNull(applicationScopeGrant.expiresAt), gt(applicationScopeGrant.expiresAt, now)),
+            eq(resourceScopeEntitlement.applicationId, applicationId),
+            eq(resourceScopeEntitlement.resourceServerId, resourceServerId),
+            isNull(resourceScopeEntitlement.endedAt),
+            or(isNull(resourceScopeEntitlement.expiresAt), gt(resourceScopeEntitlement.expiresAt, now)),
           ),
         )
     },
 
-    async revokeApplicationScopeGrant(id, now) {
+    async endScopeEntitlement(id, reason, now) {
       const rows = await db
-        .update(applicationScopeGrant)
-        .set({ revokedAt: now })
-        .where(and(eq(applicationScopeGrant.id, id), isNull(applicationScopeGrant.revokedAt)))
-        .returning({ id: applicationScopeGrant.id })
+        .update(resourceScopeEntitlement)
+        .set({ endedAt: now, endReason: reason, updatedAt: now })
+        .where(and(eq(resourceScopeEntitlement.id, id), isNull(resourceScopeEntitlement.endedAt)))
+        .returning({ id: resourceScopeEntitlement.id })
       return rows.length > 0
     },
 
@@ -659,7 +662,7 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
               hostId: sql<string | null>`${audit.hostId}`.as('host_id'),
               resourceId: apiResource.id,
               resourceConnectionId: sql<string | null>`${audit.resourceConnectionId}`.as('resource_connection_id'),
-              accessGrantId: sql<string | null>`${audit.accessGrantId}`.as('access_grant_id'),
+              accessRequestId: sql<string | null>`${audit.accessRequestId}`.as('access_request_id'),
               scopes: sql<string[] | null>`${audit.scopes === null ? null : JSON.stringify(audit.scopes)}`.as('scopes'),
               reasonCode: sql<string | null>`${audit.reasonCode}`.as('reason_code'),
               metadata: sql<Record<string, unknown> | null>`${
@@ -690,17 +693,9 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
           .set({ status: 'denied', decidedAt: now, updatedAt: now })
           .where(and(eq(agentAccessRequest.resourceId, id), eq(agentAccessRequest.status, 'pending'))),
         db
-          .update(agentAccessGrant)
-          .set({ status: 'revoked', revokedAt: now, updatedAt: now })
-          .where(and(eq(agentAccessGrant.resourceId, id), eq(agentAccessGrant.status, 'active'))),
-        db
-          .update(userScopeGrant)
-          .set({ revokedAt: now })
-          .where(and(eq(userScopeGrant.resourceServerId, id), isNull(userScopeGrant.revokedAt))),
-        db
-          .update(applicationScopeGrant)
-          .set({ revokedAt: now })
-          .where(and(eq(applicationScopeGrant.resourceServerId, id), isNull(applicationScopeGrant.revokedAt))),
+          .update(resourceScopeEntitlement)
+          .set({ endedAt: now, endReason: 'revoked', updatedAt: now })
+          .where(and(eq(resourceScopeEntitlement.resourceServerId, id), isNull(resourceScopeEntitlement.endedAt))),
         db
           .update(applicationConsent)
           .set({ revokedAt: now })
@@ -790,11 +785,11 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
             and(
               isNull(externalTokenLease.revokedAt),
               inArray(
-                externalTokenLease.grantId,
+                externalTokenLease.requestId,
                 db
-                  .select({ id: agentAccessGrant.id })
-                  .from(agentAccessGrant)
-                  .where(eq(agentAccessGrant.resourceId, id)),
+                  .select({ id: agentAccessRequest.id })
+                  .from(agentAccessRequest)
+                  .where(eq(agentAccessRequest.resourceId, id)),
               ),
             ),
           ),
@@ -936,6 +931,40 @@ function isUniqueConstraint(error: unknown) {
   return false
 }
 
+function activeEquivalentEntitlement(input: ResourceScopeEntitlementRecord) {
+  return and(
+    input.userId ? eq(resourceScopeEntitlement.userId, input.userId) : isNull(resourceScopeEntitlement.userId),
+    input.applicationId
+      ? eq(resourceScopeEntitlement.applicationId, input.applicationId)
+      : isNull(resourceScopeEntitlement.applicationId),
+    input.agentIdentityId
+      ? eq(resourceScopeEntitlement.agentIdentityId, input.agentIdentityId)
+      : isNull(resourceScopeEntitlement.agentIdentityId),
+    input.organizationId
+      ? eq(resourceScopeEntitlement.organizationId, input.organizationId)
+      : isNull(resourceScopeEntitlement.organizationId),
+    eq(resourceScopeEntitlement.resourceServerId, input.resourceServerId),
+    input.connectionId
+      ? eq(resourceScopeEntitlement.connectionId, input.connectionId)
+      : isNull(resourceScopeEntitlement.connectionId),
+    sql`${resourceScopeEntitlement.authorizationDetails} = ${JSON.stringify(input.authorizationDetails)}`,
+    eq(resourceScopeEntitlement.scope, input.scope),
+    isNull(resourceScopeEntitlement.endedAt),
+  )
+}
+
+function strongerLifetime(
+  current: ResourceScopeEntitlementRecord,
+  requested: ResourceScopeEntitlementRecord,
+): Pick<ResourceScopeEntitlementRecord, 'mode' | 'expiresAt'> | null {
+  if (current.mode === 'persistent' || requested.mode === 'once') return null
+  if (requested.mode === 'persistent') return { mode: 'persistent', expiresAt: null }
+  if (current.mode === 'once') return { mode: 'until', expiresAt: requested.expiresAt }
+  return requested.expiresAt!.getTime() > current.expiresAt!.getTime()
+    ? { mode: 'until', expiresAt: requested.expiresAt }
+    : null
+}
+
 function decodePermissionScopes(permission: Record<string, string[]>) {
   return (permission.scope ?? []).flatMap((value) => {
     const separator = value.indexOf('/')
@@ -968,7 +997,7 @@ function auditSelect(audit: import('@server/usecases/ports').AgentAuditEventReco
     hostId: sql<string | null>`${audit.hostId}`.as('host_id'),
     resourceId: sql<string | null>`${audit.resourceId}`.as('resource_id'),
     resourceConnectionId: sql<string | null>`${audit.resourceConnectionId}`.as('resource_connection_id'),
-    accessGrantId: sql<string | null>`${audit.accessGrantId}`.as('access_grant_id'),
+    accessRequestId: sql<string | null>`${audit.accessRequestId}`.as('access_request_id'),
     scopes: sql<string[] | null>`${audit.scopes === null ? null : JSON.stringify(audit.scopes)}`.as('scopes'),
     reasonCode: sql<string | null>`${audit.reasonCode}`.as('reason_code'),
     metadata: sql<Record<string, unknown>>`${JSON.stringify({ ...audit.metadata, ...metadata })}`.as('metadata'),

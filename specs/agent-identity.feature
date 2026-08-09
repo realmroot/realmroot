@@ -14,7 +14,7 @@ Feature: Agent identity and delegated API authorization
       Given Agent identity uses protocol registrations, host credentials, and identity bindings internally
       And external authorization uses discovery metadata, OAuth clients, connection state, and token leases internally
       When an Agent, controller, or administrator reads the Realmroot API contract
-      Then the public resources are Agents, Agent installations, Agent installation enrollments, API resources, account connections, access requests, access grants, and audit events
+      Then the public resources are Agents, Agent installations, Agent installation enrollments, API resources, account connections, access requests, scope entitlements, and audit events
       And Agent registrations, hosts, identity bindings, connection intents, OAuth integration records, and token leases remain private implementation records
       And each public resource has one canonical URI in its caller boundary
       And Agent installation representations never expose internal Host identifiers
@@ -31,7 +31,7 @@ Feature: Agent identity and delegated API authorization
       And the adapter creates a personal stable identity through the approved Agent session
       Then Realmroot creates an Agent with a stable issuer and subject
       And the Agent belongs to exactly one home space
-      And users govern the Agent through explicit access grants in that space
+      And users govern the Agent through explicit scope entitlements in that space
       And the host registration is bound to that Agent identity
       And the original whoami operation resumes and returns the stable issuer and subject
       And the hosted approval page replaces the request with a clear completion state that says it can be closed
@@ -91,7 +91,7 @@ Feature: Agent identity and delegated API authorization
       Given an Agent's host credentials may be compromised
       When an authorized controller recovers the Agent
       Then every existing host credential and session is revoked
-      And external API resource grants are frozen
+      And external API resource entitlements are frozen
       And the Agent becomes inactive without entering a recovering state
       And the Agent keeps the same issuer and subject
 
@@ -236,7 +236,7 @@ Feature: Agent identity and delegated API authorization
       And it does not require a user-created authority grant or grant identifier
       When an authorized controller approves the request
       Then the approval preserves the exact requested authorization details without an Account Connection
-      Then Realmroot creates the same access-grant resource used for external APIs
+      Then Realmroot creates the same per-scope entitlements used for external APIs
 
     @entrypoint:agent-protocol @journey:agent-resource-discovery-isolation
     Scenario: An unavailable API resource does not block resource discovery
@@ -252,7 +252,7 @@ Feature: Agent identity and delegated API authorization
       When the Agent requests that exact scope
       Then Realmroot allows the access request to proceed to controller approval
       And the controller may approve only scopes within the controller's effective scope set
-      And an approved Agent grant stores that exact scope snapshot without a roles claim
+      And the approved request stores the exact scope-entitlement snapshot without a roles claim
 
     @e2e @entrypoint:agent-protocol @journey:native-api-resource-token
     Scenario: An Agent calls a native API directly
@@ -276,18 +276,18 @@ Feature: Agent identity and delegated API authorization
       Then the plugin sends the access token and a fresh DPoP proof directly to the product API
       And the product API validates the token type, signature, issuer, audience, expiry, scopes, and DPoP binding
 
-    @entrypoint:agent-protocol @journey:agent-resource-grant-policy
-    Scenario: Both API authorization modes enforce the same access grant
+    @entrypoint:agent-protocol @journey:agent-resource-entitlement-policy
+    Scenario: Both API authorization modes enforce the same scope entitlements
       Given an Agent requests a target token for an API resource
-      When no active access grant permits the Agent, resource, scopes, and lifetime
+      When no active scope entitlements permit the Agent, resource, scopes, and lifetime
       Then Realmroot denies the request
       And the Agent cannot substitute another account connection or resource
-      When an active access grant permits the request
+      When active scope entitlements permit the request
       Then the token issuer is selected only from the API resource authorization mode
       And one-time, limited, persistent, revocation, and audit behavior is consistent across both modes
 
     @entrypoint:restish @journey:restish-resource-credential-lifecycle
-    Scenario: Restish manages target credentials without observing access grants
+    Scenario: Restish manages target credentials without observing scope entitlements
       Given Restish stores a DPoP credential obtained through the Realmroot credential source
       When another approved access request returns a credential offer for the same Resource Server
       Then the plugin reuses the opaque credential source reference for that Resource
@@ -324,11 +324,11 @@ Feature: Agent identity and delegated API authorization
     Scenario: Target token refresh uses the stable Agent issuer
       Given one Realmroot issuer is available through a canonical origin and an alternate profile origin
       And the alternate profile was the last Realmroot connection used by the Agent
-      When Restish refreshes a native API resource token from an existing grant
+      When Restish refreshes a native API resource token from existing entitlements
       Then the plugin requests the token from the canonical origin of the stable Agent issuer
       And the DPoP proof is bound to that canonical target token endpoint
       And the native API resource URL and active target profile do not change the proof target
-      When Restish refreshes an external API resource token from an existing grant
+      When Restish refreshes an external API resource token from existing entitlements
       Then the plugin still requests the Realmroot token operation from the canonical issuer origin
       And the external DPoP proof remains bound to the target platform's discovered token endpoint
 

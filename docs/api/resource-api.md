@@ -141,11 +141,11 @@ Collection responses include:
 
 `nextOffset` is `null` when there is no next page.
 
-`/application-authorizations`, `/role-assignments`,
-`/agent-access-requests`, and `/agent-access-grants` are canonical Realm
-inventories. Their relationship fields are optional filters: omitting
-`applicationId`, `agentId`, `organizationId`, or `resourceId` lists every
-record visible to the authenticated principal. A filter never establishes
+`/application-authorizations`, `/role-assignments`, and `/access/requests` are
+canonical Realm inventories. Direct Resource authority is exposed beneath its
+subject at `/users/{userId}/scope-entitlements`,
+`/applications/{applicationId}/scope-entitlements`, or
+`/agents/{agentId}/scope-entitlements`. A relationship filter never establishes
 ownership or expands visibility. Console and Account Center use these same
 URIs; there are no product-surface aliases.
 

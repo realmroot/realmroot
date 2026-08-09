@@ -18,11 +18,11 @@ describe('API error boundary helpers', () => {
     expect(unauthorized()).toMatchObject({ status: 401, code: 'unauthorized', message: 'Authentication is required.' })
     expect(forbidden()).toMatchObject({ status: 403, code: 'forbidden', message: 'Admin access is required.' })
     expect(notFound()).toMatchObject({ status: 404, code: 'not_found', message: 'Resource not found.' })
-    expect(resourceInUse('In use.', { agentAccessGrants: 1 })).toMatchObject({
+    expect(resourceInUse('In use.', { scopeEntitlements: 1 })).toMatchObject({
       status: 409,
       code: 'resource_in_use',
       message: 'In use.',
-      details: { agentAccessGrants: 1 },
+      details: { scopeEntitlements: 1 },
     })
     expect(badGateway('Unavailable.', { stage: 'resource' })).toMatchObject({
       status: 502,
@@ -56,7 +56,7 @@ describe('API error boundary helpers', () => {
         accountConnections: 1,
         connectionIntents: 0,
         agentAccessRequests: 1,
-        agentAccessGrants: 1,
+        scopeEntitlements: 1,
       }),
       context(),
     )
@@ -72,7 +72,7 @@ describe('API error boundary helpers', () => {
           accountConnections: 1,
           connectionIntents: 0,
           agentAccessRequests: 1,
-          agentAccessGrants: 1,
+          scopeEntitlements: 1,
         },
       },
     })

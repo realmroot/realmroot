@@ -40,7 +40,7 @@ describe('console Agent detail', () => {
     expect(await screen.findByText('request-pending')).toBeTruthy()
     expect(screen.getByText('request-approved')).toBeTruthy()
 
-    openTab('Access grants')
+    openTab('Resource access')
     expect(await screen.findByText('One use')).toBeTruthy()
     expect(screen.getByText('Until revoked')).toBeTruthy()
     expect(screen.getByText(/^Until \d/)).toBeTruthy()
@@ -117,7 +117,7 @@ describe('console Agent detail', () => {
     const emptyTabs: Array<[string, string]> = [
       ['Installations', 'No installations'],
       ['Access requests', 'No access requests'],
-      ['Access grants', 'No active access grants'],
+      ['Resource access', 'No Resource access'],
       ['Activity', 'No Agent activity'],
     ]
     for (const [tab, emptyTitle] of emptyTabs) {
@@ -203,7 +203,7 @@ function agentDetailResponse(url: URL, collections: AgentCollections) {
   if (path === '/api/access/requests') {
     return jsonResponse({ items: collections.requests, pagination: page(collections.requests.length) })
   }
-  if (path === '/api/agents/agent-1/access-grants') {
+  if (path === '/api/agents/agent-1/scope-entitlements') {
     return jsonResponse({ items: collections.grants, pagination: page(collections.grants.length) })
   }
   if (path === '/api/realm/audit-events') {
@@ -223,7 +223,8 @@ const agent: ManagementAgent = {
   status: 'active',
   installationCount: 2,
   pendingRequestCount: 1,
-  activeGrantCount: 3,
+  activeResourceCount: 1,
+  activeScopeCount: 3,
   createdAt: timestamp,
   updatedAt: timestamp,
 }
@@ -301,7 +302,7 @@ const populatedCollections = {
       id: 'grant-until',
       agentId: 'agent-1',
       resource: resource(),
-      scopes: ['projects:read'],
+      scope: 'projects:read',
       mode: 'until',
       status: 'active',
       expiresAt: '2099-01-01T00:00:00.000Z',
@@ -311,7 +312,7 @@ const populatedCollections = {
       id: 'grant-once',
       agentId: 'agent-1',
       resource: resource(),
-      scopes: ['projects:write'],
+      scope: 'projects:write',
       mode: 'once',
       status: 'consumed',
       expiresAt: null,
@@ -321,7 +322,7 @@ const populatedCollections = {
       id: 'grant-persistent',
       agentId: 'agent-1',
       resource: resource(),
-      scopes: ['projects:admin'],
+      scope: 'projects:admin',
       mode: 'persistent',
       status: 'active',
       expiresAt: null,

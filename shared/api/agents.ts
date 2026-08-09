@@ -135,7 +135,7 @@ export const agentAuditEventSchema = z.object({
   hostId: z.string().nullable(),
   resourceId: z.string().nullable(),
   resourceConnectionId: z.string().nullable(),
-  accessGrantId: z.string().nullable(),
+  accessRequestId: z.string().nullable(),
   scopes: z.array(z.string()).nullable(),
   reasonCode: z.string().nullable(),
   metadata: z.record(z.string(), z.unknown()).nullable(),

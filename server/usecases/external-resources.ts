@@ -11,21 +11,21 @@ import {
 import { isRealmrootResourceServer } from '@server/domain/realmroot-resource-server'
 import type { Deps } from '@server/usecases/deps'
 import type {
-  AgentAccessGrantRecord,
   AgentAccessRequestRecord,
   AgentConnectionRequestRecord,
   ExternalResourceAuthorizationRecord,
   ProviderResourceAuthorizationRecord,
+  ResourceScopeEntitlementRecord,
 } from '@server/usecases/ports'
 import type {
   AccessRequest,
   AccessRequestApproval,
   AccountConnection,
-  AgentAccessGrant,
+  AgentScopeEntitlement,
   CreateAccessRequest,
   CreateAccountConnection,
   CreateResourceConnectionRequest,
-  ListAgentAccessGrantsQuery,
+  ListAgentScopeEntitlementsQuery,
   ResourceConnectionApproval,
   ResourceConnectionRequest,
 } from '@shared/api/agent-api'
@@ -367,7 +367,13 @@ export async function completeResourceConnectionIntent(
       })
   if (!connection) throw badRequest('The API resource was deleted while completing the connection.')
   if (existing) {
-    await revokeUncoveredGrants(deps, connection, intent.authorizationDetails.length > 0, intent.initiatedByUserId, now)
+    await revokeUncoveredEntitlements(
+      deps,
+      connection,
+      intent.authorizationDetails.length > 0,
+      intent.initiatedByUserId,
+      now,
+    )
   }
   return {
     ...toResourceConnection(connection),
@@ -452,7 +458,13 @@ async function completeBrokeredResourceConnectionIntent(
       })
   if (!connection) throw badRequest('Resource Server was deleted while completing the connection.')
   if (existing) {
-    await revokeUncoveredGrants(deps, connection, intent.authorizationDetails.length > 0, intent.initiatedByUserId, now)
+    await revokeUncoveredEntitlements(
+      deps,
+      connection,
+      intent.authorizationDetails.length > 0,
+      intent.initiatedByUserId,
+      now,
+    )
   }
   return { ...toResourceConnection(connection), returnTo: intent.returnTo }
 }
@@ -847,8 +859,8 @@ async function revokeBrokeredProviderAuthorization(
 
 export async function revokeResourceConnection(deps: Deps, connectionId: string, actorUserId: string) {
   const connection = await requireControlledConnection(deps, connectionId, actorUserId)
-  const grants = await deps.externalResources.listActiveGrantsByConnection(connection.id)
-  for (const grant of grants) await revokeAgentAccessGrant(deps, grant.id, actorUserId)
+  const entitlements = await deps.externalResources.listActiveEntitlementsByConnection(connection.id, new Date())
+  for (const entitlement of entitlements) await revokeAgentScopeEntitlement(deps, entitlement.id, actorUserId)
   if (!(await deps.externalResources.revokeConnection(connectionId, new Date()))) {
     throw badRequest('Resource account connection is already revoked.')
   }
@@ -1253,29 +1265,23 @@ export async function createAgentAccessRequest(
   }
   await requireAgentResourceVisibility(deps, resource, identity.identity)
   const scopes = [...new Set(input.scopes)].sort()
-  const reusableGrants = (await deps.externalResources.listActiveGrantsByAgent(principal.identityId)).filter(
-    (grant) =>
-      grant.connectionId === (connection?.id ?? null) &&
-      grant.resourceId === resource.id &&
-      (grant.mode === 'once' ? exactScopes(grant.scopes, scopes) : includesScopes(grant.scopes, scopes)) &&
-      exactAuthorizationDetails(grant.authorizationDetails, authorizationDetails) &&
-      (!grant.expiresAt || grant.expiresAt.getTime() > Date.now()),
+  const now = new Date()
+  const reusableEntitlements = (
+    await deps.externalResources.listActiveEntitlementsByAgent(principal.identityId, now)
+  ).filter(
+    (entitlement) =>
+      entitlement.connectionId === (connection?.id ?? null) &&
+      entitlement.resourceServerId === resource.id &&
+      exactAuthorizationDetails(entitlement.authorizationDetails, authorizationDetails),
   )
-  let existingGrant: AgentAccessGrantRecord | undefined
-  for (const grant of reusableGrants) {
-    const approvedRequest = await deps.externalResources.findAccessRequestByGrant(grant.id)
-    if (
-      approvedRequest &&
-      authorizationDetailsMatchRequest(grant.authorizationDetails, approvedRequest.authorizationDetails)
-    ) {
-      existingGrant = grant
-      break
-    }
-  }
+  const approvedEntitlements = scopes.flatMap((scope) => {
+    const entitlement = reusableEntitlements.find((candidate) => candidate.scope === scope)
+    return entitlement ? [{ scope, entitlementId: entitlement.id }] : []
+  })
+  const alreadyAuthorized = approvedEntitlements.length === scopes.length
   const binding = identity.bindings.find(
     (candidate) => candidate.hostId === principal.hostId && candidate.protocolAgentId === principal.protocolAgentId,
   )!
-  const now = new Date()
   const pending = (await deps.externalResources.listPendingAccessRequestsByAgent(principal.identityId, now)).find(
     (request) =>
       request.resourceId === resource.id &&
@@ -1299,22 +1305,22 @@ export async function createAgentAccessRequest(
     scopes,
     authorizationDetails,
     reason: input.reason ?? null,
-    status: existingGrant ? 'approved' : 'pending',
+    status: alreadyAuthorized ? 'approved' : 'pending',
     approvalTokenHash: await sha256(rawApprovalToken),
     encryptedApprovalToken: await deps.secrets.seal(rawApprovalToken, accessRequestTokenContext(requestId)),
-    grantId: existingGrant?.id ?? null,
+    approvedEntitlements: alreadyAuthorized ? approvedEntitlements : [],
     expiresAt,
-    decidedAt: existingGrant ? now : null,
+    decidedAt: alreadyAuthorized ? now : null,
     createdAt: now,
     updatedAt: now,
   }
   const audit = await resourceAuditRecord(deps, {
     action: 'api_resource.access_requested',
-    result: existingGrant ? 'allowed' : 'pending',
+    result: alreadyAuthorized ? 'allowed' : 'pending',
     principal,
     resourceId: resource.id,
     connection,
-    grantId: existingGrant?.id ?? null,
+    accessRequestId: request.id,
     scopes,
     authorizationDetails,
     reasonCode: null,
@@ -1324,7 +1330,7 @@ export async function createAgentAccessRequest(
   return toAgentAccessRequest(
     created,
     principal.hostId,
-    existingGrant ? null : approvalUrl(approvalOrigin, rawApprovalToken),
+    alreadyAuthorized ? null : approvalUrl(approvalOrigin, rawApprovalToken),
   )
 }
 
@@ -1556,7 +1562,7 @@ export async function decideAgentAccessRequest(
       resourceId: request.resourceId,
       connection: controlledConnection,
       request,
-      grantId: null,
+      accessRequestId: request.id,
       controllerUserId: actorUserId,
       scopes: request.scopes,
       authorizationDetails: request.authorizationDetails,
@@ -1564,7 +1570,7 @@ export async function decideAgentAccessRequest(
     })
     const decided = await deps.externalResources.decideAccessRequestWithAudit(
       request.id,
-      { status: 'denied', grantId: null, decidedAt: now, updatedAt: now },
+      { status: 'denied', approvedEntitlements: [], decidedAt: now, updatedAt: now },
       audit,
     )
     if (!decided) throw badRequest('Agent access request was already decided.')
@@ -1609,40 +1615,83 @@ export async function decideAgentAccessRequest(
     assertAuthorizationDetailsSelection(resource, null, authorizationDetails)
   }
   const expiresAt = input.mode === 'until' ? new Date(input.expiresAt!) : null
-  if (expiresAt && expiresAt.getTime() <= now.getTime()) throw badRequest('Grant expiry must be in the future.')
-  const grantRecord = {
-    id: createId('accessgrant'),
-    resourceId: request.resourceId,
-    connectionId,
-    agentIdentityId: request.agentIdentityId,
-    scopes: request.scopes,
-    authorizationDetails,
-    mode: input.mode!,
-    status: 'active',
-    grantedByUserId: actorUserId,
-    expiresAt,
-    revokedAt: null,
-    createdAt: now,
-    updatedAt: now,
-  }
+  if (expiresAt && expiresAt.getTime() <= now.getTime()) throw badRequest('Entitlement expiry must be in the future.')
+  const contextHash = await sha256(canonicalJson(authorizationDetails))
+  const existing = (await deps.externalResources.listActiveEntitlementsByAgent(request.agentIdentityId, now)).filter(
+    (entitlement) =>
+      entitlement.resourceServerId === request.resourceId &&
+      entitlement.connectionId === connectionId &&
+      exactAuthorizationDetails(entitlement.authorizationDetails, authorizationDetails),
+  )
+  const entitlements: ResourceScopeEntitlementRecord[] = []
+  const entitlementUpdates: Array<{
+    id: string
+    mode: ResourceScopeEntitlementRecord['mode']
+    expiresAt: Date | null
+    authorizationContextHash: string
+    updatedAt: Date
+  }> = []
+  const approvedEntitlements = request.scopes.map((scope) => {
+    const current = existing.find((entitlement) => entitlement.scope === scope)
+    if (current) {
+      const shouldPersist = input.mode === 'persistent' && current.mode !== 'persistent'
+      const shouldExtend =
+        input.mode === 'until' &&
+        current.mode !== 'persistent' &&
+        (!current.expiresAt || current.expiresAt.getTime() < expiresAt!.getTime())
+      if (shouldPersist || shouldExtend || current.authorizationContextHash !== contextHash) {
+        entitlementUpdates.push({
+          id: current.id,
+          mode: shouldPersist ? 'persistent' : shouldExtend ? 'until' : current.mode,
+          expiresAt: shouldPersist ? null : shouldExtend ? expiresAt : current.expiresAt,
+          authorizationContextHash: contextHash,
+          updatedAt: now,
+        })
+      }
+      return { scope, entitlementId: current.id }
+    }
+    const entitlement: ResourceScopeEntitlementRecord = {
+      id: createId('ent'),
+      userId: null,
+      applicationId: null,
+      agentIdentityId: request.agentIdentityId,
+      organizationId: null,
+      resourceServerId: request.resourceId,
+      connectionId,
+      authorizationDetails,
+      authorizationContextHash: contextHash,
+      scope,
+      mode: input.mode!,
+      grantedByUserId: actorUserId,
+      sourceAccessRequestId: request.id,
+      expiresAt,
+      endedAt: null,
+      endReason: null,
+      createdAt: now,
+      updatedAt: now,
+    }
+    entitlements.push(entitlement)
+    return { scope, entitlementId: entitlement.id }
+  })
   const audit = await resourceAuditRecord(deps, {
     action: 'api_resource.access_decided',
     result: 'allowed',
     resourceId: request.resourceId,
     connection,
     request,
-    grantId: grantRecord.id,
+    accessRequestId: request.id,
     controllerUserId: actorUserId,
     scopes: request.scopes,
     authorizationDetails,
     reasonCode: null,
   })
-  const approved = await deps.externalResources.approveAccessRequestWithAudit(
-    grantRecord,
+  const approved = await deps.externalResources.approveAccessRequestWithEntitlements(
+    entitlements,
+    entitlementUpdates,
     request.id,
     {
       status: 'approved',
-      grantId: grantRecord.id,
+      approvedEntitlements,
       connectionId,
       decidedAt: now,
       updatedAt: now,
@@ -1650,7 +1699,7 @@ export async function decideAgentAccessRequest(
     audit,
     brokeredAccountConnection(resource) ? (connection?.providerEventRevision ?? null) : undefined,
   )
-  if (approved === 'grant_unavailable') {
+  if (approved === 'resource_unavailable') {
     throw badRequest('The API resource was deleted before access could be approved.')
   }
   if (approved === 'request_changed') throw badRequest('Agent access request was already decided.')
@@ -1672,46 +1721,55 @@ export async function decideAccessRequest(
 
 export async function issueTargetAccessToken(
   deps: Deps,
-  grantId: string,
+  requestId: string,
   dpopProof: string,
   tokenRequestUrl: string,
   principal: AgentResourcePrincipal,
   signer: AgentAssertionSigner,
-  accessRequestId?: string,
 ) {
   const identity = await requireActiveIdentityAndBinding(deps, principal)
-  const grant = await deps.externalResources.findGrant(grantId)
-  if (!grant || grant.agentIdentityId !== principal.identityId)
-    throw forbidden('Active Agent access grant is required.')
-  const request = accessRequestId
-    ? await deps.externalResources.findAccessRequest(accessRequestId)
-    : await deps.externalResources.findAccessRequestByGrant(grant.id)
+  const request = await deps.externalResources.findAccessRequest(requestId)
   if (
     !request ||
     request.agentIdentityId !== principal.identityId ||
-    (accessRequestId !== undefined && request.grantId !== grant.id) ||
     (request.status !== 'approved' && request.status !== 'consumed')
   ) {
     throw forbidden('Approved Agent access request is required.')
   }
-  const resource = await deps.authorization.findResource(request.resourceId)
-  if (grant.status !== 'active' || (grant.expiresAt && grant.expiresAt.getTime() <= Date.now()) || !resource?.enabled) {
-    throw forbidden('Active Agent access grant is required.')
+  const entitlementIds = request.approvedEntitlements.map((snapshot) => snapshot.entitlementId)
+  const entitlements = await deps.externalResources.findEntitlements(entitlementIds)
+  const now = new Date()
+  if (
+    entitlements.length !== request.scopes.length ||
+    request.approvedEntitlements.length !== request.scopes.length ||
+    request.approvedEntitlements.some(({ scope, entitlementId }) => {
+      const entitlement = entitlements.find((candidate) => candidate.id === entitlementId)
+      return (
+        !entitlement ||
+        entitlement.scope !== scope ||
+        entitlement.agentIdentityId !== principal.identityId ||
+        entitlement.resourceServerId !== request.resourceId ||
+        entitlement.connectionId !== request.connectionId ||
+        entitlement.endedAt !== null ||
+        (entitlement.expiresAt !== null && entitlement.expiresAt.getTime() <= now.getTime()) ||
+        !exactAuthorizationDetails(entitlement.authorizationDetails, request.authorizationDetails)
+      )
+    })
+  ) {
+    throw forbidden('Every approved scope requires an active Entitlement.')
   }
-  assertScopeSubset(request.scopes, grant.scopes, 'Agent access grant')
+  const resource = await deps.authorization.findResource(request.resourceId)
+  if (!resource?.enabled) throw forbidden('Enabled Resource Server is required.')
   validateResourceRequestedScopes(resource, request.scopes)
   if (!activeResourceVisibleToAgent(resource, await activeIdentityOrganizationIds(deps, identity.identity))) {
     throw forbidden('Resource Server is not visible to this Agent.')
   }
-  if (!authorizationDetailsMatchRequest(grant.authorizationDetails, request.authorizationDetails)) {
-    throw forbidden('Agent access grant authorization details do not match the approved request.')
-  }
   if (resource.accessMode !== 'external_oauth') {
     const connection = request.connectionId ? await deps.externalResources.findConnection(request.connectionId) : null
-    assertAuthorizationDetailsSelection(resource, connection, grant.authorizationDetails)
+    assertAuthorizationDetailsSelection(resource, connection, request.authorizationDetails)
     return issueNativeAccessToken(
       deps,
-      { grant, request, resource, identity },
+      { entitlements, request, resource, identity },
       dpopProof,
       tokenRequestUrl,
       principal,
@@ -1742,8 +1800,8 @@ export async function issueTargetAccessToken(
     throw forbidden('Active external API resource grant is required.')
   }
   assertScopeSubset(request.scopes, connection.grantedScopes, 'connected account')
-  assertAuthorizationDetailsSelection(resource, connection, grant.authorizationDetails)
-  assertAuthorizationDetailsSubset(grant.authorizationDetails, connection.authorizationDetails, 'connected account')
+  assertAuthorizationDetailsSelection(resource, connection, request.authorizationDetails)
+  assertAuthorizationDetailsSubset(request.authorizationDetails, connection.authorizationDetails, 'connected account')
   const confirmationJkt = await validateDpopTokenProof(deps, dpopProof, authorization.tokenEndpoint)
   const subjectToken = await refreshConnectionToken(deps, connection, authorization)
   const nowSeconds = Math.floor(Date.now() / 1000)
@@ -1782,8 +1840,8 @@ export async function issueTargetAccessToken(
       requested_token_type: accessTokenType,
       resource: resource.resourceUrl,
       scope: request.scopes.join(' '),
-      ...(grant.authorizationDetails.length > 0
-        ? { authorization_details: JSON.stringify(grant.authorizationDetails) }
+      ...(request.authorizationDetails.length > 0
+        ? { authorization_details: JSON.stringify(request.authorizationDetails) }
         : {}),
     },
     authorization.clientId,
@@ -1796,13 +1854,13 @@ export async function issueTargetAccessToken(
     throw unauthorized('Target authorization server did not issue a DPoP-bound access token.')
   }
   const expiresIn = requiredPositiveInteger(token, 'expires_in', 'Token exchange response')
-  const now = new Date()
   const expiresAt = new Date(now.getTime() + expiresIn * 1000)
   if (expiresIn > 3600) {
     throw unauthorized('Target authorization server issued an access token with an excessive lifetime.')
   }
-  if (grant.expiresAt && expiresAt.getTime() > grant.expiresAt.getTime()) {
-    throw unauthorized('Target authorization server issued an access token beyond the access grant lifetime.')
+  const entitlementExpiry = earliestEntitlementExpiry(entitlements)
+  if (entitlementExpiry && expiresAt.getTime() > entitlementExpiry.getTime()) {
+    throw unauthorized('Target authorization server issued an access token beyond an Entitlement lifetime.')
   }
   const issuedScope = scopeString(token.scope) ?? request.scopes
   if (!exactScopes(issuedScope, request.scopes)) {
@@ -1810,17 +1868,17 @@ export async function issueTargetAccessToken(
   }
   const issuedAuthorizationDetails = readAuthorizationDetails(
     token.authorization_details,
-    grant.authorizationDetails.length > 0,
-    grant.authorizationDetails.map((detail) => detail.type),
+    request.authorizationDetails.length > 0,
+    request.authorizationDetails.map((detail) => detail.type),
     'Token exchange response',
   )
-  if (!exactAuthorizationDetails(issuedAuthorizationDetails, grant.authorizationDetails)) {
+  if (!exactAuthorizationDetails(issuedAuthorizationDetails, request.authorizationDetails)) {
     throw unauthorized('Target authorization server issued different authorization details.')
   }
   const leaseId = createId('tokenlease')
   const leaseRecord = {
     id: leaseId,
-    grantId: grant.id,
+    entitlementIds,
     requestId: request.id,
     bindingId: identity.bindings.find(
       (binding) => binding.protocolAgentId === principal.protocolAgentId && binding.hostId === principal.hostId,
@@ -1829,7 +1887,7 @@ export async function issueTargetAccessToken(
     tokenHash: await sha256(accessToken),
     confirmationJkt,
     scopes: request.scopes,
-    authorizationDetails: grant.authorizationDetails,
+    authorizationDetails: request.authorizationDetails,
     expiresAt,
     revokedAt: null,
     createdAt: now,
@@ -1841,20 +1899,25 @@ export async function issueTargetAccessToken(
     resourceId: resource.id,
     connection,
     request,
-    grantId: grant.id,
+    accessRequestId: request.id,
     scopes: request.scopes,
-    authorizationDetails: grant.authorizationDetails,
+    authorizationDetails: request.authorizationDetails,
     reasonCode: null,
   })
-  const lease = await deps.externalResources.issueTokenLeaseWithAudit(leaseRecord, grant.mode === 'once', now, audit)
-  if (!lease) throw forbidden('Active Agent access grant is required.')
+  const lease = await deps.externalResources.issueTokenLeaseWithAudit(
+    leaseRecord,
+    entitlements.filter((entitlement) => entitlement.mode === 'once').map((entitlement) => entitlement.id),
+    now,
+    audit,
+  )
+  if (!lease) throw forbidden('Every approved scope requires an active Entitlement.')
   return {
     accessToken,
     tokenType: 'DPoP' as const,
     expiresIn,
     expiresAt: expiresAt.toISOString(),
     scopes: request.scopes,
-    authorizationDetails: grant.authorizationDetails,
+    authorizationDetails: request.authorizationDetails,
     resourceUrl: resource.resourceUrl,
     dpopNonce: tokenResponse.dpopNonce,
   }
@@ -1869,18 +1932,13 @@ export async function createAccessRequestCredential(
   signer: AgentAssertionSigner,
 ) {
   const request = await getAgentAccessRequest(deps, requestId, principal)
-  if ((request.status !== 'approved' && request.status !== 'consumed') || !request.grantId) {
+  if (
+    (request.status !== 'approved' && request.status !== 'consumed') ||
+    request.approvedEntitlements.length !== request.scopes.length
+  ) {
     throw forbidden('Approved Resource access is required.')
   }
-  const token = await issueTargetAccessToken(
-    deps,
-    request.grantId,
-    dpopProof,
-    credentialRequestUrl,
-    principal,
-    signer,
-    request.id,
-  )
+  const token = await issueTargetAccessToken(deps, request.id, dpopProof, credentialRequestUrl, principal, signer)
   const origin = new URL(credentialRequestUrl).origin
   return {
     ...token,
@@ -1898,7 +1956,7 @@ export async function createAccessRequestCredential(
 async function issueNativeAccessToken(
   deps: Deps,
   context: {
-    grant: AgentAccessGrantRecord
+    entitlements: ResourceScopeEntitlementRecord[]
     request: AgentAccessRequestRecord
     resource: NonNullable<Awaited<ReturnType<Deps['authorization']['findResource']>>>
     identity: Awaited<ReturnType<typeof requireActiveIdentityAndBinding>>
@@ -1908,13 +1966,13 @@ async function issueNativeAccessToken(
   principal: AgentResourcePrincipal,
   signer: AgentAssertionSigner,
 ) {
-  const { grant, request, resource, identity } = context
+  const { entitlements, request, resource, identity } = context
   const brokered = brokeredAccountConnection(resource)
-  if ((request.connectionId !== null || grant.connectionId !== null) && !brokered) {
+  if (request.connectionId !== null && !brokered) {
     throw forbidden('Native API resource grants cannot use account connections.')
   }
   const connection = brokered
-    ? request.connectionId && request.connectionId === grant.connectionId
+    ? request.connectionId
       ? await deps.externalResources.findConnection(request.connectionId)
       : null
     : null
@@ -1930,8 +1988,12 @@ async function issueNativeAccessToken(
   }
   if (brokered) {
     assertScopeSubset(request.scopes, connection!.grantedScopes, 'connected account')
-    assertAuthorizationDetailsSubset(grant.authorizationDetails, connection!.authorizationDetails, 'connected account')
-    assertAuthorityConstraintScopes(request.scopes, connection!, grant.authorizationDetails)
+    assertAuthorizationDetailsSubset(
+      request.authorizationDetails,
+      connection!.authorizationDetails,
+      'connected account',
+    )
+    assertAuthorityConstraintScopes(request.scopes, connection!, request.authorizationDetails)
   }
   if (signer.issuer !== principal.issuer) {
     throw forbidden('Agent identity does not belong to the active OAuth issuer.')
@@ -1939,13 +2001,14 @@ async function issueNativeAccessToken(
   const confirmationJkt = await validateDpopTokenProof(deps, dpopProof, tokenRequestUrl)
   const now = new Date()
   const maximumExpiresAt = new Date(now.getTime() + 5 * 60 * 1000)
+  const entitlementExpiry = earliestEntitlementExpiry(entitlements)
   const expiresAt =
-    grant.expiresAt && grant.expiresAt.getTime() < maximumExpiresAt.getTime() ? grant.expiresAt : maximumExpiresAt
+    entitlementExpiry && entitlementExpiry.getTime() < maximumExpiresAt.getTime() ? entitlementExpiry : maximumExpiresAt
   const subject = identity.identity.ownerUserId ?? identity.identity.ownerOrganizationId
   if (!subject) throw forbidden('Agent home-space controller is unavailable.')
   const realmroot = isRealmrootResourceServer(resource.id)
-  const realmrootAuthority = realmroot ? grant.authorizationDetails[0] : undefined
-  if (realmroot) assertRealmrootAuthoritySelection(grant.authorizationDetails)
+  const realmrootAuthority = realmroot ? request.authorizationDetails[0] : undefined
+  if (realmroot) assertRealmrootAuthoritySelection(request.authorizationDetails)
   const issuedScopes = realmroot ? [...new Set([...agentBootstrapScopes, ...request.scopes])].sort() : request.scopes
   const accessToken = await signer.sign(
     {
@@ -1964,7 +2027,7 @@ async function issueNativeAccessToken(
             : [],
       client_id: principal.protocolAgentId,
       ...(connection
-        ? { connection_id: connection.brokerReference, authorization_details: grant.authorizationDetails }
+        ? { connection_id: connection.brokerReference, authorization_details: request.authorizationDetails }
         : {}),
       ...(realmroot
         ? { host_id: principal.hostId, sub_profile: 'ai_agent', realmroot_authority: realmrootAuthority }
@@ -1981,7 +2044,7 @@ async function issueNativeAccessToken(
   const leaseId = createId('tokenlease')
   const leaseRecord = {
     id: leaseId,
-    grantId: grant.id,
+    entitlementIds: entitlements.map((entitlement) => entitlement.id),
     requestId: request.id,
     bindingId: identity.bindings.find(
       (binding) => binding.protocolAgentId === principal.protocolAgentId && binding.hostId === principal.hostId,
@@ -1990,7 +2053,7 @@ async function issueNativeAccessToken(
     tokenHash: await sha256(accessToken),
     confirmationJkt,
     scopes: request.scopes,
-    authorizationDetails: realmroot || brokered ? grant.authorizationDetails : [],
+    authorizationDetails: realmroot || brokered ? request.authorizationDetails : [],
     expiresAt,
     revokedAt: null,
     createdAt: now,
@@ -2002,114 +2065,124 @@ async function issueNativeAccessToken(
     resourceId: resource.id,
     connection,
     request,
-    grantId: grant.id,
+    accessRequestId: request.id,
     scopes: request.scopes,
-    authorizationDetails: realmroot || brokered ? grant.authorizationDetails : [],
+    authorizationDetails: realmroot || brokered ? request.authorizationDetails : [],
     reasonCode: null,
   })
-  const lease = await deps.externalResources.issueTokenLeaseWithAudit(leaseRecord, grant.mode === 'once', now, audit)
-  if (!lease) throw forbidden('Active Agent access grant is required.')
+  const lease = await deps.externalResources.issueTokenLeaseWithAudit(
+    leaseRecord,
+    entitlements.filter((entitlement) => entitlement.mode === 'once').map((entitlement) => entitlement.id),
+    now,
+    audit,
+  )
+  if (!lease) throw forbidden('Every approved scope requires an active Entitlement.')
   return {
     accessToken,
     tokenType: 'DPoP' as const,
     expiresIn: Math.max(1, Math.floor((expiresAt.getTime() - now.getTime()) / 1000)),
     expiresAt: expiresAt.toISOString(),
     scopes: request.scopes,
-    authorizationDetails: realmroot || brokered ? grant.authorizationDetails : [],
+    authorizationDetails: realmroot || brokered ? request.authorizationDetails : [],
     resourceUrl: resource.resourceUrl,
     dpopNonce: null,
   }
 }
 
-export async function listAgentAccessGrants(
+export async function listAgentScopeEntitlements(
   deps: Deps,
   principal: AgentResourcePrincipal,
-  query: ListAgentAccessGrantsQuery,
+  query: ListAgentScopeEntitlementsQuery,
 ) {
   await requireActiveIdentityAndBinding(deps, principal)
-  const result = await deps.externalResources.listGrants({ ...query, agentId: principal.identityId })
+  const result = await deps.externalResources.listAgentScopeEntitlements({ ...query, agentId: principal.identityId })
   return {
-    items: result.items.map(({ grant, resource }) => toAccessGrant(grant, resource)),
+    items: result.items.map(({ entitlement, resource }) => toScopeEntitlement(entitlement, resource)),
     pagination: paginationMetadata(result),
   }
 }
 
-export async function getAgentAccessGrant(
+export async function getAgentScopeEntitlement(
   deps: Deps,
-  grantId: string,
+  entitlementId: string,
   principal: AgentResourcePrincipal,
-): Promise<AgentAccessGrant> {
+): Promise<AgentScopeEntitlement> {
   await requireActiveIdentityAndBinding(deps, principal)
-  const grant = await deps.externalResources.findGrant(grantId)
-  if (!grant || grant.status === 'revoked' || grant.agentIdentityId !== principal.identityId) {
-    throw notFound('Agent access grant was not found.')
+  const entitlement = await deps.externalResources.findEntitlement(entitlementId)
+  if (!entitlement || entitlement.agentIdentityId !== principal.identityId) {
+    throw notFound('Agent scope Entitlement was not found.')
   }
-  const resource = await deps.authorization.findResource(grant.resourceId)
-  if (!resource) throw notFound('Agent access grant Resource Server was not found.')
-  return toAccessGrant(grant, resource)
+  const resource = await deps.authorization.findResource(entitlement.resourceServerId)
+  if (!resource) throw notFound('Agent scope Entitlement Resource Server was not found.')
+  return toScopeEntitlement(entitlement, resource)
 }
 
-export async function revokeAgentAccessGrant(deps: Deps, grantId: string, actorUserId: string) {
-  const grant = await deps.externalResources.findGrant(grantId)
-  if (!grant || grant.status === 'revoked') throw notFound('Agent access grant was not found.')
-  const request = await deps.externalResources.findAccessRequestByGrant(grant.id)
-  if (!request) throw notFound('Approved Agent access request was not found.')
+export async function revokeAgentScopeEntitlement(deps: Deps, entitlementId: string, actorUserId: string) {
+  const entitlement = await deps.externalResources.findEntitlement(entitlementId)
+  if (!entitlement?.agentIdentityId || entitlement.endedAt) throw notFound('Agent scope Entitlement was not found.')
+  const request = entitlement.sourceAccessRequestId
+    ? await deps.externalResources.findAccessRequest(entitlement.sourceAccessRequestId)
+    : null
+  if (!request) throw notFound('Source Agent access request was not found.')
   const connection = await requireControlledRequestTarget(deps, request, actorUserId)
   const now = new Date()
-  const leaseIds = await revokeGrantTokenLeasesAtTarget(deps, grant, now)
+  const leaseIds = await revokeEntitlementTokenLeasesAtTarget(deps, entitlement, now)
   const audit = await resourceAuditRecord(deps, {
     action: 'api_resource.access_revoked',
     result: 'allowed',
-    resourceId: grant.resourceId,
+    resourceId: entitlement.resourceServerId,
     connection,
-    grantId: grant.id,
+    accessRequestId: request.id,
     controllerUserId: actorUserId,
-    scopes: grant.scopes,
-    authorizationDetails: grant.authorizationDetails,
+    scopes: [entitlement.scope],
+    authorizationDetails: entitlement.authorizationDetails,
     reasonCode: null,
   })
-  await deps.externalResources.revokeGrantWithAudit(grant.id, leaseIds, now, audit)
+  await deps.externalResources.endEntitlementWithAudit(entitlement.id, 'revoked', leaseIds, now, audit)
 }
 
 export async function revokeAgentResourceAccess(deps: Deps, agentIdentityId: string) {
   const now = new Date()
-  for (const grant of await deps.externalResources.listActiveGrantsByAgent(agentIdentityId)) {
-    await revokeGrantTokenLeases(deps, grant, now)
-    await deps.externalResources.revokeGrant(grant.id, now)
+  for (const entitlement of await deps.externalResources.listActiveEntitlementsByAgent(agentIdentityId, now)) {
+    await revokeEntitlementTokenLeases(deps, entitlement, now)
+    await deps.externalResources.endEntitlement(entitlement.id, 'revoked', now)
   }
 }
 
 export async function revokeAgentResourceLeasesForBinding(deps: Deps, bindingId: string) {
   const now = new Date()
   for (const lease of await deps.externalResources.listActiveTokenLeasesByBinding(bindingId, now)) {
-    const grant = await deps.externalResources.findGrant(lease.grantId)
-    if (!grant) continue
-    await revokeTokenLeaseAtTarget(deps, grant, lease, now)
+    await revokeTokenLeaseAtTarget(deps, lease, now)
   }
 }
 
-async function revokeGrantTokenLeases(deps: Deps, grant: AgentAccessGrantRecord, now: Date) {
-  for (const lease of await deps.externalResources.listActiveTokenLeasesByGrant(grant.id, now)) {
-    await revokeTokenLeaseAtTarget(deps, grant, lease, now)
+async function revokeEntitlementTokenLeases(deps: Deps, entitlement: ResourceScopeEntitlementRecord, now: Date) {
+  for (const lease of await deps.externalResources.listActiveTokenLeasesByEntitlement(entitlement.id, now)) {
+    await revokeTokenLeaseAtTarget(deps, lease, now)
   }
 }
 
-async function revokeGrantTokenLeasesAtTarget(deps: Deps, grant: AgentAccessGrantRecord, now: Date) {
-  const leases = await deps.externalResources.listActiveTokenLeasesByGrant(grant.id, now)
-  for (const lease of leases) await revokeTokenLeaseAtTarget(deps, grant, lease, now, false)
+async function revokeEntitlementTokenLeasesAtTarget(
+  deps: Deps,
+  entitlement: ResourceScopeEntitlementRecord,
+  now: Date,
+) {
+  const leases = await deps.externalResources.listActiveTokenLeasesByEntitlement(entitlement.id, now)
+  for (const lease of leases) await revokeTokenLeaseAtTarget(deps, lease, now, false)
   return leases.map((lease) => lease.id)
 }
 
 async function revokeTokenLeaseAtTarget(
   deps: Deps,
-  grant: AgentAccessGrantRecord,
-  lease: Awaited<ReturnType<Deps['externalResources']['listActiveTokenLeasesByGrant']>>[number],
+  lease: Awaited<ReturnType<Deps['externalResources']['listActiveTokenLeasesByEntitlement']>>[number],
   now: Date,
   persist = true,
 ) {
-  const resource = await deps.authorization.findResource(grant.resourceId)
+  const request = await deps.externalResources.findAccessRequest(lease.requestId)
+  if (!request) throw notFound('Approved Agent access request was not found.')
+  const resource = await deps.authorization.findResource(request.resourceId)
   if (!resource) throw notFound('API resource was not found.')
-  const connection = grant.connectionId ? await deps.externalResources.findConnection(grant.connectionId) : null
+  const connection = request.connectionId ? await deps.externalResources.findConnection(request.connectionId) : null
   const authorization = await externalOAuthAuthorization(deps, resource, connection?.clientGeneration ?? 1)
   if (!authorization) {
     if (persist) await deps.externalResources.revokeTokenLease(lease.id, now)
@@ -2192,36 +2265,21 @@ async function readAuthorizationDetailCatalog(
       url: endpoint,
     })
   }
-  const now = Date.now()
-  const activeGrants = (await deps.externalResources.listActiveGrantsByAgent(agentIdentityId)).filter(
-    (grant) =>
-      grant.resourceId === resource.id &&
-      grant.connectionId === connection.id &&
-      grant.status === 'active' &&
-      (!grant.expiresAt || grant.expiresAt.getTime() > now),
+  const entitlements = (await deps.externalResources.listActiveEntitlementsByAgent(agentIdentityId, new Date())).filter(
+    (entitlement) => entitlement.resourceServerId === resource.id && entitlement.connectionId === connection.id,
   )
-  const grants = (
-    await Promise.all(
-      activeGrants.map(async (grant) => ({
-        grant,
-        request: await deps.externalResources.findAccessRequestByGrant(grant.id),
-      })),
-    )
-  )
-    .filter(({ grant, request }) =>
-      request ? authorizationDetailsMatchRequest(grant.authorizationDetails, request.authorizationDetails) : false,
-    )
-    .map(({ grant }) => grant)
   const items = parsed.data.items.map((item) => {
     const connectionAuthorized = connection.authorizationDetails.some((detail) =>
       exactAuthorizationDetails([detail], [item.authorizationDetail]),
     )
     const authorizedScopes = new Set(
-      grants
-        .filter((grant) =>
-          grant.authorizationDetails.some((detail) => exactAuthorizationDetails([detail], [item.authorizationDetail])),
+      entitlements
+        .filter((entitlement) =>
+          entitlement.authorizationDetails.some((detail) =>
+            exactAuthorizationDetails([detail], [item.authorizationDetail]),
+          ),
         )
-        .flatMap((grant) => grant.scopes),
+        .map((entitlement) => entitlement.scope),
     )
     return {
       ...item,
@@ -2259,22 +2317,20 @@ async function readResourceCatalog(
     return readAuthorizationDetailCatalog(deps, resource, connection, agentIdentityId, pagination)
   }
   const details = connection.authorizationDetails.slice(pagination.offset, pagination.offset + pagination.limit)
-  const grants = (await deps.externalResources.listActiveGrantsByAgent(agentIdentityId)).filter(
-    (grant) =>
-      grant.resourceId === resource.id &&
-      grant.connectionId === connection.id &&
-      grant.status === 'active' &&
-      (!grant.expiresAt || grant.expiresAt.getTime() > Date.now()),
+  const entitlements = (await deps.externalResources.listActiveEntitlementsByAgent(agentIdentityId, new Date())).filter(
+    (entitlement) => entitlement.resourceServerId === resource.id && entitlement.connectionId === connection.id,
   )
   return {
     items: details.map((authorizationDetail) => {
       const authorizedScopes = [
         ...new Set(
-          grants
-            .filter((grant) =>
-              grant.authorizationDetails.some((detail) => exactAuthorizationDetails([detail], [authorizationDetail])),
+          entitlements
+            .filter((entitlement) =>
+              entitlement.authorizationDetails.some((detail) =>
+                exactAuthorizationDetails([detail], [authorizationDetail]),
+              ),
             )
-            .flatMap((grant) => grant.scopes),
+            .map((entitlement) => entitlement.scope),
         ),
       ].sort()
       return {
@@ -2298,18 +2354,15 @@ async function activeResourceScopes(
   resourceServerId: string,
   authorizationDetails: AuthorizationDetail[],
 ) {
-  const now = Date.now()
   return [
     ...new Set(
-      (await deps.externalResources.listActiveGrantsByAgent(agentIdentityId))
+      (await deps.externalResources.listActiveEntitlementsByAgent(agentIdentityId, new Date()))
         .filter(
-          (grant) =>
-            grant.resourceId === resourceServerId &&
-            grant.status === 'active' &&
-            (!grant.expiresAt || grant.expiresAt.getTime() > now) &&
-            exactAuthorizationDetails(grant.authorizationDetails, authorizationDetails),
+          (entitlement) =>
+            entitlement.resourceServerId === resourceServerId &&
+            exactAuthorizationDetails(entitlement.authorizationDetails, authorizationDetails),
         )
-        .flatMap((grant) => grant.scopes),
+        .map((entitlement) => entitlement.scope),
     ),
   ].sort()
 }
@@ -2411,8 +2464,12 @@ async function realmrootAuthorityEffectiveScopes(
   }
   if (controllerUserId && detail.authority === 'user' && detail.id === controllerUserId) {
     const scopes = new Set(['agents:read', 'agents:write', 'audit-events:read'])
-    for (const grant of await deps.authorization.listActiveUserScopeGrants(controllerUserId, resource.id, new Date())) {
-      for (const scope of grant.scopes) scopes.add(scope)
+    for (const entitlement of await deps.authorization.listActiveUserScopeEntitlements(
+      controllerUserId,
+      resource.id,
+      new Date(),
+    )) {
+      scopes.add(entitlement.scope)
     }
     return current(scopes)
   }
@@ -2923,7 +2980,7 @@ async function resourceAuditRecord(
     request?: AgentAccessRequestRecord
     resourceId: string
     connection: ProviderResourceAuthorizationRecord | null
-    grantId: string | null
+    accessRequestId: string | null
     controllerUserId?: string
     scopes: string[]
     authorizationDetails?: AuthorizationDetail[]
@@ -2951,7 +3008,7 @@ async function resourceAuditRecord(
     hostId: input.principal?.hostId ?? null,
     resourceId: input.resourceId,
     resourceConnectionId: input.connection?.id ?? null,
-    accessGrantId: input.grantId,
+    accessRequestId: input.accessRequestId,
     scopes: input.scopes,
     reasonCode: input.reasonCode,
     metadata:
@@ -2981,32 +3038,32 @@ async function resolveAuditTenant(
     : { type: 'organization' as const, id: identity.identity.ownerOrganizationId! }
 }
 
-async function revokeUncoveredGrants(
+async function revokeUncoveredEntitlements(
   deps: Deps,
   connection: ProviderResourceAuthorizationRecord,
   authorizationDetailsRequired: boolean,
   controllerUserId: string,
   now: Date,
 ) {
-  for (const grant of await deps.externalResources.listActiveGrantsByConnection(connection.id)) {
+  for (const entitlement of await deps.externalResources.listActiveEntitlementsByConnection(connection.id, now)) {
     const covered =
-      grant.scopes.every((scope) => connection.grantedScopes.includes(scope)) &&
-      (!authorizationDetailsRequired || grant.authorizationDetails.length > 0) &&
-      isAuthorizationDetailsSubset(grant.authorizationDetails, connection.authorizationDetails)
+      connection.grantedScopes.includes(entitlement.scope) &&
+      (!authorizationDetailsRequired || entitlement.authorizationDetails.length > 0) &&
+      isAuthorizationDetailsSubset(entitlement.authorizationDetails, connection.authorizationDetails)
     if (covered) continue
-    const leaseIds = await revokeGrantTokenLeasesAtTarget(deps, grant, now)
+    const leaseIds = await revokeEntitlementTokenLeasesAtTarget(deps, entitlement, now)
     const audit = await resourceAuditRecord(deps, {
       action: 'api_resource.access_revoked',
       result: 'allowed',
-      resourceId: grant.resourceId,
+      resourceId: entitlement.resourceServerId,
       connection,
-      grantId: grant.id,
+      accessRequestId: entitlement.sourceAccessRequestId,
       controllerUserId,
-      scopes: grant.scopes,
-      authorizationDetails: grant.authorizationDetails,
+      scopes: [entitlement.scope],
+      authorizationDetails: entitlement.authorizationDetails,
       reasonCode: 'connection_authorization_changed',
     })
-    await deps.externalResources.revokeGrantWithAudit(grant.id, leaseIds, now, audit)
+    await deps.externalResources.endEntitlementWithAudit(entitlement.id, 'revoked', leaseIds, now, audit)
   }
 }
 
@@ -3450,13 +3507,13 @@ function assertScopeSubset(requested: string[], allowed: string[], boundary: str
   if (missing.length > 0) throw badRequest(`Requested scopes exceed the ${boundary} boundary: ${missing.join(', ')}.`)
 }
 
-function includesScopes(allowed: string[], requested: string[]) {
-  const allowedSet = new Set(allowed)
-  return requested.every((scope) => allowedSet.has(scope))
-}
-
 function exactScopes(left: string[], right: string[]) {
   return left.length === right.length && [...left].sort().every((value, index) => value === [...right].sort()[index])
+}
+
+function earliestEntitlementExpiry(entitlements: ResourceScopeEntitlementRecord[]) {
+  const expiries = entitlements.flatMap((entitlement) => (entitlement.expiresAt ? [entitlement.expiresAt] : []))
+  return expiries.length > 0 ? new Date(Math.min(...expiries.map((expiresAt) => expiresAt.getTime()))) : null
 }
 
 async function requireAgentResourceVisibility(
@@ -3555,7 +3612,7 @@ function toAgentAccessRequest(record: AgentAccessRequestRecord, hostId: string, 
     reason: record.reason,
     status: record.status as 'pending' | 'approved' | 'denied' | 'consumed' | 'expired',
     approvalUrl,
-    grantId: record.grantId,
+    approvedEntitlements: record.approvedEntitlements,
     expiresAt: record.expiresAt.toISOString(),
     decidedAt: record.decidedAt?.toISOString() ?? null,
     createdAt: record.createdAt.toISOString(),
@@ -3671,7 +3728,11 @@ function toAccessRequest(
     },
     links: {
       self,
-      credentials: request.grantId ? `${self}/credentials` : null,
+      credentials:
+        (request.status === 'approved' || request.status === 'consumed') &&
+        request.approvedEntitlements.length === request.scopes.length
+          ? `${self}/credentials`
+          : null,
     },
     credentialOffer: null,
     expiresAt: request.expiresAt,
@@ -3687,7 +3748,12 @@ async function agentAccessRequestRepresentation(
   apiOrigin: string,
 ): Promise<AccessRequest> {
   const representation = toAccessRequest(request, apiOrigin)
-  if ((request.status !== 'approved' && request.status !== 'consumed') || !request.grantId) return representation
+  if (
+    (request.status !== 'approved' && request.status !== 'consumed') ||
+    request.approvedEntitlements.length !== request.scopes.length
+  ) {
+    return representation
+  }
   const resourceServer = await requireEnabledResource(deps, request.resourceId)
   const authorization = await externalOAuthAuthorization(
     deps,
@@ -3713,28 +3779,35 @@ async function agentAccessRequestRepresentation(
   }
 }
 
-function toAccessGrant(
-  record: AgentAccessGrantRecord,
+function toScopeEntitlement(
+  record: ResourceScopeEntitlementRecord,
   resource: { id: string; identifier: string; name: string },
-): AgentAccessGrant {
+): AgentScopeEntitlement {
   return {
     id: record.id,
-    agentId: record.agentIdentityId,
+    agentId: record.agentIdentityId!,
     target: {
       type: 'api-resource',
-      apiResourceId: record.resourceId,
+      apiResourceId: record.resourceServerId,
       ...(record.connectionId ? { accountConnectionId: record.connectionId } : {}),
     },
     resource: { id: resource.id, identifier: resource.identifier, name: resource.name },
-    scopes: record.scopes,
+    scope: record.scope,
     authorizationDetails: record.authorizationDetails,
-    mode: record.mode as AgentAccessGrant['mode'],
-    status: record.status as AgentAccessGrant['status'],
+    mode: record.mode as AgentScopeEntitlement['mode'],
+    status: record.endedAt
+      ? record.endReason!
+      : record.expiresAt && record.expiresAt.getTime() <= Date.now()
+        ? 'expired'
+        : 'active',
+    sourceAccessRequestId: record.sourceAccessRequestId,
     expiresAt: record.expiresAt?.toISOString() ?? null,
+    endedAt: record.endedAt?.toISOString() ?? null,
+    endReason: record.endReason,
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
     links: {
-      self: `/api/agents/${encodeURIComponent(record.agentIdentityId)}/access-grants/${encodeURIComponent(record.id)}`,
+      self: `/api/agents/${encodeURIComponent(record.agentIdentityId!)}/scope-entitlements/${encodeURIComponent(record.id)}`,
     },
   }
 }

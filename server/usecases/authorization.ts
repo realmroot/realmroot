@@ -29,12 +29,12 @@ import type {
   AddMemberRequest,
   ApiResourceResponse,
   CreateApiResourceRequest,
-  CreateApplicationScopeGrantRequest,
+  CreateApplicationScopeEntitlementRequest,
   CreateInvitationRequest,
   CreateOrganizationRequest,
   CreateRoleRequest,
-  CreateUserScopeGrantRequest,
-  ListScopeGrantsQuery,
+  CreateUserScopeEntitlementRequest,
+  ListScopeEntitlementsQuery,
   PaginationQuery,
   ReplaceMemberRolesRequest,
   RoleResponse,
@@ -533,7 +533,7 @@ function resourceMutationAudit(
     hostId: actor.agent?.hostId ?? null,
     resourceId,
     resourceConnectionId: null,
-    accessGrantId: null,
+    accessRequestId: null,
     scopes: null,
     reasonCode: null,
     metadata: { authorizationRecordsRevoked: true },
@@ -556,72 +556,87 @@ export async function deleteResource(deps: Deps, id: string, actor: MutationActo
   }
 }
 
-export async function createUserScopeGrant(
+export async function createUserScopeEntitlement(
   deps: Deps,
   userId: string,
-  input: CreateUserScopeGrantRequest,
+  input: CreateUserScopeEntitlementRequest,
   grantedByUserId: string,
 ) {
   await deps.users.getUser(userId)
   const resource = await getResource(deps, input.resourceServerId)
   if (!resource.enabled) throw badRequest('Resource Server must be active.')
-  validateAssignedScopes(resource, input.scopes)
+  validateAssignedScope(resource, input.scope)
   if (resource.visibility === 'private') {
     const membership = await deps.authorization.findMemberByOrganizationUser(resource.ownerOrganizationId, userId)
     if (!membership) throw badRequest('Private Resource Server grants require an owner Organization member.')
   }
   if (input.organizationId) {
     const membership = await deps.authorization.findMemberByOrganizationUser(input.organizationId, userId)
-    if (!membership) throw badRequest('User scope grant Organization must contain the target user.')
+    if (!membership) throw badRequest('User scope Entitlement Organization must contain the target user.')
     if (!activeResourceVisibleToOrganization(resource, input.organizationId)) {
       throw badRequest('Resource Server is not visible to the grant Organization.')
     }
   }
-  const expiresAt = input.expiresAt ? new Date(input.expiresAt) : null
-  if (expiresAt && expiresAt.getTime() <= Date.now()) throw badRequest('Scope grant expiry must be in the future.')
-  return toUserScopeGrantResponse(
-    await deps.authorization.createUserScopeGrant({
-      id: createId('usg'),
-      userId,
-      organizationId: input.organizationId ?? null,
-      resourceServerId: resource.id,
-      scopes: [...new Set(input.scopes)].sort(),
-      grantedByUserId,
-      expiresAt,
-      revokedAt: null,
-      createdAt: new Date(),
-    }),
+  const now = new Date()
+  const expiresAt = input.mode === 'until' && input.expiresAt ? new Date(input.expiresAt) : null
+  if (input.mode === 'until' && !expiresAt) throw badRequest('Until Entitlements require an expiry.')
+  if (input.mode === 'persistent' && input.expiresAt) throw badRequest('Persistent Entitlements cannot expire.')
+  if (expiresAt && expiresAt.getTime() <= now.getTime()) throw badRequest('Entitlement expiry must be in the future.')
+  return toScopeEntitlementResponse(
+    await deps.authorization.createScopeEntitlement(
+      {
+        id: createId('ent'),
+        userId,
+        applicationId: null,
+        agentIdentityId: null,
+        organizationId: input.organizationId ?? null,
+        resourceServerId: resource.id,
+        connectionId: null,
+        authorizationDetails: [],
+        authorizationContextHash: await authorizationContextHash([]),
+        scope: input.scope,
+        mode: input.mode,
+        grantedByUserId,
+        sourceAccessRequestId: null,
+        expiresAt,
+        endedAt: null,
+        endReason: null,
+        createdAt: now,
+        updatedAt: now,
+      },
+      now,
+    ),
   )
 }
 
-export async function getUserScopeGrant(deps: Deps, id: string) {
-  const grant = await deps.authorization.findUserScopeGrant(id)
-  if (!grant || grant.revokedAt) throw notFound('User scope grant was not found.')
-  return toUserScopeGrantResponse(grant)
+export async function getUserScopeEntitlement(deps: Deps, id: string) {
+  const entitlement = await deps.authorization.findScopeEntitlement(id)
+  if (!entitlement?.userId) throw notFound('User scope Entitlement was not found.')
+  return toScopeEntitlementResponse(entitlement)
 }
 
-export async function listUserScopeGrants(
+export async function listUserScopeEntitlements(
   deps: Deps,
   userId: string,
-  query: ListScopeGrantsQuery,
+  query: ListScopeEntitlementsQuery,
   ownerOrganizationIds?: string[],
 ) {
   await deps.users.getUser(userId)
-  const result = await deps.authorization.listUserScopeGrants(userId, query, ownerOrganizationIds)
-  return { items: result.items.map(toUserScopeGrantResponse), pagination: result.pagination }
+  const result = await deps.authorization.listUserScopeEntitlements(userId, query, ownerOrganizationIds)
+  return { items: result.items.map(toScopeEntitlementResponse), pagination: result.pagination }
 }
 
-export async function revokeUserScopeGrant(deps: Deps, id: string) {
-  await getUserScopeGrant(deps, id)
-  if (!(await deps.authorization.revokeUserScopeGrant(id, new Date()))) {
-    throw conflict('User scope grant is already revoked.')
+export async function revokeUserScopeEntitlement(deps: Deps, id: string) {
+  await getUserScopeEntitlement(deps, id)
+  if (!(await deps.authorization.endScopeEntitlement(id, 'revoked', new Date()))) {
+    throw conflict('User scope Entitlement is already ended.')
   }
 }
 
-export async function createApplicationScopeGrant(
+export async function createApplicationScopeEntitlement(
   deps: Deps,
   applicationId: string,
-  input: CreateApplicationScopeGrantRequest,
+  input: CreateApplicationScopeEntitlementRequest,
   grantedByUserId: string,
 ) {
   const [resource, application] = await Promise.all([
@@ -639,85 +654,98 @@ export async function createApplicationScopeGrant(
   if (!activeResourceVisibleToOrganization(resource, application.ownerOrganizationId)) {
     throw badRequest('Resource Server is not visible to the Application owner Organization.')
   }
-  validateAssignedScopes(resource, input.scopes)
-  const expiresAt = input.expiresAt ? new Date(input.expiresAt) : null
-  if (expiresAt && expiresAt.getTime() <= Date.now()) throw badRequest('Scope grant expiry must be in the future.')
-  return toApplicationScopeGrantResponse(
-    await deps.authorization.createApplicationScopeGrant({
-      id: createId('asg'),
-      applicationId: application.id,
-      resourceServerId: resource.id,
-      scopes: [...new Set(input.scopes)].sort(),
-      grantedByUserId,
-      expiresAt,
-      revokedAt: null,
-      createdAt: new Date(),
-    }),
+  validateAssignedScope(resource, input.scope)
+  const now = new Date()
+  const expiresAt = input.mode === 'until' && input.expiresAt ? new Date(input.expiresAt) : null
+  if (input.mode === 'until' && !expiresAt) throw badRequest('Until Entitlements require an expiry.')
+  if (input.mode === 'persistent' && input.expiresAt) throw badRequest('Persistent Entitlements cannot expire.')
+  if (expiresAt && expiresAt.getTime() <= now.getTime()) throw badRequest('Entitlement expiry must be in the future.')
+  return toScopeEntitlementResponse(
+    await deps.authorization.createScopeEntitlement(
+      {
+        id: createId('ent'),
+        userId: null,
+        applicationId: application.id,
+        agentIdentityId: null,
+        organizationId: null,
+        resourceServerId: resource.id,
+        connectionId: null,
+        authorizationDetails: [],
+        authorizationContextHash: await authorizationContextHash([]),
+        scope: input.scope,
+        mode: input.mode,
+        grantedByUserId,
+        sourceAccessRequestId: null,
+        expiresAt,
+        endedAt: null,
+        endReason: null,
+        createdAt: now,
+        updatedAt: now,
+      },
+      now,
+    ),
   )
 }
 
-export async function getApplicationScopeGrant(deps: Deps, id: string) {
-  const grant = await deps.authorization.findApplicationScopeGrant(id)
-  if (!grant || grant.revokedAt) throw notFound('Application scope grant was not found.')
-  return toApplicationScopeGrantResponse(grant)
+export async function getApplicationScopeEntitlement(deps: Deps, id: string) {
+  const entitlement = await deps.authorization.findScopeEntitlement(id)
+  if (!entitlement?.applicationId) throw notFound('Application scope Entitlement was not found.')
+  return toScopeEntitlementResponse(entitlement)
 }
 
-export async function listApplicationScopeGrants(deps: Deps, applicationId: string, query: ListScopeGrantsQuery) {
-  const result = await deps.authorization.listApplicationScopeGrants(applicationId, query)
-  return { items: result.items.map(toApplicationScopeGrantResponse), pagination: result.pagination }
+export async function listApplicationScopeEntitlements(
+  deps: Deps,
+  applicationId: string,
+  query: ListScopeEntitlementsQuery,
+) {
+  const result = await deps.authorization.listApplicationScopeEntitlements(applicationId, query)
+  return { items: result.items.map(toScopeEntitlementResponse), pagination: result.pagination }
 }
 
-export async function revokeApplicationScopeGrant(deps: Deps, id: string) {
-  await getApplicationScopeGrant(deps, id)
-  if (!(await deps.authorization.revokeApplicationScopeGrant(id, new Date()))) {
-    throw conflict('Application scope grant is already revoked.')
+export async function revokeApplicationScopeEntitlement(deps: Deps, id: string) {
+  await getApplicationScopeEntitlement(deps, id)
+  if (!(await deps.authorization.endScopeEntitlement(id, 'revoked', new Date()))) {
+    throw conflict('Application scope Entitlement is already ended.')
   }
 }
 
-function validateAssignedScopes(resource: ApiResourceResponse, scopes: string[]) {
+function validateAssignedScope(resource: ApiResourceResponse, scope: string) {
   const assigned = new Set(
     resource.scopeRegistry?.scopes.filter((scope) => scope.grantMode === 'assigned').map((scope) => scope.value) ?? [],
   )
-  if (scopes.some((scope) => !assigned.has(scope))) {
+  if (!assigned.has(scope)) {
     throw badRequest('Direct grants may reference only assigned scopes in the current Resource Server registry.')
   }
 }
 
-function toUserScopeGrantResponse(grant: Awaited<ReturnType<Deps['authorization']['createUserScopeGrant']>>) {
+function toScopeEntitlementResponse(entitlement: Awaited<ReturnType<Deps['authorization']['createScopeEntitlement']>>) {
+  const status = entitlement.endedAt
+    ? entitlement.endReason!
+    : entitlement.expiresAt && entitlement.expiresAt.getTime() <= Date.now()
+      ? ('expired' as const)
+      : ('active' as const)
+  const subjectPath = entitlement.userId
+    ? `users/${encodeURIComponent(entitlement.userId)}`
+    : entitlement.applicationId
+      ? `applications/${encodeURIComponent(entitlement.applicationId)}`
+      : `agents/${encodeURIComponent(entitlement.agentIdentityId!)}`
   return {
-    id: grant.id,
-    userId: grant.userId,
-    organizationId: grant.organizationId,
-    resourceServerId: grant.resourceServerId,
-    scopes: grant.scopes,
-    status: grant.expiresAt && grant.expiresAt.getTime() <= Date.now() ? ('expired' as const) : ('active' as const),
-    grantedByUserId: grant.grantedByUserId,
-    expiresAt: grant.expiresAt?.toISOString() ?? null,
-    createdAt: grant.createdAt.toISOString(),
+    ...entitlement,
+    status,
+    expiresAt: entitlement.expiresAt?.toISOString() ?? null,
+    endedAt: entitlement.endedAt?.toISOString() ?? null,
+    createdAt: entitlement.createdAt.toISOString(),
+    updatedAt: entitlement.updatedAt.toISOString(),
     links: {
-      self: `/api/users/${encodeURIComponent(grant.userId)}/scope-grants/${encodeURIComponent(grant.id)}`,
-      resourceServer: `/api/resource-servers/${encodeURIComponent(grant.resourceServerId)}`,
+      self: `/api/${subjectPath}/scope-entitlements/${encodeURIComponent(entitlement.id)}`,
+      resourceServer: `/api/resource-servers/${encodeURIComponent(entitlement.resourceServerId)}`,
     },
   }
 }
 
-function toApplicationScopeGrantResponse(
-  grant: Awaited<ReturnType<Deps['authorization']['createApplicationScopeGrant']>>,
-) {
-  return {
-    id: grant.id,
-    applicationId: grant.applicationId,
-    resourceServerId: grant.resourceServerId,
-    scopes: grant.scopes,
-    status: grant.expiresAt && grant.expiresAt.getTime() <= Date.now() ? ('expired' as const) : ('active' as const),
-    grantedByUserId: grant.grantedByUserId,
-    expiresAt: grant.expiresAt?.toISOString() ?? null,
-    createdAt: grant.createdAt.toISOString(),
-    links: {
-      self: `/api/applications/${encodeURIComponent(grant.applicationId)}/scope-grants/${encodeURIComponent(grant.id)}`,
-      resourceServer: `/api/resource-servers/${encodeURIComponent(grant.resourceServerId)}`,
-    },
-  }
+async function authorizationContextHash(details: unknown[]) {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(details)))
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('')
 }
 
 export async function createRole(deps: Deps, organizationId: string, input: CreateRoleRequest, actor: MutationActor) {
@@ -983,7 +1011,7 @@ function authorizationAudit(
     hostId: actor.agent?.hostId ?? null,
     resourceId: null,
     resourceConnectionId: null,
-    accessGrantId: null,
+    accessRequestId: null,
     scopes: null,
     reasonCode: null,
     metadata,

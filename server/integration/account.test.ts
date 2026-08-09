@@ -1,12 +1,12 @@
 import { applyD1Migrations, env, reset } from 'cloudflare:test'
 import {
-  agentAccessGrant,
   agentAccessRequest,
   agentIdentity,
   agentIdentityBinding,
   apiResource,
   identityProviderConnector,
   resourceConnectionIntent,
+  resourceScopeEntitlement,
   verification,
 } from '@server/db/schema'
 import { eq } from 'drizzle-orm'
@@ -236,13 +236,14 @@ describe('account self-service over real D1', () => {
       createdAt: now,
       updatedAt: now,
     })
-    await harness.db.insert(agentAccessGrant).values({
-      id: 'household-agent-grant',
-      resourceId,
+    await harness.db.insert(resourceScopeEntitlement).values({
+      id: 'ent_household',
+      resourceServerId: resourceId,
       agentIdentityId: 'household-agent',
-      scopes: ['household:read'],
+      authorizationDetails: [],
+      authorizationContextHash: '4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945',
+      scope: 'household:read',
       mode: 'persistent',
-      status: 'active',
       grantedByUserId: userId,
       createdAt: now,
       updatedAt: now,
@@ -292,14 +293,19 @@ describe('account self-service over real D1', () => {
     await expect(roles.json()).resolves.toMatchObject({
       roles: expect.arrayContaining([expect.objectContaining({ key: 'owner', predefined: true })]),
     })
-    const agentAccessGrants = await harness.request('/api/agents/household-agent/access-grants?status=active', {
-      headers: { cookie },
+    const agentScopeEntitlements = await harness.request(
+      '/api/agents/household-agent/scope-entitlements?status=active',
+      {
+        headers: { cookie },
+      },
+    )
+    expect(agentScopeEntitlements.status, await agentScopeEntitlements.clone().text()).toBe(200)
+    await expect(agentScopeEntitlements.json()).resolves.toMatchObject({
+      items: [{ id: 'ent_household', agentId: 'household-agent', scope: 'household:read' }],
     })
-    expect(agentAccessGrants.status, await agentAccessGrants.clone().text()).toBe(200)
-    await expect(agentAccessGrants.json()).resolves.toMatchObject({
-      items: [{ id: 'household-agent-grant', agentId: 'household-agent', scopes: ['household:read'] }],
-    })
-    expect((await harness.request('/api/agents/missing-agent/access-grants', { headers: { cookie } })).status).toBe(404)
+    expect(
+      (await harness.request('/api/agents/missing-agent/scope-entitlements', { headers: { cookie } })).status,
+    ).toBe(404)
     const profile = await harness.request('/api/account/profile', { headers: { cookie } })
     await expect(profile.json()).resolves.toMatchObject({ user: { id: userId } })
     const developerAccess = await harness.request('/api/account/developer-console-access', {

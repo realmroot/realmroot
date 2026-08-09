@@ -30,7 +30,7 @@ describe('effective Resource Server scopes', () => {
   it('combines current automatic, direct, and Role scopes', async () => {
     const authorization = {
       listUserMemberships: vi.fn().mockResolvedValue([{ organizationId: 'org-1', roles: ['operator'] }]),
-      listActiveUserScopeGrants: vi.fn().mockResolvedValue([{ scopes: ['direct', 'removed'] }]),
+      listActiveUserScopeEntitlements: vi.fn().mockResolvedValue([{ scope: 'direct' }, { scope: 'removed' }]),
       listOrganizationRoleScopes: vi
         .fn()
         .mockResolvedValue(new Map([['operator', [{ resourceId: resource.id, scope: 'role' }]]])),
@@ -49,7 +49,7 @@ describe('effective Resource Server scopes', () => {
   it('fails closed for invisible and empty registries', async () => {
     const authorization = {
       listUserMemberships: vi.fn().mockResolvedValue([]),
-      listActiveUserScopeGrants: vi.fn().mockResolvedValue([{ scopes: ['removed'] }]),
+      listActiveUserScopeEntitlements: vi.fn().mockResolvedValue([{ scope: 'removed' }]),
     }
     const deps = { authorization } as unknown as Deps
     await expect(
@@ -62,7 +62,7 @@ describe('effective Resource Server scopes', () => {
 
   it('combines Application scopes only for visible owners', async () => {
     const authorization = {
-      listActiveApplicationScopeGrants: vi.fn().mockResolvedValue([{ scopes: ['direct', 'removed'] }]),
+      listActiveApplicationScopeEntitlements: vi.fn().mockResolvedValue([{ scope: 'direct' }, { scope: 'removed' }]),
     }
     const deps = { authorization } as unknown as Deps
     const app = { id: 'app-1', ownerOrganizationId: 'org-1' } as ApplicationAggregate

@@ -104,6 +104,11 @@ func handleCredentialSource(
 					Type: "dpop-nonce", Nonce: challenge.nonce,
 				}}, nil
 			}
+			if terminalCredentialPermissionError(err) {
+				if removeErr := states.RemoveCredentialOffer(reference); removeErr != nil {
+					return credentialSourceOutput{}, fmt.Errorf("remove invalid Resource credential offer: %w", removeErr)
+				}
+			}
 			return credentialSourceOutput{}, err
 		}
 		return credentialSourceOutput{Credential: &credentialSourceCredential{
@@ -117,6 +122,12 @@ func handleCredentialSource(
 	default:
 		return credentialSourceOutput{}, fmt.Errorf("unsupported Realmroot credential source action %q", input.Action)
 	}
+}
+
+func terminalCredentialPermissionError(err error) bool {
+	var responseErr *httpResponseError
+	return errors.As(err, &responseErr) &&
+		(responseErr.StatusCode == http.StatusForbidden || responseErr.StatusCode == http.StatusNotFound)
 }
 
 func issueTargetCredential(

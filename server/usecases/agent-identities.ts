@@ -12,7 +12,7 @@ import type {
 import type {
   Agent,
   AgentEnrollment,
-  ListAgentAccessGrantsQuery,
+  ListAgentScopeEntitlementsQuery,
   ListManagementAgentAccessRequestsQuery,
 } from '@shared/api/agent-api'
 import type {
@@ -147,68 +147,57 @@ export async function getManagementAgentAccessRequest(deps: Deps, requestId: str
   }
 }
 
-export async function listManagementAgentAccessGrants(
+export async function listManagementAgentScopeEntitlements(
   deps: Deps,
-  query: ListAgentAccessGrantsQuery & { agentId: string },
+  query: ListAgentScopeEntitlementsQuery & { agentId: string },
   scope?: AgentAuthorityInventoryScope,
 ) {
-  const result = await deps.externalResources.listGrants(query, scope)
+  const result = await deps.externalResources.listAgentScopeEntitlements(query, scope)
   return {
-    items: result.items.map(({ grant, resource }) => ({
-      id: grant.id,
-      agentId: grant.agentIdentityId,
+    items: result.items.map(({ entitlement, resource }) => ({
+      id: entitlement.id,
+      agentId: entitlement.agentIdentityId!,
       target: {
         type: 'api-resource' as const,
-        apiResourceId: grant.resourceId,
-        ...(grant.connectionId ? { accountConnectionId: grant.connectionId } : {}),
+        apiResourceId: entitlement.resourceServerId,
+        ...(entitlement.connectionId ? { accountConnectionId: entitlement.connectionId } : {}),
       },
       resource,
-      scopes: grant.scopes,
-      authorizationDetails: grant.authorizationDetails,
-      mode: grant.mode,
-      status:
-        grant.status === 'active' && grant.expiresAt && grant.expiresAt.getTime() <= Date.now()
+      scope: entitlement.scope,
+      authorizationDetails: entitlement.authorizationDetails,
+      mode: entitlement.mode,
+      status: entitlement.endedAt
+        ? entitlement.endReason!
+        : entitlement.expiresAt && entitlement.expiresAt.getTime() <= Date.now()
           ? ('expired' as const)
-          : grant.status,
-      expiresAt: grant.expiresAt?.toISOString() ?? null,
-      createdAt: grant.createdAt.toISOString(),
-      updatedAt: grant.updatedAt.toISOString(),
+          : ('active' as const),
+      sourceAccessRequestId: entitlement.sourceAccessRequestId,
+      expiresAt: entitlement.expiresAt?.toISOString() ?? null,
+      endedAt: entitlement.endedAt?.toISOString() ?? null,
+      endReason: entitlement.endReason,
+      createdAt: entitlement.createdAt.toISOString(),
+      updatedAt: entitlement.updatedAt.toISOString(),
       links: {
-        self: `/api/agents/${encodeURIComponent(grant.agentIdentityId)}/access-grants/${encodeURIComponent(grant.id)}`,
+        self: `/api/agents/${encodeURIComponent(entitlement.agentIdentityId!)}/scope-entitlements/${encodeURIComponent(entitlement.id)}`,
       },
     })),
     pagination: paginationMetadata(result),
   }
 }
 
-export async function getManagementAgentAccessGrant(deps: Deps, grantId: string) {
-  const grant = await deps.externalResources.findGrant(grantId)
-  if (!grant || grant.status === 'revoked') throw notFound('Agent access grant was not found.')
-  await requireIdentity(deps, grant.agentIdentityId)
-  const resource = await getManagementResource(deps, grant.resourceId, 'Agent access grant was not found.')
-  return {
-    id: grant.id,
-    agentId: grant.agentIdentityId,
-    target: {
-      type: 'api-resource' as const,
-      apiResourceId: grant.resourceId,
-      ...(grant.connectionId ? { accountConnectionId: grant.connectionId } : {}),
-    },
-    resource,
-    scopes: grant.scopes,
-    authorizationDetails: grant.authorizationDetails,
-    mode: grant.mode,
-    status:
-      grant.status === 'active' && grant.expiresAt && grant.expiresAt.getTime() <= Date.now()
-        ? ('expired' as const)
-        : grant.status,
-    expiresAt: grant.expiresAt?.toISOString() ?? null,
-    createdAt: grant.createdAt.toISOString(),
-    updatedAt: grant.updatedAt.toISOString(),
-    links: {
-      self: `/api/agents/${encodeURIComponent(grant.agentIdentityId)}/access-grants/${encodeURIComponent(grant.id)}`,
-    },
-  }
+export async function getManagementAgentScopeEntitlement(deps: Deps, entitlementId: string) {
+  const entitlement = await deps.externalResources.findEntitlement(entitlementId)
+  if (!entitlement?.agentIdentityId) throw notFound('Agent scope Entitlement was not found.')
+  await requireIdentity(deps, entitlement.agentIdentityId)
+  const result = await listManagementAgentScopeEntitlements(deps, {
+    agentId: entitlement.agentIdentityId,
+    resourceId: entitlement.resourceServerId,
+    limit: 100,
+    offset: 0,
+  })
+  const projected = result.items.find((item) => item.id === entitlement.id)
+  if (!projected) throw notFound('Agent scope Entitlement was not found.')
+  return projected
 }
 
 export async function getAgentIdentityByProtocolAgent(deps: Deps, protocolAgentId: string): Promise<AgentIdentity> {
@@ -640,7 +629,8 @@ function toManagementAgent(
     owner,
     installationCount: aggregate.bindings.filter((binding) => binding.status === 'active').length,
     pendingRequestCount: access.pendingRequestCount,
-    activeGrantCount: access.activeGrantCount,
+    activeResourceCount: access.activeResourceCount,
+    activeScopeCount: access.activeScopeCount,
   }
 }
 

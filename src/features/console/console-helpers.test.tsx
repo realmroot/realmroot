@@ -76,7 +76,7 @@ describe('admin console helpers', () => {
       'overview',
       'authentication',
       'sessions',
-      'access-grants',
+      'scope-entitlements',
       'agents',
       'authorized-apps',
       'settings',

@@ -156,8 +156,8 @@ export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> =
         ),
       findOrganization: vi.fn().mockResolvedValue(null),
       findResource: vi.fn().mockResolvedValue(null),
-      listActiveUserScopeGrants: vi.fn().mockResolvedValue([]),
-      listActiveApplicationScopeGrants: vi.fn().mockResolvedValue([]),
+      listActiveUserScopeEntitlements: vi.fn().mockResolvedValue([]),
+      listActiveApplicationScopeEntitlements: vi.fn().mockResolvedValue([]),
       hasPendingInvitation: vi.fn().mockResolvedValue(false),
     },
     configz: {
@@ -225,7 +225,6 @@ export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> =
       createAccessRequest: vi.fn().mockImplementation(async (input) => input),
       createAccessRequestWithAudit: vi.fn().mockImplementation(async (input) => input),
       findAccessRequest: vi.fn().mockResolvedValue(null),
-      findAccessRequestByGrant: vi.fn().mockResolvedValue(null),
       findAccessRequestByApprovalTokenHash: vi.fn().mockResolvedValue(null),
       listAccessRequests: vi.fn().mockResolvedValue(emptyPage()),
       listPendingAccessRequestsByAgent: vi.fn().mockResolvedValue([]),
@@ -234,22 +233,26 @@ export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> =
       decideAccessRequestWithAudit: vi.fn().mockResolvedValue(null),
       consumeAccessRequest: vi.fn().mockResolvedValue(false),
       listPendingAccessRequestsByConnections: vi.fn().mockResolvedValue([]),
-      createGrant: vi.fn().mockImplementation(async (input) => input),
-      approveAccessRequestWithAudit: vi.fn().mockImplementation(async (grant, _requestId, decision) => ({
-        grant,
-        request: { ...grant, ...decision },
-      })),
-      findGrant: vi.fn().mockResolvedValue(null),
-      listActiveGrantsByAgent: vi.fn().mockResolvedValue([]),
-      listGrants: vi.fn().mockResolvedValue(emptyPage()),
+      approveAccessRequestWithEntitlements: vi
+        .fn()
+        .mockImplementation(async (entitlements, _updates, requestId, decision) => ({
+          entitlements,
+          request: { id: requestId, ...decision },
+        })),
+      findEntitlement: vi.fn().mockResolvedValue(null),
+      findEntitlements: vi.fn(async (ids: string[]) => {
+        const records = await Promise.all(ids.map((id) => base.externalResources.findEntitlement(id)))
+        return records.filter((record) => record !== null)
+      }),
+      listActiveEntitlementsByAgent: vi.fn().mockResolvedValue([]),
+      listAgentScopeEntitlements: vi.fn().mockResolvedValue(emptyPage()),
       summarizeAgentAccess: vi.fn().mockResolvedValue(new Map()),
-      listActiveGrantsByConnection: vi.fn().mockResolvedValue([]),
-      revokeGrant: vi.fn().mockResolvedValue(false),
-      revokeGrantWithAudit: vi.fn().mockResolvedValue(false),
-      consumeGrant: vi.fn().mockResolvedValue(false),
+      listActiveEntitlementsByConnection: vi.fn().mockResolvedValue([]),
+      endEntitlement: vi.fn().mockResolvedValue(false),
+      endEntitlementWithAudit: vi.fn().mockResolvedValue(false),
       createTokenLease: vi.fn().mockImplementation(async (input) => input),
       issueTokenLeaseWithAudit: vi.fn().mockImplementation(async (input) => input),
-      listActiveTokenLeasesByGrant: vi.fn().mockResolvedValue([]),
+      listActiveTokenLeasesByEntitlement: vi.fn().mockResolvedValue([]),
       listActiveTokenLeasesByBinding: vi.fn().mockResolvedValue([]),
       revokeTokenLease: vi.fn().mockResolvedValue(false),
     },
@@ -368,24 +371,25 @@ export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> =
     if (request) await base.agentAudit.append(audit)
     return request
   })
-  base.externalResources.approveAccessRequestWithAudit.mockImplementation(async (grant, requestId, decision, audit) => {
-    const createdGrant = await base.externalResources.createGrant(grant)
-    if (!createdGrant) return 'grant_unavailable'
-    const request = await base.externalResources.decideAccessRequest(requestId, decision)
-    if (request) await base.agentAudit.append(audit)
-    return request ? { grant: createdGrant, request } : 'request_changed'
-  })
-  base.externalResources.issueTokenLeaseWithAudit.mockImplementation(async (input, consumeGrant, now, audit) => {
-    const lease = await base.externalResources.createTokenLease(input)
-    if (!lease) return null
-    await base.externalResources.consumeAccessRequest(input.requestId, now)
-    if (consumeGrant) await base.externalResources.consumeGrant(input.grantId, now)
-    await base.agentAudit.append(audit)
-    return lease
-  })
-  base.externalResources.revokeGrantWithAudit.mockImplementation(async (id, tokenLeaseIds, now, audit) => {
+  base.externalResources.approveAccessRequestWithEntitlements.mockImplementation(
+    async (entitlements, _updates, requestId, decision, audit) => {
+      const request = await base.externalResources.decideAccessRequest(requestId, decision)
+      if (request) await base.agentAudit.append(audit)
+      return request ? { entitlements, request } : 'request_changed'
+    },
+  )
+  base.externalResources.issueTokenLeaseWithAudit.mockImplementation(
+    async (input, _consumeEntitlementIds, now, audit) => {
+      const lease = await base.externalResources.createTokenLease(input)
+      if (!lease) return null
+      await base.externalResources.consumeAccessRequest(input.requestId, now)
+      await base.agentAudit.append(audit)
+      return lease
+    },
+  )
+  base.externalResources.endEntitlementWithAudit.mockImplementation(async (id, reason, tokenLeaseIds, now, audit) => {
     for (const leaseId of tokenLeaseIds) await base.externalResources.revokeTokenLease(leaseId, now)
-    const revoked = await base.externalResources.revokeGrant(id, now)
+    const revoked = await base.externalResources.endEntitlement(id, reason, now)
     await base.agentAudit.append(audit)
     return revoked
   })

@@ -170,7 +170,10 @@ export const agentAccessRequest = sqliteTable(
     status: text('status').notNull().default('pending'),
     approvalTokenHash: text('approval_token_hash').notNull().unique(),
     encryptedApprovalToken: text('encrypted_approval_token').notNull(),
-    grantId: text('grant_id'),
+    approvedEntitlements: text('approved_entitlements', { mode: 'json' })
+      .$type<Array<{ scope: string; entitlementId: string }>>()
+      .notNull()
+      .default(sql`'[]'`),
     expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
     decidedAt: integer('decided_at', { mode: 'timestamp_ms' }),
     createdAt: integer('created_at', { mode: 'timestamp_ms' })
@@ -189,51 +192,11 @@ export const agentAccessRequest = sqliteTable(
   ],
 )
 
-export const agentAccessGrant = sqliteTable(
-  'agent_access_grant',
-  {
-    id: text('id').primaryKey(),
-    resourceId: text('resource_id')
-      .notNull()
-      .references(() => apiResource.id, { onDelete: 'restrict' }),
-    connectionId: text('connection_id').references(() => providerResourceAuthorization.id, { onDelete: 'restrict' }),
-    agentIdentityId: text('agent_identity_id')
-      .notNull()
-      .references(() => agentIdentity.id, { onDelete: 'restrict' }),
-    scopes: text('scopes', { mode: 'json' }).$type<string[]>().notNull(),
-    authorizationDetails: text('authorization_details', { mode: 'json' })
-      .$type<AuthorizationDetail[]>()
-      .notNull()
-      .default(sql`'[]'`),
-    mode: text('mode').notNull(),
-    status: text('status').notNull().default('active'),
-    grantedByUserId: text('granted_by_user_id')
-      .notNull()
-      .references(() => user.id, { onDelete: 'restrict' }),
-    expiresAt: integer('expires_at', { mode: 'timestamp_ms' }),
-    revokedAt: integer('revoked_at', { mode: 'timestamp_ms' }),
-    createdAt: integer('created_at', { mode: 'timestamp_ms' })
-      .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
-      .notNull(),
-    updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
-      .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
-      .notNull(),
-  },
-  (table) => [
-    index('agentAccessGrant_resourceId_idx').on(table.resourceId),
-    index('agentAccessGrant_connectionId_idx').on(table.connectionId),
-    index('agentAccessGrant_agentIdentityId_idx').on(table.agentIdentityId),
-    index('agentAccessGrant_status_idx').on(table.status),
-  ],
-)
-
 export const externalTokenLease = sqliteTable(
   'external_token_lease',
   {
     id: text('id').primaryKey(),
-    grantId: text('grant_id')
-      .notNull()
-      .references(() => agentAccessGrant.id, { onDelete: 'restrict' }),
+    entitlementIds: text('entitlement_ids', { mode: 'json' }).$type<string[]>().notNull(),
     requestId: text('request_id')
       .notNull()
       .references(() => agentAccessRequest.id, { onDelete: 'restrict' }),
@@ -255,7 +218,7 @@ export const externalTokenLease = sqliteTable(
       .notNull(),
   },
   (table) => [
-    index('externalTokenLease_grantId_idx').on(table.grantId),
+    index('externalTokenLease_requestId_idx').on(table.requestId),
     index('externalTokenLease_bindingId_idx').on(table.bindingId),
     index('externalTokenLease_expiresAt_idx').on(table.expiresAt),
   ],

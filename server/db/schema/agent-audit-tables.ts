@@ -17,7 +17,7 @@ export const agentAuditEvent = sqliteTable(
     hostId: text('host_id'),
     resourceId: text('resource_id'),
     resourceConnectionId: text('resource_connection_id'),
-    accessGrantId: text('access_grant_id'),
+    accessRequestId: text('access_request_id'),
     scopes: text('scopes', { mode: 'json' }).$type<string[]>(),
     reasonCode: text('reason_code'),
     metadata: text('metadata', { mode: 'json' }).$type<Record<string, unknown>>(),

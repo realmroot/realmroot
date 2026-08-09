@@ -1,9 +1,11 @@
 import type {
+  AgentAccessRequestRecord,
   AgentAuditEventRecord,
   AgentAuthorityInventoryScope,
   ExternalResourceRepository,
   ProviderConnectionRecord,
   ProviderResourceAuthorizationRecord,
+  ResourceScopeEntitlementRecord,
 } from '@server/usecases/ports'
 import {
   and,
@@ -25,7 +27,6 @@ import {
 import type { Database } from '../../db/client'
 import {
   account,
-  agentAccessGrant,
   agentAccessRequest,
   agentAuditEvent,
   agentConnectionRequest,
@@ -37,6 +38,7 @@ import {
   providerConnectionEventReceipt,
   providerResourceAuthorization,
   resourceConnectionIntent,
+  resourceScopeEntitlement,
 } from '../../db/schema'
 
 export function createExternalResourceRepository(db: Database): ExternalResourceRepository {
@@ -144,25 +146,28 @@ export function createExternalResourceRepository(db: Database): ExternalResource
             ),
           ),
       )
-      const revokeGrant = authorityInvalidationPredicate(
+      const revokeEntitlement = authorityEntitlementInvalidationPredicate(
         input,
-        agentAccessGrant.authorizationDetails,
-        agentAccessGrant.scopes,
+        resourceScopeEntitlement.authorizationDetails,
+        resourceScopeEntitlement.scope,
       )
       const expireRequest =
         input.type === 'suspended'
           ? sql<boolean>`1`
           : authorityInvalidationPredicate(input, agentAccessRequest.authorizationDetails, agentAccessRequest.scopes)
       const revokeEveryLease = input.type === 'suspended' || input.type === 'revoked'
-      const affectedGrant = exists(
+      const affectedEntitlement = exists(
         db
-          .select({ id: agentAccessGrant.id })
-          .from(agentAccessGrant)
+          .select({ id: resourceScopeEntitlement.id })
+          .from(resourceScopeEntitlement)
           .where(
             and(
-              eq(agentAccessGrant.id, externalTokenLease.grantId),
-              eq(agentAccessGrant.connectionId, target.authorization.id),
-              revokeEveryLease ? undefined : eq(agentAccessGrant.status, 'revoked'),
+              sql`exists (
+                select 1 from json_each(${externalTokenLease.entitlementIds}) as lease_entitlement
+                where lease_entitlement.value = ${resourceScopeEntitlement.id}
+              )`,
+              eq(resourceScopeEntitlement.connectionId, target.authorization.id),
+              revokeEveryLease ? undefined : eq(resourceScopeEntitlement.endReason, 'revoked'),
               currentEvent,
             ),
           ),
@@ -198,13 +203,13 @@ export function createExternalResourceRepository(db: Database): ExternalResource
             ),
           ),
         db
-          .update(agentAccessGrant)
-          .set({ status: 'revoked', revokedAt: input.receivedAt, updatedAt: input.receivedAt })
+          .update(resourceScopeEntitlement)
+          .set({ endedAt: input.receivedAt, endReason: 'revoked', updatedAt: input.receivedAt })
           .where(
             and(
-              eq(agentAccessGrant.connectionId, target.authorization.id),
-              eq(agentAccessGrant.status, 'active'),
-              revokeGrant,
+              eq(resourceScopeEntitlement.connectionId, target.authorization.id),
+              isNull(resourceScopeEntitlement.endedAt),
+              revokeEntitlement,
               currentEvent,
             ),
           ),
@@ -222,14 +227,14 @@ export function createExternalResourceRepository(db: Database): ExternalResource
               ),
             ),
           db
-            .update(agentAccessGrant)
-            .set({ status: 'revoked', revokedAt: input.receivedAt, updatedAt: input.receivedAt })
+            .update(resourceScopeEntitlement)
+            .set({ endedAt: input.receivedAt, endReason: 'revoked', updatedAt: input.receivedAt })
             .where(
               and(
-                eq(agentAccessGrant.connectionId, target.authorization.id),
-                eq(agentAccessGrant.status, 'active'),
-                scopesContain(agentAccessGrant.scopes, scope),
-                authorizationDetailsNotSubset(agentAccessGrant.authorizationDetails, authorizationDetails),
+                eq(resourceScopeEntitlement.connectionId, target.authorization.id),
+                isNull(resourceScopeEntitlement.endedAt),
+                eq(resourceScopeEntitlement.scope, scope),
+                authorizationDetailsNotSubset(resourceScopeEntitlement.authorizationDetails, authorizationDetails),
                 currentEvent,
               ),
             ),
@@ -237,7 +242,7 @@ export function createExternalResourceRepository(db: Database): ExternalResource
         db
           .update(externalTokenLease)
           .set({ revokedAt: input.receivedAt })
-          .where(and(isNull(externalTokenLease.revokedAt), affectedGrant)),
+          .where(and(isNull(externalTokenLease.revokedAt), affectedEntitlement)),
         db
           .update(providerConnection)
           .set({ status: providerConnectionStatus(target.connection.status, input.type), updatedAt: input.receivedAt })
@@ -683,11 +688,6 @@ export function createExternalResourceRepository(db: Database): ExternalResource
       return row ?? null
     },
 
-    async findAccessRequestByGrant(grantId) {
-      const [row] = await db.select().from(agentAccessRequest).where(eq(agentAccessRequest.grantId, grantId)).limit(1)
-      return row ?? null
-    },
-
     async findAccessRequestByApprovalTokenHash(tokenHash) {
       const [row] = await db
         .select()
@@ -763,17 +763,15 @@ export function createExternalResourceRepository(db: Database): ExternalResource
 
     async decideAccessRequest(id, input) {
       const conditions = [eq(agentAccessRequest.id, id), eq(agentAccessRequest.status, 'pending')]
-      if (input.status === 'approved' && input.grantId) {
+      if (input.status === 'approved' && input.approvedEntitlements.length > 0) {
         conditions.push(
           exists(
             db
-              .select({ id: agentAccessGrant.id })
-              .from(agentAccessGrant)
-              .innerJoin(apiResource, eq(apiResource.id, agentAccessGrant.resourceId))
+              .select({ id: apiResource.id })
+              .from(apiResource)
               .where(
                 and(
-                  eq(agentAccessGrant.id, input.grantId),
-                  eq(agentAccessGrant.status, 'active'),
+                  eq(apiResource.id, agentAccessRequest.resourceId),
                   eq(apiResource.enabled, true),
                   isNull(apiResource.deletedAt),
                 ),
@@ -820,56 +818,92 @@ export function createExternalResourceRepository(db: Database): ExternalResource
         .orderBy(agentAccessRequest.createdAt)
     },
 
-    async createGrant(input) {
-      const [row] = await insertGrant(input)
-      return row ?? null
-    },
-
-    async approveAccessRequestWithAudit(grant, requestId, decision, audit, expectedConnectionRevision) {
-      const [grants, requests] = await db.batch([
-        insertGrant(grant, requestId, expectedConnectionRevision),
+    async approveAccessRequestWithEntitlements(
+      entitlements,
+      entitlementUpdates,
+      requestId,
+      decision,
+      audit,
+      expectedConnectionRevision,
+    ) {
+      const statements = [
+        ...entitlements.map((entitlement) => insertEntitlement(entitlement, requestId, expectedConnectionRevision)),
+        ...entitlementUpdates.map((update) =>
+          db
+            .update(resourceScopeEntitlement)
+            .set({
+              mode: update.mode,
+              expiresAt: update.expiresAt,
+              authorizationContextHash: update.authorizationContextHash,
+              updatedAt: update.updatedAt,
+            })
+            .where(and(eq(resourceScopeEntitlement.id, update.id), isNull(resourceScopeEntitlement.endedAt)))
+            .returning(),
+        ),
         updateAccessRequestDecision(requestId, decision),
-        db
-          .insert(agentAuditEvent)
-          .select(db.select(auditProjection(audit)).from(agentAccessGrant).where(eq(agentAccessGrant.id, grant.id))),
-      ])
-      if (!grants[0]) return 'grant_unavailable'
-      if (!requests[0]) return 'request_changed'
-      return { grant: grants[0], request: requests[0] }
+        db.insert(agentAuditEvent).select(
+          db
+            .select(auditProjection(audit))
+            .from(agentAccessRequest)
+            .where(and(eq(agentAccessRequest.id, requestId), eq(agentAccessRequest.status, 'approved'))),
+        ),
+      ] as const
+      const results = await db.batch(
+        statements as unknown as [(typeof statements)[number], ...Array<(typeof statements)[number]>],
+      )
+      const requestRows = results[entitlements.length + entitlementUpdates.length] as AgentAccessRequestRecord[]
+      const inserted = results.slice(0, entitlements.length).flat() as ResourceScopeEntitlementRecord[]
+      if (inserted.length !== entitlements.length) return 'resource_unavailable'
+      const updated = results.slice(entitlements.length, entitlements.length + entitlementUpdates.length)
+      if (updated.some((rows) => !Array.isArray(rows) || rows.length !== 1)) return 'resource_unavailable'
+      if (!requestRows[0]) return 'request_changed'
+      return { entitlements: inserted, request: requestRows[0] }
     },
 
-    async findGrant(id) {
-      const [row] = await db.select().from(agentAccessGrant).where(eq(agentAccessGrant.id, id)).limit(1)
+    async findEntitlement(id) {
+      const [row] = await db.select().from(resourceScopeEntitlement).where(eq(resourceScopeEntitlement.id, id)).limit(1)
       return row ?? null
     },
 
-    async listActiveGrantsByAgent(agentIdentityId) {
+    async findEntitlements(ids) {
+      if (ids.length === 0) return []
+      return db.select().from(resourceScopeEntitlement).where(inArray(resourceScopeEntitlement.id, ids))
+    },
+
+    async listActiveEntitlementsByAgent(agentIdentityId, now) {
       return db
         .select()
-        .from(agentAccessGrant)
-        .where(and(eq(agentAccessGrant.agentIdentityId, agentIdentityId), eq(agentAccessGrant.status, 'active')))
-        .orderBy(agentAccessGrant.createdAt)
+        .from(resourceScopeEntitlement)
+        .where(
+          and(
+            eq(resourceScopeEntitlement.agentIdentityId, agentIdentityId),
+            isNull(resourceScopeEntitlement.endedAt),
+            or(isNull(resourceScopeEntitlement.expiresAt), gt(resourceScopeEntitlement.expiresAt, now)),
+          ),
+        )
+        .orderBy(resourceScopeEntitlement.createdAt)
     },
 
-    async listGrants(query, scope) {
+    async listAgentScopeEntitlements(query, scope) {
       const now = new Date()
       const statusCondition =
         query.status === 'expired'
-          ? and(eq(agentAccessGrant.status, 'active'), lte(agentAccessGrant.expiresAt, now))
+          ? or(eq(resourceScopeEntitlement.endReason, 'expired'), lte(resourceScopeEntitlement.expiresAt, now))
           : query.status === 'active'
             ? and(
-                eq(agentAccessGrant.status, 'active'),
-                or(isNull(agentAccessGrant.expiresAt), gt(agentAccessGrant.expiresAt, now)),
+                isNull(resourceScopeEntitlement.endedAt),
+                or(isNull(resourceScopeEntitlement.expiresAt), gt(resourceScopeEntitlement.expiresAt, now)),
               )
-            : query.status
-              ? eq(agentAccessGrant.status, query.status)
-              : undefined
+            : query.status === 'consumed'
+              ? eq(resourceScopeEntitlement.endReason, 'consumed')
+              : query.status
+                ? eq(resourceScopeEntitlement.endReason, query.status)
+                : undefined
       const where = and(
-        query.agentId ? eq(agentAccessGrant.agentIdentityId, query.agentId) : undefined,
-        query.resourceId ? eq(agentAccessGrant.resourceId, query.resourceId) : undefined,
+        query.agentId ? eq(resourceScopeEntitlement.agentIdentityId, query.agentId) : undefined,
+        query.resourceId ? eq(resourceScopeEntitlement.resourceServerId, query.resourceId) : undefined,
         query.organizationId ? eq(agentIdentity.ownerOrganizationId, query.organizationId) : undefined,
         authorityOwnerCondition(scope),
-        ne(agentAccessGrant.status, 'revoked'),
         isNull(agentIdentity.deletedAt),
         isNull(apiResource.deletedAt),
         statusCondition,
@@ -877,21 +911,21 @@ export function createExternalResourceRepository(db: Database): ExternalResource
       const [items, totals] = await Promise.all([
         db
           .select({
-            grant: agentAccessGrant,
+            entitlement: resourceScopeEntitlement,
             resource: { id: apiResource.id, identifier: apiResource.identifier, name: apiResource.name },
           })
-          .from(agentAccessGrant)
-          .innerJoin(agentIdentity, eq(agentAccessGrant.agentIdentityId, agentIdentity.id))
-          .innerJoin(apiResource, eq(agentAccessGrant.resourceId, apiResource.id))
+          .from(resourceScopeEntitlement)
+          .innerJoin(agentIdentity, eq(resourceScopeEntitlement.agentIdentityId, agentIdentity.id))
+          .innerJoin(apiResource, eq(resourceScopeEntitlement.resourceServerId, apiResource.id))
           .where(where)
-          .orderBy(desc(agentAccessGrant.createdAt), desc(agentAccessGrant.id))
+          .orderBy(desc(resourceScopeEntitlement.createdAt), desc(resourceScopeEntitlement.id))
           .limit(query.limit)
           .offset(query.offset),
         db
           .select({ value: count() })
-          .from(agentAccessGrant)
-          .innerJoin(agentIdentity, eq(agentAccessGrant.agentIdentityId, agentIdentity.id))
-          .innerJoin(apiResource, eq(agentAccessGrant.resourceId, apiResource.id))
+          .from(resourceScopeEntitlement)
+          .innerJoin(agentIdentity, eq(resourceScopeEntitlement.agentIdentityId, agentIdentity.id))
+          .innerJoin(apiResource, eq(resourceScopeEntitlement.resourceServerId, apiResource.id))
           .where(where),
       ])
       return {
@@ -904,7 +938,7 @@ export function createExternalResourceRepository(db: Database): ExternalResource
 
     async summarizeAgentAccess(agentIdentityIds, now) {
       if (agentIdentityIds.length === 0) return new Map()
-      const [requests, grants] = await Promise.all([
+      const [requests, entitlements] = await Promise.all([
         db
           .select({ agentIdentityId: agentAccessRequest.agentIdentityId, value: count() })
           .from(agentAccessRequest)
@@ -921,59 +955,76 @@ export function createExternalResourceRepository(db: Database): ExternalResource
           )
           .groupBy(agentAccessRequest.agentIdentityId),
         db
-          .select({ agentIdentityId: agentAccessGrant.agentIdentityId, value: count() })
-          .from(agentAccessGrant)
-          .innerJoin(agentIdentity, eq(agentAccessGrant.agentIdentityId, agentIdentity.id))
-          .innerJoin(apiResource, eq(agentAccessGrant.resourceId, apiResource.id))
+          .select({
+            agentIdentityId: resourceScopeEntitlement.agentIdentityId,
+            scopes: count(),
+            resources: sql<number>`count(distinct ${resourceScopeEntitlement.resourceServerId})`,
+          })
+          .from(resourceScopeEntitlement)
+          .innerJoin(agentIdentity, eq(resourceScopeEntitlement.agentIdentityId, agentIdentity.id))
+          .innerJoin(apiResource, eq(resourceScopeEntitlement.resourceServerId, apiResource.id))
           .where(
             and(
-              inArray(agentAccessGrant.agentIdentityId, agentIdentityIds),
-              eq(agentAccessGrant.status, 'active'),
-              or(isNull(agentAccessGrant.expiresAt), gt(agentAccessGrant.expiresAt, now)),
+              inArray(resourceScopeEntitlement.agentIdentityId, agentIdentityIds),
+              isNull(resourceScopeEntitlement.endedAt),
+              or(isNull(resourceScopeEntitlement.expiresAt), gt(resourceScopeEntitlement.expiresAt, now)),
               isNull(agentIdentity.deletedAt),
               isNull(apiResource.deletedAt),
             ),
           )
-          .groupBy(agentAccessGrant.agentIdentityId),
+          .groupBy(resourceScopeEntitlement.agentIdentityId),
       ])
       const summaries = new Map(
-        agentIdentityIds.map((agentIdentityId) => [agentIdentityId, { pendingRequestCount: 0, activeGrantCount: 0 }]),
+        agentIdentityIds.map((agentIdentityId) => [
+          agentIdentityId,
+          { pendingRequestCount: 0, activeResourceCount: 0, activeScopeCount: 0 },
+        ]),
       )
       for (const row of requests) summaries.get(row.agentIdentityId)!.pendingRequestCount = row.value
-      for (const row of grants) summaries.get(row.agentIdentityId)!.activeGrantCount = row.value
+      for (const row of entitlements) {
+        const summary = summaries.get(row.agentIdentityId!)!
+        summary.activeScopeCount = row.scopes
+        summary.activeResourceCount = row.resources
+      }
       return summaries
     },
 
-    async listActiveGrantsByConnection(connectionId) {
+    async listActiveEntitlementsByConnection(connectionId, now) {
       return db
         .select()
-        .from(agentAccessGrant)
-        .where(and(eq(agentAccessGrant.connectionId, connectionId), eq(agentAccessGrant.status, 'active')))
-        .orderBy(agentAccessGrant.createdAt)
+        .from(resourceScopeEntitlement)
+        .where(
+          and(
+            eq(resourceScopeEntitlement.connectionId, connectionId),
+            isNull(resourceScopeEntitlement.endedAt),
+            or(isNull(resourceScopeEntitlement.expiresAt), gt(resourceScopeEntitlement.expiresAt, now)),
+          ),
+        )
+        .orderBy(resourceScopeEntitlement.createdAt)
     },
 
-    async revokeGrant(id, now) {
+    async endEntitlement(id, reason, now) {
       const [row] = await db
-        .update(agentAccessGrant)
-        .set({ status: 'revoked', revokedAt: now, updatedAt: now })
-        .where(and(eq(agentAccessGrant.id, id), eq(agentAccessGrant.status, 'active')))
-        .returning({ id: agentAccessGrant.id })
+        .update(resourceScopeEntitlement)
+        .set({ endedAt: now, endReason: reason, updatedAt: now })
+        .where(and(eq(resourceScopeEntitlement.id, id), isNull(resourceScopeEntitlement.endedAt)))
+        .returning({ id: resourceScopeEntitlement.id })
       return Boolean(row)
     },
 
-    async revokeGrantWithAudit(id, tokenLeaseIds, now, audit) {
+    async endEntitlementWithAudit(id, reason, tokenLeaseIds, now, audit) {
       const statements = [
         db.insert(agentAuditEvent).select(
           db
             .select(auditProjection(audit))
-            .from(agentAccessGrant)
-            .where(and(eq(agentAccessGrant.id, id), eq(agentAccessGrant.status, 'active'))),
+            .from(resourceScopeEntitlement)
+            .where(and(eq(resourceScopeEntitlement.id, id), isNull(resourceScopeEntitlement.endedAt))),
         ),
         db
-          .update(agentAccessGrant)
-          .set({ status: 'revoked', revokedAt: now, updatedAt: now })
-          .where(and(eq(agentAccessGrant.id, id), eq(agentAccessGrant.status, 'active')))
-          .returning({ id: agentAccessGrant.id }),
+          .update(resourceScopeEntitlement)
+          .set({ endedAt: now, endReason: reason, updatedAt: now })
+          .where(and(eq(resourceScopeEntitlement.id, id), isNull(resourceScopeEntitlement.endedAt)))
+          .returning({ id: resourceScopeEntitlement.id }),
         ...(tokenLeaseIds.length > 0
           ? [
               db
@@ -984,17 +1035,8 @@ export function createExternalResourceRepository(db: Database): ExternalResource
           : []),
       ] as const
       const results = await db.batch(statements)
-      const grantResult = results[1]
-      return Array.isArray(grantResult) && grantResult.length > 0
-    },
-
-    async consumeGrant(id, now) {
-      const [row] = await db
-        .update(agentAccessGrant)
-        .set({ status: 'consumed', updatedAt: now })
-        .where(and(eq(agentAccessGrant.id, id), eq(agentAccessGrant.status, 'active')))
-        .returning({ id: agentAccessGrant.id })
-      return Boolean(row)
+      const entitlementResult = results[1]
+      return Array.isArray(entitlementResult) && entitlementResult.length > 0
     },
 
     async createTokenLease(input) {
@@ -1002,7 +1044,7 @@ export function createExternalResourceRepository(db: Database): ExternalResource
       return row ?? null
     },
 
-    async issueTokenLeaseWithAudit(input, consumeOneTimeGrant, now, audit) {
+    async issueTokenLeaseWithAudit(input, consumeEntitlementIds, now, audit) {
       const statements = [
         insertTokenLease(input),
         db
@@ -1020,15 +1062,15 @@ export function createExternalResourceRepository(db: Database): ExternalResource
               ),
             ),
           ),
-        ...(consumeOneTimeGrant
+        ...(consumeEntitlementIds.length > 0
           ? [
               db
-                .update(agentAccessGrant)
-                .set({ status: 'consumed', updatedAt: now })
+                .update(resourceScopeEntitlement)
+                .set({ endedAt: now, endReason: 'consumed', updatedAt: now })
                 .where(
                   and(
-                    eq(agentAccessGrant.id, input.grantId),
-                    eq(agentAccessGrant.status, 'active'),
+                    inArray(resourceScopeEntitlement.id, consumeEntitlementIds),
+                    isNull(resourceScopeEntitlement.endedAt),
                     exists(
                       db
                         .select({ id: externalTokenLease.id })
@@ -1049,13 +1091,16 @@ export function createExternalResourceRepository(db: Database): ExternalResource
       return leases[0] ?? null
     },
 
-    async listActiveTokenLeasesByGrant(grantId, now) {
+    async listActiveTokenLeasesByEntitlement(entitlementId, now) {
       return db
         .select()
         .from(externalTokenLease)
         .where(
           and(
-            eq(externalTokenLease.grantId, grantId),
+            sql`exists (
+              select 1 from json_each(${externalTokenLease.entitlementIds}) as lease_entitlement
+              where lease_entitlement.value = ${entitlementId}
+            )`,
             gt(externalTokenLease.expiresAt, now),
             isNull(externalTokenLease.revokedAt),
           ),
@@ -1108,7 +1153,9 @@ export function createExternalResourceRepository(db: Database): ExternalResource
             status: sql<string>`${input.status}`.as('status'),
             approvalTokenHash: sql<string>`${input.approvalTokenHash}`.as('approval_token_hash'),
             encryptedApprovalToken: sql<string>`${input.encryptedApprovalToken}`.as('encrypted_approval_token'),
-            grantId: sql<string | null>`${input.grantId}`.as('grant_id'),
+            approvedEntitlements: sql<
+              typeof input.approvedEntitlements
+            >`${JSON.stringify(input.approvedEntitlements)}`.as('approved_entitlements'),
             expiresAt: sql<Date>`${input.expiresAt.getTime()}`.as('expires_at'),
             decidedAt: sql<Date | null>`${input.decidedAt?.getTime() ?? null}`.as('decided_at'),
             createdAt: sql<Date>`${input.createdAt.getTime()}`.as('created_at'),
@@ -1125,22 +1172,32 @@ export function createExternalResourceRepository(db: Database): ExternalResource
     input: Parameters<ExternalResourceRepository['decideAccessRequest']>[1],
   ) {
     const conditions = [eq(agentAccessRequest.id, id), eq(agentAccessRequest.status, 'pending')]
-    if (input.status === 'approved' && input.grantId) {
+    if (input.status === 'approved') {
       conditions.push(
         exists(
           db
-            .select({ id: agentAccessGrant.id })
-            .from(agentAccessGrant)
-            .innerJoin(apiResource, eq(apiResource.id, agentAccessGrant.resourceId))
+            .select({ id: apiResource.id })
+            .from(apiResource)
             .where(
               and(
-                eq(agentAccessGrant.id, input.grantId),
-                eq(agentAccessGrant.status, 'active'),
+                eq(apiResource.id, agentAccessRequest.resourceId),
                 eq(apiResource.enabled, true),
                 isNull(apiResource.deletedAt),
               ),
             ),
         ),
+        sql`json_array_length(${JSON.stringify(input.approvedEntitlements)}) = json_array_length(${agentAccessRequest.scopes})`,
+        sql`not exists (
+          select 1 from json_each(${JSON.stringify(input.approvedEntitlements)}) as approved
+          left join resource_scope_entitlement as entitlement
+            on entitlement.id = json_extract(approved.value, '$.entitlementId')
+          where entitlement.id is null
+            or entitlement.agent_identity_id <> ${agentAccessRequest.agentIdentityId}
+            or entitlement.resource_server_id <> ${agentAccessRequest.resourceId}
+            or entitlement.connection_id is not ${input.connectionId ?? null}
+            or entitlement.scope <> json_extract(approved.value, '$.scope')
+            or entitlement.ended_at is not null
+        )`,
       )
     }
     return db
@@ -1150,9 +1207,9 @@ export function createExternalResourceRepository(db: Database): ExternalResource
       .returning()
   }
 
-  function insertGrant(
-    input: Parameters<ExternalResourceRepository['createGrant']>[0],
-    requestId?: string,
+  function insertEntitlement(
+    input: ResourceScopeEntitlementRecord,
+    requestId: string,
     expectedConnectionRevision?: number | null,
   ) {
     const activeConnection = input.connectionId
@@ -1173,56 +1230,41 @@ export function createExternalResourceRepository(db: Database): ExternalResource
             ),
         )
       : undefined
-    const source = requestId
-      ? db
-          .select({
-            id: sql<string>`${input.id}`.as('id'),
-            resourceId: apiResource.id,
-            connectionId: sql<string | null>`${input.connectionId}`.as('connection_id'),
-            agentIdentityId: sql<string>`${input.agentIdentityId}`.as('agent_identity_id'),
-            scopes: sql<string[]>`${JSON.stringify(input.scopes)}`.as('scopes'),
-            authorizationDetails: sql<
-              typeof input.authorizationDetails
-            >`${JSON.stringify(input.authorizationDetails)}`.as('authorization_details'),
-            mode: sql<string>`${input.mode}`.as('mode'),
-            status: sql<string>`${input.status}`.as('status'),
-            grantedByUserId: sql<string>`${input.grantedByUserId}`.as('granted_by_user_id'),
-            expiresAt: sql<Date | null>`${input.expiresAt?.getTime() ?? null}`.as('expires_at'),
-            revokedAt: sql<Date | null>`${input.revokedAt?.getTime() ?? null}`.as('revoked_at'),
-            createdAt: sql<Date>`${input.createdAt.getTime()}`.as('created_at'),
-            updatedAt: sql<Date>`${input.updatedAt.getTime()}`.as('updated_at'),
-          })
-          .from(apiResource)
-          .innerJoin(
-            agentAccessRequest,
-            and(
-              eq(agentAccessRequest.id, requestId),
-              eq(agentAccessRequest.resourceId, apiResource.id),
-              eq(agentAccessRequest.status, 'pending'),
-            ),
-          )
-          .where(and(activeResource(input.resourceId), activeConnection))
-      : db
-          .select({
-            id: sql<string>`${input.id}`.as('id'),
-            resourceId: apiResource.id,
-            connectionId: sql<string | null>`${input.connectionId}`.as('connection_id'),
-            agentIdentityId: sql<string>`${input.agentIdentityId}`.as('agent_identity_id'),
-            scopes: sql<string[]>`${JSON.stringify(input.scopes)}`.as('scopes'),
-            authorizationDetails: sql<
-              typeof input.authorizationDetails
-            >`${JSON.stringify(input.authorizationDetails)}`.as('authorization_details'),
-            mode: sql<string>`${input.mode}`.as('mode'),
-            status: sql<string>`${input.status}`.as('status'),
-            grantedByUserId: sql<string>`${input.grantedByUserId}`.as('granted_by_user_id'),
-            expiresAt: sql<Date | null>`${input.expiresAt?.getTime() ?? null}`.as('expires_at'),
-            revokedAt: sql<Date | null>`${input.revokedAt?.getTime() ?? null}`.as('revoked_at'),
-            createdAt: sql<Date>`${input.createdAt.getTime()}`.as('created_at'),
-            updatedAt: sql<Date>`${input.updatedAt.getTime()}`.as('updated_at'),
-          })
-          .from(apiResource)
-          .where(and(activeResource(input.resourceId), activeConnection))
-    return db.insert(agentAccessGrant).select(source).returning()
+    const source = db
+      .select({
+        id: sql<string>`${input.id}`.as('id'),
+        userId: sql<string | null>`null`.as('user_id'),
+        applicationId: sql<string | null>`null`.as('application_id'),
+        agentIdentityId: sql<string | null>`${input.agentIdentityId}`.as('agent_identity_id'),
+        organizationId: sql<string | null>`null`.as('organization_id'),
+        resourceServerId: apiResource.id,
+        connectionId: sql<string | null>`${input.connectionId}`.as('connection_id'),
+        authorizationDetails: sql<typeof input.authorizationDetails>`${JSON.stringify(input.authorizationDetails)}`.as(
+          'authorization_details',
+        ),
+        authorizationContextHash: sql<string>`${input.authorizationContextHash}`.as('authorization_context_hash'),
+        scope: sql<string>`${input.scope}`.as('scope'),
+        mode: sql<string>`${input.mode}`.as('mode'),
+        grantedByUserId: sql<string>`${input.grantedByUserId}`.as('granted_by_user_id'),
+        sourceAccessRequestId: agentAccessRequest.id,
+        expiresAt: sql<Date | null>`${input.expiresAt?.getTime() ?? null}`.as('expires_at'),
+        endedAt: sql<Date | null>`null`.as('ended_at'),
+        endReason: sql<string | null>`null`.as('end_reason'),
+        createdAt: sql<Date>`${input.createdAt.getTime()}`.as('created_at'),
+        updatedAt: sql<Date>`${input.updatedAt.getTime()}`.as('updated_at'),
+      })
+      .from(apiResource)
+      .innerJoin(
+        agentAccessRequest,
+        and(
+          eq(agentAccessRequest.id, requestId),
+          eq(agentAccessRequest.resourceId, apiResource.id),
+          eq(agentAccessRequest.agentIdentityId, input.agentIdentityId!),
+          eq(agentAccessRequest.status, 'pending'),
+        ),
+      )
+      .where(and(activeResource(input.resourceServerId), activeConnection))
+    return db.insert(resourceScopeEntitlement).select(source).returning()
   }
 
   function insertTokenLease(input: Parameters<ExternalResourceRepository['createTokenLease']>[0]) {
@@ -1232,7 +1274,7 @@ export function createExternalResourceRepository(db: Database): ExternalResource
         db
           .select({
             id: sql<string>`${input.id}`.as('id'),
-            grantId: agentAccessGrant.id,
+            entitlementIds: sql<string[]>`${JSON.stringify(input.entitlementIds)}`.as('entitlement_ids'),
             requestId: sql<string>`${input.requestId}`.as('request_id'),
             bindingId: sql<string>`${input.bindingId}`.as('binding_id'),
             encryptedAccessToken: sql<string>`${input.encryptedAccessToken}`.as('encrypted_access_token'),
@@ -1246,29 +1288,42 @@ export function createExternalResourceRepository(db: Database): ExternalResource
             revokedAt: sql<Date | null>`${input.revokedAt?.getTime() ?? null}`.as('revoked_at'),
             createdAt: sql<Date>`${input.createdAt.getTime()}`.as('created_at'),
           })
-          .from(agentAccessGrant)
-          .innerJoin(apiResource, eq(apiResource.id, agentAccessGrant.resourceId))
-          .innerJoin(
-            agentAccessRequest,
-            and(
-              eq(agentAccessRequest.id, input.requestId),
-              eq(agentAccessRequest.grantId, agentAccessGrant.id),
-              inArray(agentAccessRequest.status, ['approved', 'consumed']),
-            ),
-          )
+          .from(agentAccessRequest)
+          .innerJoin(apiResource, eq(apiResource.id, agentAccessRequest.resourceId))
           .where(
             and(
-              eq(agentAccessGrant.id, input.grantId),
-              eq(agentAccessGrant.status, 'active'),
+              eq(agentAccessRequest.id, input.requestId),
+              inArray(agentAccessRequest.status, ['approved', 'consumed']),
+              sql`json_array_length(${agentAccessRequest.approvedEntitlements}) > 0`,
+              sql`not exists (
+                select 1
+                from json_each(${agentAccessRequest.approvedEntitlements}) as approved
+                left join resource_scope_entitlement as entitlement
+                  on entitlement.id = json_extract(approved.value, '$.entitlementId')
+                where entitlement.id is null
+                  or entitlement.ended_at is not null
+                  or (entitlement.expires_at is not null and entitlement.expires_at <= ${input.createdAt.getTime()})
+                  or not exists (
+                    select 1 from json_each(${JSON.stringify(input.entitlementIds)}) as supplied
+                    where supplied.value = entitlement.id
+                  )
+              )`,
+              sql`not exists (
+                select 1 from json_each(${JSON.stringify(input.entitlementIds)}) as supplied
+                where not exists (
+                  select 1 from json_each(${agentAccessRequest.approvedEntitlements}) as approved
+                  where json_extract(approved.value, '$.entitlementId') = supplied.value
+                )
+              )`,
               or(
-                isNull(agentAccessGrant.connectionId),
+                isNull(agentAccessRequest.connectionId),
                 exists(
                   db
                     .select({ id: providerResourceAuthorization.id })
                     .from(providerResourceAuthorization)
                     .where(
                       and(
-                        eq(providerResourceAuthorization.id, agentAccessGrant.connectionId),
+                        eq(providerResourceAuthorization.id, agentAccessRequest.connectionId),
                         eq(providerResourceAuthorization.status, 'active'),
                       ),
                     ),
@@ -1297,7 +1352,7 @@ export function createExternalResourceRepository(db: Database): ExternalResource
       hostId: sql<string | null>`${audit.hostId}`.as('host_id'),
       resourceId: sql<string | null>`${audit.resourceId}`.as('resource_id'),
       resourceConnectionId: sql<string | null>`${audit.resourceConnectionId}`.as('resource_connection_id'),
-      accessGrantId: sql<string | null>`${audit.accessGrantId}`.as('access_grant_id'),
+      accessRequestId: sql<string | null>`${audit.accessRequestId}`.as('access_request_id'),
       scopes: sql<string[] | null>`${audit.scopes === null ? null : JSON.stringify(audit.scopes)}`.as('scopes'),
       reasonCode: sql<string | null>`${audit.reasonCode}`.as('reason_code'),
       metadata: sql<Record<
@@ -1342,9 +1397,36 @@ function authorityOwnerCondition(scope?: AgentAuthorityInventoryScope) {
 type ConnectionEventInput = Parameters<ExternalResourceRepository['applyProviderConnectionEvent']>[0]
 
 type AuthorizationDetailsColumn =
-  | typeof agentAccessGrant.authorizationDetails
+  | typeof resourceScopeEntitlement.authorizationDetails
   | typeof agentAccessRequest.authorizationDetails
-type ScopesColumn = typeof agentAccessGrant.scopes | typeof agentAccessRequest.scopes
+type ScopesColumn = typeof agentAccessRequest.scopes
+
+function authorityEntitlementInvalidationPredicate(
+  event: ConnectionEventInput,
+  detailsColumn: typeof resourceScopeEntitlement.authorizationDetails,
+  scopeColumn: typeof resourceScopeEntitlement.scope,
+) {
+  if (event.type === 'revoked') return sql<boolean>`1`
+  if (event.type === 'suspended') return sql<boolean>`0`
+  if (event.type === 'authorityChanged') {
+    const affected = authorizationDetailsOverlap(detailsColumn, event.affectedAuthorizationDetails)
+    return sql<boolean>`(${affected} AND ${scopeNotIn(scopeColumn, event.affectedScopes)})`
+  }
+  if (event.type === 'resourcesChanged' || event.type === 'restored') {
+    const scopeUnavailable = scopeNotIn(scopeColumn, event.scopes)
+    const detailsUnavailable = authorizationDetailsNotSubset(detailsColumn, event.authorizationDetails)
+    return sql<boolean>`(${scopeUnavailable} OR ${detailsUnavailable})`
+  }
+  return sql<boolean>`0`
+}
+
+function scopeNotIn(column: typeof resourceScopeEntitlement.scope, allowed: string[]) {
+  if (allowed.length === 0) return sql<boolean>`1`
+  return sql<boolean>`${column} NOT IN (${sql.join(
+    allowed.map((scope) => sql`${scope}`),
+    sql`, `,
+  )})`
+}
 
 function authorityInvalidationPredicate(
   event: ConnectionEventInput,
