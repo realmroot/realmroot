@@ -437,6 +437,9 @@ async function completeBrokeredResourceConnectionIntent(
     credentialExpiresAt: null,
     revokedAt: null,
     updatedAt: now,
+    ...(existing && existing.brokerReference !== brokerReference
+      ? { providerEventOccurredAt: null, providerEventRevision: null }
+      : {}),
   }
   const connection = existing
     ? await deps.externalResources.replaceConnectionAuthorization(existing.id, intent.resourceId, authorizationInput)

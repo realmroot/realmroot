@@ -758,6 +758,8 @@ export interface ExternalResourceRepository {
       authorizationDetails: AuthorizationDetail[]
       authorityConstraints: ProviderAuthorityConstraint[]
       clientGeneration?: number
+      providerEventOccurredAt?: Date | null
+      providerEventRevision?: number | null
       status: 'active'
       credentialExpiresAt: Date | null
       revokedAt: null

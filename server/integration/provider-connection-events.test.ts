@@ -13,6 +13,7 @@ import {
   user,
 } from '@server/db/schema'
 import { decideAgentAccessRequest } from '@server/usecases/external-resources'
+import type { JsonValue } from '@shared/api/authorization-details'
 import { eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createHarness, type Harness, seedAgent, signInAdmin } from './harness'
@@ -305,6 +306,124 @@ describe('Provider Connection Events over real D1', () => {
       providerEventOccurredAt: null,
       providerEventRevision: null,
     })
+  })
+
+  it('[spec: agent-identity/provider-connection-events] resets event ordering only when the broker authority changes', async () => {
+    const previousEventAt = new Date('2026-08-08T20:01:00.000Z')
+    await harness.db
+      .update(providerResourceAuthorization)
+      .set({ providerEventOccurredAt: previousEventAt, providerEventRevision: 7 })
+      .where(eq(providerResourceAuthorization.id, 'event-connection'))
+
+    await harness.deps.externalResources.replaceConnectionAuthorization('event-connection', 'event-resource', {
+      credentialCustody: 'resource_server',
+      encryptedTokens: null,
+      brokerReference: 'installation-2',
+      grantedScopes: ['contents:read'],
+      authorizationDetails: [{ type: 'provider_installation', resource_id: 'repository-1' }],
+      authorityConstraints: constraintsFor(
+        [{ type: 'provider_installation', resource_id: 'repository-1' }],
+        ['contents:read'],
+      ),
+      providerEventOccurredAt: null,
+      providerEventRevision: null,
+      status: 'active',
+      credentialExpiresAt: null,
+      revokedAt: null,
+      updatedAt: new Date('2026-08-08T20:02:00.000Z'),
+    })
+
+    let [connection] = await harness.db
+      .select()
+      .from(providerResourceAuthorization)
+      .where(eq(providerResourceAuthorization.id, 'event-connection'))
+    expect(connection).toMatchObject({
+      brokerReference: 'installation-2',
+      providerEventOccurredAt: null,
+      providerEventRevision: null,
+    })
+
+    expect(
+      (
+        await putEvent(harness, 'delivery-new-broker-first', {
+          type: 'authorityChanged',
+          resource,
+          brokerReference: 'installation-2',
+          occurredAt: '2026-08-08T20:03:00.000Z',
+          revision: 1,
+          scopes: ['contents:read'],
+          affectedScopes: ['contents:read'],
+          affectedAuthorizationDetails: [{ type: 'provider_installation', resource_id: 'repository-1' }],
+          authorityConstraints: constraintsFor(
+            [{ type: 'provider_installation', resource_id: 'repository-1' }],
+            ['contents:read'],
+          ),
+        })
+      ).status,
+    ).toBe(204)
+    expect(
+      (
+        await putEvent(harness, 'delivery-old-broker-replay', {
+          type: 'revoked',
+          resource,
+          brokerReference: 'installation-1',
+          occurredAt: '2026-08-08T20:04:00.000Z',
+          revision: 8,
+        })
+      ).status,
+    ).toBe(404)
+
+    ;[connection] = await harness.db
+      .select()
+      .from(providerResourceAuthorization)
+      .where(eq(providerResourceAuthorization.id, 'event-connection'))
+    expect(connection).toMatchObject({
+      brokerReference: 'installation-2',
+      providerEventRevision: 1,
+      status: 'active',
+    })
+
+    await harness.deps.externalResources.replaceConnectionAuthorization('event-connection', 'event-resource', {
+      credentialCustody: 'resource_server',
+      encryptedTokens: null,
+      brokerReference: 'installation-2',
+      grantedScopes: ['contents:read'],
+      authorizationDetails: [{ type: 'provider_installation', resource_id: 'repository-1' }],
+      authorityConstraints: constraintsFor(
+        [{ type: 'provider_installation', resource_id: 'repository-1' }],
+        ['contents:read'],
+      ),
+      status: 'active',
+      credentialExpiresAt: null,
+      revokedAt: null,
+      updatedAt: new Date('2026-08-08T20:05:00.000Z'),
+    })
+    ;[connection] = await harness.db
+      .select()
+      .from(providerResourceAuthorization)
+      .where(eq(providerResourceAuthorization.id, 'event-connection'))
+    expect(connection).toMatchObject({
+      brokerReference: 'installation-2',
+      providerEventRevision: 1,
+    })
+    expect(
+      (
+        await putEvent(harness, 'delivery-same-broker-equal-revision', {
+          type: 'authorityChanged',
+          resource,
+          brokerReference: 'installation-2',
+          occurredAt: '2026-08-08T20:06:00.000Z',
+          revision: 1,
+          scopes: ['contents:read'],
+          affectedScopes: ['contents:read'],
+          affectedAuthorizationDetails: [{ type: 'provider_installation', resource_id: 'repository-1' }],
+          authorityConstraints: constraintsFor(
+            [{ type: 'provider_installation', resource_id: 'repository-1' }],
+            ['contents:read'],
+          ),
+        })
+      ).status,
+    ).toBe(409)
   })
 
   it('[spec: agent-identity/provider-connection-events] isolates affected scopes from an adjacent authority', async () => {
@@ -979,6 +1098,6 @@ async function putEvent(harness: Harness, eventId: string, representation: Recor
   })
 }
 
-function constraintsFor(authorizationDetails: Array<Record<string, unknown>>, scopes: string[]) {
+function constraintsFor(authorizationDetails: Array<{ type: string; [key: string]: JsonValue }>, scopes: string[]) {
   return authorizationDetails.map((authorizationDetail) => ({ authorizationDetails: [authorizationDetail], scopes }))
 }

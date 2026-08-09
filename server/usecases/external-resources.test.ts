@@ -653,6 +653,8 @@ describe('external API resource authorization', () => {
       credentialCustody: 'resource_server',
       encryptedTokens: null,
       brokerReference: 'connection-1',
+      providerEventOccurredAt: new Date('2026-08-08T20:00:00.000Z'),
+      providerEventRevision: 1,
       grantedScopes: ['projects:read'],
       authorizationDetails: [{ type: 'github_installation', installation_id: '152097080', account_login: 'realmroot' }],
     }
@@ -831,7 +833,7 @@ describe('external API resource authorization', () => {
       Response.json({
         external_subject: externalSubject,
         display_name: 'GitHub Controller',
-        broker_reference: 'connection-1',
+        broker_reference: existing.providerConnectionId,
         authorization_details: [
           { type: 'github_installation', installation_id: '152097080', account_login: 'realmroot' },
         ],
@@ -878,8 +880,30 @@ describe('external API resource authorization', () => {
     expect(deps.externalResources.replaceConnectionAuthorization).toHaveBeenCalledWith(
       existing.id,
       native.id,
-      expect.objectContaining({ credentialCustody: 'resource_server', encryptedTokens: null }),
+      expect.objectContaining({
+        credentialCustody: 'resource_server',
+        encryptedTokens: null,
+        brokerReference: existing.providerConnectionId,
+        providerEventOccurredAt: null,
+        providerEventRevision: null,
+      }),
     )
+
+    const sameReference = {
+      ...existing,
+      brokerReference: existing.providerConnectionId,
+      providerEventOccurredAt: new Date('2026-08-08T20:05:00.000Z'),
+      providerEventRevision: 2,
+    }
+    vi.mocked(deps.externalResources.findConnectionByOwnerResource).mockResolvedValue(sameReference)
+    vi.mocked(deps.externalHttp.fetch).mockResolvedValueOnce(brokerResponse(existing.externalSubject))
+    vi.mocked(deps.externalResources.replaceConnectionAuthorization).mockClear()
+    await expect(
+      completeResourceConnectionIntent(deps, { state: 'state', code: 'code' }, 'https://auth.example.com'),
+    ).resolves.toMatchObject({ id: existing.id })
+    const sameReferenceInput = vi.mocked(deps.externalResources.replaceConnectionAuthorization).mock.calls[0]![2]
+    expect(sameReferenceInput).not.toHaveProperty('providerEventOccurredAt')
+    expect(sameReferenceInput).not.toHaveProperty('providerEventRevision')
   })
 
   it('preserves a same-subject connection identity while switching only it to a new client generation', async () => {
