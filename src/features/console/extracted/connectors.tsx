@@ -102,6 +102,7 @@ export function ConnectorsPage() {
     onSuccess: () => {
       setSelectedProviderKey(null)
       return queryClient.invalidateQueries({
+        exact: true,
         queryKey: consoleQueryKeys.connectors,
       })
     },
@@ -141,6 +142,7 @@ export function ConnectorsPage() {
       setSelectedProviderKey(null)
       queryClient.setQueryData([...consoleQueryKeys.connectors, connector.id], connector)
       return queryClient.invalidateQueries({
+        exact: true,
         queryKey: consoleQueryKeys.connectors,
       })
     },
@@ -151,6 +153,7 @@ export function ConnectorsPage() {
       setDeleteTarget(null)
       setSelectedProviderKey(null)
       return queryClient.invalidateQueries({
+        exact: true,
         queryKey: consoleQueryKeys.connectors,
       })
     },

@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { queryClientDefaultOptions } from '@/lib/query-client'
 import { AppRouter, queryClient } from '@/router'
 
 globalThis.ResizeObserver ??= class ResizeObserver {
@@ -74,18 +75,12 @@ describe('console route navigation', () => {
       ['/console', '/console', 'Dashboard'],
       ['/console/applications', '/console/applications', 'Applications'],
       ['/console/sign-in-experience', '/console/sign-in-experience/theme', 'Experience'],
-      [
-        '/console/sign-in-experience/sign-up-and-sign-in',
-        '/console/sign-in-experience/sign-in',
-        'Sign-in & registration',
-      ],
       ['/console/sign-in-experience/sign-in', '/console/sign-in-experience/sign-in', 'Sign-in & registration'],
-      ['/console/sign-in-experience/branding', '/console/sign-in-experience/theme', 'Experience'],
       ['/console/sign-in-experience/theme', '/console/sign-in-experience/theme', 'Experience'],
       ['/console/sign-in-experience/assets', '/console/sign-in-experience/assets', 'Experience'],
       ['/console/sign-in-experience/legal', '/console/sign-in-experience/legal', 'Experience'],
-      ['/console/sign-in-experience/account-center', '/console/sign-in-experience/theme', 'Experience'],
-      ['/console/sign-in-experience/content', '/console/sign-in-experience/legal', 'Experience'],
+      ['/console/sign-in-experience/account-center', '/console/sign-in-experience/account-center', 'Account Center'],
+      ['/console/sign-in-experience/content', '/console/sign-in-experience/content', 'Experience'],
       ['/console/security', '/console/security/sign-in', 'Security policies'],
       ['/console/security/sign-in', '/console/security/sign-in', 'Security policies'],
       ['/console/security/mfa', '/console/security/mfa', 'Security policies'],
@@ -130,6 +125,23 @@ describe('console route navigation', () => {
     }
     expect(screen.queryByRole('tab', { name: 'Desktop' })).toBeNull()
     expect(screen.queryByRole('tab', { name: 'Mobile' })).toBeNull()
+  })
+
+  it('does not repeat fresh guard and page queries while switching Experience tabs', async () => {
+    queryClient.setDefaultOptions(queryClientDefaultOptions)
+    const fetchSpy = vi.spyOn(window, 'fetch').mockImplementation(consoleRouteFetch)
+    window.history.pushState(null, '', '/console/sign-in-experience/theme')
+
+    render(<AppRouter />)
+
+    expect(await screen.findByRole('heading', { name: 'Experience' })).toBeTruthy()
+    await waitFor(() => expect(fetchSpy.mock.calls.length).toBeGreaterThanOrEqual(7))
+    fetchSpy.mockClear()
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Brand assets' }))
+
+    await waitFor(() => expect(window.location.pathname).toBe('/console/sign-in-experience/assets'))
+    expect(fetchSpy).not.toHaveBeenCalled()
   })
 
   it('keeps Sign-in & registration separate from Experience navigation', async () => {
@@ -244,14 +256,6 @@ describe('console route navigation', () => {
       return consoleSharedFetch(input, init)
     })
 
-    window.history.pushState(null, '', '/console/roles/role-1?context=org-1')
-    render(<AppRouter />)
-
-    await waitFor(() => expect(window.location.pathname).toBe('/organizations'))
-    expect(window.location.search).toBe('')
-
-    cleanup()
-    queryClient.clear()
     window.history.pushState(null, '', '/console/users/user-1?context=org-1')
     render(<AppRouter />)
 
@@ -267,13 +271,6 @@ describe('console route navigation', () => {
 
     expect(await screen.findByRole('heading', { name: 'Management API' })).toBeTruthy()
     expect(window.location.pathname).toBe('/console/api-resources/resource-1/overview')
-
-    cleanup()
-    queryClient.clear()
-    window.history.pushState(null, '', '/console/organizations/org-1')
-    render(<AppRouter />)
-
-    await waitFor(() => expect(window.location.pathname).toBe('/organizations/org-1/overview'))
 
     cleanup()
     queryClient.clear()

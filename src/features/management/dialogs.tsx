@@ -319,7 +319,7 @@ export function useConnectorPreviewProviders() {
   const query = useQuery({
     queryKey: consoleQueryKeys.connectors,
     queryFn: listConnectors,
-    initialData: emptyConnectorsResponse,
+    placeholderData: emptyConnectorsResponse,
   })
   const connectors = Array.isArray(query.data?.connectors) ? query.data.connectors : []
   return {

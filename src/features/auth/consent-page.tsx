@@ -7,6 +7,7 @@ import { Status } from '@/components/ui/status'
 import { createConsent, getConsentRequest } from '@/lib/api'
 import { completeOAuthConsent, signOut } from '@/lib/auth-client'
 import { tt } from '@/lib/i18n'
+import { deduplicateRequest } from '@/lib/request-deduplication'
 import { useConfigz } from './hooks'
 export function ConsentPage() {
   const { data: config } = useConfigz()
@@ -26,7 +27,7 @@ export function ConsentPage() {
         active = false
       }
     }
-    getConsentRequest(search)
+    deduplicateRequest(`consent:${search}`, () => getConsentRequest(search))
       .then((result) => {
         if (active) {
           setConsent(result)

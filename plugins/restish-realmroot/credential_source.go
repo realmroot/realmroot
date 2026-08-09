@@ -72,7 +72,7 @@ func handleCredentialSource(
 		reference, err := states.FindCredentialOffer(input.Reference, runtime, input.Scopes)
 		if errors.Is(err, os.ErrNotExist) {
 			return credentialSourceOutput{}, fmt.Errorf(
-				"Realmroot has no approved credential offer for Resource %q and scopes %q; request exact Resource access before retrying",
+				"Realmroot has no approved credential offer for credential source %q and scopes %q; request exact Resource access before retrying",
 				input.Reference,
 				input.Scopes,
 			)

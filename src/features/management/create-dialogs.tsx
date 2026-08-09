@@ -124,7 +124,7 @@ export function CreateApplicationDialog({
           </div>
           <DialogFooter className="m-0">
             <LinkButton
-              href={
+              to={
                 fixedOwnerOrganizationId
                   ? `/organizations/${fixedOwnerOrganizationId}/applications/${createdApplication.id}/settings`
                   : `/console/applications/${createdApplication.id}/settings`

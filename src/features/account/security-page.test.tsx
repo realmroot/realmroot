@@ -32,6 +32,7 @@ const server = createAccountServer(store)
 
 async function openSecurityTab(name: 'MFA' | 'Passkeys' | 'Sessions') {
   fireEvent.mouseDown(await screen.findByRole('tab', { name }), { button: 0, ctrlKey: false })
+  await waitFor(() => expect(screen.queryByText('Loading security settings')).toBeNull())
 }
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'bypass' }))
@@ -122,7 +123,31 @@ describe('AccountSecurityPage', () => {
   it('renders an error state when a security request fails', async () => {
     server.use(http.get(`${base}/api/account/security`, () => HttpResponse.json({ error: 'no' }, { status: 500 })))
     renderWithClient(<AccountSecurityPage />)
+    fireEvent.mouseDown(await screen.findByRole('tab', { name: 'MFA' }), { button: 0, ctrlKey: false })
     expect(await screen.findByText('no')).toBeTruthy()
+  })
+
+  it('keeps the Account Center shell visible while a Security tab loads', async () => {
+    let finishSecurityRequest!: () => void
+    server.use(
+      http.get(`${base}/api/account/security`, async () => {
+        await new Promise<void>((resolve) => {
+          finishSecurityRequest = resolve
+        })
+        return HttpResponse.json({ security: store.security })
+      }),
+    )
+    renderWithClient(<AccountSecurityPage />)
+
+    expect(await screen.findByRole('heading', { name: 'Sign-in & security' })).toBeTruthy()
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'MFA' }), { button: 0, ctrlKey: false })
+
+    expect(await screen.findByText('Loading security settings')).toBeTruthy()
+    expect(screen.getByRole('navigation', { name: 'Account Center' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Sign-in & security' })).toBeTruthy()
+
+    finishSecurityRequest()
+    expect(await screen.findByText('Multi-factor authentication')).toBeTruthy()
   })
 
   it('shows the account-load error when the profile is missing', async () => {

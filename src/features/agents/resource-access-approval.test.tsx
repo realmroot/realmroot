@@ -1,5 +1,6 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { resetRequestDeduplicationForTests } from '@/lib/request-deduplication'
 import { ResourceAccessApproval } from './resource-access-approval'
 
 const api = vi.hoisted(() => ({
@@ -112,6 +113,7 @@ describe('Agent resource access approval', () => {
 
   afterEach(() => {
     cleanup()
+    resetRequestDeduplicationForTests()
     vi.clearAllMocks()
     window.location.hash = ''
   })
@@ -554,6 +556,25 @@ describe('Agent resource access approval', () => {
     api.getAgentResourceApproval.mockRejectedValue('offline')
     render(<ResourceAccessApproval />)
     expect(await screen.findByText('Unable to load the Agent resource request.')).toBeTruthy()
+  })
+
+  it('does not let an older approval token response overwrite the current request', async () => {
+    let resolveOldRequest: (value: typeof request) => void = () => undefined
+    api.getAgentResourceApproval
+      .mockImplementationOnce(() => new Promise((resolve) => (resolveOldRequest = resolve)))
+      .mockResolvedValueOnce(request)
+    render(<ResourceAccessApproval />)
+
+    window.location.hash = 'token=new-token'
+    fireEvent(window, new HashChangeEvent('hashchange'))
+    expect(await screen.findByText('Release helper')).toBeTruthy()
+
+    await act(async () => {
+      resolveOldRequest({ ...request, agent: { id: 'stale-agent', name: 'Stale Agent' } })
+      await Promise.resolve()
+    })
+    expect(screen.queryByText('Stale Agent')).toBeNull()
+    expect(screen.getByText('Release helper')).toBeTruthy()
   })
 
   it('reports decision failures from Error and unknown values', async () => {

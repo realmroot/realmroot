@@ -6,6 +6,7 @@ import { Status } from '@/components/ui/status'
 import { useConfigz } from '@/features/auth/hooks'
 import { LoadingMessage } from '@/features/auth/pages/controls'
 import { tt } from '@/lib/i18n'
+import { deduplicateRequest } from '@/lib/request-deduplication'
 
 const oidcStateStorageKey = 'realmroot.oidc.state'
 const oidcVerifierStorageKey = 'realmroot.oidc.verifier'
@@ -15,7 +16,7 @@ export function OidcStartRoute({ startAuthorization }: { startAuthorization?: ()
   const [error, setError] = useState<string | null>(null)
   useEffect(() => {
     const start = startAuthorization ?? (() => startOidcAuthorization((url) => window.location.assign(url)))
-    void start().catch((startError: unknown) => {
+    void deduplicateRequest(`oidc-start:${window.location.href}`, start).catch((startError: unknown) => {
       setError(startError instanceof Error ? startError.message : tt('Unable to start client sign-in.'))
     })
   }, [startAuthorization])
@@ -66,7 +67,7 @@ export function OidcCallbackRoute() {
       {valid ? (
         <>
           <Status tone="success">{tt('Authorization code received securely.')}</Status>
-          <LinkButton href="/">{tt('Open Account Center')}</LinkButton>
+          <LinkButton to="/">{tt('Open Account Center')}</LinkButton>
         </>
       ) : (
         <Status tone="error">{callbackError}</Status>

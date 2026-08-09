@@ -61,6 +61,14 @@ describe('composed UI primitives', () => {
     expect(screen.getByRole('link', { name: 'Link action' }).getAttribute('href')).toBe('/settings')
   })
 
+  it('leaves internal link navigation to the application router', () => {
+    const pushState = vi.spyOn(window.history, 'pushState')
+    render(<LinkButton to="/settings">Open settings</LinkButton>)
+
+    expect(screen.getByRole('link', { name: 'Open settings' }).getAttribute('href')).toBe('/settings')
+    expect(pushState).not.toHaveBeenCalled()
+  })
+
   it('renders card and dialog subcomponents with supplied content', () => {
     render(
       <>

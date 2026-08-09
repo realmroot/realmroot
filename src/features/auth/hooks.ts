@@ -1,6 +1,7 @@
 import type { ConfigzConfigResponse } from '@shared/api/configz'
 import { useEffect, useState } from 'react'
 import { getConfigz } from '@/lib/api'
+import { deduplicateRequest } from '@/lib/request-deduplication'
 
 type LoadState<T> = {
   data: T | null
@@ -18,7 +19,7 @@ export function useConfigz(): LoadState<ConfigzConfigResponse> {
   useEffect(() => {
     let active = true
 
-    getConfigz()
+    deduplicateRequest('configz', getConfigz)
       .then((data) => {
         if (active) setState({ data, error: null, loading: false })
       })

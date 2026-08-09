@@ -216,16 +216,18 @@ func TestFileStateStoreFindsCredentialOfferByOpaqueReference(t *testing.T) {
 	}
 	credential := testCredential(t, "", time.Time{})
 	state := agentState{
-		Version:              agentStateVersion,
-		Origin:               target.Origin,
-		Issuer:               target.Issuer,
-		Runtime:              target.Runtime,
-		Name:                 "Build Agent",
-		AgentID:              "agent-123",
-		HostID:               "host-123",
-		AgentKeyID:           "agent-key",
-		AgentPrivateKey:      encodePrivateKey(agentPrivateKey),
-		DPoPCredentialOffers: map[string][]dpopCredential{credential.ResourceHref: {credential}},
+		Version:         agentStateVersion,
+		Origin:          target.Origin,
+		Issuer:          target.Issuer,
+		Runtime:         target.Runtime,
+		Name:            "Build Agent",
+		AgentID:         "agent-123",
+		HostID:          "host-123",
+		AgentKeyID:      "agent-key",
+		AgentPrivateKey: encodePrivateKey(agentPrivateKey),
+		CredentialSources: map[string]credentialSource{
+			testCredentialSourceReference: {ResourceHref: credential.ResourceHref, Offers: []dpopCredential{credential}},
+		},
 	}
 	path := store.path(target)
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
@@ -239,12 +241,25 @@ func TestFileStateStoreFindsCredentialOfferByOpaqueReference(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	reference, err := store.FindCredentialOffer(credential.ResourceHref, target.Runtime, credential.Scopes)
+	reference, err := store.FindCredentialOffer(testCredentialSourceReference, target.Runtime, credential.Scopes)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if reference.credential.ResourceHref != credential.ResourceHref {
 		t.Fatalf("credential = %#v", reference.credential)
+	}
+}
+
+func TestAgentStateRejectsResourceURLAsCredentialSourceReference(t *testing.T) {
+	credential := testCredential(t, "", time.Time{})
+	state := newCredentialState(t, credential).state
+	state.CredentialSources = map[string]credentialSource{
+		credential.ResourceHref: {ResourceHref: credential.ResourceHref, Offers: []dpopCredential{credential}},
+	}
+
+	err := validateAgentStateCredentials(state)
+	if err == nil || !strings.Contains(err.Error(), "invalid DPoP credential metadata") {
+		t.Fatalf("error = %v", err)
 	}
 }
 

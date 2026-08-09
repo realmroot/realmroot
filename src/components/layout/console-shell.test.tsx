@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -24,10 +25,15 @@ const profile = {
   role: 'admin',
 }
 function TestConsoleShell({ children }: { children: ReactNode }) {
-  return <ConsoleShell profile={profile}>{children}</ConsoleShell>
+  return (
+    <QueryClientProvider client={queryClient}>
+      <ConsoleShell profile={profile}>{children}</ConsoleShell>
+    </QueryClientProvider>
+  )
 }
 
 let pathname = '/console'
+const queryClient = new QueryClient()
 const signOut = vi.fn().mockResolvedValue({})
 const navigate = vi.fn()
 
@@ -63,6 +69,7 @@ afterEach(() => {
   pathname = '/console'
   navigate.mockClear()
   signOut.mockClear()
+  queryClient.clear()
   window.history.pushState(null, '', '/')
 })
 
@@ -131,7 +138,12 @@ describe('ConsoleShell', () => {
     }
 
     fireEvent.click(screen.getByRole('menuitem', { name: 'Sign out' }))
-    await waitFor(() => expect(signOut).toHaveBeenCalledTimes(1))
+    queryClient.setQueryData(['private'], 'cached')
+    await waitFor(() => {
+      expect(signOut).toHaveBeenCalledTimes(1)
+      expect(queryClient.getQueryData(['private'])).toBeUndefined()
+      expect(navigate).toHaveBeenCalledWith({ to: '/auth/sign-in' })
+    })
   })
 
   it('marks the dashboard alias active for local visual review', () => {

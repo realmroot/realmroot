@@ -21,13 +21,14 @@ Follow the normal Resource Server flow in
 4. inspect the intended operations in the live OpenAPI document;
 5. request the union of their declared OAuth scopes with the `access` command.
 
-After approval, bind the returned credential source to Realmroot's `oauth2`
-OpenAPI credential ID:
+After approval, set `CREDENTIAL_SOURCE_REFERENCE` to the returned
+`credentialSource.reference` value and bind it to Realmroot's `oauth2` OpenAPI
+credential ID:
 
 ```bash
 restish api auth add "$API_NAME" oauth2 \
   --source realmroot \
-  --reference "$RESOURCE_HREF"
+  --reference "$CREDENTIAL_SOURCE_REFERENCE"
 restish api auth inspect "$API_NAME" --operation getAgentStatus --redact
 restish "$API_NAME" agents whoami --rsh-print b -o json
 ```

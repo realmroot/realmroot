@@ -444,7 +444,7 @@ describe('planned Account Center journeys', () => {
     await waitFor(() => expect(screen.getByLabelText('Organization name')).toBeTruthy())
   })
 
-  it('manages Organization members, invitations, profile, and deletion', async () => {
+  it('[spec: admin-console/admin-govern-organization] manages Organization members, invitations, profile, and deletion', async () => {
     const actions: Array<{ path: string; body: unknown }> = []
     store.access.platformOperator = true
     server.use(

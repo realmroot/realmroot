@@ -1,8 +1,10 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AppRouter, queryClient } from '@/router'
 
 vi.mock('@/features/account/account-center', () => ({
+  AccountCenterLayout: ({ children }: { children: ReactNode }) => children,
   AccountAgentsPage: () => <h1>Agents route</h1>,
   AccountApplicationsPage: () => <h1>Applications route</h1>,
   AccountConnectionsPage: () => <h1>Connections route</h1>,

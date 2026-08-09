@@ -72,7 +72,7 @@ export function UserDetailPage({ userId, section = 'overview' }: { userId: strin
     onSuccess: async (result) => {
       queryClient.setQueryData([...consoleQueryKeys.users, userId], result)
       setEditOpen(false)
-      await queryClient.invalidateQueries({ queryKey: consoleQueryKeys.users })
+      await queryClient.invalidateQueries({ exact: true, queryKey: consoleQueryKeys.users })
     },
   })
   const reset = useAdminMutation({
@@ -83,12 +83,12 @@ export function UserDetailPage({ userId, section = 'overview' }: { userId: strin
     mutationFn: (input: { reason?: string }) => banUser(userId, input),
     onSuccess: async () => {
       setBanOpen(false)
-      await queryClient.invalidateQueries({ queryKey: [...consoleQueryKeys.users, userId] })
+      await queryClient.invalidateQueries({ exact: true, queryKey: [...consoleQueryKeys.users, userId] })
     },
   })
   const unban = useAdminMutation({
     mutationFn: () => unbanUser(userId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: [...consoleQueryKeys.users, userId] }),
+    onSuccess: () => queryClient.invalidateQueries({ exact: true, queryKey: [...consoleQueryKeys.users, userId] }),
   })
   const remove = useMutation({
     mutationFn: () => deleteUser(userId),

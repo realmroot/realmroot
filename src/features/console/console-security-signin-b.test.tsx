@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { BrandingPage } from '@/features/console/extracted/branding-content/branding'
+import { ExperiencePage } from '@/features/console/extracted/branding-content/branding'
 import { SignInSettingsPage } from '@/features/console/extracted/sign-in-settings'
 import { queryClient } from '@/router'
 import {
@@ -124,7 +124,7 @@ describe('admin console sign-in and preview controls', () => {
       return consoleSharedFetch(input, init)
     })
 
-    renderWithQuery(<BrandingPage />)
+    renderWithQuery(<ExperiencePage section="theme" />)
     expect(await screen.findByLabelText('Acme Auth hosted sign-in preview')).toBeTruthy()
     expect(screen.queryByRole('tab', { name: 'Mobile' })).toBeNull()
     expect(screen.queryByRole('tab', { name: 'Desktop' })).toBeNull()

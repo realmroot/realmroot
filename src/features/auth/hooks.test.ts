@@ -15,6 +15,23 @@ afterEach(() => {
 })
 
 describe('useConfigz', () => {
+  it('deduplicates concurrent configuration requests', async () => {
+    let resolveFetch: ((value: Response) => void) | undefined
+    const fetchSpy = vi.spyOn(window, 'fetch').mockReturnValue(
+      new Promise<Response>((resolve) => {
+        resolveFetch = resolve
+      }),
+    )
+
+    const first = renderHook(() => useConfigz())
+    const second = renderHook(() => useConfigz())
+
+    expect(fetchSpy).toHaveBeenCalledOnce()
+    resolveFetch?.(jsonResponse({ copy: { productName: 'Acme ID' } }))
+    await waitFor(() => expect(first.result.current.loading).toBe(false))
+    await waitFor(() => expect(second.result.current.loading).toBe(false))
+  })
+
   it('exposes the loaded configuration when the request succeeds', async () => {
     vi.spyOn(window, 'fetch').mockResolvedValue(jsonResponse({ copy: { productName: 'Acme ID' } }))
 

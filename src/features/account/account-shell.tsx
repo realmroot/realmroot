@@ -1,4 +1,5 @@
 import type { DeveloperConsoleAccessResponse } from '@shared/api/account'
+import { useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
 import {
   AppWindow,
@@ -62,11 +63,12 @@ export function AccountPageShell({
   accountCenter: AccountCenterSettings
   children: ReactNode
   config: Parameters<typeof brandingStyle>[0]
-  profile: UserProfile | null
+  profile: UserProfile
   section: AccountCenterSection
 }) {
   void accountCenter
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const [navigationOpen, setNavigationOpen] = useState(false)
   const navigationTriggerRef = useRef<HTMLButtonElement>(null)
 
@@ -78,6 +80,7 @@ export function AccountPageShell({
   async function signOutFromAccount() {
     try {
       await signOut()
+      queryClient.clear()
       toast.success(tt('Signed out'))
       await navigate({ to: '/auth/sign-in' })
     } catch (mutationError) {
@@ -118,15 +121,13 @@ export function AccountPageShell({
               <HelpCircle />
             </a>
           </Button>
-          {profile ? (
-            <ProductAccountMenu
-              onSignOut={() => void signOutFromAccount()}
-              primaryAction={
-                access.platformOperator ? { icon: LayoutDashboard, label: 'Console', to: '/console' } : undefined
-              }
-              profile={profile}
-            />
-          ) : null}
+          <ProductAccountMenu
+            onSignOut={() => void signOutFromAccount()}
+            primaryAction={
+              access.platformOperator ? { icon: LayoutDashboard, label: 'Console', to: '/console' } : undefined
+            }
+            profile={profile}
+          />
         </div>
       </header>
       <div className="accountShellLayout">
@@ -207,25 +208,23 @@ function AccountSidebar({
 }: {
   access: DeveloperConsoleAccessResponse
   onNavigate?: () => void
-  profile: UserProfile | null
+  profile: UserProfile
   section: AccountCenterSection
 }) {
   return (
     <aside className="accountSidebar">
-      {profile ? (
-        <div className="accountSidebarIdentity">
-          <Avatar className="size-11">
-            {profile.image ? <AvatarImage alt="" src={profile.image} /> : null}
-            <AvatarFallback className="bg-primary/10 text-xs font-semibold text-primary">
-              {profile.displayName.slice(0, 2).toUpperCase()}
-            </AvatarFallback>
-          </Avatar>
-          <div>
-            <strong>{profile.displayName}</strong>
-            <span>{profile.email}</span>
-          </div>
+      <div className="accountSidebarIdentity">
+        <Avatar className="size-11">
+          {profile.image ? <AvatarImage alt="" src={profile.image} /> : null}
+          <AvatarFallback className="bg-primary/10 text-xs font-semibold text-primary">
+            {profile.displayName.slice(0, 2).toUpperCase()}
+          </AvatarFallback>
+        </Avatar>
+        <div>
+          <strong>{profile.displayName}</strong>
+          <span>{profile.email}</span>
         </div>
-      ) : null}
+      </div>
       <nav aria-label={tt('Account Center')} className="accountNav">
         {accountNavGroups.map((group) => (
           <div className="accountNavGroup" key={group.label}>

@@ -15,7 +15,7 @@ func TestCredentialSourceDescribesStoredOfferWithoutCredentialMaterial(t *testin
 
 	output, err := handleCredentialSource(context.Background(), credentialSourceInput{
 		Action:    "describe",
-		Reference: offer.ResourceHref,
+		Reference: testCredentialSourceReference,
 		Scopes:    offer.Scopes,
 	}, states, roundTripFunc(nil))
 	if err != nil {
@@ -43,10 +43,10 @@ func TestCredentialSourceRequiresExplicitAccessForMissingOperationScopes(t *test
 		return jsonResponse(http.StatusCreated, completedInteractionWithOffer(readOffer)), nil
 	})
 	_, err := handleCredentialSource(context.Background(), credentialSourceInput{
-		Action: "describe", Reference: readOffer.ResourceHref, Scopes: readOffer.Scopes,
+		Action: "describe", Reference: testCredentialSourceReference, Scopes: readOffer.Scopes,
 	}, states, client)
 	if err == nil || !strings.Contains(err.Error(), "request exact Resource access before retrying") ||
-		!strings.Contains(err.Error(), readOffer.ResourceHref) || !strings.Contains(err.Error(), "files:read") {
+		!strings.Contains(err.Error(), testCredentialSourceReference) || !strings.Contains(err.Error(), "files:read") {
 		t.Fatalf("error = %v, want explicit Resource access guidance", err)
 	}
 	if requests != 0 {
@@ -93,7 +93,7 @@ func TestCredentialSourceIssuesTokenForRestishOwnedProof(t *testing.T) {
 
 	output, err := handleCredentialSource(context.Background(), credentialSourceInput{
 		Action:    "issue",
-		Reference: offer.ResourceHref,
+		Reference: testCredentialSourceReference,
 		Scopes:    offer.Scopes,
 		Proof:     targetProof,
 	}, states, client)
@@ -103,7 +103,7 @@ func TestCredentialSourceIssuesTokenForRestishOwnedProof(t *testing.T) {
 	if output.Credential == nil || output.Credential.AccessToken != "target-token" || output.Credential.TokenType != "DPoP" {
 		t.Fatalf("credential = %#v", output.Credential)
 	}
-	stored := states.state.DPoPCredentialOffers[offer.ResourceHref][0]
+	stored := states.state.CredentialSources[testCredentialSourceReference].Offers[0]
 	if stored.PrivateKey != "" || stored.AccessToken != "" || stored.ExpiresAt != nil {
 		t.Fatalf("plugin retained target credential material: %#v", stored)
 	}
@@ -122,7 +122,7 @@ func TestCredentialSourceReturnsStructuredDPoPNonceChallenge(t *testing.T) {
 	})
 
 	output, err := handleCredentialSource(context.Background(), credentialSourceInput{
-		Action: "issue", Reference: offer.ResourceHref, Scopes: offer.Scopes, Proof: "first-proof",
+		Action: "issue", Reference: testCredentialSourceReference, Scopes: offer.Scopes, Proof: "first-proof",
 	}, states, client)
 	if err != nil {
 		t.Fatal(err)
@@ -153,7 +153,7 @@ func TestCredentialSourceReturnsNextDPoPNonceWithIssuedCredential(t *testing.T) 
 	})
 
 	output, err := handleCredentialSource(context.Background(), credentialSourceInput{
-		Action: "issue", Reference: offer.ResourceHref, Scopes: offer.Scopes, Proof: "nonce-proof",
+		Action: "issue", Reference: testCredentialSourceReference, Scopes: offer.Scopes, Proof: "nonce-proof",
 	}, states, client)
 	if err != nil {
 		t.Fatal(err)

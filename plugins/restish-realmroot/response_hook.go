@@ -54,6 +54,7 @@ func handleProfiledResponse(
 	opener browserOpener,
 	states agentStateFinder,
 	client httpDoer,
+	references credentialSourceReferenceGenerator,
 ) (plugin.ResponseMiddlewareOutput, error) {
 	if input.Response.Status < 200 || input.Response.Status >= 300 || !hasProfile(input.Response.Headers, interactiveResourceProfile) {
 		return plugin.ResponseMiddlewareOutput{}, nil
@@ -80,6 +81,7 @@ func handleProfiledResponse(
 		opener,
 		states,
 		client,
+		references,
 	)
 }
 
@@ -92,6 +94,7 @@ func handleInteractiveResource(
 	opener browserOpener,
 	states agentStateFinder,
 	client httpDoer,
+	references credentialSourceReferenceGenerator,
 ) (plugin.ResponseMiddlewareOutput, error) {
 	if resource.AgentID == "" || resource.Links.Self == "" || resource.Interaction.Type != "user-approval" {
 		return plugin.ResponseMiddlewareOutput{}, errors.New("interactive Resource is missing its Agent, self link, or interaction type")
@@ -107,7 +110,7 @@ func handleInteractiveResource(
 		switch resource.Interaction.Status {
 		case "completed":
 			if resource.CredentialOffer != nil {
-				return acceptCredentialOffer(resource, *resource.CredentialOffer, origin, states)
+				return acceptCredentialOffer(resource, *resource.CredentialOffer, origin, states, references)
 			}
 			return plugin.ResponseMiddlewareOutput{Response: &plugin.HookResponseUpdate{Body: representation}}, nil
 		case "denied", "expired", "failed":
@@ -177,6 +180,7 @@ func acceptCredentialOffer(
 	offer credentialOffer,
 	origin string,
 	states agentStateFinder,
+	references credentialSourceReferenceGenerator,
 ) (plugin.ResponseMiddlewareOutput, error) {
 	if offer.Type != "dpop" || offer.Proof.Algorithm != "ES256" || offer.Proof.Method != http.MethodPost ||
 		offer.Resource.Href == "" || offer.ResourceIndicator == "" || offer.Endpoint == "" || offer.Proof.URI == "" {
@@ -204,23 +208,48 @@ func acceptCredentialOffer(
 		ProofTarget:        offer.Proof.URI,
 		Scopes:             append([]string(nil), resource.Scopes...),
 	}
-	if reference.state.DPoPCredentialOffers == nil {
-		reference.state.DPoPCredentialOffers = make(map[string][]dpopCredential)
+	if reference.state.CredentialSources == nil {
+		reference.state.CredentialSources = make(map[string]credentialSource)
 	}
-	offers := reference.state.DPoPCredentialOffers[credential.ResourceHref]
-	replaced := false
-	for index := range offers {
-		if sameStringSet(offers[index].Scopes, credential.Scopes) {
-			offers[index] = credential
-			replaced = true
-			break
+	credentialSourceReference := ""
+	for candidateReference, source := range reference.state.CredentialSources {
+		if source.ResourceHref == credential.ResourceHref {
+			if credentialSourceReference != "" {
+				return plugin.ResponseMiddlewareOutput{}, errors.New("multiple credential sources exist for the same Resource")
+			}
+			credentialSourceReference = candidateReference
 		}
 	}
-	if !replaced {
-		offers = append(offers, credential)
+	if credentialSourceReference == "" {
+		credentialSourceReference, err = references()
+		if err != nil {
+			return plugin.ResponseMiddlewareOutput{}, err
+		}
+		if !isCredentialSourceReference(credentialSourceReference) {
+			return plugin.ResponseMiddlewareOutput{}, errors.New("generated credential source reference is invalid")
+		}
+		if _, exists := reference.state.CredentialSources[credentialSourceReference]; exists {
+			return plugin.ResponseMiddlewareOutput{}, errors.New("generated credential source reference already exists")
+		}
+		reference.state.CredentialSources[credentialSourceReference] = credentialSource{
+			ResourceHref: credential.ResourceHref,
+			Offers:       []dpopCredential{credential},
+		}
+	} else {
+		source := reference.state.CredentialSources[credentialSourceReference]
+		replaced := false
+		for index := range source.Offers {
+			if sameStringSet(source.Offers[index].Scopes, credential.Scopes) {
+				source.Offers[index] = credential
+				replaced = true
+				break
+			}
+		}
+		if !replaced {
+			source.Offers = append(source.Offers, credential)
+		}
+		reference.state.CredentialSources[credentialSourceReference] = source
 	}
-	reference.state.DPoPCredentialOffers[credential.ResourceHref] = offers
-	reference.state.ActiveDPoPCredentials = nil
 	if err := store.UpdateStateReference(reference); err != nil {
 		return plugin.ResponseMiddlewareOutput{}, err
 	}
@@ -231,7 +260,7 @@ func acceptCredentialOffer(
 		"scopes":            resource.Scopes,
 		"credentialSource": map[string]any{
 			"name":      "realmroot",
-			"reference": credential.ResourceHref,
+			"reference": credentialSourceReference,
 		},
 	}}}, nil
 }

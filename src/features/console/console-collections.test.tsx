@@ -1,13 +1,13 @@
-import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ApplicationsPage } from '@/features/applications/management/applications-list'
-import { BrandingPage } from '@/features/console/extracted/branding-content/branding'
+import { ExperiencePage } from '@/features/console/extracted/branding-content/branding'
 import { ContentSettingsPage } from '@/features/console/extracted/branding-content/content-settings'
 import { ConnectorsPage } from '@/features/console/extracted/connectors'
 import { DeploymentSettingsPage, SettingsPage } from '@/features/console/extracted/deployment-misc/deployment'
 import { ConsoleOnboardingPage } from '@/features/console/extracted/onboarding'
 import { OrganizationsPage } from '@/features/console/extracted/organizations'
-import { MfaPage } from '@/features/console/extracted/security-settings'
+import { SecurityPoliciesPage } from '@/features/console/extracted/security-settings'
 import { SignInSettingsPage } from '@/features/console/extracted/sign-in-settings'
 import { UsersPage } from '@/features/console/extracted/users/users-list'
 import { ApiResourcesPage } from '@/features/resource-servers/management-resource-servers'
@@ -241,6 +241,69 @@ describe('console collections', () => {
     expect(screen.getByText('No resource servers match the current filters.')).toBeTruthy()
   })
 
+  it('renders canonical Organization inventory counts, fallbacks, and dialog cancellation', async () => {
+    const secondOrganization = {
+      ...organization,
+      id: 'org-2',
+      slug: 'beta',
+      name: 'Beta',
+      displayName: 'Beta Company',
+    }
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const request = input instanceof Request ? input : null
+      const url = request?.url ? new URL(request.url).pathname : String(input)
+      if (url === '/api/organizations') {
+        return Promise.resolve(
+          jsonResponse({
+            organizations: [{ ...organization, displayName: null }, secondOrganization],
+            pagination,
+          }),
+        )
+      }
+      if (url === '/api/agents') {
+        return Promise.resolve(
+          jsonResponse({
+            items: [
+              { id: 'agent-1', homeSpace: { type: 'organization', organizationId: 'org-1' } },
+              { id: 'agent-2', homeSpace: { type: 'organization', organizationId: 'org-2' } },
+              { id: 'agent-personal', homeSpace: { type: 'personal', userId: 'user-1' } },
+            ],
+            pagination,
+          }),
+        )
+      }
+      if (url === '/api/organizations/org-1/members') {
+        return Promise.resolve(
+          jsonResponse({
+            members: [{ id: 'member-1' }, { id: 'member-2' }],
+            pagination: { ...pagination, total: 2 },
+          }),
+        )
+      }
+      if (url === '/api/organizations/org-2/members') {
+        return Promise.resolve(jsonResponse({ error: { message: 'Members unavailable.' } }, 503))
+      }
+      return consoleSharedFetch(input, init)
+    })
+
+    renderWithQuery(<OrganizationsPage />)
+
+    const acmeRow = (await screen.findByText('Acme')).closest('tr')
+    expect(acmeRow).toBeTruthy()
+    expect(await within(acmeRow!).findByText('2')).toBeTruthy()
+    expect(within(acmeRow!).getByText('1')).toBeTruthy()
+
+    const betaRow = screen.getByText('Beta Company').closest('tr')
+    expect(betaRow).toBeTruthy()
+    expect(await within(betaRow!).findByText('Unavailable')).toBeTruthy()
+    expect(within(betaRow!).getByText('1')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Provision organization' }))
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  })
+
   it('renders collection loading and query error states', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
@@ -304,13 +367,13 @@ describe('console collections', () => {
         text: 'Legal & support',
       },
       {
-        component: <BrandingPage />,
+        component: <ExperiencePage section="theme" />,
         matches: (url: string) => url === '/api/realm/branding',
         success: brandingSettings,
         text: 'Color scheme',
       },
       {
-        component: <MfaPage />,
+        component: <SecurityPoliciesPage section="mfa" />,
         matches: (url: string) => url === '/api/realm/security-policy',
         success: securityPolicy,
         text: 'Available factors',
@@ -366,7 +429,7 @@ describe('console collections', () => {
       if (url === '/api/realm/security-policy') return Promise.resolve(jsonResponse(securityPolicy))
       return consoleSharedFetch(input, init)
     })
-    const { unmount } = renderWithQuery(<BrandingPage />)
+    const { unmount } = renderWithQuery(<ExperiencePage section="theme" />)
 
     expect(await screen.findByRole('heading', { name: 'Experience' })).toBeTruthy()
     expect(await screen.findByRole('tab', { name: 'Color scheme' })).toBeTruthy()

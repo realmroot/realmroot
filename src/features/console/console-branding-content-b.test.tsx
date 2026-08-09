@@ -1,7 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AccountCenterSettingsPage } from '@/features/console/extracted/branding-content/account-center-settings'
-import { CustomizeJwtPage } from '@/features/console/extracted/deployment-misc/misc'
 import { AppRouter, queryClient } from '@/router'
 import {
   accountCenterSettings,
@@ -118,13 +117,7 @@ describe('admin console account center and deferred configuration', () => {
     expect(open).toHaveBeenCalledWith('/profile', '_blank', 'noopener')
   })
 
-  it('keeps deferred audit logs and unsupported arbitrary JWT editors out of the Console', async () => {
-    renderWithQuery(<CustomizeJwtPage />)
-    expect(await screen.findByRole('heading', { name: 'Custom JWT' })).toBeTruthy()
-    expect(screen.queryByText(/Arbitrary claim editor/i)).toBeNull()
-    expect(screen.queryByText(/Interactive user fields/i)).toBeNull()
-
-    cleanup()
+  it('keeps deferred audit logs out of the Console', async () => {
     vi.spyOn(window, 'fetch').mockImplementation(consoleRouteFetch)
     window.history.pushState(null, '', '/console/audit-logs')
     render(<AppRouter />)

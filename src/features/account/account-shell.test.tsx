@@ -1,8 +1,9 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AccountPageShell } from '@/features/account/account-shell'
-import { defaultAccountCenterSettings } from '@/features/account/settings'
+import { type AccountCenterSection, defaultAccountCenterSettings } from '@/features/account/settings'
 import type { UserProfile } from '@/features/account/types'
 import { i18n } from '@/lib/i18n'
 
@@ -44,24 +45,28 @@ function profile(overrides: Partial<UserProfile> = {}): UserProfile {
   } as UserProfile
 }
 
-function renderShell(profileValue: UserProfile | null) {
-  const platformOperator = profileValue?.role === 'admin'
+function renderShell(profileValue: UserProfile, section: AccountCenterSection = 'profile') {
+  const platformOperator = profileValue.role === 'admin'
+  const queryClient = new QueryClient()
   render(
-    <AccountPageShell
-      access={{
-        canCreateOrganization: platformOperator,
-        showOrganizations: platformOperator,
-        platformOperator,
-        consoleOrganizations: [],
-      }}
-      accountCenter={defaultAccountCenterSettings}
-      config={null}
-      profile={profileValue}
-      section="profile"
-    >
-      <div>Account content</div>
-    </AccountPageShell>,
+    <QueryClientProvider client={queryClient}>
+      <AccountPageShell
+        access={{
+          canCreateOrganization: platformOperator,
+          showOrganizations: platformOperator,
+          platformOperator,
+          consoleOrganizations: [],
+        }}
+        accountCenter={defaultAccountCenterSettings}
+        config={null}
+        profile={profileValue}
+        section={section}
+      >
+        <div>Account content</div>
+      </AccountPageShell>
+    </QueryClientProvider>,
   )
+  return queryClient
 }
 
 function openAccountMenu() {
@@ -98,12 +103,14 @@ describe('AccountPageShell', () => {
   })
 
   it('signs out and redirects to hosted sign-in [spec: account-center/sign-out]', async () => {
-    renderShell(profile())
+    const queryClient = renderShell(profile())
+    const clear = vi.spyOn(queryClient, 'clear')
 
     openAccountMenu()
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Sign out' }))
 
     await waitFor(() => expect(signOut).toHaveBeenCalledTimes(1))
+    expect(clear).toHaveBeenCalledOnce()
     await waitFor(() => expect(navigate).toHaveBeenCalledWith({ to: '/auth/sign-in' }))
   })
 
@@ -116,6 +123,26 @@ describe('AccountPageShell', () => {
 
     await waitFor(() => expect(signOut).toHaveBeenCalledTimes(1))
     expect(navigate).not.toHaveBeenCalled()
+  })
+
+  it('uses the stable account error message for a non-Error sign-out failure', async () => {
+    signOut.mockRejectedValueOnce('offline')
+    renderShell(profile())
+
+    openAccountMenu()
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Sign out' }))
+
+    await waitFor(() => expect(signOut).toHaveBeenCalledTimes(1))
+    expect(navigate).not.toHaveBeenCalled()
+  })
+
+  it('applies the settings surface only to Profile and Security sections', () => {
+    renderShell(profile(), 'security')
+    expect(document.querySelector('.accountContent')?.className).toContain('is-settings')
+    cleanup()
+
+    renderShell(profile(), 'overview')
+    expect(document.querySelector('.accountContent')?.className).not.toContain('is-settings')
   })
 
   it('renders the avatar image when the profile has one', async () => {
@@ -139,11 +166,6 @@ describe('AccountPageShell', () => {
       expect(trigger.querySelector('img')?.getAttribute('src')).toBe('https://cdn.example.com/avatar.png'),
     )
     Object.defineProperty(window, 'Image', { configurable: true, value: OriginalImage })
-  })
-
-  it('omits the account menu when there is no profile', () => {
-    renderShell(null)
-    expect(screen.queryByRole('button', { name: 'Account menu' })).toBeNull()
   })
 
   it('does not show placeholder realm details in the sidebar [spec: account-center/account-center]', () => {

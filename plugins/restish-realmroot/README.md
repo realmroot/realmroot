@@ -16,8 +16,8 @@ The plugin performs only work that must happen on the Agent's machine:
   short-lived DPoP access token to Realmroot requests;
 - recognize generic response profiles declared with `Link: ...; rel="profile"`;
 - open a `user-approval` interaction and poll its supplied `links.self`;
-- accept a generic DPoP credential offer, obtain and cache a short-lived
-  credential, and return a token-free receipt;
+- accept a generic DPoP credential offer, store it under a locally generated
+  opaque credential-source reference, and return a token-free receipt;
 - add `Authorization: DPoP ...` and a fresh proof to matching target requests.
 
 Restish passes the final request URL and one complete OpenAPI security
@@ -99,11 +99,17 @@ An approved access request may include:
 }
 ```
 
-The plugin creates a separate P-256 key, signs the requested proof locally,
-posts to the supplied same-origin credential endpoint, validates that the
-short-lived response is bound to the exact Resource href and indicator, and
-caches it. The visible result contains only status, Resource, scopes, and
-expiry. Target traffic then goes directly to the Resource Server.
+The plugin stores the offer under a locally generated `rrcs_...` reference.
+That reference remains stable for the same Agent Resource. Later approvals
+replace only an offer with the same scopes and retain offers for every other
+approved scope set; a different Resource receives a different reference. After
+the reference is added to a Restish API credential, Restish creates a separate
+P-256 key and asks the plugin to redeem the least broad stored offer covering
+the operation scopes. The plugin posts to the supplied same-origin credential
+endpoint and validates that the short-lived response is bound to the exact
+Resource href and indicator. The visible access result contains only status,
+Resource, scopes, and the opaque credential-source reference. Target traffic
+then goes directly to the Resource Server.
 
 Expired credentials are renewed through the stored offer. If renewal is no
 longer authorized, or the Resource Server returns `401`, the local credential
@@ -125,10 +131,11 @@ is isolated by a hashed Agent session identifier when the runtime exposes one,
 allowing concurrent sessions to use different Resources at the same service
 URL.
 
-State files contain private keys and short-lived credentials. They are regular
-files with mode `0600`; symlinks and files accessible to group or other users
-are rejected. State created before the shared-Host layout must be removed and
-enrolled again. Never commit, log, or copy state files.
+State files contain private keys, short-lived protocol credentials, and
+approved credential offers. They are regular files with mode `0600`; symlinks
+and files accessible to group or other users are rejected. State created before
+the opaque credential-source layout must be removed and enrolled again. Never
+commit, log, or copy state files.
 
 Set `AGENT` to override runtime detection. Set
 `REALMROOT_PLUGIN_STATE_DIR` only when an explicitly isolated cleanroom is

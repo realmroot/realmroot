@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Status } from '@/components/ui/status'
 import { useConfigz } from '@/features/auth/hooks'
 import { approveAgentEnrollment, getAgentEnrollment } from '@/lib/api/account'
+import { deduplicateRequest } from '@/lib/request-deduplication'
 
 export function AgentIdentityApproval() {
   const { data: config } = useConfigz()
@@ -19,7 +20,7 @@ export function AgentIdentityApproval() {
   useEffect(() => {
     if (!intentId) return
     let active = true
-    getAgentEnrollment(intentId)
+    deduplicateRequest(`agent-enrollment:${intentId}`, () => getAgentEnrollment(intentId))
       .then((result) => {
         if (active) setIntent(result)
       })

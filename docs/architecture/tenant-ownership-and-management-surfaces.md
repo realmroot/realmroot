@@ -197,11 +197,8 @@ The Console retains Realm-wide operational views:
 - Realm and deployment settings.
 
 `/console/organizations` remains a platform inventory. Selecting an Organization
-opens its canonical Organization Workspace. The old
-`/console/organizations/:organizationId/*` route family redirects to the
-corresponding `/organizations/:organizationId/*` route during the supported
-navigation transition and is then removed when repository compatibility policy
-allows it.
+opens its canonical Organization Workspace at `/organizations/:organizationId/*`.
+There is no parallel Console Organization-detail route family.
 
 Realm-wide inventories are not Organization management pages. They support
 platform discovery, incident response, disablement, and cross-tenant oversight.

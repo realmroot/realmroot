@@ -1,3 +1,4 @@
+import { SpaLink } from '@/components/spa-link'
 import {
   authPageHref,
   authRequestContext,
@@ -347,10 +348,10 @@ export function SignInPage() {
               />
             </Field>
             {enabled.passwordEnabled ? (
-              <a className="authFieldLink" href={authPageHref('/auth/forgot-password')}>
+              <SpaLink className="authFieldLink" to={authPageHref('/auth/forgot-password')}>
                 {' '}
                 {tt('Forgot password?')}{' '}
-              </a>
+              </SpaLink>
             ) : null}
             <CaptchaTokenField key={captchaResetKey} config={config} onChange={setCaptchaToken} />
             <Button disabled={submit.loading} type="submit">
@@ -358,7 +359,7 @@ export function SignInPage() {
             </Button>
             {enabled.signupEnabled ? (
               <p className="authSignupPrompt">
-                {tt('No account yet?')} <a href={authPageHref('/auth/sign-up')}>{tt('Create account')}</a>
+                {tt('No account yet?')} <SpaLink to={authPageHref('/auth/sign-up')}>{tt('Create account')}</SpaLink>
               </p>
             ) : null}
           </form>
