@@ -279,6 +279,19 @@ describe('direct scope Entitlements', () => {
       ownerOrganizationId: 'org-1',
       allowedGrantTypes: ['client_credentials'],
     })
+    vi.mocked(authorization.findResource).mockResolvedValueOnce({
+      ...resource,
+      visibility: 'private',
+      ownerOrganizationId: 'org-2',
+    })
+    await expect(
+      subject.createApplicationScopeEntitlement(
+        deps,
+        'app-1',
+        { resourceServerId: resource.id, scope: 'read', mode: 'persistent' },
+        'admin',
+      ),
+    ).rejects.toThrow('not visible')
     await expect(
       subject.createApplicationScopeEntitlement(
         deps,
