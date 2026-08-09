@@ -2130,6 +2130,7 @@ export async function revokeAgentScopeEntitlement(deps: Deps, entitlementId: str
   const audit = await resourceAuditRecord(deps, {
     action: 'api_resource.access_revoked',
     result: 'allowed',
+    request,
     resourceId: entitlement.resourceServerId,
     connection,
     accessRequestId: request.id,

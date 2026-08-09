@@ -3023,6 +3023,29 @@ describe('external API resource authorization', () => {
     expect(deps.externalResources.endEntitlement).toHaveBeenCalledWith('ent_1', 'revoked', expect.any(Date))
   })
 
+  it('records the Agent owner when revoking native Resource access', async () => {
+    const deps = createTestDeps()
+    const identity = identityAggregate()
+    vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue({
+      ...identity,
+      identity: { ...identity.identity, ownerUserId: 'user-1', ownerOrganizationId: null },
+    })
+    vi.mocked(deps.externalResources.findEntitlement).mockResolvedValue({ ...grantRecord(), connectionId: null })
+    vi.mocked(deps.externalResources.findAccessRequest).mockResolvedValue({ ...requestRecord(), connectionId: null })
+    vi.mocked(deps.externalResources.listActiveTokenLeasesByEntitlement).mockResolvedValue([])
+    vi.mocked(deps.externalResources.endEntitlement).mockResolvedValue(true)
+
+    await revokeAgentScopeEntitlement(deps, 'ent_1', 'user-1')
+
+    expect(deps.agentAudit.append).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'api_resource.access_revoked',
+        agentIdentityId: 'identity-1',
+        ownerUserId: 'user-1',
+      }),
+    )
+  })
+
   it('maps management and account resource views', async () => {
     const deps = createTestDeps()
     authorizationDeps(deps)
