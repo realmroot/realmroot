@@ -1,11 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
-import { ArrowLeft, Trash2 } from 'lucide-react'
-import { type ReactNode, useEffect, useState } from 'react'
+import { ArrowLeft, Search, Trash2 } from 'lucide-react'
+import { type ReactNode, useEffect, useMemo, useState } from 'react'
 import { DestructiveConfirmation } from '@/components/destructive-confirmation'
 import { TableEmptyRow } from '@/components/table-empty-row'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ErrorState, LoadingState, MutationError } from '@/features/management/dialogs'
@@ -40,6 +41,7 @@ export function AgentDetailPage({
   const [tab, setTab] = useState<AgentDetailSection>(section)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [revokeEntitlementId, setRevokeEntitlementId] = useState<string | null>(null)
+  const [selectedGrantResourceId, setSelectedGrantResourceId] = useState('')
   const agentQuery = useQuery({ queryKey: [...consoleQueryKeys.agents, agentId], queryFn: () => getAgent(agentId) })
   const hosts = useQuery({
     queryKey: [...consoleQueryKeys.agents, agentId, 'hosts'],
@@ -49,9 +51,25 @@ export function AgentDetailPage({
     queryKey: [...consoleQueryKeys.agents, agentId, 'requests'],
     queryFn: () => listAgentAccessRequests({ agentId, limit: 100 }),
   })
-  const grants = useQuery({
-    queryKey: [...consoleQueryKeys.agents, agentId, 'grants'],
+  const grantInventory = useQuery({
+    queryKey: [...consoleQueryKeys.agents, agentId, 'grants', 'resources'],
     queryFn: () => listAgentScopeEntitlements(agentId, { limit: 100 }),
+  })
+  const grantResources = useMemo(() => {
+    const resources = new Map<string, { id: string; name: string; identifier: string }>()
+    for (const entitlement of grantInventory.data?.items ?? []) {
+      resources.set(entitlement.resource.id, entitlement.resource)
+    }
+    return [...resources.values()]
+  }, [grantInventory.data?.items])
+  const grants = useQuery({
+    enabled: selectedGrantResourceId.length > 0,
+    queryKey: [...consoleQueryKeys.agents, agentId, 'grants', { resourceId: selectedGrantResourceId }],
+    queryFn: () =>
+      listAgentScopeEntitlements(agentId, {
+        limit: 100,
+        resourceId: selectedGrantResourceId,
+      }),
   })
   const audit = useQuery({
     queryKey: [...consoleQueryKeys.agents, agentId, 'audit', { organizationId }],
@@ -88,8 +106,17 @@ export function AgentDetailPage({
   useEffect(() => {
     setTab(section)
   }, [section])
+  useEffect(() => {
+    if (grantResources.length === 0) {
+      if (selectedGrantResourceId) setSelectedGrantResourceId('')
+      return
+    }
+    if (!grantResources.some((resource) => resource.id === selectedGrantResourceId)) {
+      setSelectedGrantResourceId(grantResources[0].id)
+    }
+  }, [grantResources, selectedGrantResourceId])
 
-  const detailQueries = [agentQuery, hosts, requests, grants, audit]
+  const detailQueries = [agentQuery, hosts, requests, grantInventory, audit]
   if (detailQueries.some((query) => query.isLoading)) return <LoadingState label={tt('Loading Agent')} />
   const loadError = detailQueries.find((query) => query.error)?.error
   if (loadError)
@@ -100,7 +127,10 @@ export function AgentDetailPage({
   }
   const events = (audit.data?.items ?? []).filter((event) => event.agentIdentityId === agent.id)
   const resources = new Map(
-    [...(requests.data?.items ?? []), ...(grants.data?.items ?? [])].map((item) => [item.resource.id, item.resource]),
+    [...(requests.data?.items ?? []), ...(grantInventory.data?.items ?? [])].map((item) => [
+      item.resource.id,
+      item.resource,
+    ]),
   )
   const owner = `${agent.owner.displayName} · ${agent.owner.id}`
   const tabs: AgentDetailSection[] = ['overview', 'hosts', 'requests', 'grants', 'activity', 'settings']
@@ -174,10 +204,19 @@ export function AgentDetailPage({
             <AgentRequestsTable items={requests.data?.items ?? []} />
           </TabsContent>
           <TabsContent className="mt-5" value="grants">
-            <AgentGrantsTable
+            <AgentGrantsPanel
+              error={grants.error}
               items={grants.data?.items ?? []}
+              loading={grants.isLoading}
               onRevoke={setRevokeEntitlementId}
+              onResourceChange={setSelectedGrantResourceId}
+              onRetry={() => {
+                void grants.refetch()
+              }}
+              resources={grantResources}
               revoking={entitlementRevocation.isPending}
+              selectedResourceId={selectedGrantResourceId}
+              total={grants.data?.pagination.total ?? 0}
             />
           </TabsContent>
           <TabsContent className="mt-5" value="activity">
@@ -318,11 +357,124 @@ function AgentRequestsTable({ items }: { items: Awaited<ReturnType<typeof listAg
   )
 }
 
+function AgentGrantsPanel({
+  error,
+  items,
+  loading,
+  onResourceChange,
+  onRetry,
+  onRevoke,
+  resources,
+  revoking,
+  selectedResourceId,
+  total,
+}: {
+  error: Error | null
+  items: Awaited<ReturnType<typeof listAgentScopeEntitlements>>['items']
+  loading: boolean
+  onResourceChange: (resourceId: string) => void
+  onRetry: () => void
+  onRevoke: (entitlementId: string) => void
+  resources: Array<{ id: string; name: string; identifier: string }>
+  revoking: boolean
+  selectedResourceId: string
+  total: number
+}) {
+  const [resourceSearch, setResourceSearch] = useState('')
+  if (resources.length === 0) {
+    return <AgentGrantsTable items={[]} onRevoke={onRevoke} revoking={revoking} />
+  }
+  const selectedResource = resources.find((resource) => resource.id === selectedResourceId) ?? resources[0]
+  const normalizedSearch = resourceSearch.trim().toLowerCase()
+  const visibleResources = resources.filter((resource) =>
+    [resource.name, resource.identifier].some((value) => value.toLowerCase().includes(normalizedSearch)),
+  )
+
+  return (
+    <div className="grid min-h-[24rem] border-b md:grid-cols-[15rem_minmax(0,1fr)]">
+      <aside className="min-w-0 border-b md:border-r md:border-b-0">
+        <div className="border-b px-3 py-2.5">
+          <div className="mb-2 flex items-baseline justify-between gap-3">
+            <h2 className="font-medium">{tt('Resource Servers')}</h2>
+            <span className="text-xs tabular-nums text-muted-foreground">{resources.length.toLocaleString()}</span>
+          </div>
+          <label className="sr-only" htmlFor="agent-resource-search">
+            {tt('Search Resource Servers')}
+          </label>
+          <div className="relative">
+            <Search
+              aria-hidden="true"
+              className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
+            />
+            <Input
+              aria-label={tt('Search Resource Servers')}
+              className="pl-8"
+              id="agent-resource-search"
+              onChange={(event) => setResourceSearch(event.target.value)}
+              placeholder={tt('Search by name or identifier')}
+              value={resourceSearch}
+            />
+          </div>
+        </div>
+        <nav aria-label={tt('Resource Servers')} className="max-h-56 overflow-y-auto p-1.5 md:max-h-[28rem]">
+          {visibleResources.length ? (
+            visibleResources.map((resource) => (
+              <button
+                aria-current={resource.id === selectedResourceId ? 'true' : undefined}
+                className="block min-h-12 w-full border-l-2 border-transparent px-2.5 py-2 text-left transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring data-[active=true]:border-primary data-[active=true]:bg-muted"
+                data-active={resource.id === selectedResourceId}
+                key={resource.id}
+                onClick={() => onResourceChange(resource.id)}
+                type="button"
+              >
+                <span className="line-clamp-2 break-words text-sm font-medium leading-snug">{resource.name}</span>
+                <span className="mt-1 block truncate font-mono text-xs text-muted-foreground">
+                  {resource.identifier}
+                </span>
+              </button>
+            ))
+          ) : (
+            <p className="px-3 py-8 text-center text-sm text-muted-foreground">{tt('No matching Resource Servers.')}</p>
+          )}
+        </nav>
+      </aside>
+      <section className="min-w-0">
+        <header className="flex min-h-16 flex-col justify-center border-b px-4 py-2.5">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+            <div className="min-w-0">
+              <h2 className="break-words font-semibold leading-tight">{selectedResource.name}</h2>
+              <span className="mt-1 block break-all font-mono text-xs text-muted-foreground">
+                {selectedResource.identifier}
+              </span>
+            </div>
+            {!loading && !error ? (
+              <span className="text-sm text-muted-foreground">
+                {tt('{{count}} scope Entitlements', { count: total })}
+              </span>
+            ) : null}
+          </div>
+        </header>
+        <div className="px-4 py-3">
+          {loading ? (
+            <LoadingState label={tt('Loading Resource access')} />
+          ) : error ? (
+            <ErrorState error={error} onRetry={onRetry} />
+          ) : (
+            <AgentGrantsTable flat items={items} onRevoke={onRevoke} revoking={revoking} />
+          )}
+        </div>
+      </section>
+    </div>
+  )
+}
+
 function AgentGrantsTable({
+  flat = false,
   items,
   onRevoke,
   revoking,
 }: {
+  flat?: boolean
   items: Awaited<ReturnType<typeof listAgentScopeEntitlements>>['items']
   onRevoke: (entitlementId: string) => void
   revoking: boolean
@@ -331,15 +483,14 @@ function AgentGrantsTable({
     <DetailTable
       emptyDescription="This Agent has no Resource access."
       emptyTitle="No Resource access"
-      headers={['Resource Server', 'Scope', 'Source', 'Lifetime', 'Status', '']}
+      flat={flat}
+      headers={['Scope', 'Source', 'Lifetime', 'Status', '']}
       rows={items.map((entitlement) => ({
         id: entitlement.id,
         cells: [
-          <div key="resource">
-            <strong>{entitlement.resource.name}</strong>
-            <span className="block font-mono text-xs text-muted-foreground">{entitlement.resource.identifier}</span>
-          </div>,
-          <ScopeList key="scope" scopes={[entitlement.scope]} />,
+          <span className="font-mono text-sm" key="scope">
+            {entitlement.scope}
+          </span>,
           entitlement.sourceAccessRequestId ? tt('Access request') : tt('Direct'),
           entitlement.mode === 'until' && entitlement.expiresAt
             ? tt('Until {{date}}', { date: new Date(entitlement.expiresAt).toLocaleString() })
@@ -453,16 +604,18 @@ function ScopeList({ scopes }: { scopes: string[] }) {
 function DetailTable({
   emptyDescription,
   emptyTitle,
+  flat = false,
   headers,
   rows,
 }: {
   emptyDescription: string
   emptyTitle: string
+  flat?: boolean
   headers: string[]
   rows: Array<{ id: string; cells: ReactNode[] }>
 }) {
   return (
-    <div className="overflow-hidden rounded-xl border">
+    <div className={flat ? 'overflow-x-auto' : 'overflow-hidden rounded-xl border'}>
       <Table>
         <TableHeader>
           <TableRow>

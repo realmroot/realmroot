@@ -1,5 +1,5 @@
 import type { ManagementAgent } from '@shared/api/agent-api'
-import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AgentDetailPage } from '@/features/agents/management-agent-detail'
 import { emptyPagination, jsonResponse, renderWithQuery } from './console.test-utils'
@@ -12,10 +12,14 @@ afterEach(() => {
 describe('console Agent detail', () => {
   it('reviews every Agent resource, deactivates it, and soft-deletes it', async () => {
     const requests: Array<{ method: string; path: string }> = []
+    const scopeQueries: string[] = []
     let finishRevocation: ((response: Response) => void) | undefined
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const request = requestDetails(input, init)
       requests.push({ method: request.method, path: request.url.pathname })
+      if (request.method === 'GET' && request.url.pathname === '/api/agents/agent-1/scope-entitlements') {
+        scopeQueries.push(request.url.search)
+      }
       if (request.method === 'DELETE' && request.url.pathname === '/api/agents/agent-1/activation') {
         return Promise.resolve(new Response(null, { status: 204 }))
       }
@@ -50,10 +54,27 @@ describe('console Agent detail', () => {
     expect(screen.getByText('request-approved')).toBeTruthy()
 
     openTab('Resource access')
+    expect(await screen.findByRole('heading', { name: 'Projects API' })).toBeTruthy()
+    const resourceNavigation = screen.getByRole('navigation', { name: 'Resource Servers' })
+    expect(within(resourceNavigation).getByText('projects')).toBeTruthy()
+    const resourceSearch = screen.getByRole('textbox', { name: 'Search Resource Servers' })
+    fireEvent.change(resourceSearch, { target: { value: 'invoices' } })
+    expect(within(resourceNavigation).queryByText('Projects API')).toBeNull()
+    expect(within(resourceNavigation).getByText('Invoices API')).toBeTruthy()
     expect(await screen.findByText('One use')).toBeTruthy()
     expect(screen.getByText('Until revoked')).toBeTruthy()
     expect(screen.getByText(/^Until \d/)).toBeTruthy()
     expect(screen.getAllByRole('button', { name: 'Revoke' })).toHaveLength(2)
+    fireEvent.click(within(resourceNavigation).getByText('Invoices API'))
+    expect(await screen.findByRole('heading', { name: 'Invoices API' })).toBeTruthy()
+    expect(await screen.findByText('invoices:read')).toBeTruthy()
+    expect(screen.queryByText('projects:read')).toBeNull()
+    await waitFor(() =>
+      expect(scopeQueries.some((query) => new URLSearchParams(query).get('resourceId') === 'resource-2')).toBe(true),
+    )
+    fireEvent.change(resourceSearch, { target: { value: 'projects' } })
+    fireEvent.click(within(resourceNavigation).getByText('Projects API'))
+    expect(await screen.findByText('projects:read')).toBeTruthy()
     fireEvent.click(screen.getAllByRole('button', { name: 'Revoke' })[0])
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     fireEvent.click(screen.getAllByRole('button', { name: 'Revoke' })[0])
@@ -226,7 +247,11 @@ function agentDetailResponse(url: URL, collections: AgentCollections) {
     return jsonResponse({ items: collections.requests, pagination: page(collections.requests.length) })
   }
   if (path === '/api/agents/agent-1/scope-entitlements') {
-    return jsonResponse({ items: collections.grants, pagination: page(collections.grants.length) })
+    const resourceId = url.searchParams.get('resourceId')
+    const grants = resourceId
+      ? collections.grants.filter((entitlement) => entitlement.resource.id === resourceId)
+      : collections.grants
+    return jsonResponse({ items: grants, pagination: page(grants.length) })
   }
   if (path === '/api/realm/audit-events') {
     return jsonResponse({ items: collections.events, pagination: page(collections.events.length) })
@@ -252,7 +277,9 @@ const agent: ManagementAgent = {
 }
 
 function resource(id = 'resource-1') {
-  return { id, identifier: id === 'resource-1' ? 'projects' : id, name: id === 'resource-1' ? 'Projects API' : id }
+  if (id === 'resource-1') return { id, identifier: 'projects', name: 'Projects API' }
+  if (id === 'resource-2') return { id, identifier: 'invoices', name: 'Invoices API' }
+  return { id, identifier: id, name: id }
 }
 
 function auditEvent(id: string, action: string, result: 'allowed' | 'denied' | 'pending', resourceId: string | null) {
@@ -350,6 +377,17 @@ const populatedCollections = {
       status: 'active',
       expiresAt: null,
       createdAt: timestamp,
+    },
+    {
+      id: 'grant-invoices',
+      agentId: 'agent-1',
+      resource: resource('resource-2'),
+      scope: 'invoices:read',
+      mode: 'persistent',
+      status: 'active',
+      expiresAt: null,
+      createdAt: timestamp,
+      sourceAccessRequestId: 'request-approved',
     },
   ],
   events: [

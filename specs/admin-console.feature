@@ -347,6 +347,7 @@ Feature: Admin Console
     When I open the Agent detail in Console
     Then its inventory summary uses real active Resource and scope counts
     And separate tabs show Agent installations, access requests, Resource access, and audit activity
+    And Resource access offers a searchable Resource Server list and shows only the selected Resource Server's scope Entitlements
     And those tabs compose canonical Agent access request, scope entitlement, and audit collections
     And access request and scope entitlement collections omit history associated with deleted Resource Servers
     And protocol Agent implementation records and credential material are not exposed
