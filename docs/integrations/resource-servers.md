@@ -236,7 +236,7 @@ endpoint is recommended during the 0.1 compatibility window:
 ```json
 {
   "resource": "https://adapter.example.com/github",
-  "scopes_supported": ["github:metadata:read", "github:issues:write"],
+  "scopes_supported": ["metadata:read", "issues:write"],
   "account_connection_modes_supported": ["brokered"],
   "account_connection_authorization_endpoint": "https://adapter.example.com/github/account-connection-authorizations",
   "account_connection_token_endpoint": "https://adapter.example.com/github/account-connection-credentials",
@@ -263,7 +263,7 @@ the token endpoint. Return only connection metadata:
   "external_subject": "8208",
   "display_name": "Jasper Van",
   "broker_reference": "connection-opaque-id",
-  "scope": "github:metadata:read github:issues:write",
+  "scope": "metadata:read issues:write",
   "authorization_details": [
     { "type": "github_installation", "installation_id": "152097080" }
   ]
@@ -286,6 +286,86 @@ posts a short-lived signed JWT as the form field `request`. Validate the same
 issuer, Resource audience, expiry, and one-use `jti` rules, then invalidate the
 bound `broker_reference`. Return a successful 2xx response only after the
 provider credential can no longer be used.
+
+### Connection Event backchannel
+
+Brokered Resource Servers translate provider lifecycle notifications into
+provider-neutral Connection Event resources:
+
+```http
+PUT /api/provider-connection-events/delivery-018f4f92
+Authorization: Bearer <resource-scoped-secret>
+Realmroot-Timestamp: 1786233600
+Realmroot-Signature: sha256=<hmac-sha256-hex>
+Content-Type: application/json
+
+{
+  "type": "authorityChanged",
+  "resource": "https://adapter.example.com/provider",
+  "brokerReference": "connection-opaque-id",
+  "occurredAt": "2026-08-08T20:00:00.000Z",
+  "revision": 42,
+  "scopes": ["items:read", "items:write"],
+  "affectedScopes": ["items:read"],
+  "affectedAuthorizationDetails": [
+    { "type": "provider_resource", "resource_id": "resource-1" }
+  ],
+  "authorityConstraints": [
+    {
+      "authorizationDetails": [
+        { "type": "provider_resource", "resource_id": "resource-1" }
+      ],
+      "scopes": ["items:read"]
+    }
+  ]
+}
+```
+
+The five event types are `authorityChanged`, `resourcesChanged`, `suspended`,
+`restored`, and `revoked`. Their payloads are disjoint:
+`authorityChanged` requires complete connection-wide `scopes` and
+`authorityConstraints` plus `affectedScopes` and `affectedAuthorizationDetails`.
+`resourcesChanged` and `restored` require complete `scopes`,
+`authorizationDetails`, and `authorityConstraints` snapshots. `suspended` and
+`revoked` carry only the common event fields. Sign the exact string
+`${timestamp}\nPUT\n${pathname}\n${rawBody}` with HMAC-SHA256. Realmroot selects
+the verification secret by the exact `resource` URI, rejects signatures older
+than five minutes, and scopes replay identity to `(resource, eventId)`. A
+successful first application or exact replay returns `204`; conflicting reuse
+returns `409`. `revision` is a required positive integer that the Resource
+Server increases for each provider connection. Realmroot orders events by the
+per-connection `revision` only: a higher revision applies even with an earlier
+`occurredAt`, while a lower or equal revision is acknowledged without changing
+state even with a later `occurredAt`. The occurrence time is audit metadata for
+the applied revision. Never forward provider webhook event names or provider-specific
+top-level fields into this protocol. Provider-specific resource selectors may
+remain within RFC 9396 `authorizationDetails`.
+
+Connection Event receipts are durable audit and replay-safety records, not a
+transient request cache. Realmroot does not delete them automatically because a
+removed `(resource, eventId)` receipt would make an old delivery identity usable
+again. Operators should monitor receipt row count and D1 storage growth as part
+of capacity planning. Introduce retention or archival only with an explicit
+provider delivery-ID reuse guarantee and a window longer than every provider
+retry and audit requirement; never prune unapplied or recent receipts merely to
+recover space.
+
+For `authorityChanged`, `affectedAuthorizationDetails` and `affectedScopes` are
+required together. The details identify only the generic authority whose scopes
+changed, and `affectedScopes` is that authority's resulting scope set. The
+`scopes` remains the resulting connection-wide union and updates
+the Connection record; it is never used as the affected authority's scope set.
+Realmroot atomically revokes matching pending requests, grants, and leases only
+when their scopes exceed `affectedScopes`, so an adjacent authority retaining the
+same scope cannot keep an affected grant alive through the connection-wide union.
+Permission or resource additions preserve grants that remain subsets. Object
+members are compared recursively, arrays are treated as unordered sets, and
+scalars must match exactly. For
+`resourcesChanged` and `restored`, `scopes`, `authorizationDetails`, and
+`authorityConstraints` form the complete replacement connection context.
+Realmroot atomically expires or revokes requests, grants, and leases no longer
+covered by that snapshot. Every snapshot authorization detail must be covered
+by at least one constraint selector. Event bodies are limited to 64 KiB.
 
 ## External Authorization
 

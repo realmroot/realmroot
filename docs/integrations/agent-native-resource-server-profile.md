@@ -154,6 +154,56 @@ and opaque broker reference. The Resource Server validates it with the same
 issuer JWKS and permanently invalidates the referenced provider credential.
 Adapters SHOULD implement this endpoint; a later profile version may require it.
 
+Provider lifecycle changes flow back through the generic Connection Event
+resource at `PUT /api/provider-connection-events/{eventId}`. The event
+representation contains the canonical `resource`, opaque `brokerReference`,
+`occurredAt`, a positive monotonic `revision`, and one of `authorityChanged`,
+`resourcesChanged`, `suspended`, `restored`, or `revoked`. `authorityChanged`
+requires complete connection-wide `scopes` and `authorityConstraints` plus its
+affected scope/detail pair. `resourcesChanged` and `restored` require complete
+`scopes`, `authorizationDetails`, and `authorityConstraints` snapshots.
+`suspended` and `revoked` carry only the common event fields. Provider
+webhook names and payloads stay inside the
+Resource Server; Realmroot accepts only this provider-neutral representation.
+An `authorityChanged` event includes `affectedAuthorizationDetails` and
+`affectedScopes` together. The details select the changed authority and
+`affectedScopes` is its resulting scope set. Optional `scopes` remains the
+connection-wide union used to update the Connection record; it cannot authorize
+the selected authority. Realmroot therefore revokes grants for that authority
+only when their scopes exceed `affectedScopes`, even when an adjacent authority
+keeps the same scope in the connection-wide union. Permission expansion preserves
+grants already within the resulting authority. The three snapshot fields are
+complete replacement context for `resourcesChanged` and `restored`; every
+authorization detail must be covered by a constraint selector. Detail
+objects are compared recursively, arrays are unordered sets, and scalar values
+must match exactly when Realmroot determines whether a grant is a subset.
+The same atomic D1 boundary expires pending access requests and revokes active
+grants that exceed the resulting authority, then invalidates their leases, so an approval racing the
+event cannot recreate stale authority. Full snapshots also atomically revoke or
+expire requests, grants, and leases no longer covered by their global scopes,
+resources, or authority constraints.
+Connection Event receipts remain durable for audit and replay safety. Operators
+monitor their row count and D1 footprint; deletion requires an explicit retention
+policy longer than the provider's delivery retry and identity-reuse window, and
+must not remove recent or unapplied receipts.
+
+The Resource Server authenticates with the Bearer secret configured for the
+exact Resource URI and sends `Realmroot-Timestamp` as Unix seconds plus
+`Realmroot-Signature: sha256=<hex>`. The signature is HMAC-SHA256 over the exact
+bytes `${timestamp}\nPUT\n${pathname}\n${body}`. Realmroot rejects timestamps
+outside five minutes. An event identity is scoped to its Resource URI: an exact
+replay returns `204`, while the same identity with a different representation
+returns `409`. Realmroot orders mutations only by the Resource Server's
+per-connection `revision`. A higher revision applies even when its provider
+occurrence timestamp is earlier, while a lower or equal revision is acknowledged
+without mutating state even when its timestamp is later. `occurredAt` is retained
+as audit metadata for the applied revision. Realmroot immediately
+revokes affected active leases, constrains grants to reduced scopes and
+authorization details, keeps suspension reversible, and permanently revokes
+grants when the Connection is revoked or no safe authority remains.
+Representations larger than 64 KiB are rejected before the complete body is
+buffered.
+
 The API Resource selects the Provider Connector whose account identity it
 represents. Realmroot allows one brokered account-connection authority per
 Connector and one Provider Connection per owner and Connector. Connector type

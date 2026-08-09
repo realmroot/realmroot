@@ -10,8 +10,48 @@ const rfc9728ScopeRegistryMigrationName = '20260806214840_rfc9728_scope_registry
 const lifecycleMigrationName = '20260807004611_unique_weapon_omega.sql'
 const providerConnectionMigrationName = '20260808175918_brokered_provider_connections.sql'
 const resourceAccessModeMigrationName = '20260808205043_talented_the_call.sql'
+const providerConnectionEventMigrationName = '20260809023858_swift_patriot.sql'
 
 describe('tenant ownership migration', () => {
+  it('backfills authority constraints for existing brokered connections', () => {
+    const database = new DatabaseSync(':memory:')
+    try {
+      database.exec(`
+        CREATE TABLE provider_resource_authorization (
+          id text PRIMARY KEY NOT NULL,
+          credential_custody text NOT NULL,
+          authorization_details text NOT NULL,
+          granted_scopes text NOT NULL
+        );
+        INSERT INTO provider_resource_authorization VALUES
+          ('brokered', 'resource_server', '[{"type":"provider_installation","installation_id":"1"}]', '["contents:read"]'),
+          ('native', 'realmroot', '[{"type":"account"}]', '["profile:read"]');
+      `)
+
+      database.exec(
+        readFileSync(new URL(`../../migrations/${providerConnectionEventMigrationName}`, import.meta.url), 'utf8'),
+      )
+
+      const brokered = database
+        .prepare(
+          "select authority_constraints as constraints from provider_resource_authorization where id = 'brokered'",
+        )
+        .get() as { constraints: string }
+      const native = database
+        .prepare("select authority_constraints as constraints from provider_resource_authorization where id = 'native'")
+        .get() as { constraints: string }
+      expect(JSON.parse(brokered.constraints)).toEqual([
+        {
+          authorizationDetails: [{ type: 'provider_installation', installation_id: '1' }],
+          scopes: ['contents:read'],
+        },
+      ])
+      expect(JSON.parse(native.constraints)).toEqual([])
+    } finally {
+      database.close()
+    }
+  })
+
   it('rebuilds legacy ownership into the final schema and quarantines ambiguity', () => {
     const database = new DatabaseSync(':memory:')
     try {
@@ -26,6 +66,7 @@ describe('tenant ownership migration', () => {
             lifecycleMigrationName,
             providerConnectionMigrationName,
             resourceAccessModeMigrationName,
+            providerConnectionEventMigrationName,
           ].includes(name),
       )) {
         database.exec(readFileSync(new URL(`../../migrations/${name}`, import.meta.url), 'utf8'))
@@ -51,6 +92,9 @@ describe('tenant ownership migration', () => {
       )
       database.exec(
         readFileSync(new URL(`../../migrations/${resourceAccessModeMigrationName}`, import.meta.url), 'utf8'),
+      )
+      database.exec(
+        readFileSync(new URL(`../../migrations/${providerConnectionEventMigrationName}`, import.meta.url), 'utf8'),
       )
 
       expect(columnNames(database, 'application')).not.toContain('owner_user_id')

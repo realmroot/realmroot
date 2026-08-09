@@ -52,6 +52,7 @@ function statusCode(status: number): ErrorCode {
   if (status === 403) return 'forbidden'
   if (status === 404) return 'not_found'
   if (status === 409) return 'conflict'
+  if (status === 413) return 'payload_too_large'
   if (status === 412) return 'precondition_failed'
   if (status === 428) return 'precondition_required'
   if (status === 502) return 'bad_gateway'

@@ -1,0 +1,8 @@
+[
+  {
+    "method": "PUT",
+    "path": "/provider-connection-events/{eventId}",
+    "operationId": "replaceProviderConnectionEvent",
+    "semanticHash": "0c73657c48da5bab7336291e42e774869f824e434d4ded88a525e4045a7869fe"
+  }
+]

@@ -1,4 +1,5 @@
 import type { AuthorizationDetail } from '@shared/api/authorization-details'
+import type { ProviderAuthorityConstraint } from '@shared/api/external-resources'
 import { sql } from 'drizzle-orm'
 import { check, index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import { agentIdentity, agentIdentityBinding } from './agent-identity-tables'
@@ -26,10 +27,16 @@ export const providerResourceAuthorization = sqliteTable(
       .$type<AuthorizationDetail[]>()
       .notNull()
       .default(sql`'[]'`),
+    authorityConstraints: text('authority_constraints', { mode: 'json' })
+      .$type<ProviderAuthorityConstraint[]>()
+      .notNull()
+      .default(sql`'[]'`),
     clientGeneration: integer('client_generation').default(1).notNull(),
     status: text('status').notNull().default('active'),
     credentialExpiresAt: integer('credential_expires_at', { mode: 'timestamp_ms' }),
     revokedAt: integer('revoked_at', { mode: 'timestamp_ms' }),
+    providerEventOccurredAt: integer('provider_event_occurred_at', { mode: 'timestamp_ms' }),
+    providerEventRevision: integer('provider_event_revision'),
     createdAt: integer('created_at', { mode: 'timestamp_ms' })
       .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
       .notNull(),

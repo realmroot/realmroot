@@ -804,6 +804,29 @@ describe('external API resource authorization', () => {
       completeResourceConnectionIntent(deps, { state: 'state', code: 'code' }, 'https://auth.example.com'),
     ).rejects.toThrow('returned unsupported authorization details')
 
+    vi.mocked(deps.authorization.findResource).mockResolvedValueOnce(native)
+    vi.mocked(deps.externalHttp.fetch).mockResolvedValueOnce(
+      Response.json({
+        external_subject: existing.externalSubject,
+        display_name: existing.displayName,
+        broker_reference: 'connection-1',
+        authorization_details: [
+          { type: 'github_installation', installation_id: '152097080', account_login: 'realmroot' },
+        ],
+        authority_constraints: [
+          {
+            authorizationDetails: [
+              { type: 'github_installation', installation_id: '152097080', account_login: 'realmroot' },
+            ],
+            scopes: ['projects:admin'],
+          },
+        ],
+      }),
+    )
+    await expect(
+      completeResourceConnectionIntent(deps, { state: 'state', code: 'code' }, 'https://auth.example.com'),
+    ).rejects.toThrow('authority constraints do not cover')
+
     const brokerResponse = (externalSubject: string) =>
       Response.json({
         external_subject: externalSubject,
@@ -4818,7 +4841,12 @@ describe('external API resource authorization', () => {
   it('binds brokered native access tokens to the active resource-server-custodied connection', async () => {
     const deps = createTestDeps()
     const authorizationDetails = [
-      { type: 'github_installation', installation_id: '152097080', account_login: 'realmroot' },
+      {
+        type: 'github_installation',
+        installation_id: '152097080',
+        account_login: 'realmroot',
+        selector: { repositories: ['realmroot/realmroot'] },
+      },
     ]
     const native = {
       ...nativeResource(),
@@ -4843,6 +4871,7 @@ describe('external API resource authorization', () => {
       encryptedTokens: null,
       brokerReference: 'connection-1',
       authorizationDetails,
+      authorityConstraints: [{ authorizationDetails, scopes: ['openid', 'offline_access', 'projects:read'] }],
     }
     Object.assign(deps.authorization, { findResource: vi.fn().mockResolvedValue(native) })
     mockResourceOpenApi(deps, native.resourceUrl)
@@ -4940,6 +4969,14 @@ describe('external API resource authorization', () => {
       true,
       expect.any(Date),
       expect.objectContaining({ resourceConnectionId: connection.id }),
+    )
+
+    vi.mocked(deps.externalResources.findConnection).mockResolvedValue({
+      ...connection,
+      authorityConstraints: [{ authorizationDetails, scopes: [] }],
+    })
+    await expect(issueTargetAccessToken(deps, 'grant-1', proof, tokenUrl, principal(), signer)).rejects.toThrow(
+      'selected authority boundary',
     )
 
     vi.mocked(deps.externalResources.findConnection).mockResolvedValue({

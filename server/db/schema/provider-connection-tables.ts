@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { check, index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
+import { check, index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import { account, user } from './auth-tables'
 import { organization } from './authorization-tables'
 import { identityProviderConnector } from './connector-tables'
@@ -16,7 +16,7 @@ export const providerConnection = sqliteTable(
     authenticationAccountId: text('authentication_account_id').references(() => account.id, { onDelete: 'set null' }),
     externalSubject: text('external_subject').notNull(),
     displayName: text('display_name').notNull(),
-    status: text('status', { enum: ['active', 'revoked'] })
+    status: text('status', { enum: ['active', 'suspended', 'revoked'] })
       .notNull()
       .default('active'),
     createdAt: integer('created_at', { mode: 'timestamp_ms' })
@@ -46,5 +46,25 @@ export const providerConnection = sqliteTable(
     index('providerConnection_ownerUserId_idx').on(table.ownerUserId),
     index('providerConnection_ownerOrganizationId_idx').on(table.ownerOrganizationId),
     index('providerConnection_status_idx').on(table.status),
+  ],
+)
+
+export const providerConnectionEventReceipt = sqliteTable(
+  'provider_connection_event_receipt',
+  {
+    resource: text('resource').notNull(),
+    id: text('id').notNull(),
+    fingerprint: text('fingerprint').notNull(),
+    claimToken: text('claim_token').notNull(),
+    occurredAt: integer('occurred_at', { mode: 'timestamp_ms' }).notNull(),
+    revision: integer('revision').notNull(),
+    receivedAt: integer('received_at', { mode: 'timestamp_ms' })
+      .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+      .notNull(),
+    appliedAt: integer('applied_at', { mode: 'timestamp_ms' }),
+  },
+  (table) => [
+    primaryKey({ columns: [table.resource, table.id] }),
+    index('providerConnectionEventReceipt_receivedAt_idx').on(table.receivedAt),
   ],
 )

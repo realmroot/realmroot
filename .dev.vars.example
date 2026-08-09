@@ -1,2 +1,3 @@
 BETTER_AUTH_SECRET=
 CREDENTIAL_ENCRYPTION_KEY=
+PROVIDER_CONNECTION_EVENT_SECRETS={"https://adapter.example.com/provider":"replace-with-at-least-32-random-characters"}
