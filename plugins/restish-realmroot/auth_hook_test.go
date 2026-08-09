@@ -312,13 +312,6 @@ func (s *memoryStateStore) FindCredentialOffer(reference, runtime string, scopes
 	return resourceCredentialReference{}, os.ErrNotExist
 }
 
-func (s *memoryStateStore) FindCredentialState(reference, runtime string) (agentStateReference, error) {
-	if !s.exists || s.state.Runtime != runtime || !sameOrigin(reference, s.state.Origin) {
-		return agentStateReference{}, os.ErrNotExist
-	}
-	return agentStateReference{path: "memory", state: s.state}, nil
-}
-
 func decodeJWTPayload(t *testing.T, token string) map[string]any {
 	t.Helper()
 	parts := strings.Split(token, ".")

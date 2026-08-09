@@ -66,7 +66,7 @@ func main() {
 		if err := plugin.DecMode.Unmarshal(raw, &input); err != nil {
 			exitWithError(fmt.Errorf("decode credential source input: %w", err))
 		}
-		output, err := handleCredentialSource(context.Background(), input, newFileStateStore(), newHTTPClient(), systemBrowserOpener{})
+		output, err := handleCredentialSource(context.Background(), input, newFileStateStore(), newHTTPClient())
 		if err != nil {
 			exitWithError(err)
 		}

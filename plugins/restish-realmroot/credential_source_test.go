@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 )
@@ -16,7 +17,7 @@ func TestCredentialSourceDescribesStoredOfferWithoutCredentialMaterial(t *testin
 		Action:    "describe",
 		Reference: offer.ResourceHref,
 		Scopes:    offer.Scopes,
-	}, states, roundTripFunc(nil), &browserRecorder{})
+	}, states, roundTripFunc(nil))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -29,43 +30,27 @@ func TestCredentialSourceDescribesStoredOfferWithoutCredentialMaterial(t *testin
 	}
 }
 
-func TestCredentialSourceAcquiresAndRetainsAnOfferForTheOperationScopes(t *testing.T) {
+func TestCredentialSourceRequiresExplicitAccessForMissingOperationScopes(t *testing.T) {
+	t.Log("[spec: agent-identity/restish-explicit-resource-access]")
 	writeOffer := testCredential(t, "", time.Time{})
 	writeOffer.Scopes = []string{"files:write"}
 	readOffer := testCredential(t, "", time.Time{})
 	readOffer.CredentialEndpoint = "https://auth.example.com/api/access-requests/request-read/credentials"
 	states := newCredentialState(t, writeOffer)
+	requests := 0
 	client := roundTripFunc(func(request *http.Request) (*http.Response, error) {
-		if request.Method != http.MethodPost || request.URL.String() != "https://auth.example.com/api/access/requests" {
-			t.Fatalf("access request = %s %s", request.Method, request.URL)
-		}
-		var body struct {
-			Resource struct {
-				Href string `json:"href"`
-			} `json:"resource"`
-			Scopes []string `json:"scopes"`
-		}
-		if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
-			t.Fatal(err)
-		}
-		if body.Resource.Href != readOffer.ResourceHref || !sameStringSet(body.Scopes, readOffer.Scopes) {
-			t.Fatalf("access request body = %#v", body)
-		}
+		requests++
 		return jsonResponse(http.StatusCreated, completedInteractionWithOffer(readOffer)), nil
 	})
-
-	output, err := handleCredentialSource(context.Background(), credentialSourceInput{
+	_, err := handleCredentialSource(context.Background(), credentialSourceInput{
 		Action: "describe", Reference: readOffer.ResourceHref, Scopes: readOffer.Scopes,
-	}, states, client, &browserRecorder{})
-	if err != nil {
-		t.Fatal(err)
+	}, states, client)
+	if err == nil || !strings.Contains(err.Error(), "request exact Resource access before retrying") ||
+		!strings.Contains(err.Error(), readOffer.ResourceHref) || !strings.Contains(err.Error(), "files:read") {
+		t.Fatalf("error = %v, want explicit Resource access guidance", err)
 	}
-	if output.Description == nil || !sameStringSet(output.Description.Scopes, readOffer.Scopes) {
-		t.Fatalf("description = %#v", output.Description)
-	}
-	offers := states.state.DPoPCredentialOffers[readOffer.ResourceHref]
-	if len(offers) != 2 {
-		t.Fatalf("stored offers = %#v, want read and write offers", offers)
+	if requests != 0 {
+		t.Fatalf("credential describe created %d access requests", requests)
 	}
 }
 
@@ -111,7 +96,7 @@ func TestCredentialSourceIssuesTokenForRestishOwnedProof(t *testing.T) {
 		Reference: offer.ResourceHref,
 		Scopes:    offer.Scopes,
 		Proof:     targetProof,
-	}, states, client, &browserRecorder{})
+	}, states, client)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,7 +123,7 @@ func TestCredentialSourceReturnsStructuredDPoPNonceChallenge(t *testing.T) {
 
 	output, err := handleCredentialSource(context.Background(), credentialSourceInput{
 		Action: "issue", Reference: offer.ResourceHref, Scopes: offer.Scopes, Proof: "first-proof",
-	}, states, client, &browserRecorder{})
+	}, states, client)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -169,7 +154,7 @@ func TestCredentialSourceReturnsNextDPoPNonceWithIssuedCredential(t *testing.T) 
 
 	output, err := handleCredentialSource(context.Background(), credentialSourceInput{
 		Action: "issue", Reference: offer.ResourceHref, Scopes: offer.Scopes, Proof: "nonce-proof",
-	}, states, client, &browserRecorder{})
+	}, states, client)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -56,7 +56,6 @@ func handleCredentialSource(
 	input credentialSourceInput,
 	states credentialOfferStore,
 	client httpDoer,
-	opener browserOpener,
 ) (credentialSourceOutput, error) {
 	if input.Reference == "" {
 		return credentialSourceOutput{}, errors.New("Realmroot credential source reference is required")
@@ -70,7 +69,14 @@ func handleCredentialSource(
 		if input.Proof != "" {
 			return credentialSourceOutput{}, errors.New("Realmroot credential describe must not include a proof")
 		}
-		reference, err := ensureCredentialOffer(ctx, states, client, opener, input.Reference, runtime, input.Scopes)
+		reference, err := states.FindCredentialOffer(input.Reference, runtime, input.Scopes)
+		if errors.Is(err, os.ErrNotExist) {
+			return credentialSourceOutput{}, fmt.Errorf(
+				"Realmroot has no approved credential offer for Resource %q and scopes %q; request exact Resource access before retrying",
+				input.Reference,
+				input.Scopes,
+			)
+		}
 		if err != nil {
 			return credentialSourceOutput{}, err
 		}
@@ -111,70 +117,6 @@ func handleCredentialSource(
 	default:
 		return credentialSourceOutput{}, fmt.Errorf("unsupported Realmroot credential source action %q", input.Action)
 	}
-}
-
-func ensureCredentialOffer(
-	ctx context.Context,
-	states credentialOfferStore,
-	client httpDoer,
-	opener browserOpener,
-	reference string,
-	runtime string,
-	scopes []string,
-) (resourceCredentialReference, error) {
-	stored, err := states.FindCredentialOffer(reference, runtime, scopes)
-	if err == nil {
-		return stored, nil
-	}
-	if !errors.Is(err, os.ErrNotExist) {
-		return resourceCredentialReference{}, err
-	}
-	stateReference, err := states.FindCredentialState(reference, runtime)
-	if err != nil {
-		return resourceCredentialReference{}, err
-	}
-	protocol, err := usableProtocolCredential(ctx, client, stateReference.state)
-	if err != nil {
-		return resourceCredentialReference{}, err
-	}
-	endpoint := stateReference.state.Origin + "/api/access/requests"
-	proof, err := signDPoPProof(protocol.PrivateKey, http.MethodPost, endpoint, protocol.AccessToken, time.Now())
-	if err != nil {
-		return resourceCredentialReference{}, err
-	}
-	var representation map[string]any
-	if err := requestJSONHeaders(
-		ctx,
-		client,
-		http.MethodPost,
-		endpoint,
-		map[string]string{"Authorization": "DPoP " + protocol.AccessToken, "DPoP": proof},
-		map[string]any{
-			"resource": map[string]string{"href": reference},
-			"scopes":   append([]string(nil), scopes...),
-			"reason":   "Use the configured Resource credential for the requested operation",
-		},
-		&representation,
-	); err != nil {
-		return resourceCredentialReference{}, fmt.Errorf("request Resource credential offer: %w", err)
-	}
-	resource, err := decodeHookBody[interactiveResponse](representation)
-	if err != nil {
-		return resourceCredentialReference{}, fmt.Errorf("decode Resource credential offer: %w", err)
-	}
-	if _, err := handleInteractiveResource(
-		ctx,
-		resource,
-		representation,
-		2*time.Second,
-		stateReference.state.Origin,
-		opener,
-		states,
-		client,
-	); err != nil {
-		return resourceCredentialReference{}, err
-	}
-	return states.FindCredentialOffer(reference, runtime, scopes)
 }
 
 func issueTargetCredential(

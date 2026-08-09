@@ -110,10 +110,7 @@ type resourceCredentialReference struct {
 }
 
 type credentialOfferStore interface {
-	agentStateFinder
-	resourceAccessStateStore
 	FindCredentialOffer(reference string, runtime string, scopes []string) (resourceCredentialReference, error)
-	FindCredentialState(reference string, runtime string) (agentStateReference, error)
 }
 
 type fileStateStore struct {
@@ -325,31 +322,6 @@ func (s *fileStateStore) FindCredentialOffer(reference string, runtime string, s
 	}
 	if matched == nil {
 		return resourceCredentialReference{}, os.ErrNotExist
-	}
-	return *matched, nil
-}
-
-func (s *fileStateStore) FindCredentialState(reference string, runtime string) (agentStateReference, error) {
-	origin, err := realmrootOrigin(reference)
-	if err != nil {
-		return agentStateReference{}, err
-	}
-	var matched *agentStateReference
-	err = s.walkStates(func(path string, state agentState) error {
-		if state.Runtime != runtime || state.Origin != origin {
-			return nil
-		}
-		if matched != nil {
-			return errors.New("multiple Realmroot Agent states match the credential reference")
-		}
-		matched = &agentStateReference{path: path, state: state}
-		return nil
-	})
-	if err != nil {
-		return agentStateReference{}, fmt.Errorf("find Realmroot Agent state: %w", err)
-	}
-	if matched == nil {
-		return agentStateReference{}, os.ErrNotExist
 	}
 	return *matched, nil
 }

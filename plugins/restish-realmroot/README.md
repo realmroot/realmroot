@@ -109,6 +109,12 @@ Expired credentials are renewed through the stored offer. If renewal is no
 longer authorized, or the Resource Server returns `401`, the local credential
 is removed and a new access request is required.
 
+Credential-source lookup never creates an access request or opens an approval
+interaction. When no stored offer covers the target operation's scopes, the
+plugin returns an actionable error. The Agent must explicitly request exact
+Resource access, complete any controller approval, and retry the target
+operation.
+
 ## State
 
 Host state is keyed by the discovered issuer, so runtimes on the same device

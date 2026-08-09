@@ -239,5 +239,10 @@ rejects renewal, rediscover the Resource and repeat the access request. On
 `403`, surface the target's authority error. Request additional scopes only
 when the user's task requires them.
 
+If the credential source reports that no approved offer covers the operation
+scopes, do not retry the target or expect the plugin to start approval. Return
+to step 5, request exact Resource access explicitly, complete any controller
+approval, and then retry the target operation.
+
 Completion means the intended target operation succeeded. Resource discovery,
 connection, approval, or a ready receipt alone is not completion.

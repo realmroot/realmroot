@@ -301,6 +301,15 @@ Feature: Agent identity and delegated API authorization
       Then Restish removes the rejected access token
       And the Agent must discover the current connection state and request current Resource access before retrying
 
+    @entrypoint:restish @journey:restish-explicit-resource-access
+    Scenario: Restish requires explicit Resource access before acquiring a target credential
+      Given a target credential binding names a Resource
+      And no stored credential offer covers the target operation's scopes
+      When Restish asks the plugin to describe that credential source
+      Then the plugin returns an error requiring explicit Resource access for those scopes
+      And does not create an access request or open a controller approval interaction
+      And the Agent must request exact Resource access before retrying the target operation
+
     @entrypoint:restish @journey:restish-deep-resource-response
     Scenario: Restish preserves deeply nested resource responses
       Given a registered API resource returns a valid deeply nested document such as an OpenAPI contract
