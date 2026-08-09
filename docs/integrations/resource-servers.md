@@ -335,9 +335,10 @@ successful first application or exact replay returns `204`; conflicting reuse
 returns `409`. `revision` is a required positive integer that the Resource
 Server increases for each provider connection. Realmroot orders events by the
 per-connection `revision` only: a higher revision applies even with an earlier
-`occurredAt`, while a lower or equal revision is acknowledged without changing
-state even with a later `occurredAt`. The occurrence time is audit metadata for
-the applied revision. Never forward provider webhook event names or provider-specific
+`occurredAt`, while a lower revision is acknowledged without changing state
+even with a later `occurredAt`. A different event using the current revision
+conflicts because each event must increase the connection revision. The occurrence
+time is audit metadata for the applied revision. Never forward provider webhook event names or provider-specific
 top-level fields into this protocol. Provider-specific resource selectors may
 remain within RFC 9396 `authorizationDetails`.
 

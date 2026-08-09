@@ -369,7 +369,8 @@ Feature: Agent identity and delegated API authorization
       And replaying the same event has no additional effect
       But reusing its event identity for a different representation is rejected
       And events are ordered only by revision so a higher revision applies despite an earlier occurrence time
-      But a lower or equal revision cannot change Realmroot state despite a later occurrence time
+      But a lower revision is acknowledged without changing Realmroot state despite a later occurrence time
+      And a different event using the current revision is rejected as a conflict
       And an authority reduction racing approval cannot recreate a grant from an older Connection revision
       And later discovery, approval, and credential issuance enforce the persisted scopes of the selected authority
       And unsigned or invalidly signed Connection Events cannot change Realmroot state

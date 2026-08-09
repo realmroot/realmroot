@@ -66,7 +66,9 @@ export async function applyProviderConnectionEvent(
             }
           : { ...common, type: event.type },
   )
-  if (result === 'conflict') throw conflict('Connection Event identity was already used for another representation.')
+  if (result === 'conflict') {
+    throw conflict('Connection Event conflicts with an existing event identity or the current Connection revision.')
+  }
   if (result === 'not_found') throw notFound('The Connection referenced by this event was not found.')
 }
 

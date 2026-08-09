@@ -64,7 +64,10 @@ export function createExternalResourceRepository(db: Database): ExternalResource
   return {
     async applyProviderConnectionEvent(input) {
       const [existingReceipt] = await db
-        .select({ fingerprint: providerConnectionEventReceipt.fingerprint })
+        .select({
+          fingerprint: providerConnectionEventReceipt.fingerprint,
+          appliedAt: providerConnectionEventReceipt.appliedAt,
+        })
         .from(providerConnectionEventReceipt)
         .where(
           and(
@@ -73,7 +76,9 @@ export function createExternalResourceRepository(db: Database): ExternalResource
           ),
         )
         .limit(1)
-      if (existingReceipt) return existingReceipt.fingerprint === input.fingerprint ? 'duplicate' : 'conflict'
+      if (existingReceipt) {
+        return existingReceipt.fingerprint === input.fingerprint && existingReceipt.appliedAt ? 'duplicate' : 'conflict'
+      }
 
       const targets = await db
         .select({ authorization: providerResourceAuthorization, connection: providerConnection })
@@ -114,6 +119,30 @@ export function createExternalResourceRepository(db: Database): ExternalResource
           .select({ id: providerResourceAuthorization.id })
           .from(providerResourceAuthorization)
           .where(and(eq(providerResourceAuthorization.id, target.authorization.id), canApplyEvent, claimedEvent)),
+      )
+      const acknowledgedEvent = exists(
+        db
+          .select({ id: providerResourceAuthorization.id })
+          .from(providerResourceAuthorization)
+          .where(
+            and(
+              eq(providerResourceAuthorization.id, target.authorization.id),
+              claimedEvent,
+              or(
+                canApplyEvent,
+                gt(providerResourceAuthorization.providerEventRevision, input.revision),
+                input.type === 'revoked'
+                  ? undefined
+                  : and(
+                      eq(providerResourceAuthorization.status, 'revoked'),
+                      or(
+                        isNull(providerResourceAuthorization.providerEventRevision),
+                        lt(providerResourceAuthorization.providerEventRevision, input.revision),
+                      ),
+                    ),
+              ),
+            ),
+          ),
       )
       const revokeGrant = authorityInvalidationPredicate(
         input,
@@ -214,6 +243,18 @@ export function createExternalResourceRepository(db: Database): ExternalResource
           .set({ status: providerConnectionStatus(target.connection.status, input.type), updatedAt: input.receivedAt })
           .where(and(eq(providerConnection.id, target.connection.id), currentEvent)),
         db
+          .update(providerConnectionEventReceipt)
+          .set({ appliedAt: input.receivedAt })
+          .where(
+            and(
+              eq(providerConnectionEventReceipt.resource, input.resource),
+              eq(providerConnectionEventReceipt.id, input.id),
+              eq(providerConnectionEventReceipt.claimToken, claimToken),
+              acknowledgedEvent,
+            ),
+          )
+          .returning({ id: providerConnectionEventReceipt.id }),
+        db
           .update(providerResourceAuthorization)
           .set({
             status: connectionAuthorizationStatus(target.authorization.status, input.type),
@@ -229,22 +270,18 @@ export function createExternalResourceRepository(db: Database): ExternalResource
             updatedAt: input.receivedAt,
           })
           .where(and(eq(providerResourceAuthorization.id, target.authorization.id), canApplyEvent, claimedEvent)),
-        db
-          .update(providerConnectionEventReceipt)
-          .set({ appliedAt: input.receivedAt })
-          .where(
-            and(
-              eq(providerConnectionEventReceipt.resource, input.resource),
-              eq(providerConnectionEventReceipt.id, input.id),
-              eq(providerConnectionEventReceipt.claimToken, claimToken),
-            ),
-          ),
       ]
       const results = await db.batch(statements as [(typeof statements)[number], ...Array<(typeof statements)[number]>])
       const inserted = results[0]
-      if (Array.isArray(inserted) && inserted.length > 0) return 'applied'
+      if (Array.isArray(inserted) && inserted.length > 0) {
+        const acknowledged = results.at(-2)
+        return Array.isArray(acknowledged) && acknowledged.length > 0 ? 'applied' : 'conflict'
+      }
       const [racedReceipt] = await db
-        .select({ fingerprint: providerConnectionEventReceipt.fingerprint })
+        .select({
+          fingerprint: providerConnectionEventReceipt.fingerprint,
+          appliedAt: providerConnectionEventReceipt.appliedAt,
+        })
         .from(providerConnectionEventReceipt)
         .where(
           and(
@@ -253,7 +290,7 @@ export function createExternalResourceRepository(db: Database): ExternalResource
           ),
         )
         .limit(1)
-      return racedReceipt?.fingerprint === input.fingerprint ? 'duplicate' : 'conflict'
+      return racedReceipt?.fingerprint === input.fingerprint && racedReceipt.appliedAt ? 'duplicate' : 'conflict'
     },
 
     async connectAuthenticationAccount(input) {
