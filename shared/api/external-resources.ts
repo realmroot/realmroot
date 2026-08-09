@@ -35,7 +35,7 @@ const providerConnectionEventCommonShape = {
   resource: z.url(),
   brokerReference: nonEmptyString,
   occurredAt: z.iso
-    .datetime()
+    .datetime({ offset: true })
     .describe('Provider occurrence time retained as audit metadata; it does not determine mutation order.'),
   revision: z.number().int().positive().describe('Monotonic per-connection revision used as the sole mutation order.'),
 }

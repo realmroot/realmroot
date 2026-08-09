@@ -11,7 +11,7 @@ const body = JSON.stringify({
   type: 'authorityChanged',
   resource: 'https://adapter.example.com/provider',
   brokerReference: 'installation-1',
-  occurredAt: '2026-08-08T20:00:00.000Z',
+  occurredAt: '2026-08-09T01:28:27.000-04:00',
   revision: 1,
   scopes: ['contents:read'],
   affectedScopes: ['contents:read'],
