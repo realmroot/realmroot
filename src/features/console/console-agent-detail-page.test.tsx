@@ -111,6 +111,9 @@ describe('console Agent detail', () => {
     }
     expect(screen.getAllByText('Realmroot').length).toBeGreaterThan(0)
     expect(screen.getAllByText('resource-missing')).toHaveLength(2)
+    expect(screen.getByText('Scopes: projects:read')).toBeTruthy()
+    expect(screen.getByText('Host host-1')).toBeTruthy()
+    expect(screen.getByText('Reason: policy_denied')).toBeTruthy()
     fireEvent.change(screen.getByRole('textbox', { name: 'Search audit activity' }), {
       target: { value: 'projects:read' },
     })
@@ -400,7 +403,12 @@ const populatedCollections = {
     auditEvent('event-5', 'agent.capability_decided', 'denied', null),
     auditEvent('event-6', 'agent.capability_decided', 'allowed', null),
     auditEvent('event-7', 'api_resource.access_requested', 'pending', 'resource-1'),
-    auditEvent('event-8', 'api_resource.access_decided', 'denied', 'resource-1'),
+    {
+      ...auditEvent('event-8', 'api_resource.access_decided', 'denied', 'resource-1'),
+      scopes: ['projects:read'],
+      hostId: 'host-1',
+      reasonCode: 'policy_denied',
+    },
     auditEvent('event-9', 'api_resource.access_decided', 'allowed', 'resource-1'),
     auditEvent('event-10', 'api_resource.access_revoked', 'allowed', 'resource-1'),
     auditEvent('event-11', 'api_resource.token_issued', 'allowed', 'resource-1'),
