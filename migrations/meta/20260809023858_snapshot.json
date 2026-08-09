@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "89cfae79-d2ae-44c0-bcdb-1144838e4db5",
+  "id": "2b41e67e-c09d-4334-a62d-a2a42733ec59",
   "prevId": "acf8a74c-650d-480a-9654-686068a8668a",
   "tables": {
     "agent_audit_event": {
@@ -6443,6 +6443,14 @@
         },
         "authorization_details": {
           "name": "authorization_details",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'[]'"
+        },
+        "authority_constraints": {
+          "name": "authority_constraints",
           "type": "text",
           "primaryKey": false,
           "notNull": true,

@@ -123,6 +123,9 @@
       "CREDENTIAL_ENCRYPTION_KEY": {
         "description": "Master secret for AES-GCM encryption of Connector and external API resource credentials"
       },
+      "PROVIDER_CONNECTION_EVENT_SECRETS": {
+        "description": "Optional JSON map from canonical brokered Resource URIs to independent Connection Event secrets"
+      },
       "DB": {
         "description": "D1 database for Realmroot identity data"
       },

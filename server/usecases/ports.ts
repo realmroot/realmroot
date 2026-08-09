@@ -29,6 +29,7 @@ import type {
 } from '@shared/api/authorization'
 import type { AuthorizationDetail } from '@shared/api/authorization-details'
 import type { ConfigzConfigResponse } from '@shared/api/configz'
+import type { ProviderAuthorityConstraint } from '@shared/api/external-resources'
 import type {
   DeveloperConsoleAccessPolicyResponse,
   EmailServiceSettings,
@@ -545,6 +546,7 @@ export interface ProviderResourceAuthorizationRecord {
   brokerReference?: string | null
   grantedScopes: string[]
   authorizationDetails: AuthorizationDetail[]
+  authorityConstraints?: ProviderAuthorityConstraint[]
   clientGeneration?: number
   status: string
   credentialExpiresAt: Date | null
@@ -666,20 +668,49 @@ export interface ExternalTokenLeaseRecord {
   createdAt: Date
 }
 
+type ProviderConnectionEventRepositoryInput = {
+  id: string
+  fingerprint: string
+  resource: string
+  brokerReference: string
+  occurredAt: Date
+  revision: number
+  receivedAt: Date
+} & (
+  | {
+      type: 'authorityChanged'
+      scopes: string[]
+      affectedScopes: string[]
+      affectedAuthorizationDetails: AuthorizationDetail[]
+      authorityConstraints: ProviderAuthorityConstraint[]
+    }
+  | {
+      type: 'resourcesChanged'
+      scopes: string[]
+      authorizationDetails: AuthorizationDetail[]
+      authorityConstraints: ProviderAuthorityConstraint[]
+      affectedScopes?: never
+      affectedAuthorizationDetails?: never
+    }
+  | {
+      type: 'restored'
+      scopes: string[]
+      authorizationDetails: AuthorizationDetail[]
+      authorityConstraints: ProviderAuthorityConstraint[]
+      affectedScopes?: never
+      affectedAuthorizationDetails?: never
+    }
+  | {
+      type: 'suspended' | 'revoked'
+      affectedScopes?: never
+      affectedAuthorizationDetails?: never
+    }
+)
+
 export interface ExternalResourceRepository {
-  applyProviderConnectionEvent(input: {
-    id: string
-    fingerprint: string
-    resource: string
-    brokerReference: string
-    type: 'authorityChanged' | 'resourcesChanged' | 'suspended' | 'restored' | 'revoked'
-    occurredAt: Date
-    revision: number
-    receivedAt: Date
-    scopes?: string[]
-    authorizationDetails?: AuthorizationDetail[]
-    affectedAuthorizationDetails?: AuthorizationDetail[]
-  }): Promise<'applied' | 'duplicate' | 'conflict' | 'not_found'>
+  applyProviderConnectionEvent(
+    input: ProviderConnectionEventRepositoryInput,
+  ): Promise<'applied' | 'duplicate' | 'conflict' | 'not_found'>
   connectAuthenticationAccount(input: {
     authenticationAccountId: string
     providerId: string
@@ -725,6 +756,7 @@ export interface ExternalResourceRepository {
       brokerReference?: string | null
       grantedScopes: string[]
       authorizationDetails: AuthorizationDetail[]
+      authorityConstraints: ProviderAuthorityConstraint[]
       clientGeneration?: number
       status: 'active'
       credentialExpiresAt: Date | null
@@ -799,6 +831,7 @@ export interface ExternalResourceRepository {
       updatedAt: Date
     },
     audit: AgentAuditEventRecord,
+    expectedConnectionRevision?: number | null,
   ): Promise<
     { grant: AgentAccessGrantRecord; request: AgentAccessRequestRecord } | 'grant_unavailable' | 'request_changed'
   >

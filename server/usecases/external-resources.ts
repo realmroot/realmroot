@@ -39,7 +39,9 @@ import type {
   CreateAgentAccessRequest,
   CreateResourceConnectionIntentRequest,
   DecideAgentAccessRequest,
+  ProviderAuthorityConstraint,
 } from '@shared/api/external-resources'
+import { providerAuthorityConstraintsSchema } from '@shared/api/external-resources'
 import { type PaginationInput, paginationMetadata } from '@shared/api/pagination'
 import { agentBootstrapScopes, realmrootOAuthScopes } from '@shared/authz'
 import { realmrootManagementScopes } from '@shared/scope-registry'
@@ -347,6 +349,7 @@ export async function completeResourceConnectionIntent(
     brokerReference: null,
     grantedScopes,
     authorizationDetails,
+    authorityConstraints: [],
     clientGeneration: intent.clientGeneration ?? 1,
     status: 'active' as const,
     credentialExpiresAt: expiresAt,
@@ -401,11 +404,19 @@ async function completeBrokeredResourceConnectionIntent(
   const grantedScopes = scopeString(result.scope) ?? intent.scopes
   assertScopeSubset(intent.scopes, grantedScopes, 'brokered account connection')
   const authorizationDetails = authorizationDetailsSchema.parse(result.authorization_details ?? [])
+  const authorityConstraints =
+    result.authority_constraints === undefined
+      ? authorizationDetails.map((authorizationDetail) => ({
+          authorizationDetails: [authorizationDetail],
+          scopes: grantedScopes,
+        }))
+      : providerAuthorityConstraintsSchema.parse(result.authority_constraints)
   if (resource.authorizationDetails.length > 0) {
     assertConcreteAuthorizationDetails(resource.authorizationDetails, authorizationDetails, 'Brokered connection')
   } else if (authorizationDetails.length > 0) {
     throw invalidAuthorizationDetails('Brokered connection returned unsupported authorization details.')
   }
+  validateAuthorityConstraints(authorityConstraints, authorizationDetails, grantedScopes)
   const now = new Date()
   const provider = await ensureProviderConnection(deps, resource, intent, externalSubject, displayName, now)
   const existing = await deps.externalResources.findConnectionByOwnerResource({
@@ -420,6 +431,7 @@ async function completeBrokeredResourceConnectionIntent(
     brokerReference,
     grantedScopes,
     authorizationDetails,
+    authorityConstraints,
     clientGeneration: 1,
     status: 'active' as const,
     credentialExpiresAt: null,
@@ -1233,6 +1245,9 @@ export async function createAgentAccessRequest(
   validateResourceRequestedScopes(resource, input.scopes)
   const authorizationDetails = input.authorizationDetails ?? []
   assertAccessRequestAuthorizationDetails(resource, connection, authorizationDetails)
+  if (connection && brokeredAccountConnection(resource)) {
+    assertAuthorityConstraintScopes(input.scopes, connection, authorizationDetails)
+  }
   await requireAgentResourceVisibility(deps, resource, identity.identity)
   const scopes = [...new Set(input.scopes)].sort()
   const reusableGrants = (await deps.externalResources.listActiveGrantsByAgent(principal.identityId)).filter(
@@ -1582,6 +1597,9 @@ export async function decideAgentAccessRequest(
     assertScopeSubset(request.scopes, connection.grantedScopes, 'connected account')
     assertAuthorizationDetailsSelection(resource, connection, authorizationDetails)
     assertAuthorizationDetailsSubset(authorizationDetails, connection.authorizationDetails, 'connected account')
+    if (brokeredAccountConnection(resource)) {
+      assertAuthorityConstraintScopes(request.scopes, connection, authorizationDetails)
+    }
   } else if (connectionId) {
     throw badRequest('Native API resources do not use account connections.')
   } else {
@@ -1627,6 +1645,7 @@ export async function decideAgentAccessRequest(
       updatedAt: now,
     },
     audit,
+    brokeredAccountConnection(resource) ? (connection?.providerEventRevision ?? null) : undefined,
   )
   if (approved === 'grant_unavailable') {
     throw badRequest('The API resource was deleted before access could be approved.')
@@ -1904,6 +1923,11 @@ async function issueNativeAccessToken(
       connection.credentialCustody !== 'resource_server')
   ) {
     throw forbidden('Active brokered account connection is required.')
+  }
+  if (brokered) {
+    assertScopeSubset(request.scopes, connection!.grantedScopes, 'connected account')
+    assertAuthorizationDetailsSubset(grant.authorizationDetails, connection!.authorizationDetails, 'connected account')
+    assertAuthorityConstraintScopes(request.scopes, connection!, grant.authorizationDetails)
   }
   if (signer.issuer !== principal.issuer) {
     throw forbidden('Agent identity does not belong to the active OAuth issuer.')
@@ -2198,7 +2222,7 @@ async function readAuthorizationDetailCatalog(
       connectionStatus: connectionAuthorized ? ('authorized' as const) : ('authorization_required' as const),
       authorizedScopes: connectionAuthorized ? [...authorizedScopes].sort() : [],
       requestableScopes: connectionAuthorized
-        ? connection.grantedScopes
+        ? authorityConstraintScopes(connection, [item.authorizationDetail])
             .filter(
               (scope) =>
                 scope !== 'openid' &&
@@ -2252,7 +2276,7 @@ async function readResourceCatalog(
         display: authorizationDetailDisplay(authorizationDetail),
         connectionStatus: 'authorized' as const,
         authorizedScopes,
-        requestableScopes: connection.grantedScopes
+        requestableScopes: authorityConstraintScopes(connection, [authorizationDetail])
           .filter((scope) => scope !== 'openid' && scope !== 'offline_access' && !authorizedScopes.includes(scope))
           .sort(),
       }
@@ -2569,7 +2593,9 @@ function connectionCoversRequest(
 ) {
   return Boolean(
     connection?.status === 'active' &&
-      request.scopes.every((scope) => connection.grantedScopes.includes(scope)) &&
+      request.scopes.every((scope) =>
+        authorityConstraintScopes(connection, request.authorizationDetails).includes(scope),
+      ) &&
       isAuthorizationDetailsSubset(request.authorizationDetails, connection.authorizationDetails),
   )
 }
@@ -3094,6 +3120,77 @@ function isAuthorizationDetailsSubset(requested: AuthorizationDetail[], allowed:
   return true
 }
 
+function authorizationSelectorCovers(requested: AuthorizationDetail, selector: AuthorizationDetail): boolean {
+  return jsonSelectorCovers(requested, selector)
+}
+
+function jsonSelectorCovers(requested: unknown, selector: unknown): boolean {
+  if (requested === null || selector === null) return requested === selector
+  if (Array.isArray(requested)) {
+    return (
+      Array.isArray(selector) &&
+      requested.every((item) => selector.some((candidate) => jsonSelectorCovers(item, candidate)))
+    )
+  }
+  if (typeof requested === 'object') {
+    if (typeof selector !== 'object' || Array.isArray(selector)) return false
+    return Object.entries(requested as Record<string, unknown>).every(([key, value]) =>
+      jsonSelectorCovers(value, (selector as Record<string, unknown>)[key]),
+    )
+  }
+  return requested === selector
+}
+
+function validateAuthorityConstraints(
+  constraints: ProviderAuthorityConstraint[],
+  authorizationDetails: AuthorizationDetail[],
+  grantedScopes: string[],
+) {
+  if (
+    constraints.some(
+      (constraint) =>
+        !isAuthorizationDetailsSubset(constraint.authorizationDetails, authorizationDetails) ||
+        constraint.scopes.some((scope) => !grantedScopes.includes(scope)),
+    ) ||
+    authorizationDetails.some(
+      (detail) =>
+        !constraints.some((constraint) =>
+          constraint.authorizationDetails.some((selector) => authorizationSelectorCovers(detail, selector)),
+        ),
+    )
+  ) {
+    throw invalidAuthorizationDetails('Brokered connection authority constraints do not cover its granted authority.')
+  }
+}
+
+function authorityConstraintScopes(
+  connection: ProviderResourceAuthorizationRecord,
+  authorizationDetails: AuthorizationDetail[],
+) {
+  if (authorizationDetails.length === 0) return connection.grantedScopes
+  const constraints = connection.authorityConstraints ?? []
+  if (constraints.length === 0) return connection.grantedScopes
+  const scopesByDetail = authorizationDetails.map((detail) => [
+    ...new Set(
+      constraints
+        .filter((constraint) =>
+          constraint.authorizationDetails.some((selector) => authorizationSelectorCovers(detail, selector)),
+        )
+        .flatMap((constraint) => constraint.scopes),
+    ),
+  ])
+  if (scopesByDetail.some((scopes) => scopes.length === 0)) return []
+  return connection.grantedScopes.filter((scope) => scopesByDetail.every((scopes) => scopes.includes(scope)))
+}
+
+function assertAuthorityConstraintScopes(
+  requested: string[],
+  connection: ProviderResourceAuthorizationRecord,
+  authorizationDetails: AuthorizationDetail[],
+) {
+  assertScopeSubset(requested, authorityConstraintScopes(connection, authorizationDetails), 'selected authority')
+}
+
 function exactAuthorizationDetails(left: AuthorizationDetail[], right: AuthorizationDetail[]) {
   if (left.length !== right.length) return false
   const leftEntries = left.map(canonicalJson).sort()
@@ -3432,6 +3529,7 @@ function toResourceConnection(record: ProviderResourceAuthorizationRecord) {
     displayName: record.displayName,
     grantedScopes: record.grantedScopes,
     authorizationDetails: record.authorizationDetails,
+    authorityConstraints: record.authorityConstraints ?? [],
     status: record.status as 'active' | 'suspended' | 'revoked',
     credentialExpiresAt: record.credentialExpiresAt?.toISOString() ?? null,
     createdAt: record.createdAt.toISOString(),

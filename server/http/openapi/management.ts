@@ -224,7 +224,7 @@ const managementRoutes: ManagementRouteConfig[] = [
     ],
     request: {
       params: z.object({
-        eventId: providerConnectionEventIdSchema.openapi({
+        eventId: providerConnectionEventIdSchema.meta({
           param: { name: 'eventId', in: 'path' },
           example: 'delivery-018f4f92',
         }),
@@ -233,14 +233,14 @@ const managementRoutes: ManagementRouteConfig[] = [
         'Realmroot-Timestamp': z
           .string()
           .regex(/^\d+$/)
-          .openapi({
+          .meta({
             param: { name: 'Realmroot-Timestamp', in: 'header' },
             example: '1786233600',
           }),
         'Realmroot-Signature': z
           .string()
           .regex(/^sha256=[a-f0-9]{64}$/)
-          .openapi({
+          .meta({
             param: { name: 'Realmroot-Signature', in: 'header' },
             example: `sha256=${'0'.repeat(64)}`,
           }),

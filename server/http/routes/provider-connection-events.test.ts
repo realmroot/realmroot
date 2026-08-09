@@ -14,7 +14,14 @@ const body = JSON.stringify({
   occurredAt: '2026-08-08T20:00:00.000Z',
   revision: 1,
   scopes: ['contents:read'],
-  authorizationDetails: [{ type: 'provider_installation', resource_ids: ['repo-1'] }],
+  affectedScopes: ['contents:read'],
+  affectedAuthorizationDetails: [{ type: 'provider_installation', resource_id: 'repo-1' }],
+  authorityConstraints: [
+    {
+      authorizationDetails: [{ type: 'provider_installation', resource_id: 'repo-1' }],
+      scopes: ['contents:read'],
+    },
+  ],
 })
 
 describe('Provider Connection Event routes', () => {
@@ -35,8 +42,84 @@ describe('Provider Connection Event routes', () => {
         brokerReference: 'installation-1',
         type: 'authorityChanged',
         scopes: ['contents:read'],
+        affectedScopes: ['contents:read'],
       }),
     )
+  })
+
+  it('rejects incomplete or misplaced authority and resource change fields with 400', async () => {
+    const deps = createTestDeps()
+    const app = testApp(deps)
+    const timestamp = `${Math.floor(Date.now() / 1000)}`
+    const valid = JSON.parse(body) as Record<string, unknown>
+    const invalidBodies = [
+      JSON.stringify({ ...valid, affectedScopes: undefined }),
+      JSON.stringify({ ...valid, affectedAuthorizationDetails: undefined }),
+      JSON.stringify({ ...valid, authorizationDetails: [] }),
+      JSON.stringify({ ...valid, type: 'restored' }),
+      JSON.stringify({ ...valid, affectedScopes: ['contents:read', 'issues:write'] }),
+      JSON.stringify({
+        ...valid,
+        authorityConstraints: [
+          {
+            authorizationDetails: valid.affectedAuthorizationDetails,
+            scopes: ['issues:write'],
+          },
+        ],
+      }),
+      JSON.stringify({
+        type: 'resourcesChanged',
+        resource: valid.resource,
+        brokerReference: valid.brokerReference,
+        occurredAt: valid.occurredAt,
+        revision: valid.revision,
+      }),
+      JSON.stringify({
+        type: 'resourcesChanged',
+        resource: valid.resource,
+        brokerReference: valid.brokerReference,
+        occurredAt: valid.occurredAt,
+        revision: valid.revision,
+        scopes: [],
+        authorizationDetails: [],
+      }),
+      JSON.stringify({
+        type: 'resourcesChanged',
+        resource: valid.resource,
+        brokerReference: valid.brokerReference,
+        occurredAt: valid.occurredAt,
+        revision: valid.revision,
+        scopes: ['contents:read'],
+        authorizationDetails: [{ type: 'provider_repository', repository_id: 'repository-1' }],
+        authorityConstraints: [
+          {
+            authorizationDetails: [{ type: 'provider_repository', repository_id: 'repository-2' }],
+            scopes: ['contents:read'],
+          },
+        ],
+      }),
+      JSON.stringify({
+        type: 'suspended',
+        resource: valid.resource,
+        brokerReference: valid.brokerReference,
+        occurredAt: valid.occurredAt,
+        revision: valid.revision,
+        authorizationDetails: [],
+      }),
+    ]
+
+    const responses = await Promise.all(
+      invalidBodies.map(async (invalidBody) =>
+        app.request(`https://auth.example.com${path}`, {
+          method: 'PUT',
+          headers: await signedHeaders(timestamp, invalidBody),
+          body: invalidBody,
+        }),
+      ),
+    )
+
+    expect(responses.map((response) => response.status)).toEqual(invalidBodies.map(() => 400))
+    expect(deps.externalResources.applyProviderConnectionEvent).not.toHaveBeenCalled()
   })
 
   it('rejects missing, stale, malformed, and invalidly signed requests before persistence', async () => {

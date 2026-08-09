@@ -1,4 +1,6 @@
 import { unauthorized } from '@server/domain/errors'
+// biome-ignore lint/style/useNodejsImportProtocol: TypeScript 6 bundler resolution does not resolve the node:crypto declaration in the Worker configs.
+import { timingSafeEqual } from 'crypto'
 
 const signatureWindowSeconds = 5 * 60
 const encoder = new TextEncoder()
@@ -15,7 +17,11 @@ export async function authenticateProviderConnectionEvent(
   if (!authorization?.startsWith('Bearer ') || !timestampValue || !signatureValue?.startsWith('sha256=')) {
     throw unauthorized('Connection Event authentication is required.')
   }
-  if (!constantTimeEqual(authorization.slice('Bearer '.length), secret)) {
+  const [candidateCredential, expectedCredential] = await Promise.all([
+    sha256(authorization.slice('Bearer '.length)),
+    sha256(secret),
+  ])
+  if (!timingSafeEqual(candidateCredential, expectedCredential)) {
     throw unauthorized('Connection Event credentials are invalid.')
   }
 
@@ -30,7 +36,8 @@ export async function authenticateProviderConnectionEvent(
   signedContent.set(prefix)
   signedContent.set(rawBody, prefix.length)
   const expected = await hmacSha256(secret, signedContent)
-  if (!constantTimeEqual(signatureValue, `sha256=${expected}`)) {
+  const candidate = decodeSha256Signature(signatureValue)
+  if (!candidate || !timingSafeEqual(candidate, expected)) {
     throw unauthorized('Connection Event signature is invalid.')
   }
 }
@@ -40,16 +47,20 @@ async function hmacSha256(secret: string, value: Uint8Array<ArrayBuffer>) {
     'sign',
   ])
   const signature = await crypto.subtle.sign('HMAC', key, value)
-  return Array.from(new Uint8Array(signature), (byte) => byte.toString(16).padStart(2, '0')).join('')
+  return new Uint8Array(signature)
 }
 
-function constantTimeEqual(left: string, right: string) {
-  const leftBytes = encoder.encode(left)
-  const rightBytes = encoder.encode(right)
-  const length = Math.max(leftBytes.length, rightBytes.length)
-  let difference = leftBytes.length ^ rightBytes.length
-  for (let index = 0; index < length; index += 1) {
-    difference |= (leftBytes[index] ?? 0) ^ (rightBytes[index] ?? 0)
+async function sha256(value: string) {
+  return new Uint8Array(await crypto.subtle.digest('SHA-256', encoder.encode(value)))
+}
+
+function decodeSha256Signature(value: string) {
+  const hex = value.slice('sha256='.length)
+  if (!/^[0-9a-fA-F]{64}$/.test(hex)) return undefined
+
+  const bytes = new Uint8Array(32)
+  for (let index = 0; index < bytes.length; index += 1) {
+    bytes[index] = Number.parseInt(hex.slice(index * 2, index * 2 + 2), 16)
   }
-  return difference === 0
+  return bytes
 }

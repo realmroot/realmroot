@@ -17,10 +17,11 @@ describe('validateEnv', () => {
     )
   })
 
-  it('requires independent Connection Event secrets keyed by canonical Resource URI', () => {
-    expect(() =>
-      validateEnv(createEnv({ PROVIDER_CONNECTION_EVENT_SECRETS: undefined }), 'https://tenant.example.com'),
-    ).toThrow('PROVIDER_CONNECTION_EVENT_SECRETS must be a JSON object keyed by canonical Resource URI.')
+  it('[spec: platform-onboarding/cloudflare-deployment-isolation] disables Connection Events when no secrets are configured and validates configured Resource secrets', () => {
+    expect(
+      validateEnv(createEnv({ PROVIDER_CONNECTION_EVENT_SECRETS: undefined }), 'https://tenant.example.com')
+        .providerConnectionEventSecrets,
+    ).toEqual({})
     expect(() =>
       validateEnv(
         createEnv({ PROVIDER_CONNECTION_EVENT_SECRETS: JSON.stringify({ provider: 'short' }) }),

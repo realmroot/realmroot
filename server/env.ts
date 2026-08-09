@@ -109,7 +109,7 @@ export function validateEnv(env: Env, requestUrl: string): RuntimeConfig {
 function parseProviderConnectionEventSecrets(value: string | undefined): Record<string, string> {
   let parsed: unknown
   try {
-    parsed = JSON.parse(value ?? '')
+    parsed = JSON.parse(value ?? '{}')
   } catch {
     throw new Error('PROVIDER_CONNECTION_EVENT_SECRETS must be a JSON object keyed by canonical Resource URI.')
   }
@@ -118,7 +118,6 @@ function parseProviderConnectionEventSecrets(value: string | undefined): Record<
   }
   const entries = Object.entries(parsed as Record<string, unknown>)
   if (
-    entries.length === 0 ||
     entries.some(([resource, secret]) => !URL.canParse(resource) || typeof secret !== 'string' || secret.length < 32)
   ) {
     throw new Error(

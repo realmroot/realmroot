@@ -359,7 +359,9 @@ Feature: Agent identity and delegated API authorization
       Given a brokered Resource Server holds a provider account connection for an Agent grant
       When the Resource Server sends a signed Connection Event with a unique event identity and positive monotonic revision
       Then Realmroot verifies the signature and applies the authority, resource, suspension, restoration, or revocation change
-      And Realmroot updates the Connection scopes and authorization details from the generic event representation
+      And Realmroot updates connection-wide scopes separately from the resulting scopes of any selected authority
+      And Realmroot persists provider-neutral authorization-detail-to-scope constraints for every current authority
+      And an authority change identifies the affected authority and its resulting scopes together
       And Realmroot constrains or revokes Agent grants that exceed the Connection's current authority
       And an authority-specific change revokes only grants matched to its generic authorization detail
       But authority or resource expansion preserves grants already within the resulting authority
@@ -368,6 +370,8 @@ Feature: Agent identity and delegated API authorization
       But reusing its event identity for a different representation is rejected
       And events are ordered only by revision so a higher revision applies despite an earlier occurrence time
       But a lower or equal revision cannot change Realmroot state despite a later occurrence time
+      And an authority reduction racing approval cannot recreate a grant from an older Connection revision
+      And later discovery, approval, and credential issuance enforce the persisted scopes of the selected authority
       And unsigned or invalidly signed Connection Events cannot change Realmroot state
 
     @entrypoint:product-ui @journey:external-api-resource-registration

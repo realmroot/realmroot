@@ -37,6 +37,7 @@ the explicit deployment version boundary.
    - `CLOUDFLARE_ACCOUNT_ID`
    - optional `BETTER_AUTH_SECRET`
    - optional `CREDENTIAL_ENCRYPTION_KEY`
+   - optional `PROVIDER_CONNECTION_EVENT_SECRETS`
 
 4. Optionally add:
 
@@ -80,12 +81,14 @@ it. Otherwise it reuses the existing Worker secret or generates one on the first
 deployment. Rotating `CREDENTIAL_ENCRYPTION_KEY` requires re-encrypting stored
 credentials first.
 
-`PROVIDER_CONNECTION_EVENT_SECRETS` is a required JSON object whose keys are
+`PROVIDER_CONNECTION_EVENT_SECRETS` is a JSON object whose keys are
 canonical brokered Resource URIs and whose values are independently generated
 secrets of at least 32 characters. Give each Resource Server only its own
 value. Realmroot uses this mapping to authenticate signed Connection Events
 without allowing one provider integration to address another provider's
-Connections. For example:
+Connections. When it is unset, the Connection Event backchannel is disabled and
+events are rejected without preventing ordinary Realmroot requests or scheduled
+work. Configure it before enabling a provider lifecycle webhook. For example:
 
 ```json
 {

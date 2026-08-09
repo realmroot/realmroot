@@ -1,4 +1,5 @@
 import type { AuthorizationDetail } from '@shared/api/authorization-details'
+import type { ProviderAuthorityConstraint } from '@shared/api/external-resources'
 import { sql } from 'drizzle-orm'
 import { check, index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import { agentIdentity, agentIdentityBinding } from './agent-identity-tables'
@@ -24,6 +25,10 @@ export const providerResourceAuthorization = sqliteTable(
     grantedScopes: text('granted_scopes', { mode: 'json' }).$type<string[]>().notNull(),
     authorizationDetails: text('authorization_details', { mode: 'json' })
       .$type<AuthorizationDetail[]>()
+      .notNull()
+      .default(sql`'[]'`),
+    authorityConstraints: text('authority_constraints', { mode: 'json' })
+      .$type<ProviderAuthorityConstraint[]>()
       .notNull()
       .default(sql`'[]'`),
     clientGeneration: integer('client_generation').default(1).notNull(),
