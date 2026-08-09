@@ -190,6 +190,7 @@ export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> =
       delete: vi.fn(),
     },
     externalResources: {
+      applyProviderConnectionEvent: vi.fn().mockResolvedValue('applied'),
       connectAuthenticationAccount: vi.fn().mockResolvedValue(null),
       disconnectAuthenticationAccount: vi.fn(),
       upsertProviderConnection: vi.fn().mockImplementation(async (input) => {

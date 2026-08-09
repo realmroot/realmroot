@@ -8,6 +8,7 @@ export type ErrorCode =
   | 'precondition_failed'
   | 'precondition_required'
   | 'bad_gateway'
+  | 'payload_too_large'
   | 'internal_error'
 
 export class ApiError extends Error {
@@ -46,6 +47,7 @@ export const preconditionFailed = (message: string) => new ApiError(412, 'precon
 export const preconditionRequired = (message: string) => new ApiError(428, 'precondition_required', message)
 export const badGateway = (message: string, details?: Record<string, unknown>) =>
   new ApiError(502, 'bad_gateway', message, details)
+export const payloadTooLarge = (message: string) => new ApiError(413, 'payload_too_large', message)
 export const oauthError = (
   error: string,
   description: string,

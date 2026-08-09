@@ -154,6 +154,42 @@ and opaque broker reference. The Resource Server validates it with the same
 issuer JWKS and permanently invalidates the referenced provider credential.
 Adapters SHOULD implement this endpoint; a later profile version may require it.
 
+Provider lifecycle changes flow back through the generic Connection Event
+resource at `PUT /api/provider-connection-events/{eventId}`. The event
+representation contains the canonical `resource`, opaque `brokerReference`,
+`occurredAt`, a positive monotonic `revision`, one of `authorityChanged`, `resourcesChanged`, `suspended`,
+`restored`, or `revoked`, and optional replacement `scopes` and
+`authorizationDetails`. Provider webhook names and payloads stay inside the
+Resource Server; Realmroot accepts only this provider-neutral representation.
+An authority-specific scope change includes `affectedAuthorizationDetails` so
+Realmroot can conservatively revoke grants for that authority only when their
+scopes exceed its resulting scope set, without applying a connection-wide scope
+union to unrelated authorities. Permission expansion therefore preserves grants
+already within the resulting authority. `authorizationDetails`
+remains the complete replacement context for `resourcesChanged` events. Detail
+objects are compared recursively, arrays are unordered sets, and scalar values
+must match exactly when Realmroot determines whether a grant is a subset.
+The same atomic D1 boundary expires pending access requests and revokes active
+grants that exceed the resulting authority, then invalidates their leases, so an approval racing the
+event cannot recreate stale authority.
+
+The Resource Server authenticates with the Bearer secret configured for the
+exact Resource URI and sends `Realmroot-Timestamp` as Unix seconds plus
+`Realmroot-Signature: sha256=<hex>`. The signature is HMAC-SHA256 over the exact
+bytes `${timestamp}\nPUT\n${pathname}\n${body}`. Realmroot rejects timestamps
+outside five minutes. An event identity is scoped to its Resource URI: an exact
+replay returns `204`, while the same identity with a different representation
+returns `409`. Realmroot orders mutations only by the Resource Server's
+per-connection `revision`. A higher revision applies even when its provider
+occurrence timestamp is earlier, while a lower or equal revision is acknowledged
+without mutating state even when its timestamp is later. `occurredAt` is retained
+as audit metadata for the applied revision. Realmroot immediately
+revokes affected active leases, constrains grants to reduced scopes and
+authorization details, keeps suspension reversible, and permanently revokes
+grants when the Connection is revoked or no safe authority remains.
+Representations larger than 64 KiB are rejected before the complete body is
+buffered.
+
 The API Resource selects the Provider Connector whose account identity it
 represents. Realmroot allows one brokered account-connection authority per
 Connector and one Provider Connection per owner and Connector. Connector type

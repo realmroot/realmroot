@@ -10,6 +10,38 @@ const scopeListSchema = z
 
 export const externalAuthorizationStatusSchema = z.enum(['pending', 'active', 'invalid'])
 
+export const providerConnectionEventTypeSchema = z.enum([
+  'authorityChanged',
+  'resourcesChanged',
+  'suspended',
+  'restored',
+  'revoked',
+])
+
+export const providerConnectionEventSchema = z
+  .object({
+    type: providerConnectionEventTypeSchema,
+    resource: z.url(),
+    brokerReference: nonEmptyString,
+    occurredAt: z.iso
+      .datetime()
+      .describe('Provider occurrence time retained as audit metadata; it does not determine mutation order.'),
+    revision: z
+      .number()
+      .int()
+      .positive()
+      .describe('Monotonic per-connection revision used as the sole mutation order.'),
+    scopes: z
+      .array(nonEmptyString)
+      .transform((values) => [...new Set(values)].sort())
+      .optional(),
+    authorizationDetails: authorizationDetailsSchema.optional(),
+    affectedAuthorizationDetails: authorizationDetailsSchema.optional(),
+  })
+  .strict()
+
+export const providerConnectionEventIdSchema = nonEmptyString.max(200)
+
 export const externalResourceAuthorizationSchema = z.object({
   resourceId: z.string(),
   connectorId: z.string(),
@@ -74,7 +106,7 @@ export const providerResourceAuthorizationSchema = z.object({
   displayName: z.string(),
   grantedScopes: z.array(z.string()),
   authorizationDetails: authorizationDetailsSchema,
-  status: z.enum(['active', 'revoked']),
+  status: z.enum(['active', 'suspended', 'revoked']),
   credentialExpiresAt: z.iso.datetime().nullable(),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
@@ -182,6 +214,7 @@ export const agentResourceDiscoverySchema = z.object({
 })
 
 export type ExternalResourceAuthorizationRecord = z.infer<typeof externalResourceAuthorizationSchema>
+export type ProviderConnectionEvent = z.infer<typeof providerConnectionEventSchema>
 export type CreateResourceConnectionIntentRequest = z.infer<typeof createResourceConnectionIntentRequestSchema>
 export type CreateAgentAccessRequest = z.input<typeof createAgentAccessRequestSchema>
 export type DecideAgentAccessRequest = z.input<typeof decideAgentAccessRequestSchema>

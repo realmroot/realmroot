@@ -287,6 +287,55 @@ issuer, Resource audience, expiry, and one-use `jti` rules, then invalidate the
 bound `broker_reference`. Return a successful 2xx response only after the
 provider credential can no longer be used.
 
+### Connection Event backchannel
+
+Brokered Resource Servers translate provider lifecycle notifications into
+provider-neutral Connection Event resources:
+
+```http
+PUT /api/provider-connection-events/delivery-018f4f92
+Authorization: Bearer <resource-scoped-secret>
+Realmroot-Timestamp: 1786233600
+Realmroot-Signature: sha256=<hmac-sha256-hex>
+Content-Type: application/json
+
+{
+  "type": "authorityChanged",
+  "resource": "https://adapter.example.com/provider",
+  "brokerReference": "connection-opaque-id",
+  "occurredAt": "2026-08-08T20:00:00.000Z",
+  "revision": 42,
+  "scopes": ["items:read"],
+  "affectedAuthorizationDetails": [
+    { "type": "provider_resource", "resource_id": "resource-1" }
+  ]
+}
+```
+
+The five event types are `authorityChanged`, `resourcesChanged`, `suspended`,
+`restored`, and `revoked`. Sign the exact string
+`${timestamp}\nPUT\n${pathname}\n${rawBody}` with HMAC-SHA256. Realmroot selects
+the verification secret by the exact `resource` URI, rejects signatures older
+than five minutes, and scopes replay identity to `(resource, eventId)`. A
+successful first application or exact replay returns `204`; conflicting reuse
+returns `409`. `revision` is a required positive integer that the Resource
+Server increases for each provider connection. Realmroot orders events by the
+per-connection `revision` only: a higher revision applies even with an earlier
+`occurredAt`, while a lower or equal revision is acknowledged without changing
+state even with a later `occurredAt`. The occurrence time is audit metadata for
+the applied revision. Never forward provider webhook event names or provider-specific
+top-level fields into this protocol. Provider-specific resource selectors may
+remain within RFC 9396 `authorizationDetails`.
+For `authorityChanged`, `affectedAuthorizationDetails` identifies only the
+generic authority whose scopes changed; Realmroot atomically revokes matching
+pending requests, grants, and leases only when their scopes exceed the resulting
+authority instead of treating scopes from separate authorities as a safe union.
+Permission or resource additions preserve grants that remain subsets. Object
+members are compared recursively, arrays are treated as unordered sets, and
+scalars must match exactly. For
+`resourcesChanged`, `authorizationDetails` is the complete
+replacement resource context. Event bodies are limited to 64 KiB.
+
 ## External Authorization
 
 Use external mode when the target platform owns its users, OAuth client

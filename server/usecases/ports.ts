@@ -511,7 +511,7 @@ export interface ProviderConnectionRecord {
   authenticationAccountId: string | null
   externalSubject: string
   displayName: string
-  status: 'active' | 'revoked'
+  status: 'active' | 'suspended' | 'revoked'
   createdAt: Date
   updatedAt: Date
 }
@@ -549,6 +549,8 @@ export interface ProviderResourceAuthorizationRecord {
   status: string
   credentialExpiresAt: Date | null
   revokedAt: Date | null
+  providerEventOccurredAt?: Date | null
+  providerEventRevision?: number | null
   createdAt: Date
   updatedAt: Date
 }
@@ -665,6 +667,19 @@ export interface ExternalTokenLeaseRecord {
 }
 
 export interface ExternalResourceRepository {
+  applyProviderConnectionEvent(input: {
+    id: string
+    fingerprint: string
+    resource: string
+    brokerReference: string
+    type: 'authorityChanged' | 'resourcesChanged' | 'suspended' | 'restored' | 'revoked'
+    occurredAt: Date
+    revision: number
+    receivedAt: Date
+    scopes?: string[]
+    authorizationDetails?: AuthorizationDetail[]
+    affectedAuthorizationDetails?: AuthorizationDetail[]
+  }): Promise<'applied' | 'duplicate' | 'conflict' | 'not_found'>
   connectAuthenticationAccount(input: {
     authenticationAccountId: string
     providerId: string

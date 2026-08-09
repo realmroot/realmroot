@@ -80,6 +80,19 @@ it. Otherwise it reuses the existing Worker secret or generates one on the first
 deployment. Rotating `CREDENTIAL_ENCRYPTION_KEY` requires re-encrypting stored
 credentials first.
 
+`PROVIDER_CONNECTION_EVENT_SECRETS` is a required JSON object whose keys are
+canonical brokered Resource URIs and whose values are independently generated
+secrets of at least 32 characters. Give each Resource Server only its own
+value. Realmroot uses this mapping to authenticate signed Connection Events
+without allowing one provider integration to address another provider's
+Connections. For example:
+
+```json
+{
+  "https://adapter.example.com/provider": "replace-with-at-least-32-random-characters"
+}
+```
+
 These settings remain deployment-specific:
 
 - `BETTER_AUTH_URL`: optional canonical deployment origin. The shared user and

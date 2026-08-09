@@ -30,6 +30,8 @@ export const providerResourceAuthorization = sqliteTable(
     status: text('status').notNull().default('active'),
     credentialExpiresAt: integer('credential_expires_at', { mode: 'timestamp_ms' }),
     revokedAt: integer('revoked_at', { mode: 'timestamp_ms' }),
+    providerEventOccurredAt: integer('provider_event_occurred_at', { mode: 'timestamp_ms' }),
+    providerEventRevision: integer('provider_event_revision'),
     createdAt: integer('created_at', { mode: 'timestamp_ms' })
       .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
       .notNull(),

@@ -8,6 +8,7 @@ import {
   resourceServerResourceSchema,
   resourceServerResourcesResponseSchema,
 } from '@shared/api/agent-api'
+import { providerConnectionEventIdSchema, providerConnectionEventSchema } from '@shared/api/external-resources'
 import { paginationQuerySchema } from '@shared/api/pagination'
 import {
   publicAgentResponseSchema,
@@ -210,6 +211,55 @@ const managementRoutes: ManagementRouteConfig[] = [
     responseHeaders: { ...locationResponseHeader, ...interactiveResourceResponseHeaders },
   },
   {
+    method: 'put',
+    path: '/provider-connection-events/{eventId}',
+    operationId: 'replaceProviderConnectionEvent',
+    summary: 'Apply an idempotent provider Connection Event',
+    security: [
+      {
+        providerConnectionEventSecret: [],
+        providerConnectionEventTimestamp: [],
+        providerConnectionEventSignature: [],
+      },
+    ],
+    request: {
+      params: z.object({
+        eventId: providerConnectionEventIdSchema.openapi({
+          param: { name: 'eventId', in: 'path' },
+          example: 'delivery-018f4f92',
+        }),
+      }),
+      headers: z.object({
+        'Realmroot-Timestamp': z
+          .string()
+          .regex(/^\d+$/)
+          .openapi({
+            param: { name: 'Realmroot-Timestamp', in: 'header' },
+            example: '1786233600',
+          }),
+        'Realmroot-Signature': z
+          .string()
+          .regex(/^sha256=[a-f0-9]{64}$/)
+          .openapi({
+            param: { name: 'Realmroot-Signature', in: 'header' },
+            example: `sha256=${'0'.repeat(64)}`,
+          }),
+      }),
+      body: jsonBody(providerConnectionEventSchema),
+    },
+    status: 204,
+    noBody: true,
+    errors: {
+      400: 'The event representation, resource, or timestamp is invalid.',
+      404: 'The referenced Connection was not found.',
+      409: 'The event identity was already used for a different representation.',
+      413: 'The event representation exceeds 64 KiB.',
+    },
+    additionalResponses: {
+      401: { description: 'The backchannel credential or body signature is missing, stale, or invalid.' },
+    },
+  },
+  {
     method: 'get',
     path: '/resource-servers/{resourceServerId}/connection-requests/{requestId}',
     operationId: 'getConnectionRequest',
@@ -252,6 +302,23 @@ function createManagementOpenApiApp() {
     scheme: 'DPoP',
     description:
       'RFC 9449 DPoP authentication with a short-lived, sender-constrained OAuth 2.0 access token. Discover token acquisition through the protected-resource and authorization-server metadata endpoints.',
+  })
+  app.openAPIRegistry.registerComponent('securitySchemes', 'providerConnectionEventSecret', {
+    type: 'http',
+    scheme: 'bearer',
+    description: 'Resource-scoped provider Connection Event backchannel secret.',
+  })
+  app.openAPIRegistry.registerComponent('securitySchemes', 'providerConnectionEventTimestamp', {
+    type: 'apiKey',
+    in: 'header',
+    name: 'Realmroot-Timestamp',
+    description: 'Unix timestamp within five minutes of Realmroot time.',
+  })
+  app.openAPIRegistry.registerComponent('securitySchemes', 'providerConnectionEventSignature', {
+    type: 'apiKey',
+    in: 'header',
+    name: 'Realmroot-Signature',
+    description: 'HMAC-SHA256 signature over timestamp, method, request path, and exact request body.',
   })
   for (const routeConfig of managementRoutes) app.openAPIRegistry.registerPath(createManagementRoute(routeConfig))
   return app
@@ -312,6 +379,7 @@ function managementTagForPath(path: string): (typeof managementOpenApiTags)[numb
   if (path.startsWith('/access/consents')) return 'Consents'
   if (path.startsWith('/applications')) return 'Applications'
   if (path.startsWith('/resource-servers')) return 'Resource Servers'
+  if (path.startsWith('/provider-connection-events')) return 'Resource Servers'
   if (path.startsWith('/organizations')) return 'Organizations'
   if (path.startsWith('/users')) return 'Users'
   if (path.startsWith('/connectors')) return 'Connectors'

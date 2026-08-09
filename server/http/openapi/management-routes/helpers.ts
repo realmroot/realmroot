@@ -141,7 +141,7 @@ export interface ManagementRouteConfig {
   >
   errors?: Partial<
     Record<
-      400 | 404 | 409 | 412 | 422 | 428 | 429 | 502,
+      400 | 404 | 409 | 412 | 413 | 422 | 428 | 429 | 502,
       | string
       | {
           description: string

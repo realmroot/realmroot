@@ -343,7 +343,7 @@ export const connectableApiResourcesResponseSchema = z.object({
   pagination: paginationMetadataSchema,
 })
 
-export const accountConnectionStatusSchema = z.enum(['pending_authorization', 'active', 'revoked'])
+export const accountConnectionStatusSchema = z.enum(['pending_authorization', 'active', 'suspended', 'revoked'])
 export const accountConnectionSchema = z.object({
   id: z.string(),
   apiResourceId: z.string(),

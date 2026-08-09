@@ -17,6 +17,20 @@ describe('validateEnv', () => {
     )
   })
 
+  it('requires independent Connection Event secrets keyed by canonical Resource URI', () => {
+    expect(() =>
+      validateEnv(createEnv({ PROVIDER_CONNECTION_EVENT_SECRETS: undefined }), 'https://tenant.example.com'),
+    ).toThrow('PROVIDER_CONNECTION_EVENT_SECRETS must be a JSON object keyed by canonical Resource URI.')
+    expect(() =>
+      validateEnv(
+        createEnv({ PROVIDER_CONNECTION_EVENT_SECRETS: JSON.stringify({ provider: 'short' }) }),
+        'https://tenant.example.com',
+      ),
+    ).toThrow(
+      'PROVIDER_CONNECTION_EVENT_SECRETS must map canonical Resource URIs to secrets of at least 32 characters.',
+    )
+  })
+
   it('allows email binding and sender settings to be completed from Console later', () => {
     expect(() =>
       validateEnv(
@@ -58,6 +72,9 @@ describe('validateEnv', () => {
       authSecret: 'secret',
       baseURL: 'https://tenant.example.com',
       credentialEncryptionKey: 'credential-encryption-key-for-tests-2026',
+      providerConnectionEventSecrets: {
+        'https://adapter.example.com/provider': 'provider-connection-event-secret-for-tests-2026',
+      },
       emailFrom: 'noreply@example.com',
       emailFromName: undefined,
       trustedOrigins: ['https://tenant.example.com', 'https://admin.example.com'],
@@ -183,6 +200,9 @@ function createEnv(overrides: Partial<Env> = {}): Env {
     ASSET_BUCKET: {},
     BETTER_AUTH_SECRET: 'secret',
     CREDENTIAL_ENCRYPTION_KEY: 'credential-encryption-key-for-tests-2026',
+    PROVIDER_CONNECTION_EVENT_SECRETS: JSON.stringify({
+      'https://adapter.example.com/provider': 'provider-connection-event-secret-for-tests-2026',
+    }),
     EMAIL_FROM: 'noreply@example.com',
     ...overrides,
   } as unknown as Env
