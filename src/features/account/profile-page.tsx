@@ -27,42 +27,23 @@ import {
 } from '@/lib/api/account'
 import { i18n, normalizeLanguage, type SupportedLanguage, tt } from '@/lib/i18n'
 import { AccountPageHeader, AccountRow, AccountRows, AccountTabContent, AccountTabs } from './account-page'
-import { AccountPageError, AccountPageLoading, AccountPageShell } from './account-shell'
+import { useAccountCenterLayout } from './account-surface'
 import { SettingsAction, UnavailableSection } from './primitives'
 import { ProfileDialogs } from './profile-dialogs'
-import {
-  accountQueryKeys,
-  useAccountConfig,
-  useAccountMutation,
-  useAccountProfile,
-  useDeveloperConsoleAccess,
-  useLinkedAccounts,
-} from './queries'
+import { accountQueryKeys, useAccountMutation, useLinkedAccounts } from './queries'
 import { defaultAccountCenterSettings } from './settings'
 import type { MutationHandler, UserProfile } from './types'
 import { accountTimeZones, readAccountTimeZone, saveAccountTimeZone } from './utils'
 
 export function AccountProfilePage() {
-  const configQuery = useAccountConfig()
-  const profileQuery = useAccountProfile()
-  const accessQuery = useDeveloperConsoleAccess()
+  const { accountCenter, profile } = useAccountCenterLayout()
   const mutate = useAccountMutation()
   const [tab, setTab] = useState('details')
   const [action, setAction] = useState<'language' | 'timezone' | null>(null)
   const [language, setLanguage] = useState<SupportedLanguage>(() => normalizeLanguage(i18n.language))
   const [timezone, setTimezone] = useState(readAccountTimeZone)
-  const config = configQuery.data ?? null
-  const accountCenter = config?.accountCenter ?? defaultAccountCenterSettings
-  const error = configQuery.error ?? profileQuery.error ?? accessQuery.error
-  if (configQuery.isLoading || profileQuery.isLoading || accessQuery.isLoading)
-    return <AccountPageLoading config={config} />
-  if (error)
-    return <AccountPageError config={config} message={error instanceof Error ? error.message : tt('Unable to load.')} />
-  const profile = profileQuery.data?.user ?? null
-  const access = accessQuery.data
-  if (!access) return <AccountPageError config={config} message={tt('Unable to load account center.')} />
   return (
-    <AccountPageShell access={access} accountCenter={accountCenter} config={config} profile={profile} section="profile">
+    <>
       <AccountPageHeader
         description={tt('Manage the identity information Realmroot shares with trusted applications.')}
         title={tt('Profile')}
@@ -142,7 +123,7 @@ export function AccountProfilePage() {
         onTimezoneChange={setTimezone}
         timezone={timezone}
       />
-    </AccountPageShell>
+    </>
   )
 }
 

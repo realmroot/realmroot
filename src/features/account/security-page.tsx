@@ -1,12 +1,13 @@
 import type { AccountProviderConnection } from '@shared/api/account'
 import { Link } from '@tanstack/react-router'
-import { Fingerprint, Laptop, Link2, ShieldCheck, Wallet } from 'lucide-react'
-import { useState } from 'react'
+import { Fingerprint, Laptop, Link2, LoaderCircle, ShieldCheck, Wallet } from 'lucide-react'
+import { type ReactNode, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { Status } from '@/components/ui/status'
 import { deletePasskey, revokeOtherSessions, revokeSession, unlinkWalletAddress } from '@/lib/api/account'
 import { tt } from '@/lib/i18n'
 import { AccountPageHeader, AccountTabContent, AccountTabs } from './account-page'
-import { AccountPageError, AccountPageLoading, AccountPageShell } from './account-shell'
+import { useAccountCenterLayout } from './account-surface'
 import {
   DestructiveConfirmationDialog,
   ItemList,
@@ -17,104 +18,51 @@ import {
 import { ProfilePasswordPanel } from './profile-page'
 import {
   accountQueryKeys,
-  useAccountConfig,
   useAccountMutation,
   useAccountPasskeys,
-  useAccountProfile,
   useAccountProviderConnections,
   useAccountSecurity,
   useAccountSessions,
-  useDeveloperConsoleAccess,
   useLinkedAccounts,
 } from './queries'
 import { PasskeyDialog, TotpDialogs } from './security-dialogs'
-import { defaultAccountCenterSettings } from './settings'
+import type { defaultAccountCenterSettings } from './settings'
 import type { ConfirmDestructiveHandler, MutationHandler, Passkey, SecurityState, UserSessionDevice } from './types'
 import { enrollWallet, formatDate, formatSessionDevice, type TotpEnrollmentDisplay } from './utils'
 
 export function AccountSecurityPage() {
-  const configQuery = useAccountConfig()
-  const profileQuery = useAccountProfile()
-  const accessQuery = useDeveloperConsoleAccess()
-  const securityQuery = useAccountSecurity()
-  const passkeysQuery = useAccountPasskeys()
-  const config = configQuery.data ?? null
-  const accountCenter = config?.accountCenter ?? defaultAccountCenterSettings
-  const sessionsQuery = useAccountSessions(accountCenter.sessionsViewEnabled)
-  const linkedAccountsQuery = useLinkedAccounts(accountCenter.connectedAccountsEnabled)
-  const providerConnectionsQuery = useAccountProviderConnections()
+  const { accountCenter, config, profile } = useAccountCenterLayout()
   const mutate = useAccountMutation()
   const [confirmation, setConfirmation] = useDestructiveConfirmation()
-  const queries = [
-    configQuery,
-    profileQuery,
-    accessQuery,
-    securityQuery,
-    passkeysQuery,
-    sessionsQuery,
-    linkedAccountsQuery,
-    providerConnectionsQuery,
-  ]
-  const error = queries.find((query) => query.error)?.error
-  if (queries.some((query) => query.isLoading)) return <AccountPageLoading config={config} />
-  if (error)
-    return <AccountPageError config={config} message={error instanceof Error ? error.message : tt('Unable to load.')} />
-  const profile = profileQuery.data?.user ?? null
-  const access = accessQuery.data
-  if (!profile || !access) return <AccountPageError config={config} message={tt('Unable to load account center.')} />
   return (
-    <AccountPageShell
-      access={access}
-      accountCenter={accountCenter}
-      config={config}
-      profile={profile}
-      section="security"
-    >
+    <>
       <AccountPageHeader
         description={tt('Control credentials, recovery methods, sign-in identities, and active sessions.')}
         title={tt('Sign-in & security')}
       />
       <SecuritySections
+        accountCenter={accountCenter}
         confirm={setConfirmation}
-        providerConnections={providerConnectionsQuery.data?.items ?? []}
-        walletAccounts={(linkedAccountsQuery.data?.accounts ?? []).filter((account) => account.providerId === 'siwe')}
         mutate={mutate}
-        passkeys={passkeysQuery.data?.passkeys ?? []}
-        passwordEnabled={accountCenter.passwordChangeEnabled}
         profile={profile}
-        security={securityQuery.data?.security ?? null}
-        sessions={sessionsQuery.data?.sessions ?? []}
-        sessionsEnabled={accountCenter.sessionsViewEnabled}
         walletProvider={config?.builtInProviders.web3Wallet}
       />
       <DestructiveConfirmationDialog confirmation={confirmation} onClose={() => setConfirmation(null)} />
-    </AccountPageShell>
+    </>
   )
 }
 
 function SecuritySections({
+  accountCenter,
   confirm,
-  providerConnections,
   mutate,
-  passkeys,
-  passwordEnabled,
   profile,
-  security,
-  sessions,
-  sessionsEnabled,
-  walletAccounts,
   walletProvider,
 }: {
+  accountCenter: typeof defaultAccountCenterSettings
   confirm: ConfirmDestructiveHandler
-  providerConnections: AccountProviderConnection[]
   mutate: MutationHandler
-  passkeys: Passkey[]
-  passwordEnabled: boolean
   profile: import('./types').UserProfile
-  security: SecurityState | null
-  sessions: UserSessionDevice[]
-  sessionsEnabled: boolean
-  walletAccounts: import('./types').LinkedAccount[]
   walletProvider?: import('./types').Web3WalletProvider
 }) {
   const [tab, setTab] = useState('sign-in')
@@ -123,6 +71,14 @@ function SecuritySections({
   const [code, setCode] = useState('')
   const [passkeyName, setPasskeyName] = useState('')
   const [totpEnrollment, setTotpEnrollment] = useState<TotpEnrollmentDisplay | null>(null)
+  const securityQuery = useAccountSecurity(tab === 'mfa' || tab === 'passkeys')
+  const passkeysQuery = useAccountPasskeys(tab === 'passkeys')
+  const sessionsQuery = useAccountSessions(tab === 'sessions' && accountCenter.sessionsViewEnabled)
+  const linkedAccountsQuery = useLinkedAccounts(
+    tab === 'sign-in' && accountCenter.connectedAccountsEnabled && Boolean(walletProvider?.enabled),
+  )
+  const providerConnectionsQuery = useAccountProviderConnections(tab === 'sign-in')
+  const security = securityQuery.data?.security ?? null
   const mfaRequired = security?.policy.mfa.mode === 'required'
   const mfaEnabled = Boolean(security?.mfa.enabled)
   return (
@@ -133,46 +89,64 @@ function SecuritySections({
           { value: 'sign-in', label: tt('Sign-in') },
           { value: 'mfa', label: tt('MFA') },
           { value: 'passkeys', label: tt('Passkeys') },
-          sessionsEnabled ? { value: 'sessions', label: tt('Sessions') } : null,
+          accountCenter.sessionsViewEnabled ? { value: 'sessions', label: tt('Sessions') } : null,
         ].filter((item): item is { value: string; label: string } => item !== null)}
         value={tab}
       >
         <AccountTabContent value="sign-in">
-          <div className="accountSignInStack">
-            {passwordEnabled ? (
+          <SecurityTabState
+            error={providerConnectionsQuery.error ?? linkedAccountsQuery.error}
+            loading={providerConnectionsQuery.isLoading || linkedAccountsQuery.isLoading}
+          >
+            <div className="accountSignInStack">
+              {accountCenter.passwordChangeEnabled ? (
+                <div className="accountTabPanel">
+                  <ProfilePasswordPanel profile={profile} />
+                </div>
+              ) : null}
               <div className="accountTabPanel">
-                <ProfilePasswordPanel profile={profile} />
+                <ExternalSignInSummary connections={providerConnectionsQuery.data?.items ?? []} />
               </div>
-            ) : null}
-            <div className="accountTabPanel">
-              <ExternalSignInSummary connections={providerConnections} />
+              {walletProvider?.enabled ? (
+                <div className="accountTabPanel">
+                  <WalletSignInPanel
+                    accounts={(linkedAccountsQuery.data?.accounts ?? []).filter(
+                      (account) => account.providerId === 'siwe',
+                    )}
+                    confirm={confirm}
+                    mutate={mutate}
+                    walletProvider={walletProvider}
+                  />
+                </div>
+              ) : null}
             </div>
-            {walletProvider?.enabled ? (
-              <div className="accountTabPanel">
-                <WalletSignInPanel
-                  accounts={walletAccounts}
-                  confirm={confirm}
-                  mutate={mutate}
-                  walletProvider={walletProvider}
-                />
-              </div>
-            ) : null}
-          </div>
+          </SecurityTabState>
         </AccountTabContent>
         <AccountTabContent surface value="mfa">
-          <MfaPanel mfaEnabled={mfaEnabled} mfaRequired={mfaRequired} security={security} setDialog={setDialog} />
+          <SecurityTabState error={securityQuery.error} loading={securityQuery.isLoading}>
+            <MfaPanel mfaEnabled={mfaEnabled} mfaRequired={mfaRequired} security={security} setDialog={setDialog} />
+          </SecurityTabState>
         </AccountTabContent>
         <AccountTabContent surface value="passkeys">
-          <PasskeysPanel
-            confirm={confirm}
-            mutate={mutate}
-            passkeys={passkeys}
-            security={security}
-            setDialog={setDialog}
-          />
+          <SecurityTabState
+            error={securityQuery.error ?? passkeysQuery.error}
+            loading={securityQuery.isLoading || passkeysQuery.isLoading}
+          >
+            <PasskeysPanel
+              confirm={confirm}
+              mutate={mutate}
+              passkeys={passkeysQuery.data?.passkeys ?? []}
+              security={security}
+              setDialog={setDialog}
+            />
+          </SecurityTabState>
         </AccountTabContent>
         <AccountTabContent surface value="sessions">
-          {sessionsEnabled ? <SessionsPanel confirm={confirm} mutate={mutate} sessions={sessions} /> : null}
+          <SecurityTabState error={sessionsQuery.error} loading={sessionsQuery.isLoading}>
+            {accountCenter.sessionsViewEnabled ? (
+              <SessionsPanel confirm={confirm} mutate={mutate} sessions={sessionsQuery.data?.sessions ?? []} />
+            ) : null}
+          </SecurityTabState>
         </AccountTabContent>
       </AccountTabs>
       <TotpDialogs
@@ -198,6 +172,18 @@ function SecuritySections({
       />
     </>
   )
+}
+
+function SecurityTabState({ children, error, loading }: { children: ReactNode; error: unknown; loading: boolean }) {
+  if (loading)
+    return (
+      <Status>
+        <LoaderCircle className="spin" size={18} />
+        {tt('Loading security settings')}
+      </Status>
+    )
+  if (error) return <Status tone="error">{error instanceof Error ? error.message : tt('Unable to load.')}</Status>
+  return children
 }
 
 function ExternalSignInSummary({ connections }: { connections: AccountProviderConnection[] }) {

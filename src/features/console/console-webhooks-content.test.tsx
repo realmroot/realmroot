@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { OrganizationDetailPage, OrganizationsPage } from '@/features/console/extracted/organizations'
+import { OrganizationsPage } from '@/features/console/extracted/organizations'
 import { ApiResourcesPage } from '@/features/resource-servers/management-resource-servers'
 import { RolesPage } from '@/features/roles/management-roles'
 import { queryClient } from '@/router'
@@ -13,7 +13,6 @@ import {
   pagination,
   renderWithQuery,
   role,
-  user,
 } from './console.test-utils'
 
 globalThis.ResizeObserver ??= class ResizeObserver {
@@ -110,111 +109,5 @@ describe('admin console authorization creation and Organization detail', () => {
         },
       ]),
     )
-  })
-
-  it('renders a compact Organization overview and edits identity from Settings', async () => {
-    const requests: Array<{ url: string; body: unknown }> = []
-    let deleted = false
-    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
-      const raw = String(input)
-      const url = raw.startsWith('http') ? new URL(raw).pathname : raw.split('?')[0]
-      if (url === '/api/organizations/org-1' && init?.method === 'DELETE') {
-        deleted = true
-        return Promise.resolve(new Response(null, { status: 204 }))
-      }
-      if (url === '/api/organizations/org-1' && init?.method === 'PATCH') {
-        const body = JSON.parse(String(init.body))
-        requests.push({ url, body })
-        return Promise.resolve(jsonResponse({ ...organization, ...body }))
-      }
-      if (deleted && url.startsWith('/api/organizations/org-1')) {
-        throw new Error(`Removed Organization detail was refetched: ${init?.method ?? 'GET'} ${raw}`)
-      }
-      if (url === '/api/organizations/org-1') return Promise.resolve(jsonResponse(organization))
-      if (url === '/api/organizations/org-1/members') {
-        return Promise.resolve(
-          jsonResponse({
-            members: [
-              {
-                id: 'member-owner',
-                organizationId: 'org-1',
-                userId: user.id,
-                roles: ['owner'],
-                title: null,
-                createdAt: '2026-01-01T00:00:00.000Z',
-                updatedAt: '2026-01-01T00:00:00.000Z',
-              },
-            ],
-            pagination: { ...emptyPagination, total: 1 },
-          }),
-        )
-      }
-      if (url === '/api/organizations/org-1/invitations') {
-        return Promise.resolve(
-          jsonResponse({
-            invitations: [
-              {
-                id: 'invitation-canceled',
-                organizationId: 'org-1',
-                email: 'canceled@example.com',
-                roles: ['member'],
-                inviterId: 'user-1',
-                status: 'canceled',
-                expiresAt: '2026-01-08T00:00:00.000Z',
-                acceptedAt: null,
-                revokedAt: null,
-                createdAt: '2026-01-01T00:00:00.000Z',
-              },
-            ],
-            pagination: { ...emptyPagination, total: 1 },
-          }),
-        )
-      }
-      if (url === '/api/organizations/org-1/roles') {
-        return Promise.resolve(
-          jsonResponse({
-            roles: ['owner', 'admin', 'developer', 'member'].map((key) => ({ key, displayName: key })),
-            pagination: { ...emptyPagination, total: 4 },
-          }),
-        )
-      }
-      if (url === '/api/users') return Promise.resolve(jsonResponse({ users: [user], pagination }))
-      if (url === '/api/agents') return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
-      if (url === '/api/realm/audit-events')
-        return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
-      throw new Error(`Unexpected request: ${init?.method ?? 'GET'} ${raw}`)
-    })
-
-    renderWithQuery(<OrganizationDetailPage organizationId="org-1" />)
-    expect(await screen.findByRole('heading', { name: 'Acme' })).toBeTruthy()
-    expect(screen.getByText(/org-1/)).toBeTruthy()
-    expect(screen.getAllByText('Members').length).toBeGreaterThan(0)
-    expect(screen.getByText('Pending invitations')).toBeTruthy()
-    expect(screen.getByText('Pending invitations').closest('.detailFlatRow')?.textContent).toContain('0')
-    expect(screen.getByText('Agent identities')).toBeTruthy()
-    expect(screen.queryByText('Applications & resource servers')).toBeNull()
-
-    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Members' }), { button: 0, ctrlKey: false })
-    expect(screen.queryByText('canceled@example.com')).toBeNull()
-    expect(screen.queryByRole('button', { name: 'Manage Jane Doe' })).toBeNull()
-
-    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Settings' }), { button: 0, ctrlKey: false })
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
-    fireEvent.change(await screen.findByLabelText('Name'), { target: { value: 'Acme Updated' } })
-    fireEvent.change(screen.getByLabelText('Slug'), { target: { value: 'acme-updated' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
-
-    await waitFor(() =>
-      expect(requests).toEqual([
-        {
-          url: '/api/organizations/org-1',
-          body: { name: 'Acme Updated', slug: 'acme-updated' },
-        },
-      ]),
-    )
-
-    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Delete organization' }))
-    await waitFor(() => expect(deleted).toBe(true))
   })
 })

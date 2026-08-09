@@ -141,17 +141,6 @@ export function PayloadBlock({ label, value }: { label: string; value: string })
     </div>
   )
 }
-export function TokenCustomizationCard({ rows, title }: { rows: Array<[string, string]>; title: string }) {
-  return (
-    <SettingsSection title={title} description={tt('Claim controls reflect the persisted authorization contract.')}>
-      <div className="grid gap-3">
-        {rows.map(([label, value]) => (
-          <SettingRow key={label} label={label} value={value} />
-        ))}
-      </div>
-    </SettingsSection>
-  )
-}
 export type SignInExperienceTab = {
   href: string
   label: string
@@ -161,12 +150,12 @@ const signInExperienceTabs: SignInExperienceTab[] = [
   {
     value: 'branding',
     label: 'Branding',
-    href: '/console/sign-in-experience/branding',
+    href: '/console/sign-in-experience/theme',
   },
   {
-    value: 'sign-up-and-sign-in',
+    value: 'sign-in',
     label: 'Sign-up and sign-in',
-    href: '/console/sign-in-experience/sign-up-and-sign-in',
+    href: '/console/sign-in-experience/sign-in',
   },
   {
     value: 'account-center',

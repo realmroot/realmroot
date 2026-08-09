@@ -8,6 +8,7 @@ import { Status } from '@/components/ui/status'
 import { useConfigz } from '@/features/auth/hooks'
 import { createOnboardingAdmin, getOnboardingStatus } from '@/lib/api'
 import { tt } from '@/lib/i18n'
+import { deduplicateRequest } from '@/lib/request-deduplication'
 
 export function OnboardingRoute() {
   const { data: config } = useConfigz()
@@ -26,7 +27,7 @@ export function OnboardingRoute() {
 
   useEffect(() => {
     let active = true
-    getOnboardingStatus().then((value) => {
+    deduplicateRequest('onboarding-status', getOnboardingStatus).then((value) => {
       if (active) setStatus(value)
     })
     return () => {
@@ -75,7 +76,7 @@ export function OnboardingRoute() {
       {status?.required === false || submit.message ? (
         <>
           <Status tone="success">{submit.message ?? tt('First-admin onboarding is already locked.')}</Status>
-          <LinkButton href="/auth/sign-in?return_to=/console/onboarding">
+          <LinkButton to="/auth/sign-in?return_to=/console/onboarding">
             <KeyRound size={18} /> {tt('Continue to sign in')}{' '}
           </LinkButton>
         </>

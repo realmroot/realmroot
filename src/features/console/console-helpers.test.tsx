@@ -6,7 +6,6 @@ import { hostedAuthMode, passwordSignupEnabled, previewSignInAction } from '@/fe
 import {
   apiResourceDetailTabs,
   navigateConsoleTab,
-  organizationDetailTabs,
   roleDetailTabs,
   userDetailTabs,
 } from '@/features/management/resource-components'
@@ -80,13 +79,6 @@ describe('admin console helpers', () => {
       'access-grants',
       'agents',
       'authorized-apps',
-      'settings',
-    ])
-    expect(organizationDetailTabs().map((tab) => tab.value)).toEqual([
-      'overview',
-      'members',
-      'agents',
-      'activity',
       'settings',
     ])
     expect(roleDetailTabs().map((tab) => tab.value)).toEqual([

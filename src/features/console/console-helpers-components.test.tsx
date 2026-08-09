@@ -32,7 +32,6 @@ import {
   PayloadBlock,
   SettingsSection,
   SettingsSections,
-  TokenCustomizationCard,
   WebhookEndpointRow,
   WebhookRequestDialog,
   WebhookSecretDisclosureDialog,
@@ -503,19 +502,19 @@ describe('helpers-resource', () => {
     const onSelect = vi.fn()
     render(
       <RoutedSettingsTabs
-        active="captcha"
+        active="sign-in"
         ariaLabel="Security settings"
         onSelect={onSelect}
         tabs={[
-          ['captcha', 'CAPTCHA', '/console/security/captcha'],
-          ['blocklist', 'Blocklist', '/console/security/blocklist'],
+          ['sign-in', 'Sign-in security', '/console/security/sign-in'],
+          ['abuse', 'Abuse prevention', '/console/security/abuse'],
         ]}
       />,
     )
-    fireEvent.click(screen.getByRole('link', { name: 'Blocklist' }))
-    expect(onSelect).toHaveBeenCalledWith('blocklist')
+    fireEvent.click(screen.getByRole('link', { name: 'Abuse prevention' }))
+    expect(onSelect).toHaveBeenCalledWith('abuse')
     // modifier-clicks are ignored (handler returns before onSelect)
-    fireEvent.click(screen.getByRole('link', { name: 'CAPTCHA' }), { metaKey: true })
+    fireEvent.click(screen.getByRole('link', { name: 'Sign-in security' }), { metaKey: true })
     expect(onSelect).toHaveBeenCalledTimes(1)
   })
 
@@ -596,12 +595,9 @@ describe('helpers-preview presentational pieces', () => {
     rerender(<WebhookRequestDialog onClose={vi.fn()} request={null} />)
   })
 
-  it('renders payload block and token customization card', () => {
+  it('renders payload blocks', () => {
     render(<PayloadBlock label="Body" value="{}" />)
     expect(screen.getByText('Body')).toBeTruthy()
-    cleanup()
-    render(<TokenCustomizationCard rows={[['Audience', 'aud']]} title="Tokens" />)
-    expect(screen.getByText('Audience')).toBeTruthy()
   })
 
   it('renders settings sections and changes section visibility', () => {

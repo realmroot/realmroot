@@ -436,10 +436,6 @@ export function ExperiencePage({ section = 'theme' }: { section?: ExperienceSect
   )
 }
 
-export function BrandingPage() {
-  return <ExperiencePage section="theme" />
-}
-
 function ColorField({
   description,
   label,

@@ -81,7 +81,7 @@ export function AccountConnectionsPage() {
   }
 
   return (
-    <AccountSurface section="connections">
+    <AccountSurface>
       {() => (
         <>
           <AccountPageHeader

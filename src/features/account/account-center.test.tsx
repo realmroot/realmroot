@@ -1,8 +1,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AccountConnectionsPage, AccountProfilePage, AccountSecurityPage } from '@/features/account/account-center'
+import { AccountCenterLayout } from '@/features/account/account-surface'
 import {
   asRecord,
   base64UrlToBuffer,
@@ -64,7 +65,7 @@ describe('account pages', () => {
     )
   })
 
-  it('security page loads security-owned account data', async () => {
+  it('security page loads only the active tab data', async () => {
     const requests = mockAccountFetch()
     renderWithClient(<AccountSecurityPage />)
 
@@ -74,13 +75,24 @@ describe('account pages', () => {
         '/api/configz',
         '/api/account/profile',
         '/api/account/developer-console-access',
-        '/api/account/security',
-        '/api/account/security/passkeys',
-        '/api/account/sessions',
         '/api/account/linked-accounts',
         '/api/account/provider-connections?limit=100&offset=0',
       ]),
     )
+
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'MFA' }), { button: 0, ctrlKey: false })
+    await waitFor(() => expect(requests.at(-1)).toBe('/api/account/security'))
+
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Passkeys' }), { button: 0, ctrlKey: false })
+    await waitFor(() => expect(requests.at(-1)).toBe('/api/account/security/passkeys'))
+
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Sessions' }), { button: 0, ctrlKey: false })
+    await waitFor(() => expect(requests.at(-1)).toBe('/api/account/sessions'))
+
+    const loadedRequestCount = requests.length
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'MFA' }), { button: 0, ctrlKey: false })
+    await waitFor(() => expect(screen.getByText('Multi-factor authentication')).toBeTruthy())
+    expect(requests).toHaveLength(loadedRequestCount)
   })
 
   it('connections page loads connection-owned account data', async () => {
@@ -103,7 +115,11 @@ describe('account pages', () => {
 
 function renderWithClient(ui: ReactNode) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>)
+  render(
+    <QueryClientProvider client={queryClient}>
+      <AccountCenterLayout section="overview">{ui}</AccountCenterLayout>
+    </QueryClientProvider>,
+  )
 }
 
 function mockAccountFetch() {

@@ -81,7 +81,7 @@ export function AccountOverviewPage() {
   const sessions = sessionsQuery.data?.sessions ?? []
   const securityStrong = Boolean(security?.mfa.enabled || security?.passkeys.count)
   return (
-    <AccountSurface section="overview">
+    <AccountSurface>
       {(profile) => (
         <>
           <AccountPageHeader
@@ -230,7 +230,7 @@ export function AccountApplicationsPage() {
   const [confirmation, setConfirmation] = useDestructiveConfirmation()
   const applications = applicationsQuery.data?.applications ?? []
   return (
-    <AccountSurface section="applications">
+    <AccountSurface>
       {() => (
         <>
           <AccountPageHeader
@@ -361,7 +361,7 @@ export function AccountAgentsPage() {
   const agents = agentsQuery.data?.items ?? []
   const requests = requestsQuery.data?.items ?? []
   return (
-    <AccountSurface section="agents">
+    <AccountSurface>
       {() => (
         <>
           <AccountPageHeader
@@ -663,7 +663,7 @@ export function AccountOrganizationsPage() {
   const organizations = organizationsQuery.data ?? []
   const invitations = (invitationsQuery.data ?? []).filter((invitation) => invitation.status === 'pending')
   return (
-    <AccountSurface section="organizations">
+    <AccountSurface>
       {(_profile, access, activeOrganizationId) => (
         <>
           <AccountPageHeader
@@ -942,7 +942,7 @@ export function AccountOrganizationDetailPage({
   const agents = agentsQuery.data?.items ?? []
   useEffect(() => setActiveSection(section), [section])
   return (
-    <AccountSurface section="organizations">
+    <AccountSurface>
       {(profile) => {
         if (organizationQuery.isLoading)
           return <p className="text-sm text-muted-foreground">{tt('Loading Organization…')}</p>

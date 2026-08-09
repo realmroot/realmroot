@@ -1,3 +1,4 @@
+import { SpaLink } from '@/components/spa-link'
 import {
   AuthMethodDivider,
   authPageHref,
@@ -86,14 +87,14 @@ export function SignUpPage() {
               usernameEnabled={config?.signIn.usernameEnabled}
             />
           }
-          signInAction={<a href={authPageHref('/auth/sign-in')}>{tt('Already have an account?')}</a>}
+          signInAction={<SpaLink to={authPageHref('/auth/sign-in')}>{tt('Already have an account?')}</SpaLink>}
           socialButtons={
             socialProviders.length > 0 ? <SocialButtons callback={callback} providers={socialProviders} /> : undefined
           }
           status={created ? undefined : <SubmitStatus state={submit} />}
         />
       ) : (
-        <SignUpDisabled signInAction={<a href={authPageHref('/auth/sign-in')}>{tt('Back to sign in')}</a>} />
+        <SignUpDisabled signInAction={<SpaLink to={authPageHref('/auth/sign-in')}>{tt('Back to sign in')}</SpaLink>} />
       )}
     </AuthLayout>
   )

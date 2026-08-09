@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useRouterState } from '@tanstack/react-router'
 import {
   AppWindow,
@@ -20,6 +21,7 @@ import {
   X,
 } from 'lucide-react'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
+import { toast } from 'sonner'
 import { ProductAccountMenu } from '@/components/product-account-menu'
 import { RealmrootWordmark } from '@/components/realmroot-brand'
 import { Button } from '@/components/ui/button'
@@ -83,7 +85,7 @@ const consoleNavGroups: ConsoleNavGroup[] = [
         href: '/console/sign-in-experience/sign-in',
         label: 'Sign-in & registration',
         icon: Fingerprint,
-        activePaths: ['/console/sign-in-experience/sign-in', '/console/sign-in-experience/sign-up-and-sign-in'],
+        activePaths: ['/console/sign-in-experience/sign-in'],
       },
       {
         href: '/console/security/sign-in',
@@ -104,7 +106,6 @@ const consoleNavGroups: ConsoleNavGroup[] = [
           '/console/sign-in-experience/theme',
           '/console/sign-in-experience/assets',
           '/console/sign-in-experience/legal',
-          '/console/sign-in-experience/branding',
           '/console/sign-in-experience/content',
           '/console/sign-in-experience/account-center',
         ],
@@ -126,6 +127,8 @@ const consoleUtilities = [
 
 export function ConsoleShell({ children, profile }: { children: ReactNode; profile: UserProfile }) {
   const pathname = useRouterState({ select: (state) => state.location.pathname })
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const mobileNavTriggerRef = useRef<HTMLButtonElement>(null)
@@ -148,8 +151,14 @@ export function ConsoleShell({ children, profile }: { children: ReactNode; profi
   }
 
   async function signOutFromConsole() {
-    await signOut()
-    window.location.href = '/auth/sign-in'
+    try {
+      await signOut()
+      queryClient.clear()
+      toast.success(tt('Signed out'))
+      await navigate({ to: '/auth/sign-in' })
+    } catch (mutationError) {
+      toast.error(mutationError instanceof Error ? tt(mutationError.message) : tt('Account update failed.'))
+    }
   }
 
   return (
@@ -323,7 +332,6 @@ function breadcrumbSegmentLabel(route: string, segment: string) {
 }
 
 const consoleBreadcrumbRoutes: Array<{ href: string; label: string }> = [
-  { href: '/console/sign-in-experience/sign-up-and-sign-in', label: 'Sign-in & registration' },
   { href: '/console/sign-in-experience/sign-in', label: 'Sign-in & registration' },
   { href: '/console/sign-in-experience', label: 'Experience' },
   { href: '/console/tenant-settings', label: 'Settings' },
@@ -335,7 +343,6 @@ const consoleBreadcrumbRoutes: Array<{ href: string; label: string }> = [
   { href: '/console/security', label: 'Security policies' },
   { href: '/console/users', label: 'Users' },
   { href: '/console/agents', label: 'Agents' },
-  { href: '/console/roles', label: 'Roles' },
 ]
 
 function ConsoleNavigation({

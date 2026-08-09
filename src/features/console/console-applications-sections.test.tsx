@@ -1,7 +1,6 @@
 import type { ApplicationResponse } from '@shared/api/applications'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ApplicationBrandingCard } from '@/features/applications/management/application-branding-card'
 import {
   ApplicationOidcClaimsForm,
   ApplicationsTableContent,
@@ -108,37 +107,5 @@ describe('ApplicationsTableContent', () => {
       />,
     )
     expect(screen.getByText('No applications yet')).toBeTruthy()
-  })
-})
-
-describe('ApplicationBrandingCard', () => {
-  it('renders an explicit error message alongside the mutation error', () => {
-    render(
-      <ApplicationBrandingCard
-        application={app}
-        error={new Error('upload failed')}
-        errorMessage="Logo too large"
-        onLogo={vi.fn()}
-      />,
-    )
-    expect(screen.getByText('upload failed')).toBeTruthy()
-    expect(screen.getByText('Logo too large')).toBeTruthy()
-  })
-
-  it('uploads a logo file and shows the homepage fallback', () => {
-    const onLogo = vi.fn()
-    render(
-      <ApplicationBrandingCard
-        application={{ ...app, homepageUrl: null }}
-        error={null}
-        errorMessage={null}
-        onLogo={onLogo}
-      />,
-    )
-    expect(screen.getByText('Not set')).toBeTruthy()
-    const input = screen.getByLabelText(`Upload logo for ${app.name}`)
-    const file = new File(['x'], 'logo.png', { type: 'image/png' })
-    fireEvent.change(input, { target: { files: [file] } })
-    expect(onLogo).toHaveBeenCalledWith(file)
   })
 })

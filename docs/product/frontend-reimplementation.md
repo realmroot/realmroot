@@ -38,7 +38,7 @@ reviewed.
 | Agents | `/console/agents` | Real | Stable Agent inventory; no create action |
 | Agent detail | `/console/agents/:id/*` | Partial | Overview, Requests & grants, Hosts, Activity, Settings |
 | Organizations | `/console/organizations` | Real | Shared membership and authorization-context inventory |
-| Organization detail | `/console/organizations/:id/*` | Partial | Platform inventory drill-down redirects to the canonical Organization Workspace |
+| Organization detail | `/organizations/:id/*` | Real | Canonical Organization Workspace; Console inventory links here directly |
 | Applications | `/console/applications` | Real, old classification | Unified owner-filtered inventory |
 | Application detail | `/console/applications/:id/*` | Real, old tabs | Overview, OAuth, Authorizations, Settings, including consent policy |
 | Resource servers | `/console/api-resources` | Real, old product name | Unified native/external inventory with authorization second and owner last |

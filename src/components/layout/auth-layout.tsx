@@ -2,6 +2,7 @@ import type { ConfigzConfigResponse } from '@shared/api/configz'
 import { ArrowLeft } from 'lucide-react'
 import { type CSSProperties, createElement, type ReactNode, useEffect } from 'react'
 import { RealmrootMark } from '@/components/realmroot-brand'
+import { SpaLink } from '@/components/spa-link'
 import { tt } from '@/lib/i18n'
 
 type AuthLayoutProps = {
@@ -49,10 +50,10 @@ export function AuthLayout({
         {tt('Skip to content')}
       </a>
       {backHref ? (
-        <a className="authBackLink" href={backHref}>
+        <SpaLink className="authBackLink" to={backHref}>
           <ArrowLeft aria-hidden="true" size={16} />
           {backLabel ?? tt('auth.back')}
-        </a>
+        </SpaLink>
       ) : null}
       <AuthCardFrame
         brand={icon ? <div className="authMessageIcon">{icon}</div> : <BrandIdentity config={config} />}
@@ -120,14 +121,14 @@ export function AuthCardFrame({
 export function BrandIdentity({ config }: { config: ConfigzConfigResponse | null }) {
   const productName = config?.copy?.productName ?? 'Realmroot'
   return (
-    <a className="brand brandLink" href="/">
+    <SpaLink className="brand brandLink" to="/">
       {config?.branding.logoUrl ? (
         <img className="brandLogo" src={config.branding.logoUrl} alt="" width="36" height="36" />
       ) : (
         <RealmrootMark className="brandMark" />
       )}
       <span>{productName}</span>
-    </a>
+    </SpaLink>
   )
 }
 export function brandingStyle(config: ConfigzConfigResponse | null): CSSProperties {
@@ -169,9 +170,7 @@ function AuthPageFooter({ links }: { links: Array<[string, string]> }) {
       {links.length > 0 ? (
         <nav className="authLegalLinks" aria-label={tt('auth.hostedLegalLinks')}>
           {links.map(([label, href]) => (
-            <a href={href} key={label}>
-              {tt(label)}
-            </a>
+            <LegalLink href={href} key={label} label={label} />
           ))}
         </nav>
       ) : (
@@ -179,5 +178,13 @@ function AuthPageFooter({ links }: { links: Array<[string, string]> }) {
       )}
       <p className="authPoweredBy">{tt('Secured by Realmroot')}</p>
     </footer>
+  )
+}
+
+function LegalLink({ href, label }: { href: string; label: string }) {
+  return href.startsWith('/') && !href.startsWith('//') ? (
+    <SpaLink to={href}>{tt(label)}</SpaLink>
+  ) : (
+    <a href={href}>{tt(label)}</a>
   )
 }

@@ -1,3 +1,4 @@
+import { SpaLink } from '@/components/spa-link'
 import { ErrorState, LoadingState } from './dialogs'
 import {
   AlertCircle,
@@ -188,30 +189,6 @@ export function userDetailTabs(): DetailTab[] {
     },
   ]
 }
-export function organizationDetailTabs(): DetailTab[] {
-  return [
-    {
-      value: 'overview',
-      label: 'Overview',
-    },
-    {
-      value: 'members',
-      label: 'Members',
-    },
-    {
-      value: 'agents',
-      label: 'Agents',
-    },
-    {
-      value: 'activity',
-      label: 'Activity',
-    },
-    {
-      value: 'settings',
-      label: 'Settings',
-    },
-  ]
-}
 export function roleDetailTabs(): DetailTab[] {
   return [
     {
@@ -267,27 +244,14 @@ export function SetupChecklist({ items, title }: { items: ManagementReadinessIte
                   <p className="text-sm leading-6 text-muted-foreground">{item.description}</p>
                 </div>
               </div>
-              <a className="uiButton uiButton-ghost" href={item.href}>
+              <SpaLink className="uiButton uiButton-ghost" to={item.href}>
                 {item.action}
-              </a>
+              </SpaLink>
             </div>
           )
         })}
       </div>
     </section>
-  )
-}
-export function SecuritySectionTabs({ active }: { active: 'captcha' | 'blocklist' | 'general' }) {
-  return (
-    <RoutedSettingsTabs
-      active={active}
-      ariaLabel="Security settings"
-      tabs={[
-        ['captcha', 'CAPTCHA', '/console/security/captcha'],
-        ['blocklist', 'Blocklist', '/console/security/blocklist'],
-        ['general', 'General', '/console/security/general'],
-      ]}
-    />
   )
 }
 export function lines(value: string) {

@@ -1,6 +1,8 @@
+import { QueryClient } from '@tanstack/react-query'
 import { HttpResponse, http } from 'msw'
 import { setupServer } from 'msw/node'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
+import { accountQueryKeys } from '@/lib/account-query'
 import {
   loadAccountProfile,
   loadDeveloperConsoleAccess,
@@ -10,6 +12,10 @@ import {
 
 const base = 'http://localhost:3000'
 const server = setupServer()
+
+function routeQueryClient() {
+  return new QueryClient({ defaultOptions: { queries: { retry: false } } })
+}
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
 afterEach(() => {
@@ -76,6 +82,54 @@ describe('loadDeveloperConsoleAccess', () => {
 })
 
 describe('requireAccountProfile', () => {
+  it('reuses fresh route authentication data across navigations', async () => {
+    let profileRequests = 0
+    let securityRequests = 0
+    server.use(
+      http.get(`${base}/api/account/profile`, () => {
+        profileRequests += 1
+        return HttpResponse.json({ user: { role: 'user' } })
+      }),
+      http.get(`${base}/api/account/security`, () => {
+        securityRequests += 1
+        return HttpResponse.json({ security: { mfa: { enabled: false }, policy: { mfa: { mode: 'optional' } } } })
+      }),
+    )
+    const queryClient = routeQueryClient()
+
+    await requireAccountProfile('/profile', queryClient)
+    await requireAccountProfile('/applications', queryClient)
+
+    expect(profileRequests).toBe(1)
+    expect(securityRequests).toBe(1)
+  })
+
+  it('reloads route authentication data after explicit invalidation', async () => {
+    let profileRequests = 0
+    let securityRequests = 0
+    server.use(
+      http.get(`${base}/api/account/profile`, () => {
+        profileRequests += 1
+        return HttpResponse.json({ user: { role: 'user' } })
+      }),
+      http.get(`${base}/api/account/security`, () => {
+        securityRequests += 1
+        return HttpResponse.json({ security: { mfa: { enabled: false }, policy: { mfa: { mode: 'optional' } } } })
+      }),
+    )
+    const queryClient = routeQueryClient()
+    await requireAccountProfile('/profile', queryClient)
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: accountQueryKeys.profile }),
+      queryClient.invalidateQueries({ queryKey: accountQueryKeys.security }),
+    ])
+
+    await requireAccountProfile('/applications', queryClient)
+
+    expect(profileRequests).toBe(2)
+    expect(securityRequests).toBe(2)
+  })
+
   it('returns the profile when authenticated', async () => {
     server.use(
       http.get(`${base}/api/account/profile`, () => HttpResponse.json({ user: { role: 'user' } })),
@@ -83,12 +137,12 @@ describe('requireAccountProfile', () => {
         HttpResponse.json({ security: { mfa: { enabled: false }, policy: { mfa: { mode: 'optional' } } } }),
       ),
     )
-    expect(await requireAccountProfile('/profile')).toEqual({ user: { role: 'user' } })
+    expect(await requireAccountProfile('/profile', routeQueryClient())).toEqual({ user: { role: 'user' } })
   })
 
   it('does not require a second security lookup on the Security page', async () => {
     server.use(http.get(`${base}/api/account/profile`, () => HttpResponse.json({ user: { role: 'user' } })))
-    expect(await requireAccountProfile('/security')).toEqual({ user: { role: 'user' } })
+    expect(await requireAccountProfile('/security', routeQueryClient())).toEqual({ user: { role: 'user' } })
   })
 
   it('redirects an unenrolled user to Account Security when MFA is required', async () => {
@@ -100,7 +154,7 @@ describe('requireAccountProfile', () => {
     )
 
     try {
-      await requireAccountProfile('/console')
+      await requireAccountProfile('/console', routeQueryClient())
       expect.unreachable('should have redirected to enrollment')
     } catch (error) {
       const redirectResponse = error as Response & { options: { href?: string } }
@@ -111,7 +165,7 @@ describe('requireAccountProfile', () => {
   it('redirects to hosted sign-in with the return path when unauthenticated', async () => {
     server.use(http.get(`${base}/api/account/profile`, () => new HttpResponse(null, { status: 401 })))
     try {
-      await requireAccountProfile('/profile?tab=security')
+      await requireAccountProfile('/profile?tab=security', routeQueryClient())
       expect.unreachable('should have thrown a redirect')
     } catch (error) {
       const redirectResponse = error as Response & { options: { href?: string } }
@@ -125,7 +179,7 @@ describe('requireAccountProfile', () => {
     const approval = '/agent/resource-access/approve#token=secret'
 
     try {
-      await requireAccountProfile(approval)
+      await requireAccountProfile(approval, routeQueryClient())
       expect.unreachable('should have thrown a redirect')
     } catch (error) {
       const redirectResponse = error as Response & { options: { href?: string } }

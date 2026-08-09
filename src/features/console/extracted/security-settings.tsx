@@ -390,22 +390,6 @@ export function SecurityPoliciesPage({ section = 'sign-in' }: { section?: Securi
   )
 }
 
-export function MfaPage() {
-  return <SecurityPoliciesPage section="mfa" />
-}
-export function SecurityPasswordPolicyPage() {
-  return <SecurityPoliciesPage section="sign-in" />
-}
-export function SecurityCaptchaPage() {
-  return <SecurityPoliciesPage section="abuse" />
-}
-export function SecurityBlocklistPage() {
-  return <SecurityPoliciesPage section="abuse" />
-}
-export function SecurityGeneralPage() {
-  return <SecurityPoliciesPage section="sign-in" />
-}
-
 function SecuritySwitch({
   checked,
   description,

@@ -4,6 +4,7 @@ import { Field, TextInput } from '@/components/product-form'
 import { Button } from '@/components/ui/button'
 import { Status } from '@/components/ui/status'
 import { approveDeviceCode, denyDeviceCode, verifyDeviceCode } from '@/lib/auth-client'
+import { deduplicateRequest } from '@/lib/request-deduplication'
 
 type DeviceVerificationProps = {
   userCode?: string
@@ -23,7 +24,7 @@ export function DeviceVerification({ mode, userCode: initialUserCode = '' }: Dev
     let canceled = false
     setSubmitting(true)
     setError(null)
-    verifyDeviceCode({ userCode: initialUserCode })
+    deduplicateRequest(`device-code:${initialUserCode}`, () => verifyDeviceCode({ userCode: initialUserCode }))
       .then((response) => {
         if (canceled) return
         setVerifiedCode(response.user_code)

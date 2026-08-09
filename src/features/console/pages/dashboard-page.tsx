@@ -155,8 +155,8 @@ function ConfigurationGaps({ dashboard }: { dashboard: AdminDashboard }) {
               </div>
               <LinkButton
                 aria-label={tt('Open {{item}}', { item: item.label })}
-                href={item.href}
                 size="icon-sm"
+                to={item.href}
                 variant="ghost"
               >
                 <ArrowRight />

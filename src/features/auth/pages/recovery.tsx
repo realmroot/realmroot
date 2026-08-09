@@ -1,3 +1,4 @@
+import { SpaLink } from '@/components/spa-link'
 import {
   authPageHref,
   authRequestContext,
@@ -97,7 +98,7 @@ export function ForgotPasswordPage() {
     >
       {!resetComplete ? <SubmitStatus state={submit} /> : null}
       {resetComplete ? (
-        <LinkButton href={authPageHref('/auth/sign-in')}>{tt('Continue to sign in')}</LinkButton>
+        <LinkButton to={authPageHref('/auth/sign-in')}>{tt('Continue to sign in')}</LinkButton>
       ) : (
         <form className="formStack" onSubmit={onSubmit}>
           <Field label={tt('Email')}>
@@ -169,7 +170,7 @@ export function ForgotPasswordPage() {
       )}
       {!resetComplete ? (
         <div className="authLinks">
-          <a href={authPageHref('/auth/sign-in')}>{tt('Back to sign in')}</a>
+          <SpaLink to={authPageHref('/auth/sign-in')}>{tt('Back to sign in')}</SpaLink>
         </div>
       ) : null}
     </AuthLayout>
@@ -221,7 +222,7 @@ export function EmailVerificationPage() {
       }
     >
       {verified ? (
-        <LinkButton href={authPageHref('/auth/sign-in')}>{tt('Continue to sign in')}</LinkButton>
+        <LinkButton to={authPageHref('/auth/sign-in')}>{tt('Continue to sign in')}</LinkButton>
       ) : (
         <>
           <SubmitStatus state={submit} />
@@ -296,7 +297,7 @@ export function AuthCallbackPage() {
       {state.loading ? <LoadingMessage label={tt('Checking callback state')} /> : null}
       {state.error ? <Status tone="error">{state.error}</Status> : null}
       {state.href ? (
-        <LinkButton href={state.href}>
+        <LinkButton to={state.href}>
           {tt('Continue')} <ArrowRight size={18} />
         </LinkButton>
       ) : null}

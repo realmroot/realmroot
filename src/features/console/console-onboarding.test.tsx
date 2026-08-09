@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { BrandingPage } from '@/features/console/extracted/branding-content/branding'
+import { ExperiencePage } from '@/features/console/extracted/branding-content/branding'
 import { ConsoleOnboardingPage } from '@/features/console/extracted/onboarding'
 import { queryClient } from '@/router'
 
@@ -54,7 +54,7 @@ describe('console onboarding', () => {
   it('exposes only the designed Realm brand asset URL fields [spec: admin-console/admin-branding]', async () => {
     vi.spyOn(window, 'fetch').mockImplementation(consoleSharedFetch)
 
-    renderWithQuery(<BrandingPage />)
+    renderWithQuery(<ExperiencePage section="theme" />)
     await userEvent.click(await screen.findByRole('tab', { name: 'Brand assets' }))
 
     expect(await screen.findByLabelText('Product name')).toBeTruthy()

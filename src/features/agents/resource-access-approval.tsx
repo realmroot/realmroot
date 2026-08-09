@@ -20,6 +20,7 @@ import {
   listApprovalAuthorizationDetailCatalog,
 } from '@/lib/api/account'
 import { toLocalDateTimeValue } from '@/lib/date-time'
+import { deduplicateRequest } from '@/lib/request-deduplication'
 
 type ApprovalMode = NonNullable<DecideAccessRequest['mode']>
 const approvalTokenStorageKey = 'realmroot.resource-access-approval-token'
@@ -65,33 +66,49 @@ export function ResourceAccessApproval() {
       setError('This resource access request is incomplete. Start again from the requesting Agent.')
       return
     }
-    void getAgentResourceApproval(token)
-      .then(async (accessRequest) => {
-        const availableConnections = await listApprovalAccountConnections(token)
-        if (availableConnections.items.length > 1) {
-          throw new Error('This resource has more than one connected account.')
-        }
-        const availableConnection = availableConnections.items[0] ?? null
+    let active = true
+    void deduplicateRequest(`resource-access-approval:${token}`, async () => {
+      const accessRequest = await getAgentResourceApproval(token)
+      const availableConnections = await listApprovalAccountConnections(token)
+      if (availableConnections.items.length > 1) {
+        throw new Error('This resource has more than one connected account.')
+      }
+      const availableConnection = availableConnections.items[0] ?? null
+      let catalog: AuthorizationDetailCatalogEntry[] = []
+      let authorizationCatalogError: string | null = null
+      if (
+        availableConnection &&
+        accessRequest.authorizationDetails.length > 0 &&
+        accessRequest.scopes.every((scope) => availableConnection.scopes.includes(scope))
+      ) {
+        await loadApprovalAuthorizationDetailCatalog(accessRequest.id, token)
+          .then((items) => {
+            catalog = items
+          })
+          .catch((cause: unknown) => {
+            authorizationCatalogError =
+              cause instanceof Error ? cause.message : 'Unable to load authorization contexts.'
+          })
+      }
+      return { accessRequest, authorizationCatalogError, availableConnection, catalog }
+    })
+      .then(({ accessRequest, authorizationCatalogError, availableConnection, catalog }) => {
+        if (!active) return
         setRequest(accessRequest)
         setConnection(availableConnection)
         setAgentName(accessRequest.agent.name)
         setResourceName(accessRequest.resource.name)
-        if (
-          availableConnection &&
-          accessRequest.authorizationDetails.length > 0 &&
-          accessRequest.scopes.every((scope) => availableConnection.scopes.includes(scope))
-        ) {
-          await loadApprovalAuthorizationDetailCatalog(accessRequest.id, token)
-            .then(setAuthorizationDetailCatalog)
-            .catch((cause: unknown) => {
-              setCatalogError(cause instanceof Error ? cause.message : 'Unable to load authorization contexts.')
-            })
-        }
+        setAuthorizationDetailCatalog(catalog)
+        setCatalogError(authorizationCatalogError)
       })
       .catch((cause: unknown) => {
+        if (!active) return
         setError(cause instanceof Error ? cause.message : 'Unable to load the Agent resource request.')
         setSubmitting(false)
       })
+    return () => {
+      active = false
+    }
   }, [callbackError, token])
 
   async function submit(nextDecision: 'approve' | 'deny') {

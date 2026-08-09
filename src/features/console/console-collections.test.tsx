@@ -1,13 +1,13 @@
 import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ApplicationsPage } from '@/features/applications/management/applications-list'
-import { BrandingPage } from '@/features/console/extracted/branding-content/branding'
+import { ExperiencePage } from '@/features/console/extracted/branding-content/branding'
 import { ContentSettingsPage } from '@/features/console/extracted/branding-content/content-settings'
 import { ConnectorsPage } from '@/features/console/extracted/connectors'
 import { DeploymentSettingsPage, SettingsPage } from '@/features/console/extracted/deployment-misc/deployment'
 import { ConsoleOnboardingPage } from '@/features/console/extracted/onboarding'
 import { OrganizationsPage } from '@/features/console/extracted/organizations'
-import { MfaPage } from '@/features/console/extracted/security-settings'
+import { SecurityPoliciesPage } from '@/features/console/extracted/security-settings'
 import { SignInSettingsPage } from '@/features/console/extracted/sign-in-settings'
 import { UsersPage } from '@/features/console/extracted/users/users-list'
 import { ApiResourcesPage } from '@/features/resource-servers/management-resource-servers'
@@ -304,13 +304,13 @@ describe('console collections', () => {
         text: 'Legal & support',
       },
       {
-        component: <BrandingPage />,
+        component: <ExperiencePage section="theme" />,
         matches: (url: string) => url === '/api/realm/branding',
         success: brandingSettings,
         text: 'Color scheme',
       },
       {
-        component: <MfaPage />,
+        component: <SecurityPoliciesPage section="mfa" />,
         matches: (url: string) => url === '/api/realm/security-policy',
         success: securityPolicy,
         text: 'Available factors',
@@ -366,7 +366,7 @@ describe('console collections', () => {
       if (url === '/api/realm/security-policy') return Promise.resolve(jsonResponse(securityPolicy))
       return consoleSharedFetch(input, init)
     })
-    const { unmount } = renderWithQuery(<BrandingPage />)
+    const { unmount } = renderWithQuery(<ExperiencePage section="theme" />)
 
     expect(await screen.findByRole('heading', { name: 'Experience' })).toBeTruthy()
     expect(await screen.findByRole('tab', { name: 'Color scheme' })).toBeTruthy()

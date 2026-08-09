@@ -1,12 +1,6 @@
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import {
-  MfaPage,
-  SecurityBlocklistPage,
-  SecurityCaptchaPage,
-  SecurityGeneralPage,
-  SecurityPasswordPolicyPage,
-} from '@/features/console/extracted/security-settings'
+import { SecurityPoliciesPage } from '@/features/console/extracted/security-settings'
 import { queryClient } from '@/router'
 import { consoleSharedFetch, jsonResponse, renderWithQuery, securityPolicy } from './console.test-utils'
 
@@ -62,13 +56,13 @@ describe('admin console security policies', () => {
       return consoleSharedFetch(input, init)
     })
 
-    const mfa = renderWithQuery(<MfaPage />)
+    const mfa = renderWithQuery(<SecurityPoliciesPage section="mfa" />)
     expect(await screen.findByLabelText('Prompt policy')).toHaveProperty('value', 'optional')
     expect(screen.getByRole('switch', { name: 'Passkey' }).getAttribute('aria-checked')).toBe('false')
     expect(screen.getByRole('switch', { name: 'Email verification code' }).getAttribute('aria-checked')).toBe('true')
     mfa.unmount()
 
-    renderWithQuery(<SecurityCaptchaPage />)
+    renderWithQuery(<SecurityPoliciesPage section="abuse" />)
     expect(await screen.findByLabelText('Provider')).toHaveProperty('value', 'hcaptcha')
     expect(screen.getByLabelText('Site key')).toHaveProperty('value', 'site-key-1')
     expect(screen.getByText('Configured')).toBeTruthy()
@@ -79,7 +73,7 @@ describe('admin console security policies', () => {
   it('shows available factors and persists the MFA prompt policy [spec: admin-console/admin-security-policy]', async () => {
     const requests: unknown[] = []
     vi.spyOn(window, 'fetch').mockImplementation(securityFetch(requests))
-    renderWithQuery(<MfaPage />)
+    renderWithQuery(<SecurityPoliciesPage section="mfa" />)
 
     const factors = (await screen.findByRole('heading', { name: 'Available factors' })).closest(
       'section',
@@ -115,7 +109,7 @@ describe('admin console security policies', () => {
   it('edits password rules inline and persists the active tab atomically', async () => {
     const requests: unknown[] = []
     vi.spyOn(window, 'fetch').mockImplementation(securityFetch(requests))
-    renderWithQuery(<SecurityGeneralPage />)
+    renderWithQuery(<SecurityPoliciesPage section="sign-in" />)
 
     const section = (await screen.findByRole('heading', { name: 'Password policy' })).closest('section') as HTMLElement
     expect(within(section).getByLabelText('Minimum length')).toHaveProperty('value', '12')
@@ -148,7 +142,7 @@ describe('admin console security policies', () => {
   it('discards controlled password and CAPTCHA values from inline forms [spec: admin-console/admin-security-policy]', async () => {
     const requests: unknown[] = []
     vi.spyOn(window, 'fetch').mockImplementation(securityFetch(requests))
-    const { unmount } = renderWithQuery(<SecurityPasswordPolicyPage />)
+    const { unmount } = renderWithQuery(<SecurityPoliciesPage section="sign-in" />)
 
     await screen.findByRole('heading', { name: 'Password policy' })
     fireEvent.click(await screen.findByRole('switch', { name: 'Reject custom words' }))
@@ -158,7 +152,7 @@ describe('admin console security policies', () => {
     )
 
     unmount()
-    renderWithQuery(<SecurityCaptchaPage />)
+    renderWithQuery(<SecurityPoliciesPage section="abuse" />)
     await screen.findByRole('heading', { name: 'CAPTCHA' })
     fireEvent.change(await screen.findByLabelText('Provider'), { target: { value: 'hcaptcha' } })
     fireEvent.click(screen.getByRole('button', { name: 'Discard' }))
@@ -169,7 +163,7 @@ describe('admin console security policies', () => {
   it('edits session lifetimes without exposing deployment environment variables', async () => {
     const requests: unknown[] = []
     vi.spyOn(window, 'fetch').mockImplementation(securityFetch(requests))
-    renderWithQuery(<SecurityPasswordPolicyPage />)
+    renderWithQuery(<SecurityPoliciesPage section="sign-in" />)
 
     await screen.findByRole('heading', { name: 'Session policy' })
     fireEvent.change(await screen.findByLabelText('Session lifetime'), { target: { value: '86400' } })
@@ -198,7 +192,7 @@ describe('admin console security policies', () => {
   it('configures Turnstile with site and managed secret credentials', async () => {
     const requests: unknown[] = []
     vi.spyOn(window, 'fetch').mockImplementation(securityFetch(requests))
-    renderWithQuery(<SecurityCaptchaPage />)
+    renderWithQuery(<SecurityPoliciesPage section="abuse" />)
 
     await screen.findByRole('heading', { name: 'CAPTCHA' })
     fireEvent.click(await screen.findByRole('switch', { name: 'Enable CAPTCHA' }))
@@ -230,7 +224,7 @@ describe('admin console security policies', () => {
   ])('persists $provider provider-specific credentials', async ({ projectId, provider, secretLabel }) => {
     const requests: unknown[] = []
     vi.spyOn(window, 'fetch').mockImplementation(securityFetch(requests))
-    renderWithQuery(<SecurityCaptchaPage />)
+    renderWithQuery(<SecurityPoliciesPage section="abuse" />)
 
     await screen.findByRole('heading', { name: 'CAPTCHA' })
     fireEvent.click(await screen.findByRole('switch', { name: 'Enable CAPTCHA' }))
@@ -260,7 +254,7 @@ describe('admin console security policies', () => {
   it('persists email blocklist entries and subaddressing policy', async () => {
     const requests: unknown[] = []
     vi.spyOn(window, 'fetch').mockImplementation(securityFetch(requests))
-    renderWithQuery(<SecurityBlocklistPage />)
+    renderWithQuery(<SecurityPoliciesPage section="abuse" />)
 
     await screen.findByRole('heading', { name: 'Email blocklist' })
     fireEvent.click(await screen.findByRole('switch', { name: 'Block email subaddressing' }))
@@ -296,7 +290,7 @@ describe('admin console security policies', () => {
       return consoleSharedFetch(input, init)
     })
 
-    renderWithQuery(<SecurityCaptchaPage />)
+    renderWithQuery(<SecurityPoliciesPage section="abuse" />)
     expect(await screen.findByText('Security unavailable.')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
     await screen.findByRole('heading', { name: 'CAPTCHA' })

@@ -1,3 +1,4 @@
+import { QueryClient } from '@tanstack/react-query'
 import { createMemoryHistory, createRouter, RouterProvider } from '@tanstack/react-router'
 import { cleanup, render, screen } from '@testing-library/react'
 import type React from 'react'
@@ -23,8 +24,8 @@ vi.mock('@/features/auth/hooks', () => ({
   useConfigz: () => ({ data: null }),
 }))
 
-// The approval route is gated on a signed-in profile; let it through so the test
-// exercises rendering, not auth.
+// The protected approval layout is gated on a signed-in profile; let it through
+// so the test exercises rendering, not auth.
 vi.mock('@/lib/route-auth', () => ({
   requireAccountProfile: vi.fn(async () => ({ id: 'user-test' })),
 }))
@@ -34,14 +35,13 @@ afterEach(() => {
   window.history.pushState(null, '', '/')
 })
 
-// Drives the REAL route tree (not the route components in isolation) so the
-// /device → /device/approve parent/child Outlet wiring is actually covered: a
-// missing <Outlet/> on the /device layout silently swallows the child route.
+// Drives the real route tree rather than isolated route components.
 // The device components read the user code from window.location, so mirror the
 // path there too (memory history alone does not update window.location).
 async function renderRouteAt(path: string) {
   window.history.pushState(null, '', path)
   const router = createRouter({
+    context: { queryClient: new QueryClient() },
     routeTree,
     history: createMemoryHistory({ initialEntries: [path] }),
   })
@@ -57,7 +57,7 @@ describe('device routes', () => {
     expect(screen.getByText('Device verification ABCD-1234').getAttribute('data-mode')).toBe('entry')
   })
 
-  it('renders the device approval mode at /device/approve (child route via the layout Outlet)', async () => {
+  it('renders the device approval mode at /device/approve through the protected layout', async () => {
     await renderRouteAt('/device/approve?user_code=ABCD-1234')
 
     expect(screen.getByRole('heading', { name: 'Approve device' })).toBeTruthy()

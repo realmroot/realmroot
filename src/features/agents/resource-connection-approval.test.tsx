@@ -1,5 +1,6 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { resetRequestDeduplicationForTests } from '@/lib/request-deduplication'
 import { ResourceConnectionApprovalPage } from './resource-connection-approval'
 
 const api = vi.hoisted(() => ({
@@ -35,6 +36,7 @@ describe('Agent resource connection approval', () => {
 
   afterEach(() => {
     cleanup()
+    resetRequestDeduplicationForTests()
     vi.clearAllMocks()
   })
 
@@ -231,5 +233,19 @@ describe('Agent resource connection approval', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Connect account' }))
 
     expect(await screen.findByText('Unable to start account authorization.')).toBeTruthy()
+  })
+
+  it('does not update state when a pending approval request settles after unmount', async () => {
+    let resolveApproval: (value: typeof approval) => void = () => undefined
+    api.getResourceConnectionApproval.mockImplementationOnce(
+      () => new Promise((resolve) => (resolveApproval = resolve)),
+    )
+    const { unmount } = render(<ResourceConnectionApprovalPage />)
+
+    unmount()
+    await act(async () => {
+      resolveApproval(approval)
+      await Promise.resolve()
+    })
   })
 })

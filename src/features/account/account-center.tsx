@@ -1,3 +1,4 @@
+export { AccountCenterLayout } from './account-surface'
 export { AccountConnectionsPage } from './connections-page'
 export {
   AccountAgentsPage,

@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { BrandingPage } from '@/features/console/extracted/branding-content/branding'
+import { ExperiencePage } from '@/features/console/extracted/branding-content/branding'
 import { ContentSettingsPage } from '@/features/console/extracted/branding-content/content-settings'
 import { SignInSettingsPage } from '@/features/console/extracted/sign-in-settings'
 import { queryClient } from '@/router'
@@ -40,7 +40,7 @@ describe('admin console hosted experience', () => {
       return consoleSharedFetch(input, init)
     })
 
-    renderWithQuery(<BrandingPage />)
+    renderWithQuery(<ExperiencePage section="theme" />)
 
     const preview = (await screen.findByLabelText('Acme Auth hosted sign-in preview')).closest('.brandingPreview')
     const save = screen.getByRole('button', { name: 'Save changes' })
@@ -71,7 +71,7 @@ describe('admin console hosted experience', () => {
   it('discards unsaved Experience changes through the standard inline form actions', async () => {
     vi.spyOn(window, 'fetch').mockImplementation(consoleSharedFetch)
 
-    renderWithQuery(<BrandingPage />)
+    renderWithQuery(<ExperiencePage section="theme" />)
 
     const preview = (await screen.findByLabelText('Acme Auth hosted sign-in preview')).closest('.brandingPreview')
     fireEvent.click(screen.getByRole('button', { name: /Sage/ }))
@@ -99,7 +99,7 @@ describe('admin console hosted experience', () => {
       return consoleSharedFetch(input, init)
     })
 
-    renderWithQuery(<BrandingPage />)
+    renderWithQuery(<ExperiencePage section="theme" />)
 
     expect(await screen.findByLabelText('Primary')).toHaveProperty('value', '#135f5a')
     expect(screen.getByLabelText('Page background')).toHaveProperty('value', '#fbfefd')
@@ -143,7 +143,7 @@ describe('admin console hosted experience', () => {
       return consoleSharedFetch(input, init)
     })
 
-    renderWithQuery(<BrandingPage />)
+    renderWithQuery(<ExperiencePage section="theme" />)
 
     expect((await screen.findByRole('button', { name: /Clear Aqua/ })).getAttribute('aria-pressed')).toBe('true')
     fireEvent.mouseDown(screen.getByRole('tab', { name: 'Brand assets' }), { button: 0, ctrlKey: false })
@@ -165,7 +165,7 @@ describe('admin console hosted experience', () => {
       return consoleSharedFetch(input, init)
     })
 
-    renderWithQuery(<BrandingPage />)
+    renderWithQuery(<ExperiencePage section="theme" />)
     fireEvent.click(await screen.findByRole('button', { name: 'Retry' }))
     expect(await screen.findByRole('heading', { name: 'Color scheme' })).toBeTruthy()
     expect(attempts).toBe(2)
@@ -174,7 +174,7 @@ describe('admin console hosted experience', () => {
   it('updates brand asset URLs in the preview and falls back cleanly', async () => {
     vi.spyOn(window, 'fetch').mockImplementation(consoleSharedFetch)
 
-    renderWithQuery(<BrandingPage />)
+    renderWithQuery(<ExperiencePage section="theme" />)
     fireEvent.mouseDown(await screen.findByRole('tab', { name: 'Brand assets' }), { button: 0, ctrlKey: false })
     fireEvent.change(await screen.findByLabelText('Product name'), { target: { value: 'Northstar ID' } })
     fireEvent.change(screen.getByLabelText('Logo URL'), {

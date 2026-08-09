@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Status } from '@/components/ui/status'
 import { useConfigz } from '@/features/auth/hooks'
 import { createAccountConnection, getResourceConnectionApproval } from '@/lib/api/account'
+import { deduplicateRequest } from '@/lib/request-deduplication'
 
 const approvalTokenStorageKey = 'realmroot.resource-connection-approval-token'
 
@@ -41,11 +42,18 @@ export function ResourceConnectionApprovalPage() {
       setError('This resource connection request is incomplete. Start again from the requesting Agent.')
       return
     }
-    void getResourceConnectionApproval(token)
-      .then(setApproval)
+    let active = true
+    void deduplicateRequest(`resource-connection-approval:${token}`, () => getResourceConnectionApproval(token))
+      .then((nextApproval) => {
+        if (active) setApproval(nextApproval)
+      })
       .catch((cause: unknown) => {
+        if (!active) return
         setError(cause instanceof Error ? cause.message : 'Unable to load the resource connection request.')
       })
+    return () => {
+      active = false
+    }
   }, [callbackCompleted, completedConnectionId, token])
 
   async function connect() {

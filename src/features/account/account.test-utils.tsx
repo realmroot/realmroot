@@ -3,6 +3,7 @@ import { render } from '@testing-library/react'
 import { HttpResponse, http } from 'msw'
 import { setupServer } from 'msw/node'
 import type { ReactNode } from 'react'
+import { AccountCenterLayout } from './account-surface'
 
 const base = 'http://localhost:3000'
 
@@ -231,7 +232,11 @@ export function renderWithClient(ui: ReactNode) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return {
     queryClient,
-    ...render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>),
+    ...render(
+      <QueryClientProvider client={queryClient}>
+        <AccountCenterLayout section="overview">{ui}</AccountCenterLayout>
+      </QueryClientProvider>,
+    ),
   }
 }
 

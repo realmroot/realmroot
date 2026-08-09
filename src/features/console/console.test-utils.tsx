@@ -128,7 +128,16 @@ export function consoleSharedFetch(input: RequestInfo | URL, init?: RequestInit)
 export function accountRouteFetch(input: RequestInfo | URL, init?: RequestInit) {
   const url = String(input)
   if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
-  if (url === '/api/account/profile') return Promise.resolve(jsonResponse({ user: profile }))
+  if (url === '/api/account/profile') {
+    return Promise.resolve(jsonResponse({ user: { ...profile, bio: null, links: [], location: null } }))
+  }
+  if (url === '/api/account/developer-console-access') return Promise.resolve(jsonResponse(consoleAccountAccess))
+  if (url === '/api/account/organization-context') {
+    return Promise.resolve(jsonResponse({ activeOrganizationId: null }))
+  }
+  if (url === '/api/account/provider-connections?limit=100&offset=0') {
+    return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
+  }
   if (url === '/api/account/linked-accounts') return Promise.resolve(jsonResponse({ accounts: [] }))
   if (url === '/api/account/applications') return Promise.resolve(jsonResponse({ applications: [] }))
   if (url === '/api/account/agents') return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))

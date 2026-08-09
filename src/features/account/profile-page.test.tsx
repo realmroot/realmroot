@@ -503,11 +503,8 @@ describe('AccountProfilePage', () => {
   it('renders the unavailable profile section when no profile is returned', async () => {
     server.use(http.get(`${base}/api/account/profile`, () => HttpResponse.json({ user: null, access: store.access })))
     renderWithClient(<AccountProfilePage />)
-    expect(await screen.findByText('Profile editing is disabled for this account center.')).toBeTruthy()
+    expect(await screen.findByText('Unable to load account center.')).toBeTruthy()
     expect(screen.queryByText('Jane Stone')).toBeNull()
-    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Account' }), { button: 0, ctrlKey: false })
-    fireEvent.click(await screen.findByRole('button', { name: 'Download data' }))
-    expect(success).not.toHaveBeenCalled()
   })
 
   it('triggers the hidden file input from the upload button', async () => {
