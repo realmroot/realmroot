@@ -252,7 +252,7 @@ const managementRoutes: ManagementRouteConfig[] = [
     errors: {
       400: 'The event representation, resource, or timestamp is invalid.',
       404: 'The referenced Connection was not found.',
-      409: 'The event identity was already used for a different representation.',
+      409: 'The event identity or revision conflicts with the current Connection Event state.',
       413: 'The event representation exceeds 64 KiB.',
     },
     additionalResponses: {

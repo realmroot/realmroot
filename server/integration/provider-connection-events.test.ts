@@ -484,19 +484,31 @@ describe('Provider Connection Events over real D1', () => {
     }
     const distinct = await Promise.all([
       putEvent(harness, 'delivery-race-first', first),
+      putEvent(harness, 'delivery-race-first', first),
       putEvent(harness, 'delivery-race-second', second),
     ])
-    expect(distinct.map((response) => response.status)).toEqual([204, 204])
+    const distinctStatuses = distinct.map((response) => response.status)
+    expect(distinctStatuses[0]).toBe(distinctStatuses[1])
+    expect(new Set(distinctStatuses)).toEqual(new Set([204, 409]))
 
     let [connection] = await harness.db
       .select()
       .from(providerResourceAuthorization)
       .where(eq(providerResourceAuthorization.id, 'event-connection'))
     expect(connection.providerEventRevision).toBe(1)
-    expect([
-      JSON.stringify({ scopes: ['contents:read', 'issues:write'], occurredAt: new Date(first.occurredAt) }),
-      JSON.stringify({ scopes: ['issues:write'], occurredAt: new Date(second.occurredAt) }),
-    ]).toContain(JSON.stringify({ scopes: connection.grantedScopes, occurredAt: connection.providerEventOccurredAt }))
+    expect(connection.grantedScopes).toEqual(distinctStatuses[0] === 204 ? first.scopes : second.scopes)
+    expect(connection.providerEventOccurredAt).toEqual(
+      new Date(distinctStatuses[0] === 204 ? first.occurredAt : second.occurredAt),
+    )
+    const firstConflicted = distinctStatuses[0] === 409
+    const conflictingId = firstConflicted ? 'delivery-race-first' : 'delivery-race-second'
+    const conflictingEvent = firstConflicted ? first : second
+    expect((await putEvent(harness, conflictingId, conflictingEvent)).status).toBe(409)
+    const revisionReceipts = (await harness.db.select().from(providerConnectionEventReceipt)).filter((receipt) =>
+      ['delivery-race-first', 'delivery-race-second'].includes(receipt.id),
+    )
+    expect(revisionReceipts.find((receipt) => receipt.id === conflictingId)?.appliedAt).toBeNull()
+    expect(revisionReceipts.find((receipt) => receipt.id !== conflictingId)?.appliedAt).not.toBeNull()
 
     const exact = {
       ...first,
@@ -928,7 +940,7 @@ describe('Provider Connection Events over real D1', () => {
           revision: 2,
         })
       ).status,
-    ).toBe(204)
+    ).toBe(409)
     const [connection] = await harness.db
       .select()
       .from(providerResourceAuthorization)

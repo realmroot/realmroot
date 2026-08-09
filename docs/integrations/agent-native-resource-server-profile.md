@@ -195,8 +195,9 @@ outside five minutes. An event identity is scoped to its Resource URI: an exact
 replay returns `204`, while the same identity with a different representation
 returns `409`. Realmroot orders mutations only by the Resource Server's
 per-connection `revision`. A higher revision applies even when its provider
-occurrence timestamp is earlier, while a lower or equal revision is acknowledged
-without mutating state even when its timestamp is later. `occurredAt` is retained
+occurrence timestamp is earlier, while a lower revision is acknowledged without
+mutating state even when its timestamp is later. A different event using the
+current revision conflicts because every event must advance that revision. `occurredAt` is retained
 as audit metadata for the applied revision. Realmroot immediately
 revokes affected active leases, constrains grants to reduced scopes and
 authorization details, keeps suspension reversible, and permanently revokes
