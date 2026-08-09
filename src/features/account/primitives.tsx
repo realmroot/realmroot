@@ -53,7 +53,7 @@ export function SettingsAction({
   meta: string
   status?: string
   title: string
-  value?: string
+  value?: ReactNode
 }) {
   return (
     <article className="accountRow settingsAction">
@@ -65,7 +65,7 @@ export function SettingsAction({
         <span>{meta}</span>
       </div>
       <div className="accountRowValue">
-        {value ? <span className="block font-medium text-foreground">{value}</span> : null}
+        {value ? <div className="block font-medium text-foreground">{value}</div> : null}
         {status ? <span>{status}</span> : null}
       </div>
       <div className="accountRowAction">{action}</div>

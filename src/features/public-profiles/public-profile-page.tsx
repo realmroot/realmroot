@@ -129,6 +129,7 @@ function PublicProfileNavigation() {
             displayName: session.data.user.name,
             email: session.data.user.email,
             image: session.data.user.image,
+            username: session.data.user.username,
           }}
         />
       </nav>

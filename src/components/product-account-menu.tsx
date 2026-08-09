@@ -29,6 +29,7 @@ export type ProductAccountMenuProfile = {
   displayName: string
   email: string
   image?: string | null
+  username?: string | null
 }
 
 export function ProductAccountMenu({
@@ -44,6 +45,18 @@ export function ProductAccountMenu({
   const { setTheme, theme } = useTheme()
   const language = normalizeLanguage(i18n.language)
   const initials = profileInitials(profile.displayName)
+  const profileIdentity = (
+    <>
+      <Avatar className="accountMenuHeaderAvatar">
+        {profile.image ? <AvatarImage alt="" src={profile.image} /> : null}
+        <AvatarFallback className="bg-primary/10 text-xs font-semibold text-primary">{initials}</AvatarFallback>
+      </Avatar>
+      <div>
+        <strong>{profile.displayName}</strong>
+        <span>{profile.email}</span>
+      </div>
+    </>
+  )
 
   return (
     <DropdownMenu>
@@ -56,16 +69,19 @@ export function ProductAccountMenu({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="accountUserMenu" sideOffset={8}>
-        <DropdownMenuLabel className="accountUserMenuHeader">
-          <Avatar className="accountMenuHeaderAvatar">
-            {profile.image ? <AvatarImage alt="" src={profile.image} /> : null}
-            <AvatarFallback className="bg-primary/10 text-xs font-semibold text-primary">{initials}</AvatarFallback>
-          </Avatar>
-          <div>
-            <strong>{profile.displayName}</strong>
-            <span>{profile.email}</span>
-          </div>
-        </DropdownMenuLabel>
+        {profile.username ? (
+          <DropdownMenuItem asChild className="accountUserMenuHeader">
+            <Link
+              aria-label={tt('View public profile for {{name}}', { name: profile.displayName })}
+              params={{ username: profile.username }}
+              to="/u/$username"
+            >
+              {profileIdentity}
+            </Link>
+          </DropdownMenuItem>
+        ) : (
+          <DropdownMenuLabel className="accountUserMenuHeader">{profileIdentity}</DropdownMenuLabel>
+        )}
         {primaryAction ? (
           <>
             <DropdownMenuGroup>

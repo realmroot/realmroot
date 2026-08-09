@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import type { ReactNode } from 'react'
+import userEvent from '@testing-library/user-event'
+import type { AnchorHTMLAttributes } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AccountPageShell } from '@/features/account/account-shell'
 import { type AccountCenterSection, defaultAccountCenterSettings } from '@/features/account/settings'
@@ -11,11 +12,29 @@ const navigate = vi.fn().mockResolvedValue(undefined)
 const signOut = vi.fn().mockResolvedValue({})
 
 vi.mock('@tanstack/react-router', () => ({
-  Link: ({ children, className, to }: { children: ReactNode; className?: string; to: string }) => (
-    <a className={className} href={to}>
-      {children}
-    </a>
-  ),
+  Link: ({
+    params,
+    to,
+    onClick,
+    ...props
+  }: AnchorHTMLAttributes<HTMLAnchorElement> & {
+    params?: Record<string, string>
+    to: string
+  }) => {
+    const href = Object.entries(params ?? {}).reduce((path, [key, value]) => path.replace(`$${key}`, value), to)
+    return (
+      <a
+        {...props}
+        href={href}
+        onClick={(event) => {
+          onClick?.(event)
+          if (event.defaultPrevented) return
+          event.preventDefault()
+          void navigate({ to: href })
+        }}
+      />
+    )
+  },
   useNavigate: () => navigate,
 }))
 
@@ -89,7 +108,7 @@ describe('AccountPageShell', () => {
     expect(screen.queryByRole('link', { name: 'Open Realm Console' })).toBeNull()
     openAccountMenu()
 
-    const consoleLink = await screen.findByRole('link', { name: 'Console' })
+    const consoleLink = await screen.findByRole('menuitem', { name: 'Console' })
     expect(consoleLink.getAttribute('href')).toBe('/console')
   })
 
@@ -99,7 +118,37 @@ describe('AccountPageShell', () => {
     openAccountMenu()
 
     expect((await screen.findAllByText('jane@example.com')).length).toBeGreaterThan(0)
-    expect(screen.queryByRole('link', { name: 'Console' })).toBeNull()
+    expect(screen.getByRole('menuitem', { name: 'View public profile for Jane Stone' }).getAttribute('href')).toBe(
+      '/u/jane',
+    )
+    expect(screen.queryByRole('menuitem', { name: 'Console' })).toBeNull()
+  })
+
+  it('does not link the avatar menu identity before a public username is set', async () => {
+    renderShell(profile({ username: null }))
+
+    openAccountMenu()
+
+    expect((await screen.findAllByText('jane@example.com')).length).toBeGreaterThan(0)
+    expect(screen.queryByRole('menuitem', { name: /View public profile/ })).toBeNull()
+  })
+
+  it('supports opening and activating the public profile menu item from the keyboard', async () => {
+    const user = userEvent.setup()
+    renderShell(profile())
+
+    const trigger = screen.getByRole('button', { name: 'Account menu' })
+    trigger.focus()
+    await user.keyboard('{Enter}')
+
+    const profileLink = await screen.findByRole('menuitem', { name: 'View public profile for Jane Stone' })
+    expect(document.activeElement).toBe(profileLink)
+    await user.keyboard('{Enter}')
+
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith({ to: '/u/jane' }))
+    await waitFor(() =>
+      expect(screen.queryByRole('menuitem', { name: 'View public profile for Jane Stone' })).toBeNull(),
+    )
   })
 
   it('signs out and redirects to hosted sign-in [spec: account-center/sign-out]', async () => {

@@ -7,7 +7,9 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 import { PublicAgentProfilePage, PublicUserProfilePage } from './public-profile-page'
 
 const authState = vi.hoisted(() => ({
-  data: null as null | { user: { email: string; id: string; image: string | null; name: string } },
+  data: null as null | {
+    user: { email: string; id: string; image: string | null; name: string; username: string | null }
+  },
   error: null,
   isPending: false,
 }))
@@ -22,8 +24,21 @@ vi.mock('@/lib/auth-client', () => ({
 }))
 
 vi.mock('@tanstack/react-router', () => ({
-  Link: ({ children, params, to }: { children: ReactNode; params?: Record<string, string>; to: string }) => (
-    <a href={Object.entries(params ?? {}).reduce((path, [key, value]) => path.replace(`$${key}`, value), to)}>
+  Link: ({
+    'aria-label': ariaLabel,
+    children,
+    params,
+    to,
+  }: {
+    'aria-label'?: string
+    children: ReactNode
+    params?: Record<string, string>
+    to: string
+  }) => (
+    <a
+      aria-label={ariaLabel}
+      href={Object.entries(params ?? {}).reduce((path, [key, value]) => path.replace(`$${key}`, value), to)}
+    >
       {children}
     </a>
   ),
@@ -62,7 +77,7 @@ describe('Public profile pages', () => {
 
   it('shows the shared account menu instead of Sign in to a signed-in visitor [spec: account-center/public-user-profile]', async () => {
     authState.data = {
-      user: { email: 'jane@example.com', id: 'user-1', image: null, name: 'Jane Stone' },
+      user: { email: 'jane@example.com', id: 'user-1', image: null, name: 'Jane Stone', username: 'jane' },
     }
 
     renderProfile(<PublicUserProfilePage username="jane" />)
@@ -70,6 +85,9 @@ describe('Public profile pages', () => {
     expect(await screen.findByRole('heading', { name: 'Jane Stone' })).toBeTruthy()
     expect(screen.queryByRole('link', { name: 'Sign in' })).toBeNull()
     fireEvent.pointerDown(screen.getByRole('button', { name: 'Account menu' }), { button: 0, ctrlKey: false })
+    expect(screen.getByRole('link', { name: 'View public profile for Jane Stone' }).getAttribute('href')).toBe(
+      '/u/jane',
+    )
     expect((await screen.findByRole('link', { name: 'Account Center' })).getAttribute('href')).toBe('/profile')
     expect(screen.getByText('jane@example.com')).toBeTruthy()
     fireEvent.click(screen.getByRole('menuitem', { name: 'Sign out' }))
@@ -80,7 +98,7 @@ describe('Public profile pages', () => {
 
   it('does not redirect a signed-in visitor when sign out fails', async () => {
     authState.data = {
-      user: { email: 'jane@example.com', id: 'user-1', image: null, name: 'Jane Stone' },
+      user: { email: 'jane@example.com', id: 'user-1', image: null, name: 'Jane Stone', username: 'jane' },
     }
     signOut.mockRejectedValueOnce(new Error('Sign out failed.'))
 

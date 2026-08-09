@@ -1,3 +1,4 @@
+import { Link } from '@tanstack/react-router'
 import { ChevronsUpDown, Download, Globe2, LockKeyhole, Mail, Plus, Trash2, UserRound } from 'lucide-react'
 import { type FormEvent, useEffect, useState } from 'react'
 import { toast } from 'sonner'
@@ -444,7 +445,19 @@ function ProfileSections({
               icon={<Globe2 size={18} />}
               meta={tt('Bio, location, and links shown on your public profile.')}
               title={tt('Public profile')}
-              value={profile.username ? `/u/${profile.username}` : tt('Set a username to publish')}
+              value={
+                profile.username ? (
+                  <Link
+                    className="underline-offset-4 hover:underline"
+                    params={{ username: profile.username }}
+                    to="/u/$username"
+                  >
+                    /u/{profile.username}
+                  </Link>
+                ) : (
+                  tt('Set a username to publish')
+                )
+              }
             />
           </section>
         </>

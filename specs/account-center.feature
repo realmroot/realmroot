@@ -42,6 +42,7 @@ Feature: Account Center
     And the User explicitly chooses which linked accounts to publish with HTTPS profile URLs
     When a visitor opens the User profile
     Then Realmroot returns the User's public identity
+    And a signed-in User can open their public profile from Profile settings or the shared avatar menu
     And a signed-in visitor sees the shared account avatar menu with an Account Center action in the public topbar
     And a signed-out visitor sees Sign in in the public topbar
     And the default summary omits Public Agents and recent activity

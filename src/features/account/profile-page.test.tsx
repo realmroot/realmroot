@@ -28,8 +28,21 @@ vi.mock('sonner', () => ({
 }))
 
 vi.mock('@tanstack/react-router', () => ({
-  Link: ({ children, className, to }: { children: ReactNode; className?: string; to: string }) => (
-    <a className={className} href={to}>
+  Link: ({
+    children,
+    className,
+    params,
+    to,
+  }: {
+    children: ReactNode
+    className?: string
+    params?: Record<string, string>
+    to: string
+  }) => (
+    <a
+      className={className}
+      href={Object.entries(params ?? {}).reduce((path, [key, value]) => path.replace(`$${key}`, value), to)}
+    >
       {children}
     </a>
   ),
@@ -137,6 +150,7 @@ describe('AccountProfilePage', () => {
     expect(screen.getByRole('button', { name: /Edit display name/ })).toBeTruthy()
     expect(screen.getByRole('button', { name: /Edit username/ })).toBeTruthy()
     expect(screen.getByRole('button', { name: /Edit email/ })).toBeTruthy()
+    expect(screen.getByRole('link', { name: '/u/jane' }).getAttribute('href')).toBe('/u/jane')
   })
 
   it('renders an error state when the profile request fails', async () => {

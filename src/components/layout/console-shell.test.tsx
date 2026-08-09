@@ -40,18 +40,28 @@ const navigate = vi.fn()
 vi.mock('@tanstack/react-router', () => ({
   Link: ({
     'aria-current': ariaCurrent,
+    'aria-label': ariaLabel,
     children,
     className,
     onClick,
+    params,
     to,
   }: {
     'aria-current'?: 'page'
+    'aria-label'?: string
     children: ReactNode
     className?: string
     onClick?: () => void
+    params?: Record<string, string>
     to: string
   }) => (
-    <a aria-current={ariaCurrent} className={className} href={to} onClick={onClick}>
+    <a
+      aria-current={ariaCurrent}
+      aria-label={ariaLabel}
+      className={className}
+      href={Object.entries(params ?? {}).reduce((path, [key, value]) => path.replace(`$${key}`, value), to)}
+      onClick={onClick}
+    >
       {children}
     </a>
   ),
@@ -118,6 +128,9 @@ describe('ConsoleShell', () => {
 
     expect(await screen.findByText('Realmroot Admin')).toBeTruthy()
     expect(screen.getByText('admin@example.com')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'View public profile for Realmroot Admin' }).getAttribute('href')).toBe(
+      '/u/admin',
+    )
     expect(screen.getByRole('menuitem', { name: /Language/ }).getAttribute('aria-haspopup')).toBe('menu')
     expect(screen.getByRole('menuitem', { name: /Theme/ }).getAttribute('aria-haspopup')).toBe('menu')
 
