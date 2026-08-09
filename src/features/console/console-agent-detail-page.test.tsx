@@ -21,6 +21,12 @@ describe('console Agent detail', () => {
       if (request.method === 'DELETE' && request.url.pathname === '/api/agents/agent-1') {
         return Promise.resolve(new Response(null, { status: 204 }))
       }
+      if (
+        request.method === 'DELETE' &&
+        request.url.pathname === '/api/agents/agent-1/scope-entitlements/grant-until'
+      ) {
+        return Promise.resolve(new Response(null, { status: 204 }))
+      }
       return Promise.resolve(agentDetailResponse(request.url, populatedCollections))
     })
 
@@ -44,6 +50,15 @@ describe('console Agent detail', () => {
     expect(await screen.findByText('One use')).toBeTruthy()
     expect(screen.getByText('Until revoked')).toBeTruthy()
     expect(screen.getByText(/^Until \d/)).toBeTruthy()
+    expect(screen.getAllByRole('button', { name: 'Revoke' })).toHaveLength(2)
+    fireEvent.click(screen.getAllByRole('button', { name: 'Revoke' })[0])
+    fireEvent.click(screen.getByRole('button', { name: 'Revoke scope' }))
+    await waitFor(() =>
+      expect(requests).toContainEqual({
+        method: 'DELETE',
+        path: '/api/agents/agent-1/scope-entitlements/grant-until',
+      }),
+    )
 
     openTab('Activity')
     for (const label of [

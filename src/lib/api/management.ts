@@ -553,6 +553,14 @@ export function listAgentScopeEntitlements(
   )
 }
 
+export function deleteAgentScopeEntitlement(agentId: string, entitlementId: string) {
+  return readRpcResponse(
+    apiClient.api.agents[':agentId']['scope-entitlements'][':entitlementId'].$delete({
+      param: { agentId, entitlementId },
+    }),
+  )
+}
+
 export function listUserScopeEntitlements(userId: string, query: Partial<ListScopeEntitlementsQuery> = {}) {
   return readRpcResponse(
     apiClient.api.users[':userId']['scope-entitlements'].$get({

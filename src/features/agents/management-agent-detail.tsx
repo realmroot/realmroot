@@ -15,6 +15,7 @@ import {
   consoleQueryKeys,
   deactivateAgent,
   deleteAgent,
+  deleteAgentScopeEntitlement,
   getAgent,
   getAgentAuditEvents,
   listAgentAccessRequests,
@@ -38,6 +39,7 @@ export function AgentDetailPage({
   const navigate = useNavigate()
   const [tab, setTab] = useState<AgentDetailSection>(section)
   const [deleteOpen, setDeleteOpen] = useState(false)
+  const [revokeEntitlementId, setRevokeEntitlementId] = useState<string | null>(null)
   const agentQuery = useQuery({ queryKey: [...consoleQueryKeys.agents, agentId], queryFn: () => getAgent(agentId) })
   const hosts = useQuery({
     queryKey: [...consoleQueryKeys.agents, agentId, 'hosts'],
@@ -75,6 +77,13 @@ export function AgentDetailPage({
   const activation = useMutation({
     mutationFn: (active: boolean) => (active ? activateAgent(agentId) : deactivateAgent(agentId)),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: consoleQueryKeys.agents }),
+  })
+  const entitlementRevocation = useMutation({
+    mutationFn: (entitlementId: string) => deleteAgentScopeEntitlement(agentId, entitlementId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: [...consoleQueryKeys.agents, agentId] })
+      setRevokeEntitlementId(null)
+    },
   })
   useEffect(() => {
     setTab(section)
@@ -165,7 +174,11 @@ export function AgentDetailPage({
             <AgentRequestsTable items={requests.data?.items ?? []} />
           </TabsContent>
           <TabsContent className="mt-5" value="grants">
-            <AgentGrantsTable items={grants.data?.items ?? []} />
+            <AgentGrantsTable
+              items={grants.data?.items ?? []}
+              onRevoke={setRevokeEntitlementId}
+              revoking={entitlementRevocation.isPending}
+            />
           </TabsContent>
           <TabsContent className="mt-5" value="activity">
             <AgentActivityTable events={events} resources={resources} />
@@ -201,6 +214,16 @@ export function AgentDetailPage({
           </TabsContent>
         </Tabs>
       </div>
+      <DestructiveConfirmation
+        confirmLabel={entitlementRevocation.isPending ? tt('Revoking…') : tt('Revoke scope')}
+        description={tt('This scope stops applying immediately. Existing audit history is preserved.')}
+        error={<MutationError error={entitlementRevocation.error} />}
+        onClose={() => setRevokeEntitlementId(null)}
+        onConfirm={() => entitlementRevocation.mutate(revokeEntitlementId!)}
+        open={revokeEntitlementId !== null}
+        pending={entitlementRevocation.isPending}
+        title={tt('Revoke scope?')}
+      />
       <DestructiveConfirmation
         confirmLabel={deletion.isPending ? tt('Deleting…') : tt('Delete Agent')}
         description={tt(
@@ -295,12 +318,20 @@ function AgentRequestsTable({ items }: { items: Awaited<ReturnType<typeof listAg
   )
 }
 
-function AgentGrantsTable({ items }: { items: Awaited<ReturnType<typeof listAgentScopeEntitlements>>['items'] }) {
+function AgentGrantsTable({
+  items,
+  onRevoke,
+  revoking,
+}: {
+  items: Awaited<ReturnType<typeof listAgentScopeEntitlements>>['items']
+  onRevoke: (entitlementId: string) => void
+  revoking: boolean
+}) {
   return (
     <DetailTable
       emptyDescription="This Agent has no Resource access."
       emptyTitle="No Resource access"
-      headers={['Resource Server', 'Scope', 'Source', 'Lifetime', 'Status']}
+      headers={['Resource Server', 'Scope', 'Source', 'Lifetime', 'Status', '']}
       rows={items.map((entitlement) => ({
         id: entitlement.id,
         cells: [
@@ -318,6 +349,17 @@ function AgentGrantsTable({ items }: { items: Awaited<ReturnType<typeof listAgen
           <Badge key="status" variant="secondary">
             {entitlement.status}
           </Badge>,
+          entitlement.status === 'active' ? (
+            <Button
+              disabled={revoking}
+              key="revoke"
+              onClick={() => onRevoke(entitlement.id)}
+              size="sm"
+              variant="outline"
+            >
+              {tt('Revoke')}
+            </Button>
+          ) : null,
         ],
       }))}
     />
