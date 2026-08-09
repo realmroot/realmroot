@@ -140,7 +140,7 @@ describe('Scope Entitlements panel', () => {
     await waitFor(() => expect(calls).toContain('DELETE /api/applications/app-1/scope-entitlements/ent_1'))
   })
 
-  it('renders boundary values and closes grant dialogs without mutating', async () => {
+  it('renders boundary values without revoke actions and closes Entitlement dialogs without mutating', async () => {
     const secondResource = {
       ...resource,
       id: 'resource-2',
@@ -172,16 +172,13 @@ describe('Scope Entitlements panel', () => {
     renderWithQuery(<ScopeEntitlementsPanel subject={{ type: 'user', id: 'user-2', label: 'Alex' }} />)
     expect((await screen.findAllByText('missing-resource')).length).toBeGreaterThan(0)
     expect(screen.getByText('expired')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Revoke' })).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: 'Add scope' }))
     fireEvent.change(await screen.findByLabelText('Resource Server'), { target: { value: secondResource.id } })
     fireEvent.change(await screen.findByLabelText('Scope'), { target: { value: 'invoices:read' } })
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     await waitFor(() => expect(screen.queryByLabelText('Scope')).toBeNull())
-
-    fireEvent.click(screen.getByRole('button', { name: 'Revoke' }))
-    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Cancel' }))
-    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
   })
 
   it('treats omitted collection fields as empty boundary responses', async () => {

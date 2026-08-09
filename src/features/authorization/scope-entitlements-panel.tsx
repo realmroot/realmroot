@@ -157,9 +157,11 @@ export function ScopeEntitlementsPanel({ subject }: { subject: ScopeEntitlementS
                           : tt('Does not expire')}
                       </TableCell>
                       <TableCell>
-                        <Button onClick={() => setRevokeTarget(entitlement)} size="sm" variant="outline">
-                          {tt('Revoke')}
-                        </Button>
+                        {entitlement.status === 'active' ? (
+                          <Button onClick={() => setRevokeTarget(entitlement)} size="sm" variant="outline">
+                            {tt('Revoke')}
+                          </Button>
+                        ) : null}
                       </TableCell>
                     </TableRow>
                   )
