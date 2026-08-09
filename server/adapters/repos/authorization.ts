@@ -1,7 +1,7 @@
 import { conflict } from '@server/domain/errors'
 import type { AuthorizationRepository, ResourceScopeEntitlementRecord } from '@server/usecases/ports'
 import { decodeRoleScope, encodeRoleScope } from '@shared/organization-access'
-import { and, count, desc, eq, gt, inArray, isNotNull, isNull, lte, notExists, or, sql } from 'drizzle-orm'
+import { and, count, desc, eq, gt, inArray, isNull, notExists, or, sql } from 'drizzle-orm'
 import type { BatchItem } from 'drizzle-orm/batch'
 import type { Database } from '../../db/client'
 import {
@@ -33,6 +33,7 @@ import {
   toResource,
   withoutUndefined,
 } from './authorization-mappers'
+import { scopeEntitlementStatusCondition } from './resource-scope-entitlement-filters'
 
 export function createDrizzleAuthorizationRepository(db: Database): AuthorizationRepository {
   return {
@@ -519,24 +520,7 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
 
     async listUserScopeEntitlements(userId, query, ownerOrganizationIds) {
       const now = new Date()
-      const statusCondition =
-        query.status === 'expired'
-          ? or(
-              eq(resourceScopeEntitlement.endReason, 'expired'),
-              and(
-                isNull(resourceScopeEntitlement.endedAt),
-                isNotNull(resourceScopeEntitlement.expiresAt),
-                lte(resourceScopeEntitlement.expiresAt, now),
-              ),
-            )
-          : query.status === 'active'
-            ? and(
-                isNull(resourceScopeEntitlement.endedAt),
-                or(isNull(resourceScopeEntitlement.expiresAt), gt(resourceScopeEntitlement.expiresAt, now)),
-              )
-            : query.status
-              ? eq(resourceScopeEntitlement.endReason, query.status)
-              : undefined
+      const statusCondition = scopeEntitlementStatusCondition(query.status, now)
       const effectiveOwnerOrganizationId = sql<string>`coalesce(${resourceScopeEntitlement.organizationId}, ${apiResource.ownerOrganizationId})`
       const where = and(
         eq(resourceScopeEntitlement.userId, userId),
@@ -581,24 +565,7 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
 
     async listApplicationScopeEntitlements(applicationId, query) {
       const now = new Date()
-      const statusCondition =
-        query.status === 'expired'
-          ? or(
-              eq(resourceScopeEntitlement.endReason, 'expired'),
-              and(
-                isNull(resourceScopeEntitlement.endedAt),
-                isNotNull(resourceScopeEntitlement.expiresAt),
-                lte(resourceScopeEntitlement.expiresAt, now),
-              ),
-            )
-          : query.status === 'active'
-            ? and(
-                isNull(resourceScopeEntitlement.endedAt),
-                or(isNull(resourceScopeEntitlement.expiresAt), gt(resourceScopeEntitlement.expiresAt, now)),
-              )
-            : query.status
-              ? eq(resourceScopeEntitlement.endReason, query.status)
-              : undefined
+      const statusCondition = scopeEntitlementStatusCondition(query.status, now)
       const where = and(
         eq(resourceScopeEntitlement.applicationId, applicationId),
         query.resourceServerId ? eq(resourceScopeEntitlement.resourceServerId, query.resourceServerId) : undefined,

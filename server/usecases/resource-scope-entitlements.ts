@@ -1,8 +1,21 @@
 import type { Deps } from '@server/usecases/deps'
-import type { ApplicationAggregate } from '@server/usecases/ports'
+import type { ApplicationAggregate, ResourceScopeEntitlementRecord } from '@server/usecases/ports'
 import type { ApiResourceResponse } from '@shared/api/authorization'
 import { resolveOrganizationMembershipScopes } from './organization-membership-scopes'
 import { activeResourceVisibleToOrganization } from './resource-visibility'
+
+export function resourceScopeEntitlementLifecycle(
+  entitlement: Pick<ResourceScopeEntitlementRecord, 'endedAt' | 'endReason' | 'expiresAt'>,
+  now = new Date(),
+) {
+  if (entitlement.endedAt) {
+    return { status: 'ended' as const, endReason: entitlement.endReason! }
+  }
+  if (entitlement.expiresAt && entitlement.expiresAt.getTime() <= now.getTime()) {
+    return { status: 'ended' as const, endReason: 'expired' as const }
+  }
+  return { status: 'active' as const, endReason: null }
+}
 
 export async function userEffectiveResourceScopes(
   deps: Deps,

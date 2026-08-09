@@ -146,12 +146,29 @@ describe('authorization management over real D1', () => {
       displayName: 'Personal Audit',
       password: 'personal-audit-password-2026',
     })
+    const auditResource = await createResource(harness.deps, {
+      identifier: 'personal-audit-resource',
+      resourceUrl: 'https://personal-audit.example.com/api',
+      accessMode: 'realmroot',
+      ownerOrganizationId: 'org_platform',
+    })
     await harness.db.insert(agentAuditEvent).values({
       id: 'personal-audit-event',
       action: 'agent.identity_enrolled',
       result: 'allowed',
       realmOwned: false,
       ownerUserId: personalUser,
+      occurredAt: new Date(),
+    })
+    await harness.db.insert(agentAuditEvent).values({
+      id: 'personal-audit-denied-event',
+      action: 'api_resource.access_decided',
+      result: 'denied',
+      realmOwned: false,
+      ownerUserId: personalUser,
+      accessRequestId: 'request-denied',
+      resourceId: auditResource.id,
+      scopes: ['projects:write'],
       occurredAt: new Date(),
     })
     const cookie = await signIn(harness, 'personal-audit@example.com', 'personal-audit-password-2026')
@@ -162,6 +179,27 @@ describe('authorization management over real D1', () => {
     expect(((await response.json()) as { items: { id: string }[] }).items.map((event) => event.id)).toContain(
       'personal-audit-event',
     )
+
+    const filtered = await harness.request(
+      '/api/realm/audit-events?action=api_resource.access_decided&result=denied&search=projects%3Awrite',
+      { headers: { cookie } },
+    )
+    await expect(filtered.json()).resolves.toMatchObject({
+      items: [
+        {
+          id: 'personal-audit-denied-event',
+          resource: { id: auditResource.id, identifier: 'personal-audit-resource' },
+        },
+      ],
+      pagination: { total: 1 },
+    })
+    const resourceSearch = await harness.request('/api/realm/audit-events?search=personal-audit-resource', {
+      headers: { cookie },
+    })
+    await expect(resourceSearch.json()).resolves.toMatchObject({
+      items: [{ id: 'personal-audit-denied-event' }],
+      pagination: { total: 1 },
+    })
   })
 
   it('does not delete a dynamic Role referenced by a pending invitation', async () => {
@@ -744,7 +782,47 @@ describe('authorization management over real D1', () => {
     ).toBe(204)
     const revokedEntitlement = await harness.request(userGrant.links.self, { headers: { cookie } })
     expect(revokedEntitlement.status).toBe(200)
-    await expect(revokedEntitlement.json()).resolves.toMatchObject({ status: 'revoked' })
+    await expect(revokedEntitlement.json()).resolves.toMatchObject({ status: 'ended', endReason: 'revoked' })
+    const revokedEntitlements = await harness.request(`/api/users/${targetUserId}/scope-entitlements?status=inactive`, {
+      headers: { cookie },
+    })
+    await expect(revokedEntitlements.json()).resolves.toMatchObject({ items: [{ id: userGrant.id }] })
+    expect(
+      (
+        await harness.request(`/api/users/${targetUserId}/scope-entitlements?status=ended`, {
+          headers: { cookie },
+        })
+      ).status,
+    ).toBe(400)
+    await expect(
+      (
+        await harness.request(`/api/users/${targetUserId}/scope-entitlements`, {
+          headers: { cookie },
+        })
+      ).json(),
+    ).resolves.toMatchObject({ items: [], pagination: { total: 0 } })
+
+    await harness.db
+      .update(resourceScopeEntitlement)
+      .set({ mode: 'until', expiresAt: new Date('2020-01-01T00:00:00.000Z') })
+      .where(eq(resourceScopeEntitlement.id, applicationGrant.id))
+    await expect(
+      (
+        await harness.request(`/api/applications/${application.id}/scope-entitlements`, {
+          headers: { cookie },
+        })
+      ).json(),
+    ).resolves.toMatchObject({ items: [], pagination: { total: 0 } })
+    await expect(
+      (
+        await harness.request(`/api/applications/${application.id}/scope-entitlements?status=inactive`, {
+          headers: { cookie },
+        })
+      ).json(),
+    ).resolves.toMatchObject({
+      items: [{ id: applicationGrant.id, status: 'ended', endReason: 'expired' }],
+      pagination: { total: 1 },
+    })
     expect((await harness.request('/api/user-scope-grants', { headers: { cookie } })).status).toBe(404)
     expect((await harness.request('/api/application-scope-grants', { headers: { cookie } })).status).toBe(404)
   })

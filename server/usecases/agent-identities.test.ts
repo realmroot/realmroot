@@ -366,22 +366,19 @@ describe('Agent identity lifecycle', () => {
       },
     ]
     vi.mocked(deps.externalResources.listAgentScopeEntitlements).mockResolvedValue({
-      items: grants.map((entitlement) => ({
-        entitlement,
+      items: [grants[1]].map((entitlement) => ({
+        entitlement: entitlement!,
         resource: { id: 'resource-1', identifier: 'projects', name: 'Projects API' },
       })),
-      total: 2,
+      total: 1,
       limit: 20,
       offset: 0,
     } as never)
     await expect(
       listManagementAgentScopeEntitlements(deps, { agentId: 'agent-1', limit: 20, offset: 0 }),
     ).resolves.toMatchObject({
-      items: [
-        { id: 'grant-expired', status: 'expired', expiresAt: '2020-01-01T00:00:00.000Z' },
-        { id: 'grant-active', status: 'active', expiresAt: null },
-      ],
-      pagination: { total: 2 },
+      items: [{ id: 'grant-active', status: 'active', expiresAt: null }],
+      pagination: { total: 1 },
     })
     vi.mocked(deps.externalResources.findEntitlement).mockResolvedValue(grants[1] as never)
     await expect(getManagementAgentScopeEntitlement(deps, 'grant-active')).resolves.toMatchObject({
@@ -391,10 +388,26 @@ describe('Agent identity lifecycle', () => {
     })
 
     vi.mocked(deps.externalResources.findEntitlement).mockResolvedValue(grants[0] as never)
+    vi.mocked(deps.externalResources.listAgentScopeEntitlements).mockResolvedValue({
+      items: [
+        {
+          entitlement: grants[0]!,
+          resource: { id: 'resource-1', identifier: 'projects', name: 'Projects API' },
+        },
+      ],
+      total: 1,
+      limit: 100,
+      offset: 0,
+    } as never)
     await expect(getManagementAgentScopeEntitlement(deps, 'grant-expired')).resolves.toMatchObject({
-      status: 'expired',
+      status: 'ended',
+      endReason: 'expired',
       expiresAt: '2020-01-01T00:00:00.000Z',
     })
+    expect(deps.externalResources.listAgentScopeEntitlements).toHaveBeenLastCalledWith(
+      expect.objectContaining({ status: 'inactive' }),
+      undefined,
+    )
   })
 
   it('projects remote JWKS installations with stable pagination and host fallbacks', async () => {

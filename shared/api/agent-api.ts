@@ -3,6 +3,7 @@ import { agentAuditEventSchema, agentHomeSpaceSchema, agentIdentityStatusSchema 
 import {
   apiResourceResponseSchema,
   createApiResourceRequestSchema,
+  scopeEntitlementListStatusSchema,
   updateApiResourceRequestSchema,
 } from './authorization'
 import { authorizationDetailCatalogItemSchema, authorizationDetailsSchema } from './authorization-details'
@@ -80,13 +81,25 @@ export const listAgentsQuerySchema = paginationQuerySchema.extend({
   organizationId: nonEmptyString.optional(),
 })
 export type ListAgentsQuery = z.infer<typeof listAgentsQuerySchema>
+export const managementAgentAuditEventSchema = agentAuditEventSchema.extend({
+  resource: z
+    .object({
+      id: z.string(),
+      identifier: z.string(),
+      name: z.string(),
+    })
+    .nullable(),
+})
 export const auditEventsResponseSchema = z.object({
-  items: z.array(agentAuditEventSchema),
+  items: z.array(managementAgentAuditEventSchema),
   pagination: paginationMetadataSchema,
 })
 export const listAgentAuditEventsQuerySchema = paginationQuerySchema.extend({
   organizationId: nonEmptyString.optional(),
   agentId: nonEmptyString.optional(),
+  search: z.string().trim().min(1).max(200).optional(),
+  action: nonEmptyString.optional(),
+  result: z.enum(['allowed', 'denied', 'pending']).optional(),
 })
 export type ListAgentAuditEventsQuery = z.infer<typeof listAgentAuditEventsQuerySchema>
 
@@ -143,7 +156,7 @@ export const agentScopeEntitlementSchema = z.object({
   scope: z.string(),
   authorizationDetails: authorizationDetailsSchema,
   mode: resourceScopeEntitlementModeSchema,
-  status: z.enum(['active', 'revoked', 'consumed', 'expired', 'merged']),
+  status: z.enum(['active', 'ended']),
   sourceAccessRequestId: z.string().nullable(),
   endedAt: z.iso.datetime().nullable(),
   endReason: z.enum(['revoked', 'consumed', 'expired', 'merged']).nullable(),
@@ -158,7 +171,7 @@ export const agentScopeEntitlementsResponseSchema = z.object({
 })
 export const listAgentScopeEntitlementsQuerySchema = paginationQuerySchema.extend({
   resourceId: nonEmptyString.optional(),
-  status: z.enum(['active', 'revoked', 'consumed', 'expired', 'merged']).optional(),
+  status: scopeEntitlementListStatusSchema.optional(),
 })
 
 export const agentEnrollmentStatusSchema = z.enum(['pending', 'approved', 'denied', 'expired', 'cancelled'])
@@ -520,6 +533,7 @@ export const targetTokenSchema = z.object({
 export type Agent = z.infer<typeof agentSchema>
 export type ManagementAgent = z.infer<typeof managementAgentSchema>
 export type ManagementAgentInstallation = z.infer<typeof managementAgentInstallationSchema>
+export type ManagementAgentAuditEvent = z.infer<typeof managementAgentAuditEventSchema>
 export type ManagementAgentAccessRequest = z.infer<typeof managementAgentAccessRequestSchema>
 export type ListManagementAgentAccessRequestsQuery = z.infer<typeof listManagementAgentAccessRequestsQuerySchema>
 export type ListAgentScopeEntitlementsQuery = z.infer<typeof listAgentScopeEntitlementsQuerySchema>

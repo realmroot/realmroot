@@ -265,7 +265,7 @@ export const resourceScopeEntitlementResponseSchema = z.object({
   authorizationDetails: authorizationDetailsSchema,
   scope: nonEmptyString,
   mode: z.enum(['persistent', 'until', 'once']),
-  status: z.enum(['active', 'revoked', 'consumed', 'expired', 'merged']),
+  status: z.enum(['active', 'ended']),
   grantedByUserId: z.string(),
   sourceAccessRequestId: z.string().nullable(),
   expiresAt: z.iso.datetime().nullable(),
@@ -292,9 +292,10 @@ export const createApplicationScopeEntitlementRequestSchema = z.object({
   mode: z.enum(['persistent', 'until']).default('persistent'),
   expiresAt: z.iso.datetime().nullable().optional(),
 })
+export const scopeEntitlementListStatusSchema = z.enum(['active', 'inactive'])
 export const listScopeEntitlementsQuerySchema = paginationQuerySchema.extend({
   resourceServerId: nonEmptyString.optional(),
-  status: z.enum(['active', 'revoked', 'consumed', 'expired', 'merged']).optional(),
+  status: scopeEntitlementListStatusSchema.optional(),
 })
 export const listUserScopeEntitlementsResponseSchema = z.object({
   items: z.array(resourceScopeEntitlementResponseSchema),

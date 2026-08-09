@@ -24,10 +24,10 @@ import type {
   ListManagementAgentAccessRequestsQuery,
   ManagementAgent,
   ManagementAgentAccessRequest,
+  ManagementAgentAuditEvent,
   ManagementAgentInstallation,
   updateApiResourceSchema,
 } from '@shared/api/agent-api'
-import type { AgentAuditEvent } from '@shared/api/agents'
 import type {
   ApplicationAuthorization,
   ApplicationAuthorizationRevocation,
@@ -521,7 +521,7 @@ export type RpcSchema = {
   '/api/realm/audit-events': {
     $get: RpcEndpoint<
       { query?: Partial<Record<keyof ListAgentAuditEventsQuery, string>> },
-      { items: AgentAuditEvent[]; pagination: PaginationMetadata }
+      { items: ManagementAgentAuditEvent[]; pagination: PaginationMetadata }
     >
   }
   '/api/realm/security-policy': {

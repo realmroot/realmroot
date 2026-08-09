@@ -13,12 +13,16 @@ describe('console Agent detail', () => {
   it('reviews every Agent resource, deactivates it, and soft-deletes it', async () => {
     const requests: Array<{ method: string; path: string }> = []
     const scopeQueries: string[] = []
+    const auditQueries: string[] = []
     let finishRevocation: ((response: Response) => void) | undefined
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const request = requestDetails(input, init)
       requests.push({ method: request.method, path: request.url.pathname })
       if (request.method === 'GET' && request.url.pathname === '/api/agents/agent-1/scope-entitlements') {
         scopeQueries.push(request.url.search)
+      }
+      if (request.method === 'GET' && request.url.pathname === '/api/realm/audit-events') {
+        auditQueries.push(request.url.search)
       }
       if (request.method === 'DELETE' && request.url.pathname === '/api/agents/agent-1/activation') {
         return Promise.resolve(new Response(null, { status: 204 }))
@@ -49,11 +53,10 @@ describe('console Agent detail', () => {
     expect(screen.getByText('Public key')).toBeTruthy()
     expect(screen.getByText('Never')).toBeTruthy()
 
-    openTab('Access requests')
-    expect(await screen.findByText('request-pending')).toBeTruthy()
-    expect(screen.getByText('request-approved')).toBeTruthy()
+    expect(screen.queryByRole('tab', { name: 'Access requests' })).toBeNull()
+    expect(requests.some((request) => request.path === '/api/access/requests')).toBe(false)
 
-    openTab('Resource access')
+    openTab('Permissions')
     expect(await screen.findByRole('heading', { name: 'Projects API' })).toBeTruthy()
     const resourceNavigation = screen.getByRole('navigation', { name: 'Resource Servers' })
     expect(within(resourceNavigation).getByText('projects')).toBeTruthy()
@@ -89,6 +92,7 @@ describe('console Agent detail', () => {
     )
 
     openTab('Activity')
+    const activityTable = screen.getByRole('table')
     for (const label of [
       'Agent enrolled',
       'Agent recovered',
@@ -103,10 +107,33 @@ describe('console Agent detail', () => {
       'Access token issued',
       'custom.action',
     ]) {
-      expect(await screen.findByText(label)).toBeTruthy()
+      expect(await within(activityTable).findByText(label)).toBeTruthy()
     }
     expect(screen.getAllByText('Realmroot').length).toBeGreaterThan(0)
-    expect(screen.getByText('resource-missing')).toBeTruthy()
+    expect(screen.getAllByText('resource-missing')).toHaveLength(2)
+    expect(screen.getByText('Scopes: projects:read')).toBeTruthy()
+    expect(screen.getByText('Host host-1')).toBeTruthy()
+    expect(screen.getByText('Reason: policy_denied')).toBeTruthy()
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search audit activity' }), {
+      target: { value: 'projects:read' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Search' }))
+    fireEvent.change(screen.getByRole('combobox', { name: 'Filter by result' }), { target: { value: 'denied' } })
+    fireEvent.change(screen.getByRole('combobox', { name: 'Filter by event' }), {
+      target: { value: 'api_resource.access_decided' },
+    })
+    await waitFor(() =>
+      expect(
+        auditQueries.some((query) => {
+          const params = new URLSearchParams(query)
+          return (
+            params.get('search') === 'projects:read' &&
+            params.get('result') === 'denied' &&
+            params.get('action') === 'api_resource.access_decided'
+          )
+        }),
+      ).toBe(true),
+    )
 
     openTab('Settings')
     fireEvent.click(screen.getByRole('button', { name: 'Deactivate' }))
@@ -159,8 +186,7 @@ describe('console Agent detail', () => {
 
     const emptyTabs: Array<[string, string]> = [
       ['Installations', 'No installations'],
-      ['Access requests', 'No access requests'],
-      ['Resource access', 'No Resource access'],
+      ['Permissions', 'No Resource access'],
       ['Activity', 'No Agent activity'],
     ]
     for (const [tab, emptyTitle] of emptyTabs) {
@@ -243,9 +269,6 @@ function agentDetailResponse(url: URL, collections: AgentCollections) {
   if (path === '/api/agents/agent-1/installations') {
     return jsonResponse({ items: collections.installations, pagination: page(collections.installations.length) })
   }
-  if (path === '/api/access/requests') {
-    return jsonResponse({ items: collections.requests, pagination: page(collections.requests.length) })
-  }
   if (path === '/api/agents/agent-1/scope-entitlements') {
     const resourceId = url.searchParams.get('resourceId')
     const grants = resourceId
@@ -254,7 +277,11 @@ function agentDetailResponse(url: URL, collections: AgentCollections) {
     return jsonResponse({ items: grants, pagination: page(grants.length) })
   }
   if (path === '/api/realm/audit-events') {
-    return jsonResponse({ items: collections.events, pagination: page(collections.events.length) })
+    const agentId = url.searchParams.get('agentId')
+    const events = agentId
+      ? collections.events.filter((event) => event.agentIdentityId === agentId)
+      : collections.events
+    return jsonResponse({ items: events, pagination: page(events.length) })
   }
   throw new Error(`Unexpected Agent detail request: ${url}`)
 }
@@ -294,11 +321,12 @@ function auditEvent(id: string, action: string, result: 'allowed' | 'denied' | '
     hostId: null,
     resourceId,
     resourceConnectionId: null,
-    accessGrantId: null,
+    accessRequestId: action.startsWith('api_resource.access_') ? 'request-1' : null,
     scopes: null,
     reasonCode: null,
     metadata: null,
     occurredAt: timestamp,
+    resource: resourceId ? resource(resourceId) : null,
   }
 }
 
@@ -322,30 +350,6 @@ const populatedCollections = {
       lastSeenAt: null,
     },
   ],
-  requests: [
-    {
-      id: 'request-pending',
-      agentId: 'agent-1',
-      resource: resource(),
-      scopes: ['projects:read'],
-      reason: null,
-      status: 'pending',
-      expiresAt: timestamp,
-      decidedAt: null,
-      createdAt: timestamp,
-    },
-    {
-      id: 'request-approved',
-      agentId: 'agent-1',
-      resource: resource(),
-      scopes: ['projects:write'],
-      reason: 'Deploy',
-      status: 'approved',
-      expiresAt: timestamp,
-      decidedAt: timestamp,
-      createdAt: timestamp,
-    },
-  ],
   grants: [
     {
       id: 'grant-until',
@@ -364,7 +368,8 @@ const populatedCollections = {
       resource: resource(),
       scope: 'projects:write',
       mode: 'once',
-      status: 'consumed',
+      status: 'ended',
+      endReason: 'consumed',
       expiresAt: null,
       createdAt: timestamp,
     },
@@ -398,7 +403,12 @@ const populatedCollections = {
     auditEvent('event-5', 'agent.capability_decided', 'denied', null),
     auditEvent('event-6', 'agent.capability_decided', 'allowed', null),
     auditEvent('event-7', 'api_resource.access_requested', 'pending', 'resource-1'),
-    auditEvent('event-8', 'api_resource.access_decided', 'denied', 'resource-1'),
+    {
+      ...auditEvent('event-8', 'api_resource.access_decided', 'denied', 'resource-1'),
+      scopes: ['projects:read'],
+      hostId: 'host-1',
+      reasonCode: 'policy_denied',
+    },
     auditEvent('event-9', 'api_resource.access_decided', 'allowed', 'resource-1'),
     auditEvent('event-10', 'api_resource.access_revoked', 'allowed', 'resource-1'),
     auditEvent('event-11', 'api_resource.token_issued', 'allowed', 'resource-1'),
@@ -410,7 +420,6 @@ const populatedCollections = {
 const emptyCollections = {
   agent,
   installations: [],
-  requests: [],
   grants: [],
   events: [],
 } as typeof populatedCollections

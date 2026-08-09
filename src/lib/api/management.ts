@@ -1,4 +1,4 @@
-import type { AgentAuditEvent } from '@shared/api/agents'
+import type { ManagementAgentAuditEvent } from '@shared/api/agent-api'
 import type {
   ApplicationResponse,
   CreateApplicationRequest,
@@ -314,27 +314,25 @@ export async function listUserApplications(
   query: Partial<PaginationQuery> = {},
 ): Promise<ListManagementUserApplicationsResponse> {
   const [result, inventory] = await Promise.all([
-    listApplicationAuthorizations({ ...query, limit: query.limit ?? 100 }),
+    listApplicationAuthorizations({ ...query, userId: id, status: 'active', limit: query.limit ?? 100 }),
     listApplications({ limit: 100 }),
   ])
   const applicationsById = new Map(inventory.applications.map((application) => [application.id, application]))
-  const applications = result.authorizations
-    .filter((authorization) => authorization.user.id === id)
-    .map((authorization) => {
-      const application = applicationsById.get(authorization.applicationId)
-      return {
-        id: authorization.id,
-        applicationId: authorization.applicationId,
-        applicationName: application?.name ?? authorization.applicationId,
-        applicationSlug: application?.slug ?? authorization.applicationId,
-        scopes: authorization.scopes,
-        grantedAt: authorization.grantedAt,
-        expiresAt: authorization.expiresAt,
-      }
-    })
+  const applications = result.authorizations.map((authorization) => {
+    const application = applicationsById.get(authorization.applicationId)
+    return {
+      id: authorization.id,
+      applicationId: authorization.applicationId,
+      applicationName: application?.name ?? authorization.applicationId,
+      applicationSlug: application?.slug ?? authorization.applicationId,
+      scopes: authorization.scopes,
+      grantedAt: authorization.grantedAt,
+      expiresAt: authorization.expiresAt,
+    }
+  })
   return {
     applications,
-    pagination: { limit: applications.length, offset: 0, total: applications.length, hasMore: false, nextOffset: null },
+    pagination: result.pagination,
   }
 }
 
@@ -617,7 +615,7 @@ export function deleteApplicationScopeEntitlement(applicationId: string, entitle
 export function getAgentAuditEvents(
   query: Partial<import('@shared/api/agent-api').ListAgentAuditEventsQuery> = {},
 ): Promise<{
-  items: AgentAuditEvent[]
+  items: ManagementAgentAuditEvent[]
   pagination: PaginationMetadata
 }> {
   return readRpcResponse(apiClient.api.realm['audit-events'].$get({ query: stringifyQuery(query) }))

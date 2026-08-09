@@ -19,6 +19,7 @@ import {
   validateRequestedScopes,
   validateResourceUrl,
 } from '@server/usecases/resource-openapi'
+import { resourceScopeEntitlementLifecycle } from '@server/usecases/resource-scope-entitlements'
 import { activeResourceVisibleToOrganization } from '@server/usecases/resource-visibility'
 
 export type { AuthorizationTokenClaimInput } from '@server/usecases/authorization-utils'
@@ -719,11 +720,7 @@ function validateAssignedScope(resource: ApiResourceResponse, scope: string) {
 }
 
 function toScopeEntitlementResponse(entitlement: Awaited<ReturnType<Deps['authorization']['createScopeEntitlement']>>) {
-  const status = entitlement.endedAt
-    ? entitlement.endReason!
-    : entitlement.expiresAt && entitlement.expiresAt.getTime() <= Date.now()
-      ? ('expired' as const)
-      : ('active' as const)
+  const lifecycle = resourceScopeEntitlementLifecycle(entitlement)
   const subjectPath = entitlement.userId
     ? `users/${encodeURIComponent(entitlement.userId)}`
     : entitlement.applicationId
@@ -731,7 +728,7 @@ function toScopeEntitlementResponse(entitlement: Awaited<ReturnType<Deps['author
       : `agents/${encodeURIComponent(entitlement.agentIdentityId!)}`
   return {
     ...entitlement,
-    status,
+    ...lifecycle,
     expiresAt: entitlement.expiresAt?.toISOString() ?? null,
     endedAt: entitlement.endedAt?.toISOString() ?? null,
     createdAt: entitlement.createdAt.toISOString(),

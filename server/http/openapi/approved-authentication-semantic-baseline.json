@@ -3,7 +3,7 @@
     "method": "GET",
     "path": "/access/consents",
     "operationId": "listApplicationConsents",
-    "semanticHash": "7ab69565e50e67a6129864e7f42dbac1a84d48b6dde35019d4b8c1d4202d010c"
+    "semanticHash": "ec0c7090209de51de661793957160be75a39621f1a8db325223a566f4d82f951"
   },
   {
     "method": "GET",

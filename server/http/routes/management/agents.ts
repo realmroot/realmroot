@@ -29,11 +29,11 @@ import {
   listManagementAgentAccessRequestsQuerySchema,
   managementAgentAccessRequestSchema,
   managementAgentAccessRequestsResponseSchema,
+  managementAgentAuditEventSchema,
   managementAgentInstallationsResponseSchema,
   managementAgentResponseSchema,
   managementAgentsResponseSchema,
 } from '@shared/api/agent-api'
-import { agentAuditEventSchema } from '@shared/api/agents'
 import { paginationMetadata, paginationQuerySchema } from '@shared/api/pagination'
 import { Hono } from 'hono'
 import { getActorUserId, getPrincipal } from '../../middleware/authn'
@@ -221,11 +221,22 @@ managementAgentsRoute.get('/realm/audit-events', async (c) => {
   }
   const result = await getDeps(c).agentAudit.list(query, {
     agentIdentityId: query.agentId,
+    action: query.action,
+    result: query.result,
+    search: query.search,
     ownerUserId: query.organizationId ? undefined : tenants?.find((tenant) => tenant.type === 'user')?.id,
     ownerOrganizationIds: selectedOrganizationIds,
   })
+  const resourceIds = [...new Set(result.items.flatMap((event) => (event.resourceId ? [event.resourceId] : [])))]
+  const resources = await getDeps(c).authorization.findResources(resourceIds)
+  const resourcesById = new Map(resources.map((resource) => [resource.id, resource]))
   return c.json({
-    items: result.items.map((event) => agentAuditEventSchema.parse(event)),
+    items: result.items.map((event) =>
+      managementAgentAuditEventSchema.parse({
+        ...event,
+        resource: event.resourceId ? (resourcesById.get(event.resourceId) ?? null) : null,
+      }),
+    ),
     pagination: paginationMetadata({ ...query, total: result.total }),
   })
 })

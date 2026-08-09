@@ -109,7 +109,8 @@ Feature: Admin Console
     Given a user exists
     When I open user detail
     Then profile update, password reset, and session revocation controls work
-    And direct Resource Server assignments are managed from Resource access
+    And direct Resource Server assignments are managed from Permissions
+    And Authorized apps shows only the user's active application consents
 
   @entrypoint:product-ui @journey:admin-create-connector
   Scenario: Connectors page creates a draft social connector
@@ -264,6 +265,7 @@ Feature: Admin Console
     And Application Scope Entitlements are managed only below the target Application
     And only Applications configured as machine principals accept Application Scope Entitlements
     And each scope entitlement has an independent lifetime, canonical URI, and audit identity
+    And scope entitlement lists show only active records unless inactive history is requested
     And assigning another scope never shortens or replaces an existing entitlement
     And direct entitlements combine with optional Organization Role scopes
     But public visibility does not automatically grant any assigned scope
@@ -346,10 +348,13 @@ Feature: Admin Console
     Given a stable Agent identity has bound Hosts, access requests, and scope entitlements
     When I open the Agent detail in Console
     Then its inventory summary uses real active Resource and scope counts
-    And separate tabs show Agent installations, access requests, Resource access, and audit activity
+    And separate tabs show Agent installations, Permissions, audit activity, and settings
     And Resource access offers a searchable Resource Server list and shows only the selected Resource Server's scope Entitlements
-    And those tabs compose canonical Agent access request, scope entitlement, and audit collections
-    And access request and scope entitlement collections omit history associated with deleted Resource Servers
+    And each scope Entitlement reports its active or ended status separately from its end reason
+    And audit activity supports searching and filtering Agent governance history
+    And Agent access request history is available through audit activity instead of a separate detail tab
+    And those tabs compose canonical scope entitlement and audit collections
+    And scope entitlement collections omit history associated with deleted Resource Servers
     And protocol Agent implementation records and credential material are not exposed
 
   @entrypoint:product-ui @journey:admin-application-oidc-claims

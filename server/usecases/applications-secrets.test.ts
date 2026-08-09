@@ -473,6 +473,7 @@ class InMemoryApplicationRepository implements ApplicationRepository {
 
   async listAuthorizations(query: {
     applicationId?: string
+    userId?: string
     limit: number
     offset: number
     status?: 'active' | 'expired' | 'revoked'

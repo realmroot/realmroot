@@ -4955,7 +4955,7 @@ describe('external API resource authorization', () => {
         limit: 10,
         offset: 0,
         resourceId: 'resource-1',
-        status: 'active',
+        status: 'inactive',
       }),
     ).resolves.toMatchObject({
       items: [{ id: 'ent_1', target: { accountConnectionId: 'connection-1' } }],
@@ -4965,7 +4965,7 @@ describe('external API resource authorization', () => {
       limit: 10,
       offset: 0,
       resourceId: 'resource-1',
-      status: 'active',
+      status: 'inactive',
     })
     await expect(getAgentScopeEntitlement(deps, 'ent_1', principal())).resolves.toMatchObject({ id: 'ent_1' })
     await revokeAgentResourceAccess(deps, 'identity-1')

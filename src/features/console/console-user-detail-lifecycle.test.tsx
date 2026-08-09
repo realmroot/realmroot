@@ -40,6 +40,7 @@ const personalAgent = {
 describe('admin console user detail lifecycle', () => {
   it('operates populated authentication, sessions, Agents, apps, and account settings', async () => {
     const requests: Array<{ method: string; url: string; body?: unknown }> = []
+    const requestedUrls: string[] = []
     let currentUser = {
       ...profile,
       role: 'user',
@@ -93,7 +94,9 @@ describe('admin console user detail lifecycle', () => {
       },
     ]
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
-      const url = String(input).split('?')[0]!
+      const requestUrl = String(input)
+      requestedUrls.push(requestUrl)
+      const url = requestUrl.split('?')[0]!
       const method = init?.method ?? 'GET'
       if (url === '/api/users/user-1' && method === 'GET') return Promise.resolve(jsonResponse({ user: currentUser }))
       if (url === '/api/users/user-1/sessions' && method === 'GET') {
@@ -270,7 +273,7 @@ describe('admin console user detail lifecycle', () => {
     fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Revoke sessions' }))
     expect(await screen.findByText('No active sessions')).toBeTruthy()
 
-    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Resource access' }), { button: 0, ctrlKey: false })
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Permissions' }), { button: 0, ctrlKey: false })
     expect(await screen.findByText('Projects API')).toBeTruthy()
     expect(screen.getByText('projects:admin')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Revoke' }))
@@ -290,6 +293,7 @@ describe('admin console user detail lifecycle', () => {
     expect(await screen.findByText('Customer portal')).toBeTruthy()
     expect(screen.getByText('Reports')).toBeTruthy()
     expect(screen.getByText('Never')).toBeTruthy()
+    expect(requestedUrls).toContain('/api/access/consents?userId=user-1&status=active&limit=100')
 
     fireEvent.mouseDown(screen.getByRole('tab', { name: 'Settings' }), { button: 0, ctrlKey: false })
     fireEvent.click(await screen.findByRole('button', { name: 'Send password reset' }))

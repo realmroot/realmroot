@@ -455,12 +455,14 @@ class InMemoryApplicationRepository implements ApplicationRepository {
 
   async listAuthorizations(query: {
     applicationId?: string
+    userId?: string
     limit: number
     offset: number
     status?: 'active' | 'expired' | 'revoked'
   }) {
     const authorizations = [...this.consents.entries()]
       .filter(([key]) => !query.applicationId || key.startsWith(`${query.applicationId}:`))
+      .filter(([key]) => !query.userId || key.slice(key.indexOf(':') + 1) === query.userId)
       .map(([key, consent]) => ({
         ...consent,
         applicationId: key.slice(0, key.indexOf(':')),
