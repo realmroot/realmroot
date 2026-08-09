@@ -186,8 +186,9 @@ Feature: Agent identity and delegated API authorization
     Scenario: Restish registers a Resource credential without observing Realmroot grant internals
       Given an approved access request returns a DPoP resource-credential offer
       When the Restish response middleware handles that offer
-      Then the plugin retains only the opaque credential source reference and server-supplied offer
-      And returns a safe receipt that identifies the Restish credential source
+      Then the plugin generates an opaque local credential source reference
+      And stores that reference with the server-supplied offer in the Agent's local state
+      And returns a safe receipt containing the opaque reference rather than a Resource URL
       When the Agent adds that credential source to the target Restish API
       Then Restish creates and retains the DPoP private key locally
       And asks the plugin to redeem the offer with a proof for the exact supplied method and URI
@@ -289,7 +290,9 @@ Feature: Agent identity and delegated API authorization
     Scenario: Restish manages target credentials without observing access grants
       Given Restish stores a DPoP credential obtained through the Realmroot credential source
       When another approved access request returns a credential offer for the same Resource Server
-      Then the plugin replaces only the stored offer for that Resource without reading or selecting an access grant
+      Then the plugin reuses the opaque credential source reference for that Resource
+      And replaces only an offer with the same scopes
+      And retains every other offer for that Resource while its server-managed authority remains valid
       And does not alter Restish credentials for other authorization contexts
       And target requests use only the explicitly configured Restish DPoP credential
       When a short-lived credential expires while its server-managed authority remains active

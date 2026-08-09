@@ -9,7 +9,7 @@ import (
 	"github.com/rest-sh/restish/v2/plugin"
 )
 
-const pluginVersion = "0.12.0"
+const pluginVersion = "0.13.0"
 
 func main() {
 	manifest := plugin.Manifest{
@@ -83,6 +83,7 @@ func main() {
 			systemBrowserOpener{},
 			newFileStateStore(),
 			newHTTPClient(),
+			newCredentialSourceReference,
 		)
 		if err != nil {
 			exitWithError(err)

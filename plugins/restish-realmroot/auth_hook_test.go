@@ -16,6 +16,12 @@ import (
 	"github.com/rest-sh/restish/v2/plugin"
 )
 
+const testCredentialSourceReference = "rrcs_MDEyMzQ1Njc4OWFiY2RlZg"
+
+func fixedCredentialSourceReference() (string, error) {
+	return testCredentialSourceReference, nil
+}
+
 func TestAuthHookIgnoresUnmarkedProfiles(t *testing.T) {
 	output, err := authenticateRequest(plugin.AuthHookInput{}, &memoryStateStore{}, roundTripFunc(nil), &promptRecorder{})
 	if err != nil {
@@ -193,9 +199,11 @@ func newCredentialState(t *testing.T, credential dpopCredential) *memoryStateSto
 	return &memoryStateStore{exists: true, state: agentState{
 		Version: agentStateVersion, Origin: "https://auth.example.com", Issuer: "https://auth.example.com/api/auth",
 		Runtime: defaultAgentRuntime, AgentID: "agent-123", HostID: "host-123", AgentKeyID: "agent-key",
-		AgentPrivateKey:      encodePrivateKey(agentPrivate),
-		Identity:             &stableIdentity{ID: "identity-1", Issuer: "https://auth.example.com/api/auth", Subject: "agt_123"},
-		DPoPCredentialOffers: map[string][]dpopCredential{credential.ResourceHref: {credential}},
+		AgentPrivateKey: encodePrivateKey(agentPrivate),
+		Identity:        &stableIdentity{ID: "identity-1", Issuer: "https://auth.example.com/api/auth", Subject: "agt_123"},
+		CredentialSources: map[string]credentialSource{
+			testCredentialSourceReference: {ResourceHref: credential.ResourceHref, Offers: []dpopCredential{credential}},
+		},
 		ProtocolCredential: &dpopCredential{
 			ResourceHref: "https://auth.example.com/api", ResourceIndicator: "https://auth.example.com/api",
 			CredentialEndpoint: "https://auth.example.com/api/auth/oauth2/token",
@@ -300,13 +308,15 @@ func (s *memoryStateStore) UpdateStateReference(reference agentStateReference) e
 }
 
 func (s *memoryStateStore) FindCredentialOffer(reference, runtime string, scopes []string) (resourceCredentialReference, error) {
-	offers := s.state.DPoPCredentialOffers[reference]
 	if !s.exists || s.state.Runtime != runtime {
 		return resourceCredentialReference{}, os.ErrNotExist
 	}
-	for _, credential := range offers {
-		if scopesContain(credential.Scopes, scopes) {
-			return resourceCredentialReference{path: "memory", state: s.state, credential: credential}, nil
+	source, ok := s.state.CredentialSources[reference]
+	if ok {
+		for _, credential := range source.Offers {
+			if scopesContain(credential.Scopes, scopes) {
+				return resourceCredentialReference{path: "memory", state: s.state, credential: credential}, nil
+			}
 		}
 	}
 	return resourceCredentialReference{}, os.ErrNotExist

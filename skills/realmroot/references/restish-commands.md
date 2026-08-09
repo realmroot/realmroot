@@ -172,18 +172,19 @@ reference Restish needs:
   "scopes": ["<required-scope>"],
   "credentialSource": {
     "name": "realmroot",
-    "reference": "https://id.realmroot.dev/api/resource-servers/service-id/resources/resource-id"
+    "reference": "rrcs_MDEyMzQ1Njc4OWFiY2RlZg"
   }
 }
 ```
 
 Register that source against the credential ID published by the target's
-OpenAPI contract:
+OpenAPI contract. Set `CREDENTIAL_SOURCE_REFERENCE` to the returned
+`credentialSource.reference` value:
 
 ```bash
 restish api auth add "$TARGET_API" "$CREDENTIAL_ID" \
   --source realmroot \
-  --reference "$RESOURCE_HREF"
+  --reference "$CREDENTIAL_SOURCE_REFERENCE"
 restish api auth inspect "$TARGET_API" --redact
 ```
 

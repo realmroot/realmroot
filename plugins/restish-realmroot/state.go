@@ -13,7 +13,7 @@ import (
 
 const (
 	stateDirectoryEnv = "REALMROOT_PLUGIN_STATE_DIR"
-	agentStateVersion = 13
+	agentStateVersion = 14
 	hostStateVersion  = 1
 	identityDirectory = "identities"
 	hostDirectory     = "hosts"
@@ -50,6 +50,11 @@ type dpopCredential struct {
 	Scopes             []string   `json:"scopes,omitempty"`
 }
 
+type credentialSource struct {
+	ResourceHref string           `json:"resource_href"`
+	Offers       []dpopCredential `json:"offers"`
+}
+
 type agentState struct {
 	Version                  int                         `json:"version"`
 	Origin                   string                      `json:"origin"`
@@ -63,8 +68,7 @@ type agentState struct {
 	RegistrationApproval     *pendingApproval            `json:"registration_approval,omitempty"`
 	Identity                 *stableIdentity             `json:"identity,omitempty"`
 	DPoPCredentials          map[string]dpopCredential   `json:"dpop_credentials,omitempty"`
-	DPoPCredentialOffers     map[string][]dpopCredential `json:"dpop_credential_offers,omitempty"`
-	ActiveDPoPCredentials    map[string]string           `json:"active_dpop_credentials,omitempty"`
+	CredentialSources        map[string]credentialSource `json:"credential_sources,omitempty"`
 	ProtocolCredential       *dpopCredential             `json:"protocol_credential,omitempty"`
 	LegacyPlatformCredential *dpopCredential             `json:"platform_credential,omitempty"`
 }
@@ -301,11 +305,15 @@ func (s *fileStateStore) FindCredentialOffer(reference string, runtime string, s
 		if state.Runtime != runtime {
 			return nil
 		}
-		offers := state.DPoPCredentialOffers[reference]
+		source, ok := state.CredentialSources[reference]
+		if !ok {
+			return nil
+		}
 		var offer *dpopCredential
-		for index := range offers {
-			if scopesContain(offers[index].Scopes, scopes) && (offer == nil || len(offers[index].Scopes) < len(offer.Scopes)) {
-				offer = &offers[index]
+		for index := range source.Offers {
+			if scopesContain(source.Offers[index].Scopes, scopes) &&
+				(offer == nil || len(source.Offers[index].Scopes) < len(offer.Scopes)) {
+				offer = &source.Offers[index]
 			}
 		}
 		if offer == nil {
@@ -474,12 +482,24 @@ func validateAgentStateCredentials(state agentState) error {
 	if len(state.DPoPCredentials) > 0 {
 		return errors.New("Agent state contains legacy DPoP credential storage")
 	}
-	for resourceHref, offers := range state.DPoPCredentialOffers {
-		if resourceHref == "" || len(offers) == 0 {
+	resourceReferences := make(map[string]string, len(state.CredentialSources))
+	for reference, source := range state.CredentialSources {
+		if !isCredentialSourceReference(reference) || source.ResourceHref == "" || len(source.Offers) == 0 {
 			return errors.New("Agent state contains invalid DPoP credential metadata")
 		}
-		for _, credential := range offers {
-			if credential.ResourceHref != resourceHref || credential.ResourceIndicator == "" ||
+		if existingReference, exists := resourceReferences[source.ResourceHref]; exists {
+			return fmt.Errorf(
+				"Agent state credential sources %q and %q address the same Resource",
+				existingReference,
+				reference,
+			)
+		}
+		resourceReferences[source.ResourceHref] = reference
+		if _, err := validatedAbsoluteURL(source.ResourceHref); err != nil {
+			return fmt.Errorf("Agent state credential Resource URL is invalid: %w", err)
+		}
+		for _, credential := range source.Offers {
+			if credential.ResourceHref != source.ResourceHref || credential.ResourceIndicator == "" ||
 				credential.CredentialEndpoint == "" || credential.ProofTarget == "" {
 				return errors.New("Agent state contains invalid DPoP credential metadata")
 			}
@@ -511,9 +531,6 @@ func validateAgentStateCredentials(state agentState) error {
 		if (credential.AccessToken == "") != (credential.ExpiresAt == nil) {
 			return errors.New("Agent state contains an incomplete Agent protocol OAuth credential")
 		}
-	}
-	if len(state.ActiveDPoPCredentials) > 0 {
-		return errors.New("Agent state contains legacy active DPoP credential bindings")
 	}
 	return nil
 }

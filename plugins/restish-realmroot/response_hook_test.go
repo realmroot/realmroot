@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 	"testing"
@@ -8,6 +9,22 @@ import (
 
 	"github.com/rest-sh/restish/v2/plugin"
 )
+
+func TestCredentialSourceReferenceIsOpaqueAndLocallyGenerated(t *testing.T) {
+	reference, err := newCredentialSourceReference()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !isCredentialSourceReference(reference) {
+		t.Fatalf("reference = %q", reference)
+	}
+}
+
+func TestCredentialSourceReferenceRejectsResourceURL(t *testing.T) {
+	if isCredentialSourceReference("https://auth.example.com/api/resource-servers/zpan/resources/workspace-1") {
+		t.Fatal("Resource URL was accepted as a credential source reference")
+	}
+}
 
 type browserRecorder struct{ uri string }
 
@@ -18,7 +35,9 @@ func TestProfiledResponseIgnoresEndpointNamesAndUnprofiledBodies(t *testing.T) {
 		Request:  plugin.HookRequest{Method: http.MethodPost, URI: "https://auth.example.com/api/access-requests"},
 		Response: plugin.HookResponse{Status: http.StatusCreated, Body: pendingInteraction("https://auth.example.com")},
 	}
-	output, err := handleProfiledResponse(input, &browserRecorder{}, &memoryStateStore{}, roundTripFunc(nil))
+	output, err := handleProfiledResponse(
+		input, &browserRecorder{}, &memoryStateStore{}, roundTripFunc(nil), fixedCredentialSourceReference,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -31,8 +50,7 @@ func TestProfiledResponseOpensAndPollsAnyInteractiveResource(t *testing.T) {
 	t.Run("[spec: agent-identity/restish-generic-interactive-resource]", func(t *testing.T) {
 		t.Log("[spec: agent-identity/restish-generic-interactive-resource]")
 		states := newCredentialState(t, testCredential(t, "cached", time.Now().Add(time.Minute)))
-		states.state.DPoPCredentialOffers = nil
-		states.state.ActiveDPoPCredentials = nil
+		states.state.CredentialSources = nil
 		browser := &browserRecorder{}
 		client := roundTripFunc(func(request *http.Request) (*http.Response, error) {
 			if request.Method != http.MethodGet || request.URL.String() != "https://auth.example.com/api/connection-requests/request-1" {
@@ -42,7 +60,7 @@ func TestProfiledResponseOpensAndPollsAnyInteractiveResource(t *testing.T) {
 		})
 		input := profiledInput("https://auth.example.com/api/resource-servers/zpan/connection-requests", pendingInteraction("https://auth.example.com"))
 
-		output, err := handleProfiledResponse(input, browser, states, client)
+		output, err := handleProfiledResponse(input, browser, states, client, fixedCredentialSourceReference)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -68,8 +86,7 @@ func TestProfiledResponseAcceptsCredentialOfferWithoutGrantKnowledge(t *testing.
 		t.Log("[spec: agent-identity/restish-generic-resource-credential-offer]")
 		credential := testCredential(t, "old", time.Now().Add(-time.Minute))
 		states := newCredentialState(t, credential)
-		states.state.DPoPCredentialOffers = nil
-		states.state.ActiveDPoPCredentials = nil
+		states.state.CredentialSources = nil
 		browser := &browserRecorder{}
 		client := roundTripFunc(func(request *http.Request) (*http.Response, error) {
 			if request.URL.String() != "https://auth.example.com/api/access-requests/request-1" {
@@ -80,7 +97,7 @@ func TestProfiledResponseAcceptsCredentialOfferWithoutGrantKnowledge(t *testing.
 		})
 		input := profiledInput("https://auth.example.com/api/access-requests", pendingAccessInteraction("https://auth.example.com"))
 
-		output, err := handleProfiledResponse(input, browser, states, client)
+		output, err := handleProfiledResponse(input, browser, states, client, fixedCredentialSourceReference)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -89,14 +106,67 @@ func TestProfiledResponseAcceptsCredentialOfferWithoutGrantKnowledge(t *testing.
 			t.Fatalf("safe result = %#v", body)
 		}
 		source, ok := body["credentialSource"].(map[string]any)
-		if !ok || source["name"] != "realmroot" || source["reference"] != credential.ResourceHref {
+		if !ok || source["name"] != "realmroot" || source["reference"] != testCredentialSourceReference {
 			t.Fatalf("credential source receipt = %#v", body)
 		}
-		stored := states.state.DPoPCredentialOffers[credential.ResourceHref][0]
+		stored := states.state.CredentialSources[testCredentialSourceReference].Offers[0]
 		if stored.AccessToken != "" || stored.PrivateKey != "" || stored.ExpiresAt != nil {
 			t.Fatalf("plugin retained target credential material: %#v", stored)
 		}
 	})
+}
+
+func TestCredentialOfferReusesResourceReferenceAndPreservesOtherScopes(t *testing.T) {
+	t.Log("[spec: agent-identity/restish-resource-credential-lifecycle]")
+	readOffer := testCredential(t, "", time.Time{})
+	states := newCredentialState(t, readOffer)
+	writeOffer := readOffer
+	writeOffer.Scopes = []string{"files:write"}
+	writeOffer.CredentialEndpoint = "https://auth.example.com/api/access-requests/request-write/credentials"
+	representation := completedInteractionWithOffer(writeOffer)
+	representation["scopes"] = writeOffer.Scopes
+	resource, err := decodeHookBody[interactiveResponse](representation)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	output, err := acceptCredentialOffer(resource, *resource.CredentialOffer, "https://auth.example.com", states, func() (string, error) {
+		return "", errors.New("reference generator must not run for an existing Resource")
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := output.Response.Body.(map[string]any)
+	sourceReceipt := body["credentialSource"].(map[string]any)
+	if sourceReceipt["reference"] != testCredentialSourceReference {
+		t.Fatalf("credential source receipt = %#v", sourceReceipt)
+	}
+	source := states.state.CredentialSources[testCredentialSourceReference]
+	if len(source.Offers) != 2 {
+		t.Fatalf("offers = %#v", source.Offers)
+	}
+	if source.Offers[0].CredentialEndpoint != readOffer.CredentialEndpoint ||
+		source.Offers[1].CredentialEndpoint != writeOffer.CredentialEndpoint {
+		t.Fatalf("offers = %#v", source.Offers)
+	}
+
+	renewedReadOffer := readOffer
+	renewedReadOffer.CredentialEndpoint = "https://auth.example.com/api/access-requests/request-read-renewed/credentials"
+	representation = completedInteractionWithOffer(renewedReadOffer)
+	resource, err = decodeHookBody[interactiveResponse](representation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := acceptCredentialOffer(resource, *resource.CredentialOffer, "https://auth.example.com", states, func() (string, error) {
+		return "", errors.New("reference generator must not run for an existing Resource")
+	}); err != nil {
+		t.Fatal(err)
+	}
+	source = states.state.CredentialSources[testCredentialSourceReference]
+	if len(source.Offers) != 2 || source.Offers[0].CredentialEndpoint != renewedReadOffer.CredentialEndpoint ||
+		source.Offers[1].CredentialEndpoint != writeOffer.CredentialEndpoint {
+		t.Fatalf("offers after same-scope replacement = %#v", source.Offers)
+	}
 }
 
 func TestProfiledResponseRejectsCrossOriginInteractionLinks(t *testing.T) {
@@ -110,6 +180,7 @@ func TestProfiledResponseRejectsCrossOriginInteractionLinks(t *testing.T) {
 		browser,
 		states,
 		roundTripFunc(nil),
+		fixedCredentialSourceReference,
 	)
 	if err == nil || !strings.Contains(err.Error(), "self link") {
 		t.Fatalf("cross-origin error = %v", err)

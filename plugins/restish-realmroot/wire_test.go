@@ -42,6 +42,7 @@ func TestResponseMiddlewareDecodesDeepResourceDocument(t *testing.T) {
 			&browserRecorder{},
 			&memoryStateStore{},
 			roundTripFunc(nil),
+			fixedCredentialSourceReference,
 		)
 		if err != nil {
 			t.Fatal(err)
