@@ -147,4 +147,161 @@ describe('direct scope Entitlements', () => {
     await subject.revokeUserScopeEntitlement(deps, 'ent_1')
     expect(authorization.endScopeEntitlement).toHaveBeenCalledWith('ent_1', 'revoked', expect.any(Date))
   })
+
+  it('lists, reads, and revokes User and Application Entitlements', async () => {
+    const { deps, authorization } = setup()
+
+    await expect(subject.listUserScopeEntitlements(deps, 'user-1', { limit: 20, offset: 0 })).resolves.toMatchObject({
+      items: [expect.objectContaining({ id: 'ent_1', status: 'active' })],
+    })
+    vi.mocked(authorization.findScopeEntitlement).mockResolvedValue(
+      entitlement({ userId: null, applicationId: 'app-1', endedAt: now, endReason: 'revoked' }),
+    )
+    await expect(subject.getApplicationScopeEntitlement(deps, 'ent_1')).resolves.toMatchObject({
+      applicationId: 'app-1',
+      status: 'revoked',
+    })
+    await expect(
+      subject.listApplicationScopeEntitlements(deps, 'app-1', { limit: 20, offset: 0 }),
+    ).resolves.toMatchObject({ items: [expect.objectContaining({ applicationId: 'app-1' })] })
+    await subject.revokeApplicationScopeEntitlement(deps, 'ent_1')
+    expect(authorization.endScopeEntitlement).toHaveBeenLastCalledWith('ent_1', 'revoked', expect.any(Date))
+
+    vi.mocked(authorization.endScopeEntitlement).mockResolvedValue(false)
+    await expect(subject.revokeApplicationScopeEntitlement(deps, 'ent_1')).rejects.toThrow('already ended')
+    vi.mocked(authorization.findScopeEntitlement).mockResolvedValue(null)
+    await expect(subject.getUserScopeEntitlement(deps, 'missing')).rejects.toThrow('not found')
+    await expect(subject.getApplicationScopeEntitlement(deps, 'missing')).rejects.toThrow('not found')
+  })
+
+  it('enforces Resource visibility, subject, and lifetime boundaries', async () => {
+    const { deps, authorization, applications } = setup()
+    vi.mocked(authorization.findResource).mockResolvedValueOnce({ ...resource, enabled: false })
+    await expect(
+      subject.createUserScopeEntitlement(
+        deps,
+        'user-1',
+        { resourceServerId: resource.id, scope: 'read', mode: 'persistent' },
+        'admin',
+      ),
+    ).rejects.toThrow('active')
+
+    vi.mocked(authorization.findResource).mockResolvedValue({ ...resource, visibility: 'private' })
+    vi.mocked(authorization.findMemberByOrganizationUser).mockResolvedValueOnce(null)
+    await expect(
+      subject.createUserScopeEntitlement(
+        deps,
+        'user-1',
+        { resourceServerId: resource.id, scope: 'read', mode: 'persistent' },
+        'admin',
+      ),
+    ).rejects.toThrow('owner Organization member')
+    vi.mocked(authorization.findMemberByOrganizationUser).mockResolvedValueOnce({ id: 'member' })
+    await expect(
+      subject.createUserScopeEntitlement(
+        deps,
+        'user-1',
+        { resourceServerId: resource.id, scope: 'read', mode: 'persistent' },
+        'admin',
+      ),
+    ).resolves.toMatchObject({ scope: 'read' })
+
+    vi.mocked(authorization.findResource).mockResolvedValue(resource)
+    vi.mocked(authorization.findMemberByOrganizationUser).mockResolvedValueOnce(null)
+    await expect(
+      subject.createUserScopeEntitlement(
+        deps,
+        'user-1',
+        { organizationId: 'org-2', resourceServerId: resource.id, scope: 'read', mode: 'persistent' },
+        'admin',
+      ),
+    ).rejects.toThrow('contain the target user')
+    vi.mocked(authorization.findResource).mockResolvedValueOnce({
+      ...resource,
+      visibility: 'private',
+      ownerOrganizationId: 'org-1',
+    })
+    vi.mocked(authorization.findMemberByOrganizationUser).mockResolvedValue({ id: 'member' })
+    await expect(
+      subject.createUserScopeEntitlement(
+        deps,
+        'user-1',
+        { organizationId: 'org-2', resourceServerId: resource.id, scope: 'read', mode: 'persistent' },
+        'admin',
+      ),
+    ).rejects.toThrow('not visible')
+    await expect(
+      subject.createUserScopeEntitlement(
+        deps,
+        'user-1',
+        { resourceServerId: resource.id, scope: 'read', mode: 'until', expiresAt: '2020-01-01T00:00:00.000Z' },
+        'admin',
+      ),
+    ).rejects.toThrow('future')
+
+    await expect(
+      subject.createUserScopeEntitlement(
+        deps,
+        'user-1',
+        { resourceServerId: resource.id, scope: 'read', mode: 'persistent' },
+        'admin',
+      ),
+    ).resolves.toMatchObject({ organizationId: null })
+    vi.mocked(authorization.endScopeEntitlement).mockResolvedValue(false)
+    await expect(subject.revokeUserScopeEntitlement(deps, 'ent_1')).rejects.toThrow('already ended')
+
+    vi.mocked(applications.findById).mockResolvedValueOnce(null)
+    await expect(
+      subject.createApplicationScopeEntitlement(
+        deps,
+        'missing',
+        { resourceServerId: resource.id, scope: 'read', mode: 'persistent' },
+        'admin',
+      ),
+    ).rejects.toThrow('not found')
+    vi.mocked(applications.findById).mockResolvedValueOnce({
+      id: 'app-1',
+      ownerOrganizationId: 'org-1',
+      allowedGrantTypes: ['authorization_code'],
+    })
+    await expect(
+      subject.createApplicationScopeEntitlement(
+        deps,
+        'app-1',
+        { resourceServerId: resource.id, scope: 'read', mode: 'persistent' },
+        'admin',
+      ),
+    ).rejects.toThrow('machine-principal')
+
+    vi.mocked(applications.findById).mockResolvedValue({
+      id: 'app-1',
+      ownerOrganizationId: 'org-1',
+      allowedGrantTypes: ['client_credentials'],
+    })
+    await expect(
+      subject.createApplicationScopeEntitlement(
+        deps,
+        'app-1',
+        { resourceServerId: resource.id, scope: 'read', mode: 'until' },
+        'admin',
+      ),
+    ).rejects.toThrow('expiry')
+    await expect(
+      subject.createApplicationScopeEntitlement(
+        deps,
+        'app-1',
+        { resourceServerId: resource.id, scope: 'read', mode: 'until', expiresAt: '2020-01-01T00:00:00.000Z' },
+        'admin',
+      ),
+    ).rejects.toThrow('future')
+
+    vi.mocked(authorization.findScopeEntitlement).mockResolvedValue(
+      entitlement({
+        userId: null,
+        applicationId: 'app-1',
+        expiresAt: new Date('2020-01-01T00:00:00.000Z'),
+      }),
+    )
+    await expect(subject.getApplicationScopeEntitlement(deps, 'ent_1')).resolves.toMatchObject({ status: 'expired' })
+  })
 })

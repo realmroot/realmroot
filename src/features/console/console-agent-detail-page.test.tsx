@@ -12,6 +12,7 @@ afterEach(() => {
 describe('console Agent detail', () => {
   it('reviews every Agent resource, deactivates it, and soft-deletes it', async () => {
     const requests: Array<{ method: string; path: string }> = []
+    let finishRevocation: ((response: Response) => void) | undefined
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const request = requestDetails(input, init)
       requests.push({ method: request.method, path: request.url.pathname })
@@ -25,7 +26,9 @@ describe('console Agent detail', () => {
         request.method === 'DELETE' &&
         request.url.pathname === '/api/agents/agent-1/scope-entitlements/grant-until'
       ) {
-        return Promise.resolve(new Response(null, { status: 204 }))
+        return new Promise<Response>((resolve) => {
+          finishRevocation = resolve
+        })
       }
       return Promise.resolve(agentDetailResponse(request.url, populatedCollections))
     })
@@ -52,7 +55,11 @@ describe('console Agent detail', () => {
     expect(screen.getByText(/^Until \d/)).toBeTruthy()
     expect(screen.getAllByRole('button', { name: 'Revoke' })).toHaveLength(2)
     fireEvent.click(screen.getAllByRole('button', { name: 'Revoke' })[0])
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    fireEvent.click(screen.getAllByRole('button', { name: 'Revoke' })[0])
     fireEvent.click(screen.getByRole('button', { name: 'Revoke scope' }))
+    expect(await screen.findByRole('button', { name: 'Revoking…' })).toBeTruthy()
+    finishRevocation!(new Response(null, { status: 204 }))
     await waitFor(() =>
       expect(requests).toContainEqual({
         method: 'DELETE',
@@ -322,6 +329,7 @@ const populatedCollections = {
       status: 'active',
       expiresAt: '2099-01-01T00:00:00.000Z',
       createdAt: timestamp,
+      sourceAccessRequestId: 'request-approved',
     },
     {
       id: 'grant-once',

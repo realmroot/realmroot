@@ -86,6 +86,7 @@ describe('Scope Entitlements panel', () => {
 
   it('creates and revokes User Entitlements', async () => {
     let entitlements = [entitlement]
+    let finishCreate: ((response: Response) => void) | undefined
     const calls: string[] = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const { url, method } = request(input, init)
@@ -95,7 +96,9 @@ describe('Scope Entitlements panel', () => {
       if (url === '/api/users/user-1/scope-entitlements?limit=50&offset=0')
         return Promise.resolve(jsonResponse(page(entitlements)))
       if (url === '/api/users/user-1/scope-entitlements' && method === 'POST')
-        return Promise.resolve(jsonResponse(entitlement, 201))
+        return new Promise<Response>((resolve) => {
+          finishCreate = resolve
+        })
       if (url.endsWith('/scope-entitlements/ent_1') && method === 'DELETE') {
         entitlements = []
         return Promise.resolve(new Response(null, { status: 204 }))
@@ -106,7 +109,11 @@ describe('Scope Entitlements panel', () => {
     await screen.findByText('Orders API')
     fireEvent.click(screen.getByRole('button', { name: 'Add scope' }))
     fireEvent.submit(document.getElementById('create-scope-entitlement')!)
+    expect(await screen.findByRole('button', { name: 'Adding…' })).toBeTruthy()
+    finishCreate!(jsonResponse(entitlement, 201))
     await waitFor(() => expect(calls).toContain('POST /api/users/user-1/scope-entitlements'))
+    fireEvent.click(screen.getByRole('button', { name: 'Revoke' }))
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Cancel' }))
     fireEvent.click(screen.getByRole('button', { name: 'Revoke' }))
     fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Revoke scope' }))
     expect(await screen.findByText('No Resource access')).toBeTruthy()
