@@ -1321,7 +1321,7 @@ function credentialDeps(repository: InMemoryTokenExchangeRepository): Deps {
       findResource: async (id: string) => (id === audienceResourceId ? eligibleAudienceResource() : null),
       findResourceByResourceUrl: async (resourceUrl: string) =>
         resourceUrl === defaultAudience ? eligibleAudienceResource(clientScopes(repository)) : null,
-      listActiveApplicationScopeGrants: async () => [],
+      listActiveApplicationScopeEntitlements: async () => [],
     },
   } as unknown as Deps
 }

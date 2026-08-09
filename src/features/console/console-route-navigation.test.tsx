@@ -236,7 +236,8 @@ describe('console route navigation', () => {
               status: 'active',
               installationCount: 1,
               pendingRequestCount: 0,
-              activeGrantCount: 1,
+              activeResourceCount: 1,
+              activeScopeCount: 1,
               createdAt: '2026-01-01T00:00:00.000Z',
               updatedAt: '2026-01-01T00:00:00.000Z',
             },
@@ -246,7 +247,7 @@ describe('console route navigation', () => {
       if (
         url.startsWith('/api/agents/agent-1/installations') ||
         url.startsWith('/api/access/requests?agentId=agent-1') ||
-        url.startsWith('/api/agents/agent-1/access-grants')
+        url.startsWith('/api/agents/agent-1/scope-entitlements')
       ) {
         return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
       }

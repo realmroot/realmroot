@@ -15,11 +15,12 @@ import {
   consoleQueryKeys,
   deactivateAgent,
   deleteAgent,
+  deleteAgentScopeEntitlement,
   getAgent,
   getAgentAuditEvents,
-  listAgentAccessGrants,
   listAgentAccessRequests,
   listAgentInstallations,
+  listAgentScopeEntitlements,
 } from '@/lib/api/management'
 import { tt } from '@/lib/i18n'
 
@@ -38,6 +39,7 @@ export function AgentDetailPage({
   const navigate = useNavigate()
   const [tab, setTab] = useState<AgentDetailSection>(section)
   const [deleteOpen, setDeleteOpen] = useState(false)
+  const [revokeEntitlementId, setRevokeEntitlementId] = useState<string | null>(null)
   const agentQuery = useQuery({ queryKey: [...consoleQueryKeys.agents, agentId], queryFn: () => getAgent(agentId) })
   const hosts = useQuery({
     queryKey: [...consoleQueryKeys.agents, agentId, 'hosts'],
@@ -49,7 +51,7 @@ export function AgentDetailPage({
   })
   const grants = useQuery({
     queryKey: [...consoleQueryKeys.agents, agentId, 'grants'],
-    queryFn: () => listAgentAccessGrants(agentId, { limit: 100 }),
+    queryFn: () => listAgentScopeEntitlements(agentId, { limit: 100 }),
   })
   const audit = useQuery({
     queryKey: [...consoleQueryKeys.agents, agentId, 'audit', { organizationId }],
@@ -75,6 +77,13 @@ export function AgentDetailPage({
   const activation = useMutation({
     mutationFn: (active: boolean) => (active ? activateAgent(agentId) : deactivateAgent(agentId)),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: consoleQueryKeys.agents }),
+  })
+  const entitlementRevocation = useMutation({
+    mutationFn: (entitlementId: string) => deleteAgentScopeEntitlement(agentId, entitlementId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: [...consoleQueryKeys.agents, agentId] })
+      setRevokeEntitlementId(null)
+    },
   })
   useEffect(() => {
     setTab(section)
@@ -151,7 +160,8 @@ export function AgentDetailPage({
                 ['Issuer', agent.issuer],
                 ['Installations', agent.installationCount.toLocaleString()],
                 ['Pending access requests', agent.pendingRequestCount.toLocaleString()],
-                ['Active access grants', agent.activeGrantCount.toLocaleString()],
+                ['Active Resources', agent.activeResourceCount.toLocaleString()],
+                ['Active scopes', agent.activeScopeCount.toLocaleString()],
                 ['Created', new Date(agent.createdAt).toLocaleString()],
                 ['Last updated', new Date(agent.updatedAt).toLocaleString()],
               ]}
@@ -164,7 +174,11 @@ export function AgentDetailPage({
             <AgentRequestsTable items={requests.data?.items ?? []} />
           </TabsContent>
           <TabsContent className="mt-5" value="grants">
-            <AgentGrantsTable items={grants.data?.items ?? []} />
+            <AgentGrantsTable
+              items={grants.data?.items ?? []}
+              onRevoke={setRevokeEntitlementId}
+              revoking={entitlementRevocation.isPending}
+            />
           </TabsContent>
           <TabsContent className="mt-5" value="activity">
             <AgentActivityTable events={events} resources={resources} />
@@ -201,6 +215,16 @@ export function AgentDetailPage({
         </Tabs>
       </div>
       <DestructiveConfirmation
+        confirmLabel={entitlementRevocation.isPending ? tt('Revoking…') : tt('Revoke scope')}
+        description={tt('This scope stops applying immediately. Existing audit history is preserved.')}
+        error={<MutationError error={entitlementRevocation.error} />}
+        onClose={() => setRevokeEntitlementId(null)}
+        onConfirm={() => entitlementRevocation.mutate(revokeEntitlementId!)}
+        open={revokeEntitlementId !== null}
+        pending={entitlementRevocation.isPending}
+        title={tt('Revoke scope?')}
+      />
+      <DestructiveConfirmation
         confirmLabel={deletion.isPending ? tt('Deleting…') : tt('Delete Agent')}
         description={tt(
           'The Agent disappears from every interface. Installations, active grants, and pending requests stop immediately, and it cannot be restored.',
@@ -221,7 +245,7 @@ function agentTabLabel(value: AgentDetailSection) {
     overview: 'Overview',
     hosts: 'Installations',
     requests: 'Access requests',
-    grants: 'Access grants',
+    grants: 'Resource access',
     activity: 'Activity',
     settings: 'Settings',
   }[value]
@@ -294,28 +318,48 @@ function AgentRequestsTable({ items }: { items: Awaited<ReturnType<typeof listAg
   )
 }
 
-function AgentGrantsTable({ items }: { items: Awaited<ReturnType<typeof listAgentAccessGrants>>['items'] }) {
+function AgentGrantsTable({
+  items,
+  onRevoke,
+  revoking,
+}: {
+  items: Awaited<ReturnType<typeof listAgentScopeEntitlements>>['items']
+  onRevoke: (entitlementId: string) => void
+  revoking: boolean
+}) {
   return (
     <DetailTable
-      emptyDescription="This Agent has no active resource access grants."
-      emptyTitle="No active access grants"
-      headers={['Target', 'Scopes', 'Lifetime', 'Status']}
-      rows={items.map((grant) => ({
-        id: grant.id,
+      emptyDescription="This Agent has no Resource access."
+      emptyTitle="No Resource access"
+      headers={['Resource Server', 'Scope', 'Source', 'Lifetime', 'Status', '']}
+      rows={items.map((entitlement) => ({
+        id: entitlement.id,
         cells: [
           <div key="resource">
-            <strong>{grant.resource.name}</strong>
-            <span className="block font-mono text-xs text-muted-foreground">{grant.resource.identifier}</span>
+            <strong>{entitlement.resource.name}</strong>
+            <span className="block font-mono text-xs text-muted-foreground">{entitlement.resource.identifier}</span>
           </div>,
-          <ScopeList key="scopes" scopes={grant.scopes} />,
-          grant.mode === 'until' && grant.expiresAt
-            ? tt('Until {{date}}', { date: new Date(grant.expiresAt).toLocaleString() })
-            : grant.mode === 'once'
+          <ScopeList key="scope" scopes={[entitlement.scope]} />,
+          entitlement.sourceAccessRequestId ? tt('Access request') : tt('Direct'),
+          entitlement.mode === 'until' && entitlement.expiresAt
+            ? tt('Until {{date}}', { date: new Date(entitlement.expiresAt).toLocaleString() })
+            : entitlement.mode === 'once'
               ? tt('One use')
               : tt('Until revoked'),
           <Badge key="status" variant="secondary">
-            {grant.status}
+            {entitlement.status}
           </Badge>,
+          entitlement.status === 'active' ? (
+            <Button
+              disabled={revoking}
+              key="revoke"
+              onClick={() => onRevoke(entitlement.id)}
+              size="sm"
+              variant="outline"
+            >
+              {tt('Revoke')}
+            </Button>
+          ) : null,
         ],
       }))}
     />

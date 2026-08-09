@@ -84,8 +84,8 @@ Feature: Admin Console
     Given an application exists
     When I open its detail page
     Then settings, branding, redirect URIs, integration details, and secret rotation are available
-    And Access grants are visible only when the Application can act as a machine principal
-    And User authorizations remain separate from Application Access grants
+    And Resource access is visible only when the Application can act as a machine principal
+    And User authorizations remain separate from Application scope entitlements
     And active user authorizations are read from the canonical Application authorization collection
     And revoking one creates its durable revocation state without deleting its authorization history
     And rotating a client secret requires confirmation because the current secret stops working
@@ -109,7 +109,7 @@ Feature: Admin Console
     Given a user exists
     When I open user detail
     Then profile update, password reset, and session revocation controls work
-    And direct Resource Server assignments are managed from Access grants
+    And direct Resource Server assignments are managed from Resource access
 
   @entrypoint:product-ui @journey:admin-create-connector
   Scenario: Connectors page creates a draft social connector
@@ -224,7 +224,7 @@ Feature: Admin Console
     And its Scopes tab manages each discovered scope's automatic or assigned grant mode
     And its Endpoints tab lists protected operations and required scope sets derived from that contract
     And external authorization connection details are included in Overview
-    And Organization Roles and direct Access grants remain managed from their owning resources
+    And Organization Roles and direct scope Entitlements remain managed from their owning resources
 
   @entrypoint:product-ui @journey:admin-delete-api-resource
   Scenario: API resource settings soft-delete a resource
@@ -256,15 +256,16 @@ Feature: Admin Console
     And the last Owner cannot be removed by a Role replacement
     And each dynamic Role references only assigned scopes from visible Resource servers
 
-  @entrypoint:product-ui @journey:admin-resource-scope-grants
-  Scenario: Resource scope grants are explicit authorization resources
+  @entrypoint:product-ui @journey:admin-resource-scope-entitlements
+  Scenario: Resource scope entitlements are explicit authorization resources
     Given a visible Resource Server has assigned scopes
     When an authorized administrator grants scopes directly to a User or Application
-    Then User Scope Grants are managed only below the target User
-    And Application Scope Grants are managed only below the target Application
-    And only Applications configured as machine principals accept Application Scope Grants
-    And each grant has an independent lifetime, canonical URI, and audit identity
-    And direct grants combine with optional Organization Role scopes
+    Then User Scope Entitlements are managed only below the target User
+    And Application Scope Entitlements are managed only below the target Application
+    And only Applications configured as machine principals accept Application Scope Entitlements
+    And each scope entitlement has an independent lifetime, canonical URI, and audit identity
+    And assigning another scope never shortens or replaces an existing entitlement
+    And direct entitlements combine with optional Organization Role scopes
     But public visibility does not automatically grant any assigned scope
 
   @entrypoint:product-ui @journey:admin-branding-settings
@@ -342,12 +343,12 @@ Feature: Admin Console
 
   @entrypoint:product-ui @journey:admin-agent-governance-detail
   Scenario: Agent detail presents the stable identity governance model
-    Given a stable Agent identity has bound Hosts, access requests, and access grants
+    Given a stable Agent identity has bound Hosts, access requests, and scope entitlements
     When I open the Agent detail in Console
-    Then its inventory summary uses real active access-grant counts
-    And separate tabs show Agent installations, access requests, access grants, and audit activity
-    And those tabs compose canonical Agent access request, Agent access grant, and audit collections
-    And access request and access grant collections omit history associated with deleted Resource Servers
+    Then its inventory summary uses real active Resource and scope counts
+    And separate tabs show Agent installations, access requests, Resource access, and audit activity
+    And those tabs compose canonical Agent access request, scope entitlement, and audit collections
+    And access request and scope entitlement collections omit history associated with deleted Resource Servers
     And protocol Agent implementation records and credential material are not exposed
 
   @entrypoint:product-ui @journey:admin-application-oidc-claims
@@ -375,10 +376,10 @@ Feature: Admin Console
 
   @entrypoint:product-ui @journey:admin-agent-inventory
   Scenario: Admins govern Agents without managing protocol internals
-    Given delegated AgentAuth hosts, agents, grants, and approval requests exist
+    Given delegated AgentAuth hosts, Agents, scope entitlements, and approval requests exist
     When Console reads the tenant Agent inventory
-    Then Realmroot presents stable Agents, access requests, access grants, account connections, and audit events
+    Then Realmroot presents stable Agents, access requests, scope entitlements, account connections, and audit events
     And it does not expose hosts, registrations, bindings, or protocol approval records as management resources
-    When an admin deletes an Agent or revokes an access grant
-    Then the Agent or grant is no longer active
+    When an admin deletes an Agent or revokes a scope entitlement
+    Then the Agent or scope entitlement is no longer active
     And no autonomous agent mode or broad admin mutation capability is enabled

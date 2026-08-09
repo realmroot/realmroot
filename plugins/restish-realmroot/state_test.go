@@ -105,7 +105,7 @@ func TestFileStateStoreSharesProtectedHostByIssuer(t *testing.T) {
 	}
 }
 
-func TestFileStateStoreRejectsLegacyGrantCredentialCache(t *testing.T) {
+func TestFileStateStoreRejectsUnsupportedCredentialCacheVersion(t *testing.T) {
 	store := &fileStateStore{root: t.TempDir()}
 	target := agentTarget{
 		API:     "realmroot-local",
@@ -127,8 +127,8 @@ func TestFileStateStoreRejectsLegacyGrantCredentialCache(t *testing.T) {
 		"name": "Build Agent", "agent_id": "agent-123", "host_id": "host-123",
 		"agent_key_id": "agent-key", "host_key_id": "host-key",
 		"agent_private_key": encodePrivateKey(agentPrivateKey), "host_private_key": encodePrivateKey(hostPrivateKey),
-		"dpop_credentials": map[string]any{"grant-old": map[string]any{
-			"grant_id": "grant-old", "resource_id": "resource-1", "resource_url": "https://api.example.com",
+		"credential_cache": map[string]any{"credential-old": map[string]any{
+			"resource_id": "resource-1", "resource_url": "https://api.example.com",
 		}},
 	}
 	legacyPath := store.path(target)

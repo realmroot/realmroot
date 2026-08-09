@@ -7,7 +7,7 @@ import { managementApplicationAuthorizationsRoute, managementApplicationsRoute }
 import { createManagementConnectorRoutes } from './connectors'
 import { managementOrganizationsRoute } from './organizations'
 import { createManagementReadinessRoute } from './readiness'
-import { managementScopeGrantsRoute } from './scope-grants'
+import { managementScopeEntitlementsRoute } from './scope-entitlements'
 import { managementSecurityRoutes } from './security'
 import { createManagementSettingsRoutes } from './settings'
 import { managementUserRoutes } from './users'
@@ -29,7 +29,7 @@ export function createProtectedResourceRoutes(options: ProtectedResourceRoutesOp
     '/resource-servers',
     createManagementApiResourcesRoute({ baseURL: options.canonicalOrigin, trustedOrigins: options.trustedOrigins }),
   )
-  app.route('/', managementScopeGrantsRoute)
+  app.route('/', managementScopeEntitlementsRoute)
   app.route('/', managementAgentsRoute)
   app.route('/organizations', managementOrganizationsRoute)
   app.route('/users', managementUserRoutes(options.authApi, { normalizeListResponse: true }))

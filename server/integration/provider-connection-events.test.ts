@@ -1,6 +1,5 @@
 import { applyD1Migrations, env, reset } from 'cloudflare:test'
 import {
-  agentAccessGrant,
   agentAccessRequest,
   agentIdentity,
   agentIdentityBinding,
@@ -10,6 +9,7 @@ import {
   providerConnection,
   providerConnectionEventReceipt,
   providerResourceAuthorization,
+  resourceScopeEntitlement,
   user,
 } from '@server/db/schema'
 import { decideAgentAccessRequest } from '@server/usecases/external-resources'
@@ -149,7 +149,10 @@ describe('Provider Connection Events over real D1', () => {
       status: 'approved',
       approvalTokenHash: 'event-approval-token-hash',
       encryptedApprovalToken: 'event-approval-token',
-      grantId: 'event-grant',
+      approvedEntitlements: [
+        { scope: 'contents:read', entitlementId: 'retained-affected-event-grant' },
+        { scope: 'issues:write', entitlementId: 'event-grant' },
+      ],
       expiresAt: new Date('2027-08-08T20:00:00.000Z'),
       createdAt: now,
       updatedAt: now,
@@ -175,7 +178,7 @@ describe('Provider Connection Events over real D1', () => {
       connectionId: 'event-connection',
       agentIdentityId: 'event-agent-identity',
       bindingId: 'event-agent-binding',
-      scopes: ['contents:read', 'issues:write'],
+      scopes: ['issues:write'],
       authorizationDetails: [{ type: 'provider_installation', resource_id: 'repository-2' }],
       status: 'pending',
       approvalTokenHash: 'unaffected-pending-event-token-hash',
@@ -184,54 +187,54 @@ describe('Provider Connection Events over real D1', () => {
       createdAt: now,
       updatedAt: now,
     })
-    await harness.db.insert(agentAccessGrant).values({
+    await harness.db.insert(resourceScopeEntitlement).values({
       id: 'event-grant',
-      resourceId: 'event-resource',
+      resourceServerId: 'event-resource',
       connectionId: 'event-connection',
       agentIdentityId: 'event-agent-identity',
-      scopes: ['contents:read', 'issues:write'],
+      authorizationContextHash: 'ctx-repository-1',
+      scope: 'issues:write',
       authorizationDetails: [{ type: 'provider_installation', resource_id: 'repository-1' }],
       mode: 'persistent',
-      status: 'active',
       grantedByUserId: admin!.id,
       createdAt: now,
       updatedAt: now,
     })
-    await harness.db.insert(agentAccessGrant).values({
+    await harness.db.insert(resourceScopeEntitlement).values({
       id: 'unaffected-event-grant',
-      resourceId: 'event-resource',
+      resourceServerId: 'event-resource',
       connectionId: 'event-connection',
       agentIdentityId: 'event-agent-identity',
-      scopes: ['contents:read'],
+      authorizationContextHash: 'ctx-repository-2',
+      scope: 'contents:read',
       authorizationDetails: [{ type: 'provider_installation', resource_id: 'repository-2' }],
       mode: 'persistent',
-      status: 'active',
       grantedByUserId: admin!.id,
       createdAt: now,
       updatedAt: now,
     })
-    await harness.db.insert(agentAccessGrant).values({
+    await harness.db.insert(resourceScopeEntitlement).values({
       id: 'retained-affected-event-grant',
-      resourceId: 'event-resource',
+      resourceServerId: 'event-resource',
       connectionId: 'event-connection',
       agentIdentityId: 'event-agent-identity',
-      scopes: ['contents:read'],
+      authorizationContextHash: 'ctx-repository-1',
+      scope: 'contents:read',
       authorizationDetails: [{ type: 'provider_installation', resource_id: 'repository-1' }],
       mode: 'persistent',
-      status: 'active',
       grantedByUserId: admin!.id,
       createdAt: now,
       updatedAt: now,
     })
-    await harness.db.insert(agentAccessGrant).values({
+    await harness.db.insert(resourceScopeEntitlement).values({
       id: 'nested-event-grant',
-      resourceId: 'event-resource',
+      resourceServerId: 'event-resource',
       connectionId: 'event-connection',
       agentIdentityId: 'event-agent-identity',
-      scopes: ['contents:read'],
+      authorizationContextHash: 'ctx-nested-repository-1',
+      scope: 'contents:read',
       authorizationDetails: [{ type: 'provider_installation', selector: { repositories: ['repository-1'] } }],
       mode: 'persistent',
-      status: 'active',
       grantedByUserId: admin!.id,
       createdAt: now,
       updatedAt: now,
@@ -247,14 +250,14 @@ describe('Provider Connection Events over real D1', () => {
       status: 'approved',
       approvalTokenHash: 'unaffected-approved-event-token-hash',
       encryptedApprovalToken: 'unaffected-approved-event-token',
-      grantId: 'unaffected-event-grant',
+      approvedEntitlements: [{ scope: 'contents:read', entitlementId: 'unaffected-event-grant' }],
       expiresAt: new Date('2027-08-08T20:00:00.000Z'),
       createdAt: now,
       updatedAt: now,
     })
     await harness.db.insert(externalTokenLease).values({
       id: 'event-token-lease',
-      grantId: 'event-grant',
+      entitlementIds: ['retained-affected-event-grant', 'event-grant'],
       requestId: 'event-access-request',
       bindingId: 'event-agent-binding',
       encryptedAccessToken: 'event-access-token',
@@ -428,15 +431,15 @@ describe('Provider Connection Events over real D1', () => {
 
   it('[spec: agent-identity/provider-connection-events] isolates affected scopes from an adjacent authority', async () => {
     const now = new Date('2026-08-08T20:00:00.000Z')
-    await harness.db.insert(agentAccessGrant).values({
+    await harness.db.insert(resourceScopeEntitlement).values({
       id: 'adjacent-authority-grant',
-      resourceId: 'event-resource',
+      resourceServerId: 'event-resource',
       connectionId: 'event-connection',
       agentIdentityId: 'event-agent-identity',
-      scopes: ['issues:write'],
+      authorizationContextHash: 'ctx-adjacent-repository-2',
+      scope: 'issues:write',
       authorizationDetails: [{ type: 'provider_installation', resource_id: 'repository-2' }],
       mode: 'persistent',
-      status: 'active',
       grantedByUserId: (await harness.db.select({ id: user.id }).from(user).limit(1))[0]!.id,
       createdAt: now,
       updatedAt: now,
@@ -469,18 +472,18 @@ describe('Provider Connection Events over real D1', () => {
 
     const [affectedGrant] = await harness.db
       .select()
-      .from(agentAccessGrant)
-      .where(eq(agentAccessGrant.id, 'event-grant'))
+      .from(resourceScopeEntitlement)
+      .where(eq(resourceScopeEntitlement.id, 'event-grant'))
     const [adjacentGrant] = await harness.db
       .select()
-      .from(agentAccessGrant)
-      .where(eq(agentAccessGrant.id, 'adjacent-authority-grant'))
+      .from(resourceScopeEntitlement)
+      .where(eq(resourceScopeEntitlement.id, 'adjacent-authority-grant'))
     const [connection] = await harness.db
       .select()
       .from(providerResourceAuthorization)
       .where(eq(providerResourceAuthorization.id, 'event-connection'))
-    expect(affectedGrant.status).toBe('revoked')
-    expect(adjacentGrant.status).toBe('active')
+    expect(affectedGrant.endReason).toBe('revoked')
+    expect(adjacentGrant.endedAt).toBeNull()
     expect(connection).toMatchObject({
       grantedScopes: ['contents:read', 'issues:write'],
       providerEventRevision: 1,
@@ -517,26 +520,34 @@ describe('Provider Connection Events over real D1', () => {
 
     const staleApprovalAt = new Date('2026-08-08T20:02:01.000Z')
     await expect(
-      harness.deps.externalResources.approveAccessRequestWithAudit(
-        {
-          id: 'stale-revision-grant',
-          resourceId: 'event-resource',
-          connectionId: 'event-connection',
-          agentIdentityId: 'event-agent-identity',
-          scopes: ['issues:write'],
-          authorizationDetails: [{ type: 'provider_installation', resource_id: 'repository-1' }],
-          mode: 'persistent',
-          status: 'active',
-          grantedByUserId: controllerUserId,
-          expiresAt: null,
-          revokedAt: null,
-          createdAt: staleApprovalAt,
-          updatedAt: staleApprovalAt,
-        },
+      harness.deps.externalResources.approveAccessRequestWithEntitlements(
+        [
+          {
+            id: 'stale-revision-grant',
+            userId: null,
+            applicationId: null,
+            agentIdentityId: 'event-agent-identity',
+            organizationId: null,
+            resourceServerId: 'event-resource',
+            connectionId: 'event-connection',
+            authorizationDetails: [{ type: 'provider_installation', resource_id: 'repository-1' }],
+            authorizationContextHash: 'ctx-repository-1',
+            scope: 'issues:write',
+            mode: 'persistent',
+            grantedByUserId: controllerUserId,
+            sourceAccessRequestId: 'post-reduction-request',
+            expiresAt: null,
+            endedAt: null,
+            endReason: null,
+            createdAt: staleApprovalAt,
+            updatedAt: staleApprovalAt,
+          },
+        ],
+        [],
         'post-reduction-request',
         {
           status: 'approved',
-          grantId: 'stale-revision-grant',
+          approvedEntitlements: [{ scope: 'issues:write', entitlementId: 'stale-revision-grant' }],
           connectionId: 'event-connection',
           decidedAt: staleApprovalAt,
           updatedAt: staleApprovalAt,
@@ -555,7 +566,7 @@ describe('Provider Connection Events over real D1', () => {
           hostId: null,
           resourceId: 'event-resource',
           resourceConnectionId: 'event-connection',
-          accessGrantId: 'stale-revision-grant',
+          accessRequestId: 'post-reduction-request',
           scopes: ['issues:write'],
           reasonCode: null,
           metadata: null,
@@ -563,12 +574,12 @@ describe('Provider Connection Events over real D1', () => {
         },
         0,
       ),
-    ).resolves.toBe('grant_unavailable')
+    ).resolves.toBe('resource_unavailable')
     await expect(
       harness.db
-        .select({ id: agentAccessGrant.id })
-        .from(agentAccessGrant)
-        .where(eq(agentAccessGrant.id, 'stale-revision-grant')),
+        .select({ id: resourceScopeEntitlement.id })
+        .from(resourceScopeEntitlement)
+        .where(eq(resourceScopeEntitlement.id, 'stale-revision-grant')),
     ).resolves.toEqual([])
   })
 
@@ -703,13 +714,16 @@ describe('Provider Connection Events over real D1', () => {
       .select()
       .from(providerResourceAuthorization)
       .where(eq(providerResourceAuthorization.id, 'event-connection'))
-    const [grant] = await harness.db.select().from(agentAccessGrant).where(eq(agentAccessGrant.id, 'event-grant'))
+    const [grant] = await harness.db
+      .select()
+      .from(resourceScopeEntitlement)
+      .where(eq(resourceScopeEntitlement.id, 'event-grant'))
     const [lease] = await harness.db
       .select()
       .from(externalTokenLease)
       .where(eq(externalTokenLease.id, 'event-token-lease'))
     expect(connection).toMatchObject({ status: 'active', grantedScopes: ['contents:read'], providerEventRevision: 2 })
-    expect(grant.status).toBe('revoked')
+    expect(grant.endReason).toBe('revoked')
     expect(lease.revokedAt).not.toBeNull()
   })
 
@@ -733,12 +747,15 @@ describe('Provider Connection Events over real D1', () => {
       ).status,
     ).toBe(204)
 
-    const [grant] = await harness.db.select().from(agentAccessGrant).where(eq(agentAccessGrant.id, 'event-grant'))
+    const [grant] = await harness.db
+      .select()
+      .from(resourceScopeEntitlement)
+      .where(eq(resourceScopeEntitlement.id, 'event-grant'))
     const [lease] = await harness.db
       .select()
       .from(externalTokenLease)
       .where(eq(externalTokenLease.id, 'event-token-lease'))
-    expect(grant.status).toBe('revoked')
+    expect(grant.endReason).toBe('revoked')
     expect(lease.revokedAt).not.toBeNull()
   })
 
@@ -777,9 +794,9 @@ describe('Provider Connection Events over real D1', () => {
     expect((await putEvent(harness, 'delivery-expansion', expansion)).status).toBe(204)
     const [grantAfterExpansion] = await harness.db
       .select()
-      .from(agentAccessGrant)
-      .where(eq(agentAccessGrant.id, 'event-grant'))
-    expect(grantAfterExpansion.status).toBe('active')
+      .from(resourceScopeEntitlement)
+      .where(eq(resourceScopeEntitlement.id, 'event-grant'))
+    expect(grantAfterExpansion.endedAt).toBeNull()
 
     const authority = {
       type: 'authorityChanged',
@@ -814,7 +831,10 @@ describe('Provider Connection Events over real D1', () => {
       .select()
       .from(providerResourceAuthorization)
       .where(eq(providerResourceAuthorization.id, 'event-connection'))
-    let [grant] = await harness.db.select().from(agentAccessGrant).where(eq(agentAccessGrant.id, 'event-grant'))
+    let [grant] = await harness.db
+      .select()
+      .from(resourceScopeEntitlement)
+      .where(eq(resourceScopeEntitlement.id, 'event-grant'))
     expect(connection).toMatchObject({
       status: 'active',
       grantedScopes: ['contents:read'],
@@ -824,17 +844,17 @@ describe('Provider Connection Events over real D1', () => {
         { type: 'provider_installation', selector: { repositories: ['repository-1', 'repository-2'] } },
       ],
     })
-    expect(grant.status).toBe('revoked')
+    expect(grant.endReason).toBe('revoked')
     const [unaffectedGrant] = await harness.db
       .select()
-      .from(agentAccessGrant)
-      .where(eq(agentAccessGrant.id, 'unaffected-event-grant'))
-    expect(unaffectedGrant.status).toBe('active')
+      .from(resourceScopeEntitlement)
+      .where(eq(resourceScopeEntitlement.id, 'unaffected-event-grant'))
+    expect(unaffectedGrant.endedAt).toBeNull()
     const [retainedAffectedGrant] = await harness.db
       .select()
-      .from(agentAccessGrant)
-      .where(eq(agentAccessGrant.id, 'retained-affected-event-grant'))
-    expect(retainedAffectedGrant.status).toBe('active')
+      .from(resourceScopeEntitlement)
+      .where(eq(resourceScopeEntitlement.id, 'retained-affected-event-grant'))
+    expect(retainedAffectedGrant.endedAt).toBeNull()
     const [expiredRequest] = await harness.db
       .select()
       .from(agentAccessRequest)
@@ -881,9 +901,9 @@ describe('Provider Connection Events over real D1', () => {
     ).toBe(204)
     const [grantAfterResourceExpansion] = await harness.db
       .select()
-      .from(agentAccessGrant)
-      .where(eq(agentAccessGrant.id, 'unaffected-event-grant'))
-    expect(grantAfterResourceExpansion.status).toBe('active')
+      .from(resourceScopeEntitlement)
+      .where(eq(resourceScopeEntitlement.id, 'unaffected-event-grant'))
+    expect(grantAfterResourceExpansion.endedAt).toBeNull()
 
     expect(
       (
@@ -900,9 +920,12 @@ describe('Provider Connection Events over real D1', () => {
       .select()
       .from(providerResourceAuthorization)
       .where(eq(providerResourceAuthorization.id, 'event-connection'))
-    ;[grant] = await harness.db.select().from(agentAccessGrant).where(eq(agentAccessGrant.id, 'event-grant'))
+    ;[grant] = await harness.db
+      .select()
+      .from(resourceScopeEntitlement)
+      .where(eq(resourceScopeEntitlement.id, 'event-grant'))
     expect(connection.status).toBe('active')
-    expect(grant.status).toBe('revoked')
+    expect(grant.endReason).toBe('revoked')
 
     expect(
       (
@@ -919,14 +942,17 @@ describe('Provider Connection Events over real D1', () => {
       .select()
       .from(providerResourceAuthorization)
       .where(eq(providerResourceAuthorization.id, 'event-connection'))
-    ;[grant] = await harness.db.select().from(agentAccessGrant).where(eq(agentAccessGrant.id, 'event-grant'))
+    ;[grant] = await harness.db
+      .select()
+      .from(resourceScopeEntitlement)
+      .where(eq(resourceScopeEntitlement.id, 'event-grant'))
     expect(connection.status).toBe('suspended')
-    expect(grant.status).toBe('revoked')
+    expect(grant.endReason).toBe('revoked')
     const [suspendedUnaffectedGrant] = await harness.db
       .select()
-      .from(agentAccessGrant)
-      .where(eq(agentAccessGrant.id, 'unaffected-event-grant'))
-    expect(suspendedUnaffectedGrant.status).toBe('active')
+      .from(resourceScopeEntitlement)
+      .where(eq(resourceScopeEntitlement.id, 'unaffected-event-grant'))
+    expect(suspendedUnaffectedGrant.endedAt).toBeNull()
     const [suspendedPendingRequest] = await harness.db
       .select()
       .from(agentAccessRequest)
@@ -935,7 +961,7 @@ describe('Provider Connection Events over real D1', () => {
     await expect(
       harness.deps.externalResources.createTokenLease({
         id: 'lease-after-suspension',
-        grantId: 'unaffected-event-grant',
+        entitlementIds: ['unaffected-event-grant'],
         requestId: 'unaffected-approved-event-access-request',
         bindingId: 'event-agent-binding',
         encryptedAccessToken: 'lease-after-suspension-token',
@@ -979,9 +1005,12 @@ describe('Provider Connection Events over real D1', () => {
       .select()
       .from(providerResourceAuthorization)
       .where(eq(providerResourceAuthorization.id, 'event-connection'))
-    ;[grant] = await harness.db.select().from(agentAccessGrant).where(eq(agentAccessGrant.id, 'event-grant'))
+    ;[grant] = await harness.db
+      .select()
+      .from(resourceScopeEntitlement)
+      .where(eq(resourceScopeEntitlement.id, 'event-grant'))
     expect(connection.status).toBe('revoked')
-    expect(grant.status).toBe('revoked')
+    expect(grant.endReason).toBe('revoked')
   })
 
   it('orders events only by revision and compares nested authorization details structurally', async () => {
@@ -1011,9 +1040,9 @@ describe('Provider Connection Events over real D1', () => {
 
     let [nestedGrant] = await harness.db
       .select()
-      .from(agentAccessGrant)
-      .where(eq(agentAccessGrant.id, 'nested-event-grant'))
-    expect(nestedGrant.status).toBe('active')
+      .from(resourceScopeEntitlement)
+      .where(eq(resourceScopeEntitlement.id, 'nested-event-grant'))
+    expect(nestedGrant.endedAt).toBeNull()
 
     const reduced = {
       ...expanded,
@@ -1036,9 +1065,9 @@ describe('Provider Connection Events over real D1', () => {
 
     ;[nestedGrant] = await harness.db
       .select()
-      .from(agentAccessGrant)
-      .where(eq(agentAccessGrant.id, 'nested-event-grant'))
-    expect(nestedGrant.status).toBe('revoked')
+      .from(resourceScopeEntitlement)
+      .where(eq(resourceScopeEntitlement.id, 'nested-event-grant'))
+    expect(nestedGrant.endReason).toBe('revoked')
 
     expect(
       (

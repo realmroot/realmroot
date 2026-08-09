@@ -504,7 +504,7 @@ async function loadManagementApi(options: { userSecurity?: unknown } = {}) {
               $put: endpoint('agentActivation.put'),
               $delete: endpoint('agentActivation.delete'),
             },
-            'access-grants': { $get: endpoint('agentAccessGrants.get') },
+            'scope-entitlements': { $get: endpoint('agentScopeEntitlements.get') },
           },
         },
         'audit-events': { $get: endpoint('agentAudit.get') },

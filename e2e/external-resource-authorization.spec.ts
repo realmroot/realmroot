@@ -7,14 +7,14 @@ const externalResource = `${externalOrigin}/api`
 const nativeOrigin = `http://127.0.0.1:${process.env.E2E_NATIVE_PORT ?? '4400'}`
 const realmrootResource = `${nativeOrigin}/api`
 
-async function grantControllerScope(page: Page, resourceServerId: string) {
+async function assignControllerScope(page: Page, resourceServerId: string) {
   const sessionResponse = await page.request.get('/api/auth/get-session')
   expect(sessionResponse.status(), await sessionResponse.text()).toBe(200)
   const session = (await sessionResponse.json()) as { user: { id: string } }
-  const grantResponse = await page.request.post(`/api/users/${session.user.id}/scope-grants`, {
-    data: { organizationId: null, resourceServerId, scopes: ['projects:read'], expiresAt: null },
+  const entitlementResponse = await page.request.post(`/api/users/${session.user.id}/scope-entitlements`, {
+    data: { organizationId: null, resourceServerId, scope: 'projects:read', mode: 'persistent', expiresAt: null },
   })
-  expect(grantResponse.status(), await grantResponse.text()).toBe(201)
+  expect(entitlementResponse.status(), await entitlementResponse.text()).toBe(201)
 }
 
 test.describe('external API resource authorization', () => {
@@ -58,7 +58,7 @@ test.describe('external API resource authorization', () => {
       })
       expect(resourceResponse.status(), await resourceResponse.text()).toBe(201)
       const resource = (await resourceResponse.json()) as { id: string }
-      await grantControllerScope(page, resource.id)
+      await assignControllerScope(page, resource.id)
 
       const discovered = plugin.listResourceServers<{
         items: Array<{
@@ -111,6 +111,7 @@ test.describe('external API resource authorization', () => {
       })
       await page.goto(await accessRequest.approvalUrl)
       await expect(page.getByRole('heading', { name: 'Approve Agent resource access' })).toBeVisible()
+      await page.getByRole('radio', { name: 'Persistent until revoked' }).click()
       await page.getByRole('button', { name: 'Approve exact access', exact: true }).click()
       await expect(page.getByRole('heading', { name: 'Resource access approved' })).toBeVisible()
 
@@ -148,14 +149,16 @@ test.describe('external API resource authorization', () => {
       })
       expect(directBody.authorization.act).not.toHaveProperty('host')
 
-      const grantsResponse = await page.request.get(`/api/agents/${identity.agent.id}/access-grants`)
-      expect(grantsResponse.status(), await grantsResponse.text()).toBe(200)
-      const grants = (await grantsResponse.json()) as {
-        items: Array<{ id: string; resource: { id: string } }>
+      const entitlementsResponse = await page.request.get(`/api/agents/${identity.agent.id}/scope-entitlements`)
+      expect(entitlementsResponse.status(), await entitlementsResponse.text()).toBe(200)
+      const entitlements = (await entitlementsResponse.json()) as {
+        items: Array<{ id: string; agentId: string; target: { apiResourceId: string } }>
       }
-      const grant = grants.items.find((candidate) => candidate.resource.id === resource.id)
-      expect(grant).toBeDefined()
-      const revoked = await page.request.delete(`/api/agents/${identity.agent.id}/access-grants/${grant!.id}`)
+      const entitlement = entitlements.items.find((candidate) => candidate.target.apiResourceId === resource.id)
+      expect(entitlement).toBeDefined()
+      const revoked = await page.request.delete(
+        `/api/agents/${entitlement!.agentId}/scope-entitlements/${entitlement!.id}`,
+      )
       expect(revoked.status()).toBe(204)
       const afterRevocation = plugin.listResources<{
         items: Array<{ links: { self: string }; agentAuthorization: { authorizedScopes: string[] } }>
@@ -192,7 +195,7 @@ test.describe('external API resource authorization', () => {
       })
       expect(resourceResponse.status(), await resourceResponse.text()).toBe(201)
       const resource = (await resourceResponse.json()) as { id: string }
-      await grantControllerScope(page, resource.id)
+      await assignControllerScope(page, resource.id)
 
       const discovered = plugin.listResourceServers<{
         items: Array<{

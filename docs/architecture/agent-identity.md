@@ -53,14 +53,15 @@ resource key without turning that key or Host into an identity.
 Enrollment establishes identity only. API authority starts with a request from
 the Agent for one API Resource and an exact scope set. External resources also
 bind the request to one connected target account. A controller decision creates
-an access grant with one-time, limited, or persistent lifetime.
+or extends one Entitlement per approved scope with one-time, limited, or
+persistent lifetime.
 
 Authority is never inferred from enrollment, home-space ownership, Connector
 configuration, or account connection. Expanding scopes, changing the external
 account, or changing the resource requires a new decision.
 
 The public lifecycle is intentionally expressed as Agent enrollment, access
-request, access grant, and audit event resources. Host credentials, identity
+request, scope Entitlement, and audit event resources. Host credentials, identity
 bindings, OAuth connection intents, encrypted refresh credentials, and target
 token leases remain internal security records rather than parallel public
 resources.

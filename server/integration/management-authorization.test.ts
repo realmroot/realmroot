@@ -1,7 +1,6 @@
 import { applyD1Migrations, env, reset } from 'cloudflare:test'
 import {
   agent,
-  agentAccessGrant,
   agentAccessRequest,
   agentAuditEvent,
   agentHost,
@@ -16,6 +15,7 @@ import {
   providerConnection,
   providerResourceAuthorization,
   resourceConnectionIntent,
+  resourceScopeEntitlement,
   user,
 } from '@server/db/schema'
 import { createResource } from '@server/usecases/authorization'
@@ -236,7 +236,7 @@ describe('authorization management over real D1', () => {
           hostId: null,
           resourceId: null,
           resourceConnectionId: null,
-          accessGrantId: null,
+          accessRequestId: null,
           scopes: null,
           reasonCode: null,
           metadata: null,
@@ -323,7 +323,7 @@ describe('authorization management over real D1', () => {
       hostId: 'atomic-host',
       resourceId: resource.id,
       resourceConnectionId: null,
-      accessGrantId: 'atomic-grant',
+      accessRequestId: 'atomic-request',
       scopes: ['files:read'],
       reasonCode: null,
       metadata: null,
@@ -332,26 +332,34 @@ describe('authorization management over real D1', () => {
     await harness.db.insert(agentAuditEvent).values(audit)
 
     await expect(
-      harness.deps.externalResources.approveAccessRequestWithAudit(
-        {
-          id: 'atomic-grant',
-          resourceId: resource.id,
-          connectionId: null,
-          agentIdentityId: 'atomic-identity',
-          scopes: ['files:read'],
-          authorizationDetails: [],
-          mode: 'ongoing',
-          status: 'active',
-          grantedByUserId: admin.id,
-          expiresAt: null,
-          revokedAt: null,
-          createdAt: now,
-          updatedAt: now,
-        },
+      harness.deps.externalResources.approveAccessRequestWithEntitlements(
+        [
+          {
+            id: 'atomic-entitlement',
+            userId: null,
+            applicationId: null,
+            resourceServerId: resource.id,
+            connectionId: null,
+            agentIdentityId: 'atomic-identity',
+            organizationId: null,
+            authorizationContextHash: 'ctx-empty',
+            scope: 'files:read',
+            authorizationDetails: [],
+            mode: 'persistent',
+            grantedByUserId: admin.id,
+            sourceAccessRequestId: 'atomic-request',
+            expiresAt: null,
+            endedAt: null,
+            endReason: null,
+            createdAt: now,
+            updatedAt: now,
+          },
+        ],
+        [],
         'atomic-request',
         {
           status: 'approved',
-          grantId: 'atomic-grant',
+          approvedEntitlements: [{ scope: 'files:read', entitlementId: 'atomic-entitlement' }],
           connectionId: null,
           decidedAt: now,
           updatedAt: now,
@@ -361,9 +369,9 @@ describe('authorization management over real D1', () => {
     ).rejects.toThrow()
     await expect(
       harness.db
-        .select({ id: agentAccessGrant.id })
-        .from(agentAccessGrant)
-        .where(eq(agentAccessGrant.id, 'atomic-grant')),
+        .select({ id: resourceScopeEntitlement.id })
+        .from(resourceScopeEntitlement)
+        .where(eq(resourceScopeEntitlement.id, 'atomic-entitlement')),
     ).resolves.toEqual([])
     await expect(
       harness.db
@@ -372,18 +380,18 @@ describe('authorization management over real D1', () => {
         .where(eq(agentAccessRequest.id, 'atomic-request')),
     ).resolves.toEqual([{ status: 'pending' }])
 
-    const deniedAudit = { ...audit, id: 'atomic-denied-audit', result: 'denied', accessGrantId: null }
+    const deniedAudit = { ...audit, id: 'atomic-denied-audit', result: 'denied', accessRequestId: null }
     await expect(
       harness.deps.externalResources.decideAccessRequestWithAudit(
         'atomic-request',
-        { status: 'denied', grantId: null, decidedAt: now, updatedAt: now },
+        { status: 'denied', approvedEntitlements: [], decidedAt: now, updatedAt: now },
         deniedAudit,
       ),
     ).resolves.not.toBeNull()
     await expect(
       harness.deps.externalResources.decideAccessRequestWithAudit(
         'atomic-request',
-        { status: 'denied', grantId: null, decidedAt: new Date(), updatedAt: new Date() },
+        { status: 'denied', approvedEntitlements: [], decidedAt: new Date(), updatedAt: new Date() },
         { ...deniedAudit, id: 'atomic-duplicate-denied-audit' },
       ),
     ).resolves.toBeNull()
@@ -394,15 +402,15 @@ describe('authorization management over real D1', () => {
         .where(eq(agentAuditEvent.id, 'atomic-duplicate-denied-audit')),
     ).resolves.toEqual([])
 
-    await harness.db.insert(agentAccessGrant).values({
+    await harness.db.insert(resourceScopeEntitlement).values({
       id: 'atomic-revoke-grant',
-      resourceId: resource.id,
+      resourceServerId: resource.id,
       connectionId: null,
       agentIdentityId: 'atomic-identity',
-      scopes: ['files:read'],
+      authorizationContextHash: 'ctx-empty',
+      scope: 'files:read',
       authorizationDetails: [],
-      mode: 'ongoing',
-      status: 'active',
+      mode: 'persistent',
       grantedByUserId: admin.id,
       createdAt: now,
       updatedAt: now,
@@ -411,13 +419,13 @@ describe('authorization management over real D1', () => {
       ...audit,
       id: 'atomic-revoked-audit',
       action: 'api_resource.access_revoked',
-      accessGrantId: 'atomic-revoke-grant',
+      accessRequestId: 'atomic-revoke-grant',
     }
     await expect(
-      harness.deps.externalResources.revokeGrantWithAudit('atomic-revoke-grant', [], now, revokedAudit),
+      harness.deps.externalResources.endEntitlementWithAudit('atomic-revoke-grant', 'revoked', [], now, revokedAudit),
     ).resolves.toBe(true)
     await expect(
-      harness.deps.externalResources.revokeGrantWithAudit('atomic-revoke-grant', [], new Date(), {
+      harness.deps.externalResources.endEntitlementWithAudit('atomic-revoke-grant', 'revoked', [], new Date(), {
         ...revokedAudit,
         id: 'atomic-duplicate-revoked-audit',
       }),
@@ -428,6 +436,75 @@ describe('authorization management over real D1', () => {
         .from(agentAuditEvent)
         .where(eq(agentAuditEvent.id, 'atomic-duplicate-revoked-audit')),
     ).resolves.toEqual([])
+
+    await harness.db.insert(agentAccessRequest).values({
+      id: 'atomic-once-request',
+      resourceId: resource.id,
+      connectionId: null,
+      agentIdentityId: 'atomic-identity',
+      bindingId: 'atomic-binding',
+      scopes: ['files:once'],
+      authorizationDetails: [],
+      status: 'approved',
+      approvalTokenHash: 'atomic-once-approval-hash',
+      encryptedApprovalToken: 'atomic-once-approval',
+      approvedEntitlements: [{ scope: 'files:once', entitlementId: 'atomic-once-entitlement' }],
+      expiresAt: new Date(now.getTime() + 60_000),
+      decidedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    })
+    await harness.db.insert(resourceScopeEntitlement).values({
+      id: 'atomic-once-entitlement',
+      resourceServerId: resource.id,
+      agentIdentityId: 'atomic-identity',
+      authorizationContextHash: 'ctx-empty',
+      scope: 'files:once',
+      authorizationDetails: [],
+      mode: 'once',
+      grantedByUserId: admin.id,
+      sourceAccessRequestId: 'atomic-once-request',
+      createdAt: now,
+      updatedAt: now,
+    })
+    const onceLease = (id: string) => ({
+      id,
+      entitlementIds: ['atomic-once-entitlement'],
+      requestId: 'atomic-once-request',
+      bindingId: 'atomic-binding',
+      encryptedAccessToken: `sealed-${id}`,
+      tokenHash: `hash-${id}`,
+      confirmationJkt: 'atomic-jkt',
+      scopes: ['files:once'],
+      authorizationDetails: [],
+      expiresAt: new Date(now.getTime() + 30_000),
+      revokedAt: null,
+      createdAt: now,
+    })
+    const [firstLease, secondLease] = await Promise.all([
+      harness.deps.externalResources.issueTokenLeaseWithAudit(
+        onceLease('atomic-once-lease-1'),
+        ['atomic-once-entitlement'],
+        now,
+        { ...audit, id: 'atomic-once-audit-1', accessRequestId: 'atomic-once-request' },
+      ),
+      harness.deps.externalResources.issueTokenLeaseWithAudit(
+        onceLease('atomic-once-lease-2'),
+        ['atomic-once-entitlement'],
+        now,
+        { ...audit, id: 'atomic-once-audit-2', accessRequestId: 'atomic-once-request' },
+      ),
+    ])
+    expect([firstLease, secondLease].filter(Boolean)).toHaveLength(1)
+    await expect(
+      harness.db.select().from(externalTokenLease).where(eq(externalTokenLease.requestId, 'atomic-once-request')),
+    ).resolves.toHaveLength(1)
+    await expect(
+      harness.db
+        .select({ endReason: resourceScopeEntitlement.endReason })
+        .from(resourceScopeEntitlement)
+        .where(eq(resourceScopeEntitlement.id, 'atomic-once-entitlement')),
+    ).resolves.toEqual([{ endReason: 'consumed' }])
   })
 
   it('allows only one concurrent last-Owner demotion', async () => {
@@ -536,7 +613,7 @@ describe('authorization management over real D1', () => {
     expect(response.status).toBe(400)
   })
 
-  it('[spec: admin-console/admin-resource-scope-grants] manages direct grants below each subject', async () => {
+  it('[spec: admin-console/admin-resource-scope-entitlements] manages direct Entitlements below each subject', async () => {
     const cookie = await signInAdmin(harness)
     const targetUserId = await createUser(harness, cookie, {
       email: 'grant-target@example.com',
@@ -579,30 +656,36 @@ describe('authorization management over real D1', () => {
     })
 
     const userGrant = (await (
-      await postJson(harness, cookie, `/api/users/${targetUserId}/scope-grants`, {
+      await postJson(harness, cookie, `/api/users/${targetUserId}/scope-entitlements`, {
         resourceServerId: resource.id,
-        scopes: ['projects:read'],
+        scope: 'projects:read',
+        mode: 'persistent',
       })
     ).json()) as { id: string; userId: string; links: { self: string } }
     expect(userGrant).toMatchObject({ userId: targetUserId })
-    expect(userGrant.links.self).toBe(`/api/users/${targetUserId}/scope-grants/${userGrant.id}`)
-    const userGrants = await harness.request(`/api/users/${targetUserId}/scope-grants`, { headers: { cookie } })
+    expect(userGrant.links.self).toBe(`/api/users/${targetUserId}/scope-entitlements/${userGrant.id}`)
+    const userGrants = await harness.request(`/api/users/${targetUserId}/scope-entitlements`, { headers: { cookie } })
     await expect(userGrants.json()).resolves.toMatchObject({ items: [{ id: userGrant.id }] })
 
     const applicationGrant = (await (
-      await postJson(harness, cookie, `/api/applications/${application.id}/scope-grants`, {
+      await postJson(harness, cookie, `/api/applications/${application.id}/scope-entitlements`, {
         resourceServerId: resource.id,
-        scopes: ['projects:read'],
+        scope: 'projects:read',
+        mode: 'persistent',
       })
     ).json()) as { id: string; applicationId: string; links: { self: string } }
     expect(applicationGrant).toMatchObject({ applicationId: application.id })
-    expect(applicationGrant.links.self).toBe(`/api/applications/${application.id}/scope-grants/${applicationGrant.id}`)
-    const applicationGrants = await harness.request(`/api/applications/${application.id}/scope-grants`, {
+    expect(applicationGrant.links.self).toBe(
+      `/api/applications/${application.id}/scope-entitlements/${applicationGrant.id}`,
+    )
+    const applicationGrants = await harness.request(`/api/applications/${application.id}/scope-entitlements`, {
       headers: { cookie },
     })
     await expect(applicationGrants.json()).resolves.toMatchObject({ items: [{ id: applicationGrant.id }] })
 
-    expect((await harness.request('/api/users/missing-user/scope-grants', { headers: { cookie } })).status).toBe(404)
+    expect((await harness.request('/api/users/missing-user/scope-entitlements', { headers: { cookie } })).status).toBe(
+      404,
+    )
     const userFlowApplication = (await (
       await postJson(harness, cookie, '/api/applications', {
         name: 'User Flow Client',
@@ -618,10 +701,11 @@ describe('authorization management over real D1', () => {
         await postJson(
           harness,
           cookie,
-          `/api/applications/${userFlowApplication.id}/scope-grants`,
+          `/api/applications/${userFlowApplication.id}/scope-entitlements`,
           {
             resourceServerId: resource.id,
-            scopes: ['projects:read'],
+            scope: 'projects:read',
+            mode: 'persistent',
           },
           400,
         )
@@ -639,10 +723,11 @@ describe('authorization management over real D1', () => {
         await postJson(
           harness,
           cookie,
-          `/api/users/${targetUserId}/scope-grants`,
+          `/api/users/${targetUserId}/scope-entitlements`,
           {
             resourceServerId: resource.id,
-            scopes: ['projects:read'],
+            scope: 'projects:read',
+            mode: 'persistent',
           },
           400,
         )
@@ -657,7 +742,9 @@ describe('authorization management over real D1', () => {
         })
       ).status,
     ).toBe(204)
-    expect((await harness.request(userGrant.links.self, { headers: { cookie } })).status).toBe(404)
+    const revokedEntitlement = await harness.request(userGrant.links.self, { headers: { cookie } })
+    expect(revokedEntitlement.status).toBe(200)
+    await expect(revokedEntitlement.json()).resolves.toMatchObject({ status: 'revoked' })
     expect((await harness.request('/api/user-scope-grants', { headers: { cookie } })).status).toBe(404)
     expect((await harness.request('/api/application-scope-grants', { headers: { cookie } })).status).toBe(404)
   })
@@ -1264,21 +1351,22 @@ describe('authorization management over real D1', () => {
       createdAt: now,
       updatedAt: now,
     })
-    await harness.db.insert(agentAccessGrant).values({
+    await harness.db.insert(resourceScopeEntitlement).values({
       id: 'deleted-grant',
-      resourceId: resource.id,
+      resourceServerId: resource.id,
       connectionId: 'deleted-connection',
       agentIdentityId: 'deleted-identity',
-      scopes: ['files:read'],
-      mode: 'ongoing',
-      status: 'active',
+      authorizationContextHash: 'ctx-empty',
+      scope: 'files:read',
+      authorizationDetails: [],
+      mode: 'persistent',
       grantedByUserId: admin.id,
       createdAt: now,
       updatedAt: now,
     })
     await harness.db.insert(externalTokenLease).values({
       id: 'deleted-lease',
-      grantId: 'deleted-grant',
+      entitlementIds: ['deleted-grant'],
       requestId: 'deleted-request',
       bindingId: 'deleted-binding',
       encryptedAccessToken: 'encrypted-access-token',
@@ -1301,14 +1389,14 @@ describe('authorization management over real D1', () => {
         .set({ status: 'pending', decidedAt: null })
         .where(eq(agentAccessRequest.id, 'deleted-request')),
       harness.db
-        .update(agentAccessGrant)
-        .set({ status: 'active', revokedAt: null })
-        .where(eq(agentAccessGrant.id, 'deleted-grant')),
+        .update(resourceScopeEntitlement)
+        .set({ endedAt: null, endReason: null })
+        .where(eq(resourceScopeEntitlement.id, 'deleted-grant')),
     ])
     const agentDetail = await harness.request('/api/agents/deleted-identity', { headers: { cookie } })
     expect(agentDetail.status).toBe(200)
     await expect(agentDetail.json()).resolves.toMatchObject({
-      agent: { pendingRequestCount: 0, activeGrantCount: 0 },
+      agent: { pendingRequestCount: 0, activeScopeCount: 0 },
     })
     const requests = await harness.request('/api/access/requests?agentId=deleted-identity', {
       headers: { cookie },
@@ -1319,7 +1407,7 @@ describe('authorization management over real D1', () => {
       pagination: { total: 0 },
     })
     expect((await harness.request('/api/access/requests/deleted-request', { headers: { cookie } })).status).toBe(404)
-    const grants = await harness.request('/api/agents/deleted-identity/access-grants', {
+    const grants = await harness.request('/api/agents/deleted-identity/scope-entitlements', {
       headers: { cookie },
     })
     expect(grants.status).toBe(200)
@@ -1333,9 +1421,9 @@ describe('authorization management over real D1', () => {
         .set({ status: 'denied', decidedAt: now })
         .where(eq(agentAccessRequest.id, 'deleted-request')),
       harness.db
-        .update(agentAccessGrant)
-        .set({ status: 'revoked', revokedAt: now })
-        .where(eq(agentAccessGrant.id, 'deleted-grant')),
+        .update(resourceScopeEntitlement)
+        .set({ endedAt: now, endReason: 'revoked' })
+        .where(eq(resourceScopeEntitlement.id, 'deleted-grant')),
     ])
     await expect(
       discoverAgentResources(harness.deps, {
@@ -1357,14 +1445,14 @@ describe('authorization management over real D1', () => {
         .where(eq(providerResourceAuthorization.id, 'deleted-connection')),
       harness.db.select().from(resourceConnectionIntent).where(eq(resourceConnectionIntent.id, 'deleted-intent')),
       harness.db.select().from(agentAccessRequest).where(eq(agentAccessRequest.id, 'deleted-request')),
-      harness.db.select().from(agentAccessGrant).where(eq(agentAccessGrant.id, 'deleted-grant')),
+      harness.db.select().from(resourceScopeEntitlement).where(eq(resourceScopeEntitlement.id, 'deleted-grant')),
       harness.db.select().from(externalTokenLease).where(eq(externalTokenLease.id, 'deleted-lease')),
     ])
     expect(resourceRow).toMatchObject({ id: resource.id, enabled: false, deletedAt: expect.any(Date) })
     expect(connection).toMatchObject({ status: 'revoked', revokedAt: expect.any(Date) })
     expect(intent).toMatchObject({ status: 'cancelled', completedAt: expect.any(Date) })
     expect(request).toMatchObject({ status: 'denied', decidedAt: expect.any(Date) })
-    expect(grant).toMatchObject({ status: 'revoked', revokedAt: expect.any(Date) })
+    expect(grant).toMatchObject({ endReason: 'revoked', endedAt: expect.any(Date) })
     expect(lease).toMatchObject({ revokedAt: expect.any(Date) })
     await Promise.all([
       harness.db
@@ -1433,7 +1521,7 @@ describe('authorization management over real D1', () => {
         status: 'pending',
         approvalTokenHash: 'late-approval-hash',
         encryptedApprovalToken: 'late-approval',
-        grantId: null,
+        approvedEntitlements: [],
         expiresAt,
         decidedAt: null,
         createdAt: now,
@@ -1443,7 +1531,7 @@ describe('authorization management over real D1', () => {
     await expect(
       harness.deps.externalResources.createTokenLease({
         id: 'late-lease',
-        grantId: 'deleted-grant',
+        entitlementIds: ['deleted-grant'],
         requestId: 'deleted-request',
         bindingId: 'deleted-binding',
         encryptedAccessToken: 'late-access-token',
@@ -1463,10 +1551,10 @@ describe('authorization management over real D1', () => {
       .where(eq(providerResourceAuthorization.id, 'deleted-connection'))
     const [preservedGrant] = await harness.db
       .select()
-      .from(agentAccessGrant)
-      .where(eq(agentAccessGrant.id, 'deleted-grant'))
+      .from(resourceScopeEntitlement)
+      .where(eq(resourceScopeEntitlement.id, 'deleted-grant'))
     expect(preservedConnection.status).toBe('revoked')
-    expect(preservedGrant.status).toBe('revoked')
+    expect(preservedGrant.endReason).toBe('revoked')
     const audits = await harness.db.select().from(agentAuditEvent).where(eq(agentAuditEvent.resourceId, resource.id))
     expect(audits.map((event) => event.action)).toEqual(['api_resource.deleted'])
   })

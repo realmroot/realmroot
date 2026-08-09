@@ -2,7 +2,6 @@ import {
   account,
   accountCenterSetting,
   agent,
-  agentAccessGrant,
   agentAccessRequest,
   agentAuditEvent,
   agentCapabilityGrant,
@@ -36,6 +35,7 @@ import {
   passkey,
   providerResourceAuthorization,
   resourceConnectionIntent,
+  resourceScopeEntitlement,
   session,
   signInExperience,
   twoFactor,
@@ -264,7 +264,7 @@ describe('schema.test 1', () => {
     )
   })
 
-  it('separates signing, credential custody, grants, OAuth state, and audit storage', () => {
+  it('separates signing, credential custody, scope Entitlements, OAuth state, and audit storage', () => {
     expect(indexNames(apiResource)).toContain('apiResource_providerConnectionAuthority_unique')
     expect(indexNames(providerResourceAuthorization)).toEqual(
       expect.arrayContaining([
@@ -274,11 +274,13 @@ describe('schema.test 1', () => {
         'providerResourceAuthorization_status_idx',
       ]),
     )
-    expect(indexNames(agentAccessGrant)).toEqual(
+    expect(indexNames(resourceScopeEntitlement)).toEqual(
       expect.arrayContaining([
-        'agentAccessGrant_resourceId_idx',
-        'agentAccessGrant_agentIdentityId_idx',
-        'agentAccessGrant_status_idx',
+        'resourceScopeEntitlement_resourceServerId_idx',
+        'resourceScopeEntitlement_agentIdentityId_idx',
+        'resourceScopeEntitlement_activeAgent_unique',
+        'resourceScopeEntitlement_activeUser_unique',
+        'resourceScopeEntitlement_activeApplication_unique',
       ]),
     )
     expect(indexNames(resourceConnectionIntent)).toEqual(
@@ -289,7 +291,7 @@ describe('schema.test 1', () => {
       ]),
     )
     expect(indexNames(agentAccessRequest)).toContain('agentAccessRequest_status_idx')
-    expect(indexNames(externalTokenLease)).toContain('externalTokenLease_grantId_idx')
+    expect(indexNames(externalTokenLease)).toContain('externalTokenLease_requestId_idx')
     expect(indexNames(agentAuditEvent)).toEqual(
       expect.arrayContaining([
         'agentAuditEvent_occurredAt_idx',

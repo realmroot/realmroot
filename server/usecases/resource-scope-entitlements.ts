@@ -18,8 +18,8 @@ export async function userEffectiveResourceScopes(
   if (resource.visibility === 'private' && visibleMemberships.length === 0) return []
 
   const scopes = automaticScopes(resource)
-  for (const grant of await deps.authorization.listActiveUserScopeGrants(userId, resource.id, now)) {
-    for (const scope of grant.scopes) scopes.add(scope)
+  for (const entitlement of await deps.authorization.listActiveUserScopeEntitlements(userId, resource.id, now)) {
+    scopes.add(entitlement.scope)
   }
   for (const membership of visibleMemberships) {
     for (const scope of await resolveOrganizationMembershipScopes(
@@ -42,8 +42,12 @@ export async function applicationEffectiveResourceScopes(
 ) {
   if (!activeResourceVisibleToOrganization(resource, application.ownerOrganizationId)) return []
   const scopes = automaticScopes(resource)
-  for (const grant of await deps.authorization.listActiveApplicationScopeGrants(application.id, resource.id, now)) {
-    for (const scope of grant.scopes) scopes.add(scope)
+  for (const entitlement of await deps.authorization.listActiveApplicationScopeEntitlements(
+    application.id,
+    resource.id,
+    now,
+  )) {
+    scopes.add(entitlement.scope)
   }
   return currentRegistryScopes(resource, scopes)
 }

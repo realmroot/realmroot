@@ -35,7 +35,7 @@ export function agentGovernanceAuditRecord(input: AgentGovernanceAuditInput) {
     hostId: input.hostId ?? null,
     resourceId: null,
     resourceConnectionId: null,
-    accessGrantId: null,
+    accessRequestId: null,
     scopes: input.capabilities ?? null,
     reasonCode: input.reasonCode ?? null,
     metadata: input.metadata ?? null,

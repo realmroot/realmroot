@@ -3,17 +3,21 @@ import { AccountOrganizationDetailPage } from '@/features/account/account-center
 import { ApplicationDetailPage } from '@/features/applications/management/application-detail'
 
 export const Route = createFileRoute(
-  '/_account/organizations/$organizationId/applications/$applicationId/access-grants',
+  '/_account/organizations/$organizationId/applications/$applicationId/scope-entitlements',
 )({
-  component: OrganizationApplicationAccessGrantsRoute,
+  component: OrganizationApplicationScopeEntitlementsRoute,
 })
 
-function OrganizationApplicationAccessGrantsRoute() {
+function OrganizationApplicationScopeEntitlementsRoute() {
   const { applicationId, organizationId } = Route.useParams()
   return (
     <AccountOrganizationDetailPage
       content={
-        <ApplicationDetailPage applicationId={applicationId} organizationId={organizationId} section="access-grants" />
+        <ApplicationDetailPage
+          applicationId={applicationId}
+          organizationId={organizationId}
+          section="scope-entitlements"
+        />
       }
       organizationId={organizationId}
       section="applications"

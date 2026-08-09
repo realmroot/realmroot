@@ -67,7 +67,6 @@ type agentState struct {
 	AgentPrivateKey          string                      `json:"agent_private_key"`
 	RegistrationApproval     *pendingApproval            `json:"registration_approval,omitempty"`
 	Identity                 *stableIdentity             `json:"identity,omitempty"`
-	DPoPCredentials          map[string]dpopCredential   `json:"dpop_credentials,omitempty"`
 	CredentialSources        map[string]credentialSource `json:"credential_sources,omitempty"`
 	ProtocolCredential       *dpopCredential             `json:"protocol_credential,omitempty"`
 	LegacyPlatformCredential *dpopCredential             `json:"platform_credential,omitempty"`
@@ -110,11 +109,13 @@ type resourceAccessStateStore interface {
 type resourceCredentialReference struct {
 	path       string
 	state      agentState
+	reference  string
 	credential dpopCredential
 }
 
 type credentialOfferStore interface {
 	FindCredentialOffer(reference string, runtime string, scopes []string) (resourceCredentialReference, error)
+	RemoveCredentialOffer(reference resourceCredentialReference) error
 }
 
 type fileStateStore struct {
@@ -322,7 +323,7 @@ func (s *fileStateStore) FindCredentialOffer(reference string, runtime string, s
 		if matched != nil {
 			return errors.New("multiple Realmroot credential offers match the source reference")
 		}
-		matched = &resourceCredentialReference{path: path, state: state, credential: *offer}
+		matched = &resourceCredentialReference{path: path, state: state, reference: reference, credential: *offer}
 		return nil
 	})
 	if err != nil {
@@ -332,6 +333,40 @@ func (s *fileStateStore) FindCredentialOffer(reference string, runtime string, s
 		return resourceCredentialReference{}, os.ErrNotExist
 	}
 	return *matched, nil
+}
+
+func (s *fileStateStore) RemoveCredentialOffer(reference resourceCredentialReference) error {
+	source, ok := reference.state.CredentialSources[reference.reference]
+	if !ok {
+		return os.ErrNotExist
+	}
+	remaining := make([]dpopCredential, 0, len(source.Offers))
+	removed := false
+	for _, offer := range source.Offers {
+		if !removed && sameCredentialOffer(offer, reference.credential) {
+			removed = true
+			continue
+		}
+		remaining = append(remaining, offer)
+	}
+	if !removed {
+		return os.ErrNotExist
+	}
+	if len(remaining) == 0 {
+		delete(reference.state.CredentialSources, reference.reference)
+	} else {
+		source.Offers = remaining
+		reference.state.CredentialSources[reference.reference] = source
+	}
+	return s.UpdateStateReference(agentStateReference{path: reference.path, state: reference.state})
+}
+
+func sameCredentialOffer(left dpopCredential, right dpopCredential) bool {
+	return left.ResourceHref == right.ResourceHref &&
+		left.ResourceIndicator == right.ResourceIndicator &&
+		left.CredentialEndpoint == right.CredentialEndpoint &&
+		left.ProofTarget == right.ProofTarget &&
+		sameStringSet(left.Scopes, right.Scopes)
 }
 
 func (s *fileStateStore) FindByOriginAndAgentID(origin string, agentID string) (agentState, error) {
@@ -478,9 +513,6 @@ func validateAgentStateCredentials(state agentState) error {
 	key, err := base64.RawURLEncoding.DecodeString(state.AgentPrivateKey)
 	if err != nil || len(key) != ed25519.PrivateKeySize {
 		return errors.New("Agent private key is invalid")
-	}
-	if len(state.DPoPCredentials) > 0 {
-		return errors.New("Agent state contains legacy DPoP credential storage")
 	}
 	resourceReferences := make(map[string]string, len(state.CredentialSources))
 	for reference, source := range state.CredentialSources {

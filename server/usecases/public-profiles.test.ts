@@ -252,7 +252,7 @@ function auditEvent(action: string, id = 'audit-1'): AgentAuditEventRecord {
     hostId: 'private-host',
     resourceId: 'resource-1',
     resourceConnectionId: null,
-    accessGrantId: null,
+    accessRequestId: null,
     scopes: ['private:scope'],
     reasonCode: null,
     metadata: { private: true },

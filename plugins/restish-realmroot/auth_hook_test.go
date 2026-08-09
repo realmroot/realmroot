@@ -315,11 +315,39 @@ func (s *memoryStateStore) FindCredentialOffer(reference, runtime string, scopes
 	if ok {
 		for _, credential := range source.Offers {
 			if scopesContain(credential.Scopes, scopes) {
-				return resourceCredentialReference{path: "memory", state: s.state, credential: credential}, nil
+				return resourceCredentialReference{
+					path: "memory", state: s.state, reference: reference, credential: credential,
+				}, nil
 			}
 		}
 	}
 	return resourceCredentialReference{}, os.ErrNotExist
+}
+
+func (s *memoryStateStore) RemoveCredentialOffer(reference resourceCredentialReference) error {
+	source, ok := s.state.CredentialSources[reference.reference]
+	if !ok {
+		return os.ErrNotExist
+	}
+	remaining := make([]dpopCredential, 0, len(source.Offers))
+	removed := false
+	for _, offer := range source.Offers {
+		if !removed && sameCredentialOffer(offer, reference.credential) {
+			removed = true
+			continue
+		}
+		remaining = append(remaining, offer)
+	}
+	if !removed {
+		return os.ErrNotExist
+	}
+	if len(remaining) == 0 {
+		delete(s.state.CredentialSources, reference.reference)
+	} else {
+		source.Offers = remaining
+		s.state.CredentialSources[reference.reference] = source
+	}
+	return nil
 }
 
 func decodeJWTPayload(t *testing.T, token string) map[string]any {

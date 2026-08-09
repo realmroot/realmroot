@@ -162,3 +162,46 @@ func TestCredentialSourceReturnsNextDPoPNonceWithIssuedCredential(t *testing.T) 
 		t.Fatalf("credential = %#v", output.Credential)
 	}
 }
+
+func TestCredentialSourceRemovesOnlyTerminallyRejectedOffer(t *testing.T) {
+	readOffer := testCredential(t, "", time.Time{})
+	writeOffer := readOffer
+	writeOffer.CredentialEndpoint = "https://auth.example.com/api/access/requests/write/credentials"
+	writeOffer.Scopes = []string{"files:write"}
+	states := newCredentialState(t, readOffer)
+	source := states.state.CredentialSources[testCredentialSourceReference]
+	source.Offers = append(source.Offers, writeOffer)
+	states.state.CredentialSources[testCredentialSourceReference] = source
+	client := roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return jsonResponse(http.StatusForbidden, map[string]any{"error": "insufficient_scope"}), nil
+	})
+
+	_, err := handleCredentialSource(context.Background(), credentialSourceInput{
+		Action: "issue", Reference: testCredentialSourceReference, Scopes: readOffer.Scopes, Proof: "proof",
+	}, states, client)
+	if err == nil {
+		t.Fatal("issue unexpectedly succeeded")
+	}
+	remaining := states.state.CredentialSources[testCredentialSourceReference].Offers
+	if len(remaining) != 1 || !sameCredentialOffer(remaining[0], writeOffer) {
+		t.Fatalf("remaining offers = %#v", remaining)
+	}
+}
+
+func TestCredentialSourceRetainsOfferAfterRetryableFailure(t *testing.T) {
+	offer := testCredential(t, "", time.Time{})
+	states := newCredentialState(t, offer)
+	client := roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return jsonResponse(http.StatusServiceUnavailable, map[string]any{"error": "temporarily_unavailable"}), nil
+	})
+
+	_, err := handleCredentialSource(context.Background(), credentialSourceInput{
+		Action: "issue", Reference: testCredentialSourceReference, Scopes: offer.Scopes, Proof: "proof",
+	}, states, client)
+	if err == nil {
+		t.Fatal("issue unexpectedly succeeded")
+	}
+	if len(states.state.CredentialSources[testCredentialSourceReference].Offers) != 1 {
+		t.Fatal("retryable failure removed the stored offer")
+	}
+}

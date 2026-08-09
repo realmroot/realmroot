@@ -231,7 +231,7 @@ export function createRestishAgentPlugin(origin: string): RestishAgentPlugin {
       if (!resourceURL) throw new Error(`Target API "${targetAPIName}" is not connected`)
       try {
         return JSON.parse(
-          execFileSync('restish', ['get', `${resourceURL}/${path}`, '--rsh-output-format', 'json'], {
+          execFileSync('restish', ['get', `${targetAPIName}/${path}`, '--rsh-output-format', 'json'], {
             cwd: repoRoot,
             env: environment,
             encoding: 'utf8',

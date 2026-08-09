@@ -23,7 +23,8 @@ export const realmrootScopeRegistry = {
   'webhooks:write': { resource: 'webhook', action: 'write', organization: true },
   'agents:read': { resource: 'agent', action: 'read', organization: true },
   'agents:write': { resource: 'agent', action: 'write', organization: true },
-  'access-grants:read': { resource: 'access-grant', action: 'read', organization: true },
+  'scope-entitlements:read': { resource: 'scope-entitlement', action: 'read', organization: true },
+  'scope-entitlements:write': { resource: 'scope-entitlement', action: 'write', organization: true },
   'audit-events:read': { resource: 'audit-event', action: 'read', organization: true },
 } as const
 

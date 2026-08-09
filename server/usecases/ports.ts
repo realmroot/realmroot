@@ -16,7 +16,7 @@ import type { AssetPurpose } from '@shared/api/assets'
 import type {
   ApiResourceResponse,
   InvitationResponse,
-  ListScopeGrantsQuery,
+  ListScopeEntitlementsQuery,
   MemberResponse,
   OrganizationResponse,
   ResourceScopeRegistry,
@@ -454,7 +454,7 @@ export interface AgentAuditEventRecord {
   hostId: string | null
   resourceId: string | null
   resourceConnectionId: string | null
-  accessGrantId: string | null
+  accessRequestId: string | null
   scopes: string[] | null
   reasonCode: string | null
   metadata: Record<string, unknown> | null
@@ -604,25 +604,33 @@ export interface AgentAccessRequestRecord {
   status: string
   approvalTokenHash: string
   encryptedApprovalToken: string
-  grantId: string | null
+  approvedEntitlements: Array<{ scope: string; entitlementId: string }>
   expiresAt: Date
   decidedAt: Date | null
   createdAt: Date
   updatedAt: Date
 }
 
-export interface AgentAccessGrantRecord {
+export type ResourceScopeEntitlementMode = 'persistent' | 'until' | 'once'
+export type ResourceScopeEntitlementEndReason = 'revoked' | 'consumed' | 'expired' | 'merged'
+
+export interface ResourceScopeEntitlementRecord {
   id: string
-  resourceId: string
+  userId: string | null
+  applicationId: string | null
+  agentIdentityId: string | null
+  organizationId: string | null
+  resourceServerId: string
   connectionId: string | null
-  agentIdentityId: string
-  scopes: string[]
   authorizationDetails: AuthorizationDetail[]
-  mode: string
-  status: string
+  authorizationContextHash: string
+  scope: string
+  mode: ResourceScopeEntitlementMode
   grantedByUserId: string
+  sourceAccessRequestId: string | null
   expiresAt: Date | null
-  revokedAt: Date | null
+  endedAt: Date | null
+  endReason: ResourceScopeEntitlementEndReason | null
   createdAt: Date
   updatedAt: Date
 }
@@ -638,14 +646,15 @@ export interface AgentAccessRequestProjection {
   resource: AgentGovernanceResourceRecord
 }
 
-export interface AgentAccessGrantProjection {
-  grant: AgentAccessGrantRecord
+export interface AgentScopeEntitlementProjection {
+  entitlement: ResourceScopeEntitlementRecord
   resource: AgentGovernanceResourceRecord
 }
 
 export interface AgentAccessSummary {
   pendingRequestCount: number
-  activeGrantCount: number
+  activeResourceCount: number
+  activeScopeCount: number
 }
 
 export interface AgentAuthorityInventoryScope {
@@ -655,7 +664,7 @@ export interface AgentAuthorityInventoryScope {
 
 export interface ExternalTokenLeaseRecord {
   id: string
-  grantId: string
+  entitlementIds: string[]
   requestId: string
   bindingId: string
   encryptedAccessToken: string
@@ -785,7 +794,6 @@ export interface ExternalResourceRepository {
     audit: AgentAuditEventRecord,
   ): Promise<AgentAccessRequestRecord | null>
   findAccessRequest(id: string): Promise<AgentAccessRequestRecord | null>
-  findAccessRequestByGrant(grantId: string): Promise<AgentAccessRequestRecord | null>
   findAccessRequestByApprovalTokenHash(tokenHash: string): Promise<AgentAccessRequestRecord | null>
   listAccessRequests(
     query: PaginationInput & {
@@ -802,7 +810,7 @@ export interface ExternalResourceRepository {
     id: string,
     input: {
       status: 'approved' | 'denied'
-      grantId: string | null
+      approvedEntitlements: Array<{ scope: string; entitlementId: string }>
       connectionId?: string | null
       decidedAt: Date
       updatedAt: Date
@@ -812,7 +820,7 @@ export interface ExternalResourceRepository {
     id: string,
     input: {
       status: 'approved' | 'denied'
-      grantId: string | null
+      approvedEntitlements: Array<{ scope: string; entitlementId: string }>
       connectionId?: string | null
       decidedAt: Date
       updatedAt: Date
@@ -821,13 +829,19 @@ export interface ExternalResourceRepository {
   ): Promise<AgentAccessRequestRecord | null>
   consumeAccessRequest(id: string, now: Date): Promise<boolean>
   listPendingAccessRequestsByConnections(connectionIds: string[]): Promise<AgentAccessRequestRecord[]>
-  createGrant(input: AgentAccessGrantRecord): Promise<AgentAccessGrantRecord | null>
-  approveAccessRequestWithAudit(
-    grant: AgentAccessGrantRecord,
+  approveAccessRequestWithEntitlements(
+    entitlements: ResourceScopeEntitlementRecord[],
+    entitlementUpdates: Array<{
+      id: string
+      mode: ResourceScopeEntitlementMode
+      expiresAt: Date | null
+      authorizationContextHash: string
+      updatedAt: Date
+    }>,
     requestId: string,
     decision: {
       status: 'approved'
-      grantId: string
+      approvedEntitlements: Array<{ scope: string; entitlementId: string }>
       connectionId: string | null
       decidedAt: Date
       updatedAt: Date
@@ -835,32 +849,40 @@ export interface ExternalResourceRepository {
     audit: AgentAuditEventRecord,
     expectedConnectionRevision?: number | null,
   ): Promise<
-    { grant: AgentAccessGrantRecord; request: AgentAccessRequestRecord } | 'grant_unavailable' | 'request_changed'
+    | { entitlements: ResourceScopeEntitlementRecord[]; request: AgentAccessRequestRecord }
+    | 'resource_unavailable'
+    | 'request_changed'
   >
-  findGrant(id: string): Promise<AgentAccessGrantRecord | null>
-  listActiveGrantsByAgent(agentIdentityId: string): Promise<AgentAccessGrantRecord[]>
-  listGrants(
+  findEntitlement(id: string): Promise<ResourceScopeEntitlementRecord | null>
+  findEntitlements(ids: string[]): Promise<ResourceScopeEntitlementRecord[]>
+  listActiveEntitlementsByAgent(agentIdentityId: string, now: Date): Promise<ResourceScopeEntitlementRecord[]>
+  listAgentScopeEntitlements(
     query: PaginationInput & {
       agentId?: string
       organizationId?: string
       resourceId?: string
-      status?: 'active' | 'consumed' | 'expired'
+      status?: 'active' | 'revoked' | 'consumed' | 'expired' | 'merged'
     },
     scope?: AgentAuthorityInventoryScope,
-  ): Promise<PaginatedResult<AgentAccessGrantProjection>>
+  ): Promise<PaginatedResult<AgentScopeEntitlementProjection>>
   summarizeAgentAccess(agentIdentityIds: string[], now: Date): Promise<Map<string, AgentAccessSummary>>
-  listActiveGrantsByConnection(connectionId: string): Promise<AgentAccessGrantRecord[]>
-  revokeGrant(id: string, now: Date): Promise<boolean>
-  revokeGrantWithAudit(id: string, tokenLeaseIds: string[], now: Date, audit: AgentAuditEventRecord): Promise<boolean>
-  consumeGrant(id: string, now: Date): Promise<boolean>
+  listActiveEntitlementsByConnection(connectionId: string, now: Date): Promise<ResourceScopeEntitlementRecord[]>
+  endEntitlement(id: string, reason: ResourceScopeEntitlementEndReason, now: Date): Promise<boolean>
+  endEntitlementWithAudit(
+    id: string,
+    reason: ResourceScopeEntitlementEndReason,
+    tokenLeaseIds: string[],
+    now: Date,
+    audit: AgentAuditEventRecord,
+  ): Promise<boolean>
   createTokenLease(input: ExternalTokenLeaseRecord): Promise<ExternalTokenLeaseRecord | null>
   issueTokenLeaseWithAudit(
     input: ExternalTokenLeaseRecord,
-    consumeGrant: boolean,
+    consumeEntitlementIds: string[],
     now: Date,
     audit: AgentAuditEventRecord,
   ): Promise<ExternalTokenLeaseRecord | null>
-  listActiveTokenLeasesByGrant(grantId: string, now: Date): Promise<ExternalTokenLeaseRecord[]>
+  listActiveTokenLeasesByEntitlement(entitlementId: string, now: Date): Promise<ExternalTokenLeaseRecord[]>
   listActiveTokenLeasesByBinding(bindingId: string, now: Date): Promise<ExternalTokenLeaseRecord[]>
   revokeTokenLease(id: string, now: Date): Promise<boolean>
 }
@@ -1257,29 +1279,6 @@ export type InvitationRecordInput = Omit<InvitationResponse, 'createdAt' | 'acce
 export type ApiResourceRecordInput = Omit<ApiResourceResponse, 'createdAt' | 'updatedAt'>
 export type OrganizationRoleRecordInput = Omit<RoleResponse, 'predefined' | 'createdAt' | 'updatedAt'>
 
-export interface UserScopeGrantRecord {
-  id: string
-  userId: string
-  organizationId: string | null
-  resourceServerId: string
-  scopes: string[]
-  grantedByUserId: string
-  expiresAt: Date | null
-  revokedAt: Date | null
-  createdAt: Date
-}
-
-export interface ApplicationScopeGrantRecord {
-  id: string
-  applicationId: string
-  resourceServerId: string
-  scopes: string[]
-  grantedByUserId: string
-  expiresAt: Date | null
-  revokedAt: Date | null
-  createdAt: Date
-}
-
 export interface AuthorizationRepository {
   createOrganization(
     input: OrganizationRecordInput,
@@ -1341,27 +1340,28 @@ export interface AuthorizationRepository {
     id: string,
     discovery: { name: string; description: string | null; scopeRegistry: ResourceScopeRegistry },
   ): Promise<boolean>
-  createUserScopeGrant(input: UserScopeGrantRecord): Promise<UserScopeGrantRecord>
-  findUserScopeGrant(id: string): Promise<UserScopeGrantRecord | null>
-  listUserScopeGrants(
+  createScopeEntitlement(input: ResourceScopeEntitlementRecord, now: Date): Promise<ResourceScopeEntitlementRecord>
+  findScopeEntitlement(id: string): Promise<ResourceScopeEntitlementRecord | null>
+  listUserScopeEntitlements(
     userId: string,
-    query: ListScopeGrantsQuery,
+    query: ListScopeEntitlementsQuery,
     ownerOrganizationIds?: string[],
-  ): Promise<AuthorizationPaginatedResult<UserScopeGrantRecord>>
-  listActiveUserScopeGrants(userId: string, resourceServerId: string, now: Date): Promise<UserScopeGrantRecord[]>
-  revokeUserScopeGrant(id: string, now: Date): Promise<boolean>
-  createApplicationScopeGrant(input: ApplicationScopeGrantRecord): Promise<ApplicationScopeGrantRecord>
-  findApplicationScopeGrant(id: string): Promise<ApplicationScopeGrantRecord | null>
-  listApplicationScopeGrants(
+  ): Promise<AuthorizationPaginatedResult<ResourceScopeEntitlementRecord>>
+  listActiveUserScopeEntitlements(
+    userId: string,
+    resourceServerId: string,
+    now: Date,
+  ): Promise<ResourceScopeEntitlementRecord[]>
+  listApplicationScopeEntitlements(
     applicationId: string,
-    query: ListScopeGrantsQuery,
-  ): Promise<AuthorizationPaginatedResult<ApplicationScopeGrantRecord>>
-  listActiveApplicationScopeGrants(
+    query: ListScopeEntitlementsQuery,
+  ): Promise<AuthorizationPaginatedResult<ResourceScopeEntitlementRecord>>
+  listActiveApplicationScopeEntitlements(
     applicationId: string,
     resourceServerId: string,
     now: Date,
-  ): Promise<ApplicationScopeGrantRecord[]>
-  revokeApplicationScopeGrant(id: string, now: Date): Promise<boolean>
+  ): Promise<ResourceScopeEntitlementRecord[]>
+  endScopeEntitlement(id: string, reason: ResourceScopeEntitlementEndReason, now: Date): Promise<boolean>
   deleteResource(id: string, now: Date, audit: AgentAuditEventRecord): Promise<boolean>
   createOrganizationRole(
     organizationId: string,

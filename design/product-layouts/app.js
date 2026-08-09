@@ -721,7 +721,7 @@ function renderAgents() {
     title: 'Agents',
     description: 'Review stable Agent identities belonging to people and Organizations across this Realm.',
     content: `${searchToolbar(['Any owner type', ownerFilter(), 'Any status'])}${dataTable(
-      ['Agent', 'Roles', 'Access grants', 'Status', 'Owner type', 'Owner', 'Last activity', ''],
+      ['Agent', 'Roles', 'Resource access', 'Status', 'Owner type', 'Owner', 'Last activity', ''],
       visibleRows,
     )}`,
   })
@@ -1083,7 +1083,7 @@ function detailPageFrame({ section, back, title, description, meta, badge, badge
 function renderAgentDetail() {
   const active = state.detailTabs.agent
   const bodies = {
-    overview: detailRows([settingRow('Owner', '', 'Payments Team'), settingRow('Assigned roles', '', 'Finance operator · Payments Team'), settingRow('Access grants', '', '1 active'), settingRow('Hosts', '', '2 active'), settingRow('Created', '', 'Jul 24, 2026'), settingRow('Last activity', '', '6 min ago')]),
+    overview: detailRows([settingRow('Owner', '', 'Payments Team'), settingRow('Assigned roles', '', 'Finance operator · Payments Team'), settingRow('Resource access', '', '1 active'), settingRow('Hosts', '', '2 active'), settingRow('Created', '', 'Jul 24, 2026'), settingRow('Last activity', '', '6 min ago')]),
     access: `${searchToolbar(['Any type', 'Any status'])}${dataTable(
       ['Type', 'Resource', 'Scopes', 'Lifetime', 'Status', ''],
       [
@@ -1132,7 +1132,7 @@ function renderUserDetail() {
       ],
     ),
     agents: dataTable(
-      ['Agent', 'Access grants', 'Hosts', 'Last activity', 'Status', ''],
+      ['Agent', 'Resource access', 'Hosts', 'Last activity', 'Status', ''],
       [
         { cells: [cell('Sales Copilot', 'did:rr:agent:01J8…A2'), '3', '2', '12 min ago', status('Active'), icon('more')] },
         { cells: [cell('Research Assistant', 'did:rr:agent:01J7…F9'), '0', '1', 'Yesterday', status('Active'), icon('more')] },
@@ -1175,7 +1175,7 @@ function renderOrganizationDetail() {
       ],
     )}`,
     agents: dataTable(
-      ['Agent', 'Roles', 'Access grants', 'Hosts', 'Last activity', 'Status', ''],
+      ['Agent', 'Roles', 'Resource access', 'Hosts', 'Last activity', 'Status', ''],
       [
         { cells: [cell('Billing Reconciler', 'did:rr:agent:01J7…K8'), 'Finance operator', '1', '2', '6 min ago', status('Active'), icon('more')] },
         { cells: [cell('Expense Auditor', 'did:rr:agent:01J6…F4'), 'Document auditor', '0', '1', 'Yesterday', status('Active'), icon('more')] },
@@ -1607,7 +1607,7 @@ function accountOverview() {
       settingRow('Application authorized', 'Realmroot CLI · openid offline_access', 'Jul 28, 09:14'),
     ]))
   return `<div class="profile-hero"><div><h1>Good morning, Jane.</h1><p>Review your identity, security, and delegated authority in this realm.</p></div></div>
-  <div class="metric-grid account-metrics"><article class="metric"><span>Security</span><strong>Strong</strong><small>Passkey and MFA are enabled.</small></article><article class="metric"><span>Active Agents</span><strong>2</strong><small>3 delegated access grants</small></article><article class="metric"><span>Organizations</span><strong>2</strong><small>1 Organization you administer</small></article></div>
+  <div class="metric-grid account-metrics"><article class="metric"><span>Security</span><strong>Strong</strong><small>Passkey and MFA are enabled.</small></article><article class="metric"><span>Active Agents</span><strong>2</strong><small>3 delegated scope Entitlements</small></article><article class="metric"><span>Organizations</span><strong>2</strong><small>1 Organization you administer</small></article></div>
   <div class="account-overview-flow">${attention}${activity}</div>`
 }
 
@@ -1744,7 +1744,7 @@ function accountOrganizationDetail() {
     )}`),
     agents: accountTabPanel(accountRows([
       settingRow('Billing Reconciler', 'Stable Agent identity · 2 active hosts.', '1 active grant', button('Review')),
-      settingRow('Expense Auditor', 'Stable Agent identity · 1 active host.', 'No access grants', button('Review')),
+      settingRow('Expense Auditor', 'Stable Agent identity · 1 active host.', 'No scope Entitlements', button('Review')),
     ])),
     authority: accountTabPanel(accountRows([
       settingRow('Finance operator', '3 scopes across Billing API and Documents API.', '2 assignments in Payments Team', button('Open in Console')),

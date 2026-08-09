@@ -587,7 +587,7 @@ async function fixture(options: { grantTypes?: string[]; scopes?: string[] } = {
               },
             }
           : null,
-      listActiveApplicationScopeGrants: async () => [],
+      listActiveApplicationScopeEntitlements: async () => [],
     },
   } as unknown as Deps
   const clientSecret = 'runner-client-secret'

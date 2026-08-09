@@ -21,7 +21,7 @@ import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetT
 import { Switch } from '@/components/ui/switch'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { AccessGrantsPanel } from '@/features/authorization/access-grants-panel'
+import { ScopeEntitlementsPanel } from '@/features/authorization/scope-entitlements-panel'
 import {
   CopyButton,
   clientConfig,
@@ -142,7 +142,7 @@ export function ApplicationDetailPage({
     (grantType) => grantType === 'authorization_code' || grantType === deviceCodeGrantType,
   )
   const visibleTab =
-    (selectedTab === 'access-grants' && !machinePrincipalEnabled) ||
+    (selectedTab === 'scope-entitlements' && !machinePrincipalEnabled) ||
     (selectedTab === 'authorizations' && !userAuthorizationEnabled)
       ? 'overview'
       : selectedTab
@@ -195,7 +195,9 @@ export function ApplicationDetailPage({
           <TabsList aria-label={tt('Application detail sections')} className="w-full" variant="navigation">
             <TabsTrigger value="overview">{tt('Overview')}</TabsTrigger>
             <TabsTrigger value="oauth">{tt('OAuth')}</TabsTrigger>
-            {machinePrincipalEnabled ? <TabsTrigger value="access-grants">{tt('Access grants')}</TabsTrigger> : null}
+            {machinePrincipalEnabled ? (
+              <TabsTrigger value="scope-entitlements">{tt('Resource access')}</TabsTrigger>
+            ) : null}
             {userAuthorizationEnabled ? (
               <TabsTrigger value="authorizations">{tt('User authorizations')}</TabsTrigger>
             ) : null}
@@ -217,8 +219,8 @@ export function ApplicationDetailPage({
             <ApplicationFederatedCredentialsPanel applicationId={applicationId} />
           </TabsContent>
           {machinePrincipalEnabled ? (
-            <TabsContent className="mt-5" value="access-grants">
-              <AccessGrantsPanel subject={{ type: 'application', id: applicationId, label: application.name }} />
+            <TabsContent className="mt-5" value="scope-entitlements">
+              <ScopeEntitlementsPanel subject={{ type: 'application', id: applicationId, label: application.name }} />
             </TabsContent>
           ) : null}
           {userAuthorizationEnabled ? (

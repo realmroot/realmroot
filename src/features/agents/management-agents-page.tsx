@@ -84,7 +84,7 @@ export function AgentsPage({ organizationId }: { organizationId?: string } = {})
         <TableHeader>
           <TableRow>
             <TableHead>{tt('Agent')}</TableHead>
-            <TableHead>{tt('Access grants')}</TableHead>
+            <TableHead>{tt('Resource access')}</TableHead>
             <TableHead>{tt('Status')}</TableHead>
             <TableHead>{tt('Owner')}</TableHead>
             <TableHead>{tt('Updated')}</TableHead>
@@ -131,7 +131,7 @@ function AgentRow({ agent, organizationId }: { agent: ManagementAgent; organizat
           </Link>
         )}
       </TableCell>
-      <TableCell>{agent.activeGrantCount.toLocaleString()}</TableCell>
+      <TableCell>{agent.activeScopeCount.toLocaleString()}</TableCell>
       <TableCell>
         <Badge variant={agent.status === 'active' ? 'secondary' : 'outline'}>{agent.status}</Badge>
       </TableCell>

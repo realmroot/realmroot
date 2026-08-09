@@ -7,104 +7,111 @@ import { Field, SelectInput, TextInput } from '@/components/product-form'
 import { TableEmptyRow } from '@/components/table-empty-row'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { ErrorState, LoadingState, MutationError } from '@/features/management/dialogs'
 import { consoleQueryKeys } from '@/lib/api/console-query-keys'
 import {
-  createApplicationScopeGrant,
-  createUserScopeGrant,
-  deleteApplicationScopeGrant,
-  deleteUserScopeGrant,
+  createApplicationScopeEntitlement,
+  createUserScopeEntitlement,
+  deleteApplicationScopeEntitlement,
+  deleteUserScopeEntitlement,
   listApiResources,
-  listApplicationScopeGrants,
-  listUserScopeGrants,
+  listApplicationScopeEntitlements,
+  listUserScopeEntitlements,
 } from '@/lib/api/management'
 import { tt } from '@/lib/i18n'
 
-type AccessGrantSubject =
+type ScopeEntitlementSubject =
   | { type: 'user'; id: string; label: string }
   | { type: 'application'; id: string; label: string }
 
-type AccessGrant = Pick<
-  Awaited<ReturnType<typeof listUserScopeGrants>>['items'][number],
-  'id' | 'resourceServerId' | 'scopes' | 'status' | 'expiresAt'
+type ScopeEntitlement = Pick<
+  Awaited<ReturnType<typeof listUserScopeEntitlements>>['items'][number],
+  'id' | 'resourceServerId' | 'scope' | 'mode' | 'status' | 'expiresAt'
 >
-type AccessGrantPage = {
-  items: AccessGrant[]
-  pagination: Awaited<ReturnType<typeof listUserScopeGrants>>['pagination']
+type ScopeEntitlementPage = {
+  items: ScopeEntitlement[]
+  pagination: Awaited<ReturnType<typeof listUserScopeEntitlements>>['pagination']
 }
 
 const pageSize = 50
 
-export function AccessGrantsPanel({ subject }: { subject: AccessGrantSubject }) {
+export function ScopeEntitlementsPanel({ subject }: { subject: ScopeEntitlementSubject }) {
   const queryClient = useQueryClient()
   const [offset, setOffset] = useState(0)
   const [createOpen, setCreateOpen] = useState(false)
-  const [revokeTarget, setRevokeTarget] = useState<AccessGrant | null>(null)
-  const queryKey = accessGrantQueryKey(subject, offset)
+  const [revokeTarget, setRevokeTarget] = useState<ScopeEntitlement | null>(null)
+  const queryKey = scopeEntitlementQueryKey(subject, offset)
   const resourcesQuery = useQuery({
-    queryKey: [...consoleQueryKeys.apiResources, { purpose: 'access-grants' }],
+    queryKey: [...consoleQueryKeys.apiResources, { purpose: 'scope-entitlements' }],
     queryFn: () => listApiResources({ limit: 100 }),
   })
-  const grantsQuery = useQuery({
+  const entitlementsQuery = useQuery({
     queryKey,
-    queryFn: async (): Promise<AccessGrantPage> => {
+    queryFn: async (): Promise<ScopeEntitlementPage> => {
       const result =
         subject.type === 'user'
-          ? await listUserScopeGrants(subject.id, { limit: pageSize, offset })
-          : await listApplicationScopeGrants(subject.id, { limit: pageSize, offset })
+          ? await listUserScopeEntitlements(subject.id, { limit: pageSize, offset })
+          : await listApplicationScopeEntitlements(subject.id, { limit: pageSize, offset })
       return { items: result.items, pagination: result.pagination }
     },
   })
   const createMutation = useMutation({
-    mutationFn: async (input: { resourceServerId: string; scopes: string[]; expiresAt: string | null }) => {
-      if (subject.type === 'user') await createUserScopeGrant(subject.id, input)
-      else await createApplicationScopeGrant(subject.id, input)
+    mutationFn: async (input: {
+      resourceServerId: string
+      scope: string
+      mode: 'persistent' | 'until'
+      expiresAt: string | null
+    }) => {
+      if (subject.type === 'user') await createUserScopeEntitlement(subject.id, input)
+      else await createApplicationScopeEntitlement(subject.id, input)
     },
     onSuccess: async () => {
       setCreateOpen(false)
       setOffset(0)
-      await queryClient.invalidateQueries({ queryKey: accessGrantQueryPrefix(subject) })
+      await queryClient.invalidateQueries({ queryKey: scopeEntitlementQueryPrefix(subject) })
     },
   })
   const revokeMutation = useMutation({
-    mutationFn: (grantId: string) =>
+    mutationFn: (entitlementId: string) =>
       subject.type === 'user'
-        ? deleteUserScopeGrant(subject.id, grantId)
-        : deleteApplicationScopeGrant(subject.id, grantId),
+        ? deleteUserScopeEntitlement(subject.id, entitlementId)
+        : deleteApplicationScopeEntitlement(subject.id, entitlementId),
     onSuccess: async () => {
       setRevokeTarget(null)
-      if (grantsQuery.data?.items.length === 1 && offset > 0) setOffset(Math.max(0, offset - pageSize))
-      await queryClient.invalidateQueries({ queryKey: accessGrantQueryPrefix(subject) })
+      if (entitlementsQuery.data?.items.length === 1 && offset > 0) setOffset(Math.max(0, offset - pageSize))
+      await queryClient.invalidateQueries({ queryKey: scopeEntitlementQueryPrefix(subject) })
     },
   })
 
-  if (resourcesQuery.isLoading || grantsQuery.isLoading) return <LoadingState label={tt('Loading access grants')} />
-  const error = resourcesQuery.error ?? grantsQuery.error
+  if (resourcesQuery.isLoading || entitlementsQuery.isLoading)
+    return <LoadingState label={tt('Loading Resource access')} />
+  const error = resourcesQuery.error ?? entitlementsQuery.error
   if (error)
-    return <ErrorState error={error} onRetry={() => Promise.all([resourcesQuery.refetch(), grantsQuery.refetch()])} />
+    return (
+      <ErrorState error={error} onRetry={() => Promise.all([resourcesQuery.refetch(), entitlementsQuery.refetch()])} />
+    )
 
   const resources = resourcesQuery.data?.items ?? []
   const assignableResources = resources.filter((resource) => assignedScopes(resource).length > 0)
   const resourceById = new Map(resources.map((resource) => [resource.id, resource]))
-  const grants = grantsQuery.data?.items ?? []
-  const pagination = grantsQuery.data?.pagination
+  const entitlements = entitlementsQuery.data?.items ?? []
+  const pagination = entitlementsQuery.data?.pagination
 
   return (
     <>
       <div className="detailSections">
         <div className="flex items-center justify-between gap-4">
           <div>
-            <h2 className="text-base font-semibold">{tt('Access grants')}</h2>
+            <h2 className="text-base font-semibold">{tt('Resource access')}</h2>
             <p className="text-sm text-muted-foreground">
               {tt('Assigned Resource Server scopes held directly by {{subject}}.', { subject: subject.label })}
             </p>
           </div>
           <Button disabled={assignableResources.length === 0} onClick={() => setCreateOpen(true)}>
             <Plus />
-            {tt('Add access grant')}
+            {tt('Add scope')}
           </Button>
         </div>
         <div className="overflow-hidden rounded-xl border">
@@ -112,7 +119,8 @@ export function AccessGrantsPanel({ subject }: { subject: AccessGrantSubject }) 
             <TableHeader>
               <TableRow>
                 <TableHead>{tt('Resource Server')}</TableHead>
-                <TableHead>{tt('Scopes')}</TableHead>
+                <TableHead>{tt('Scope')}</TableHead>
+                <TableHead>{tt('Mode')}</TableHead>
                 <TableHead>{tt('Status')}</TableHead>
                 <TableHead>{tt('Expires')}</TableHead>
                 <TableHead className="w-0">
@@ -121,47 +129,48 @@ export function AccessGrantsPanel({ subject }: { subject: AccessGrantSubject }) 
               </TableRow>
             </TableHeader>
             <TableBody>
-              {grants.length ? (
-                grants.map((grant) => {
-                  const resource = resourceById.get(grant.resourceServerId)
+              {entitlements.length ? (
+                entitlements.map((entitlement) => {
+                  const resource = resourceById.get(entitlement.resourceServerId)
                   return (
-                    <TableRow key={grant.id}>
+                    <TableRow key={entitlement.id}>
                       <TableCell>
                         <div className="flex min-w-40 flex-col whitespace-normal">
-                          <span className="font-medium">{resource?.name ?? grant.resourceServerId}</span>
+                          <span className="font-medium">{resource?.name ?? entitlement.resourceServerId}</span>
                           <span className="font-mono text-xs text-muted-foreground">
-                            {resource?.identifier ?? grant.resourceServerId}
+                            {resource?.identifier ?? entitlement.resourceServerId}
                           </span>
                         </div>
                       </TableCell>
                       <TableCell>
-                        <div className="flex max-w-md flex-wrap gap-1 whitespace-normal">
-                          {grant.scopes.map((scope) => (
-                            <Badge key={scope} variant="outline">
-                              {scope}
-                            </Badge>
-                          ))}
-                        </div>
+                        <Badge variant="outline">{entitlement.scope}</Badge>
+                      </TableCell>
+                      <TableCell>{entitlement.mode}</TableCell>
+                      <TableCell>
+                        <Badge variant={entitlement.status === 'active' ? 'secondary' : 'outline'}>
+                          {entitlement.status}
+                        </Badge>
                       </TableCell>
                       <TableCell>
-                        <Badge variant={grant.status === 'active' ? 'secondary' : 'outline'}>{grant.status}</Badge>
+                        {entitlement.expiresAt
+                          ? new Date(entitlement.expiresAt).toLocaleString()
+                          : tt('Does not expire')}
                       </TableCell>
                       <TableCell>
-                        {grant.expiresAt ? new Date(grant.expiresAt).toLocaleString() : tt('Does not expire')}
-                      </TableCell>
-                      <TableCell>
-                        <Button onClick={() => setRevokeTarget(grant)} size="sm" variant="outline">
-                          {tt('Revoke')}
-                        </Button>
+                        {entitlement.status === 'active' ? (
+                          <Button onClick={() => setRevokeTarget(entitlement)} size="sm" variant="outline">
+                            {tt('Revoke')}
+                          </Button>
+                        ) : null}
                       </TableCell>
                     </TableRow>
                   )
                 })
               ) : (
                 <TableEmptyRow
-                  colSpan={5}
+                  colSpan={6}
                   description={tt('Assigned Resource Server scopes will appear here.')}
-                  title={tt('No access grants')}
+                  title={tt('No Resource access')}
                 />
               )}
             </TableBody>
@@ -195,7 +204,7 @@ export function AccessGrantsPanel({ subject }: { subject: AccessGrantSubject }) 
           ) : null}
         </div>
       </div>
-      <CreateAccessGrantSheet
+      <CreateScopeEntitlementSheet
         error={<MutationError error={createMutation.error} />}
         onClose={() => setCreateOpen(false)}
         onSubmit={(input) => createMutation.mutate(input)}
@@ -204,20 +213,20 @@ export function AccessGrantsPanel({ subject }: { subject: AccessGrantSubject }) 
         resources={assignableResources}
       />
       <DestructiveConfirmation
-        confirmLabel={revokeMutation.isPending ? tt('Revoking…') : tt('Revoke access grant')}
-        description={tt('The assigned scopes stop applying immediately. Existing audit history is preserved.')}
+        confirmLabel={revokeMutation.isPending ? tt('Revoking…') : tt('Revoke scope')}
+        description={tt('This scope stops applying immediately. Existing audit history is preserved.')}
         error={<MutationError error={revokeMutation.error} />}
         onClose={() => setRevokeTarget(null)}
         onConfirm={() => revokeMutation.mutate(revokeTarget!.id)}
         open={revokeTarget !== null}
         pending={revokeMutation.isPending}
-        title={tt('Revoke access grant?')}
+        title={tt('Revoke scope?')}
       />
     </>
   )
 }
 
-function CreateAccessGrantSheet({
+function CreateScopeEntitlementSheet({
   error,
   onClose,
   onSubmit,
@@ -227,21 +236,27 @@ function CreateAccessGrantSheet({
 }: {
   error: ReactNode
   onClose: () => void
-  onSubmit: (input: { resourceServerId: string; scopes: string[]; expiresAt: string | null }) => void
+  onSubmit: (input: {
+    resourceServerId: string
+    scope: string
+    mode: 'persistent' | 'until'
+    expiresAt: string | null
+  }) => void
   open: boolean
   pending: boolean
   resources: ApiResourceResponse[]
 }) {
   const [resourceId, setResourceId] = useState('')
-  const [scopes, setScopes] = useState<string[]>([])
+  const [scope, setScope] = useState('')
   const selectedResource = resources.find((resource) => resource.id === resourceId)
+  const firstResource = resources[0]
   const availableScopes = useMemo(() => assignedScopes(selectedResource), [selectedResource])
 
   useEffect(() => {
     if (!open) return
-    setResourceId(resources[0]?.id ?? '')
-    setScopes([])
-  }, [open, resources[0]?.id])
+    setResourceId(firstResource?.id ?? '')
+    setScope(assignedScopes(firstResource)[0]?.value ?? '')
+  }, [open, firstResource])
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -249,7 +264,8 @@ function CreateAccessGrantSheet({
     const expiresAt = String(form.get('expiresAt') ?? '').trim()
     onSubmit({
       resourceServerId: resourceId,
-      scopes,
+      scope,
+      mode: expiresAt ? 'until' : 'persistent',
       expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null,
     })
   }
@@ -258,19 +274,21 @@ function CreateAccessGrantSheet({
     <Sheet onOpenChange={(nextOpen) => !nextOpen && onClose()} open={open}>
       <SheetContent className="flex h-full flex-col overflow-hidden sm:max-w-xl">
         <SheetHeader>
-          <SheetTitle>{tt('Add access grant')}</SheetTitle>
-          <SheetDescription>{tt('Assign scopes that require an explicit grant.')}</SheetDescription>
+          <SheetTitle>{tt('Add Resource scope')}</SheetTitle>
+          <SheetDescription>{tt('Assign one scope with its own independent lifetime.')}</SheetDescription>
         </SheetHeader>
         <form
           className="grid flex-1 content-start gap-5 overflow-y-auto px-4 py-5"
-          id="create-access-grant"
+          id="create-scope-entitlement"
           onSubmit={submit}
         >
           <Field label={tt('Resource Server')}>
             <SelectInput
               onChange={(event) => {
                 setResourceId(event.target.value)
-                setScopes([])
+                setScope(
+                  assignedScopes(resources.find((resource) => resource.id === event.target.value))[0]?.value ?? '',
+                )
               }}
               required
               value={resourceId}
@@ -282,30 +300,17 @@ function CreateAccessGrantSheet({
               ))}
             </SelectInput>
           </Field>
-          <fieldset className="grid gap-3">
-            <legend className="text-sm font-medium">{tt('Assigned scopes')}</legend>
-            {availableScopes.map((scope) => {
-              const checkboxId = `access-grant-scope-${scope.value}`
-              return (
-                <label className="flex items-start gap-3 rounded-lg border p-3" htmlFor={checkboxId} key={scope.value}>
-                  <Checkbox
-                    checked={scopes.includes(scope.value)}
-                    id={checkboxId}
-                    onCheckedChange={(checked) =>
-                      setScopes((current) =>
-                        checked ? [...current, scope.value].sort() : current.filter((value) => value !== scope.value),
-                      )
-                    }
-                  />
-                  <span className="grid gap-1 text-sm">
-                    <code>{scope.value}</code>
-                    {scope.description ? <span className="text-muted-foreground">{scope.description}</span> : null}
-                  </span>
-                </label>
-              )
-            })}
-          </fieldset>
-          <Field help={tt('Leave empty for a grant that lasts until revoked.')} label={tt('Expires')}>
+          <Field label={tt('Scope')}>
+            <SelectInput onChange={(event) => setScope(event.target.value)} required value={scope}>
+              {availableScopes.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {item.value}
+                  {item.description ? ` — ${item.description}` : ''}
+                </option>
+              ))}
+            </SelectInput>
+          </Field>
+          <Field help={tt('Leave empty for a persistent Entitlement.')} label={tt('Expires')}>
             <TextInput name="expiresAt" type="datetime-local" />
           </Field>
           {error}
@@ -314,8 +319,8 @@ function CreateAccessGrantSheet({
           <Button onClick={onClose} type="button" variant="outline">
             {tt('Cancel')}
           </Button>
-          <Button disabled={pending || !resourceId || scopes.length === 0} form="create-access-grant" type="submit">
-            {pending ? tt('Adding…') : tt('Add access grant')}
+          <Button disabled={pending || !resourceId || !scope} form="create-scope-entitlement" type="submit">
+            {pending ? tt('Adding…') : tt('Add scope')}
           </Button>
         </SheetFooter>
       </SheetContent>
@@ -327,12 +332,12 @@ function assignedScopes(resource?: ApiResourceResponse) {
   return resource?.scopeRegistry?.scopes.filter((scope) => scope.grantMode === 'assigned') ?? []
 }
 
-function accessGrantQueryPrefix(subject: AccessGrantSubject) {
+function scopeEntitlementQueryPrefix(subject: ScopeEntitlementSubject) {
   return subject.type === 'user'
-    ? [...consoleQueryKeys.users, subject.id, 'access-grants']
-    : [...consoleQueryKeys.applications, subject.id, 'access-grants']
+    ? [...consoleQueryKeys.users, subject.id, 'scope-entitlements']
+    : [...consoleQueryKeys.applications, subject.id, 'scope-entitlements']
 }
 
-function accessGrantQueryKey(subject: AccessGrantSubject, offset: number) {
-  return [...accessGrantQueryPrefix(subject), { limit: pageSize, offset }]
+function scopeEntitlementQueryKey(subject: ScopeEntitlementSubject, offset: number) {
+  return [...scopeEntitlementQueryPrefix(subject), { limit: pageSize, offset }]
 }

@@ -253,7 +253,7 @@ describe('Agent protocol routes', () => {
     const app = createRouteApp()
     expect((await app.request('/api/agent/api-resources')).status).toBe(404)
     expect((await app.request('/api/access-requests/request-1/activation')).status).toBe(404)
-    expect((await app.request('/api/agent/access-grants')).status).toBe(404)
+    expect((await app.request('/api/agent/scope-entitlements')).status).toBe(404)
   })
 })
 
@@ -292,12 +292,12 @@ function createRouteApp(overrides: { signJWT?: () => Promise<{ token: string }> 
   }
   vi.mocked(deps.agentIdentities.findActiveByProtocolAgent).mockResolvedValue(aggregate)
   vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(aggregate)
-  vi.mocked(deps.externalResources.findGrant).mockResolvedValue({
+  vi.mocked(deps.externalResources.findEntitlement).mockResolvedValue({
     id: 'grant-1',
     agentIdentityId: 'identity-1',
     status: 'active',
   } as never)
-  vi.mocked(deps.externalResources.findAccessRequestByGrant).mockResolvedValue({ id: 'request-1' } as never)
+  vi.mocked(deps.externalResources.findAccessRequest).mockResolvedValue({ id: 'request-1' } as never)
   return new Hono()
     .use('*', depsMiddleware(deps))
     .use('*', async (c, next) => {

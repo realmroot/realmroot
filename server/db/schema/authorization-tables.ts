@@ -246,60 +246,6 @@ export const applicationConsent = sqliteTable(
   ],
 )
 
-export const userScopeGrant = sqliteTable(
-  'user_scope_grant',
-  {
-    id: text('id').primaryKey(),
-    userId: text('user_id')
-      .notNull()
-      .references(() => user.id, { onDelete: 'cascade' }),
-    organizationId: text('organization_id').references(() => organization.id, { onDelete: 'cascade' }),
-    resourceServerId: text('resource_server_id')
-      .notNull()
-      .references(() => apiResource.id, { onDelete: 'cascade' }),
-    scopes: text('scopes', { mode: 'json' }).$type<string[]>().notNull(),
-    grantedByUserId: text('granted_by_user_id')
-      .notNull()
-      .references(() => user.id, { onDelete: 'restrict' }),
-    expiresAt: integer('expires_at', { mode: 'timestamp_ms' }),
-    revokedAt: integer('revoked_at', { mode: 'timestamp_ms' }),
-    createdAt: integer('created_at', { mode: 'timestamp_ms' })
-      .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
-      .notNull(),
-  },
-  (table) => [
-    index('userScopeGrant_userId_idx').on(table.userId),
-    index('userScopeGrant_resourceServerId_idx').on(table.resourceServerId),
-    index('userScopeGrant_organizationId_idx').on(table.organizationId),
-  ],
-)
-
-export const applicationScopeGrant = sqliteTable(
-  'application_scope_grant',
-  {
-    id: text('id').primaryKey(),
-    applicationId: text('application_id')
-      .notNull()
-      .references(() => application.id, { onDelete: 'cascade' }),
-    resourceServerId: text('resource_server_id')
-      .notNull()
-      .references(() => apiResource.id, { onDelete: 'cascade' }),
-    scopes: text('scopes', { mode: 'json' }).$type<string[]>().notNull(),
-    grantedByUserId: text('granted_by_user_id')
-      .notNull()
-      .references(() => user.id, { onDelete: 'restrict' }),
-    expiresAt: integer('expires_at', { mode: 'timestamp_ms' }),
-    revokedAt: integer('revoked_at', { mode: 'timestamp_ms' }),
-    createdAt: integer('created_at', { mode: 'timestamp_ms' })
-      .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
-      .notNull(),
-  },
-  (table) => [
-    index('applicationScopeGrant_applicationId_idx').on(table.applicationId),
-    index('applicationScopeGrant_resourceServerId_idx').on(table.resourceServerId),
-  ],
-)
-
 export const organizationRole = sqliteTable(
   'organization_role',
   {

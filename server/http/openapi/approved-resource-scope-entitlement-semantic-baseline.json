@@ -1,0 +1,16 @@
+[
+  {"method":"GET","path":"/agents","operationId":"listAgents","semanticHash":"60f2cc347cbe700b3a34ea2846bf74c3110e70adb3a90c66a6a9de16401ee255"},
+  {"method":"GET","path":"/agents/{agentId}","operationId":"getAgent","semanticHash":"cef1bb30ec388c864e7362bb9a67f4536b1c41c19b5d03c792ecfb59293f7e73"},
+  {"method":"GET","path":"/agents/{agentId}/scope-entitlements","operationId":"listAgentScopeEntitlements","semanticHash":"7f7322cd12e4384607d936d68003e081649b5380762a97bf65588c40e3e9c699"},
+  {"method":"DELETE","path":"/agents/{agentId}/scope-entitlements/{entitlementId}","operationId":"deleteAgentScopeEntitlement","semanticHash":"19eee94cac502b3a2c2b4445ee5cbf0cf1e432880f4c20039e70c3ee06223023"},
+  {"method":"GET","path":"/agents/{agentId}/scope-entitlements/{entitlementId}","operationId":"getAgentScopeEntitlement","semanticHash":"16f412b605cdc9311698868e2933070ab3508e0bf052d64717107f63f2cb6204"},
+  {"method":"GET","path":"/applications/{applicationId}/scope-entitlements","operationId":"listApplicationScopeEntitlements","semanticHash":"a3a761fbeab71d8b9e58adb6e4306a1220de5aaec98751092a7fca877cb13401"},
+  {"method":"POST","path":"/applications/{applicationId}/scope-entitlements","operationId":"createApplicationScopeEntitlement","semanticHash":"373e239991e7c7ed1329a87e3e6e54609586b77a6ea7a92fec24ce7062825810"},
+  {"method":"DELETE","path":"/applications/{applicationId}/scope-entitlements/{entitlementId}","operationId":"deleteApplicationScopeEntitlement","semanticHash":"6ba488c48094b9c8ee898e64c66ebf6669b0abac53e56d4a8bcf2ce3dc9c9e7d"},
+  {"method":"GET","path":"/applications/{applicationId}/scope-entitlements/{entitlementId}","operationId":"getApplicationScopeEntitlement","semanticHash":"3640d4601b9879b1755c91c56fddadd109bca6e6ec758b83c14dbe0a722d9bde"},
+  {"method":"GET","path":"/realm/audit-events","operationId":"listAgentAuditEvents","semanticHash":"996592d0ac44b82a6e1aa949a55bf739f9dab81bf317ff4b37700f251aa01030"},
+  {"method":"GET","path":"/users/{userId}/scope-entitlements","operationId":"listUserScopeEntitlements","semanticHash":"ab3dc6de964faf94a1177304172138413ed226f648d52168e12010104c423124"},
+  {"method":"POST","path":"/users/{userId}/scope-entitlements","operationId":"createUserScopeEntitlement","semanticHash":"799ffe3e5c7cc41f845d554e4c0b5d5a43d3790c94e922b873a07e9b90c52e55"},
+  {"method":"DELETE","path":"/users/{userId}/scope-entitlements/{entitlementId}","operationId":"deleteUserScopeEntitlement","semanticHash":"7644214db3984eb012ec06a9736d0c1ee647ffe40d323adb3553778cc2ac5e6a"},
+  {"method":"GET","path":"/users/{userId}/scope-entitlements/{entitlementId}","operationId":"getUserScopeEntitlement","semanticHash":"5743d8e92e390d5c25a269ceaba3621bd16cd07aca1503d642c62029b016093c"}
+]

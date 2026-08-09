@@ -84,7 +84,7 @@ export function resetLocalData() {
     DELETE FROM agent_dpop_jti;
     DELETE FROM agent_connection_request;
     DELETE FROM external_token_lease;
-    DELETE FROM agent_access_grant;
+    DELETE FROM resource_scope_entitlement;
     DELETE FROM agent_access_request;
     DELETE FROM resource_connection_intent;
     DELETE FROM provider_resource_authorization;
@@ -105,8 +105,6 @@ export function resetLocalData() {
     DELETE FROM token_exchange_access_token;
     DELETE FROM token_exchange_refresh_token;
     DELETE FROM federated_credential;
-    DELETE FROM user_scope_grant;
-    DELETE FROM application_scope_grant;
     DELETE FROM api_resource;
     DELETE FROM application_consent;
     DELETE FROM application_client_secret;

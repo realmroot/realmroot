@@ -168,7 +168,7 @@ Feature: Account Center
     When I create an Organization from Account Center
     Then I become its Owner
     And I can open its route-backed Organization Workspace with members, Roles, Applications, Resource Servers, Agents, Webhooks, activity, and settings
-    And its Agent identities, my Better Auth membership Roles, and active Agent access grants come from canonical resource collections
+    And its Agent identities, my Better Auth membership Roles, and active Agent scope Entitlements come from canonical resource collections
     And I can switch the active Organization without changing Developer Console eligibility
     When I update its profile or invite a member with one or more Roles
     Then the Organization detail reflects the change
@@ -193,5 +193,5 @@ Feature: Account Center
     When I open Account Center
     Then I can inspect each stable Agent, its granted access, and its activity
     And protocol registrations, hosts, and identity bindings remain internal
-    When I delete an Agent or revoke a selected access grant
+    When I delete an Agent or revoke a selected scope Entitlement
     Then that delegated access is no longer active for my account

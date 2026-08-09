@@ -65,7 +65,7 @@ describe('admin console applications-detail-b', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
 
     expect(await screen.findByRole('heading', { name: 'Customer portal' })).toBeTruthy()
-    expect(screen.queryByRole('tab', { name: 'Access grants' })).toBeNull()
+    expect(screen.queryByRole('tab', { name: 'Resource access' })).toBeNull()
     expect(screen.getByRole('tab', { name: 'User authorizations' })).toBeTruthy()
     expect(requests.filter((url) => url === '/api/applications/app-1')).toHaveLength(2)
   })
@@ -247,7 +247,7 @@ describe('admin console applications-detail-b', () => {
     expect(await screen.findByText('No active authorizations')).toBeTruthy()
   })
 
-  it('shows Access grants only for an Application machine principal', async () => {
+  it('shows Resource access only for an Application machine principal', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input).split('?')[0]!
       if (url === '/api/applications/app-1') {
@@ -264,7 +264,7 @@ describe('admin console applications-detail-b', () => {
       if (url === '/api/resource-servers') {
         return Promise.resolve(jsonResponse({ items: [assignedResource], pagination }))
       }
-      if (url === '/api/applications/app-1/scope-grants') {
+      if (url === '/api/applications/app-1/scope-entitlements') {
         return Promise.resolve(
           jsonResponse({
             items: [
@@ -272,13 +272,14 @@ describe('admin console applications-detail-b', () => {
                 id: 'asg-1',
                 applicationId: 'app-1',
                 resourceServerId: 'resource-1',
-                scopes: ['projects:admin'],
+                scope: 'projects:admin',
+                mode: 'persistent',
                 status: 'active',
                 grantedByUserId: 'admin-1',
                 expiresAt: null,
                 createdAt: '2026-01-01T00:00:00.000Z',
                 links: {
-                  self: '/api/applications/app-1/scope-grants/asg-1',
+                  self: '/api/applications/app-1/scope-entitlements/asg-1',
                   resourceServer: '/api/resource-servers/resource-1',
                 },
               },
@@ -290,9 +291,9 @@ describe('admin console applications-detail-b', () => {
       return consoleSharedFetch(input, init)
     })
 
-    renderWithQuery(<ApplicationDetailPage applicationId="app-1" section="access-grants" />)
+    renderWithQuery(<ApplicationDetailPage applicationId="app-1" section="scope-entitlements" />)
 
-    expect(await screen.findByRole('tab', { name: 'Access grants' })).toBeTruthy()
+    expect(await screen.findByRole('tab', { name: 'Resource access' })).toBeTruthy()
     expect(screen.queryByRole('tab', { name: 'User authorizations' })).toBeNull()
     expect(await screen.findByText('Projects API')).toBeTruthy()
     expect(screen.getByText('projects:admin')).toBeTruthy()

@@ -254,48 +254,54 @@ export const apiResourceContractResponseSchema = z.object({
   ),
 })
 
-const scopeGrantFieldsSchema = z.object({
+export const resourceScopeEntitlementResponseSchema = z.object({
   id: z.string(),
+  userId: z.string().nullable(),
+  applicationId: z.string().nullable(),
+  agentIdentityId: z.string().nullable(),
+  organizationId: z.string().nullable(),
   resourceServerId: z.string(),
-  scopes: z.array(nonEmptyString),
-  status: z.enum(['active', 'expired']),
+  connectionId: z.string().nullable(),
+  authorizationDetails: authorizationDetailsSchema,
+  scope: nonEmptyString,
+  mode: z.enum(['persistent', 'until', 'once']),
+  status: z.enum(['active', 'revoked', 'consumed', 'expired', 'merged']),
   grantedByUserId: z.string(),
+  sourceAccessRequestId: z.string().nullable(),
   expiresAt: z.iso.datetime().nullable(),
+  endedAt: z.iso.datetime().nullable(),
+  endReason: z.enum(['revoked', 'consumed', 'expired', 'merged']).nullable(),
   createdAt: z.string(),
+  updatedAt: z.string(),
   links: z.object({
     self: z.string(),
     resourceServer: z.string(),
   }),
 })
 
-export const userScopeGrantResponseSchema = scopeGrantFieldsSchema.extend({
-  userId: z.string(),
-  organizationId: z.string().nullable(),
-})
-export const applicationScopeGrantResponseSchema = scopeGrantFieldsSchema.extend({
-  applicationId: z.string(),
-})
-export const createUserScopeGrantRequestSchema = z.object({
+export const createUserScopeEntitlementRequestSchema = z.object({
   organizationId: nonEmptyString.nullable().optional(),
   resourceServerId: nonEmptyString,
-  scopes: z.array(nonEmptyString).min(1),
+  scope: nonEmptyString,
+  mode: z.enum(['persistent', 'until']).default('persistent'),
   expiresAt: z.iso.datetime().nullable().optional(),
 })
-export const createApplicationScopeGrantRequestSchema = z.object({
+export const createApplicationScopeEntitlementRequestSchema = z.object({
   resourceServerId: nonEmptyString,
-  scopes: z.array(nonEmptyString).min(1),
+  scope: nonEmptyString,
+  mode: z.enum(['persistent', 'until']).default('persistent'),
   expiresAt: z.iso.datetime().nullable().optional(),
 })
-export const listScopeGrantsQuerySchema = paginationQuerySchema.extend({
+export const listScopeEntitlementsQuerySchema = paginationQuerySchema.extend({
   resourceServerId: nonEmptyString.optional(),
-  status: z.enum(['active', 'expired']).optional(),
+  status: z.enum(['active', 'revoked', 'consumed', 'expired', 'merged']).optional(),
 })
-export const listUserScopeGrantsResponseSchema = z.object({
-  items: z.array(userScopeGrantResponseSchema),
+export const listUserScopeEntitlementsResponseSchema = z.object({
+  items: z.array(resourceScopeEntitlementResponseSchema),
   pagination: paginationMetadataSchema,
 })
-export const listApplicationScopeGrantsResponseSchema = z.object({
-  items: z.array(applicationScopeGrantResponseSchema),
+export const listApplicationScopeEntitlementsResponseSchema = z.object({
+  items: z.array(resourceScopeEntitlementResponseSchema),
   pagination: paginationMetadataSchema,
 })
 
@@ -335,8 +341,7 @@ export type UpdateRoleRequest = z.infer<typeof updateRoleRequestSchema>
 export type RoleScope = z.infer<typeof roleScopeSchema>
 export type MemberRolesResponse = z.infer<typeof memberRolesResponseSchema>
 export type ReplaceMemberRolesRequest = z.infer<typeof replaceMemberRolesRequestSchema>
-export type UserScopeGrantResponse = z.infer<typeof userScopeGrantResponseSchema>
-export type ApplicationScopeGrantResponse = z.infer<typeof applicationScopeGrantResponseSchema>
-export type CreateUserScopeGrantRequest = z.infer<typeof createUserScopeGrantRequestSchema>
-export type CreateApplicationScopeGrantRequest = z.infer<typeof createApplicationScopeGrantRequestSchema>
-export type ListScopeGrantsQuery = z.infer<typeof listScopeGrantsQuerySchema>
+export type ResourceScopeEntitlementResponse = z.infer<typeof resourceScopeEntitlementResponseSchema>
+export type CreateUserScopeEntitlementRequest = z.infer<typeof createUserScopeEntitlementRequestSchema>
+export type CreateApplicationScopeEntitlementRequest = z.infer<typeof createApplicationScopeEntitlementRequestSchema>
+export type ListScopeEntitlementsQuery = z.infer<typeof listScopeEntitlementsQuerySchema>

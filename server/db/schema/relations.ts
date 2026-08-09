@@ -16,13 +16,12 @@ import {
   application,
   applicationClientSecret,
   applicationConsent,
-  applicationScopeGrant,
   invitation,
   member,
   organization,
   organizationRole,
-  userScopeGrant,
 } from './authorization-tables'
+import { resourceScopeEntitlement } from './resource-scope-entitlement-tables'
 
 export const userRelations = relations(user, ({ many }) => ({
   sessions: many(session),
@@ -40,6 +39,8 @@ export const userRelations = relations(user, ({ many }) => ({
   grantedAgentCapabilities: many(agentCapabilityGrant, { relationName: 'grantedAgentCapabilities' }),
   deniedAgentCapabilities: many(agentCapabilityGrant, { relationName: 'deniedAgentCapabilities' }),
   agentApprovalRequests: many(approvalRequest),
+  scopeEntitlements: many(resourceScopeEntitlement, { relationName: 'entitlementSubjectUser' }),
+  grantedScopeEntitlements: many(resourceScopeEntitlement, { relationName: 'entitlementGrantor' }),
 }))
 
 export const twoFactorRelations = relations(twoFactor, ({ one }) => ({
@@ -172,7 +173,7 @@ export const applicationRelations = relations(application, ({ one, many }) => ({
   }),
   clientSecrets: many(applicationClientSecret),
   consents: many(applicationConsent),
-  scopeGrants: many(applicationScopeGrant),
+  scopeEntitlements: many(resourceScopeEntitlement),
 }))
 
 export const apiResourceRelations = relations(apiResource, ({ many, one }) => ({
@@ -180,8 +181,28 @@ export const apiResourceRelations = relations(apiResource, ({ many, one }) => ({
     fields: [apiResource.ownerOrganizationId],
     references: [organization.id],
   }),
-  userScopeGrants: many(userScopeGrant),
-  applicationScopeGrants: many(applicationScopeGrant),
+  scopeEntitlements: many(resourceScopeEntitlement),
+}))
+
+export const resourceScopeEntitlementRelations = relations(resourceScopeEntitlement, ({ one }) => ({
+  user: one(user, {
+    fields: [resourceScopeEntitlement.userId],
+    references: [user.id],
+    relationName: 'entitlementSubjectUser',
+  }),
+  application: one(application, {
+    fields: [resourceScopeEntitlement.applicationId],
+    references: [application.id],
+  }),
+  resourceServer: one(apiResource, {
+    fields: [resourceScopeEntitlement.resourceServerId],
+    references: [apiResource.id],
+  }),
+  grantedByUser: one(user, {
+    fields: [resourceScopeEntitlement.grantedByUserId],
+    references: [user.id],
+    relationName: 'entitlementGrantor',
+  }),
 }))
 
 export const organizationRoleRelations = relations(organizationRole, ({ one }) => ({

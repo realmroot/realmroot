@@ -85,20 +85,20 @@
   },
   {
     "method": "GET",
-    "path": "/agents/{agentId}/access-grants",
-    "operationId": "listAgentAccessGrants",
+    "path": "/agents/{agentId}/scope-entitlements",
+    "operationId": "listAgentScopeEntitlements",
     "semanticHash": "f02a05e6d65941494e89b89b92a155d37f618845ab53ac9d4d3038c34a32a154"
   },
   {
     "method": "DELETE",
-    "path": "/agents/{agentId}/access-grants/{grantId}",
-    "operationId": "deleteAgentAccessGrant",
+    "path": "/agents/{agentId}/scope-entitlements/{grantId}",
+    "operationId": "deleteAgentScopeEntitlement",
     "semanticHash": "cf93a4165e554565b74fc1816f37f917b59b48f4e5ec28e7be344e22711c5de1"
   },
   {
     "method": "GET",
-    "path": "/agents/{agentId}/access-grants/{grantId}",
-    "operationId": "getAgentAccessGrant",
+    "path": "/agents/{agentId}/scope-entitlements/{grantId}",
+    "operationId": "getAgentScopeEntitlement",
     "semanticHash": "e8d7163173cc636f8232e725e02a58864c142f9c73e734b559b91f0a882393f3"
   },
   {
@@ -211,26 +211,26 @@
   },
   {
     "method": "GET",
-    "path": "/applications/{applicationId}/scope-grants",
-    "operationId": "listApplicationScopeGrants",
+    "path": "/applications/{applicationId}/scope-entitlements",
+    "operationId": "listApplicationScopeEntitlements",
     "semanticHash": "cdf67531dd5188d0d174fa6b272fae88afbb6553c367494aab12993eaabac35b"
   },
   {
     "method": "POST",
-    "path": "/applications/{applicationId}/scope-grants",
-    "operationId": "createApplicationScopeGrant",
+    "path": "/applications/{applicationId}/scope-entitlements",
+    "operationId": "createApplicationScopeEntitlement",
     "semanticHash": "20757d60fe30cdf1244cd88bc98fa1e55e957036cb7f06b0a222b7e2775aea89"
   },
   {
     "method": "DELETE",
-    "path": "/applications/{applicationId}/scope-grants/{grantId}",
-    "operationId": "deleteApplicationScopeGrant",
+    "path": "/applications/{applicationId}/scope-entitlements/{grantId}",
+    "operationId": "deleteApplicationScopeEntitlement",
     "semanticHash": "f5614b47f57367bd4dc016846dbb5cf90a2bc2e05b81004ba4c30ee03a093b87"
   },
   {
     "method": "GET",
-    "path": "/applications/{applicationId}/scope-grants/{grantId}",
-    "operationId": "getApplicationScopeGrant",
+    "path": "/applications/{applicationId}/scope-entitlements/{grantId}",
+    "operationId": "getApplicationScopeEntitlement",
     "semanticHash": "05953ab0593662a26115bbd73a8d0277b4c1c25ec93df006aa2214f35fb849ac"
   },
   {
@@ -655,26 +655,26 @@
   },
   {
     "method": "GET",
-    "path": "/users/{userId}/scope-grants",
-    "operationId": "listUserScopeGrants",
+    "path": "/users/{userId}/scope-entitlements",
+    "operationId": "listUserScopeEntitlements",
     "semanticHash": "ac3110ae1929ec850c5adcfb52f2b8aa4abef7b601c6aa9261fd502613ba9177"
   },
   {
     "method": "POST",
-    "path": "/users/{userId}/scope-grants",
-    "operationId": "createUserScopeGrant",
+    "path": "/users/{userId}/scope-entitlements",
+    "operationId": "createUserScopeEntitlement",
     "semanticHash": "3aef485d1665a1c50e2b5443bd413e9fe3d04f5ccbf9b61a43d245623fa51bb9"
   },
   {
     "method": "DELETE",
-    "path": "/users/{userId}/scope-grants/{grantId}",
-    "operationId": "deleteUserScopeGrant",
+    "path": "/users/{userId}/scope-entitlements/{grantId}",
+    "operationId": "deleteUserScopeEntitlement",
     "semanticHash": "3ed3180d6914b50cae01e1d5be48bdc92dd61b126e153d8b8f1dae8e27dea5cc"
   },
   {
     "method": "GET",
-    "path": "/users/{userId}/scope-grants/{grantId}",
-    "operationId": "getUserScopeGrant",
+    "path": "/users/{userId}/scope-entitlements/{grantId}",
+    "operationId": "getUserScopeEntitlement",
     "semanticHash": "16df5574908b2db5934098853acf9b26cf743d828268bc274c90686e5f4a622f"
   },
   {
