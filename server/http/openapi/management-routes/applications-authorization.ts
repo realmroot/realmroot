@@ -225,6 +225,11 @@ export const applicationAuthorizationRoutes: ManagementRouteConfig[] = [
     path: '/resource-servers',
     operationId: 'listResourceServers',
     summary: 'List Resource Servers',
+    security: [
+      { agentAuth: ['resource-servers:read'] },
+      { oauth2: ['resource-servers:read'] },
+      { sessionCookie: ['resource-servers:read'] },
+    ],
     request: { query: listApiResourcesQuerySchema },
     response: resourceServersResponseSchema,
   },
@@ -243,6 +248,11 @@ export const applicationAuthorizationRoutes: ManagementRouteConfig[] = [
     path: '/resource-servers/{resourceServerId}',
     operationId: 'getResourceServer',
     summary: 'Get a Resource Server',
+    security: [
+      { agentAuth: ['resource-servers:read'] },
+      { oauth2: ['resource-servers:read'] },
+      { sessionCookie: ['resource-servers:read'] },
+    ],
     request: { params: resourceServerIdParam },
     response: resourceServerSchema,
   },

@@ -1,0 +1,788 @@
+[
+  {
+    "method": "GET",
+    "path": "/access/consents",
+    "operationId": "listApplicationConsents",
+    "semanticHash": "7ab69565e50e67a6129864e7f42dbac1a84d48b6dde35019d4b8c1d4202d010c"
+  },
+  {
+    "method": "GET",
+    "path": "/access/consents/{consentId}",
+    "operationId": "getApplicationConsent",
+    "semanticHash": "091052cbe41e9fb1e31d6126b050a0b81d4607d361d653ca62de1520bd08f97d"
+  },
+  {
+    "method": "GET",
+    "path": "/access/consents/{consentId}/revocation",
+    "operationId": "getApplicationConsentRevocation",
+    "semanticHash": "f8a9b488b567863b215f29ad4c26ec2f3c54326d096fae9806b17793eb8a10af"
+  },
+  {
+    "method": "PUT",
+    "path": "/access/consents/{consentId}/revocation",
+    "operationId": "replaceApplicationConsentRevocation",
+    "semanticHash": "9eb3d547866eb9649852097cf614eb7f1983559cfd6c31a8966ee10d27eaf729"
+  },
+  {
+    "method": "GET",
+    "path": "/access/requests",
+    "operationId": "listAgentAuthorizationRequests",
+    "semanticHash": "f9895014021b5e99cfb5e53a04eb7c534244a7c27aa1db6e2c3f995fec235d2f"
+  },
+  {
+    "method": "POST",
+    "path": "/access/requests",
+    "operationId": "createAgentAuthorizationRequest",
+    "semanticHash": "c8ca4d6cb065ca4fe61f2f4d3d24c2f567cd68482fa5181aa2429b57fb200860"
+  },
+  {
+    "method": "GET",
+    "path": "/access/requests/{requestId}",
+    "operationId": "getManagedAgentAuthorizationRequest",
+    "semanticHash": "fb3bf289a19ca7b6035eae1ca52f5b0c72a8a26d0c8d74d3d21551e903bb906d"
+  },
+  {
+    "method": "POST",
+    "path": "/access/requests/{requestId}/credentials",
+    "operationId": "createAgentAccessRequestCredential",
+    "semanticHash": "abfdf0b697ced5cd83a1462562257e4289c141086d0fc225c4ab2e447016389c"
+  },
+  {
+    "method": "GET",
+    "path": "/access/requests/{requestId}/decision",
+    "operationId": "getAgentAuthorizationRequestDecision",
+    "semanticHash": "4bfc87576c78b0cce0cd5b30cbd6c86064697750b15eb3a49b578a2f15f8f72e"
+  },
+  {
+    "method": "PUT",
+    "path": "/access/requests/{requestId}/decision",
+    "operationId": "replaceAgentAuthorizationRequestDecision",
+    "semanticHash": "7111cc04c2a6dd5a18db2aab73f6c9cbc3c6ff3a6f105b7304f59482e1ce0372"
+  },
+  {
+    "method": "GET",
+    "path": "/agent/status",
+    "operationId": "getAgentStatus",
+    "semanticHash": "c69cc1d3cdfdb86ab8f3c44e36e544caa34ea57e82b8bbb26036f2d8b567d52c"
+  },
+  {
+    "method": "GET",
+    "path": "/agents",
+    "operationId": "listAgents",
+    "semanticHash": "e2f01b2140ed7bdd7972871c368a92089167552b9ea6f7215b4fc3488f4104f5"
+  },
+  {
+    "method": "DELETE",
+    "path": "/agents/{agentId}",
+    "operationId": "deleteAgent",
+    "semanticHash": "10a850a18474a75fd28323080e26e0c1a5d93998f308e58d1507c68546e77d66"
+  },
+  {
+    "method": "GET",
+    "path": "/agents/{agentId}",
+    "operationId": "getAgent",
+    "semanticHash": "23a2aea6518ee4e0903d8d21970038988193db08d1ca93391bda077d27f99631"
+  },
+  {
+    "method": "GET",
+    "path": "/agents/{agentId}/access-grants",
+    "operationId": "listAgentAccessGrants",
+    "semanticHash": "f02a05e6d65941494e89b89b92a155d37f618845ab53ac9d4d3038c34a32a154"
+  },
+  {
+    "method": "DELETE",
+    "path": "/agents/{agentId}/access-grants/{grantId}",
+    "operationId": "deleteAgentAccessGrant",
+    "semanticHash": "cf93a4165e554565b74fc1816f37f917b59b48f4e5ec28e7be344e22711c5de1"
+  },
+  {
+    "method": "GET",
+    "path": "/agents/{agentId}/access-grants/{grantId}",
+    "operationId": "getAgentAccessGrant",
+    "semanticHash": "e8d7163173cc636f8232e725e02a58864c142f9c73e734b559b91f0a882393f3"
+  },
+  {
+    "method": "DELETE",
+    "path": "/agents/{agentId}/activation",
+    "operationId": "deleteAgentActivation",
+    "semanticHash": "22c92e01b85c524ccc97d326260c8481f20571541568febd37c9ecd8d13fa5f7"
+  },
+  {
+    "method": "GET",
+    "path": "/agents/{agentId}/activation",
+    "operationId": "getAgentActivation",
+    "semanticHash": "91e3337537d0d519950081362b5ce1ffed3a6be731495d04ead289a78fbcfa5b"
+  },
+  {
+    "method": "PUT",
+    "path": "/agents/{agentId}/activation",
+    "operationId": "replaceAgentActivation",
+    "semanticHash": "1b2fb5e048d85aba3c047c3ec6f38170c74619a2a39d6171428b994df239bfe3"
+  },
+  {
+    "method": "GET",
+    "path": "/agents/{agentId}/installations",
+    "operationId": "listAgentInstallations",
+    "semanticHash": "3754702db944882a05d6c7c658428feb9fd9b3ee8056f4220cc1ba687da97c96"
+  },
+  {
+    "method": "GET",
+    "path": "/applications",
+    "operationId": "listApplications",
+    "semanticHash": "e08c55508d63019b4f30c2427be7bacf9c9dc5e4cece42c8e0571d7a7957d3c3"
+  },
+  {
+    "method": "POST",
+    "path": "/applications",
+    "operationId": "createApplication",
+    "semanticHash": "18b8d7f6c076e5b79564a1775f7aa7ce05e99836dbe642812441c24b102b8431"
+  },
+  {
+    "method": "DELETE",
+    "path": "/applications/{applicationId}",
+    "operationId": "deleteApplication",
+    "semanticHash": "3a6e43f1b490652c46ffb25c670ebf41e45a2be14aeaa5fc56a7b1edebd9ac55"
+  },
+  {
+    "method": "GET",
+    "path": "/applications/{applicationId}",
+    "operationId": "getApplication",
+    "semanticHash": "0de817bdc4545108656703377d39e137f2ec1586ddce85de65476f8e0ae75c1b"
+  },
+  {
+    "method": "PATCH",
+    "path": "/applications/{applicationId}",
+    "operationId": "updateApplication",
+    "semanticHash": "75072c4b4fee5cc70737ec7e9ea95c85c9d48e153f870f04f917591c84745455"
+  },
+  {
+    "method": "GET",
+    "path": "/applications/{applicationId}/client-secrets",
+    "operationId": "listClientSecrets",
+    "semanticHash": "123dd3c4e77480091c62532c13d21a774bd322658c544bd67e9c58507a2c2fee"
+  },
+  {
+    "method": "POST",
+    "path": "/applications/{applicationId}/client-secrets",
+    "operationId": "createClientSecret",
+    "semanticHash": "9d0a27cefa2ce80a16c7b831ddaf22d8234d4b5cca2c9d5b7b8b38d4cd64a0be"
+  },
+  {
+    "method": "GET",
+    "path": "/applications/{applicationId}/federated-credentials",
+    "operationId": "listFederatedCredentials",
+    "semanticHash": "44a3862afe931fdad46954d8db6b95033b796c1d6fe766c47b849d0f3e92e60a"
+  },
+  {
+    "method": "POST",
+    "path": "/applications/{applicationId}/federated-credentials",
+    "operationId": "createFederatedCredential",
+    "semanticHash": "24ee2a513f7845bc9d751d7ef6ecefff773e74898c6d9185a30d3464b3156300"
+  },
+  {
+    "method": "DELETE",
+    "path": "/applications/{applicationId}/federated-credentials/{credentialId}",
+    "operationId": "deleteFederatedCredential",
+    "semanticHash": "0c0d334a049b0784ea05b13e4e40695634c4edba43792b8ccbc38efe027c42f7"
+  },
+  {
+    "method": "GET",
+    "path": "/applications/{applicationId}/federated-credentials/{credentialId}",
+    "operationId": "getFederatedCredential",
+    "semanticHash": "f8b49bcb8f83a795417cfeb4f654650373cddc444ce466f00e164bcd7df06829"
+  },
+  {
+    "method": "PATCH",
+    "path": "/applications/{applicationId}/federated-credentials/{credentialId}",
+    "operationId": "updateFederatedCredential",
+    "semanticHash": "56e7db9c7de14e9ab6576a21ed0e6f77ed41a7e9086558acc454a44306185918"
+  },
+  {
+    "method": "GET",
+    "path": "/applications/{applicationId}/redirect-uris",
+    "operationId": "listRedirectUris",
+    "semanticHash": "a412d07e9ceb4cb2be30984c3d7b302ab1cca18e84568e37b1775fdf2affda06"
+  },
+  {
+    "method": "PUT",
+    "path": "/applications/{applicationId}/redirect-uris",
+    "operationId": "replaceRedirectUris",
+    "semanticHash": "ab34bf12fdf06c8a2bb88f4780a9f3f630dc3eed7cb2c01c4656cfea5fdf928a"
+  },
+  {
+    "method": "GET",
+    "path": "/applications/{applicationId}/scope-grants",
+    "operationId": "listApplicationScopeGrants",
+    "semanticHash": "cdf67531dd5188d0d174fa6b272fae88afbb6553c367494aab12993eaabac35b"
+  },
+  {
+    "method": "POST",
+    "path": "/applications/{applicationId}/scope-grants",
+    "operationId": "createApplicationScopeGrant",
+    "semanticHash": "20757d60fe30cdf1244cd88bc98fa1e55e957036cb7f06b0a222b7e2775aea89"
+  },
+  {
+    "method": "DELETE",
+    "path": "/applications/{applicationId}/scope-grants/{grantId}",
+    "operationId": "deleteApplicationScopeGrant",
+    "semanticHash": "f5614b47f57367bd4dc016846dbb5cf90a2bc2e05b81004ba4c30ee03a093b87"
+  },
+  {
+    "method": "GET",
+    "path": "/applications/{applicationId}/scope-grants/{grantId}",
+    "operationId": "getApplicationScopeGrant",
+    "semanticHash": "05953ab0593662a26115bbd73a8d0277b4c1c25ec93df006aa2214f35fb849ac"
+  },
+  {
+    "method": "GET",
+    "path": "/connectors",
+    "operationId": "listConnectors",
+    "semanticHash": "a07839189b15e6787c6bda1c8cfa76fcf6bd9421ba3cb536ad60a3fc0560bd0c"
+  },
+  {
+    "method": "POST",
+    "path": "/connectors",
+    "operationId": "createConnector",
+    "semanticHash": "0bf90b6a61914eb74202722114d5988aad76421bbb14c77c3e007e74a489a3f4"
+  },
+  {
+    "method": "DELETE",
+    "path": "/connectors/{connectorId}",
+    "operationId": "deleteConnector",
+    "semanticHash": "b8b0896dca737406f43f17fce6410f547b0dd45f5aeb4b46116829e2abc718e8"
+  },
+  {
+    "method": "GET",
+    "path": "/connectors/{connectorId}",
+    "operationId": "getConnector",
+    "semanticHash": "78cf441f1946a644794154be08def1c457830f4f70f82733a976191484de2bd1"
+  },
+  {
+    "method": "PATCH",
+    "path": "/connectors/{connectorId}",
+    "operationId": "updateConnector",
+    "semanticHash": "75d962ac3934dc4699d88f23ff8426f50f71c59b38f22b4c49fd836658521cfa"
+  },
+  {
+    "method": "GET",
+    "path": "/connectors/{connectorId}/readiness",
+    "operationId": "getConnectorReadiness",
+    "semanticHash": "309764202f8060bdc3df84108057aaf8171c12c49c1c7f7b45c67c51fe407a35"
+  },
+  {
+    "method": "GET",
+    "path": "/connectors/templates",
+    "operationId": "listConnectorTemplates",
+    "semanticHash": "72399f89b5ad3c9a8e625e00e5bfdf9c3794bb25932488a092a6028bee2cfd88"
+  },
+  {
+    "method": "GET",
+    "path": "/organizations",
+    "operationId": "listOrganizations",
+    "semanticHash": "21046b35d34457273e55c36db2044cf24654e91cd18ee4660a14fa5e6a84ebbd"
+  },
+  {
+    "method": "POST",
+    "path": "/organizations",
+    "operationId": "createOrganization",
+    "semanticHash": "887697b23a150b52dcbc499ba39925a412638a6a57773e75b3e2ab5e406811f4"
+  },
+  {
+    "method": "DELETE",
+    "path": "/organizations/{organizationId}",
+    "operationId": "deleteOrganization",
+    "semanticHash": "9d5a7b8f78c6241acefca450a2a543647f25e346d38339caef20498b5503e8b4"
+  },
+  {
+    "method": "GET",
+    "path": "/organizations/{organizationId}",
+    "operationId": "getOrganization",
+    "semanticHash": "4aef71784dd8ee87cf4e7d91b8508f85a237a31a412c34dc666e7f35659c6ff2"
+  },
+  {
+    "method": "PATCH",
+    "path": "/organizations/{organizationId}",
+    "operationId": "updateOrganization",
+    "semanticHash": "cc18248d7291e6e6529fc7f152763907707fd70df8c4048055c66bdcdcbe58ac"
+  },
+  {
+    "method": "GET",
+    "path": "/organizations/{organizationId}/invitations",
+    "operationId": "listOrganizationInvitations",
+    "semanticHash": "c586aa61874da55e934051f5b3b0b392a8df54fafc7880231245b1de7a09fb66"
+  },
+  {
+    "method": "POST",
+    "path": "/organizations/{organizationId}/invitations",
+    "operationId": "createOrganizationInvitation",
+    "semanticHash": "dd56c7f37a27f3bdb4e92987c7ef2e1dfaa888e1fedd41151a6cec6203a51fb7"
+  },
+  {
+    "method": "DELETE",
+    "path": "/organizations/{organizationId}/invitations/{invitationId}",
+    "operationId": "deleteOrganizationInvitation",
+    "semanticHash": "c5301e654e2f4b72e8037c94085cfba78901b390db06f192465ae04923bdcf4c"
+  },
+  {
+    "method": "GET",
+    "path": "/organizations/{organizationId}/invitations/{invitationId}",
+    "operationId": "getOrganizationInvitation",
+    "semanticHash": "957c2c76b2e38507c3b46fadc20a92a12e27fa73955ef96e56237974b34bfe1c"
+  },
+  {
+    "method": "GET",
+    "path": "/organizations/{organizationId}/members",
+    "operationId": "listOrganizationMembers",
+    "semanticHash": "ff4c2b3ee4cc382a9fbff7f94ad0ad16692929e60b8f1cca9b73a397e134f941"
+  },
+  {
+    "method": "POST",
+    "path": "/organizations/{organizationId}/members",
+    "operationId": "createOrganizationMember",
+    "semanticHash": "ac58e01d338b8df34599e558b8a791c149f3282bc40c32fc507daae491f519c4"
+  },
+  {
+    "method": "DELETE",
+    "path": "/organizations/{organizationId}/members/{memberId}",
+    "operationId": "deleteOrganizationMember",
+    "semanticHash": "95acc7088f0ca2bff3374622910f5c5c84f93b4ef53629201e7b54c0ac8d4e90"
+  },
+  {
+    "method": "GET",
+    "path": "/organizations/{organizationId}/members/{memberId}",
+    "operationId": "getOrganizationMember",
+    "semanticHash": "02efb0b80c59bfc38c1f96bc07b7673c369c2e01a1265f1f90481ab35656cdff"
+  },
+  {
+    "method": "PATCH",
+    "path": "/organizations/{organizationId}/members/{memberId}",
+    "operationId": "updateOrganizationMember",
+    "semanticHash": "2aaa86800032411ec96961f4e485fc70a943bd7d69044ffc14a48a0570da078e"
+  },
+  {
+    "method": "GET",
+    "path": "/organizations/{organizationId}/members/{memberId}/roles",
+    "operationId": "getOrganizationMemberRoles",
+    "semanticHash": "bce312e60490f6f3e453338ef31c5907e3298c33d4c8dbbcb23cab8e491dd0f2"
+  },
+  {
+    "method": "PUT",
+    "path": "/organizations/{organizationId}/members/{memberId}/roles",
+    "operationId": "replaceOrganizationMemberRoles",
+    "semanticHash": "0dfba83e072f2555c16995f5b3d0248627d154b588c940464da75d3eb617dfb3"
+  },
+  {
+    "method": "GET",
+    "path": "/organizations/{organizationId}/roles",
+    "operationId": "listOrganizationRoles",
+    "semanticHash": "c5d7e59b13a23f1d6f96edc3d1f89890f41339b97f0ac93ed2d0c0064ea87e7f"
+  },
+  {
+    "method": "POST",
+    "path": "/organizations/{organizationId}/roles",
+    "operationId": "createOrganizationRole",
+    "semanticHash": "bb4a4c1532aba4f0c5b71411971094ed2e76a8af6c6107a5b6ed6f43c9ae6a43"
+  },
+  {
+    "method": "DELETE",
+    "path": "/organizations/{organizationId}/roles/{roleKey}",
+    "operationId": "deleteOrganizationRole",
+    "semanticHash": "4706a612c759d210b0428b83f86e22229b0954429b48f396860ab9edc38ea8a5"
+  },
+  {
+    "method": "GET",
+    "path": "/organizations/{organizationId}/roles/{roleKey}",
+    "operationId": "getOrganizationRole",
+    "semanticHash": "bd9fa74861aa65714db2f324bc90d29e7557a83402eac56f7d832a74a4673564"
+  },
+  {
+    "method": "PATCH",
+    "path": "/organizations/{organizationId}/roles/{roleKey}",
+    "operationId": "updateOrganizationRole",
+    "semanticHash": "7c21bdedc564041325725d67df099eba54d66945bcc8b90fdcb65876b7aabf7f"
+  },
+  {
+    "method": "PUT",
+    "path": "/provider-connection-events/{eventId}",
+    "operationId": "replaceProviderConnectionEvent",
+    "semanticHash": "2decee4c9698ffc136db2b7f581a25f13d367515e4fa6d810484baea9bbf2dee"
+  },
+  {
+    "method": "GET",
+    "path": "/public/agents/{subject}",
+    "operationId": "getPublicAgent",
+    "semanticHash": "4582f083a3078178cd4a3627b29b574940df7b5943db4a6cfeeacd234d344d5b"
+  },
+  {
+    "method": "GET",
+    "path": "/public/users/{username}",
+    "operationId": "getPublicUser",
+    "semanticHash": "996c77ab83d579f480767d119634725bca35f77b3b5c1a5edc155a7e1ebc2621"
+  },
+  {
+    "method": "GET",
+    "path": "/realm",
+    "operationId": "getRealm",
+    "semanticHash": "86cb7616e5048c65b66cedb1e2957b7b85bae0c73110d27f1485256c430a548a"
+  },
+  {
+    "method": "PATCH",
+    "path": "/realm",
+    "operationId": "updateRealm",
+    "semanticHash": "e90b049bf23075125e673f43da8685a435393b192ef76976e56c99fafb910296"
+  },
+  {
+    "method": "GET",
+    "path": "/realm/account-management-policy",
+    "operationId": "getAccountManagementPolicy",
+    "semanticHash": "7f5669d0d84367c40cdb984efeaed5f52019e0bc52377709a36dd46a8770958d"
+  },
+  {
+    "method": "PATCH",
+    "path": "/realm/account-management-policy",
+    "operationId": "updateAccountManagementPolicy",
+    "semanticHash": "2b1314e0b96c8f1f08932388f537fc8433d15ba9fc6215a9c5ab073dc6320cde"
+  },
+  {
+    "method": "GET",
+    "path": "/realm/audit-events",
+    "operationId": "listAgentAuditEvents",
+    "semanticHash": "3d0d107febdeab3eef0d5d20bfed7bcc1548c4083cf732848f97f66810648734"
+  },
+  {
+    "method": "GET",
+    "path": "/realm/branding",
+    "operationId": "getRealmBranding",
+    "semanticHash": "357c80b094ee89f926c8f4c8957e989b47897b023f76f5fa8af606e1379d6d88"
+  },
+  {
+    "method": "PATCH",
+    "path": "/realm/branding",
+    "operationId": "updateRealmBranding",
+    "semanticHash": "f381077be6f795b17c1a19e62fefcee990c685e557ac5cceef7ae522c0d58ae8"
+  },
+  {
+    "method": "GET",
+    "path": "/realm/configuration-status",
+    "operationId": "getRealmConfigurationStatus",
+    "semanticHash": "d011c1408c83b3b119724d594e571c3938369a4f66635ca2a23fc203a8907fe5"
+  },
+  {
+    "method": "GET",
+    "path": "/realm/developer-console-access-policy",
+    "operationId": "getDeveloperConsoleAccessPolicy",
+    "semanticHash": "728f65967568d844fca4a87cda9626ab661b7e01aff9efe75856fdc78223420f"
+  },
+  {
+    "method": "PUT",
+    "path": "/realm/developer-console-access-policy",
+    "operationId": "replaceDeveloperConsoleAccessPolicy",
+    "semanticHash": "242c08be8e264ef2e3b7ac4fe0d1e72a0deb14e86216eecbab4fb5471112a581"
+  },
+  {
+    "method": "GET",
+    "path": "/realm/email-delivery-configuration",
+    "operationId": "getEmailDeliveryConfiguration",
+    "semanticHash": "9cd3a01550fe844d72c1bcadc1bdbda633f0087ad23263f5952f6b668bbd315f"
+  },
+  {
+    "method": "PUT",
+    "path": "/realm/email-delivery-configuration",
+    "operationId": "replaceEmailDeliveryConfiguration",
+    "semanticHash": "54615bc7037cd7f37775cfe7234648027396acce930162baea86a773490bb798"
+  },
+  {
+    "method": "GET",
+    "path": "/realm/organization-creation-policy",
+    "operationId": "getOrganizationCreationPolicy",
+    "semanticHash": "0683e81ef508e02208ed30973881881a62175eeae00e0da99f7122d7fc56dc74"
+  },
+  {
+    "method": "PUT",
+    "path": "/realm/organization-creation-policy",
+    "operationId": "replaceOrganizationCreationPolicy",
+    "semanticHash": "ce078efb4e88cc9f29f446ae0d566e34a759b2092f7d6a0496e9e9c51ba9c6a5"
+  },
+  {
+    "method": "GET",
+    "path": "/realm/security-policy",
+    "operationId": "getSecurityPolicy",
+    "semanticHash": "5b808a0b31d5e5cfea4f0ca7a2b6d643cc9c49ce64de2ecfafd71da10d6e9b2f"
+  },
+  {
+    "method": "PATCH",
+    "path": "/realm/security-policy",
+    "operationId": "updateSecurityPolicy",
+    "semanticHash": "61b4b6492b72ab2cd6e960c63fee9689f58ed56c891a228a1e6df8aa1c5b6c85"
+  },
+  {
+    "method": "GET",
+    "path": "/realm/sign-in-policy",
+    "operationId": "getSignInPolicy",
+    "semanticHash": "2fe30710101f112400fa5f9af0f04a49558579cfe69a9f52a95abeaa0f115bb3"
+  },
+  {
+    "method": "PATCH",
+    "path": "/realm/sign-in-policy",
+    "operationId": "updateSignInPolicy",
+    "semanticHash": "4e5ed54ae7849438d2a1b9a5f9d9d7cc9f8132aa1d22604099029188e92a66eb"
+  },
+  {
+    "method": "GET",
+    "path": "/resource-servers",
+    "operationId": "listResourceServers",
+    "semanticHash": "cd3d0825036b5e73ea725f4aa49850f326cb7ef369efe5a51c19d644b0cc495f"
+  },
+  {
+    "method": "POST",
+    "path": "/resource-servers",
+    "operationId": "createResourceServer",
+    "semanticHash": "83a0bb6cec9aeee0525ff68e6fde4cdebad4f4a83df5cdd0dee0bde308ac9fdd"
+  },
+  {
+    "method": "DELETE",
+    "path": "/resource-servers/{resourceServerId}",
+    "operationId": "deleteResourceServer",
+    "semanticHash": "04b3771aa16f71226a5a20b8c84bbc636610bfe9fbdfdc8046a4a0434ad63702"
+  },
+  {
+    "method": "GET",
+    "path": "/resource-servers/{resourceServerId}",
+    "operationId": "getResourceServer",
+    "semanticHash": "c17b84f92ff1cbc701ec7ac3851327735d3693b87e21755caf57b093592f8f5e"
+  },
+  {
+    "method": "PATCH",
+    "path": "/resource-servers/{resourceServerId}",
+    "operationId": "updateResourceServer",
+    "semanticHash": "290160568e391ed25ac279b13a36ea5a7250a557906c8a6f8bfb340912443558"
+  },
+  {
+    "method": "POST",
+    "path": "/resource-servers/{resourceServerId}/connection-requests",
+    "operationId": "createConnectionRequest",
+    "semanticHash": "266f3a67f590fe8864c07ed07c42f0be1bdb6bfbdb2ea4fdfa27d4d36f49f47c"
+  },
+  {
+    "method": "GET",
+    "path": "/resource-servers/{resourceServerId}/connection-requests/{requestId}",
+    "operationId": "getConnectionRequest",
+    "semanticHash": "5e6212620d9f37a9aee761964b357f45a69849d674dd8772c7c9233a5e622651"
+  },
+  {
+    "method": "GET",
+    "path": "/resource-servers/{resourceServerId}/contract",
+    "operationId": "getResourceServerContract",
+    "semanticHash": "c8763cb5900ac09992cb166661ab0e250b20538f4fa42438908c47f6024c09e5"
+  },
+  {
+    "method": "GET",
+    "path": "/resource-servers/{resourceServerId}/resources",
+    "operationId": "listResourceServerResources",
+    "semanticHash": "74840a6ca39c240dc013878ed733e6467e9c58d2f6bb848dcd76411813d6ae33"
+  },
+  {
+    "method": "GET",
+    "path": "/resource-servers/{resourceServerId}/resources/{resourceId}",
+    "operationId": "getResourceServerResource",
+    "semanticHash": "0895fa6a870cf0921a40c0a61cd22fb15305d7420e17530c200fdca6adfbb0a2"
+  },
+  {
+    "method": "PUT",
+    "path": "/resource-servers/{resourceServerId}/scope-registry",
+    "operationId": "replaceResourceServerScopeRegistry",
+    "semanticHash": "51e464189edcd6bd89d6cff77a62cc298d5a9e0ddd79a2e896d53d8dddc98024"
+  },
+  {
+    "method": "GET",
+    "path": "/users",
+    "operationId": "listUsers",
+    "semanticHash": "84acc5e8c0255f092eff2bcd92073d98c55e92c8c0437f196e395fc2ccc2a654"
+  },
+  {
+    "method": "POST",
+    "path": "/users",
+    "operationId": "createUser",
+    "semanticHash": "89e57c9ab788d6e1ca60dcb908e805e46ebbd0d283c64beded54bc00c12ab53d"
+  },
+  {
+    "method": "DELETE",
+    "path": "/users/{userId}",
+    "operationId": "deleteUser",
+    "semanticHash": "d6be882c0d53ae9035ffbbc3c695ef205d3c6ef60b75ef8022c4823995471a9b"
+  },
+  {
+    "method": "GET",
+    "path": "/users/{userId}",
+    "operationId": "getUser",
+    "semanticHash": "c2dbe205587b1c1c27b01cdebc86fb010557b7a0e6160741cfa4fa669ddd3b9e"
+  },
+  {
+    "method": "PATCH",
+    "path": "/users/{userId}",
+    "operationId": "updateUser",
+    "semanticHash": "7c7aca79bc653b15309b1f84d3096eda58efd520cdabfcec70a3001a75da6440"
+  },
+  {
+    "method": "GET",
+    "path": "/users/{userId}/linked-accounts",
+    "operationId": "listUserLinkedAccounts",
+    "semanticHash": "5de41864c9126228dbe6a30c48ceb10733e9c5eaac072cf7c394ca4f0c081984"
+  },
+  {
+    "method": "GET",
+    "path": "/users/{userId}/passkeys",
+    "operationId": "listUserPasskeys",
+    "semanticHash": "416856be9e707cbe2c2012e6f5d8770655cd52831da300caa38ad7417abe93c3"
+  },
+  {
+    "method": "DELETE",
+    "path": "/users/{userId}/passkeys/{passkeyId}",
+    "operationId": "deleteUserPasskey",
+    "semanticHash": "9d9b96184275f81c6d60a367b6c73ef6b7fcdfb819fb9c0351af68c33f162f9c"
+  },
+  {
+    "method": "POST",
+    "path": "/users/{userId}/password-reset-requests",
+    "operationId": "createUserPasswordResetRequest",
+    "semanticHash": "5be620546f953cd69a89a3ccc4ca01cc638ac5fef1066feb6402167cf681d6f1"
+  },
+  {
+    "method": "GET",
+    "path": "/users/{userId}/password-reset-requests/{requestId}",
+    "operationId": "getUserPasswordResetRequest",
+    "semanticHash": "6a1574265255842a7a89e11c1e0a571c43ae14cde6aa00736dc5ea0d73f033b7"
+  },
+  {
+    "method": "GET",
+    "path": "/users/{userId}/scope-grants",
+    "operationId": "listUserScopeGrants",
+    "semanticHash": "ac3110ae1929ec850c5adcfb52f2b8aa4abef7b601c6aa9261fd502613ba9177"
+  },
+  {
+    "method": "POST",
+    "path": "/users/{userId}/scope-grants",
+    "operationId": "createUserScopeGrant",
+    "semanticHash": "3aef485d1665a1c50e2b5443bd413e9fe3d04f5ccbf9b61a43d245623fa51bb9"
+  },
+  {
+    "method": "DELETE",
+    "path": "/users/{userId}/scope-grants/{grantId}",
+    "operationId": "deleteUserScopeGrant",
+    "semanticHash": "3ed3180d6914b50cae01e1d5be48bdc92dd61b126e153d8b8f1dae8e27dea5cc"
+  },
+  {
+    "method": "GET",
+    "path": "/users/{userId}/scope-grants/{grantId}",
+    "operationId": "getUserScopeGrant",
+    "semanticHash": "16df5574908b2db5934098853acf9b26cf743d828268bc274c90686e5f4a622f"
+  },
+  {
+    "method": "DELETE",
+    "path": "/users/{userId}/sessions",
+    "operationId": "deleteUserSessions",
+    "semanticHash": "b6364fbc1d42a9aca7d0dd5738c596705a43aa5761af66efdd898a4070468fe0"
+  },
+  {
+    "method": "GET",
+    "path": "/users/{userId}/sessions",
+    "operationId": "listUserSessions",
+    "semanticHash": "d84186c227d922162cd7f092e165ba147aef19d9e085a171c531cadbfb035a69"
+  },
+  {
+    "method": "DELETE",
+    "path": "/users/{userId}/sessions/{sessionId}",
+    "operationId": "deleteUserSession",
+    "semanticHash": "8fd2aa8b1a4afd63fc6b014191591d3dc3ab71dd7cd4976eb49794b6a99b877e"
+  },
+  {
+    "method": "GET",
+    "path": "/users/{userId}/sessions/{sessionId}",
+    "operationId": "getUserSession",
+    "semanticHash": "49ba41f760c024a766015989b36e88a9ddbf1a7c9f6dc20ad082850ba375e676"
+  },
+  {
+    "method": "DELETE",
+    "path": "/users/{userId}/suspension",
+    "operationId": "deleteUserSuspension",
+    "semanticHash": "fd69a462f7f0e1e9906e5c5f56af58f9f9528eaa1ce3f312acdfb933dfd59e47"
+  },
+  {
+    "method": "GET",
+    "path": "/users/{userId}/suspension",
+    "operationId": "getUserSuspension",
+    "semanticHash": "09900203ffe9eeb7527d53ee34a25edeff4c23e53af65c03a4773c589a9b73ac"
+  },
+  {
+    "method": "PUT",
+    "path": "/users/{userId}/suspension",
+    "operationId": "replaceUserSuspension",
+    "semanticHash": "db65580e0a30c52b2fad20fd97fa62a95c4d04b39b565a11853b7462eeb41b7e"
+  },
+  {
+    "method": "GET",
+    "path": "/webhooks",
+    "operationId": "listWebhooks",
+    "semanticHash": "fca0305f7da46048c310bd9741e1c505fc149bbd2d1f920a5b6fb370c8805644"
+  },
+  {
+    "method": "POST",
+    "path": "/webhooks",
+    "operationId": "createWebhook",
+    "semanticHash": "2f5d0eb81d6da37950624523f58f8192b40c1d564166211435b8918031e5d8c0"
+  },
+  {
+    "method": "DELETE",
+    "path": "/webhooks/{webhookId}",
+    "operationId": "deleteWebhook",
+    "semanticHash": "4268e512aec7255054365f445b055f412f5a48f9041d80081069d11fce445f5f"
+  },
+  {
+    "method": "GET",
+    "path": "/webhooks/{webhookId}",
+    "operationId": "getWebhook",
+    "semanticHash": "39ba397391ab7d358e512496a01fd80b8ac17ecb709bcb1bc79bb341bb385beb"
+  },
+  {
+    "method": "PATCH",
+    "path": "/webhooks/{webhookId}",
+    "operationId": "updateWebhook",
+    "semanticHash": "dcbe8c8f4cbe30fbf7a26e382c72fa519219ea3693b7455459c7de6a46031e62"
+  },
+  {
+    "method": "GET",
+    "path": "/webhooks/{webhookId}/deliveries",
+    "operationId": "listWebhookDeliveries",
+    "semanticHash": "ba0766495429eaa3c3e18a69915ce0a79e27866dfb66b933f9e8a20482225d4a"
+  },
+  {
+    "method": "GET",
+    "path": "/webhooks/{webhookId}/deliveries/{deliveryId}",
+    "operationId": "getWebhookDelivery",
+    "semanticHash": "1ab7db8701946dc32b08615f8bc862d9ef7220700dcc6911d87e0265fff845e2"
+  },
+  {
+    "method": "GET",
+    "path": "/webhooks/{webhookId}/deliveries/{deliveryId}/attempts",
+    "operationId": "listWebhookDeliveryAttempts",
+    "semanticHash": "229a04bea022938cd3b16cac371e626063f1e1e434be7152ab5a5088f985ad7f"
+  },
+  {
+    "method": "POST",
+    "path": "/webhooks/{webhookId}/deliveries/{deliveryId}/attempts",
+    "operationId": "createWebhookDeliveryAttempt",
+    "semanticHash": "417711ad6334c383884141d43dc45581f982f5e7036687c3a5b7875ec8fc36d0"
+  },
+  {
+    "method": "GET",
+    "path": "/webhooks/{webhookId}/deliveries/{deliveryId}/attempts/{attemptId}",
+    "operationId": "getWebhookDeliveryAttempt",
+    "semanticHash": "75a9ce4b9c768aea1bc123c14865a80f7dc568379e0b3b78800b4cacaa151f0b"
+  },
+  {
+    "method": "POST",
+    "path": "/webhooks/{webhookId}/secrets",
+    "operationId": "createWebhookSecret",
+    "semanticHash": "1d58bd02038721ba1f95890ed91337935fc2efd897c292db1522e8f0b4efa560"
+  }
+]

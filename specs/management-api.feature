@@ -18,8 +18,10 @@ Feature: Unified Realmroot resource API
     And Restish v2 exposes the current Agent and resource operations from the same contract
     And resources are not grouped under a management path
     And every protected operation declares its exact authorization scope through an OpenAPI security requirement
-    And the contract declares only RFC 9449 DPoP and session-cookie security schemes
-    And no AgentAuth, API-key, capability extension, or plugin provider name appears as a public security scheme
+    And the contract declares separate agentAuth and oauth2 security schemes plus the session-cookie scheme
+    And agentAuth identifies plugin-managed Agent protocol credentials while oauth2 identifies Resource-bound management credentials
+    And configuring oauth2 management access cannot replace agentAuth for whoami or other Agent protocol operations
+    And no API-key, capability extension, or plugin provider name appears as a public security scheme
     And Restish can validate structured authorization detail request bodies without the root OpenAPI document
 
 

@@ -21,16 +21,17 @@ The plugin performs only work that must happen on the Agent's machine:
 - add `Authorization: DPoP ...` and a fresh proof to matching target requests.
 
 Restish passes the final request URL and one complete OpenAPI security
-alternative to the plugin. The plugin claims it only when a cached Resource
-credential matches the URL and covers every required scope. When no Resource
-credential exists, valid same-origin Agent discovery identifies Realmroot
-protocol operations and allows first-use identity enrollment. Restish API
-names and aliases do not affect that decision. No placeholder token, provider,
-issuer, or scope binding is stored in a Restish profile.
+alternative to the plugin. Realmroot publishes separate credential IDs:
+`agentAuth` for plugin-managed protocol operations and `oauth2` for
+Resource-bound management operations. Valid same-origin Agent discovery lets
+the plugin resolve `agentAuth` and perform first-use identity enrollment.
+Restish API names and aliases do not affect that decision. No placeholder
+token, provider, issuer, or scope binding is stored for `agentAuth` in a
+Restish profile.
 
-When multiple credential lifecycles share one Resource URL, selection still
-uses the operation's required scopes. A narrower Resource credential cannot
-shadow a Realmroot protocol credential that covers the requested operation.
+When both credential lifecycles share the Realmroot Resource URL, distinct
+OpenAPI credential IDs prevent a configured `oauth2` Resource credential from
+shadowing the `agentAuth` protocol resolver.
 
 The plugin does not recognize Realmroot endpoint paths. It does not list or
 select account connections, grants, authorization details, token endpoints,

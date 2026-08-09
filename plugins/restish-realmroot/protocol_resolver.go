@@ -6,6 +6,8 @@ import (
 	"github.com/rest-sh/restish/v2/plugin"
 )
 
+const agentAuthSchemeID = "agentAuth"
+
 type authRequirement struct {
 	ID    string   `cbor:"id" json:"id"`
 	Kind  string   `cbor:"kind" json:"kind"`
@@ -52,7 +54,7 @@ func protocolAuthenticationSupports(requestURI string, requirements []authRequir
 }
 
 func supportedProtocolAlternative(requirements []authRequirement) bool {
-	if len(requirements) != 1 {
+	if len(requirements) != 1 || requirements[0].ID != agentAuthSchemeID {
 		return false
 	}
 	switch requirements[0].Kind {

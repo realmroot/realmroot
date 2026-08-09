@@ -16,7 +16,7 @@ import {
   publicUserResponseSchema,
 } from '@shared/api/public-profiles'
 import { usernameSchema } from '@shared/api/users'
-import { requiredProtectedScope } from '@shared/authz'
+import { agentBootstrapScopes, realmrootOAuthScopes, requiredProtectedScope } from '@shared/authz'
 import { z } from 'zod'
 import { agentGovernanceRoutes } from './management-routes/agent-governance'
 import { applicationAuthorizationRoutes } from './management-routes/applications-authorization'
@@ -168,7 +168,7 @@ const managementRoutes: ManagementRouteConfig[] = [
     operationId: 'getAgentStatus',
     summary: 'Read the current Agent status',
     cli: { group: 'Agents', name: 'whoami' },
-    security: [{ dpop: ['agent:read'] }],
+    security: [{ agentAuth: ['agent:read'] }],
     response: agentStatusSchema,
   },
   {
@@ -176,7 +176,7 @@ const managementRoutes: ManagementRouteConfig[] = [
     path: '/resource-servers/{resourceServerId}/resources',
     operationId: 'listResourceServerResources',
     summary: 'List provider-owned Resources available through a Resource Server',
-    security: [{ dpop: ['resources:read'] }],
+    security: [{ agentAuth: ['resources:read'] }],
     request: {
       params: z.object({ resourceServerId: z.string() }),
       query: paginationQuerySchema,
@@ -188,7 +188,7 @@ const managementRoutes: ManagementRouteConfig[] = [
     path: '/resource-servers/{resourceServerId}/resources/{resourceId}',
     operationId: 'getResourceServerResource',
     summary: 'Read a provider-owned Resource',
-    security: [{ dpop: ['resources:read'] }],
+    security: [{ agentAuth: ['resources:read'] }],
     request: {
       params: z.object({ resourceServerId: z.string(), resourceId: z.string() }),
     },
@@ -201,7 +201,7 @@ const managementRoutes: ManagementRouteConfig[] = [
     operationId: 'createConnectionRequest',
     summary: 'Request a controller-managed Resource Server connection',
     cli: { name: 'connect' },
-    security: [{ dpop: ['connection-requests:write'] }],
+    security: [{ agentAuth: ['connection-requests:write'] }],
     request: {
       params: z.object({ resourceServerId: z.string() }),
       body: jsonBody(createResourceConnectionRequestSchema),
@@ -264,7 +264,7 @@ const managementRoutes: ManagementRouteConfig[] = [
     path: '/resource-servers/{resourceServerId}/connection-requests/{requestId}',
     operationId: 'getConnectionRequest',
     summary: 'Read a Resource Server connection request',
-    security: [{ dpop: ['connection-requests:read'] }],
+    security: [{ agentAuth: ['connection-requests:read'] }],
     request: { params: z.object({ resourceServerId: z.string(), requestId: z.string() }) },
     response: resourceConnectionRequestSchema,
     responseHeaders: interactiveResourceResponseHeaders,
@@ -275,7 +275,7 @@ const managementRoutes: ManagementRouteConfig[] = [
     operationId: 'createAgentAuthorizationRequest',
     summary: 'Create an Agent authorization request',
     cli: { name: 'access' },
-    security: [{ dpop: ['access-requests:write'] }],
+    security: [{ agentAuth: ['access-requests:write'] }],
     request: { body: jsonBody(createAccessRequestSchema) },
     response: accessRequestSchema,
     status: 201,
@@ -297,11 +297,23 @@ function createManagementOpenApiApp() {
     name: 'better-auth.session_token',
     description: 'Authenticated browser session; each operation applies Realm, Organization, or account visibility.',
   })
-  app.openAPIRegistry.registerComponent('securitySchemes', 'dpop', {
+  app.openAPIRegistry.registerComponent('securitySchemes', 'agentAuth', {
     type: 'http',
     scheme: 'DPoP',
     description:
-      'RFC 9449 DPoP authentication with a short-lived, sender-constrained OAuth 2.0 access token. Discover token acquisition through the protected-resource and authorization-server metadata endpoints.',
+      'Plugin-managed Realmroot Agent protocol authentication with a short-lived RFC 9449 DPoP access token.',
+  })
+  app.openAPIRegistry.registerComponent('securitySchemes', 'oauth2', {
+    type: 'oauth2',
+    'x-dpop-required': true,
+    flows: {
+      authorizationCode: {
+        authorizationUrl: '/api/auth/oauth2/authorize',
+        tokenUrl: '/api/auth/oauth2/token',
+        scopes: Object.fromEntries(realmrootOAuthScopes.map((scope) => [scope, oauthScopeDescription(scope)])),
+      },
+    },
+    description: 'Resource-bound Realmroot OAuth 2.0 management credential with an RFC 9449 DPoP proof.',
   })
   app.openAPIRegistry.registerComponent('securitySchemes', 'providerConnectionEventSecret', {
     type: 'http',
@@ -330,7 +342,7 @@ function buildUnifiedOpenApi(): UnifiedOpenApiDocument {
       openapi: '3.1.0',
       info: {
         title: 'Realmroot API',
-        version: '2026-05-24',
+        version: '2026-08-09',
         description:
           'Unified API for Agent identity, self-service resources, and permission-gated tenant administration.',
       },
@@ -365,10 +377,16 @@ function createManagementRoute(routeConfig: ManagementRouteConfig) {
       : { 'x-cli-hidden': true }),
     security:
       routeConfig.security ??
-      (requiredScope ? [{ dpop: [requiredScope] }, { sessionCookie: [requiredScope] }] : [{ sessionCookie: [] }]),
+      (requiredScope ? [{ oauth2: [requiredScope] }, { sessionCookie: [requiredScope] }] : [{ sessionCookie: [] }]),
     request: routeConfig.request as never,
     responses: routeResponses(routeConfig) as never,
   })
+}
+
+function oauthScopeDescription(scope: string) {
+  return agentBootstrapScopes.includes(scope as (typeof agentBootstrapScopes)[number])
+    ? `Realmroot Agent protocol scope: ${scope}`
+    : `Realmroot Resource management scope: ${scope}`
 }
 
 function managementTagForPath(path: string): (typeof managementOpenApiTags)[number]['name'] {

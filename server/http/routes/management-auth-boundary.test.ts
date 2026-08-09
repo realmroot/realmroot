@@ -26,6 +26,9 @@ import {
 } from './management.test-utils'
 
 const operationsWithExplicitSecurity = new Set([
+  'GET /access/requests/{param}',
+  'GET /resource-servers',
+  'GET /resource-servers/{param}',
   'GET /agents/{param}/access-grants',
   'GET /agents/{param}/access-grants/{param}',
   'DELETE /agents/{param}/access-grants/{param}',
@@ -60,12 +63,16 @@ describe('management routes 1', () => {
     expect(operationIds).not.toContain(undefined)
     expect(new Set(operationIds).size).toBe(operationIds.length)
     expect(unifiedOpenApi.security).toBeUndefined()
-    expect(unifiedOpenApi.components.securitySchemes.dpop).toMatchObject({
+    expect(unifiedOpenApi.components.securitySchemes.agentAuth).toMatchObject({
       type: 'http',
       scheme: 'DPoP',
     })
+    expect(unifiedOpenApi.components.securitySchemes.oauth2).toMatchObject({
+      type: 'oauth2',
+      'x-dpop-required': true,
+    })
     expect(unifiedOpenApi.components.securitySchemes.sessionCookie).toMatchObject({ type: 'apiKey', in: 'cookie' })
-    expect(unifiedOpenApi.components.securitySchemes).not.toHaveProperty('agentAuth')
+    expect(unifiedOpenApi.components.securitySchemes).not.toHaveProperty('dpop')
     expect(unifiedOpenApi['x-cli-config']).toEqual({ command_layout: 'tags' })
 
     for (const operation of openApiOperationObjects()) {
@@ -86,7 +93,7 @@ describe('management routes 1', () => {
         !operationsWithExplicitSecurity.has(operation.key)
       ) {
         expect(operation.security, operation.key).toEqual([
-          { dpop: [requiredScope] },
+          { oauth2: [requiredScope] },
           { sessionCookie: [requiredScope] },
         ])
       }
@@ -111,6 +118,24 @@ describe('management routes 1', () => {
         expect(() => assertConstrainedOpenApiSchema(schema, operation.key)).not.toThrow()
       }
     }
+  })
+
+  it('[spec: management-api/management-restish-agent-auth] separates Agent protocol and Resource management credentials', () => {
+    const operations = new Map(openApiOperationObjects().map((operation) => [operation.operationId, operation]))
+
+    expect(operations.get('getAgentStatus')?.security).toEqual([{ agentAuth: ['agent:read'] }])
+    expect(operations.get('createAgentAuthorizationRequest')?.security).toEqual([
+      { agentAuth: ['access-requests:write'] },
+    ])
+    expect(operations.get('createResourceServer')?.security).toEqual([
+      { oauth2: ['resource-servers:write'] },
+      { sessionCookie: ['resource-servers:write'] },
+    ])
+    expect(operations.get('listResourceServers')?.security).toEqual([
+      { agentAuth: ['resource-servers:read'] },
+      { oauth2: ['resource-servers:read'] },
+      { sessionCookie: ['resource-servers:read'] },
+    ])
   })
 
   it('serves the unified OpenAPI contract with Restish discovery headers [spec: management-api/management-openapi-discovery]', async () => {
@@ -166,7 +191,7 @@ describe('management routes 1', () => {
 
     for (const [key, scope] of expectedScopes) {
       const operation = openApiOperationObjects().find((candidate) => candidate.key === key)
-      expect(operation?.security, key).toEqual([{ dpop: [scope] }, { sessionCookie: [scope] }])
+      expect(operation?.security, key).toEqual([{ oauth2: [scope] }, { sessionCookie: [scope] }])
     }
   })
 

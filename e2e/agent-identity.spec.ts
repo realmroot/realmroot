@@ -11,7 +11,7 @@ test.describe('new Agent stable identity enrollment', () => {
     await resetAndBootstrap()
   })
 
-  test('[spec: agent-identity/agent-identity-enrollment] a new Agent establishes its stable identity', async ({
+  test('[spec: agent-identity/agent-identity-enrollment] [spec: management-api/management-restish-agent-auth] a new Agent establishes its stable identity', async ({
     page,
   }) => {
     await signIn(page)
@@ -31,6 +31,14 @@ test.describe('new Agent stable identity enrollment', () => {
         name: 'E2E Build Agent',
       })
       expect(result.agent.subject).toMatch(/^agt_/)
+      expect(plugin.whoami().agent).toMatchObject({
+        issuer: result.agent.issuer,
+        subject: result.agent.subject,
+      })
+
+      plugin.configureManagementCredential(`${baseURL}/api/resource-servers/res_realmroot/resources/platform`)
+      expect(plugin.inspectAuth('getAgentStatus')).toContain('agentAuth')
+      expect(plugin.inspectAuth('createResourceServer')).toContain('oauth2')
       expect(plugin.whoami().agent).toMatchObject({
         issuer: result.agent.issuer,
         subject: result.agent.subject,

@@ -21,6 +21,20 @@ Follow the normal Resource Server flow in
 4. inspect the intended operations in the live OpenAPI document;
 5. request the union of their declared OAuth scopes with the `access` command.
 
+After approval, bind the returned credential source to Realmroot's `oauth2`
+OpenAPI credential ID:
+
+```bash
+restish api auth add "$API_NAME" oauth2 \
+  --source realmroot \
+  --reference "$RESOURCE_HREF"
+restish api auth inspect "$API_NAME" --operation getAgentStatus --redact
+restish "$API_NAME" agents whoami --rsh-print b -o json
+```
+
+`getAgentStatus` must remain assigned to the `agentAuth` runtime resolver.
+Never configure `agentAuth` or the legacy `dpop` ID in a Realmroot profile.
+
 Select the Realmroot Platform Organization Resource for platform-wide
 operations. Other Organization and User Resources remain restricted to their
 own tenant. Request the union of scopes needed for one management task in one
@@ -58,8 +72,8 @@ schema, ETag requirements, and response headers.
 
 ## Operate Resources
 
-Use Restish's generic resource operations; the adapter automatically selects
-the cached Realmroot credential for the active authority Resource:
+Use Restish's generic resource operations; Restish selects the configured
+`oauth2` credential and the adapter redeems or renews its Resource-bound offer:
 
 ```bash
 restish get "$API_NAME/applications?limit=100&offset=0" --rsh-print b -o json

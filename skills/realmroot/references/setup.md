@@ -114,12 +114,28 @@ restish api inspect "$API_NAME"
 restish api sync "$API_NAME"
 ```
 
+The Realmroot contract deliberately separates `agentAuth` from `oauth2`.
+`agentAuth` is resolved by the adapter and must never be configured in a
+Restish profile. `oauth2` is the only credential ID used for Resource-bound
+Realmroot management access. Verify the default Agent protocol path whenever
+Realmroot auth configuration changes:
+
+```bash
+restish api auth inspect "$API_NAME" --operation getAgentStatus --redact
+restish "$API_NAME" agents whoami --rsh-print b -o json
+```
+
+The inspection must report that `agentAuth` is evaluated by the runtime auth
+resolver. A configured credential for `agentAuth` or the legacy `dpop` ID is an
+invalid Realmroot profile.
+
 Represent an explicitly requested non-production deployment with a `local` or
 `staging` profile under the same API name. External users need only the
 `default` production profile unless they intentionally use another deployment.
 
 Connection is complete when inspection shows the resolved origin as either the
-default base URL or the selected profile base URL.
+default base URL or the selected profile base URL and `whoami` still succeeds
+through the runtime auth resolver.
 
 ## Add A Profile
 

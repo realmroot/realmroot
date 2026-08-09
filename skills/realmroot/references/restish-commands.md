@@ -187,6 +187,13 @@ restish api auth add "$TARGET_API" "$CREDENTIAL_ID" \
 restish api auth inspect "$TARGET_API" --redact
 ```
 
+When the target is Realmroot itself, bind the Resource credential only to the
+published `oauth2` credential ID. Never bind a Resource credential to
+`agentAuth` or the legacy `dpop` ID: `agentAuth` belongs exclusively to the
+plugin-managed Agent protocol credential. After binding Realmroot `oauth2`,
+verify that `getAgentStatus` is still delegated to the auth resolver and that
+`whoami` succeeds.
+
 This is explicit local Restish configuration, not dynamic request injection.
 Restish owns the target DPoP private key, short-lived token cache, request
 proofs, renewal, and one forced renewal after a `401`. The plugin owns only the

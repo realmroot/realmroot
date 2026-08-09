@@ -28,6 +28,8 @@ export interface PendingResourceAccess<T> {
 export interface RestishAgentPlugin {
   firstWhoami(name: string): PendingWhoami
   whoami(): PluginIdentityResult
+  configureManagementCredential(reference: string): void
+  inspectAuth(operation: string): string
   listResourceServers<T>(): T
   listResources<T>(resourceServerId: string): T
   connectResource<T>(resourceId: string, input: unknown): PendingResourceAccess<T>
@@ -187,6 +189,19 @@ export function createRestishAgentPlugin(origin: string): RestishAgentPlugin {
     firstWhoami: (name) =>
       invokePending<PluginIdentityResult>(['agents', 'whoami'], undefined, { REALMROOT_AGENT_NAME: name }),
     whoami: () => invoke<PluginIdentityResult>(['agents', 'whoami']),
+    configureManagementCredential: (reference) => {
+      execFileSync(
+        'restish',
+        ['api', 'auth', 'add', apiName, 'oauth2', '--source', 'realmroot', '--reference', reference],
+        { cwd: repoRoot, env: environment, encoding: 'utf8' },
+      )
+    },
+    inspectAuth: (operation) =>
+      execFileSync('restish', ['api', 'auth', 'inspect', apiName, '--operation', operation, '--redact'], {
+        cwd: repoRoot,
+        env: environment,
+        encoding: 'utf8',
+      }),
     listResourceServers: <T>() => get<T>(`${origin}/api/resource-servers?limit=100&offset=0`),
     listResources: <T>(resourceServerId: string) =>
       get<T>(`${origin}/api/resource-servers/${encodeURIComponent(resourceServerId)}/resources?limit=100&offset=0`),
