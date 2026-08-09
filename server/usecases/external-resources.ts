@@ -1920,7 +1920,8 @@ async function issueNativeAccessToken(
     (!connection ||
       connection.status !== 'active' ||
       connection.resourceId !== resource.id ||
-      connection.credentialCustody !== 'resource_server')
+      connection.credentialCustody !== 'resource_server' ||
+      !connection.brokerReference)
   ) {
     throw forbidden('Active brokered account connection is required.')
   }
@@ -1959,7 +1960,9 @@ async function issueNativeAccessToken(
             ? [identity.identity.ownerOrganizationId]
             : [],
       client_id: principal.protocolAgentId,
-      ...(connection ? { connection_id: connection.id, authorization_details: grant.authorizationDetails } : {}),
+      ...(connection
+        ? { connection_id: connection.brokerReference, authorization_details: grant.authorizationDetails }
+        : {}),
       ...(realmroot
         ? { host_id: principal.hostId, sub_profile: 'ai_agent', realmroot_authority: realmrootAuthority }
         : {}),

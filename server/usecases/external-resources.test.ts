@@ -4869,7 +4869,7 @@ describe('external API resource authorization', () => {
       ownerOrganizationId: null,
       credentialCustody: 'resource_server',
       encryptedTokens: null,
-      brokerReference: 'connection-1',
+      brokerReference: 'broker-reference-1',
       authorizationDetails,
       authorityConstraints: [{ authorizationDetails, scopes: ['openid', 'offline_access', 'projects:read'] }],
     }
@@ -4959,7 +4959,7 @@ describe('external API resource authorization', () => {
     })
     expect(sign).toHaveBeenCalledWith(
       expect.objectContaining({
-        connection_id: connection.id,
+        connection_id: connection.brokerReference,
         authorization_details: authorizationDetails,
       }),
       'at+jwt',
@@ -4969,6 +4969,14 @@ describe('external API resource authorization', () => {
       true,
       expect.any(Date),
       expect.objectContaining({ resourceConnectionId: connection.id }),
+    )
+
+    vi.mocked(deps.externalResources.findConnection).mockResolvedValue({
+      ...connection,
+      brokerReference: null,
+    })
+    await expect(issueTargetAccessToken(deps, 'grant-1', proof, tokenUrl, principal(), signer)).rejects.toThrow(
+      'Active brokered account connection is required.',
     )
 
     vi.mocked(deps.externalResources.findConnection).mockResolvedValue({
