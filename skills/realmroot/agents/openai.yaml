@@ -1,6 +1,6 @@
 interface:
   display_name: "Realmroot"
-  short_description: "Discover and use private Agent capabilities"
-  default_prompt: "Use $realmroot to discover an identity-backed private capability and call it with least-privilege access."
+  short_description: "Operate private Resources as a stable Agent"
+  default_prompt: "Use $realmroot to discover the required private Resource and complete the requested operation with least-privilege access."
 policy:
   allow_implicit_invocation: true

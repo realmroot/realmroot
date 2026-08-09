@@ -169,37 +169,55 @@ OAuth Server 时选择 `external`。两种方式都不需要维护 Agent 专用 
 [Native 示例](examples/native-resource-server/README.md)和
 [External 示例](examples/external-resource-server/README.md)分别实现了端到端流程。
 
-如需设计或审查面向资源的 OpenAPI 契约，请安装配套 Skill：
+## Agent Skills
+
+`realmroot/realmroot` 仓库针对三类 Realmroot 任务发布三个 Skill：
+
+| Skill | 用途 |
+| --- | --- |
+| `realmroot` | 建立稳定 Agent 身份、发现 Resource、获得授权、调用私有能力和管理 Realmroot。 |
+| `integrate-realmroot-application` | 将浏览器、Native、CLI 或服务端应用接入 Realmroot OAuth/OIDC。 |
+| `integrate-realmroot-resource-server` | 评估并实现现有受保护 API 接入 Realmroot 所需的 REQUIRED、CONDITIONAL 和 RECOMMENDED 能力。 |
+
+Resource Server Skill 假设 Provider 已经拥有业务资源模型、路由、Representation 和
+Scope 词汇。本仓库只定义 Realmroot 接入要求，不再维护通用 API 设计指南。
+
+查看仓库提供的 Skill：
 
 ```bash
-npx skills add realmroot/realmroot -g --skill design-resource-api
+npx skills add realmroot/realmroot --list
 ```
 
-然后向它提供 API 需求或现有 OpenAPI 契约：
-
-```text
-Use $design-resource-api to model this API as resources, produce its OpenAPI
-contract, and justify any exceptional generated commands.
-```
-
-## Agent 快速开始
-
-为需要使用 Realmroot 的 Agent Runtime 全局安装 Skill：
+只安装 Agent 身份和私有能力操作 Skill：
 
 ```bash
-npx skills add realmroot/realmroot -g --skill realmroot
+npx skills add realmroot/realmroot -g --agent codex -y --skill realmroot
 ```
 
-Codex 的非交互式安装命令：
+安装 Application 接入组合：
 
 ```bash
-npx skills add realmroot/realmroot -g --skill realmroot --agent codex -y
+npx skills add realmroot/realmroot -g --agent codex -y \
+  --skill realmroot integrate-realmroot-application
 ```
 
-检查安装来源和 Scope：
+安装 Resource Server 接入组合：
 
 ```bash
-npx skills list -g
+npx skills add realmroot/realmroot -g --agent codex -y \
+  --skill realmroot integrate-realmroot-resource-server
+```
+
+检查安装名称、来源和 Scope：
+
+```bash
+npx skills list -g --agent codex
+```
+
+更新全局安装的 Skill：
+
+```bash
+npx skills update -g -y
 ```
 
 然后给 Agent 一个目标：
@@ -212,8 +230,12 @@ npx skills list -g
 原操作会继续以 Agent 身份执行。发现、授权和 Token 签发都是中间步骤；完成用户要求的
 资源操作才是结果。
 
-准确的安装与操作流程位于 [`skills/realmroot`](skills/realmroot/SKILL.md)。Skill 与
-Restish Adapter 独立更新；当协议或资源授权模型变化时，请遵循
+准确的 Agent 操作流程位于 [`skills/realmroot`](skills/realmroot/SKILL.md)，Application
+接入流程位于
+[`skills/integrate-realmroot-application`](skills/integrate-realmroot-application/SKILL.md)，
+Resource Server 接入要求位于
+[`skills/integrate-realmroot-resource-server`](skills/integrate-realmroot-resource-server/SKILL.md)。
+Skill 与 Restish Adapter 独立更新；当协议或资源授权模型变化时，请遵循
 [部署升级指南](docs/deploy/upgrades.md#agent-client-compatibility)。
 
 ## 面向产品的身份基础设施

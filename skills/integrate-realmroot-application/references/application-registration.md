@@ -1,7 +1,8 @@
 # Product OIDC Clients
 
-Use this reference together with `management.md` when the user asks to
-configure a product OIDC client.
+Use this reference when the application integration must create or update its
+Realmroot Application registration. Use `$realmroot` to establish identity
+and obtain management authority before following these operations.
 
 ## Contents
 
@@ -20,7 +21,7 @@ Use issuer discovery at:
 AUTH_ORIGIN/api/auth/.well-known/openid-configuration
 ```
 
-Request `applications:read` and `applications:write` through `management.md`,
+Request `applications:read` and `applications:write` through `$realmroot`,
 then choose the client by runtime:
 
 | Client type | Use for | Secret | Typical grants |
@@ -63,7 +64,7 @@ slash:
 
 ```bash
 APP_ORIGIN="${APP_ORIGIN%/}"
-restish post "$API_NAME/applications" -o json <<JSON
+restish post "$API_NAME/applications" --rsh-print b -o json <<JSON
 {
   "name": "Customer Portal",
   "slug": "customer-portal",
@@ -86,7 +87,7 @@ requirements.
 For authorization code:
 
 ```bash
-restish post "$API_NAME/applications" -o json <<'JSON'
+restish post "$API_NAME/applications" --rsh-print b -o json <<'JSON'
 {
   "name": "Desktop App",
   "slug": "desktop-app",
@@ -102,7 +103,7 @@ JSON
 For device authorization:
 
 ```bash
-restish post "$API_NAME/applications" -o json <<'JSON'
+restish post "$API_NAME/applications" --rsh-print b -o json <<'JSON'
 {
   "name": "Runner CLI",
   "slug": "runner-cli",
@@ -127,7 +128,7 @@ CLIENT_OUTPUT_FILE=/protected/path/client.json
 (
   umask 077
   set -o noclobber
-  restish post "$API_NAME/applications" -o json > "$CLIENT_OUTPUT_FILE" <<JSON
+  restish post "$API_NAME/applications" --rsh-print b -o json > "$CLIENT_OUTPUT_FILE" <<JSON
 {
   "name": "Admin Backend",
   "slug": "admin-backend",
@@ -154,11 +155,11 @@ for representation fields and the dedicated subresources for replace/create
 semantics:
 
 ```bash
-restish put "$API_NAME/applications/$APPLICATION_ID/redirect-uris" -o json <<'JSON'
+restish put "$API_NAME/applications/$APPLICATION_ID/redirect-uris" --rsh-print b -o json <<'JSON'
 {"redirectUris": ["https://app.example.com/oidc/callback"]}
 JSON
 
-restish post "$API_NAME/applications/$APPLICATION_ID/client-secrets" -o json > "$CLIENT_OUTPUT_FILE"
+restish post "$API_NAME/applications/$APPLICATION_ID/client-secrets" --rsh-print b -o json > "$CLIENT_OUTPUT_FILE"
 ```
 
 The redirect URI operation replaces the complete collection. Client-secret

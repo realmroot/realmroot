@@ -62,10 +62,10 @@ Use Restish's generic resource operations; the adapter automatically selects
 the cached Realmroot credential for the active authority Resource:
 
 ```bash
-restish get "$API_NAME/applications?limit=100&offset=0" -o json
-restish get "$API_NAME/applications/app_123" -o json
-restish post "$API_NAME/applications" -o json < application.json
-restish patch "$API_NAME/applications/app_123" -o json < changes.json
+restish get "$API_NAME/applications?limit=100&offset=0" --rsh-print b -o json
+restish get "$API_NAME/applications/app_123" --rsh-print b -o json
+restish post "$API_NAME/applications" --rsh-print b -o json < application.json
+restish patch "$API_NAME/applications/app_123" --rsh-print b -o json < changes.json
 ```
 
 Read before mutation, use canonical IDs and links from responses, apply the

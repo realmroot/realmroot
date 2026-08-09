@@ -207,44 +207,98 @@ The implementation and validation checklist is in
 [external](examples/external-resource-server/README.md) examples implement both
 modes end to end.
 
-To design or review a resource-oriented OpenAPI contract, install the companion
-Skill:
+## Agent Skills
+
+The `realmroot/realmroot` repository publishes focused Skills for three
+Realmroot jobs. Each installed name includes `realmroot` because Skills share a
+global namespace even though their GitHub source is already namespaced by the
+Realmroot organization and repository.
+
+| Skill | Use it for |
+| --- | --- |
+| `realmroot` | Establish a stable Agent identity, discover Resources, obtain access, call private capabilities, and administer Realmroot. |
+| `integrate-realmroot-application` | Integrate browser, native, CLI, or server applications with Realmroot OAuth and OIDC. |
+| `integrate-realmroot-resource-server` | Assess and implement the required, conditional, and recommended capabilities for an existing protected API to join Realmroot. |
+
+The Resource Server Skill assumes that the provider already owns its business
+resource model, routes, representations, and scope vocabulary. This repository
+defines Realmroot integration requirements; it does not maintain general API
+design guidance.
+
+List the Skills available from the repository without installing them:
 
 ```bash
-npx skills add realmroot/realmroot -g --skill design-resource-api
+npx skills add realmroot/realmroot --list
 ```
 
-Then invoke it with the API requirements or existing contract:
+### Install
+
+Install only stable Agent identity and private capability access:
+
+```bash
+npx skills add realmroot/realmroot -g --agent codex -y --skill realmroot
+```
+
+Install the application-development pair:
+
+```bash
+npx skills add realmroot/realmroot -g --agent codex -y \
+  --skill realmroot integrate-realmroot-application
+```
+
+Install the Resource Server development set:
+
+```bash
+npx skills add realmroot/realmroot -g --agent codex -y \
+  --skill realmroot integrate-realmroot-resource-server
+```
+
+Install every Skill in this repository:
+
+```bash
+npx skills add realmroot/realmroot -g --agent codex -y --skill '*'
+```
+
+Verify the installed names, source, and scope:
+
+```bash
+npx skills list -g --agent codex
+```
+
+### Update
+
+Update all globally installed Skills from their recorded sources:
+
+```bash
+npx skills update -g -y
+```
+
+Or update only the Realmroot Skills used by a particular workflow:
+
+```bash
+npx skills update -g -y realmroot integrate-realmroot-application
+npx skills update -g -y realmroot integrate-realmroot-resource-server
+```
+
+The Skill package and Restish adapter update independently. After a Skill
+update that changes the Agent protocol or credential workflow, follow
+[Deployment upgrades](docs/deploy/upgrades.md#agent-client-compatibility) and
+verify the installed Restish adapter version.
+
+### Invoke
+
+Give the Agent the product goal rather than an enrollment subtask:
 
 ```text
-Use $design-resource-api to model this API as resources, produce its OpenAPI
-contract, and justify any exceptional generated commands.
+Use $realmroot to discover and call the private API capability needed for this task.
 ```
 
-## Quick Start For Agents
-
-Install the Realmroot Skill globally for the Agent runtime that should use it:
-
-```bash
-npx skills add realmroot/realmroot -g --skill realmroot
-```
-
-For a non-interactive Codex installation:
-
-```bash
-npx skills add realmroot/realmroot -g --skill realmroot --agent codex -y
-```
-
-Verify the installed source and scope:
-
-```bash
-npx skills list -g
-```
-
-Then give the Agent a goal:
+For product integrations, explicitly select the development Skill when useful:
 
 ```text
-Use Realmroot to discover and call the private API capability needed for this task.
+Use $integrate-realmroot-application to connect this application to Realmroot and verify sign-in end to end.
+
+Use $integrate-realmroot-resource-server to expose this API through Realmroot and prove a real Agent operation.
 ```
 
 On the first protected operation, the Restish adapter opens a hosted enrollment
@@ -252,11 +306,11 @@ or approval page. Once the controller approves, the original operation resumes
 as the Agent. Discovery, authorization, and token issuance are intermediate
 steps; completing the requested resource operation is the result.
 
-The exact setup and operating procedure lives in
-[`skills/realmroot`](skills/realmroot/SKILL.md). The Skill and Restish adapter
-update independently; follow
-[Deployment upgrades](docs/deploy/upgrades.md#agent-client-compatibility) when
-the protocol or resource-authorization model changes.
+The exact setup and Agent operating procedure lives in
+[`skills/realmroot`](skills/realmroot/SKILL.md). Application integration lives
+in [`skills/integrate-realmroot-application`](skills/integrate-realmroot-application/SKILL.md), and
+Resource Server implementation lives in
+[`skills/integrate-realmroot-resource-server`](skills/integrate-realmroot-resource-server/SKILL.md).
 
 ## Identity Infrastructure For Products
 

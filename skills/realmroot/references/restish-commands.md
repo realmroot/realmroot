@@ -17,7 +17,7 @@ credentials.
 List all pages:
 
 ```bash
-restish get "$AUTH_ORIGIN/api/resource-servers?limit=100&offset=0" -o json
+restish get "$API_NAME/resource-servers?limit=100&offset=0" --rsh-print b -o json
 ```
 
 Follow `pagination.nextOffset` while `pagination.hasMore` is true. Match the
@@ -35,12 +35,13 @@ The selected representation supplies all navigation values:
 - `links.resources` is the provider-owned Resource collection;
 - `links.connectionRequests` is present when account connection is supported.
 
-Read any returned `links.self` or collection link with Restish's generic GET
-when a generated command is unnecessary:
+Use the registered Realmroot API short name for Realmroot requests so Restish
+applies the selected profile and plugin hooks. Keep returned absolute hrefs only
+when a request schema requires a canonical href:
 
 ```bash
-restish get "$RESOURCE_SERVER_SELF" -o json
-restish get "$RESOURCES_URL?limit=100&offset=0" -o json
+restish get "$API_NAME/resource-servers/$RESOURCE_SERVER_ID" --rsh-print b -o json
+restish get "$API_NAME/resource-servers/$RESOURCE_SERVER_ID/resources?limit=100&offset=0" --rsh-print b -o json
 ```
 
 ## 2. Establish Or Expand The Connection
@@ -49,7 +50,7 @@ Skip this step when `connection.status` is `connected` or `not_required`.
 Otherwise request only the scopes needed to discover or use the target:
 
 ```bash
-restish "$API_NAME" resource-servers connect "$RESOURCE_SERVER_ID" --rsh-validate -o json <<'JSON'
+restish "$API_NAME" resource-servers connect "$RESOURCE_SERVER_ID" --rsh-validate --rsh-print b -o json <<'JSON'
 {
   "scopes": ["<required-scope>"],
   "reason": "Use the requested capability for the controller"
@@ -66,7 +67,7 @@ To expand an existing connection for a Resource whose
 command with that Resource href:
 
 ```bash
-restish "$API_NAME" resource-servers connect "$RESOURCE_SERVER_ID" --rsh-validate -o json <<JSON
+restish "$API_NAME" resource-servers connect "$RESOURCE_SERVER_ID" --rsh-validate --rsh-print b -o json <<JSON
 {
   "resources": [{"href": "$RESOURCE_HREF"}],
   "scopes": ["$REQUIRED_SCOPE"],
@@ -83,7 +84,7 @@ returned state.
 List all pages for the selected Resource Server:
 
 ```bash
-restish get "$RESOURCES_URL?limit=100&offset=0" -o json
+restish get "$API_NAME/resource-servers/$RESOURCE_SERVER_ID/resources?limit=100&offset=0" --rsh-print b -o json
 ```
 
 Each Resource supplies:
@@ -148,7 +149,7 @@ the selected Resource Server's published contract; do not assume scope names
 from another service.
 
 ```bash
-restish "$API_NAME" agent-access access --rsh-validate -o json <<JSON
+restish "$API_NAME" agent-access access --rsh-validate --rsh-print b -o json <<JSON
 {
   "resource": {"href": "$RESOURCE_HREF"},
   "scopes": ["$REQUIRED_SCOPE"],
@@ -205,7 +206,7 @@ Run the generated operation selected from the target's current help and OpenAPI
 contract:
 
 ```bash
-restish "$TARGET_API" <generated-operation> -o json
+restish "$TARGET_API" <generated-operation> --rsh-print b -o json
 ```
 
 Restish selects the configured OpenAPI credential, obtains or reuses its

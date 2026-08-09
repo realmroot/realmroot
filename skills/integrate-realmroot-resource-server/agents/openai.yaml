@@ -1,0 +1,4 @@
+interface:
+  display_name: "Realmroot Resource Server"
+  short_description: "Assess and integrate protected APIs"
+  default_prompt: "Use $integrate-realmroot-resource-server to assess this existing protected API against Realmroot requirements and verify Agent access end to end."

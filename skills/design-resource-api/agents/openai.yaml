@@ -1,4 +1,0 @@
-interface:
-  display_name: "Design Resource APIs"
-  short_description: "Design resource-first APIs for generic HTTP clients"
-  default_prompt: "Use $design-resource-api to design or review this API as resources and produce its OpenAPI contract."

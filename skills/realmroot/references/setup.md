@@ -133,7 +133,7 @@ PROFILE_ORIGIN="${PROFILE_ORIGIN%/}"
 restish api set "$API_NAME" \
   "profiles.${PROFILE_NAME}.base_url: ${PROFILE_ORIGIN}/api"
 restish api inspect "$API_NAME"
-restish -p "$PROFILE_NAME" "$API_NAME" agents whoami -o json
+restish -p "$PROFILE_NAME" "$API_NAME" agents whoami --rsh-print b -o json
 AUTH_ORIGIN="$PROFILE_ORIGIN"
 export RSH_PROFILE="$PROFILE_NAME"
 ```
@@ -152,7 +152,7 @@ matching `AUTH_ORIGIN` for every later branch command.
 Invoke the generated identity operation in the selected profile:
 
 ```bash
-restish "$API_NAME" agents whoami -o json
+restish "$API_NAME" agents whoami --rsh-print b -o json
 ```
 
 On first use, the adapter registers a stable Agent, opens the controller's

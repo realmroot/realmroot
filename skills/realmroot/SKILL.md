@@ -1,84 +1,58 @@
 ---
 name: realmroot
-description: Discover and use private Agent capabilities through Realmroot, an identity-backed toolbox for registered Resource Servers. Use when a task needs an authenticated or paid private API, another registered capability, Realmroot Agent identity and resource access, tenant administration, or product OIDC clients.
+description: Use Realmroot as a stable Agent identity to discover, request access to, and operate authenticated or paid private Resources without borrowing a person's login or manually provisioned API key. Use for Agent enrollment or identity, private capability discovery, Resource and scope selection, controller approval, account connection, direct Resource Server operations, x402-paid operations, or explicit Realmroot tenant administration through its Resource API.
 ---
 
-# Realmroot
+# Use Realmroot
 
-Realmroot is an identity-backed toolbox for private capabilities. It gives an
-Agent a stable identity, discovers registered resource servers, obtains
-controller-approved access, and calls them without borrowing a person's login
-or asking for a manually provisioned API key.
+Complete the user's requested Resource operation as a stable Agent. Treat
+identity, discovery, account connection, approval, and credential readiness as
+intermediate states.
 
 ## Operating Model
 
-- Be **discovery-driven**: select exact IDs, URLs, scopes, accounts, and
-  operations from API responses or published metadata.
-- Use one Restish API name per logical service and profiles for deployments.
-- Apply **least privilege**: request only the OAuth scopes required by the
-  user's task and bind them to exactly one Resource.
-- Hand every approval decision to the controller. The Agent may open or report
-  the approval URL and wait for the original command to finish.
+- Select exact deployments, Resource Servers, Resources, scopes, accounts, and
+  operations only from live responses and published metadata.
+- Request the complete task-scoped authority but no unrelated scope.
+- Bind every credential to exactly one Resource.
+- Hand enrollment, account connection, and access decisions to the controller.
 - Keep Agent protocol secrets in the Realmroot adapter and target DPoP keys,
-  proofs, access tokens, and token cache in Restish custody.
-- Treat a successful target operation as completion; discovery, approval, and
-  credential readiness are intermediate states.
+  proofs, tokens, and cache in Restish custody.
+- Call the target Resource Server directly; Realmroot does not proxy business
+  traffic.
 
 ## Step 1: Establish Identity
 
-Read [references/setup.md](references/setup.md) and complete its setup and
-identity procedure.
+Read [references/setup.md](references/setup.md) completely and follow its
+deployment, Restish, profile, and identity procedure.
 
-This step is complete only when `whoami` succeeds and returns both
-`agent.issuer` and `agent.subject`. If the user asked only for enrollment or
-identity, return those non-secret identifiers and stop.
+This step is complete only when `whoami` returns both `agent.issuer` and
+`agent.subject`. If the user requested identity only, return those non-secret
+identifiers and stop.
 
-## Step 2: Take The Requested Branch
+## Step 2: Discover And Operate The Resource
 
-### Discover Or Call A Private Capability
+Read [references/restish-commands.md](references/restish-commands.md)
+completely. Discover every Resource Server page, select the exact service and
+provider-owned Resource from returned metadata, establish any required
+controller account connection, inspect the target OpenAPI operation, and
+request the union of its required scopes.
 
-Read [references/restish-commands.md](references/restish-commands.md) when the
-task needs an authenticated private capability with no existing authorized
-tool, or when the user wants to discover, request access to, or call a known
-native or external Resource Server.
+When the selected Resource Server has `identifier: realmroot`, also read
+[references/management.md](references/management.md) for its authority
+boundaries and mutation rules.
 
-For an x402-paid operation, also read
-[references/x402.md](references/x402.md) before obtaining the payment
-challenge.
+When the target returns an x402 payment requirement, also read
+[references/x402.md](references/x402.md) before starting the live payment
+exchange.
 
-When a matching resource exists, this branch is complete only when the target's
-generated Restish operation succeeds. When exhaustive discovery finds no match,
-report the missing capability with the original task still open.
+Do not treat a matching Resource Server, connected account, approved request,
+or ready credential as completion. Invoke the requested generated target
+operation and verify its result. After a mutation, read the affected Resource
+back when its contract permits.
 
-### Integrate A Resource Server
+If exhaustive discovery finds no matching Resource Server or Resource, report
+the missing capability with the original task still open.
 
-Read [references/management.md](references/management.md) for management
-authority, then read
-[references/resource-server-integration.md](references/resource-server-integration.md)
-when the user asks to register, configure, or validate a native or external
-Resource Server.
-
-This branch is complete only when metadata and command discovery succeed, the
-controller can connect any required external account, and at least one real
-target operation succeeds with the requested authority.
-
-### Administer A Realmroot Tenant
-
-Read [references/management.md](references/management.md) only when the user
-explicitly asks to read or mutate Realmroot applications, Connectors, Resource
-Servers, users, settings, or other tenant resources.
-
-This branch is complete only when every requested read has returned, every
-mutation's readback matches the requested state, every one-time secret is at
-the approved protected destination, and no unrelated resource changed.
-
-### Configure A Product OIDC Client
-
-Read [references/management.md](references/management.md) for authority and
-mutation rules, then read
-[references/oidc-clients.md](references/oidc-clients.md) for client selection
-and request bodies.
-
-This branch is complete only when the application is created or updated, its
-stored configuration matches the requested runtime and redirects, and any
-create-only secret has been captured at a user-approved protected destination.
+The task is complete only when every requested target operation succeeds and no
+unrelated Resource changes.

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Realmroot Application"
+  short_description: "Integrate applications with Realmroot OIDC"
+  default_prompt: "Use $integrate-realmroot-application to integrate this application with Realmroot OIDC and verify the complete sign-in journey."
