@@ -231,6 +231,65 @@ describe('admin console applications-list', () => {
     await waitFor(() => expect(screen.queryByText('fas_created_secret')).toBeNull())
   })
 
+  it('creates a Machine Application without redirect controls', async () => {
+    const requests: Array<{ url: string; body: unknown }> = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url === '/api/applications' && init?.method === 'POST') {
+        requests.push({ url, body: JSON.parse(String(init.body)) })
+        return Promise.resolve(
+          jsonResponse(
+            {
+              ...application,
+              clientId: 'machine-client',
+              clientType: 'machine',
+              public: false,
+              redirectUris: [],
+              allowedGrantTypes: ['client_credentials', 'urn:ietf:params:oauth:grant-type:token-exchange'],
+              oidcScopes: [],
+              requirePkce: false,
+              tokenEndpointAuthMethod: 'client_secret_basic',
+              clientSecret: 'fas_machine_secret',
+            },
+            201,
+          ),
+        )
+      }
+      if (url === '/api/applications') {
+        return Promise.resolve(jsonResponse({ applications: [application], pagination }))
+      }
+      return consoleSharedFetch(input, init)
+    })
+
+    renderWithQuery(<ApplicationsPage />)
+
+    expect(await screen.findByText('Customer portal')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'New application' }))
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Event publisher' } })
+    fireEvent.change(screen.getByLabelText('Slug'), { target: { value: 'event-publisher' } })
+    fireEvent.click(screen.getByRole('button', { name: /Machine-to-machine/ }))
+    expect(screen.queryByLabelText('Redirect URIs')).toBeNull()
+    expect(screen.queryByRole('switch', { name: 'Device login' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(await screen.findByRole('heading', { name: 'Application created' })).toBeTruthy()
+    expect(screen.queryByText('Redirect URIs')).toBeNull()
+    expect(screen.getByText('Configure API access and Permissions.')).toBeTruthy()
+    expect(requests).toEqual([
+      {
+        url: '/api/applications',
+        body: {
+          name: 'Event publisher',
+          slug: 'event-publisher',
+          clientType: 'machine',
+          firstParty: true,
+          ownerOrganizationId: 'org-1',
+          redirectUris: [],
+        },
+      },
+    ])
+  })
+
   it('shows client-side validation errors and does not post invalid application input', async () => {
     const requests: Array<{ url: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {

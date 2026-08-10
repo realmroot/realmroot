@@ -319,6 +319,14 @@ describe('admin console applications-detail-b', () => {
     expect(screen.queryByRole('tab', { name: 'User authorizations' })).toBeNull()
     expect(await screen.findByText('Projects API')).toBeTruthy()
     expect(screen.getByText('projects:admin')).toBeTruthy()
+
+    cleanup()
+    queryClient.clear()
+    renderWithQuery(<ApplicationDetailPage applicationId="app-1" section="oauth" />)
+    expect(await screen.findByRole('heading', { name: 'Authorization' })).toBeTruthy()
+    expect(screen.queryByRole('heading', { name: 'Redirects and origins' })).toBeNull()
+    expect(screen.queryByRole('heading', { name: 'Token claims' })).toBeNull()
+    expect(screen.getByText('Machine-to-machine · client-1')).toBeTruthy()
   })
 
   it('renders users and displays management API errors from create flow', async () => {
