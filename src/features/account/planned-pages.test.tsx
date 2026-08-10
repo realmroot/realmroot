@@ -88,7 +88,9 @@ describe('planned Account Center journeys', () => {
     server.use(
       http.get(`${base}/api/account/access-requests`, () =>
         json({
-          items: [{ ...accessRequest(), authorizationDetails: requestedAuthorizationDetails }],
+          items: [
+            { ...accessRequest(), authorizationDetail: null, authorizationDetails: requestedAuthorizationDetails },
+          ],
           pagination: pagination(1),
         }),
       ),

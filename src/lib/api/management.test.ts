@@ -34,6 +34,18 @@ describe('management API client', () => {
     await expect(management.getUserSecurity('user-1')).rejects.toThrow('require Realm-level access')
   })
 
+  it('lists authorized Resource Servers with default collection queries', async () => {
+    const { calls, management } = await loadManagementApi()
+
+    await management.listUserAuthorizedResourceServers('user-1')
+    await management.listApplicationAuthorizedResourceServers('app-1')
+
+    expect(calls).toEqual([
+      ['userAuthorizedResourceServers.get', { param: { userId: 'user-1' }, query: {} }],
+      ['applicationAuthorizedResourceServers.get', { param: { applicationId: 'app-1' }, query: {} }],
+    ])
+  })
+
   it('maps management resource helpers to the Hono RPC boundary', async () => {
     const { calls, management } = await loadManagementApi()
 
@@ -437,6 +449,7 @@ async function loadManagementApi(options: { userSecurity?: unknown } = {}) {
             },
           },
           ':applicationId': {
+            'authorized-resource-servers': { $get: endpoint('applicationAuthorizedResourceServers.get') },
             'federated-credentials': {
               $get: endpoint('federatedCredentials.get'),
               $post: endpoint('federatedCredentials.post'),
@@ -477,6 +490,9 @@ async function loadManagementApi(options: { userSecurity?: unknown } = {}) {
               $get: endpoint('userPasskeys.get'),
               ':passkeyId': { $delete: endpoint('userPasskey.delete') },
             },
+          },
+          ':userId': {
+            'authorized-resource-servers': { $get: endpoint('userAuthorizedResourceServers.get') },
           },
           'password-reset-requests': { $post: endpoint('passwordReset.post') },
         },

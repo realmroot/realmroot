@@ -745,9 +745,7 @@ function toPermissionResponse(entitlement: Awaited<ReturnType<Deps['authorizatio
   const lifecycle = resourceScopeEntitlementLifecycle(entitlement)
   const subjectPath = entitlement.userId
     ? `users/${encodeURIComponent(entitlement.userId)}`
-    : entitlement.applicationId
-      ? `applications/${encodeURIComponent(entitlement.applicationId)}`
-      : `agents/${encodeURIComponent(entitlement.agentIdentityId!)}`
+    : `applications/${encodeURIComponent(entitlement.applicationId!)}`
   return {
     ...entitlement,
     ...lifecycle,

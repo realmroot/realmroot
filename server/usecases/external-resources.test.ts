@@ -2713,7 +2713,37 @@ describe('external API resource authorization', () => {
       }),
     )
 
+    vi.mocked(deps.externalResources.findAccessRequest).mockResolvedValue({ ...request, connectionId: null })
+    vi.mocked(deps.externalResources.findEntitlement).mockResolvedValue({ ...grant, connectionId: null })
+    await expect(
+      issueTargetAccessToken(
+        deps,
+        request.id,
+        proof,
+        'https://auth.example.com/api/agent/access-requests/request-1/credentials',
+        principal(),
+        { issuer: principal().issuer, sign },
+      ),
+    ).rejects.toThrow('Active external API resource grant is required.')
+    vi.mocked(deps.externalResources.findAccessRequest).mockResolvedValue(request)
+    vi.mocked(deps.externalResources.findEntitlement).mockResolvedValue(grant)
     vi.mocked(deps.externalResources.findConnection).mockResolvedValue(connectionRecord())
+    vi.mocked(deps.externalResources.findEntitlement).mockResolvedValue({
+      ...grant,
+      expiresAt: new Date(Date.now() + 10_000),
+    })
+    exchangeResponse = { access_token: 'beyond-entitlement', token_type: 'DPoP', expires_in: 60 }
+    await expect(
+      issueTargetAccessToken(
+        deps,
+        grant.id,
+        proof,
+        'https://auth.example.com/api/agent/access-requests/request-1/credentials',
+        principal(),
+        { issuer: principal().issuer, sign },
+      ),
+    ).rejects.toThrow('beyond an Entitlement lifetime')
+    vi.mocked(deps.externalResources.findEntitlement).mockResolvedValue(grant)
     exchangeResponse = { access_token: 'excessive-expiry', token_type: 'DPoP', expires_in: 5_000 }
     await expect(
       issueTargetAccessToken(
@@ -2922,6 +2952,18 @@ describe('external API resource authorization', () => {
         { issuer: principal().issuer, sign },
       ),
     ).resolves.toMatchObject({ dpopNonce: 'next-nonce' })
+
+    vi.mocked(deps.connectors.findById).mockResolvedValue(null)
+    await expect(
+      issueTargetAccessToken(
+        deps,
+        grant.id,
+        proof,
+        'https://auth.example.com/api/agent/access-requests/request-1/credentials',
+        principal(),
+        { issuer: principal().issuer, sign },
+      ),
+    ).rejects.toThrow('Connector not found.')
   })
 
   it('[spec: agent-identity/external-resource-contextual-delegation] exchanges and leases the exact approved authorization details', async () => {
@@ -5549,6 +5591,28 @@ describe('external API resource authorization', () => {
       status: 'approved',
       approvedEntitlements: [{ scope: 'projects:read', entitlementId: 'ent_1' }],
     })
+    vi.mocked(deps.authorization.findResource).mockResolvedValueOnce({ ...resource(), enabled: false })
+    await expect(
+      issueTargetAccessToken(deps, 'request-1', 'proof', 'https://auth.example.com/token', principal(), signer),
+    ).rejects.toThrow('Enabled Resource Server is required.')
+
+    vi.mocked(deps.authorization.findResource).mockResolvedValueOnce({
+      ...resource(),
+      visibility: 'private',
+      ownerOrganizationId: 'other-organization',
+    })
+    await expect(
+      issueTargetAccessToken(deps, 'request-1', 'proof', 'https://auth.example.com/token', principal(), signer),
+    ).rejects.toThrow('Resource Server is not visible to this Agent.')
+
+    vi.mocked(deps.externalResources.findConnection).mockResolvedValue({
+      ...connectionRecord(),
+      clientGeneration: 2,
+    })
+    await expect(
+      issueTargetAccessToken(deps, 'request-1', 'proof', 'https://auth.example.com/token', principal(), signer),
+    ).rejects.toThrow('Active external API resource grant is required.')
+
     vi.mocked(deps.externalResources.findConnection).mockResolvedValue(null)
     await expect(
       issueTargetAccessToken(deps, 'request-1', 'proof', 'https://auth.example.com/token', principal(), signer),
@@ -5575,6 +5639,23 @@ describe('external API resource authorization', () => {
     })
     const signer = { issuer: principal().issuer, sign: vi.fn().mockResolvedValue('native-token') }
     const tokenUrl = 'https://auth.example.com/api/agent/access-requests/request-1/credentials'
+
+    vi.mocked(deps.authorization.findResource).mockResolvedValueOnce({
+      ...native,
+      accessMode: 'brokered',
+      connectorId: 'connector-1',
+      scopeRegistry: {
+        ...native.scopeRegistry!,
+        accountConnection: {
+          mode: 'brokered',
+          authorizationEndpoint: 'https://adapter.example/connect',
+          tokenEndpoint: 'https://adapter.example/token',
+        },
+      },
+    })
+    await expect(issueTargetAccessToken(deps, 'request-1', 'proof', tokenUrl, principal(), signer)).rejects.toThrow(
+      'Active brokered account connection is required.',
+    )
 
     vi.mocked(deps.externalResources.findAccessRequest).mockResolvedValueOnce({
       ...requestRecord(),

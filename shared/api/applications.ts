@@ -137,29 +137,42 @@ export const createApplicationResponseSchema = applicationResponseSchema.extend(
   clientSecret: z.string().optional(),
 })
 
-export const createApplicationRequestSchema = z.object({
-  slug: z
-    .string()
-    .trim()
-    .min(3)
-    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
-    .optional(),
-  name: nonEmptyString,
-  description: z.string().trim().max(1000).optional(),
-  homepageUrl: optionalUrl,
-  iconUrl: optionalUrl,
-  clientType: applicationClientTypeSchema,
-  redirectUris: z.array(nonEmptyString).min(1),
-  postLogoutRedirectUris: z.array(nonEmptyString).optional(),
-  corsOrigins: z.array(nonEmptyString).optional(),
-  allowedGrantTypes: z.array(applicationGrantTypeSchema).min(1).optional(),
-  oidcScopes: z.array(userConfigurableApplicationScopeSchema).min(1).optional(),
-  resourceScopes: applicationResourceScopesSchema.optional(),
-  firstParty: z.boolean().optional(),
-  trusted: z.boolean().optional(),
-  ownerOrganizationId: nonEmptyString,
-  oidcClaims: applicationOidcClaimsSchema.optional(),
-})
+export const createApplicationRequestSchema = z
+  .object({
+    slug: z
+      .string()
+      .trim()
+      .min(3)
+      .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
+      .optional(),
+    name: nonEmptyString,
+    description: z.string().trim().max(1000).optional(),
+    homepageUrl: optionalUrl,
+    iconUrl: optionalUrl,
+    clientType: applicationClientTypeSchema,
+    redirectUris: z.array(nonEmptyString),
+    postLogoutRedirectUris: z.array(nonEmptyString).optional(),
+    corsOrigins: z.array(nonEmptyString).optional(),
+    allowedGrantTypes: z.array(applicationGrantTypeSchema).min(1).optional(),
+    oidcScopes: z.array(userConfigurableApplicationScopeSchema).min(1).optional(),
+    resourceScopes: applicationResourceScopesSchema.optional(),
+    firstParty: z.boolean().optional(),
+    trusted: z.boolean().optional(),
+    ownerOrganizationId: nonEmptyString,
+    oidcClaims: applicationOidcClaimsSchema.optional(),
+  })
+  .superRefine((input, context) => {
+    if (
+      (input.allowedGrantTypes ?? ['authorization_code']).includes('authorization_code') &&
+      !input.redirectUris.length
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['redirectUris'],
+        message: 'Authorization-code clients require at least one redirect URI.',
+      })
+    }
+  })
 
 export const updateApplicationRequestSchema = z.object({
   slug: z
@@ -172,7 +185,7 @@ export const updateApplicationRequestSchema = z.object({
   description: z.string().trim().max(1000).nullable().optional(),
   homepageUrl: optionalUrl.nullable(),
   iconUrl: optionalUrl.nullable(),
-  redirectUris: z.array(nonEmptyString).min(1).optional(),
+  redirectUris: z.array(nonEmptyString).optional(),
   postLogoutRedirectUris: z.array(nonEmptyString).optional(),
   corsOrigins: z.array(nonEmptyString).optional(),
   customData: customDataSchema.optional(),
@@ -188,7 +201,7 @@ export const updateApplicationRequestSchema = z.object({
 })
 
 export const replaceRedirectUrisRequestSchema = z.object({
-  redirectUris: z.array(nonEmptyString).min(1),
+  redirectUris: z.array(nonEmptyString),
 })
 
 export const rotateClientSecretResponseSchema = z.object({

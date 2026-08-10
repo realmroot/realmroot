@@ -1,0 +1,20 @@
+[
+  {
+    "method": "POST",
+    "path": "/applications",
+    "operationId": "createApplication",
+    "semanticHash": "2b28b239dc7c49877962dcc4223bf9be9ae750862cf1f9693f27c8fbf97b7418"
+  },
+  {
+    "method": "PATCH",
+    "path": "/applications/{applicationId}",
+    "operationId": "updateApplication",
+    "semanticHash": "9aea0a03887e89bb354ac2415c372dd7264e0fc5be3f377a49547c96d1143385"
+  },
+  {
+    "method": "PUT",
+    "path": "/applications/{applicationId}/redirect-uris",
+    "operationId": "replaceRedirectUris",
+    "semanticHash": "f4cdeb9ef2d4ed7789545fd83d5b9d79314aaeda95e70a07d2a059c91d9f7e4d"
+  }
+]

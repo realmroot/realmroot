@@ -110,7 +110,7 @@ describe('direct scope Entitlements', () => {
   })
 
   it('rejects automatic scopes and invalid lifetime combinations', async () => {
-    const { deps } = setup()
+    const { deps, authorization } = setup()
     await expect(
       subject.createUserPermission(
         deps,
@@ -140,6 +140,15 @@ describe('direct scope Entitlements', () => {
         'admin',
       ),
     ).rejects.toThrow('cannot expire')
+    vi.mocked(authorization.findResource).mockResolvedValueOnce({ ...resource, scopeRegistry: null })
+    await expect(
+      subject.createUserPermission(
+        deps,
+        'user-1',
+        { resourceServerId: resource.id, scope: 'read', mode: 'persistent' },
+        'admin',
+      ),
+    ).rejects.toThrow('assigned')
   })
 
   it('ends only the selected Entitlement', async () => {

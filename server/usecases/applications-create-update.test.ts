@@ -140,6 +140,43 @@ describe('service.test 1', () => {
     await expect(getApplication(deps, issuer, created.id)).rejects.toMatchObject({ status: 404 })
   })
 
+  it('allows a client-credentials-only Application without redirect URIs', async () => {
+    const repository = new InMemoryApplicationRepository()
+    const deps = { applications: repository } as unknown as Deps
+
+    await expect(
+      createApplication(
+        deps,
+        'https://auth.example.com',
+        {
+          name: 'Connection Event Publisher',
+          clientType: 'confidential_web',
+          redirectUris: [],
+          allowedGrantTypes: ['client_credentials'],
+          oidcScopes: ['openid'],
+        },
+        'admin-1',
+      ),
+    ).resolves.toMatchObject({
+      redirectUris: [],
+      allowedGrantTypes: ['client_credentials'],
+    })
+
+    await expect(
+      createApplication(
+        deps,
+        'https://auth.example.com',
+        {
+          name: 'Broken Browser Client',
+          clientType: 'confidential_web',
+          redirectUris: [],
+          allowedGrantTypes: ['authorization_code'],
+        },
+        'admin-1',
+      ),
+    ).rejects.toMatchObject({ status: 400 })
+  })
+
   it('does not issue or rotate secrets for public clients', async () => {
     const repository = new InMemoryApplicationRepository()
     const deps = { applications: repository } as unknown as Deps

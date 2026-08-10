@@ -78,6 +78,7 @@ Feature: Admin Console
     And it records OIDC scopes separately from Resource-server-qualified scope allowlists
     And Resource Server and scope allowlists are bounded at the request boundary
     And native clients can be created with device login enabled
+    And a client-credentials-only Application does not require a redirect URI
 
   @entrypoint:product-ui @journey:admin-application-detail
   Scenario: Application detail manages lifecycle, redirects, integration details, and secret rotation

@@ -205,7 +205,7 @@ describe('admin console applications-list', () => {
       target: { value: '' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
-    expect(await screen.findByText('Too small: expected array to have >=1 items')).toBeTruthy()
+    expect(await screen.findByText('Authorization-code clients require at least one redirect URI.')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: /Traditional web app/ }))
     fireEvent.change(screen.getByLabelText('Redirect URIs'), {
       target: { value: 'https://server.example.com/callback' },

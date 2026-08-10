@@ -41,6 +41,9 @@ export function normalizeClientSettings(
   if (normalizedGrantTypes.includes('refresh_token') && !normalizedScopes.includes('offline_access')) {
     normalizedScopes.push('offline_access')
   }
+  if (normalizedGrantTypes.includes('authorization_code') && normalizedRedirectUris.length === 0) {
+    throw badRequest('Authorization-code clients require at least one redirect URI.')
+  }
   for (const scope of normalizedScopes) {
     if (!applicationScopeSchema.safeParse(scope).success) {
       throw badRequest(`Unsupported scope: ${scope}`)

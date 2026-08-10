@@ -38,6 +38,9 @@ describe('OpenAPI semantic contract gate', () => {
     const runtimeApiContract = JSON.parse(
       readFileSync(new URL('./approved-runtime-api-semantic-baseline.json', import.meta.url), 'utf8'),
     ) as typeof unchanged
+    const m2mApplicationContract = JSON.parse(
+      readFileSync(new URL('./approved-m2m-application-semantic-baseline.json', import.meta.url), 'utf8'),
+    ) as typeof unchanged
     const brokeredNativeChanges = new Set(brokeredNativeContract.map(({ method, path }) => `${method}:${path}`))
     const resourceDiscoveryChanges = new Set(resourceDiscoveryContract.map(({ method, path }) => `${method}:${path}`))
     const approvedChanges = new Set(
@@ -99,10 +102,15 @@ describe('OpenAPI semantic contract gate', () => {
       path.includes('/scope-grants') ||
       path.includes('/access-grants') ||
       (method === 'GET' && (path === '/agents' || path === '/agents/{agentId}' || path === '/realm/audit-events'))
+    const m2mApplicationChanges = new Set(m2mApplicationContract.map(({ method, path }) => `${method}:${path}`))
     const baseline = [
-      ...authenticationBaseline.filter((operation) => !permissionSurface(operation)),
+      ...authenticationBaseline.filter(
+        (operation) =>
+          !permissionSurface(operation) && !m2mApplicationChanges.has(`${operation.method}:${operation.path}`),
+      ),
       ...permissionContract,
       ...runtimeApiContract,
+      ...m2mApplicationContract,
     ].sort((left, right) => `${left.path}:${left.method}`.localeCompare(`${right.path}:${right.method}`))
 
     expect(openApiSemanticSnapshot(unifiedOpenApi as unknown as Record<string, unknown>, () => true)).toEqual(baseline)
