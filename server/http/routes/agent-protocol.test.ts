@@ -253,7 +253,7 @@ describe('Agent protocol routes', () => {
     const app = createRouteApp()
     expect((await app.request('/api/agent/api-resources')).status).toBe(404)
     expect((await app.request('/api/access-requests/request-1/activation')).status).toBe(404)
-    expect((await app.request('/api/agent/scope-entitlements')).status).toBe(404)
+    expect((await app.request('/api/agent/permissions')).status).toBe(404)
   })
 })
 

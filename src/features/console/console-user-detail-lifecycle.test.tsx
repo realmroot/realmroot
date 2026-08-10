@@ -88,7 +88,7 @@ describe('admin console user detail lifecycle', () => {
         expiresAt: null,
         createdAt: '2026-01-01T00:00:00.000Z',
         links: {
-          self: '/api/users/user-1/scope-entitlements/usg-1',
+          self: '/api/users/user-1/permissions/usg-1',
           resourceServer: '/api/resource-servers/resource-1',
         },
       },
@@ -203,12 +203,12 @@ describe('admin console user detail lifecycle', () => {
       if (url === '/api/resource-servers') {
         return Promise.resolve(jsonResponse({ items: [assignedResource], pagination }))
       }
-      if (url === '/api/users/user-1/scope-entitlements' && method === 'GET') {
+      if (url === '/api/users/user-1/permissions' && method === 'GET') {
         return Promise.resolve(
           jsonResponse({ items: accessGrants, pagination: { ...pagination, total: accessGrants.length } }),
         )
       }
-      if (url === '/api/users/user-1/scope-entitlements' && method === 'POST') {
+      if (url === '/api/users/user-1/permissions' && method === 'POST') {
         const body = JSON.parse(String(init?.body))
         accessGrants = [
           {
@@ -223,14 +223,14 @@ describe('admin console user detail lifecycle', () => {
             expiresAt: body.expiresAt,
             createdAt: '2026-01-02T00:00:00.000Z',
             links: {
-              self: '/api/users/user-1/scope-entitlements/usg-2',
+              self: '/api/users/user-1/permissions/usg-2',
               resourceServer: '/api/resource-servers/resource-1',
             },
           },
         ]
         return Promise.resolve(jsonResponse(accessGrants[0], 201))
       }
-      if (url === '/api/users/user-1/scope-entitlements/usg-1' && method === 'DELETE') {
+      if (url === '/api/users/user-1/permissions/usg-1' && method === 'DELETE') {
         accessGrants = []
         return Promise.resolve(new Response(null, { status: 204 }))
       }

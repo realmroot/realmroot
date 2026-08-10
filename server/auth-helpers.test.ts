@@ -103,7 +103,7 @@ describe('filterOAuthAccessTokenScopes', () => {
     ).resolves.toEqual(['openid'])
   })
 
-  it('combines direct Entitlements with effective scopes without treating public visibility as authority [spec: admin-console/admin-resource-scope-entitlements]', async () => {
+  it('combines direct Permissions with effective scopes without treating public visibility as authority [spec: admin-console/admin-resource-permissions]', async () => {
     await expect(
       filterOAuthAccessTokenScopes(createDeps({ directScopes: ['orders:admin'] }), {
         user: { id: 'user_1' },

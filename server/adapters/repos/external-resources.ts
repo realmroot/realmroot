@@ -885,12 +885,12 @@ export function createExternalResourceRepository(db: Database): ExternalResource
         .orderBy(resourceScopeEntitlement.createdAt)
     },
 
-    async listAgentScopeEntitlements(query, scope) {
+    async listAgentPermissions(query, scope) {
       const now = new Date()
       const statusCondition = scopeEntitlementStatusCondition(query.status, now)
       const where = and(
         query.agentId ? eq(resourceScopeEntitlement.agentIdentityId, query.agentId) : undefined,
-        query.resourceId ? eq(resourceScopeEntitlement.resourceServerId, query.resourceId) : undefined,
+        query.resourceServerId ? eq(resourceScopeEntitlement.resourceServerId, query.resourceServerId) : undefined,
         query.organizationId ? eq(agentIdentity.ownerOrganizationId, query.organizationId) : undefined,
         authorityOwnerCondition(scope),
         isNull(agentIdentity.deletedAt),

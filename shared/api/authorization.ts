@@ -254,7 +254,7 @@ export const apiResourceContractResponseSchema = z.object({
   ),
 })
 
-export const resourceScopeEntitlementResponseSchema = z.object({
+export const permissionResponseSchema = z.object({
   id: z.string(),
   userId: z.string().nullable(),
   applicationId: z.string().nullable(),
@@ -279,30 +279,44 @@ export const resourceScopeEntitlementResponseSchema = z.object({
   }),
 })
 
-export const createUserScopeEntitlementRequestSchema = z.object({
+export const createUserPermissionRequestSchema = z.object({
   organizationId: nonEmptyString.nullable().optional(),
   resourceServerId: nonEmptyString,
   scope: nonEmptyString,
   mode: z.enum(['persistent', 'until']).default('persistent'),
   expiresAt: z.iso.datetime().nullable().optional(),
 })
-export const createApplicationScopeEntitlementRequestSchema = z.object({
+export const createApplicationPermissionRequestSchema = z.object({
   resourceServerId: nonEmptyString,
   scope: nonEmptyString,
   mode: z.enum(['persistent', 'until']).default('persistent'),
   expiresAt: z.iso.datetime().nullable().optional(),
 })
-export const scopeEntitlementListStatusSchema = z.enum(['active', 'inactive'])
-export const listScopeEntitlementsQuerySchema = paginationQuerySchema.extend({
+export const permissionListStatusSchema = z.enum(['active', 'inactive'])
+export const listPermissionsQuerySchema = paginationQuerySchema.extend({
   resourceServerId: nonEmptyString.optional(),
-  status: scopeEntitlementListStatusSchema.optional(),
+  status: permissionListStatusSchema.optional(),
 })
-export const listUserScopeEntitlementsResponseSchema = z.object({
-  items: z.array(resourceScopeEntitlementResponseSchema),
+export const listUserPermissionsResponseSchema = z.object({
+  items: z.array(permissionResponseSchema),
   pagination: paginationMetadataSchema,
 })
-export const listApplicationScopeEntitlementsResponseSchema = z.object({
-  items: z.array(resourceScopeEntitlementResponseSchema),
+export const listApplicationPermissionsResponseSchema = z.object({
+  items: z.array(permissionResponseSchema),
+  pagination: paginationMetadataSchema,
+})
+
+export const authorizedResourceServerSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  identifier: z.string(),
+  permissionCount: z.number().int().positive(),
+})
+export const listAuthorizedResourceServersQuerySchema = paginationQuerySchema.extend({
+  search: z.string().trim().min(1).max(200).optional(),
+})
+export const listAuthorizedResourceServersResponseSchema = z.object({
+  items: z.array(authorizedResourceServerSchema),
   pagination: paginationMetadataSchema,
 })
 
@@ -342,7 +356,9 @@ export type UpdateRoleRequest = z.infer<typeof updateRoleRequestSchema>
 export type RoleScope = z.infer<typeof roleScopeSchema>
 export type MemberRolesResponse = z.infer<typeof memberRolesResponseSchema>
 export type ReplaceMemberRolesRequest = z.infer<typeof replaceMemberRolesRequestSchema>
-export type ResourceScopeEntitlementResponse = z.infer<typeof resourceScopeEntitlementResponseSchema>
-export type CreateUserScopeEntitlementRequest = z.infer<typeof createUserScopeEntitlementRequestSchema>
-export type CreateApplicationScopeEntitlementRequest = z.infer<typeof createApplicationScopeEntitlementRequestSchema>
-export type ListScopeEntitlementsQuery = z.infer<typeof listScopeEntitlementsQuerySchema>
+export type PermissionResponse = z.infer<typeof permissionResponseSchema>
+export type CreateUserPermissionRequest = z.infer<typeof createUserPermissionRequestSchema>
+export type CreateApplicationPermissionRequest = z.infer<typeof createApplicationPermissionRequestSchema>
+export type ListPermissionsQuery = z.infer<typeof listPermissionsQuerySchema>
+export type AuthorizedResourceServer = z.infer<typeof authorizedResourceServerSchema>
+export type ListAuthorizedResourceServersQuery = z.infer<typeof listAuthorizedResourceServersQuerySchema>

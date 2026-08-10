@@ -21,11 +21,11 @@ import type {
   AccessRequest,
   AccessRequestApproval,
   AccountConnection,
-  AgentScopeEntitlement,
+  AgentPermission,
   CreateAccessRequest,
   CreateAccountConnection,
   CreateResourceConnectionRequest,
-  ListAgentScopeEntitlementsQuery,
+  ListAgentPermissionsQuery,
   ResourceConnectionApproval,
   ResourceConnectionRequest,
 } from '@shared/api/agent-api'
@@ -860,7 +860,7 @@ async function revokeBrokeredProviderAuthorization(
 export async function revokeResourceConnection(deps: Deps, connectionId: string, actorUserId: string) {
   const connection = await requireControlledConnection(deps, connectionId, actorUserId)
   const entitlements = await deps.externalResources.listActiveEntitlementsByConnection(connection.id, new Date())
-  for (const entitlement of entitlements) await revokeAgentScopeEntitlement(deps, entitlement.id, actorUserId)
+  for (const entitlement of entitlements) await revokeAgentPermission(deps, entitlement.id, actorUserId)
   if (!(await deps.externalResources.revokeConnection(connectionId, new Date()))) {
     throw badRequest('Resource account connection is already revoked.')
   }
@@ -1615,7 +1615,7 @@ export async function decideAgentAccessRequest(
     assertAuthorizationDetailsSelection(resource, null, authorizationDetails)
   }
   const expiresAt = input.mode === 'until' ? new Date(input.expiresAt!) : null
-  if (expiresAt && expiresAt.getTime() <= now.getTime()) throw badRequest('Entitlement expiry must be in the future.')
+  if (expiresAt && expiresAt.getTime() <= now.getTime()) throw badRequest('Permission expiry must be in the future.')
   const contextHash = await sha256(canonicalJson(authorizationDetails))
   const existing = (await deps.externalResources.listActiveEntitlementsByAgent(request.agentIdentityId, now)).filter(
     (entitlement) =>
@@ -2089,37 +2089,37 @@ async function issueNativeAccessToken(
   }
 }
 
-export async function listAgentScopeEntitlements(
+export async function listAgentPermissions(
   deps: Deps,
   principal: AgentResourcePrincipal,
-  query: ListAgentScopeEntitlementsQuery,
+  query: ListAgentPermissionsQuery,
 ) {
   await requireActiveIdentityAndBinding(deps, principal)
-  const result = await deps.externalResources.listAgentScopeEntitlements({ ...query, agentId: principal.identityId })
+  const result = await deps.externalResources.listAgentPermissions({ ...query, agentId: principal.identityId })
   return {
-    items: result.items.map(({ entitlement, resource }) => toScopeEntitlement(entitlement, resource)),
+    items: result.items.map(({ entitlement, resource }) => toPermission(entitlement, resource)),
     pagination: paginationMetadata(result),
   }
 }
 
-export async function getAgentScopeEntitlement(
+export async function getAgentPermission(
   deps: Deps,
   entitlementId: string,
   principal: AgentResourcePrincipal,
-): Promise<AgentScopeEntitlement> {
+): Promise<AgentPermission> {
   await requireActiveIdentityAndBinding(deps, principal)
   const entitlement = await deps.externalResources.findEntitlement(entitlementId)
   if (!entitlement || entitlement.agentIdentityId !== principal.identityId) {
-    throw notFound('Agent scope Entitlement was not found.')
+    throw notFound('Agent Permission was not found.')
   }
   const resource = await deps.authorization.findResource(entitlement.resourceServerId)
-  if (!resource) throw notFound('Agent scope Entitlement Resource Server was not found.')
-  return toScopeEntitlement(entitlement, resource)
+  if (!resource) throw notFound('Agent Permission Resource Server was not found.')
+  return toPermission(entitlement, resource)
 }
 
-export async function revokeAgentScopeEntitlement(deps: Deps, entitlementId: string, actorUserId: string) {
+export async function revokeAgentPermission(deps: Deps, entitlementId: string, actorUserId: string) {
   const entitlement = await deps.externalResources.findEntitlement(entitlementId)
-  if (!entitlement?.agentIdentityId || entitlement.endedAt) throw notFound('Agent scope Entitlement was not found.')
+  if (!entitlement?.agentIdentityId || entitlement.endedAt) throw notFound('Agent Permission was not found.')
   const request = entitlement.sourceAccessRequestId
     ? await deps.externalResources.findAccessRequest(entitlement.sourceAccessRequestId)
     : null
@@ -3780,10 +3780,10 @@ async function agentAccessRequestRepresentation(
   }
 }
 
-function toScopeEntitlement(
+function toPermission(
   record: ResourceScopeEntitlementRecord,
   resource: { id: string; identifier: string; name: string },
-): AgentScopeEntitlement {
+): AgentPermission {
   return {
     id: record.id,
     agentId: record.agentIdentityId!,
@@ -3795,7 +3795,7 @@ function toScopeEntitlement(
     resource: { id: resource.id, identifier: resource.identifier, name: resource.name },
     scope: record.scope,
     authorizationDetails: record.authorizationDetails,
-    mode: record.mode as AgentScopeEntitlement['mode'],
+    mode: record.mode as AgentPermission['mode'],
     ...resourceScopeEntitlementLifecycle(record),
     sourceAccessRequestId: record.sourceAccessRequestId,
     expiresAt: record.expiresAt?.toISOString() ?? null,
@@ -3803,7 +3803,7 @@ function toScopeEntitlement(
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
     links: {
-      self: `/api/agents/${encodeURIComponent(record.agentIdentityId!)}/scope-entitlements/${encodeURIComponent(record.id)}`,
+      self: `/api/agents/${encodeURIComponent(record.agentIdentityId!)}/permissions/${encodeURIComponent(record.id)}`,
     },
   }
 }

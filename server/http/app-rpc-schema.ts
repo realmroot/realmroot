@@ -15,11 +15,11 @@ import type {
 } from '@shared/api/account'
 import type {
   Agent,
-  AgentScopeEntitlement,
+  AgentPermission,
   ApiResource,
   createApiResourceSchema,
   ListAgentAuditEventsQuery,
-  ListAgentScopeEntitlementsQuery,
+  ListAgentPermissionsQuery,
   ListAgentsQuery,
   ListManagementAgentAccessRequestsQuery,
   ManagementAgent,
@@ -51,18 +51,20 @@ import type {
 import type { UploadedAssetResponse } from '@shared/api/assets'
 import type {
   ApiResourceContractResponse,
-  CreateApplicationScopeEntitlementRequest,
+  AuthorizedResourceServer,
+  CreateApplicationPermissionRequest,
   CreateOrganizationRequest,
   CreateRoleRequest,
-  CreateUserScopeEntitlementRequest,
+  CreateUserPermissionRequest,
   ListApiResourcesQuery,
+  ListAuthorizedResourceServersQuery,
   ListOrganizationsResponse,
+  ListPermissionsQuery,
   ListRolesResponse,
-  ListScopeEntitlementsQuery,
   MemberRolesResponse,
   OrganizationResponse,
+  PermissionResponse,
   ReplaceMemberRolesRequest,
-  ResourceScopeEntitlementResponse,
   RoleResponse,
   UpdateOrganizationRequest,
   UpdateRoleRequest,
@@ -268,20 +270,29 @@ export type RpcSchema = {
     $patch: RpcEndpoint<{ param: { id: string }; json: UpdateApplicationRequest }, ApplicationResponse>
     $delete: RpcEndpoint<{ param: { id: string } }, EmptyResponse>
   }
-  '/api/applications/:applicationId/scope-entitlements': {
+  '/api/applications/:applicationId/permissions': {
     $get: RpcEndpoint<
-      { param: { applicationId: string }; query?: Partial<Record<keyof ListScopeEntitlementsQuery, string>> },
-      { items: ResourceScopeEntitlementResponse[]; pagination: PaginationMetadata }
+      { param: { applicationId: string }; query?: Partial<Record<keyof ListPermissionsQuery, string>> },
+      { items: PermissionResponse[]; pagination: PaginationMetadata }
     >
     $post: RpcEndpoint<
-      { param: { applicationId: string }; json: CreateApplicationScopeEntitlementRequest },
-      ResourceScopeEntitlementResponse,
+      { param: { applicationId: string }; json: CreateApplicationPermissionRequest },
+      PermissionResponse,
       201
     >
   }
-  '/api/applications/:applicationId/scope-entitlements/:entitlementId': {
-    $get: RpcEndpoint<{ param: { applicationId: string; entitlementId: string } }, ResourceScopeEntitlementResponse>
-    $delete: RpcEndpoint<{ param: { applicationId: string; entitlementId: string } }, EmptyResponse, 204>
+  '/api/applications/:applicationId/authorized-resource-servers': {
+    $get: RpcEndpoint<
+      {
+        param: { applicationId: string }
+        query?: Partial<Record<keyof ListAuthorizedResourceServersQuery, string>>
+      },
+      { items: AuthorizedResourceServer[]; pagination: PaginationMetadata }
+    >
+  }
+  '/api/applications/:applicationId/permissions/:permissionId': {
+    $get: RpcEndpoint<{ param: { applicationId: string; permissionId: string } }, PermissionResponse>
+    $delete: RpcEndpoint<{ param: { applicationId: string; permissionId: string } }, EmptyResponse, 204>
   }
   '/api/applications/:id/redirect-uris': {
     $get: RpcEndpoint<
@@ -335,20 +346,22 @@ export type RpcSchema = {
     $patch: RpcEndpoint<{ param: { id: string }; json: ManagementUpdateUserRequest }, { user: ManagementUserResponse }>
     $delete: RpcEndpoint<{ param: { id: string } }, EmptyResponse>
   }
-  '/api/users/:userId/scope-entitlements': {
+  '/api/users/:userId/permissions': {
     $get: RpcEndpoint<
-      { param: { userId: string }; query?: Partial<Record<keyof ListScopeEntitlementsQuery, string>> },
-      { items: ResourceScopeEntitlementResponse[]; pagination: PaginationMetadata }
+      { param: { userId: string }; query?: Partial<Record<keyof ListPermissionsQuery, string>> },
+      { items: PermissionResponse[]; pagination: PaginationMetadata }
     >
-    $post: RpcEndpoint<
-      { param: { userId: string }; json: CreateUserScopeEntitlementRequest },
-      ResourceScopeEntitlementResponse,
-      201
+    $post: RpcEndpoint<{ param: { userId: string }; json: CreateUserPermissionRequest }, PermissionResponse, 201>
+  }
+  '/api/users/:userId/authorized-resource-servers': {
+    $get: RpcEndpoint<
+      { param: { userId: string }; query?: Partial<Record<keyof ListAuthorizedResourceServersQuery, string>> },
+      { items: AuthorizedResourceServer[]; pagination: PaginationMetadata }
     >
   }
-  '/api/users/:userId/scope-entitlements/:entitlementId': {
-    $get: RpcEndpoint<{ param: { userId: string; entitlementId: string } }, ResourceScopeEntitlementResponse>
-    $delete: RpcEndpoint<{ param: { userId: string; entitlementId: string } }, EmptyResponse, 204>
+  '/api/users/:userId/permissions/:permissionId': {
+    $get: RpcEndpoint<{ param: { userId: string; permissionId: string } }, PermissionResponse>
+    $delete: RpcEndpoint<{ param: { userId: string; permissionId: string } }, EmptyResponse, 204>
   }
   '/api/users/:id/password-reset-requests': {
     $post: RpcEndpoint<{ param: { id: string }; json: { redirectTo?: string } }, EmptyResponse>
@@ -496,18 +509,24 @@ export type RpcSchema = {
       { items: ManagementAgentInstallation[]; pagination: PaginationMetadata }
     >
   }
-  '/api/agents/:agentId/scope-entitlements': {
+  '/api/agents/:agentId/permissions': {
     $get: RpcEndpoint<
       {
         param: { agentId: string }
-        query?: Partial<Record<keyof ListAgentScopeEntitlementsQuery, string>>
+        query?: Partial<Record<keyof ListAgentPermissionsQuery, string>>
       },
-      { items: AgentScopeEntitlement[]; pagination: PaginationMetadata }
+      { items: AgentPermission[]; pagination: PaginationMetadata }
     >
   }
-  '/api/agents/:agentId/scope-entitlements/:entitlementId': {
-    $get: RpcEndpoint<{ param: { agentId: string; entitlementId: string } }, AgentScopeEntitlement>
-    $delete: RpcEndpoint<{ param: { agentId: string; entitlementId: string } }, EmptyResponse, 204>
+  '/api/agents/:agentId/authorized-resource-servers': {
+    $get: RpcEndpoint<
+      { param: { agentId: string }; query?: Partial<Record<keyof ListAuthorizedResourceServersQuery, string>> },
+      { items: AuthorizedResourceServer[]; pagination: PaginationMetadata }
+    >
+  }
+  '/api/agents/:agentId/permissions/:permissionId': {
+    $get: RpcEndpoint<{ param: { agentId: string; permissionId: string } }, AgentPermission>
+    $delete: RpcEndpoint<{ param: { agentId: string; permissionId: string } }, EmptyResponse, 204>
   }
   '/api/access/requests': {
     $get: RpcEndpoint<

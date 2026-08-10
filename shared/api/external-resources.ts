@@ -160,7 +160,7 @@ export const connectableExternalResourcesResponseSchema = z.object({
   ),
 })
 
-export const resourceScopeEntitlementModeSchema = z.enum(['once', 'until', 'persistent'])
+export const permissionModeSchema = z.enum(['once', 'until', 'persistent'])
 export const agentAccessRequestStatusSchema = z.enum(['pending', 'approved', 'denied', 'consumed', 'expired'])
 
 export const createAgentAccessRequestSchema = z.object({
@@ -189,7 +189,7 @@ export const agentAccessRequestSchema = z.object({
 
 export const decideAgentAccessRequestSchema = z.object({
   decision: z.enum(['approve', 'deny']),
-  mode: resourceScopeEntitlementModeSchema.optional(),
+  mode: permissionModeSchema.optional(),
   expiresAt: z.iso.datetime().optional(),
   authorizationDetails: authorizationDetailsSchema.default([]),
 })
@@ -205,45 +205,6 @@ export const decideAgentAccessRequestByTokenSchema = decideAgentAccessRequestSch
       ctx.addIssue({ code: 'custom', path: ['expiresAt'], message: 'Limited approval requires expiresAt.' })
     }
   })
-
-export const agentScopeEntitlementSchema = z.object({
-  id: z.string(),
-  resourceId: z.string(),
-  connectionId: z.string().nullable(),
-  agentIdentityId: z.string(),
-  scopes: z.array(z.string()),
-  authorizationDetails: authorizationDetailsSchema,
-  mode: resourceScopeEntitlementModeSchema,
-  status: z.enum(['active', 'revoked', 'consumed', 'expired']),
-  grantedByUserId: z.string(),
-  expiresAt: z.iso.datetime().nullable(),
-  revokedAt: z.iso.datetime().nullable(),
-  createdAt: z.iso.datetime(),
-  updatedAt: z.iso.datetime(),
-})
-
-export const agentResourceDiscoverySchema = z.object({
-  resources: z.array(
-    z.object({
-      id: z.string(),
-      identifier: z.string(),
-      name: z.string(),
-      connectorId: z.string().nullable(),
-      resourceUrl: z.url(),
-      scopes: z.array(z.object({ value: z.string(), description: z.string().nullable() })),
-      connections: z.array(
-        z.object({
-          id: z.string(),
-          displayName: z.string(),
-          subjectHint: z.string(),
-          grantedScopes: z.array(z.string()),
-          authorizationDetails: authorizationDetailsSchema,
-        }),
-      ),
-      grants: z.array(agentScopeEntitlementSchema),
-    }),
-  ),
-})
 
 export type ExternalResourceAuthorizationRecord = z.infer<typeof externalResourceAuthorizationSchema>
 export type ProviderConnectionEvent = z.infer<typeof providerConnectionEventSchema>

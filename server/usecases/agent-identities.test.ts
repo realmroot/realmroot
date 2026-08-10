@@ -15,7 +15,7 @@ import {
   getAgentIdentityByProtocolAgent,
   getManagementAgent,
   getManagementAgentAccessRequest,
-  getManagementAgentScopeEntitlement,
+  getManagementAgentPermission,
   getPersonalAgent,
   getProtocolAgentEnrollment,
   getPublicAgentEnrollment,
@@ -23,7 +23,7 @@ import {
   listAllAgents,
   listManagementAgentAccessRequests,
   listManagementAgentInstallations,
-  listManagementAgentScopeEntitlements,
+  listManagementAgentPermissions,
   listOrganizationAgentIdentities,
   listPersonalAgentIdentities,
   listPersonalAgents,
@@ -365,7 +365,7 @@ describe('Agent identity lifecycle', () => {
         updatedAt: new Date('2026-08-01T00:00:00.000Z'),
       },
     ]
-    vi.mocked(deps.externalResources.listAgentScopeEntitlements).mockResolvedValue({
+    vi.mocked(deps.externalResources.listAgentPermissions).mockResolvedValue({
       items: [grants[1]].map((entitlement) => ({
         entitlement: entitlement!,
         resource: { id: 'resource-1', identifier: 'projects', name: 'Projects API' },
@@ -375,20 +375,20 @@ describe('Agent identity lifecycle', () => {
       offset: 0,
     } as never)
     await expect(
-      listManagementAgentScopeEntitlements(deps, { agentId: 'agent-1', limit: 20, offset: 0 }),
+      listManagementAgentPermissions(deps, { agentId: 'agent-1', limit: 20, offset: 0 }),
     ).resolves.toMatchObject({
       items: [{ id: 'grant-active', status: 'active', expiresAt: null }],
       pagination: { total: 1 },
     })
     vi.mocked(deps.externalResources.findEntitlement).mockResolvedValue(grants[1] as never)
-    await expect(getManagementAgentScopeEntitlement(deps, 'grant-active')).resolves.toMatchObject({
+    await expect(getManagementAgentPermission(deps, 'grant-active')).resolves.toMatchObject({
       id: 'grant-active',
       status: 'active',
       expiresAt: null,
     })
 
     vi.mocked(deps.externalResources.findEntitlement).mockResolvedValue(grants[0] as never)
-    vi.mocked(deps.externalResources.listAgentScopeEntitlements).mockResolvedValue({
+    vi.mocked(deps.externalResources.listAgentPermissions).mockResolvedValue({
       items: [
         {
           entitlement: grants[0]!,
@@ -399,12 +399,12 @@ describe('Agent identity lifecycle', () => {
       limit: 100,
       offset: 0,
     } as never)
-    await expect(getManagementAgentScopeEntitlement(deps, 'grant-expired')).resolves.toMatchObject({
+    await expect(getManagementAgentPermission(deps, 'grant-expired')).resolves.toMatchObject({
       status: 'ended',
       endReason: 'expired',
       expiresAt: '2020-01-01T00:00:00.000Z',
     })
-    expect(deps.externalResources.listAgentScopeEntitlements).toHaveBeenLastCalledWith(
+    expect(deps.externalResources.listAgentPermissions).toHaveBeenLastCalledWith(
       expect.objectContaining({ status: 'inactive' }),
       undefined,
     )
@@ -465,7 +465,7 @@ describe('Agent identity lifecycle', () => {
     )
 
     await expect(getManagementAgentAccessRequest(deps, 'missing')).rejects.toMatchObject({ status: 404 })
-    await expect(getManagementAgentScopeEntitlement(deps, 'missing')).rejects.toMatchObject({ status: 404 })
+    await expect(getManagementAgentPermission(deps, 'missing')).rejects.toMatchObject({ status: 404 })
 
     vi.mocked(deps.externalResources.findAccessRequest).mockResolvedValue({
       id: 'deleted-resource-request',
@@ -481,7 +481,7 @@ describe('Agent identity lifecycle', () => {
       agentIdentityId: 'identity-1',
       status: 'active',
     } as never)
-    await expect(getManagementAgentScopeEntitlement(deps, 'deleted-resource-grant')).rejects.toMatchObject({
+    await expect(getManagementAgentPermission(deps, 'deleted-resource-grant')).rejects.toMatchObject({
       status: 404,
     })
 

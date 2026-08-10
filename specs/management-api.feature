@@ -161,7 +161,7 @@ Feature: Unified Realmroot resource API
   Scenario: Authority records keep one canonical URI across product surfaces
     Given Organization memberships and Agent access records exist for User and Organization tenants
     When a Realm operator, Organization developer, or Account Center member reads authority inventory
-    Then each Organization Role, member Role collection, User Scope Entitlement, Application Scope Entitlement, Agent access request, and Agent Scope Entitlement has one canonical API URI below its owning subject
+    Then each Organization Role, member Role collection, User Permission, Application Permission, Agent access request, and Agent Permission has one canonical API URI below its owning subject
     And filters only narrow the inventory and are never required to establish resource ownership
     And the server limits each principal to the records that principal may inspect
     And no top-level Entitlement inventory or duplicate Account Center Entitlement URI exists

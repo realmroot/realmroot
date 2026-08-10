@@ -1,7 +1,7 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { ArrowLeft, Search, Trash2 } from 'lucide-react'
-import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from 'react'
+import { type FormEvent, type ReactNode, useEffect, useState } from 'react'
 import { DestructiveConfirmation } from '@/components/destructive-confirmation'
 import { SelectInput } from '@/components/product-form'
 import { TableEmptyRow } from '@/components/table-empty-row'
@@ -17,11 +17,12 @@ import {
   consoleQueryKeys,
   deactivateAgent,
   deleteAgent,
-  deleteAgentScopeEntitlement,
+  deleteAgentPermission,
   getAgent,
   getAgentAuditEvents,
+  listAgentAuthorizedResourceServers,
   listAgentInstallations,
-  listAgentScopeEntitlements,
+  listAgentPermissions,
 } from '@/lib/api/management'
 import { tt } from '@/lib/i18n'
 
@@ -40,7 +41,7 @@ export function AgentDetailPage({
   const navigate = useNavigate()
   const [tab, setTab] = useState<AgentDetailSection>(section)
   const [deleteOpen, setDeleteOpen] = useState(false)
-  const [revokeEntitlementId, setRevokeEntitlementId] = useState<string | null>(null)
+  const [revokePermissionId, setRevokePermissionId] = useState<string | null>(null)
   const [selectedGrantResourceId, setSelectedGrantResourceId] = useState('')
   const [auditSearchInput, setAuditSearchInput] = useState('')
   const [auditSearch, setAuditSearch] = useState('')
@@ -52,24 +53,18 @@ export function AgentDetailPage({
     queryKey: [...consoleQueryKeys.agents, agentId, 'hosts'],
     queryFn: () => listAgentInstallations(agentId, { limit: 100 }),
   })
-  const grantInventory = useQuery({
-    queryKey: [...consoleQueryKeys.agents, agentId, 'grants', 'resources'],
-    queryFn: () => listAgentScopeEntitlements(agentId, { limit: 100 }),
+  const authorizedResources = useQuery({
+    queryKey: [...consoleQueryKeys.agents, agentId, 'authorized-resource-servers'],
+    queryFn: () => listAgentAuthorizedResourceServers(agentId, { limit: 100 }),
   })
-  const grantResources = useMemo(() => {
-    const resources = new Map<string, { id: string; name: string; identifier: string }>()
-    for (const entitlement of grantInventory.data?.items ?? []) {
-      resources.set(entitlement.resource.id, entitlement.resource)
-    }
-    return [...resources.values()]
-  }, [grantInventory.data?.items])
+  const grantResources = authorizedResources.data?.items ?? []
   const grants = useQuery({
     enabled: selectedGrantResourceId.length > 0,
-    queryKey: [...consoleQueryKeys.agents, agentId, 'grants', { resourceId: selectedGrantResourceId }],
+    queryKey: [...consoleQueryKeys.agents, agentId, 'permissions', { resourceServerId: selectedGrantResourceId }],
     queryFn: () =>
-      listAgentScopeEntitlements(agentId, {
+      listAgentPermissions(agentId, {
         limit: 100,
-        resourceId: selectedGrantResourceId,
+        resourceServerId: selectedGrantResourceId,
       }),
   })
   const audit = useQuery({
@@ -112,11 +107,11 @@ export function AgentDetailPage({
     mutationFn: (active: boolean) => (active ? activateAgent(agentId) : deactivateAgent(agentId)),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: consoleQueryKeys.agents }),
   })
-  const entitlementRevocation = useMutation({
-    mutationFn: (entitlementId: string) => deleteAgentScopeEntitlement(agentId, entitlementId),
+  const permissionRevocation = useMutation({
+    mutationFn: (permissionId: string) => deleteAgentPermission(agentId, permissionId),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: [...consoleQueryKeys.agents, agentId] })
-      setRevokeEntitlementId(null)
+      setRevokePermissionId(null)
     },
   })
   useEffect(() => {
@@ -132,7 +127,7 @@ export function AgentDetailPage({
     }
   }, [grantResources, selectedGrantResourceId])
 
-  const detailQueries = [agentQuery, hosts, grantInventory, audit]
+  const detailQueries = [agentQuery, hosts, authorizedResources, audit]
   if (detailQueries.some((query) => query.isLoading)) return <LoadingState label={tt('Loading Agent')} />
   const loadError = detailQueries.find((query) => query.error)?.error
   if (loadError)
@@ -213,13 +208,13 @@ export function AgentDetailPage({
               error={grants.error}
               items={grants.data?.items ?? []}
               loading={grants.isLoading}
-              onRevoke={setRevokeEntitlementId}
+              onRevoke={setRevokePermissionId}
               onResourceChange={setSelectedGrantResourceId}
               onRetry={() => {
                 void grants.refetch()
               }}
               resources={grantResources}
-              revoking={entitlementRevocation.isPending}
+              revoking={permissionRevocation.isPending}
               selectedResourceId={selectedGrantResourceId}
               total={grants.data?.pagination.total ?? 0}
             />
@@ -281,13 +276,13 @@ export function AgentDetailPage({
         </Tabs>
       </div>
       <DestructiveConfirmation
-        confirmLabel={entitlementRevocation.isPending ? tt('Revoking…') : tt('Revoke scope')}
+        confirmLabel={permissionRevocation.isPending ? tt('Revoking…') : tt('Revoke scope')}
         description={tt('This scope stops applying immediately. Existing audit history is preserved.')}
-        error={<MutationError error={entitlementRevocation.error} />}
-        onClose={() => setRevokeEntitlementId(null)}
-        onConfirm={() => entitlementRevocation.mutate(revokeEntitlementId!)}
-        open={revokeEntitlementId !== null}
-        pending={entitlementRevocation.isPending}
+        error={<MutationError error={permissionRevocation.error} />}
+        onClose={() => setRevokePermissionId(null)}
+        onConfirm={() => permissionRevocation.mutate(revokePermissionId!)}
+        open={revokePermissionId !== null}
+        pending={permissionRevocation.isPending}
         title={tt('Revoke scope?')}
       />
       <DestructiveConfirmation
@@ -369,11 +364,11 @@ function AgentGrantsPanel({
   total,
 }: {
   error: Error | null
-  items: Awaited<ReturnType<typeof listAgentScopeEntitlements>>['items']
+  items: Awaited<ReturnType<typeof listAgentPermissions>>['items']
   loading: boolean
   onResourceChange: (resourceId: string) => void
   onRetry: () => void
-  onRevoke: (entitlementId: string) => void
+  onRevoke: (permissionId: string) => void
   resources: Array<{ id: string; name: string; identifier: string }>
   revoking: boolean
   selectedResourceId: string
@@ -447,9 +442,7 @@ function AgentGrantsPanel({
               </span>
             </div>
             {!loading && !error ? (
-              <span className="text-sm text-muted-foreground">
-                {tt('{{count}} scope Entitlements', { count: total })}
-              </span>
+              <span className="text-sm text-muted-foreground">{tt('{{count}} Permissions', { count: total })}</span>
             ) : null}
           </div>
         </header>
@@ -474,8 +467,8 @@ function AgentGrantsTable({
   revoking,
 }: {
   flat?: boolean
-  items: Awaited<ReturnType<typeof listAgentScopeEntitlements>>['items']
-  onRevoke: (entitlementId: string) => void
+  items: Awaited<ReturnType<typeof listAgentPermissions>>['items']
+  onRevoke: (permissionId: string) => void
   revoking: boolean
 }) {
   return (
@@ -483,33 +476,22 @@ function AgentGrantsTable({
       emptyDescription="This Agent has no Resource access."
       emptyTitle="No Resource access"
       flat={flat}
-      headers={['Scope', 'Source', 'Lifetime', 'Status', '']}
-      rows={items.map((entitlement) => ({
-        id: entitlement.id,
+      headers={['Scope', 'Source', 'Lifetime', '']}
+      rows={items.map((permission) => ({
+        id: permission.id,
         cells: [
           <span className="font-mono text-sm" key="scope">
-            {entitlement.scope}
+            {permission.scope}
           </span>,
-          entitlement.sourceAccessRequestId ? tt('Access request') : tt('Direct'),
-          entitlement.mode === 'until' && entitlement.expiresAt
-            ? tt('Until {{date}}', { date: new Date(entitlement.expiresAt).toLocaleString() })
-            : entitlement.mode === 'once'
+          permission.sourceAccessRequestId ? tt('Access request') : tt('Direct'),
+          permission.mode === 'until' && permission.expiresAt
+            ? tt('Until {{date}}', { date: new Date(permission.expiresAt).toLocaleString() })
+            : permission.mode === 'once'
               ? tt('One use')
               : tt('Until revoked'),
-          <Badge key="status" variant={entitlement.status === 'active' ? 'secondary' : 'outline'}>
-            {entitlement.status === 'active' ? tt('Active') : tt('Ended')}
-          </Badge>,
-          entitlement.status === 'active' ? (
-            <Button
-              disabled={revoking}
-              key="revoke"
-              onClick={() => onRevoke(entitlement.id)}
-              size="sm"
-              variant="outline"
-            >
-              {tt('Revoke')}
-            </Button>
-          ) : null,
+          <Button disabled={revoking} key="revoke" onClick={() => onRevoke(permission.id)} size="sm" variant="outline">
+            {tt('Revoke')}
+          </Button>,
         ],
       }))}
     />

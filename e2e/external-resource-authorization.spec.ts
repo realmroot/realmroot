@@ -11,7 +11,7 @@ async function assignControllerScope(page: Page, resourceServerId: string) {
   const sessionResponse = await page.request.get('/api/auth/get-session')
   expect(sessionResponse.status(), await sessionResponse.text()).toBe(200)
   const session = (await sessionResponse.json()) as { user: { id: string } }
-  const entitlementResponse = await page.request.post(`/api/users/${session.user.id}/scope-entitlements`, {
+  const entitlementResponse = await page.request.post(`/api/users/${session.user.id}/permissions`, {
     data: { organizationId: null, resourceServerId, scope: 'projects:read', mode: 'persistent', expiresAt: null },
   })
   expect(entitlementResponse.status(), await entitlementResponse.text()).toBe(201)
@@ -149,16 +149,14 @@ test.describe('external API resource authorization', () => {
       })
       expect(directBody.authorization.act).not.toHaveProperty('host')
 
-      const entitlementsResponse = await page.request.get(`/api/agents/${identity.agent.id}/scope-entitlements`)
+      const entitlementsResponse = await page.request.get(`/api/agents/${identity.agent.id}/permissions`)
       expect(entitlementsResponse.status(), await entitlementsResponse.text()).toBe(200)
       const entitlements = (await entitlementsResponse.json()) as {
         items: Array<{ id: string; agentId: string; target: { apiResourceId: string } }>
       }
       const entitlement = entitlements.items.find((candidate) => candidate.target.apiResourceId === resource.id)
       expect(entitlement).toBeDefined()
-      const revoked = await page.request.delete(
-        `/api/agents/${entitlement!.agentId}/scope-entitlements/${entitlement!.id}`,
-      )
+      const revoked = await page.request.delete(`/api/agents/${entitlement!.agentId}/permissions/${entitlement!.id}`)
       expect(revoked.status()).toBe(204)
       const afterRevocation = plugin.listResources<{
         items: Array<{ links: { self: string }; agentAuthorization: { authorizedScopes: string[] } }>

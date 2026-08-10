@@ -13,7 +13,7 @@ key. The Agent-facing model is intentionally small.
 | Access request | Request for exact scopes on one Resource. |
 | Resource credential | Short-lived DPoP credential held by the local adapter. |
 
-Account-connection records, provider authorization details, scope Entitlements,
+Account-connection records, provider authorization details, Permissions,
 token leases, OAuth client records, refresh credentials, and private keys are
 implementation details. They are never choices in the Agent workflow.
 

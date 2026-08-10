@@ -264,7 +264,7 @@ describe('admin console applications-detail-b', () => {
       if (url === '/api/resource-servers') {
         return Promise.resolve(jsonResponse({ items: [assignedResource], pagination }))
       }
-      if (url === '/api/applications/app-1/scope-entitlements') {
+      if (url === '/api/applications/app-1/permissions') {
         return Promise.resolve(
           jsonResponse({
             items: [
@@ -279,7 +279,7 @@ describe('admin console applications-detail-b', () => {
                 expiresAt: null,
                 createdAt: '2026-01-01T00:00:00.000Z',
                 links: {
-                  self: '/api/applications/app-1/scope-entitlements/asg-1',
+                  self: '/api/applications/app-1/permissions/asg-1',
                   resourceServer: '/api/resource-servers/resource-1',
                 },
               },
@@ -291,7 +291,7 @@ describe('admin console applications-detail-b', () => {
       return consoleSharedFetch(input, init)
     })
 
-    renderWithQuery(<ApplicationDetailPage applicationId="app-1" section="scope-entitlements" />)
+    renderWithQuery(<ApplicationDetailPage applicationId="app-1" section="permissions" />)
 
     expect(await screen.findByRole('tab', { name: 'Resource access' })).toBeTruthy()
     expect(screen.queryByRole('tab', { name: 'User authorizations' })).toBeNull()

@@ -143,11 +143,19 @@ Collection responses include:
 
 `/application-authorizations`, `/role-assignments`, and `/access/requests` are
 canonical Realm inventories. Direct Resource authority is exposed beneath its
-subject at `/users/{userId}/scope-entitlements`,
-`/applications/{applicationId}/scope-entitlements`, or
-`/agents/{agentId}/scope-entitlements`. A relationship filter never establishes
+subject at `/users/{userId}/permissions`,
+`/applications/{applicationId}/permissions`, or
+`/agents/{agentId}/permissions`. A relationship filter never establishes
 ownership or expands visibility. Console and Account Center use these same
 URIs; there are no product-surface aliases.
+
+Each subject also exposes a read-only
+`/{subject}/{subjectId}/authorized-resource-servers` collection derived from
+its active Permissions. Items are deliberately flat:
+
+```json
+{ "id": "res_...", "name": "Orders API", "identifier": "orders", "permissionCount": 3 }
+```
 
 ## Resource Conventions
 

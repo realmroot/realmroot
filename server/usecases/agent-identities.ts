@@ -13,7 +13,7 @@ import { resourceScopeEntitlementLifecycle } from '@server/usecases/resource-sco
 import type {
   Agent,
   AgentEnrollment,
-  ListAgentScopeEntitlementsQuery,
+  ListAgentPermissionsQuery,
   ListManagementAgentAccessRequestsQuery,
 } from '@shared/api/agent-api'
 import type {
@@ -22,6 +22,7 @@ import type {
   AgentIdentity,
   CreateAgentEnrollmentIntentRequest,
 } from '@shared/api/agents'
+import type { ListAuthorizedResourceServersQuery } from '@shared/api/authorization'
 import { type PaginationInput, paginationMetadata } from '@shared/api/pagination'
 
 const enrollmentLifetimeMs = 10 * 60 * 1000
@@ -148,12 +149,12 @@ export async function getManagementAgentAccessRequest(deps: Deps, requestId: str
   }
 }
 
-export async function listManagementAgentScopeEntitlements(
+export async function listManagementAgentPermissions(
   deps: Deps,
-  query: ListAgentScopeEntitlementsQuery & { agentId: string },
+  query: ListAgentPermissionsQuery & { agentId: string },
   scope?: AgentAuthorityInventoryScope,
 ) {
-  const result = await deps.externalResources.listAgentScopeEntitlements(query, scope)
+  const result = await deps.externalResources.listAgentPermissions(query, scope)
   return {
     items: result.items.map(({ entitlement, resource }) => ({
       id: entitlement.id,
@@ -174,27 +175,36 @@ export async function listManagementAgentScopeEntitlements(
       createdAt: entitlement.createdAt.toISOString(),
       updatedAt: entitlement.updatedAt.toISOString(),
       links: {
-        self: `/api/agents/${encodeURIComponent(entitlement.agentIdentityId!)}/scope-entitlements/${encodeURIComponent(entitlement.id)}`,
+        self: `/api/agents/${encodeURIComponent(entitlement.agentIdentityId!)}/permissions/${encodeURIComponent(entitlement.id)}`,
       },
     })),
     pagination: paginationMetadata(result),
   }
 }
 
-export async function getManagementAgentScopeEntitlement(deps: Deps, entitlementId: string) {
+export async function getManagementAgentPermission(deps: Deps, entitlementId: string) {
   const entitlement = await deps.externalResources.findEntitlement(entitlementId)
-  if (!entitlement?.agentIdentityId) throw notFound('Agent scope Entitlement was not found.')
+  if (!entitlement?.agentIdentityId) throw notFound('Agent Permission was not found.')
   await requireIdentity(deps, entitlement.agentIdentityId)
-  const result = await listManagementAgentScopeEntitlements(deps, {
+  const result = await listManagementAgentPermissions(deps, {
     agentId: entitlement.agentIdentityId,
-    resourceId: entitlement.resourceServerId,
+    resourceServerId: entitlement.resourceServerId,
     ...(resourceScopeEntitlementLifecycle(entitlement).status === 'ended' ? { status: 'inactive' as const } : {}),
     limit: 100,
     offset: 0,
   })
   const projected = result.items.find((item) => item.id === entitlement.id)
-  if (!projected) throw notFound('Agent scope Entitlement was not found.')
+  if (!projected) throw notFound('Agent Permission was not found.')
   return projected
+}
+
+export async function listManagementAgentAuthorizedResourceServers(
+  deps: Deps,
+  agentId: string,
+  query: ListAuthorizedResourceServersQuery,
+) {
+  await requireIdentity(deps, agentId)
+  return deps.authorization.listAuthorizedResourceServers({ type: 'agent', id: agentId }, query, new Date())
 }
 
 export async function getAgentIdentityByProtocolAgent(deps: Deps, protocolAgentId: string): Promise<AgentIdentity> {

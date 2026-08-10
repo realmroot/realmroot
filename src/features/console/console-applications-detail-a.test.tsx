@@ -33,9 +33,7 @@ describe('admin console applications-detail-a', () => {
       if (String(input) === '/api/applications/app-1') return Promise.resolve(jsonResponse(application))
       return consoleSharedFetch(input, init)
     })
-    renderWithQuery(
-      <ApplicationDetailPage applicationId="app-1" organizationId="org-other" section="scope-entitlements" />,
-    )
+    renderWithQuery(<ApplicationDetailPage applicationId="app-1" organizationId="org-other" section="permissions" />)
     expect(await screen.findByText('Application does not belong to this Organization.')).toBeTruthy()
 
     cleanup()
@@ -45,7 +43,7 @@ describe('admin console applications-detail-a', () => {
       }
       return consoleSharedFetch(input, init)
     })
-    renderWithQuery(<ApplicationDetailPage applicationId="app-1" section="scope-entitlements" />)
+    renderWithQuery(<ApplicationDetailPage applicationId="app-1" section="permissions" />)
     expect(await screen.findByRole('heading', { name: 'Customer portal' })).toBeTruthy()
     expect(screen.getByRole('tab', { name: 'Overview' }).getAttribute('data-state')).toBe('active')
   })

@@ -30,12 +30,13 @@ import type {
   AddMemberRequest,
   ApiResourceResponse,
   CreateApiResourceRequest,
-  CreateApplicationScopeEntitlementRequest,
+  CreateApplicationPermissionRequest,
   CreateInvitationRequest,
   CreateOrganizationRequest,
   CreateRoleRequest,
-  CreateUserScopeEntitlementRequest,
-  ListScopeEntitlementsQuery,
+  CreateUserPermissionRequest,
+  ListAuthorizedResourceServersQuery,
+  ListPermissionsQuery,
   PaginationQuery,
   ReplaceMemberRolesRequest,
   RoleResponse,
@@ -557,10 +558,10 @@ export async function deleteResource(deps: Deps, id: string, actor: MutationActo
   }
 }
 
-export async function createUserScopeEntitlement(
+export async function createUserPermission(
   deps: Deps,
   userId: string,
-  input: CreateUserScopeEntitlementRequest,
+  input: CreateUserPermissionRequest,
   grantedByUserId: string,
 ) {
   await deps.users.getUser(userId)
@@ -573,17 +574,17 @@ export async function createUserScopeEntitlement(
   }
   if (input.organizationId) {
     const membership = await deps.authorization.findMemberByOrganizationUser(input.organizationId, userId)
-    if (!membership) throw badRequest('User scope Entitlement Organization must contain the target user.')
+    if (!membership) throw badRequest('User Permission Organization must contain the target user.')
     if (!activeResourceVisibleToOrganization(resource, input.organizationId)) {
       throw badRequest('Resource Server is not visible to the grant Organization.')
     }
   }
   const now = new Date()
   const expiresAt = input.mode === 'until' && input.expiresAt ? new Date(input.expiresAt) : null
-  if (input.mode === 'until' && !expiresAt) throw badRequest('Until Entitlements require an expiry.')
-  if (input.mode === 'persistent' && input.expiresAt) throw badRequest('Persistent Entitlements cannot expire.')
-  if (expiresAt && expiresAt.getTime() <= now.getTime()) throw badRequest('Entitlement expiry must be in the future.')
-  return toScopeEntitlementResponse(
+  if (input.mode === 'until' && !expiresAt) throw badRequest('Until Permissions require an expiry.')
+  if (input.mode === 'persistent' && input.expiresAt) throw badRequest('Persistent Permissions cannot expire.')
+  if (expiresAt && expiresAt.getTime() <= now.getTime()) throw badRequest('Permission expiry must be in the future.')
+  return toPermissionResponse(
     await deps.authorization.createScopeEntitlement(
       {
         id: createId('ent'),
@@ -610,34 +611,49 @@ export async function createUserScopeEntitlement(
   )
 }
 
-export async function getUserScopeEntitlement(deps: Deps, id: string) {
+export async function getUserPermission(deps: Deps, id: string) {
   const entitlement = await deps.authorization.findScopeEntitlement(id)
-  if (!entitlement?.userId) throw notFound('User scope Entitlement was not found.')
-  return toScopeEntitlementResponse(entitlement)
+  if (!entitlement?.userId) throw notFound('User Permission was not found.')
+  return toPermissionResponse(entitlement)
 }
 
-export async function listUserScopeEntitlements(
+export async function listUserPermissions(
   deps: Deps,
   userId: string,
-  query: ListScopeEntitlementsQuery,
+  query: ListPermissionsQuery,
   ownerOrganizationIds?: string[],
 ) {
   await deps.users.getUser(userId)
-  const result = await deps.authorization.listUserScopeEntitlements(userId, query, ownerOrganizationIds)
-  return { items: result.items.map(toScopeEntitlementResponse), pagination: result.pagination }
+  const result = await deps.authorization.listUserPermissions(userId, query, ownerOrganizationIds)
+  return { items: result.items.map(toPermissionResponse), pagination: result.pagination }
 }
 
-export async function revokeUserScopeEntitlement(deps: Deps, id: string) {
-  await getUserScopeEntitlement(deps, id)
+export async function listUserAuthorizedResourceServers(
+  deps: Deps,
+  userId: string,
+  query: ListAuthorizedResourceServersQuery,
+  ownerOrganizationIds?: string[],
+) {
+  await deps.users.getUser(userId)
+  return deps.authorization.listAuthorizedResourceServers(
+    { type: 'user', id: userId },
+    query,
+    new Date(),
+    ownerOrganizationIds,
+  )
+}
+
+export async function revokeUserPermission(deps: Deps, id: string) {
+  await getUserPermission(deps, id)
   if (!(await deps.authorization.endScopeEntitlement(id, 'revoked', new Date()))) {
-    throw conflict('User scope Entitlement is already ended.')
+    throw conflict('User Permission is already ended.')
   }
 }
 
-export async function createApplicationScopeEntitlement(
+export async function createApplicationPermission(
   deps: Deps,
   applicationId: string,
-  input: CreateApplicationScopeEntitlementRequest,
+  input: CreateApplicationPermissionRequest,
   grantedByUserId: string,
 ) {
   const [resource, application] = await Promise.all([
@@ -658,10 +674,10 @@ export async function createApplicationScopeEntitlement(
   validateAssignedScope(resource, input.scope)
   const now = new Date()
   const expiresAt = input.mode === 'until' && input.expiresAt ? new Date(input.expiresAt) : null
-  if (input.mode === 'until' && !expiresAt) throw badRequest('Until Entitlements require an expiry.')
-  if (input.mode === 'persistent' && input.expiresAt) throw badRequest('Persistent Entitlements cannot expire.')
-  if (expiresAt && expiresAt.getTime() <= now.getTime()) throw badRequest('Entitlement expiry must be in the future.')
-  return toScopeEntitlementResponse(
+  if (input.mode === 'until' && !expiresAt) throw badRequest('Until Permissions require an expiry.')
+  if (input.mode === 'persistent' && input.expiresAt) throw badRequest('Persistent Permissions cannot expire.')
+  if (expiresAt && expiresAt.getTime() <= now.getTime()) throw badRequest('Permission expiry must be in the future.')
+  return toPermissionResponse(
     await deps.authorization.createScopeEntitlement(
       {
         id: createId('ent'),
@@ -688,25 +704,31 @@ export async function createApplicationScopeEntitlement(
   )
 }
 
-export async function getApplicationScopeEntitlement(deps: Deps, id: string) {
+export async function getApplicationPermission(deps: Deps, id: string) {
   const entitlement = await deps.authorization.findScopeEntitlement(id)
-  if (!entitlement?.applicationId) throw notFound('Application scope Entitlement was not found.')
-  return toScopeEntitlementResponse(entitlement)
+  if (!entitlement?.applicationId) throw notFound('Application Permission was not found.')
+  return toPermissionResponse(entitlement)
 }
 
-export async function listApplicationScopeEntitlements(
+export async function listApplicationPermissions(deps: Deps, applicationId: string, query: ListPermissionsQuery) {
+  const result = await deps.authorization.listApplicationPermissions(applicationId, query)
+  return { items: result.items.map(toPermissionResponse), pagination: result.pagination }
+}
+
+export async function listApplicationAuthorizedResourceServers(
   deps: Deps,
   applicationId: string,
-  query: ListScopeEntitlementsQuery,
+  query: ListAuthorizedResourceServersQuery,
 ) {
-  const result = await deps.authorization.listApplicationScopeEntitlements(applicationId, query)
-  return { items: result.items.map(toScopeEntitlementResponse), pagination: result.pagination }
+  const application = await deps.applications.findById(applicationId)
+  if (!application) throw notFound('Application was not found.')
+  return deps.authorization.listAuthorizedResourceServers({ type: 'application', id: applicationId }, query, new Date())
 }
 
-export async function revokeApplicationScopeEntitlement(deps: Deps, id: string) {
-  await getApplicationScopeEntitlement(deps, id)
+export async function revokeApplicationPermission(deps: Deps, id: string) {
+  await getApplicationPermission(deps, id)
   if (!(await deps.authorization.endScopeEntitlement(id, 'revoked', new Date()))) {
-    throw conflict('Application scope Entitlement is already ended.')
+    throw conflict('Application Permission is already ended.')
   }
 }
 
@@ -719,7 +741,7 @@ function validateAssignedScope(resource: ApiResourceResponse, scope: string) {
   }
 }
 
-function toScopeEntitlementResponse(entitlement: Awaited<ReturnType<Deps['authorization']['createScopeEntitlement']>>) {
+function toPermissionResponse(entitlement: Awaited<ReturnType<Deps['authorization']['createScopeEntitlement']>>) {
   const lifecycle = resourceScopeEntitlementLifecycle(entitlement)
   const subjectPath = entitlement.userId
     ? `users/${encodeURIComponent(entitlement.userId)}`
@@ -734,7 +756,7 @@ function toScopeEntitlementResponse(entitlement: Awaited<ReturnType<Deps['author
     createdAt: entitlement.createdAt.toISOString(),
     updatedAt: entitlement.updatedAt.toISOString(),
     links: {
-      self: `/api/${subjectPath}/scope-entitlements/${encodeURIComponent(entitlement.id)}`,
+      self: `/api/${subjectPath}/permissions/${encodeURIComponent(entitlement.id)}`,
       resourceServer: `/api/resource-servers/${encodeURIComponent(entitlement.resourceServerId)}`,
     },
   }

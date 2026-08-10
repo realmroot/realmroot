@@ -32,8 +32,8 @@ describe('OpenAPI semantic contract gate', () => {
     const authenticationContract = JSON.parse(
       readFileSync(new URL('./approved-authentication-semantic-baseline.json', import.meta.url), 'utf8'),
     ) as typeof unchanged
-    const entitlementContract = JSON.parse(
-      readFileSync(new URL('./approved-resource-scope-entitlement-semantic-baseline.json', import.meta.url), 'utf8'),
+    const permissionContract = JSON.parse(
+      readFileSync(new URL('./approved-permission-semantic-baseline.json', import.meta.url), 'utf8'),
     ) as typeof unchanged
     const brokeredNativeChanges = new Set(brokeredNativeContract.map(({ method, path }) => `${method}:${path}`))
     const resourceDiscoveryChanges = new Set(resourceDiscoveryContract.map(({ method, path }) => `${method}:${path}`))
@@ -74,14 +74,16 @@ describe('OpenAPI semantic contract gate', () => {
       ...priorBaseline.filter(({ method, path }) => !authenticationChanges.has(`${method}:${path}`)),
       ...authenticationContract,
     ].sort((left, right) => `${left.path}:${left.method}`.localeCompare(`${right.path}:${right.method}`))
-    const entitlementSurface = ({ method, path }: { method: string; path: string }) =>
+    const permissionSurface = ({ method, path }: { method: string; path: string }) =>
+      path.includes('/permissions') ||
+      path.includes('/authorized-resource-servers') ||
       path.includes('/scope-entitlements') ||
       path.includes('/scope-grants') ||
       path.includes('/access-grants') ||
       (method === 'GET' && (path === '/agents' || path === '/agents/{agentId}' || path === '/realm/audit-events'))
     const baseline = [
-      ...authenticationBaseline.filter((operation) => !entitlementSurface(operation)),
-      ...entitlementContract,
+      ...authenticationBaseline.filter((operation) => !permissionSurface(operation)),
+      ...permissionContract,
     ].sort((left, right) => `${left.path}:${left.method}`.localeCompare(`${right.path}:${right.method}`))
 
     expect(openApiSemanticSnapshot(unifiedOpenApi as unknown as Record<string, unknown>, () => true)).toEqual(baseline)

@@ -15,8 +15,10 @@ import type {
 import type { AssetPurpose } from '@shared/api/assets'
 import type {
   ApiResourceResponse,
+  AuthorizedResourceServer,
   InvitationResponse,
-  ListScopeEntitlementsQuery,
+  ListAuthorizedResourceServersQuery,
+  ListPermissionsQuery,
   MemberResponse,
   OrganizationResponse,
   ResourceScopeRegistry,
@@ -638,6 +640,13 @@ export interface ResourceScopeEntitlementRecord {
   updatedAt: Date
 }
 
+export type PermissionSubject =
+  | { type: 'user'; id: string }
+  | { type: 'application'; id: string }
+  | { type: 'agent'; id: string }
+
+export type AuthorizedResourceServerRecord = AuthorizedResourceServer
+
 export interface AgentGovernanceResourceRecord {
   id: string
   identifier: string
@@ -649,7 +658,7 @@ export interface AgentAccessRequestProjection {
   resource: AgentGovernanceResourceRecord
 }
 
-export interface AgentScopeEntitlementProjection {
+export interface AgentPermissionProjection {
   entitlement: ResourceScopeEntitlementRecord
   resource: AgentGovernanceResourceRecord
 }
@@ -859,15 +868,15 @@ export interface ExternalResourceRepository {
   findEntitlement(id: string): Promise<ResourceScopeEntitlementRecord | null>
   findEntitlements(ids: string[]): Promise<ResourceScopeEntitlementRecord[]>
   listActiveEntitlementsByAgent(agentIdentityId: string, now: Date): Promise<ResourceScopeEntitlementRecord[]>
-  listAgentScopeEntitlements(
+  listAgentPermissions(
     query: PaginationInput & {
       agentId?: string
       organizationId?: string
-      resourceId?: string
+      resourceServerId?: string
       status?: 'active' | 'inactive'
     },
     scope?: AgentAuthorityInventoryScope,
-  ): Promise<PaginatedResult<AgentScopeEntitlementProjection>>
+  ): Promise<PaginatedResult<AgentPermissionProjection>>
   summarizeAgentAccess(agentIdentityIds: string[], now: Date): Promise<Map<string, AgentAccessSummary>>
   listActiveEntitlementsByConnection(connectionId: string, now: Date): Promise<ResourceScopeEntitlementRecord[]>
   endEntitlement(id: string, reason: ResourceScopeEntitlementEndReason, now: Date): Promise<boolean>
@@ -1345,9 +1354,9 @@ export interface AuthorizationRepository {
   ): Promise<boolean>
   createScopeEntitlement(input: ResourceScopeEntitlementRecord, now: Date): Promise<ResourceScopeEntitlementRecord>
   findScopeEntitlement(id: string): Promise<ResourceScopeEntitlementRecord | null>
-  listUserScopeEntitlements(
+  listUserPermissions(
     userId: string,
-    query: ListScopeEntitlementsQuery,
+    query: ListPermissionsQuery,
     ownerOrganizationIds?: string[],
   ): Promise<AuthorizationPaginatedResult<ResourceScopeEntitlementRecord>>
   listActiveUserScopeEntitlements(
@@ -1355,10 +1364,16 @@ export interface AuthorizationRepository {
     resourceServerId: string,
     now: Date,
   ): Promise<ResourceScopeEntitlementRecord[]>
-  listApplicationScopeEntitlements(
+  listApplicationPermissions(
     applicationId: string,
-    query: ListScopeEntitlementsQuery,
+    query: ListPermissionsQuery,
   ): Promise<AuthorizationPaginatedResult<ResourceScopeEntitlementRecord>>
+  listAuthorizedResourceServers(
+    subject: PermissionSubject,
+    query: ListAuthorizedResourceServersQuery,
+    now: Date,
+    ownerOrganizationIds?: string[],
+  ): Promise<AuthorizationPaginatedResult<AuthorizedResourceServerRecord>>
   listActiveApplicationScopeEntitlements(
     applicationId: string,
     resourceServerId: string,

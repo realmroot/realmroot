@@ -172,7 +172,7 @@ export function userDetailTabs(): DetailTab[] {
       label: 'Sessions',
     },
     {
-      value: 'scope-entitlements',
+      value: 'permissions',
       label: 'Permissions',
     },
     {

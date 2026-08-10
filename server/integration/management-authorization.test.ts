@@ -651,7 +651,7 @@ describe('authorization management over real D1', () => {
     expect(response.status).toBe(400)
   })
 
-  it('[spec: admin-console/admin-resource-scope-entitlements] manages direct Entitlements below each subject', async () => {
+  it('[spec: admin-console/admin-resource-permissions] manages direct Permissions below each subject', async () => {
     const cookie = await signInAdmin(harness)
     const targetUserId = await createUser(harness, cookie, {
       email: 'grant-target@example.com',
@@ -694,36 +694,47 @@ describe('authorization management over real D1', () => {
     })
 
     const userGrant = (await (
-      await postJson(harness, cookie, `/api/users/${targetUserId}/scope-entitlements`, {
+      await postJson(harness, cookie, `/api/users/${targetUserId}/permissions`, {
         resourceServerId: resource.id,
         scope: 'projects:read',
         mode: 'persistent',
       })
     ).json()) as { id: string; userId: string; links: { self: string } }
     expect(userGrant).toMatchObject({ userId: targetUserId })
-    expect(userGrant.links.self).toBe(`/api/users/${targetUserId}/scope-entitlements/${userGrant.id}`)
-    const userGrants = await harness.request(`/api/users/${targetUserId}/scope-entitlements`, { headers: { cookie } })
+    expect(userGrant.links.self).toBe(`/api/users/${targetUserId}/permissions/${userGrant.id}`)
+    const userGrants = await harness.request(`/api/users/${targetUserId}/permissions`, { headers: { cookie } })
     await expect(userGrants.json()).resolves.toMatchObject({ items: [{ id: userGrant.id }] })
+    const userResources = await harness.request(`/api/users/${targetUserId}/authorized-resource-servers?search=grant`, {
+      headers: { cookie },
+    })
+    await expect(userResources.json()).resolves.toMatchObject({
+      items: [{ id: resource.id, name: 'Grant API', identifier: 'grant-api', permissionCount: 1 }],
+      pagination: { total: 1 },
+    })
 
     const applicationGrant = (await (
-      await postJson(harness, cookie, `/api/applications/${application.id}/scope-entitlements`, {
+      await postJson(harness, cookie, `/api/applications/${application.id}/permissions`, {
         resourceServerId: resource.id,
         scope: 'projects:read',
         mode: 'persistent',
       })
     ).json()) as { id: string; applicationId: string; links: { self: string } }
     expect(applicationGrant).toMatchObject({ applicationId: application.id })
-    expect(applicationGrant.links.self).toBe(
-      `/api/applications/${application.id}/scope-entitlements/${applicationGrant.id}`,
-    )
-    const applicationGrants = await harness.request(`/api/applications/${application.id}/scope-entitlements`, {
+    expect(applicationGrant.links.self).toBe(`/api/applications/${application.id}/permissions/${applicationGrant.id}`)
+    const applicationGrants = await harness.request(`/api/applications/${application.id}/permissions`, {
       headers: { cookie },
     })
     await expect(applicationGrants.json()).resolves.toMatchObject({ items: [{ id: applicationGrant.id }] })
-
-    expect((await harness.request('/api/users/missing-user/scope-entitlements', { headers: { cookie } })).status).toBe(
-      404,
+    const applicationResources = await harness.request(
+      `/api/applications/${application.id}/authorized-resource-servers`,
+      { headers: { cookie } },
     )
+    await expect(applicationResources.json()).resolves.toMatchObject({
+      items: [{ id: resource.id, name: 'Grant API', identifier: 'grant-api', permissionCount: 1 }],
+      pagination: { total: 1 },
+    })
+
+    expect((await harness.request('/api/users/missing-user/permissions', { headers: { cookie } })).status).toBe(404)
     const userFlowApplication = (await (
       await postJson(harness, cookie, '/api/applications', {
         name: 'User Flow Client',
@@ -739,7 +750,7 @@ describe('authorization management over real D1', () => {
         await postJson(
           harness,
           cookie,
-          `/api/applications/${userFlowApplication.id}/scope-entitlements`,
+          `/api/applications/${userFlowApplication.id}/permissions`,
           {
             resourceServerId: resource.id,
             scope: 'projects:read',
@@ -761,7 +772,7 @@ describe('authorization management over real D1', () => {
         await postJson(
           harness,
           cookie,
-          `/api/users/${targetUserId}/scope-entitlements`,
+          `/api/users/${targetUserId}/permissions`,
           {
             resourceServerId: resource.id,
             scope: 'projects:read',
@@ -783,20 +794,27 @@ describe('authorization management over real D1', () => {
     const revokedEntitlement = await harness.request(userGrant.links.self, { headers: { cookie } })
     expect(revokedEntitlement.status).toBe(200)
     await expect(revokedEntitlement.json()).resolves.toMatchObject({ status: 'ended', endReason: 'revoked' })
-    const revokedEntitlements = await harness.request(`/api/users/${targetUserId}/scope-entitlements?status=inactive`, {
+    const revokedEntitlements = await harness.request(`/api/users/${targetUserId}/permissions?status=inactive`, {
       headers: { cookie },
     })
     await expect(revokedEntitlements.json()).resolves.toMatchObject({ items: [{ id: userGrant.id }] })
     expect(
       (
-        await harness.request(`/api/users/${targetUserId}/scope-entitlements?status=ended`, {
+        await harness.request(`/api/users/${targetUserId}/permissions?status=ended`, {
           headers: { cookie },
         })
       ).status,
     ).toBe(400)
     await expect(
       (
-        await harness.request(`/api/users/${targetUserId}/scope-entitlements`, {
+        await harness.request(`/api/users/${targetUserId}/permissions`, {
+          headers: { cookie },
+        })
+      ).json(),
+    ).resolves.toMatchObject({ items: [], pagination: { total: 0 } })
+    await expect(
+      (
+        await harness.request(`/api/users/${targetUserId}/authorized-resource-servers`, {
           headers: { cookie },
         })
       ).json(),
@@ -808,14 +826,21 @@ describe('authorization management over real D1', () => {
       .where(eq(resourceScopeEntitlement.id, applicationGrant.id))
     await expect(
       (
-        await harness.request(`/api/applications/${application.id}/scope-entitlements`, {
+        await harness.request(`/api/applications/${application.id}/permissions`, {
           headers: { cookie },
         })
       ).json(),
     ).resolves.toMatchObject({ items: [], pagination: { total: 0 } })
     await expect(
       (
-        await harness.request(`/api/applications/${application.id}/scope-entitlements?status=inactive`, {
+        await harness.request(`/api/applications/${application.id}/authorized-resource-servers`, {
+          headers: { cookie },
+        })
+      ).json(),
+    ).resolves.toMatchObject({ items: [], pagination: { total: 0 } })
+    await expect(
+      (
+        await harness.request(`/api/applications/${application.id}/permissions?status=inactive`, {
           headers: { cookie },
         })
       ).json(),
@@ -1485,7 +1510,7 @@ describe('authorization management over real D1', () => {
       pagination: { total: 0 },
     })
     expect((await harness.request('/api/access/requests/deleted-request', { headers: { cookie } })).status).toBe(404)
-    const grants = await harness.request('/api/agents/deleted-identity/scope-entitlements', {
+    const grants = await harness.request('/api/agents/deleted-identity/permissions', {
       headers: { cookie },
     })
     expect(grants.status).toBe(200)

@@ -1,7 +1,7 @@
 import { conflict } from '@server/domain/errors'
 import type { AuthorizationRepository, ResourceScopeEntitlementRecord } from '@server/usecases/ports'
 import { decodeRoleScope, encodeRoleScope } from '@shared/organization-access'
-import { and, count, desc, eq, gt, inArray, isNull, notExists, or, sql } from 'drizzle-orm'
+import { and, asc, count, countDistinct, desc, eq, gt, inArray, isNull, like, notExists, or, sql } from 'drizzle-orm'
 import type { BatchItem } from 'drizzle-orm/batch'
 import type { Database } from '../../db/client'
 import {
@@ -518,7 +518,7 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
       return row ?? null
     },
 
-    async listUserScopeEntitlements(userId, query, ownerOrganizationIds) {
+    async listUserPermissions(userId, query, ownerOrganizationIds) {
       const now = new Date()
       const statusCondition = scopeEntitlementStatusCondition(query.status, now)
       const effectiveOwnerOrganizationId = sql<string>`coalesce(${resourceScopeEntitlement.organizationId}, ${apiResource.ownerOrganizationId})`
@@ -563,7 +563,7 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
         )
     },
 
-    async listApplicationScopeEntitlements(applicationId, query) {
+    async listApplicationPermissions(applicationId, query) {
       const now = new Date()
       const statusCondition = scopeEntitlementStatusCondition(query.status, now)
       const where = and(
@@ -585,6 +585,40 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
         items,
         pagination: toPagination(query, totals[0]?.value ?? 0),
       }
+    },
+
+    async listAuthorizedResourceServers(subject, query, now, ownerOrganizationIds) {
+      const effectiveOwnerOrganizationId = sql<string>`coalesce(${resourceScopeEntitlement.organizationId}, ${apiResource.ownerOrganizationId})`
+      const search = query.search ? `%${query.search}%` : undefined
+      const where = and(
+        permissionSubjectCondition(subject),
+        scopeEntitlementStatusCondition('active', now),
+        isNull(apiResource.deletedAt),
+        ownerOrganizationIds ? inArray(effectiveOwnerOrganizationId, ownerOrganizationIds) : undefined,
+        search ? or(like(apiResource.name, search), like(apiResource.identifier, search)) : undefined,
+      )
+      const [items, totals] = await Promise.all([
+        db
+          .select({
+            id: apiResource.id,
+            name: apiResource.name,
+            identifier: apiResource.identifier,
+            permissionCount: count(),
+          })
+          .from(resourceScopeEntitlement)
+          .innerJoin(apiResource, eq(resourceScopeEntitlement.resourceServerId, apiResource.id))
+          .where(where)
+          .groupBy(apiResource.id, apiResource.name, apiResource.identifier)
+          .orderBy(asc(apiResource.name), asc(apiResource.id))
+          .limit(query.limit)
+          .offset(query.offset),
+        db
+          .select({ value: countDistinct(resourceScopeEntitlement.resourceServerId) })
+          .from(resourceScopeEntitlement)
+          .innerJoin(apiResource, eq(resourceScopeEntitlement.resourceServerId, apiResource.id))
+          .where(where),
+      ])
+      return { items, pagination: toPagination(query, totals[0]?.value ?? 0) }
     },
 
     async listActiveApplicationScopeEntitlements(applicationId, resourceServerId, now) {
@@ -887,6 +921,12 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
       return pendingInvitation ? 'assigned' : 'not_found'
     },
   }
+}
+
+function permissionSubjectCondition(subject: import('@server/usecases/ports').PermissionSubject) {
+  if (subject.type === 'user') return eq(resourceScopeEntitlement.userId, subject.id)
+  if (subject.type === 'application') return eq(resourceScopeEntitlement.applicationId, subject.id)
+  return eq(resourceScopeEntitlement.agentIdentityId, subject.id)
 }
 
 function isUniqueConstraint(error: unknown) {

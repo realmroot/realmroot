@@ -246,8 +246,9 @@ describe('console route navigation', () => {
       }
       if (
         url.startsWith('/api/agents/agent-1/installations') ||
+        url.startsWith('/api/agents/agent-1/authorized-resource-servers') ||
         url.startsWith('/api/access/requests?agentId=agent-1') ||
-        url.startsWith('/api/agents/agent-1/scope-entitlements')
+        url.startsWith('/api/agents/agent-1/permissions')
       ) {
         return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
       }

@@ -6,7 +6,7 @@ import {
   renderWithQuery,
   unexpectedConsoleRequest,
 } from '@/features/console/console.test-utils'
-import { ScopeEntitlementsPanel } from './scope-entitlements-panel'
+import { PermissionsPanel } from './permissions-panel'
 
 globalThis.ResizeObserver ??= class ResizeObserver {
   disconnect() {}
@@ -64,7 +64,7 @@ function request(input: RequestInfo | URL, init?: RequestInit) {
   return { url: u ? `${u.pathname}${u.search}` : String(input), method: r?.method ?? init?.method ?? 'GET' }
 }
 
-describe('Scope Entitlements panel', () => {
+describe('Scope Permissions panel', () => {
   it('renders empty and boundary-error states', async () => {
     let fail = false
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
@@ -72,20 +72,20 @@ describe('Scope Entitlements panel', () => {
       const { url } = request(input, init)
       if (url === '/api/resource-servers?limit=100')
         return Promise.resolve(jsonResponse({ items: [], pagination: page([]).pagination }))
-      if (url.includes('/scope-entitlements?')) return Promise.resolve(jsonResponse(page([])))
+      if (url.includes('/permissions?')) return Promise.resolve(jsonResponse(page([])))
       return unexpectedConsoleRequest(input, init)
     })
-    renderWithQuery(<ScopeEntitlementsPanel subject={{ type: 'user', id: 'empty', label: 'Nobody' }} />)
+    renderWithQuery(<PermissionsPanel subject={{ type: 'user', id: 'empty', label: 'Nobody' }} />)
     expect(await screen.findByText('No Resource access')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Add scope' })).toHaveProperty('disabled', true)
     cleanup()
     fail = true
-    renderWithQuery(<ScopeEntitlementsPanel subject={{ type: 'user', id: 'error', label: 'Nobody' }} />)
+    renderWithQuery(<PermissionsPanel subject={{ type: 'user', id: 'error', label: 'Nobody' }} />)
     expect(await screen.findByText('offline')).toBeTruthy()
   })
 
-  it('creates and revokes User Entitlements', async () => {
-    let entitlements = [entitlement]
+  it('creates and revokes User Permissions', async () => {
+    let permissions = [entitlement]
     let finishCreate: ((response: Response) => void) | undefined
     const calls: string[] = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
@@ -93,25 +93,25 @@ describe('Scope Entitlements panel', () => {
       calls.push(`${method} ${url}`)
       if (url === '/api/resource-servers?limit=100')
         return Promise.resolve(jsonResponse({ items: [resource], pagination: page([]).pagination }))
-      if (url === '/api/users/user-1/scope-entitlements?limit=50&offset=0')
-        return Promise.resolve(jsonResponse(page(entitlements)))
-      if (url === '/api/users/user-1/scope-entitlements' && method === 'POST')
+      if (url === '/api/users/user-1/permissions?limit=50&offset=0')
+        return Promise.resolve(jsonResponse(page(permissions)))
+      if (url === '/api/users/user-1/permissions' && method === 'POST')
         return new Promise<Response>((resolve) => {
           finishCreate = resolve
         })
-      if (url.endsWith('/scope-entitlements/ent_1') && method === 'DELETE') {
-        entitlements = []
+      if (url.endsWith('/permissions/ent_1') && method === 'DELETE') {
+        permissions = []
         return Promise.resolve(new Response(null, { status: 204 }))
       }
       return unexpectedConsoleRequest(input, init)
     })
-    renderWithQuery(<ScopeEntitlementsPanel subject={{ type: 'user', id: 'user-1', label: 'Jane' }} />)
+    renderWithQuery(<PermissionsPanel subject={{ type: 'user', id: 'user-1', label: 'Jane' }} />)
     await screen.findByText('Orders API')
     fireEvent.click(screen.getByRole('button', { name: 'Add scope' }))
-    fireEvent.submit(document.getElementById('create-scope-entitlement')!)
+    fireEvent.submit(document.getElementById('create-permission')!)
     expect(await screen.findByRole('button', { name: 'Adding…' })).toBeTruthy()
     finishCreate!(jsonResponse(entitlement, 201))
-    await waitFor(() => expect(calls).toContain('POST /api/users/user-1/scope-entitlements'))
+    await waitFor(() => expect(calls).toContain('POST /api/users/user-1/permissions'))
     fireEvent.click(screen.getByRole('button', { name: 'Revoke' }))
     fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Cancel' }))
     fireEvent.click(screen.getByRole('button', { name: 'Revoke' }))
@@ -128,26 +128,26 @@ describe('Scope Entitlements panel', () => {
         return Promise.resolve(jsonResponse({ items: [resource], pagination: page([]).pagination }))
       if (url.endsWith('offset=0')) return Promise.resolve(jsonResponse(page([entitlement], 0, true)))
       if (url.endsWith('offset=50')) return Promise.resolve(jsonResponse(page([entitlement], 50, false)))
-      if (url === '/api/applications/app-1/scope-entitlements' && method === 'POST')
+      if (url === '/api/applications/app-1/permissions' && method === 'POST')
         return Promise.resolve(jsonResponse(entitlement, 201))
       if (url.endsWith('/ent_1') && method === 'DELETE') return Promise.resolve(new Response(null, { status: 204 }))
       return unexpectedConsoleRequest(input, init)
     })
-    renderWithQuery(<ScopeEntitlementsPanel subject={{ type: 'application', id: 'app-1', label: 'Worker' }} />)
+    renderWithQuery(<PermissionsPanel subject={{ type: 'application', id: 'app-1', label: 'Worker' }} />)
     await screen.findByText('Orders API')
     fireEvent.click(screen.getByRole('button', { name: 'Next' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Previous' }))
     await waitFor(() => expect(screen.getByRole('button', { name: 'Previous' })).toHaveProperty('disabled', true))
     fireEvent.click(screen.getByRole('button', { name: 'Add scope' }))
     fireEvent.change(screen.getByLabelText('Expires'), { target: { value: '2099-01-01T00:00' } })
-    fireEvent.submit(document.getElementById('create-scope-entitlement')!)
-    await waitFor(() => expect(calls).toContain('POST /api/applications/app-1/scope-entitlements'))
+    fireEvent.submit(document.getElementById('create-permission')!)
+    await waitFor(() => expect(calls).toContain('POST /api/applications/app-1/permissions'))
     fireEvent.click(screen.getByRole('button', { name: 'Revoke' }))
     fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Revoke scope' }))
-    await waitFor(() => expect(calls).toContain('DELETE /api/applications/app-1/scope-entitlements/ent_1'))
+    await waitFor(() => expect(calls).toContain('DELETE /api/applications/app-1/permissions/ent_1'))
   })
 
-  it('renders boundary values without revoke actions and closes Entitlement dialogs without mutating', async () => {
+  it('renders boundary values and closes Permission dialogs without mutating', async () => {
     const secondResource = {
       ...resource,
       id: 'resource-2',
@@ -159,11 +159,9 @@ describe('Scope Entitlements panel', () => {
       },
     }
     const unregisteredResource = { ...resource, id: 'resource-3', name: 'Automatic API', scopeRegistry: null }
-    const expiringGrant = {
+    const expiringPermission = {
       ...entitlement,
       resourceServerId: 'missing-resource',
-      status: 'ended',
-      endReason: 'expired',
       expiresAt: '2027-01-01T00:00:00.000Z',
     }
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
@@ -173,14 +171,13 @@ describe('Scope Entitlements panel', () => {
           jsonResponse({ items: [resource, secondResource, unregisteredResource], pagination: page([]).pagination }),
         )
       }
-      if (url.includes('/scope-entitlements?')) return Promise.resolve(jsonResponse(page([expiringGrant])))
+      if (url.includes('/permissions?')) return Promise.resolve(jsonResponse(page([expiringPermission])))
       return unexpectedConsoleRequest(input, init)
     })
 
-    renderWithQuery(<ScopeEntitlementsPanel subject={{ type: 'user', id: 'user-2', label: 'Alex' }} />)
+    renderWithQuery(<PermissionsPanel subject={{ type: 'user', id: 'user-2', label: 'Alex' }} />)
     expect((await screen.findAllByText('missing-resource')).length).toBeGreaterThan(0)
-    expect(screen.getByText('Ended')).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'Revoke' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Revoke' })).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: 'Add scope' }))
     fireEvent.change(await screen.findByLabelText('Resource Server'), { target: { value: secondResource.id } })
@@ -192,12 +189,12 @@ describe('Scope Entitlements panel', () => {
   it('treats omitted collection fields as empty boundary responses', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const { url } = request(input, init)
-      if (url === '/api/resource-servers?limit=100' || url.includes('/scope-entitlements?')) {
+      if (url === '/api/resource-servers?limit=100' || url.includes('/permissions?')) {
         return Promise.resolve(jsonResponse({}))
       }
       return unexpectedConsoleRequest(input, init)
     })
-    renderWithQuery(<ScopeEntitlementsPanel subject={{ type: 'user', id: 'sparse', label: 'Sparse' }} />)
+    renderWithQuery(<PermissionsPanel subject={{ type: 'user', id: 'sparse', label: 'Sparse' }} />)
     expect(await screen.findByText('No Resource access')).toBeTruthy()
   })
 
@@ -218,7 +215,7 @@ describe('Scope Entitlements panel', () => {
       return unexpectedConsoleRequest(input, init)
     })
 
-    renderWithQuery(<ScopeEntitlementsPanel subject={{ type: 'application', id: 'paged', label: 'Paged' }} />)
+    renderWithQuery(<PermissionsPanel subject={{ type: 'application', id: 'paged', label: 'Paged' }} />)
     await screen.findByText('Orders API')
     fireEvent.click(screen.getByRole('button', { name: 'Next' }))
     await waitFor(() => expect(screen.getByRole('button', { name: 'Previous' })).toHaveProperty('disabled', false))

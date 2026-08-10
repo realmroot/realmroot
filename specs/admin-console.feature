@@ -85,7 +85,7 @@ Feature: Admin Console
     When I open its detail page
     Then settings, branding, redirect URIs, integration details, and secret rotation are available
     And Resource access is visible only when the Application can act as a machine principal
-    And User authorizations remain separate from Application scope entitlements
+    And User authorizations remain separate from Application Permissions
     And active user authorizations are read from the canonical Application authorization collection
     And revoking one creates its durable revocation state without deleting its authorization history
     And rotating a client secret requires confirmation because the current secret stops working
@@ -225,7 +225,7 @@ Feature: Admin Console
     And its Scopes tab manages each discovered scope's automatic or assigned grant mode
     And its Endpoints tab lists protected operations and required scope sets derived from that contract
     And external authorization connection details are included in Overview
-    And Organization Roles and direct scope Entitlements remain managed from their owning resources
+    And Organization Roles and direct Permissions remain managed from their owning resources
 
   @entrypoint:product-ui @journey:admin-delete-api-resource
   Scenario: API resource settings soft-delete a resource
@@ -257,17 +257,19 @@ Feature: Admin Console
     And the last Owner cannot be removed by a Role replacement
     And each dynamic Role references only assigned scopes from visible Resource servers
 
-  @entrypoint:product-ui @journey:admin-resource-scope-entitlements
-  Scenario: Resource scope entitlements are explicit authorization resources
+  @entrypoint:product-ui @journey:admin-resource-permissions
+  Scenario: Permissions are explicit authorization resources
     Given a visible Resource Server has assigned scopes
     When an authorized administrator grants scopes directly to a User or Application
-    Then User Scope Entitlements are managed only below the target User
-    And Application Scope Entitlements are managed only below the target Application
-    And only Applications configured as machine principals accept Application Scope Entitlements
-    And each scope entitlement has an independent lifetime, canonical URI, and audit identity
-    And scope entitlement lists show only active records unless inactive history is requested
-    And assigning another scope never shortens or replaces an existing entitlement
-    And direct entitlements combine with optional Organization Role scopes
+    Then User Permissions are managed only below the target User
+    And Application Permissions are managed only below the target Application
+    And only Applications configured as machine principals accept Application Permissions
+    And each Permission has an independent lifetime, canonical URI, and audit identity
+    And Permission lists show only active records unless inactive history is requested
+    And each subject exposes a searchable Authorized Resource Server collection derived from active Permissions
+    And each Authorized Resource Server is a flat Resource Server summary with its active Permission count
+    And assigning another scope never shortens or replaces an existing Permission
+    And direct Permissions combine with optional Organization Role scopes
     But public visibility does not automatically grant any assigned scope
 
   @entrypoint:product-ui @journey:admin-branding-settings
@@ -345,16 +347,16 @@ Feature: Admin Console
 
   @entrypoint:product-ui @journey:admin-agent-governance-detail
   Scenario: Agent detail presents the stable identity governance model
-    Given a stable Agent identity has bound Hosts, access requests, and scope entitlements
+    Given a stable Agent identity has bound Hosts, access requests, and Permissions
     When I open the Agent detail in Console
     Then its inventory summary uses real active Resource and scope counts
     And separate tabs show Agent installations, Permissions, audit activity, and settings
-    And Resource access offers a searchable Resource Server list and shows only the selected Resource Server's scope Entitlements
-    And each scope Entitlement reports its active or ended status separately from its end reason
+    And Resource access reads the Agent's Authorized Resource Servers and shows only the selected Resource Server's Permissions
+    And each Permission reports its active or ended status separately from its end reason
     And audit activity supports searching and filtering Agent governance history
     And Agent access request history is available through audit activity instead of a separate detail tab
-    And those tabs compose canonical scope entitlement and audit collections
-    And scope entitlement collections omit history associated with deleted Resource Servers
+    And those tabs compose canonical Permission and audit collections
+    And Permission collections omit history associated with deleted Resource Servers
     And protocol Agent implementation records and credential material are not exposed
 
   @entrypoint:product-ui @journey:admin-application-oidc-claims
@@ -382,10 +384,10 @@ Feature: Admin Console
 
   @entrypoint:product-ui @journey:admin-agent-inventory
   Scenario: Admins govern Agents without managing protocol internals
-    Given delegated AgentAuth hosts, Agents, scope entitlements, and approval requests exist
+    Given delegated AgentAuth hosts, Agents, Permissions, and approval requests exist
     When Console reads the tenant Agent inventory
-    Then Realmroot presents stable Agents, access requests, scope entitlements, account connections, and audit events
+    Then Realmroot presents stable Agents, access requests, Permissions, account connections, and audit events
     And it does not expose hosts, registrations, bindings, or protocol approval records as management resources
-    When an admin deletes an Agent or revokes a scope entitlement
-    Then the Agent or scope entitlement is no longer active
+    When an admin deletes an Agent or revokes a Permission
+    Then the Agent or Permission is no longer active
     And no autonomous agent mode or broad admin mutation capability is enabled

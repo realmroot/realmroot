@@ -20,15 +20,16 @@ import type {
   AddMemberRequest,
   ApiResourceContractResponse,
   ApiResourceResponse,
-  CreateApplicationScopeEntitlementRequest,
+  CreateApplicationPermissionRequest,
   CreateInvitationRequest,
   CreateOrganizationRequest,
   CreateRoleRequest,
-  CreateUserScopeEntitlementRequest,
+  CreateUserPermissionRequest,
   InvitationResponse,
+  ListAuthorizedResourceServersQuery,
   ListInvitationsResponse,
   ListMembersResponse,
-  ListScopeEntitlementsQuery,
+  ListPermissionsQuery,
   MemberResponse,
   MemberRolesResponse,
   OrganizationResponse,
@@ -539,75 +540,105 @@ export function listAgentAccessRequests(
   return readRpcResponse(apiClient.api.access.requests.$get({ query: stringifyQuery(query) }))
 }
 
-export function listAgentScopeEntitlements(
+export function listAgentPermissions(
   agentId: string,
-  query: Partial<import('@shared/api/agent-api').ListAgentScopeEntitlementsQuery> = {},
+  query: Partial<import('@shared/api/agent-api').ListAgentPermissionsQuery> = {},
 ) {
   return readRpcResponse(
-    apiClient.api.agents[':agentId']['scope-entitlements'].$get({
+    apiClient.api.agents[':agentId'].permissions.$get({
       param: { agentId },
       query: stringifyQuery(query),
     }),
   )
 }
 
-export function deleteAgentScopeEntitlement(agentId: string, entitlementId: string) {
+export function listAgentAuthorizedResourceServers(
+  agentId: string,
+  query: Partial<ListAuthorizedResourceServersQuery> = {},
+) {
   return readRpcResponse(
-    apiClient.api.agents[':agentId']['scope-entitlements'][':entitlementId'].$delete({
-      param: { agentId, entitlementId },
+    apiClient.api.agents[':agentId']['authorized-resource-servers'].$get({
+      param: { agentId },
+      query: stringifyQuery(query),
     }),
   )
 }
 
-export function listUserScopeEntitlements(userId: string, query: Partial<ListScopeEntitlementsQuery> = {}) {
+export function deleteAgentPermission(agentId: string, permissionId: string) {
   return readRpcResponse(
-    apiClient.api.users[':userId']['scope-entitlements'].$get({
+    apiClient.api.agents[':agentId'].permissions[':permissionId'].$delete({
+      param: { agentId, permissionId },
+    }),
+  )
+}
+
+export function listUserPermissions(userId: string, query: Partial<ListPermissionsQuery> = {}) {
+  return readRpcResponse(
+    apiClient.api.users[':userId'].permissions.$get({
       param: { userId },
       query: stringifyQuery(query),
     }),
   )
 }
 
-export function createUserScopeEntitlement(userId: string, input: CreateUserScopeEntitlementRequest) {
-  return readRpcResponse(apiClient.api.users[':userId']['scope-entitlements'].$post({ param: { userId }, json: input }))
-}
-
-export function deleteUserScopeEntitlement(userId: string, entitlementId: string) {
+export function listUserAuthorizedResourceServers(
+  userId: string,
+  query: Partial<ListAuthorizedResourceServersQuery> = {},
+) {
   return readRpcResponse(
-    apiClient.api.users[':userId']['scope-entitlements'][':entitlementId'].$delete({
-      param: { userId, entitlementId },
+    apiClient.api.users[':userId']['authorized-resource-servers'].$get({
+      param: { userId },
+      query: stringifyQuery(query),
     }),
   )
 }
 
-export function listApplicationScopeEntitlements(
-  applicationId: string,
-  query: Partial<ListScopeEntitlementsQuery> = {},
-) {
+export function createUserPermission(userId: string, input: CreateUserPermissionRequest) {
+  return readRpcResponse(apiClient.api.users[':userId'].permissions.$post({ param: { userId }, json: input }))
+}
+
+export function deleteUserPermission(userId: string, permissionId: string) {
   return readRpcResponse(
-    apiClient.api.applications[':applicationId']['scope-entitlements'].$get({
+    apiClient.api.users[':userId'].permissions[':permissionId'].$delete({
+      param: { userId, permissionId },
+    }),
+  )
+}
+
+export function listApplicationPermissions(applicationId: string, query: Partial<ListPermissionsQuery> = {}) {
+  return readRpcResponse(
+    apiClient.api.applications[':applicationId'].permissions.$get({
       param: { applicationId },
       query: stringifyQuery(query),
     }),
   )
 }
 
-export function createApplicationScopeEntitlement(
+export function listApplicationAuthorizedResourceServers(
   applicationId: string,
-  input: CreateApplicationScopeEntitlementRequest,
+  query: Partial<ListAuthorizedResourceServersQuery> = {},
 ) {
   return readRpcResponse(
-    apiClient.api.applications[':applicationId']['scope-entitlements'].$post({
+    apiClient.api.applications[':applicationId']['authorized-resource-servers'].$get({
+      param: { applicationId },
+      query: stringifyQuery(query),
+    }),
+  )
+}
+
+export function createApplicationPermission(applicationId: string, input: CreateApplicationPermissionRequest) {
+  return readRpcResponse(
+    apiClient.api.applications[':applicationId'].permissions.$post({
       param: { applicationId },
       json: input,
     }),
   )
 }
 
-export function deleteApplicationScopeEntitlement(applicationId: string, entitlementId: string) {
+export function deleteApplicationPermission(applicationId: string, permissionId: string) {
   return readRpcResponse(
-    apiClient.api.applications[':applicationId']['scope-entitlements'][':entitlementId'].$delete({
-      param: { applicationId, entitlementId },
+    apiClient.api.applications[':applicationId'].permissions[':permissionId'].$delete({
+      param: { applicationId, permissionId },
     }),
   )
 }

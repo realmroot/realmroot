@@ -20,10 +20,10 @@ import {
   getAccountConnection,
   getAccountResourceConnectionApproval,
   getAgentAccessRequest,
+  getAgentPermission,
   getAgentConnectionRequest as getAgentResourceConnectionActivation,
   getAgentResourceServer,
   getAgentResourceServerResource,
-  getAgentScopeEntitlement,
   getApiResource,
   getControllerAccessRequestByToken,
   getExternalResourceAuthorization,
@@ -35,14 +35,14 @@ import {
   listAccountProviderConnectors,
   listAgentResourceServers as listAgentApiResources,
   listAgentResourceServerResources as listAgentAuthorizationDetailCatalog,
-  listAgentScopeEntitlements,
+  listAgentPermissions,
   listApiResources,
   listConnectableExternalResources,
   listControllerAccessRequests,
   listResourceConnections,
+  revokeAgentPermission,
   revokeAgentResourceAccess,
   revokeAgentResourceLeasesForBinding,
-  revokeAgentScopeEntitlement,
   revokeResourceConnection,
 } from '@server/usecases/external-resources'
 import type {
@@ -3152,7 +3152,7 @@ describe('external API resource authorization', () => {
       return new Response(null, { status: 200 })
     })
 
-    await revokeAgentScopeEntitlement(deps, 'grant-1', 'user-1')
+    await revokeAgentPermission(deps, 'grant-1', 'user-1')
     expect(deps.externalResources.revokeTokenLease).toHaveBeenCalledWith('lease-1', expect.any(Date))
     expect(deps.externalResources.endEntitlement).toHaveBeenCalledWith('ent_1', 'revoked', expect.any(Date))
   })
@@ -3185,7 +3185,7 @@ describe('external API resource authorization', () => {
     ])
     vi.mocked(deps.externalResources.endEntitlement).mockResolvedValue(true)
 
-    await revokeAgentScopeEntitlement(deps, 'ent_1', 'user-1')
+    await revokeAgentPermission(deps, 'ent_1', 'user-1')
 
     expect(deps.agentAudit.append).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -4929,7 +4929,7 @@ describe('external API resource authorization', () => {
     const deps = createTestDeps()
     authorizationDeps(deps)
     vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
-    vi.mocked(deps.externalResources.listAgentScopeEntitlements).mockResolvedValue({
+    vi.mocked(deps.externalResources.listAgentPermissions).mockResolvedValue({
       items: [
         {
           entitlement: grantRecord(),
@@ -4951,23 +4951,23 @@ describe('external API resource authorization', () => {
     vi.mocked(deps.externalResources.endEntitlement).mockResolvedValue(true)
 
     await expect(
-      listAgentScopeEntitlements(deps, principal(), {
+      listAgentPermissions(deps, principal(), {
         limit: 10,
         offset: 0,
-        resourceId: 'resource-1',
+        resourceServerId: 'resource-1',
         status: 'inactive',
       }),
     ).resolves.toMatchObject({
       items: [{ id: 'ent_1', target: { accountConnectionId: 'connection-1' } }],
     })
-    expect(deps.externalResources.listAgentScopeEntitlements).toHaveBeenCalledWith({
+    expect(deps.externalResources.listAgentPermissions).toHaveBeenCalledWith({
       agentId: 'identity-1',
       limit: 10,
       offset: 0,
-      resourceId: 'resource-1',
+      resourceServerId: 'resource-1',
       status: 'inactive',
     })
-    await expect(getAgentScopeEntitlement(deps, 'ent_1', principal())).resolves.toMatchObject({ id: 'ent_1' })
+    await expect(getAgentPermission(deps, 'ent_1', principal())).resolves.toMatchObject({ id: 'ent_1' })
     await revokeAgentResourceAccess(deps, 'identity-1')
     expect(deps.externalResources.endEntitlement).toHaveBeenCalledWith('ent_1', 'revoked', expect.any(Date))
 
@@ -5659,7 +5659,7 @@ describe('external API resource authorization', () => {
         { decision: 'approve', mode: 'until', expiresAt: new Date(Date.now() - 1).toISOString() },
         'user-1',
       ),
-    ).rejects.toThrow('Entitlement expiry must be in the future.')
+    ).rejects.toThrow('Permission expiry must be in the future.')
 
     vi.mocked(deps.externalResources.approveAccessRequestWithEntitlements).mockResolvedValue('request_changed')
     vi.mocked(deps.externalResources.decideAccessRequest).mockResolvedValue(null)
@@ -5994,19 +5994,17 @@ describe('external API resource authorization', () => {
     )
 
     vi.mocked(deps.externalResources.findEntitlement).mockResolvedValue(null)
-    await expect(revokeAgentScopeEntitlement(deps, 'missing', 'user-1')).rejects.toThrow(
-      'Agent scope Entitlement was not found.',
-    )
+    await expect(revokeAgentPermission(deps, 'missing', 'user-1')).rejects.toThrow('Agent Permission was not found.')
     vi.mocked(deps.externalResources.findEntitlement).mockResolvedValue(grantRecord())
     vi.mocked(deps.externalResources.findAccessRequest).mockResolvedValue(null)
-    await expect(revokeAgentScopeEntitlement(deps, 'grant-1', 'user-1')).rejects.toThrow(
+    await expect(revokeAgentPermission(deps, 'grant-1', 'user-1')).rejects.toThrow(
       'Source Agent access request was not found.',
     )
     vi.mocked(deps.externalResources.findEntitlement).mockResolvedValue({
       ...grantRecord(),
       sourceAccessRequestId: null,
     })
-    await expect(revokeAgentScopeEntitlement(deps, 'grant-1', 'user-1')).rejects.toThrow(
+    await expect(revokeAgentPermission(deps, 'grant-1', 'user-1')).rejects.toThrow(
       'Source Agent access request was not found.',
     )
 
@@ -6061,13 +6059,11 @@ describe('external API resource authorization', () => {
       ...grantRecord(),
       agentIdentityId: 'another-agent',
     })
-    await expect(getAgentScopeEntitlement(deps, 'grant-1', principal())).rejects.toThrow(
-      'Agent scope Entitlement was not found.',
-    )
+    await expect(getAgentPermission(deps, 'grant-1', principal())).rejects.toThrow('Agent Permission was not found.')
     vi.mocked(deps.externalResources.findEntitlement).mockResolvedValue(grantRecord())
     vi.mocked(deps.authorization.findResource).mockResolvedValue(null)
-    await expect(getAgentScopeEntitlement(deps, 'grant-1', principal())).rejects.toThrow(
-      'Agent scope Entitlement Resource Server was not found.',
+    await expect(getAgentPermission(deps, 'grant-1', principal())).rejects.toThrow(
+      'Agent Permission Resource Server was not found.',
     )
 
     vi.mocked(deps.externalResources.findAccessRequestByApprovalTokenHash).mockResolvedValue(requestRecord())

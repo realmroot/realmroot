@@ -1607,7 +1607,7 @@ function accountOverview() {
       settingRow('Application authorized', 'Realmroot CLI · openid offline_access', 'Jul 28, 09:14'),
     ]))
   return `<div class="profile-hero"><div><h1>Good morning, Jane.</h1><p>Review your identity, security, and delegated authority in this realm.</p></div></div>
-  <div class="metric-grid account-metrics"><article class="metric"><span>Security</span><strong>Strong</strong><small>Passkey and MFA are enabled.</small></article><article class="metric"><span>Active Agents</span><strong>2</strong><small>3 delegated scope Entitlements</small></article><article class="metric"><span>Organizations</span><strong>2</strong><small>1 Organization you administer</small></article></div>
+  <div class="metric-grid account-metrics"><article class="metric"><span>Security</span><strong>Strong</strong><small>Passkey and MFA are enabled.</small></article><article class="metric"><span>Active Agents</span><strong>2</strong><small>3 delegated Permissions</small></article><article class="metric"><span>Organizations</span><strong>2</strong><small>1 Organization you administer</small></article></div>
   <div class="account-overview-flow">${attention}${activity}</div>`
 }
 
@@ -1744,7 +1744,7 @@ function accountOrganizationDetail() {
     )}`),
     agents: accountTabPanel(accountRows([
       settingRow('Billing Reconciler', 'Stable Agent identity · 2 active hosts.', '1 active grant', button('Review')),
-      settingRow('Expense Auditor', 'Stable Agent identity · 1 active host.', 'No scope Entitlements', button('Review')),
+      settingRow('Expense Auditor', 'Stable Agent identity · 1 active host.', 'No Permissions', button('Review')),
     ])),
     authority: accountTabPanel(accountRows([
       settingRow('Finance operator', '3 scopes across Billing API and Documents API.', '2 assignments in Payments Team', button('Open in Console')),

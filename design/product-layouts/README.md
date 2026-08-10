@@ -112,7 +112,7 @@ Organization; they are established through Agent enrollment and never created
 manually from Console. Roles are reusable Realm-global permission definitions and
 can include scopes from multiple Resource servers. Assignments bind a Role to a User,
 Agent, or workload identity either Realm-wide or within one Organization context.
-OAuth consent, contextual Role assignments, and Agent scope Entitlements remain separate
+OAuth consent, contextual Role assignments, and Agent Permissions remain separate
 rather than becoming one generic authorization object. Role details keep one
 filterable Permissions table with a Resource server column, plus Context-filtered
 assignments and audit activity. New Role creates metadata only; permission changes
@@ -132,7 +132,7 @@ contains only visibility, availability, and deletion.
 Ownership, access eligibility, and authority are deliberately separate. A
 developer-enabled Organization can own an application or API while making it
 available to every Realm user. Audience or access eligibility answers who may request it;
-Role assignments and Agent scope Entitlements answer what an eligible actor may do.
+Role assignments and Agent Permissions answer what an eligible actor may do.
 
 Account Center is the self-service entry point for creating, joining, switching,
 and managing Organizations when Realm policy allows it. The creator becomes Owner.

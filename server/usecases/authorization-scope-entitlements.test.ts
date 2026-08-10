@@ -47,11 +47,11 @@ function setup() {
     findMemberByOrganizationUser: vi.fn().mockResolvedValue({ id: 'member' }),
     createScopeEntitlement: vi.fn(async (record: ResourceScopeEntitlementRecord) => record),
     findScopeEntitlement: vi.fn().mockResolvedValue(entitlement()),
-    listUserScopeEntitlements: vi.fn().mockResolvedValue({
+    listUserPermissions: vi.fn().mockResolvedValue({
       items: [entitlement()],
       pagination: { limit: 20, offset: 0, total: 1, hasMore: false, nextOffset: null },
     }),
-    listApplicationScopeEntitlements: vi.fn().mockResolvedValue({
+    listApplicationPermissions: vi.fn().mockResolvedValue({
       items: [entitlement({ userId: null, applicationId: 'app-1' })],
       pagination: { limit: 20, offset: 0, total: 1, hasMore: false, nextOffset: null },
     }),
@@ -70,9 +70,9 @@ function setup() {
 }
 
 describe('direct scope Entitlements', () => {
-  it('[spec: admin-console/admin-resource-scope-entitlements] creates exactly one persistent User scope', async () => {
+  it('[spec: admin-console/admin-resource-permissions] creates exactly one persistent User scope', async () => {
     const { deps, authorization } = setup()
-    const result = await subject.createUserScopeEntitlement(
+    const result = await subject.createUserPermission(
       deps,
       'user-1',
       { organizationId: 'org-1', resourceServerId: resource.id, scope: 'read', mode: 'persistent' },
@@ -94,7 +94,7 @@ describe('direct scope Entitlements', () => {
 
   it('creates one limited Application scope and exposes its independent lifetime', async () => {
     const { deps } = setup()
-    const result = await subject.createApplicationScopeEntitlement(
+    const result = await subject.createApplicationPermission(
       deps,
       'app-1',
       {
@@ -112,7 +112,7 @@ describe('direct scope Entitlements', () => {
   it('rejects automatic scopes and invalid lifetime combinations', async () => {
     const { deps } = setup()
     await expect(
-      subject.createUserScopeEntitlement(
+      subject.createUserPermission(
         deps,
         'user-1',
         { resourceServerId: resource.id, scope: 'auto', mode: 'persistent' },
@@ -120,7 +120,7 @@ describe('direct scope Entitlements', () => {
       ),
     ).rejects.toThrow('assigned')
     await expect(
-      subject.createUserScopeEntitlement(
+      subject.createUserPermission(
         deps,
         'user-1',
         { resourceServerId: resource.id, scope: 'read', mode: 'until' },
@@ -128,7 +128,7 @@ describe('direct scope Entitlements', () => {
       ),
     ).rejects.toThrow('expiry')
     await expect(
-      subject.createApplicationScopeEntitlement(
+      subject.createApplicationPermission(
         deps,
         'app-1',
         {
@@ -144,42 +144,42 @@ describe('direct scope Entitlements', () => {
 
   it('ends only the selected Entitlement', async () => {
     const { deps, authorization } = setup()
-    await subject.revokeUserScopeEntitlement(deps, 'ent_1')
+    await subject.revokeUserPermission(deps, 'ent_1')
     expect(authorization.endScopeEntitlement).toHaveBeenCalledWith('ent_1', 'revoked', expect.any(Date))
   })
 
   it('lists, reads, and revokes User and Application Entitlements', async () => {
     const { deps, authorization } = setup()
 
-    await expect(subject.listUserScopeEntitlements(deps, 'user-1', { limit: 20, offset: 0 })).resolves.toMatchObject({
+    await expect(subject.listUserPermissions(deps, 'user-1', { limit: 20, offset: 0 })).resolves.toMatchObject({
       items: [expect.objectContaining({ id: 'ent_1', status: 'active' })],
     })
     vi.mocked(authorization.findScopeEntitlement).mockResolvedValue(
       entitlement({ userId: null, applicationId: 'app-1', endedAt: now, endReason: 'revoked' }),
     )
-    await expect(subject.getApplicationScopeEntitlement(deps, 'ent_1')).resolves.toMatchObject({
+    await expect(subject.getApplicationPermission(deps, 'ent_1')).resolves.toMatchObject({
       applicationId: 'app-1',
       status: 'ended',
       endReason: 'revoked',
     })
-    await expect(
-      subject.listApplicationScopeEntitlements(deps, 'app-1', { limit: 20, offset: 0 }),
-    ).resolves.toMatchObject({ items: [expect.objectContaining({ applicationId: 'app-1' })] })
-    await subject.revokeApplicationScopeEntitlement(deps, 'ent_1')
+    await expect(subject.listApplicationPermissions(deps, 'app-1', { limit: 20, offset: 0 })).resolves.toMatchObject({
+      items: [expect.objectContaining({ applicationId: 'app-1' })],
+    })
+    await subject.revokeApplicationPermission(deps, 'ent_1')
     expect(authorization.endScopeEntitlement).toHaveBeenLastCalledWith('ent_1', 'revoked', expect.any(Date))
 
     vi.mocked(authorization.endScopeEntitlement).mockResolvedValue(false)
-    await expect(subject.revokeApplicationScopeEntitlement(deps, 'ent_1')).rejects.toThrow('already ended')
+    await expect(subject.revokeApplicationPermission(deps, 'ent_1')).rejects.toThrow('already ended')
     vi.mocked(authorization.findScopeEntitlement).mockResolvedValue(null)
-    await expect(subject.getUserScopeEntitlement(deps, 'missing')).rejects.toThrow('not found')
-    await expect(subject.getApplicationScopeEntitlement(deps, 'missing')).rejects.toThrow('not found')
+    await expect(subject.getUserPermission(deps, 'missing')).rejects.toThrow('not found')
+    await expect(subject.getApplicationPermission(deps, 'missing')).rejects.toThrow('not found')
   })
 
   it('enforces Resource visibility, subject, and lifetime boundaries', async () => {
     const { deps, authorization, applications } = setup()
     vi.mocked(authorization.findResource).mockResolvedValueOnce({ ...resource, enabled: false })
     await expect(
-      subject.createUserScopeEntitlement(
+      subject.createUserPermission(
         deps,
         'user-1',
         { resourceServerId: resource.id, scope: 'read', mode: 'persistent' },
@@ -190,7 +190,7 @@ describe('direct scope Entitlements', () => {
     vi.mocked(authorization.findResource).mockResolvedValue({ ...resource, visibility: 'private' })
     vi.mocked(authorization.findMemberByOrganizationUser).mockResolvedValueOnce(null)
     await expect(
-      subject.createUserScopeEntitlement(
+      subject.createUserPermission(
         deps,
         'user-1',
         { resourceServerId: resource.id, scope: 'read', mode: 'persistent' },
@@ -199,7 +199,7 @@ describe('direct scope Entitlements', () => {
     ).rejects.toThrow('owner Organization member')
     vi.mocked(authorization.findMemberByOrganizationUser).mockResolvedValueOnce({ id: 'member' })
     await expect(
-      subject.createUserScopeEntitlement(
+      subject.createUserPermission(
         deps,
         'user-1',
         { resourceServerId: resource.id, scope: 'read', mode: 'persistent' },
@@ -210,7 +210,7 @@ describe('direct scope Entitlements', () => {
     vi.mocked(authorization.findResource).mockResolvedValue(resource)
     vi.mocked(authorization.findMemberByOrganizationUser).mockResolvedValueOnce(null)
     await expect(
-      subject.createUserScopeEntitlement(
+      subject.createUserPermission(
         deps,
         'user-1',
         { organizationId: 'org-2', resourceServerId: resource.id, scope: 'read', mode: 'persistent' },
@@ -224,7 +224,7 @@ describe('direct scope Entitlements', () => {
     })
     vi.mocked(authorization.findMemberByOrganizationUser).mockResolvedValue({ id: 'member' })
     await expect(
-      subject.createUserScopeEntitlement(
+      subject.createUserPermission(
         deps,
         'user-1',
         { organizationId: 'org-2', resourceServerId: resource.id, scope: 'read', mode: 'persistent' },
@@ -232,7 +232,7 @@ describe('direct scope Entitlements', () => {
       ),
     ).rejects.toThrow('not visible')
     await expect(
-      subject.createUserScopeEntitlement(
+      subject.createUserPermission(
         deps,
         'user-1',
         { resourceServerId: resource.id, scope: 'read', mode: 'until', expiresAt: '2020-01-01T00:00:00.000Z' },
@@ -241,7 +241,7 @@ describe('direct scope Entitlements', () => {
     ).rejects.toThrow('future')
 
     await expect(
-      subject.createUserScopeEntitlement(
+      subject.createUserPermission(
         deps,
         'user-1',
         { resourceServerId: resource.id, scope: 'read', mode: 'persistent' },
@@ -249,11 +249,11 @@ describe('direct scope Entitlements', () => {
       ),
     ).resolves.toMatchObject({ organizationId: null })
     vi.mocked(authorization.endScopeEntitlement).mockResolvedValue(false)
-    await expect(subject.revokeUserScopeEntitlement(deps, 'ent_1')).rejects.toThrow('already ended')
+    await expect(subject.revokeUserPermission(deps, 'ent_1')).rejects.toThrow('already ended')
 
     vi.mocked(applications.findById).mockResolvedValueOnce(null)
     await expect(
-      subject.createApplicationScopeEntitlement(
+      subject.createApplicationPermission(
         deps,
         'missing',
         { resourceServerId: resource.id, scope: 'read', mode: 'persistent' },
@@ -266,7 +266,7 @@ describe('direct scope Entitlements', () => {
       allowedGrantTypes: ['authorization_code'],
     })
     await expect(
-      subject.createApplicationScopeEntitlement(
+      subject.createApplicationPermission(
         deps,
         'app-1',
         { resourceServerId: resource.id, scope: 'read', mode: 'persistent' },
@@ -285,7 +285,7 @@ describe('direct scope Entitlements', () => {
       ownerOrganizationId: 'org-2',
     })
     await expect(
-      subject.createApplicationScopeEntitlement(
+      subject.createApplicationPermission(
         deps,
         'app-1',
         { resourceServerId: resource.id, scope: 'read', mode: 'persistent' },
@@ -293,7 +293,7 @@ describe('direct scope Entitlements', () => {
       ),
     ).rejects.toThrow('not visible')
     await expect(
-      subject.createApplicationScopeEntitlement(
+      subject.createApplicationPermission(
         deps,
         'app-1',
         { resourceServerId: resource.id, scope: 'read', mode: 'until' },
@@ -301,7 +301,7 @@ describe('direct scope Entitlements', () => {
       ),
     ).rejects.toThrow('expiry')
     await expect(
-      subject.createApplicationScopeEntitlement(
+      subject.createApplicationPermission(
         deps,
         'app-1',
         { resourceServerId: resource.id, scope: 'read', mode: 'until', expiresAt: '2020-01-01T00:00:00.000Z' },
@@ -316,7 +316,7 @@ describe('direct scope Entitlements', () => {
         expiresAt: new Date('2020-01-01T00:00:00.000Z'),
       }),
     )
-    await expect(subject.getApplicationScopeEntitlement(deps, 'ent_1')).resolves.toMatchObject({
+    await expect(subject.getApplicationPermission(deps, 'ent_1')).resolves.toMatchObject({
       status: 'ended',
       endReason: 'expired',
     })

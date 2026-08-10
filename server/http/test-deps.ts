@@ -245,7 +245,7 @@ export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> =
         return records.filter((record) => record !== null)
       }),
       listActiveEntitlementsByAgent: vi.fn().mockResolvedValue([]),
-      listAgentScopeEntitlements: vi.fn().mockResolvedValue(emptyPage()),
+      listAgentPermissions: vi.fn().mockResolvedValue(emptyPage()),
       summarizeAgentAccess: vi.fn().mockResolvedValue(new Map()),
       listActiveEntitlementsByConnection: vi.fn().mockResolvedValue([]),
       endEntitlement: vi.fn().mockResolvedValue(false),

@@ -1,0 +1,19 @@
+[
+  {"method":"GET","path":"/agents","operationId":"listAgents","semanticHash":"60f2cc347cbe700b3a34ea2846bf74c3110e70adb3a90c66a6a9de16401ee255"},
+  {"method":"GET","path":"/agents/{agentId}","operationId":"getAgent","semanticHash":"cef1bb30ec388c864e7362bb9a67f4536b1c41c19b5d03c792ecfb59293f7e73"},
+  {"method":"GET","path":"/agents/{agentId}/authorized-resource-servers","operationId":"listAgentAuthorizedResourceServers","semanticHash":"0d727bebb53e9d53ce525798bce56dd77c4632ce57758dd1d7fe5e503e4ee8b9"},
+  {"method":"GET","path":"/agents/{agentId}/permissions","operationId":"listAgentPermissions","semanticHash":"bcccf0dddb203fe891929946a2cd035c01fd9d644288ece9a4f4403cd05d8c29"},
+  {"method":"DELETE","path":"/agents/{agentId}/permissions/{permissionId}","operationId":"deleteAgentPermission","semanticHash":"9b708c0a197be2438834241e4eb867cba92a48962fa3c62a84ceae29c1a427d4"},
+  {"method":"GET","path":"/agents/{agentId}/permissions/{permissionId}","operationId":"getAgentPermission","semanticHash":"da08665d57dad5b8a06c602fd7afa6dbcdd1900cfd0ce8a64f9886d6005f52a6"},
+  {"method":"GET","path":"/applications/{applicationId}/authorized-resource-servers","operationId":"listApplicationAuthorizedResourceServers","semanticHash":"154cd37679412d20326f62a0fae4145520d2c19b634b475bb63b548a22406553"},
+  {"method":"GET","path":"/applications/{applicationId}/permissions","operationId":"listApplicationPermissions","semanticHash":"7a4231b3fe564e42ccb7556e52644889e3028b6e934d72646bfc3b1e739c61c7"},
+  {"method":"POST","path":"/applications/{applicationId}/permissions","operationId":"createApplicationPermission","semanticHash":"a3c9fe02e224dfac00c6096c1b1c52157219f29ab7c5fadb7834bb91c4c4ca52"},
+  {"method":"DELETE","path":"/applications/{applicationId}/permissions/{permissionId}","operationId":"deleteApplicationPermission","semanticHash":"3b26df01afbe7aaaee0e8a9691c1821fbba1a6f5f65a2350624f58660121949a"},
+  {"method":"GET","path":"/applications/{applicationId}/permissions/{permissionId}","operationId":"getApplicationPermission","semanticHash":"6d72c19f018cfa8762db2708af1ddafd50b1c244d5e35611b8018ca83f1a4b4c"},
+  {"method":"GET","path":"/realm/audit-events","operationId":"listAgentAuditEvents","semanticHash":"bb3cfe7c9be71cbfe9fb60bcaee2e2c599315b9bd66daa6ac9b3705ad332e2a9"},
+  {"method":"GET","path":"/users/{userId}/authorized-resource-servers","operationId":"listUserAuthorizedResourceServers","semanticHash":"332d4352fab0b830ead30ce93de2ede868c5deaa46790708b90e04783ae1dd01"},
+  {"method":"GET","path":"/users/{userId}/permissions","operationId":"listUserPermissions","semanticHash":"74af558230c9bae050b8d52e92b00a09c33fbf3ec035925a3840f9ba744d25eb"},
+  {"method":"POST","path":"/users/{userId}/permissions","operationId":"createUserPermission","semanticHash":"8e7b6afa09226bf4647be557b8f97f8c37b12ed9c96042a74fbc2b4ba5674cfc"},
+  {"method":"DELETE","path":"/users/{userId}/permissions/{permissionId}","operationId":"deleteUserPermission","semanticHash":"ba6f626203c200c69b24939796d32c8642dcc6d97f24b1a066476f3a55e7e61e"},
+  {"method":"GET","path":"/users/{userId}/permissions/{permissionId}","operationId":"getUserPermission","semanticHash":"9e018be481814a8426f2a7662f4f4419aad20d244d0441dc1b08edb7978eb4ed"}
+]

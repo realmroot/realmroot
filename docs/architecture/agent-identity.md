@@ -61,7 +61,7 @@ configuration, or account connection. Expanding scopes, changing the external
 account, or changing the resource requires a new decision.
 
 The public lifecycle is intentionally expressed as Agent enrollment, access
-request, scope Entitlement, and audit event resources. Host credentials, identity
+request, Permission, and audit event resources. Host credentials, identity
 bindings, OAuth connection intents, encrypted refresh credentials, and target
 token leases remain internal security records rather than parallel public
 resources.

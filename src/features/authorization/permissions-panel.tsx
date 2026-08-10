@@ -5,55 +5,54 @@ import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from 're
 import { DestructiveConfirmation } from '@/components/destructive-confirmation'
 import { Field, SelectInput, TextInput } from '@/components/product-form'
 import { TableEmptyRow } from '@/components/table-empty-row'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { ErrorState, LoadingState, MutationError } from '@/features/management/dialogs'
 import { consoleQueryKeys } from '@/lib/api/console-query-keys'
 import {
-  createApplicationScopeEntitlement,
-  createUserScopeEntitlement,
-  deleteApplicationScopeEntitlement,
-  deleteUserScopeEntitlement,
+  createApplicationPermission,
+  createUserPermission,
+  deleteApplicationPermission,
+  deleteUserPermission,
   listApiResources,
-  listApplicationScopeEntitlements,
-  listUserScopeEntitlements,
+  listApplicationPermissions,
+  listUserPermissions,
 } from '@/lib/api/management'
 import { tt } from '@/lib/i18n'
 
-type ScopeEntitlementSubject =
+type PermissionSubject =
   | { type: 'user'; id: string; label: string }
   | { type: 'application'; id: string; label: string }
 
-type ScopeEntitlement = Pick<
-  Awaited<ReturnType<typeof listUserScopeEntitlements>>['items'][number],
+type Permission = Pick<
+  Awaited<ReturnType<typeof listUserPermissions>>['items'][number],
   'id' | 'resourceServerId' | 'scope' | 'mode' | 'status' | 'expiresAt'
 >
-type ScopeEntitlementPage = {
-  items: ScopeEntitlement[]
-  pagination: Awaited<ReturnType<typeof listUserScopeEntitlements>>['pagination']
+type PermissionPage = {
+  items: Permission[]
+  pagination: Awaited<ReturnType<typeof listUserPermissions>>['pagination']
 }
 
 const pageSize = 50
 
-export function ScopeEntitlementsPanel({ subject }: { subject: ScopeEntitlementSubject }) {
+export function PermissionsPanel({ subject }: { subject: PermissionSubject }) {
   const queryClient = useQueryClient()
   const [offset, setOffset] = useState(0)
   const [createOpen, setCreateOpen] = useState(false)
-  const [revokeTarget, setRevokeTarget] = useState<ScopeEntitlement | null>(null)
-  const queryKey = scopeEntitlementQueryKey(subject, offset)
+  const [revokeTarget, setRevokeTarget] = useState<Permission | null>(null)
+  const queryKey = permissionQueryKey(subject, offset)
   const resourcesQuery = useQuery({
-    queryKey: [...consoleQueryKeys.apiResources, { purpose: 'scope-entitlements' }],
+    queryKey: [...consoleQueryKeys.apiResources, { purpose: 'permissions' }],
     queryFn: () => listApiResources({ limit: 100 }),
   })
-  const entitlementsQuery = useQuery({
+  const permissionsQuery = useQuery({
     queryKey,
-    queryFn: async (): Promise<ScopeEntitlementPage> => {
+    queryFn: async (): Promise<PermissionPage> => {
       const result =
         subject.type === 'user'
-          ? await listUserScopeEntitlements(subject.id, { limit: pageSize, offset })
-          : await listApplicationScopeEntitlements(subject.id, { limit: pageSize, offset })
+          ? await listUserPermissions(subject.id, { limit: pageSize, offset })
+          : await listApplicationPermissions(subject.id, { limit: pageSize, offset })
       return { items: result.items, pagination: result.pagination }
     },
   })
@@ -64,47 +63,47 @@ export function ScopeEntitlementsPanel({ subject }: { subject: ScopeEntitlementS
       mode: 'persistent' | 'until'
       expiresAt: string | null
     }) => {
-      if (subject.type === 'user') await createUserScopeEntitlement(subject.id, input)
-      else await createApplicationScopeEntitlement(subject.id, input)
+      if (subject.type === 'user') await createUserPermission(subject.id, input)
+      else await createApplicationPermission(subject.id, input)
     },
     onSuccess: async () => {
       setCreateOpen(false)
       setOffset(0)
-      await queryClient.invalidateQueries({ queryKey: scopeEntitlementQueryPrefix(subject) })
+      await queryClient.invalidateQueries({ queryKey: permissionQueryPrefix(subject) })
     },
   })
   const revokeMutation = useMutation({
-    mutationFn: (entitlementId: string) =>
+    mutationFn: (permissionId: string) =>
       subject.type === 'user'
-        ? deleteUserScopeEntitlement(subject.id, entitlementId)
-        : deleteApplicationScopeEntitlement(subject.id, entitlementId),
+        ? deleteUserPermission(subject.id, permissionId)
+        : deleteApplicationPermission(subject.id, permissionId),
     onSuccess: async () => {
       setRevokeTarget(null)
-      if (entitlementsQuery.data?.items.length === 1 && offset > 0) setOffset(Math.max(0, offset - pageSize))
-      await queryClient.invalidateQueries({ queryKey: scopeEntitlementQueryPrefix(subject) })
+      if (permissionsQuery.data?.items.length === 1 && offset > 0) setOffset(Math.max(0, offset - pageSize))
+      await queryClient.invalidateQueries({ queryKey: permissionQueryPrefix(subject) })
     },
   })
 
-  if (resourcesQuery.isLoading || entitlementsQuery.isLoading)
+  if (resourcesQuery.isLoading || permissionsQuery.isLoading)
     return <LoadingState label={tt('Loading Resource access')} />
-  const error = resourcesQuery.error ?? entitlementsQuery.error
+  const error = resourcesQuery.error ?? permissionsQuery.error
   if (error)
     return (
-      <ErrorState error={error} onRetry={() => Promise.all([resourcesQuery.refetch(), entitlementsQuery.refetch()])} />
+      <ErrorState error={error} onRetry={() => Promise.all([resourcesQuery.refetch(), permissionsQuery.refetch()])} />
     )
 
   const resources = resourcesQuery.data?.items ?? []
   const assignableResources = resources.filter((resource) => assignedScopes(resource).length > 0)
   const resourceById = new Map(resources.map((resource) => [resource.id, resource]))
-  const entitlements = entitlementsQuery.data?.items ?? []
-  const pagination = entitlementsQuery.data?.pagination
+  const permissions = permissionsQuery.data?.items ?? []
+  const pagination = permissionsQuery.data?.pagination
 
   return (
     <>
       <div className="detailSections">
         <div className="flex items-center justify-between gap-4">
           <div>
-            <h2 className="text-base font-semibold">{tt('Resource access')}</h2>
+            <h2 className="text-base font-semibold">{tt('Permissions')}</h2>
             <p className="text-sm text-muted-foreground">
               {tt('Assigned Resource Server scopes held directly by {{subject}}.', { subject: subject.label })}
             </p>
@@ -121,7 +120,6 @@ export function ScopeEntitlementsPanel({ subject }: { subject: ScopeEntitlementS
                 <TableHead>{tt('Resource Server')}</TableHead>
                 <TableHead>{tt('Scope')}</TableHead>
                 <TableHead>{tt('Mode')}</TableHead>
-                <TableHead>{tt('Status')}</TableHead>
                 <TableHead>{tt('Expires')}</TableHead>
                 <TableHead className="w-0">
                   <span className="sr-only">{tt('Actions')}</span>
@@ -129,46 +127,35 @@ export function ScopeEntitlementsPanel({ subject }: { subject: ScopeEntitlementS
               </TableRow>
             </TableHeader>
             <TableBody>
-              {entitlements.length ? (
-                entitlements.map((entitlement) => {
-                  const resource = resourceById.get(entitlement.resourceServerId)
+              {permissions.length ? (
+                permissions.map((permission) => {
+                  const resource = resourceById.get(permission.resourceServerId)
                   return (
-                    <TableRow key={entitlement.id}>
+                    <TableRow key={permission.id}>
                       <TableCell>
                         <div className="flex min-w-40 flex-col whitespace-normal">
-                          <span className="font-medium">{resource?.name ?? entitlement.resourceServerId}</span>
+                          <span className="font-medium">{resource?.name ?? permission.resourceServerId}</span>
                           <span className="font-mono text-xs text-muted-foreground">
-                            {resource?.identifier ?? entitlement.resourceServerId}
+                            {resource?.identifier ?? permission.resourceServerId}
                           </span>
                         </div>
                       </TableCell>
+                      <TableCell className="font-mono text-sm">{permission.scope}</TableCell>
+                      <TableCell>{permission.mode}</TableCell>
                       <TableCell>
-                        <Badge variant="outline">{entitlement.scope}</Badge>
-                      </TableCell>
-                      <TableCell>{entitlement.mode}</TableCell>
-                      <TableCell>
-                        <Badge variant={entitlement.status === 'active' ? 'secondary' : 'outline'}>
-                          {entitlement.status === 'active' ? tt('Active') : tt('Ended')}
-                        </Badge>
+                        {permission.expiresAt ? new Date(permission.expiresAt).toLocaleString() : tt('Does not expire')}
                       </TableCell>
                       <TableCell>
-                        {entitlement.expiresAt
-                          ? new Date(entitlement.expiresAt).toLocaleString()
-                          : tt('Does not expire')}
-                      </TableCell>
-                      <TableCell>
-                        {entitlement.status === 'active' ? (
-                          <Button onClick={() => setRevokeTarget(entitlement)} size="sm" variant="outline">
-                            {tt('Revoke')}
-                          </Button>
-                        ) : null}
+                        <Button onClick={() => setRevokeTarget(permission)} size="sm" variant="outline">
+                          {tt('Revoke')}
+                        </Button>
                       </TableCell>
                     </TableRow>
                   )
                 })
               ) : (
                 <TableEmptyRow
-                  colSpan={6}
+                  colSpan={5}
                   description={tt('Assigned Resource Server scopes will appear here.')}
                   title={tt('No Resource access')}
                 />
@@ -204,7 +191,7 @@ export function ScopeEntitlementsPanel({ subject }: { subject: ScopeEntitlementS
           ) : null}
         </div>
       </div>
-      <CreateScopeEntitlementSheet
+      <CreatePermissionSheet
         error={<MutationError error={createMutation.error} />}
         onClose={() => setCreateOpen(false)}
         onSubmit={(input) => createMutation.mutate(input)}
@@ -226,7 +213,7 @@ export function ScopeEntitlementsPanel({ subject }: { subject: ScopeEntitlementS
   )
 }
 
-function CreateScopeEntitlementSheet({
+function CreatePermissionSheet({
   error,
   onClose,
   onSubmit,
@@ -279,7 +266,7 @@ function CreateScopeEntitlementSheet({
         </SheetHeader>
         <form
           className="grid flex-1 content-start gap-5 overflow-y-auto px-4 py-5"
-          id="create-scope-entitlement"
+          id="create-permission"
           onSubmit={submit}
         >
           <Field label={tt('Resource Server')}>
@@ -310,7 +297,7 @@ function CreateScopeEntitlementSheet({
               ))}
             </SelectInput>
           </Field>
-          <Field help={tt('Leave empty for a persistent Entitlement.')} label={tt('Expires')}>
+          <Field help={tt('Leave empty for a persistent Permission.')} label={tt('Expires')}>
             <TextInput name="expiresAt" type="datetime-local" />
           </Field>
           {error}
@@ -319,7 +306,7 @@ function CreateScopeEntitlementSheet({
           <Button onClick={onClose} type="button" variant="outline">
             {tt('Cancel')}
           </Button>
-          <Button disabled={pending || !resourceId || !scope} form="create-scope-entitlement" type="submit">
+          <Button disabled={pending || !resourceId || !scope} form="create-permission" type="submit">
             {pending ? tt('Adding…') : tt('Add scope')}
           </Button>
         </SheetFooter>
@@ -332,12 +319,12 @@ function assignedScopes(resource?: ApiResourceResponse) {
   return resource?.scopeRegistry?.scopes.filter((scope) => scope.grantMode === 'assigned') ?? []
 }
 
-function scopeEntitlementQueryPrefix(subject: ScopeEntitlementSubject) {
+function permissionQueryPrefix(subject: PermissionSubject) {
   return subject.type === 'user'
-    ? [...consoleQueryKeys.users, subject.id, 'scope-entitlements']
-    : [...consoleQueryKeys.applications, subject.id, 'scope-entitlements']
+    ? [...consoleQueryKeys.users, subject.id, 'permissions']
+    : [...consoleQueryKeys.applications, subject.id, 'permissions']
 }
 
-function scopeEntitlementQueryKey(subject: ScopeEntitlementSubject, offset: number) {
-  return [...scopeEntitlementQueryPrefix(subject), { limit: pageSize, offset }]
+function permissionQueryKey(subject: PermissionSubject, offset: number) {
+  return [...permissionQueryPrefix(subject), { limit: pageSize, offset }]
 }

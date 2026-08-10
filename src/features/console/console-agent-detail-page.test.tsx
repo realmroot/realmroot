@@ -18,7 +18,7 @@ describe('console Agent detail', () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const request = requestDetails(input, init)
       requests.push({ method: request.method, path: request.url.pathname })
-      if (request.method === 'GET' && request.url.pathname === '/api/agents/agent-1/scope-entitlements') {
+      if (request.method === 'GET' && request.url.pathname === '/api/agents/agent-1/permissions') {
         scopeQueries.push(request.url.search)
       }
       if (request.method === 'GET' && request.url.pathname === '/api/realm/audit-events') {
@@ -30,10 +30,7 @@ describe('console Agent detail', () => {
       if (request.method === 'DELETE' && request.url.pathname === '/api/agents/agent-1') {
         return Promise.resolve(new Response(null, { status: 204 }))
       }
-      if (
-        request.method === 'DELETE' &&
-        request.url.pathname === '/api/agents/agent-1/scope-entitlements/grant-until'
-      ) {
+      if (request.method === 'DELETE' && request.url.pathname === '/api/agents/agent-1/permissions/grant-until') {
         return new Promise<Response>((resolve) => {
           finishRevocation = resolve
         })
@@ -67,13 +64,15 @@ describe('console Agent detail', () => {
     expect(await screen.findByText('One use')).toBeTruthy()
     expect(screen.getByText('Until revoked')).toBeTruthy()
     expect(screen.getByText(/^Until \d/)).toBeTruthy()
-    expect(screen.getAllByRole('button', { name: 'Revoke' })).toHaveLength(2)
+    expect(screen.getAllByRole('button', { name: 'Revoke' })).toHaveLength(3)
     fireEvent.click(within(resourceNavigation).getByText('Invoices API'))
     expect(await screen.findByRole('heading', { name: 'Invoices API' })).toBeTruthy()
     expect(await screen.findByText('invoices:read')).toBeTruthy()
     expect(screen.queryByText('projects:read')).toBeNull()
     await waitFor(() =>
-      expect(scopeQueries.some((query) => new URLSearchParams(query).get('resourceId') === 'resource-2')).toBe(true),
+      expect(scopeQueries.some((query) => new URLSearchParams(query).get('resourceServerId') === 'resource-2')).toBe(
+        true,
+      ),
     )
     fireEvent.change(resourceSearch, { target: { value: 'projects' } })
     fireEvent.click(within(resourceNavigation).getByText('Projects API'))
@@ -87,7 +86,7 @@ describe('console Agent detail', () => {
     await waitFor(() =>
       expect(requests).toContainEqual({
         method: 'DELETE',
-        path: '/api/agents/agent-1/scope-entitlements/grant-until',
+        path: '/api/agents/agent-1/permissions/grant-until',
       }),
     )
 
@@ -269,11 +268,23 @@ function agentDetailResponse(url: URL, collections: AgentCollections) {
   if (path === '/api/agents/agent-1/installations') {
     return jsonResponse({ items: collections.installations, pagination: page(collections.installations.length) })
   }
-  if (path === '/api/agents/agent-1/scope-entitlements') {
-    const resourceId = url.searchParams.get('resourceId')
+  if (path === '/api/agents/agent-1/authorized-resource-servers') {
+    const resources = new Map<string, { id: string; name: string; identifier: string; permissionCount: number }>()
+    for (const permission of collections.grants.filter((item) => item.status === 'active')) {
+      const existing = resources.get(permission.resource.id)
+      resources.set(permission.resource.id, {
+        ...permission.resource,
+        permissionCount: (existing?.permissionCount ?? 0) + 1,
+      })
+    }
+    return jsonResponse({ items: [...resources.values()], pagination: page(resources.size) })
+  }
+  if (path === '/api/agents/agent-1/permissions') {
+    const resourceId = url.searchParams.get('resourceServerId')
+    const activePermissions = collections.grants.filter((permission) => permission.status === 'active')
     const grants = resourceId
-      ? collections.grants.filter((entitlement) => entitlement.resource.id === resourceId)
-      : collections.grants
+      ? activePermissions.filter((permission) => permission.resource.id === resourceId)
+      : activePermissions
     return jsonResponse({ items: grants, pagination: page(grants.length) })
   }
   if (path === '/api/realm/audit-events') {
@@ -368,8 +379,7 @@ const populatedCollections = {
       resource: resource(),
       scope: 'projects:write',
       mode: 'once',
-      status: 'ended',
-      endReason: 'consumed',
+      status: 'active',
       expiresAt: null,
       createdAt: timestamp,
     },
