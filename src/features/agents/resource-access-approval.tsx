@@ -97,7 +97,7 @@ export function ResourceAccessApproval() {
         setRequest(accessRequest)
         setConnection(availableConnection)
         setAgentName(accessRequest.agent.name)
-        setResourceName(accessRequest.resource.name)
+        setResourceName(accessRequest.authorizationDetail?.name ?? accessRequest.resourceServer.name)
         setAuthorizationDetailCatalog(catalog)
         setCatalogError(authorizationCatalogError)
       })
@@ -168,7 +168,7 @@ export function ResourceAccessApproval() {
   const requiresAccountConnection = request?.requiresAccountConnection ?? true
   const authorizationDetailResolution = resolveAuthorizationDetails(
     request?.authorizationDetails ?? [],
-    request?.resource.authorizationDetailTemplates ?? [],
+    request?.authorizationDetail?.authorizationDetailTemplates ?? [],
     connection?.authorizationDetails ?? [],
     authorizationDetailCatalog,
     authorizationDetailSelections,
@@ -229,18 +229,18 @@ export function ResourceAccessApproval() {
       title="Approve Agent resource access"
     >
       <div className="decisionStack">
-        {request?.target.type === 'resource' ? (
+        {request ? (
           <dl className="decisionFacts">
             <RequestField id={request.agentId} label="Agent" name={agentName ?? request.agentId} />
             <RequestField
-              id={request.target.resource.href}
-              label="Resource"
-              name={resourceName ?? request.target.resource.href}
+              id={request.resourceServerId}
+              label="Resource Server"
+              name={resourceName ?? request.resourceServer.name}
             />
             {request.reason ? <RequestField label="Reason" value={request.reason} /> : null}
           </dl>
         ) : null}
-        {request?.target.type === 'resource' ? (
+        {request ? (
           <section className="decisionPermissions" aria-label="Requested permissions">
             <h2>Requested permissions</h2>
             <ul>
@@ -252,8 +252,7 @@ export function ResourceAccessApproval() {
             </ul>
           </section>
         ) : null}
-        {request?.target.type === 'resource' &&
-        authorizationDetailResolution.requirements.some((requirement) => requirement.kind !== 'fixed') ? (
+        {request && authorizationDetailResolution.requirements.some((requirement) => requirement.kind !== 'fixed') ? (
           <section className="decisionPermissions" aria-label="Requested authorization details">
             <h2>Authorization details</h2>
             <div className="grid gap-4">
@@ -296,7 +295,7 @@ export function ResourceAccessApproval() {
             </div>
           </section>
         ) : null}
-        {request?.target.type === 'resource' && resourceName && requiresAccountConnection && connection ? (
+        {request && resourceName && requiresAccountConnection && connection ? (
           <section className="decisionSection">
             <h2>{request.resourceServer.name} account</h2>
             <div>
@@ -318,7 +317,7 @@ export function ResourceAccessApproval() {
             ) : null}
           </section>
         ) : null}
-        {request?.target.type === 'resource' && resourceName && requiresAccountConnection && !connection ? (
+        {request && resourceName && requiresAccountConnection && !connection ? (
           <section className="decisionSection">
             <h2>{request.resourceServer.name} account</h2>
             <p>Connect your {request.resourceServer.name} account before deciding this Agent request.</p>
@@ -439,7 +438,7 @@ function readApprovalToken() {
 
 function resolveAuthorizationDetails(
   requested: AccessRequestApproval['authorizationDetails'],
-  templates: AccessRequestApproval['resource']['authorizationDetailTemplates'],
+  templates: NonNullable<AccessRequestApproval['authorizationDetail']>['authorizationDetailTemplates'],
   connected: AccountConnection['authorizationDetails'],
   catalog: AuthorizationDetailCatalogEntry[],
   selections: Record<number, string>,

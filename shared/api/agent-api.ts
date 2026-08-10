@@ -8,7 +8,11 @@ import {
   permissionListStatusSchema,
   updateApiResourceRequestSchema,
 } from './authorization'
-import { authorizationDetailCatalogItemSchema, authorizationDetailsSchema } from './authorization-details'
+import {
+  authorizationDetailCatalogItemSchema,
+  authorizationDetailSchema,
+  authorizationDetailsSchema,
+} from './authorization-details'
 import {
   agentAccessRequestStatusSchema,
   externalResourceAuthorizationSchema,
@@ -228,7 +232,7 @@ export const resourceServerSchema = apiResourceResponseSchema.extend({
   connection: resourceServerConnectionSummarySchema.nullable(),
   links: z.object({
     self: z.url(),
-    resources: z.url(),
+    authorizationDetails: z.url(),
     connectionRequests: z.url().nullable(),
   }),
 })
@@ -241,26 +245,18 @@ export const resourceServersResponseSchema = z.object({
 export const apiResourceSchema = resourceServerSchema
 export const apiResourcesResponseSchema = resourceServersResponseSchema
 
-export const resourceReferenceSchema = z.object({ href: nonEmptyString })
-
-export const resourceServerResourceSchema = z.object({
-  id: z.string(),
-  type: nonEmptyString,
+export const resourceServerAuthorizationDetailSchema = z.object({
+  authorizationDetail: authorizationDetailSchema,
   name: nonEmptyString,
   description: z.string().nullable(),
   metadata: z.record(nonEmptyString, z.string()),
-  accountAuthorization: z.object({
-    status: z.enum(['authorized', 'authorization_required', 'not_required']),
-  }),
-  agentAuthorization: z.object({
-    authorizedScopes: z.array(z.string()),
-    requestableScopes: z.array(z.string()),
-  }),
-  links: z.object({ self: z.url(), accessRequests: z.url() }),
+  accountAuthorizationStatus: z.enum(['authorized', 'authorization_required', 'not_required']),
+  authorizedScopes: z.array(z.string()),
+  requestableScopes: z.array(z.string()),
 })
 
-export const resourceServerResourcesResponseSchema = z.object({
-  items: z.array(resourceServerResourceSchema),
+export const resourceServerAuthorizationDetailsResponseSchema = z.object({
+  items: z.array(resourceServerAuthorizationDetailSchema),
   pagination: paginationMetadataSchema,
 })
 
@@ -312,7 +308,7 @@ export const capabilityRequestSchema = z.object({
 
 export const createResourceConnectionRequestSchema = z
   .object({
-    resources: z.array(resourceReferenceSchema).default([]),
+    authorizationDetails: authorizationDetailsSchema.default([]),
     scopes: scopeListSchema,
     reason: z.string().trim().max(500).nullable().optional(),
   })
@@ -322,7 +318,7 @@ export const resourceConnectionRequestSchema = z.object({
   id: z.string(),
   agentId: z.string(),
   resourceServerId: z.string(),
-  resources: z.array(resourceReferenceSchema),
+  authorizationDetails: authorizationDetailsSchema,
   scopes: z.array(z.string()),
   reason: z.string().nullable(),
   status: z.enum(['pending', 'connected', 'denied', 'expired']),
@@ -415,20 +411,6 @@ export const accountConnectionsResponseSchema = z.object({
   pagination: paginationMetadataSchema,
 })
 
-export const accessTargetSchema = z.discriminatedUnion('type', [
-  z
-    .object({
-      type: z.literal('resource'),
-      resource: resourceReferenceSchema,
-    })
-    .strict(),
-  z
-    .object({
-      type: z.literal('realmroot-management'),
-    })
-    .strict(),
-])
-
 export const createAccessRequestSchema = z
   .object({
     resourceServerId: nonEmptyString,
@@ -441,7 +423,8 @@ export const createAccessRequestSchema = z
 export const accessRequestSchema = z.object({
   id: z.string(),
   agentId: z.string(),
-  target: accessTargetSchema,
+  resourceServerId: z.string(),
+  authorizationDetails: authorizationDetailsSchema,
   scopes: z.array(z.string()),
   reason: z.string().nullable(),
   status: agentAccessRequestStatusSchema,
@@ -450,8 +433,8 @@ export const accessRequestSchema = z.object({
   credentialOffer: z
     .object({
       type: z.literal('dpop'),
-      resource: resourceReferenceSchema,
       resourceIndicator: z.url(),
+      authorizationDetails: authorizationDetailsSchema,
       endpoint: z.url(),
       proof: z.object({ algorithm: z.literal('ES256'), method: z.literal('POST'), uri: z.url() }),
     })
@@ -468,18 +451,17 @@ export const accessRequestsResponseSchema = z.object({
 })
 
 export const accessRequestApprovalSchema = accessRequestSchema.extend({
-  authorizationDetails: authorizationDetailsSchema,
   requiresAccountConnection: z.boolean(),
   agent: z.object({ id: z.string(), name: z.string() }),
   resourceServer: z.object({ id: z.string(), name: z.string() }),
-  resource: z.object({
-    id: z.string(),
-    name: z.string(),
-    type: z.string(),
-    description: z.string().nullable(),
-    metadata: z.record(z.string(), z.string()),
-    authorizationDetailTemplates: authorizationDetailsSchema,
-  }),
+  authorizationDetail: z
+    .object({
+      name: z.string(),
+      description: z.string().nullable(),
+      metadata: z.record(z.string(), z.string()),
+      authorizationDetailTemplates: authorizationDetailsSchema,
+    })
+    .nullable(),
 })
 
 export const accessRequestApprovalsResponseSchema = z.object({
@@ -512,7 +494,6 @@ export const targetTokenSchema = z.object({
   scopes: z.array(z.string()),
   authorizationDetails: authorizationDetailsSchema,
   resourceIndicator: z.url(),
-  resource: resourceReferenceSchema,
 })
 
 export type Agent = z.infer<typeof agentSchema>
@@ -536,4 +517,4 @@ export type AccessRequestApproval = z.infer<typeof accessRequestApprovalSchema>
 export type DecideAccessRequest = z.input<typeof decideAccessRequestSchema>
 export type AgentPermission = z.infer<typeof agentPermissionSchema>
 export type ResourceServer = z.infer<typeof resourceServerSchema>
-export type ResourceServerResource = z.infer<typeof resourceServerResourceSchema>
+export type ResourceServerAuthorizationDetail = z.infer<typeof resourceServerAuthorizationDetailSchema>

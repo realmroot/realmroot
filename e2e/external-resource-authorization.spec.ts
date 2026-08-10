@@ -87,25 +87,21 @@ test.describe('external API resource authorization', () => {
       const connected = await connectionRequest.result
       expect(connected).toMatchObject({ status: 'connected' })
 
-      const providerResources = plugin.listResources<{
+      const providerDetails = plugin.listAuthorizationDetails<{
         items: Array<{
-          links: { self: string }
-          accountAuthorization: { status: string }
-          agentAuthorization: { requestableScopes: string[] }
+          authorizationDetail: { type: string; [key: string]: unknown }
+          accountAuthorizationStatus: string
+          requestableScopes: string[]
         }>
       }>(resource.id)
-      const providerResource = providerResources.items.find((candidate) =>
-        candidate.agentAuthorization.requestableScopes.includes('projects:read'),
-      )
-      expect(providerResource, JSON.stringify(providerResources.items, null, 2)).toMatchObject({
-        accountAuthorization: { status: 'authorized' },
-      })
+      expect(providerDetails.items).toEqual([])
 
       const accessRequest = plugin.requestResourceAccess<{
         status: string
         credentialSource: { reference: string }
       }>({
-        resource: { href: providerResource!.links.self },
+        resourceServerId: resource.id,
+        authorizationDetails: [],
         scopes: ['projects:read'],
         reason: 'List projects for the controller',
       })
@@ -158,12 +154,9 @@ test.describe('external API resource authorization', () => {
       expect(entitlement).toBeDefined()
       const revoked = await page.request.delete(`/api/agents/${entitlement!.agentId}/permissions/${entitlement!.id}`)
       expect(revoked.status()).toBe(204)
-      const afterRevocation = plugin.listResources<{
-        items: Array<{ links: { self: string }; agentAuthorization: { authorizedScopes: string[] } }>
-      }>(resource.id)
-      expect(
-        afterRevocation.items.find((candidate) => candidate.links.self === providerResource!.links.self),
-      ).toMatchObject({ agentAuthorization: { authorizedScopes: [] } })
+      const afterRevocation = await page.request.get(`/api/agents/${identity.agent.id}/permissions`)
+      expect(afterRevocation.status(), await afterRevocation.text()).toBe(200)
+      expect((await afterRevocation.json()) as { items: Array<{ id: string }> }).toMatchObject({ items: [] })
     } finally {
       plugin.dispose()
     }
@@ -212,16 +205,17 @@ test.describe('external API resource authorization', () => {
         }),
       )
 
-      const providerResources = plugin.listResources<{
-        items: Array<{ links: { self: string }; type: string }>
+      const providerDetails = plugin.listAuthorizationDetails<{
+        items: Array<{ authorizationDetail: { type: string } }>
       }>(resource.id)
-      expect(providerResources.items).toHaveLength(1)
+      expect(providerDetails.items).toHaveLength(0)
 
       const accessRequest = plugin.requestResourceAccess<{
         status: string
         credentialSource: { reference: string }
       }>({
-        resource: { href: providerResources.items[0]!.links.self },
+        resourceServerId: resource.id,
+        authorizationDetails: [],
         scopes: ['projects:read'],
         reason: 'List projects for the controller',
       })

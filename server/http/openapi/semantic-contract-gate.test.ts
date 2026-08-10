@@ -67,6 +67,8 @@ describe('OpenAPI semantic contract gate', () => {
       'PUT:/access/requests/{requestId}/decision',
       'GET:/agent/status',
       'POST:/agents/{agentId}/scope-entitlements/{grantId}/credentials',
+      'GET:/resource-servers/{resourceServerId}/resources',
+      'GET:/resource-servers/{resourceServerId}/resources/{resourceId}',
     ])
     const priorBaseline = [
       ...unchanged.filter(

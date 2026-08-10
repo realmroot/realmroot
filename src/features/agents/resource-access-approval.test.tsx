@@ -18,10 +18,7 @@ Element.prototype.scrollIntoView ??= () => {}
 const request = {
   id: 'request-1',
   agentId: 'agent-1',
-  target: {
-    type: 'resource' as const,
-    resource: { href: 'https://identity.example.com/api/resource-servers/resource-1/resources/project-1' },
-  },
+  resourceServerId: 'resource-1',
   scopes: ['projects:read'],
   authorizationDetails: [{ type: 'project', project_id: 'project-1', actions: ['read'] }],
   requiresAccountConnection: true,
@@ -36,10 +33,8 @@ const request = {
   updatedAt: '2026-08-01T00:00:00.000Z',
   agent: { id: 'agent-1', name: 'Release helper' },
   resourceServer: { id: 'resource-1', name: 'ZPan' },
-  resource: {
-    id: 'project-1',
+  authorizationDetail: {
     name: 'Project One',
-    type: 'project',
     description: null,
     metadata: {},
     authorizationDetailTemplates: [{ type: 'project' }],
@@ -70,10 +65,8 @@ const nativeRequest = {
   authorizationDetails: nativeAuthorizationDetails,
   requiresAccountConnection: false,
   resourceServer: { id: 'resource-1', name: 'Realmroot' },
-  resource: {
-    id: 'user-1',
+  authorizationDetail: {
     name: 'Example User',
-    type: 'realmroot_authority',
     description: null,
     metadata: { authority: 'account', userId: 'user-1' },
     authorizationDetailTemplates: [{ type: 'realmroot_authority', authority: 'account' }],
@@ -124,7 +117,7 @@ describe('Agent resource access approval', () => {
     expect(await screen.findByText('Release helper')).toBeTruthy()
     expect(screen.getByText('agent-1')).toBeTruthy()
     expect(screen.getByText('Project One')).toBeTruthy()
-    expect(screen.getByText(request.target.resource.href)).toBeTruthy()
+    expect(screen.getByText(request.resourceServer.id)).toBeTruthy()
     expect(screen.queryByText('connection-1')).toBeNull()
     expect(screen.getByText('ZPan Demo')).toBeTruthy()
     expect(screen.queryByRole('radio', { name: 'ZPan Demo' })).toBeNull()
@@ -150,7 +143,7 @@ describe('Agent resource access approval', () => {
         ? {
             ...request,
             id: 'request-2',
-            resource: { ...request.resource, id: 'project-2', name: 'Project Two' },
+            authorizationDetail: { ...request.authorizationDetail, name: 'Project Two' },
           }
         : request,
     )
@@ -308,18 +301,10 @@ describe('Agent resource access approval', () => {
   it('shows a native resource name without requiring an account connection', async () => {
     api.getAgentResourceApproval.mockResolvedValue({
       ...request,
-      target: { type: 'resource', resource: request.target.resource },
       authorizationDetails: [],
       requiresAccountConnection: false,
       resourceServer: { id: 'resource-1', name: 'Billing API' },
-      resource: {
-        id: 'service',
-        name: 'Billing API',
-        type: 'service',
-        description: null,
-        metadata: {},
-        authorizationDetailTemplates: [],
-      },
+      authorizationDetail: null,
     })
     api.listApprovalAccountConnections.mockResolvedValue({
       items: [],
@@ -385,10 +370,7 @@ describe('Agent resource access approval', () => {
   })
 
   it('[spec: agent-identity/external-resource-first-access] connects an account before allowing a separate approval', async () => {
-    api.getAgentResourceApproval.mockResolvedValue({
-      ...request,
-      target: { type: 'resource', resource: request.target.resource },
-    })
+    api.getAgentResourceApproval.mockResolvedValue(request)
     api.listApprovalAccountConnections.mockResolvedValue({
       items: [],
       pagination: { limit: 50, offset: 0, total: 0, hasMore: false, nextOffset: null },
@@ -423,10 +405,7 @@ describe('Agent resource access approval', () => {
     window.history.replaceState(null, '', '/agent/resource-access/approve')
     window.location.hash = ''
     window.sessionStorage.setItem('realmroot.resource-access-approval-token', 'approval token')
-    api.getAgentResourceApproval.mockResolvedValue({
-      ...request,
-      target: { type: 'resource', resource: request.target.resource },
-    })
+    api.getAgentResourceApproval.mockResolvedValue(request)
     api.listApprovalAccountConnections.mockResolvedValue({
       items: [{ ...connection, id: 'connection-2' }],
       pagination: { limit: 50, offset: 0, total: 1, hasMore: false, nextOffset: null },
@@ -484,10 +463,7 @@ describe('Agent resource access approval', () => {
   })
 
   it('reports account connection failures from Error and unknown values', async () => {
-    api.getAgentResourceApproval.mockResolvedValue({
-      ...request,
-      target: { type: 'resource', resource: request.target.resource },
-    })
+    api.getAgentResourceApproval.mockResolvedValue(request)
     api.listApprovalAccountConnections.mockResolvedValue({
       items: [],
       pagination: { limit: 50, offset: 0, total: 0, hasMore: false, nextOffset: null },

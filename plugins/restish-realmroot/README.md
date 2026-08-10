@@ -87,8 +87,10 @@ An approved access request may include:
 {
   "credentialOffer": {
     "type": "dpop",
-    "resource": {"href": "https://id.realmroot.dev/api/resource-servers/zpan/resources/workspace-1"},
     "resourceIndicator": "https://drive.zpan.space/api",
+    "authorizationDetails": [
+      {"type": "https://zpan.space/authorization-details/workspace", "identifier": "workspace-1"}
+    ],
     "endpoint": "https://id.realmroot.dev/api/agent/access-requests/request-1/credentials",
     "proof": {
       "algorithm": "ES256",
@@ -100,15 +102,15 @@ An approved access request may include:
 ```
 
 The plugin stores the offer under a locally generated `rrcs_...` reference.
-That reference remains stable for the same Agent Resource. Later approvals
+That reference remains stable for the same Resource Server authorization context. Later approvals
 replace only an offer with the same scopes and retain offers for every other
-approved scope set; a different Resource receives a different reference. After
+approved scope set; different authorization details receive a different reference. After
 the reference is added to a Restish API credential, Restish creates a separate
 P-256 key and asks the plugin to redeem the least broad stored offer covering
 the operation scopes. The plugin posts to the supplied same-origin credential
 endpoint and validates that the short-lived response is bound to the exact
-Resource href and indicator. The visible access result contains only status,
-Resource, scopes, and the opaque credential-source reference. Target traffic
+resource indicator and authorization details. The visible access result contains only status,
+resource indicator, authorization details, scopes, and the opaque credential-source reference. Target traffic
 then goes directly to the Resource Server.
 
 Expired credentials are renewed through the stored offer. If renewal is no

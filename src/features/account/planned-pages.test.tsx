@@ -674,15 +674,10 @@ function accessRequest(): AccessRequestApproval {
     id: 'request-1',
     agentId: 'agent-active',
     agent: { id: 'agent-active', name: 'Build Agent' },
-    target: {
-      type: 'resource',
-      resource: { href: 'https://identity.example.com/api/resource-servers/resource-1/resources/service' },
-    },
+    resourceServerId: 'resource-server-1',
     resourceServer: { id: 'resource-server-1', name: 'Projects API' },
-    resource: {
-      id: 'resource-1',
+    authorizationDetail: {
       name: 'Projects',
-      type: 'service',
       description: null,
       metadata: {},
       authorizationDetailTemplates: [],

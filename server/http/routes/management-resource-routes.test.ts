@@ -185,7 +185,7 @@ describe('management resource routes', () => {
       resourceUrl: 'https://api.example.com',
       ownerOrganizationId: 'org-1',
       availability: { status: 'unavailable' },
-      links: { resources: 'https://auth.example.com/api/resource-servers/resource-1/resources' },
+      links: { authorizationDetails: 'https://auth.example.com/api/resource-servers/resource-1/authorization-details' },
     })
     expect(item).not.toHaveProperty('serviceUrl')
     expect(item).not.toHaveProperty('resourceIndicator')
@@ -288,7 +288,7 @@ async function loadAuthorizationRoutes(agentMode: 'authority' | 'bootstrap' | nu
     connection: null,
     links: {
       self: 'https://auth.example.com/api/resource-servers/resource-1',
-      resources: 'https://auth.example.com/api/resource-servers/resource-1/resources',
+      authorizationDetails: 'https://auth.example.com/api/resource-servers/resource-1/authorization-details',
       connectionRequests: null,
     },
   }

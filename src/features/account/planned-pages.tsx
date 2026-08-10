@@ -119,7 +119,7 @@ export function AccountOverviewPage() {
                   <AccountRow
                     action={<Button onClick={() => setRequest(item)}>{tt('Review request')}</Button>}
                     description={tt('{{resource}} · {{scopes}}', {
-                      resource: item.resource.name,
+                      resource: item.authorizationDetail?.name ?? item.resourceServer.name,
                       scopes: item.scopes.join(' '),
                     })}
                     key={item.id}
@@ -415,7 +415,7 @@ export function AccountAgentsPage() {
                   <AccountRow
                     action={<Button onClick={() => setRequest(item)}>{tt('Review request')}</Button>}
                     description={tt('{{resource}} · {{scopes}}', {
-                      resource: item.resource.name,
+                      resource: item.authorizationDetail?.name ?? item.resourceServer.name,
                       scopes: item.scopes.join(' '),
                     })}
                     key={item.id}
@@ -581,8 +581,8 @@ function AgentRequestDialog({
               </div>
               <div className="grid gap-1 py-3">
                 <dt className="text-xs text-muted-foreground">{tt('Resource server')}</dt>
-                <dd className="font-medium">{request.resource.name}</dd>
-                <dd className="break-all font-mono text-xs text-muted-foreground">{request.resource.id}</dd>
+                <dd className="font-medium">{request.authorizationDetail?.name ?? request.resourceServer.name}</dd>
+                <dd className="break-all font-mono text-xs text-muted-foreground">{request.resourceServer.id}</dd>
               </div>
               <div className="grid grid-cols-2 gap-4 pt-3">
                 <div className="grid content-start gap-1">

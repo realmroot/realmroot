@@ -23,7 +23,6 @@ import {
   getAgentPermission,
   getAgentConnectionRequest as getAgentResourceConnectionActivation,
   getAgentResourceServer,
-  getAgentResourceServerResource,
   getApiResource,
   getControllerAccessRequestByToken,
   getExternalResourceAuthorization,
@@ -34,7 +33,7 @@ import {
   listAccountConnections,
   listAccountProviderConnectors,
   listAgentResourceServers as listAgentApiResources,
-  listAgentResourceServerResources as listAgentAuthorizationDetailCatalog,
+  listAgentResourceServerAuthorizationDetails as listAgentAuthorizationDetailCatalog,
   listAgentPermissions,
   listApiResources,
   listConnectableExternalResources,
@@ -1650,7 +1649,7 @@ describe('external API resource authorization', () => {
       getAgentResourceConnectionActivation(deps, stored.id, principal(), 'https://auth.example.com'),
     ).resolves.toMatchObject({
       status: 'expired',
-      resources: [{ href: expect.stringContaining('/resources/resource_') }],
+      authorizationDetails: [{ type: 'project_access', project_id: 'project-1' }],
       interaction: { status: 'expired', url: null, expiresAt: null },
     })
 
@@ -2355,43 +2354,26 @@ describe('external API resource authorization', () => {
     })
 
     await expect(
-      listAgentAuthorizationDetailCatalog(
-        deps,
-        'resource-1',
-        principal(),
-        { limit: 100, offset: 0 },
-        'https://auth.example.com',
-      ),
+      listAgentAuthorizationDetailCatalog(deps, 'resource-1', principal(), { limit: 100, offset: 0 }),
     ).resolves.toEqual({
       items: [
         {
-          id: expect.stringMatching(/^resource_/),
-          type: 'project_access',
+          authorizationDetail: connectedDetail,
           name: 'Project One',
           description: null,
           metadata: {},
-          accountAuthorization: { status: 'authorized' },
-          agentAuthorization: {
-            authorizedScopes: ['projects:read', 'projects:write'],
-            requestableScopes: ['projects:create'],
-          },
-          links: {
-            self: expect.stringContaining('/api/resource-servers/resource-1/resources/'),
-            accessRequests: 'https://auth.example.com/api/agent/access-requests',
-          },
+          accountAuthorizationStatus: 'authorized',
+          authorizedScopes: ['projects:read', 'projects:write'],
+          requestableScopes: ['projects:create'],
         },
         {
-          id: expect.stringMatching(/^resource_/),
-          type: 'project_access',
+          authorizationDetail: availableDetail,
           name: 'Project Two',
           description: null,
           metadata: { region: 'ca-central-1' },
-          accountAuthorization: { status: 'authorization_required' },
-          agentAuthorization: { authorizedScopes: [], requestableScopes: [] },
-          links: {
-            self: expect.stringContaining('/api/resource-servers/resource-1/resources/'),
-            accessRequests: 'https://auth.example.com/api/agent/access-requests',
-          },
+          accountAuthorizationStatus: 'authorization_required',
+          authorizedScopes: [],
+          requestableScopes: [],
         },
       ],
       pagination: { limit: 100, offset: 0, total: 2, hasMore: false, nextOffset: null },
@@ -2405,22 +2387,8 @@ describe('external API resource authorization', () => {
         'resource-1',
         principal(),
         { limit: 100, offset: 0 },
-        'https://auth.example.com',
       ),
-    ).resolves.toMatchObject({
-      items: [
-        {
-          id: 'service',
-          type: 'service',
-          accountAuthorization: { status: 'authorized' },
-          agentAuthorization: {
-            authorizedScopes: [],
-            requestableScopes: ['projects:read', 'authorization-details:read'],
-          },
-        },
-      ],
-      pagination: { total: 1 },
-    })
+    ).resolves.toMatchObject({ items: [], pagination: { total: 0 } })
 
     await expect(
       listAgentAuthorizationDetailCatalog(
@@ -2428,7 +2396,6 @@ describe('external API resource authorization', () => {
         'resource-1',
         principal(),
         { limit: 100, offset: 0 },
-        'https://auth.example.com',
       ),
     ).rejects.toThrow('Resource account must be reauthorized for the authorization detail catalog scope.')
 
@@ -2471,7 +2438,6 @@ describe('external API resource authorization', () => {
           'resource-1',
           principal(),
           { limit: 100, offset: 0 },
-          'https://auth.example.com',
         ),
       ).rejects.toThrow(message)
     }
@@ -2490,20 +2456,13 @@ describe('external API resource authorization', () => {
         'resource-1',
         principal(),
         { limit: 1, offset: 0 },
-        'https://auth.example.com',
       ),
     ).rejects.toThrow('Authorization detail catalog returned more items than requested.')
 
     const unreachable = authorizationCatalogDeps()
     vi.mocked(unreachable.externalHttp.fetch).mockRejectedValue(new Error('network unavailable'))
     await expect(
-      listAgentAuthorizationDetailCatalog(
-        unreachable,
-        'resource-1',
-        principal(),
-        { limit: 100, offset: 0 },
-        'https://auth.example.com',
-      ),
+      listAgentAuthorizationDetailCatalog(unreachable, 'resource-1', principal(), { limit: 100, offset: 0 }),
     ).rejects.toThrow('Authorization detail catalog could not be reached.')
   })
 
@@ -2544,29 +2503,14 @@ describe('external API resource authorization', () => {
     const nativeAgent = authorizationCatalogDeps()
     vi.mocked(nativeAgent.authorization.findResource).mockResolvedValue(nativeResource())
     await expect(
-      listAgentAuthorizationDetailCatalog(
-        nativeAgent,
-        'resource-1',
-        principal(),
-        { limit: 10, offset: 0 },
-        'https://auth.example.com',
-      ),
-    ).resolves.toMatchObject({
-      items: [{ id: 'service', type: 'service', accountAuthorization: { status: 'not_required' } }],
-      pagination: { total: 1 },
-    })
+      listAgentAuthorizationDetailCatalog(nativeAgent, 'resource-1', principal(), { limit: 10, offset: 0 }),
+    ).resolves.toMatchObject({ items: [], pagination: { total: 0 } })
 
     for (const connection of [null, { ...connectionRecord(), status: 'revoked' as const }]) {
       const deps = authorizationCatalogDeps()
       vi.mocked(deps.externalResources.findConnectionByOwnerResource).mockResolvedValue(connection)
       await expect(
-        listAgentAuthorizationDetailCatalog(
-          deps,
-          'resource-1',
-          principal(),
-          { limit: 10, offset: 0 },
-          'https://auth.example.com',
-        ),
+        listAgentAuthorizationDetailCatalog(deps, 'resource-1', principal(), { limit: 10, offset: 0 }),
       ).resolves.toEqual({
         items: [],
         pagination: { limit: 10, offset: 0, total: 0, hasMore: false, nextOffset: null },
@@ -3702,16 +3646,8 @@ describe('external API resource authorization', () => {
     })
     vi.mocked(deps.authorization.findResource).mockResolvedValueOnce({ ...native, scopeRegistry: null })
     await expect(
-      listAgentAuthorizationDetailCatalog(
-        deps,
-        native.id,
-        principal(),
-        { limit: 10, offset: 0 },
-        'https://auth.example.com',
-      ),
-    ).resolves.toMatchObject({
-      items: [{ agentAuthorization: { requestableScopes: [] } }],
-    })
+      listAgentAuthorizationDetailCatalog(deps, native.id, principal(), { limit: 10, offset: 0 }),
+    ).resolves.toMatchObject({ items: [], pagination: { total: 0 } })
     const personalIdentity = identityAggregate()
     personalIdentity.identity.ownerOrganizationId = null
     personalIdentity.identity.ownerUserId = 'user-1'
@@ -3732,7 +3668,8 @@ describe('external API resource authorization', () => {
       'https://auth.example.com/',
     )
     expect(created).toMatchObject({
-      target: { type: 'resource', resource: { href: expect.stringContaining('/resources/service') } },
+      resourceServerId: 'resource-1',
+      authorizationDetails: [],
       status: 'approved',
       interaction: { status: 'completed' },
     })
@@ -3781,7 +3718,8 @@ describe('external API resource authorization', () => {
     vi.mocked(deps.externalResources.findAccessRequest).mockResolvedValue(stored)
     await expect(getAgentAccessRequest(deps, stored.id, principal())).resolves.toMatchObject({ id: stored.id })
     await expect(getAccessRequest(deps, stored.id, principal(), 'https://auth.example.com')).resolves.toMatchObject({
-      target: { type: 'resource' },
+      resourceServerId: stored.resourceId,
+      authorizationDetails: stored.authorizationDetails,
     })
   })
 
@@ -3803,26 +3741,14 @@ describe('external API resource authorization', () => {
       resources: [{ id: privateNative.id }],
     })
     await expect(
-      listAgentAuthorizationDetailCatalog(
-        deps,
-        privateNative.id,
-        principal(),
-        { limit: 10, offset: 0 },
-        'https://auth.example.com',
-      ),
-    ).resolves.toMatchObject({ pagination: { total: 1 } })
+      listAgentAuthorizationDetailCatalog(deps, privateNative.id, principal(), { limit: 10, offset: 0 }),
+    ).resolves.toMatchObject({ pagination: { total: 0 } })
 
     vi.mocked(deps.authorization.listUserMemberships).mockResolvedValue([{ organizationId: 'org-other' }] as never)
     vi.mocked(deps.authorization.findOrganization).mockResolvedValue({ id: 'org-other', disabled: false } as never)
     await expect(discoverAgentResources(deps, principal())).resolves.toEqual({ resources: [] })
     await expect(
-      listAgentAuthorizationDetailCatalog(
-        deps,
-        privateNative.id,
-        principal(),
-        { limit: 10, offset: 0 },
-        'https://auth.example.com',
-      ),
+      listAgentAuthorizationDetailCatalog(deps, privateNative.id, principal(), { limit: 10, offset: 0 }),
     ).rejects.toThrow('Resource Server is not visible to this Agent.')
   })
 
@@ -3852,19 +3778,15 @@ describe('external API resource authorization', () => {
     vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
     mockResourceOpenApi(deps, builtIn.resourceUrl)
 
-    const result = await listAgentAuthorizationDetailCatalog(
-      deps,
-      builtIn.id,
-      principal(),
-      { limit: 10, offset: 0 },
-      'https://auth.example.com',
-    )
+    const result = await listAgentAuthorizationDetailCatalog(deps, builtIn.id, principal(), { limit: 10, offset: 0 })
 
     expect(result.pagination.total).toBe(1)
     expect(result.items).toEqual([
-      expect.objectContaining({ type: 'realmroot_authority', name: 'Example Organization' }),
+      expect.objectContaining({
+        authorizationDetail: expect.objectContaining({ type: 'realmroot_authority' }),
+        name: 'Example Organization',
+      }),
     ])
-    expect(new Set(result.items.map((item) => item.links.self)).size).toBe(1)
 
     vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue({
       ...identityAggregate(),
@@ -3885,15 +3807,7 @@ describe('external API resource authorization', () => {
         : ({ id, name: 'Disabled', displayName: null, disabled: true } as never),
     )
     expect(
-      (
-        await listAgentAuthorizationDetailCatalog(
-          deps,
-          builtIn.id,
-          principal(),
-          { limit: 10, offset: 0 },
-          'https://auth.example.com',
-        )
-      ).items,
+      (await listAgentAuthorizationDetailCatalog(deps, builtIn.id, principal(), { limit: 10, offset: 0 })).items,
     ).toEqual([
       expect.objectContaining({ name: 'Example User' }),
       expect.objectContaining({ name: 'Example Organization' }),
@@ -3907,13 +3821,7 @@ describe('external API resource authorization', () => {
       displayName: null,
     } as never)
     await expect(
-      listAgentAuthorizationDetailCatalog(
-        deps,
-        builtIn.id,
-        principal(),
-        { limit: 10, offset: 1 },
-        'https://auth.example.com',
-      ),
+      listAgentAuthorizationDetailCatalog(deps, builtIn.id, principal(), { limit: 10, offset: 1 }),
     ).resolves.toMatchObject({ pagination: { total: 1 }, items: [] })
   })
 
@@ -3960,24 +3868,13 @@ describe('external API resource authorization', () => {
     await expect(
       getAgentResourceServer(deps, builtIn.id, principal(), 'https://auth.example.com/'),
     ).resolves.toMatchObject({ id: builtIn.id, connection: { status: 'not_required' } })
-    const resources = await listAgentAuthorizationDetailCatalog(
-      deps,
-      builtIn.id,
-      principal(),
-      { limit: 10, offset: 0 },
-      'https://auth.example.com',
-    )
-    expect(resources.items).toHaveLength(1)
-    await expect(
-      getAgentResourceServerResource(deps, builtIn.id, resources.items[0]!.id, principal(), 'https://auth.example.com'),
-    ).resolves.toMatchObject({
+    const details = await listAgentAuthorizationDetailCatalog(deps, builtIn.id, principal(), { limit: 10, offset: 0 })
+    expect(details.items).toHaveLength(1)
+    expect(details.items[0]).toMatchObject({
       name: 'Organization Display',
-      type: 'realmroot_authority',
-      agentAuthorization: { authorizedScopes: ['users:read'] },
+      authorizationDetail: { type: 'realmroot_authority' },
+      authorizedScopes: ['users:read'],
     })
-    await expect(
-      getAgentResourceServerResource(deps, builtIn.id, 'missing', principal(), 'https://auth.example.com'),
-    ).rejects.toThrow('Resource was not found.')
 
     vi.mocked(deps.authorization.listEnabledResources).mockResolvedValue([])
     await expect(getAgentResourceServer(deps, 'missing', principal(), 'https://auth.example.com')).rejects.toThrow(
@@ -4007,26 +3904,14 @@ describe('external API resource authorization', () => {
     vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(organizationIdentity)
 
     await expect(
-      listAgentAuthorizationDetailCatalog(
-        deps,
-        builtIn.id,
-        principal(),
-        { limit: 10, offset: 0 },
-        'https://auth.example.com',
-      ),
+      listAgentAuthorizationDetailCatalog(deps, builtIn.id, principal(), { limit: 10, offset: 0 }),
     ).resolves.toMatchObject({
       items: [{ name: 'Organization Display', metadata: { authority: 'organization', organizationId: 'org-1' } }],
     })
 
     vi.mocked(deps.authorization.findOrganization).mockResolvedValue(null)
     await expect(
-      listAgentAuthorizationDetailCatalog(
-        deps,
-        builtIn.id,
-        principal(),
-        { limit: 10, offset: 0 },
-        'https://auth.example.com',
-      ),
+      listAgentAuthorizationDetailCatalog(deps, builtIn.id, principal(), { limit: 10, offset: 0 }),
     ).resolves.toMatchObject({ items: [], pagination: { total: 0 } })
   })
 
@@ -4137,7 +4022,7 @@ describe('external API resource authorization', () => {
     ).resolves.toMatchObject({
       accessToken: 'credential-token',
       resourceIndicator: builtIn.resourceUrl,
-      resource: { href: expect.stringContaining(`/resource-servers/${builtIn.id}/resources/`) },
+      authorizationDetails: [authority],
     })
 
     vi.mocked(deps.externalResources.findAccessRequest).mockResolvedValue({
@@ -4181,18 +4066,14 @@ describe('external API resource authorization', () => {
     ])
     vi.mocked(deps.connectors.findById).mockResolvedValue(connectorRecord())
 
-    const catalog = await listAgentAuthorizationDetailCatalog(
-      deps,
-      external.id,
-      principal(),
-      { limit: 10, offset: 0 },
-      'https://auth.example.com',
-    )
+    const catalog = await listAgentAuthorizationDetailCatalog(deps, external.id, principal(), { limit: 10, offset: 0 })
     expect(catalog.items[0]).toMatchObject({
+      authorizationDetail: detail,
       name: 'project-1',
       metadata: { project_id: 'project-1' },
-      accountAuthorization: { status: 'authorized' },
-      agentAuthorization: { authorizedScopes: ['projects:read'], requestableScopes: ['projects:write'] },
+      accountAuthorizationStatus: 'authorized',
+      authorizedScopes: ['projects:read'],
+      requestableScopes: ['projects:write'],
     })
     expect(catalog.pagination.total).toBe(3)
     expect(catalog.items[1]).toMatchObject({ name: '2', metadata: { project_id: '2' } })
@@ -4205,7 +4086,7 @@ describe('external API resource authorization', () => {
       principal(),
       'https://auth.example.com',
     )
-    expect(created.target).toEqual({ type: 'resource', resource: { href: catalog.items[0]!.links.self } })
+    expect(created).toMatchObject({ resourceServerId: external.id, authorizationDetails: [detail] })
   })
 
   it('renders Realmroot authority approval and credential offers', async () => {
@@ -4247,7 +4128,7 @@ describe('external API resource authorization', () => {
 
     await expect(getAccountAccessRequestByToken(deps, 'approval-token', 'user-1')).resolves.toMatchObject({
       requiresAccountConnection: false,
-      resource: { name: 'Organization Display', type: 'realmroot_authority' },
+      authorizationDetail: { name: 'Organization Display' },
     })
     await expect(getControllerAccessRequestByToken(deps, 'approval-token', 'user-1')).resolves.toMatchObject({
       id: approved.id,
@@ -4272,7 +4153,7 @@ describe('external API resource authorization', () => {
     vi.mocked(deps.externalResources.findAccessRequestByApprovalTokenHash).mockResolvedValue(serviceRequest)
     vi.mocked(deps.externalResources.findAccessRequest).mockResolvedValue(serviceRequest)
     await expect(getAccountAccessRequestByToken(deps, 'approval-token', 'user-1')).resolves.toMatchObject({
-      resource: { type: 'service' },
+      authorizationDetail: null,
     })
   })
 
@@ -4312,7 +4193,7 @@ describe('external API resource authorization', () => {
         principal(),
         'https://auth.example.com',
       ),
-    ).rejects.toThrow('Select exactly one Realmroot authority Resource.')
+    ).rejects.toThrow('Select exactly one Realmroot authority detail.')
 
     const externalDeps = createTestDeps()
     authorizationDeps(externalDeps)
@@ -4405,27 +4286,18 @@ describe('external API resource authorization', () => {
       disabled: false,
     } as never)
     vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
-    const authorities = await listAgentAuthorizationDetailCatalog(
-      deps,
-      builtIn.id,
-      principal(),
-      { limit: 10, offset: 0 },
-      'https://auth.example.com',
-    )
+    const authorities = await listAgentAuthorizationDetailCatalog(deps, builtIn.id, principal(), {
+      limit: 10,
+      offset: 0,
+    })
     expect(authorities.items).toHaveLength(1)
 
     const native = nativeResource()
     vi.mocked(deps.authorization.findResource).mockResolvedValue(native)
     mockResourceOpenApi(deps, native.resourceUrl)
     await expect(
-      listAgentAuthorizationDetailCatalog(
-        deps,
-        native.id,
-        principal(),
-        { limit: 10, offset: 1 },
-        'https://auth.example.com',
-      ),
-    ).resolves.toMatchObject({ items: [], pagination: { total: 1 } })
+      listAgentAuthorizationDetailCatalog(deps, native.id, principal(), { limit: 10, offset: 1 }),
+    ).resolves.toMatchObject({ items: [], pagination: { total: 0 } })
   })
 
   it('resolves approval Resources through a paginated external catalog', async () => {
@@ -4466,7 +4338,7 @@ describe('external API resource authorization', () => {
     })
 
     await expect(getAccountAccessRequestByToken(deps, 'approval-token', 'user-1')).resolves.toMatchObject({
-      resource: {
+      authorizationDetail: {
         name: 'Project Two',
         description: 'Second project',
         metadata: { project: '2' },
@@ -4477,14 +4349,14 @@ describe('external API resource authorization', () => {
     vi.mocked(deps.externalResources.findAccessRequest).mockResolvedValue(fallbackDisplay)
     vi.mocked(deps.externalResources.findAccessRequestByApprovalTokenHash).mockResolvedValue(fallbackDisplay)
     await expect(getAccountAccessRequestByToken(deps, 'approval-token', 'user-1')).resolves.toMatchObject({
-      resource: { name: 'Project One', description: null, metadata: {} },
+      authorizationDetail: { name: 'Project One', description: null, metadata: {} },
     })
 
     const missing = { ...pending, authorizationDetails: [{ ...requested, project_id: 'missing' }] }
     vi.mocked(deps.externalResources.findAccessRequest).mockResolvedValue(missing)
     vi.mocked(deps.externalResources.findAccessRequestByApprovalTokenHash).mockResolvedValue(missing)
     await expect(getAccountAccessRequestByToken(deps, 'approval-token', 'user-1')).rejects.toThrow(
-      'Resource was not found.',
+      'Authorization detail was not found.',
     )
   })
 
@@ -4541,14 +4413,8 @@ describe('external API resource authorization', () => {
     vi.mocked(deps.externalResources.findConnectionByOwnerResource).mockResolvedValue(connectionRecord())
 
     await expect(
-      listAgentAuthorizationDetailCatalog(
-        deps,
-        resource().id,
-        principal(),
-        { limit: 10, offset: 1 },
-        'https://auth.example.com',
-      ),
-    ).resolves.toMatchObject({ items: [], pagination: { total: 1 } })
+      listAgentAuthorizationDetailCatalog(deps, resource().id, principal(), { limit: 10, offset: 1 }),
+    ).resolves.toMatchObject({ items: [], pagination: { total: 0 } })
 
     await createAgentResourceConnectionRequest(
       deps,
@@ -4701,28 +4567,28 @@ describe('external API resource authorization', () => {
     ).rejects.toThrow('mismatched pagination metadata')
   })
 
-  it('rejects duplicate Resource references and propagates non-OAuth connection failures', async () => {
+  it('rejects duplicate authorization details and propagates non-OAuth connection failures', async () => {
     const duplicateDeps = createTestDeps()
     authorizationDeps(duplicateDeps)
     vi.mocked(duplicateDeps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
     vi.mocked(duplicateDeps.externalResources.findConnectionByOwnerResource).mockResolvedValue(connectionRecord())
-    const service = `https://auth.example.com/api/resource-servers/${resource().id}/resources/service`
+    const detail = { type: 'project_access', project_id: 'project-1' }
     await expect(
       createAgentResourceConnectionRequest(
         duplicateDeps,
         resource().id,
-        { scopes: ['projects:read'], resources: [{ href: service }, { href: service }] },
+        { scopes: ['projects:read'], authorizationDetails: [detail, detail] },
         principal(),
         'https://auth.example.com',
       ),
-    ).rejects.toThrow('Resources must be unique.')
+    ).rejects.toThrow('Authorization details contain duplicate entries.')
     await expect(
       createAgentResourceConnectionRequest(
         duplicateDeps,
         resource().id,
         {
           scopes: ['projects:read'],
-          resources: [{ href: `https://realmroot.invalid/api/resource-servers/${resource().id}/resources/service` }],
+          authorizationDetails: [],
         },
         principal(),
         '',
@@ -4823,11 +4689,7 @@ describe('external API resource authorization', () => {
           id: 'request-2',
           requiresAccountConnection: true,
           agent: { id: 'identity-1', name: 'Project Agent' },
-          resource: {
-            id: 'service',
-            name: 'Projects API',
-            authorizationDetailTemplates: resource().authorizationDetails,
-          },
+          authorizationDetail: null,
         },
       ],
       pagination: { total: 2 },
@@ -5104,15 +4966,9 @@ describe('external API resource authorization', () => {
       },
     })
     await expect(
-      listAgentAuthorizationDetailCatalog(
-        deps,
-        native.id,
-        principal(),
-        { limit: 10, offset: 0 },
-        'https://auth.example.com',
-      ),
+      listAgentAuthorizationDetailCatalog(deps, native.id, principal(), { limit: 10, offset: 0 }),
     ).resolves.toMatchObject({
-      items: [{ id: expect.stringMatching(/^resource_/), type: 'github_installation' }],
+      items: [{ authorizationDetail: { type: 'github_installation' } }],
     })
     vi.mocked(deps.externalResources.findAccessRequestByApprovalTokenHash).mockResolvedValue({
       ...requestRecord(),

@@ -75,7 +75,7 @@ func TestAuthHookEnrollsOnceThenSignsOriginalRequest(t *testing.T) {
 			}
 			if request.Form.Get("grant_type") != "urn:ietf:params:oauth:grant-type:jwt-bearer" ||
 				request.Form.Get("resource") != "https://auth.example.com/api" ||
-				request.Form.Get("scope") != "agent:read resource-servers:read resources:read connection-requests:read connection-requests:write access-requests:read access-requests:write" ||
+				request.Form.Get("scope") != "agent:read resource-servers:read authorization-details:read connection-requests:read connection-requests:write access-requests:read access-requests:write" ||
 				request.Header.Get("DPoP") == "" {
 				t.Fatalf("token request form = %#v", request.Form)
 			}
@@ -176,11 +176,11 @@ func TestRegisterAgentSharesHostAcrossRuntimes(t *testing.T) {
 
 func testCredential(_ *testing.T, _ string, _ time.Time) dpopCredential {
 	return dpopCredential{
-		ResourceHref:       "https://auth.example.com/api/resource-servers/zpan/resources/workspace-1",
-		ResourceIndicator:  "https://api.example.com/v1",
-		CredentialEndpoint: "https://auth.example.com/api/access-requests/request-1/credentials",
-		ProofTarget:        "https://api.example.com/oauth/token",
-		Scopes:             []string{"files:read"},
+		ResourceIndicator:    "https://api.example.com/v1",
+		AuthorizationDetails: []map[string]any{{"type": "workspace", "identifier": "workspace-1"}},
+		CredentialEndpoint:   "https://auth.example.com/api/access-requests/request-1/credentials",
+		ProofTarget:          "https://api.example.com/oauth/token",
+		Scopes:               []string{"files:read"},
 	}
 }
 
@@ -202,10 +202,13 @@ func newCredentialState(t *testing.T, credential dpopCredential) *memoryStateSto
 		AgentPrivateKey: encodePrivateKey(agentPrivate),
 		Identity:        &stableIdentity{ID: "identity-1", Issuer: "https://auth.example.com/api/auth", Subject: "agt_123"},
 		CredentialSources: map[string]credentialSource{
-			testCredentialSourceReference: {ResourceHref: credential.ResourceHref, Offers: []dpopCredential{credential}},
+			testCredentialSourceReference: {
+				ResourceIndicator: credential.ResourceIndicator, AuthorizationDetails: credential.AuthorizationDetails,
+				Offers: []dpopCredential{credential},
+			},
 		},
 		ProtocolCredential: &dpopCredential{
-			ResourceHref: "https://auth.example.com/api", ResourceIndicator: "https://auth.example.com/api",
+			ResourceIndicator:  "https://auth.example.com/api",
 			CredentialEndpoint: "https://auth.example.com/api/auth/oauth2/token",
 			ProofTarget:        "https://auth.example.com/api/auth/oauth2/token", PrivateKey: protocolKey,
 			AccessToken: "protocol-token", ExpiresAt: &protocolExpiresAt,
@@ -221,7 +224,7 @@ func testAgentConfiguration() map[string]any {
 		"agent_endpoint":            "https://auth.example.com/api/agent",
 		"agent_token_endpoint":      "https://auth.example.com/api/auth/oauth2/token",
 		"agent_bootstrap_scopes_supported": []string{
-			"agent:read", "resource-servers:read", "resources:read", "connection-requests:read",
+			"agent:read", "resource-servers:read", "authorization-details:read", "connection-requests:read",
 			"connection-requests:write", "access-requests:read", "access-requests:write",
 		},
 		"endpoints": map[string]any{

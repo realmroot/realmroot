@@ -85,6 +85,7 @@ func TestProfiledResponseAcceptsCredentialOfferWithoutGrantKnowledge(t *testing.
 	t.Run("[spec: agent-identity/restish-generic-resource-credential-offer]", func(t *testing.T) {
 		t.Log("[spec: agent-identity/restish-generic-resource-credential-offer]")
 		credential := testCredential(t, "old", time.Now().Add(-time.Minute))
+		credential.AuthorizationDetails = nil
 		states := newCredentialState(t, credential)
 		states.state.CredentialSources = nil
 		browser := &browserRecorder{}
@@ -104,6 +105,10 @@ func TestProfiledResponseAcceptsCredentialOfferWithoutGrantKnowledge(t *testing.
 		body := output.Response.Body.(map[string]any)
 		if body["status"] != "ready" {
 			t.Fatalf("safe result = %#v", body)
+		}
+		authorizationDetails, ok := body["authorizationDetails"].([]map[string]any)
+		if !ok || len(authorizationDetails) != 0 {
+			t.Fatalf("authorization details = %#v", body["authorizationDetails"])
 		}
 		source, ok := body["credentialSource"].(map[string]any)
 		if !ok || source["name"] != "realmroot" || source["reference"] != testCredentialSourceReference {
@@ -226,7 +231,7 @@ func pendingAccessInteraction(origin string) map[string]any {
 func completedInteraction() map[string]any {
 	return map[string]any{
 		"id": "request-1", "agentId": "identity-1", "status": "connected", "scopes": []string{"files:read"},
-		"resourceServerId": "zpan", "resources": []map[string]any{{"href": "https://auth.example.com/resources/workspace-1"}},
+		"resourceServerId": "zpan", "authorizationDetails": []map[string]any{{"type": "workspace", "identifier": "workspace-1"}},
 		"interaction": map[string]any{"type": "user-approval", "status": "completed", "url": nil, "expiresAt": nil},
 		"links":       map[string]any{"self": "https://auth.example.com/api/connection-requests/request-1"},
 	}
@@ -236,8 +241,8 @@ func completedInteractionWithOffer(credential dpopCredential) map[string]any {
 	body := completedInteraction()
 	body["links"] = map[string]any{"self": "https://auth.example.com/api/access-requests/request-1"}
 	body["credentialOffer"] = map[string]any{
-		"type": "dpop", "resource": map[string]any{"href": credential.ResourceHref},
-		"resourceIndicator": credential.ResourceIndicator, "endpoint": credential.CredentialEndpoint,
+		"type": "dpop", "resourceIndicator": credential.ResourceIndicator,
+		"authorizationDetails": credential.AuthorizationDetails, "endpoint": credential.CredentialEndpoint,
 		"proof": map[string]any{"algorithm": "ES256", "method": "POST", "uri": credential.ProofTarget},
 	}
 	return body

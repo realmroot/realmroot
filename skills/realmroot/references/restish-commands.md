@@ -4,12 +4,12 @@ Use this reference after completing identity setup. Realmroot exposes only the
 resources an Agent needs to choose and act:
 
 - a **Resource Server** is a registered service;
-- a **Resource** is a provider-owned object or context offered by that service;
+- an **authorization detail** is an RFC 9396 value selecting provider-owned context;
 - a **connection** is whether the controller has linked the required account;
 - **scopes** are the authority the Agent has or may request.
 
-The Agent-facing model stops at Resource Servers, Resources, connections, and
-scopes. Realmroot resolves grants, authorization details, token endpoints, and
+The Agent-facing model stops at Resource Servers, authorization details,
+connections, and scopes. Realmroot resolves Permissions, token endpoints, and
 credentials.
 
 ## 1. Discover Resource Servers
@@ -32,16 +32,15 @@ The selected representation supplies all navigation values:
 - `connection.status` is `connected`, `not_connected`, or `not_required`;
 - `connection.authorizedScopes` is the authority already held by the linked
   account;
-- `links.resources` is the provider-owned Resource collection;
+- `links.authorizationDetails` is the provider authorization-detail collection;
 - `links.connectionRequests` is present when account connection is supported.
 
 Use the registered Realmroot API short name for Realmroot requests so Restish
-applies the selected profile and plugin hooks. Keep returned absolute hrefs only
-when a request schema requires a canonical href:
+applies the selected profile and plugin hooks:
 
 ```bash
 restish get "$API_NAME/resource-servers/$RESOURCE_SERVER_ID" --rsh-print b -o json
-restish get "$API_NAME/resource-servers/$RESOURCE_SERVER_ID/resources?limit=100&offset=0" --rsh-print b -o json
+restish get "$API_NAME/resource-servers/$RESOURCE_SERVER_ID/authorization-details?limit=100&offset=0" --rsh-print b -o json
 ```
 
 ## 2. Establish Or Expand The Connection
@@ -62,47 +61,46 @@ The plugin recognizes Realmroot's generic interactive-resource profile, opens
 the controller URL, follows `links.self`, and waits until the connection is
 established, denied, or expired.
 
-To expand an existing connection for a Resource whose
-`accountAuthorization.status` is `authorization_required`, repeat the same
-command with that Resource href:
+To expand an existing connection for an item whose
+`accountAuthorizationStatus` is `authorization_required`, repeat the same
+command with its exact `authorizationDetail` value:
 
 ```bash
 restish "$API_NAME" resource-servers connect "$RESOURCE_SERVER_ID" --rsh-validate --rsh-print b -o json <<JSON
 {
-  "resources": [{"href": "$RESOURCE_HREF"}],
+  "authorizationDetails": [$AUTHORIZATION_DETAIL_JSON],
   "scopes": ["$REQUIRED_SCOPE"],
   "reason": "Authorize the selected resource for the controller"
 }
 JSON
 ```
 
-After completion, read the Resource Server and its Resources again and use the
+After completion, read the Resource Server and its authorization details again and use the
 returned state.
 
-## 3. Discover Provider-Owned Resources
+## 3. Discover Provider Authorization Details
 
 List all pages for the selected Resource Server:
 
 ```bash
-restish get "$API_NAME/resource-servers/$RESOURCE_SERVER_ID/resources?limit=100&offset=0" --rsh-print b -o json
+restish get "$API_NAME/resource-servers/$RESOURCE_SERVER_ID/authorization-details?limit=100&offset=0" --rsh-print b -o json
 ```
 
-Each Resource supplies optional provider-owned context for discovery and
-account connection:
+Each item supplies optional provider-owned context for discovery and account
+connection:
 
-- `links.self`: the canonical href used for direct reads and resource-specific
-  account connection requests;
+- `authorizationDetail`: the exact RFC 9396 value copied into connection and
+  access requests;
 - `name`, `description`, and `metadata`: selection information;
-- `accountAuthorization.status`: whether the controller's account covers it;
-- `agentAuthorization.authorizedScopes`: scopes already approved for this
-  Agent;
-- `agentAuthorization.requestableScopes`: additional scopes the Agent may ask
+- `accountAuthorizationStatus`: whether the controller's account covers it;
+- `authorizedScopes`: scopes already approved for this Agent;
+- `requestableScopes`: additional scopes the Agent may ask
   the controller to approve.
 
-Select a Resource when the task or account-connection flow requires that
-provider-owned context. Access Requests address the Resource Server itself;
-they do not accept a Resource href. A native service normally exposes one
-`service` Resource.
+Select an authorization detail when the task or account-connection flow
+requires provider-owned context. Access Requests address the Resource Server
+and carry the selected value directly. An unconstrained service returns an
+empty collection and uses `authorizationDetails: []`.
 
 ## 4. Inspect And Connect The Target API
 
@@ -145,7 +143,7 @@ shown by `restish api auth inspect "$TARGET_API"`.
 ## 5. Request Exact Resource Access
 
 Before invoking the target, request one short-lived credential for the selected
-Resource and the complete current task. Include the union of scopes required by
+Resource Server authorization context and the complete current task. Include the union of scopes required by
 the task's known operations, but no unrelated scopes. This is task-level least
 privilege, not one access request per HTTP operation. Derive every scope from
 the selected Resource Server's published contract; do not assume scope names
@@ -156,14 +154,15 @@ restish "$API_NAME" agent access --rsh-validate --rsh-print b -o json <<JSON
 {
   "resourceServerId": "$RESOURCE_SERVER_ID",
   "scopes": ["$REQUIRED_SCOPE"],
+  "authorizationDetails": [$AUTHORIZATION_DETAIL_JSON],
   "reason": "Perform the requested operation on the selected Resource Server"
 }
 JSON
 ```
 
 Send `authorizationDetails` only when the selected operation requires an
-explicit target constraint and its values come from live Resource Server
-metadata. Omit it for an unconstrained Resource Server scope request; Realmroot
+explicit target constraint and copy its values from the live authorization-detail
+collection. Omit it for an unconstrained Resource Server scope request; Realmroot
 defaults it to an empty array. Never put a Resource URL or href in the Access
 Request representation.
 
@@ -176,8 +175,10 @@ reference Restish needs:
 ```json
 {
   "status": "ready",
-  "resource": {"href": "https://id.realmroot.dev/api/resource-servers/service-id/resources/resource-id"},
   "resourceIndicator": "https://api.example.com",
+  "authorizationDetails": [
+    {"type": "https://api.example.com/authorization-details/workspace", "identifier": "workspace-1"}
+  ],
   "scopes": ["<required-scope>"],
   "credentialSource": {
     "name": "realmroot",
@@ -213,8 +214,8 @@ grant to the Agent.
 
 If the access command is interrupted, repeat the same request; Realmroot
 resumes pending work or reuses matching approved authority. Reuse the Restish
-credential binding for that Resource and scope set. Request access again when
-switching Resources, when Realmroot rejects renewal, or when the task needs
+credential binding for that authorization context and scope set. Request access again when
+switching authorization details, when Realmroot rejects renewal, or when the task needs
 additional scopes.
 
 ## 6. Invoke The Target

@@ -82,12 +82,12 @@ func TestCredentialSourceIssuesTokenForRestishOwnedProof(t *testing.T) {
 			t.Fatalf("proof = %#v", body.Proof)
 		}
 		return jsonResponse(http.StatusOK, map[string]any{
-			"accessToken":       "target-token",
-			"tokenType":         "DPoP",
-			"expiresAt":         expiresAt,
-			"resourceIndicator": offer.ResourceIndicator,
-			"scopes":            offer.Scopes,
-			"resource":          map[string]any{"href": offer.ResourceHref},
+			"accessToken":          "target-token",
+			"tokenType":            "DPoP",
+			"expiresAt":            expiresAt,
+			"resourceIndicator":    offer.ResourceIndicator,
+			"authorizationDetails": offer.AuthorizationDetails,
+			"scopes":               offer.Scopes,
 		}), nil
 	})
 
@@ -141,12 +141,12 @@ func TestCredentialSourceReturnsNextDPoPNonceWithIssuedCredential(t *testing.T) 
 	expiresAt := time.Now().Add(time.Minute)
 	client := roundTripFunc(func(*http.Request) (*http.Response, error) {
 		response := jsonResponse(http.StatusCreated, map[string]any{
-			"accessToken":       "target-token",
-			"tokenType":         "DPoP",
-			"expiresAt":         expiresAt,
-			"resourceIndicator": offer.ResourceIndicator,
-			"scopes":            offer.Scopes,
-			"resource":          map[string]any{"href": offer.ResourceHref},
+			"accessToken":          "target-token",
+			"tokenType":            "DPoP",
+			"expiresAt":            expiresAt,
+			"resourceIndicator":    offer.ResourceIndicator,
+			"authorizationDetails": offer.AuthorizationDetails,
+			"scopes":               offer.Scopes,
 		})
 		response.Header.Set("DPoP-Nonce", "next-nonce")
 		return response, nil

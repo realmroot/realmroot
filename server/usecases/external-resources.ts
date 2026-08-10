@@ -987,39 +987,24 @@ export async function getAgentResourceServer(
   )
 }
 
-export async function listAgentResourceServerResources(
+export async function listAgentResourceServerAuthorizationDetails(
   deps: Deps,
   resourceServerId: string,
   principal: AgentResourcePrincipal,
   pagination: PaginationInput,
-  apiOrigin: string,
 ) {
   const identity = await requireActiveIdentityAndBinding(deps, principal)
   const resource = await requireEnabledResource(deps, resourceServerId)
   await requireAgentResourceVisibility(deps, resource, identity.identity)
-  const origin = apiOrigin.replace(/\/$/, '')
   if (isRealmrootResourceServer(resource.id)) {
-    const items = await realmrootAuthorityResources(deps, identity, principal.identityId, resource, origin)
+    const items = await realmrootAuthorityDetailsCatalog(deps, identity, principal.identityId, resource)
     return {
       items: items.slice(pagination.offset, pagination.offset + pagination.limit),
       pagination: paginationMetadata({ ...pagination, total: items.length }),
     }
   }
   if (!requiresAccountConnection(resource)) {
-    const item = await toResourceServerResource(
-      resourceServerId,
-      null,
-      {
-        label: resource.name,
-        description: resource.description,
-        metadata: {},
-        connectionStatus: 'not_required',
-        authorizedScopes: await activeResourceScopes(deps, principal.identityId, resourceServerId, []),
-        requestableScopes: discoverAgentResourceScopes(resource)?.map((scope) => scope.value) ?? [],
-      },
-      origin,
-    )
-    return { items: pagination.offset === 0 ? [item] : [], pagination: paginationMetadata({ ...pagination, total: 1 }) }
+    return { items: [], pagination: paginationMetadata({ ...pagination, total: 0 }) }
   }
   const connection = await deps.externalResources.findConnectionByOwnerResource({
     resourceId: resourceServerId,
@@ -1031,70 +1016,13 @@ export async function listAgentResourceServerResources(
   }
   const fallbackAuthorization = await serviceResourceFallbackAuthorization(deps, resource, connection)
   if (fallbackAuthorization) {
-    const item = await toResourceServerResource(
-      resourceServerId,
-      null,
-      {
-        label: resource.name,
-        description: resource.description,
-        metadata: {},
-        connectionStatus: 'authorized',
-        authorizedScopes: await activeResourceScopes(deps, principal.identityId, resourceServerId, []),
-        requestableScopes: connection.grantedScopes.filter(
-          (scope) =>
-            scope !== 'openid' &&
-            scope !== 'offline_access' &&
-            scope !== fallbackAuthorization.authorizationDetailsCatalogScope,
-        ),
-      },
-      origin,
-    )
-    return { items: pagination.offset === 0 ? [item] : [], pagination: paginationMetadata({ ...pagination, total: 1 }) }
+    return { items: [], pagination: paginationMetadata({ ...pagination, total: 0 }) }
   }
   const catalog = await readResourceCatalog(deps, resource, connection, principal.identityId, pagination)
   return {
-    items: await Promise.all(
-      catalog.items.map((item) =>
-        toResourceServerResource(
-          resourceServerId,
-          item.authorizationDetail,
-          {
-            label: item.display.label,
-            description: item.display.description ?? null,
-            metadata: item.display.metadata ?? {},
-            connectionStatus: item.connectionStatus,
-            authorizedScopes: item.authorizedScopes,
-            requestableScopes: item.requestableScopes,
-          },
-          origin,
-        ),
-      ),
-    ),
+    items: catalog.items.map(toResourceServerAuthorizationDetail),
     pagination: catalog.pagination,
   }
-}
-
-export async function getAgentResourceServerResource(
-  deps: Deps,
-  resourceServerId: string,
-  resourceId: string,
-  principal: AgentResourcePrincipal,
-  apiOrigin: string,
-) {
-  for (let offset = 0; ; ) {
-    const page = await listAgentResourceServerResources(
-      deps,
-      resourceServerId,
-      principal,
-      { limit: 100, offset },
-      apiOrigin,
-    )
-    const resource = page.items.find((candidate) => candidate.id === resourceId)
-    if (resource) return resource
-    if (!page.pagination.hasMore || page.pagination.nextOffset === null) break
-    offset = page.pagination.nextOffset
-  }
-  throw notFound('Resource was not found.')
 }
 
 export async function createAgentConnectionRequest(
@@ -1115,13 +1043,12 @@ export async function createAgentConnectionRequest(
     ownerUserId: identity.identity.ownerUserId,
     ownerOrganizationId: identity.identity.ownerOrganizationId,
   })
-  const authorizationDetails = await resolveResourceReferences(
+  const authorizationDetails = await resolveRequestedAuthorizationDetails(
     deps,
     resource,
     connection?.status === 'active' ? connection : null,
-    input.resources ?? [],
+    input.authorizationDetails ?? [],
     identity,
-    apiOrigin,
   )
   const now = new Date()
   const expiresAt = new Date(now.getTime() + 10 * 60 * 1000)
@@ -1445,41 +1372,30 @@ async function resolveAccessRequestApproval(deps: Deps, request: AccessRequest):
   ])
   if (!identity) throw notFound('Agent identity was not found.')
   if (!resource) throw notFound('API resource was not found.')
-  const targetResource = await resolveApprovalResource(deps, resource, record)
+  const authorizationDetail = await resolveApprovalAuthorizationDetail(deps, resource, record)
   return {
     ...request,
     authorizationDetails: record.authorizationDetails,
     requiresAccountConnection: requiresAccountConnection(resource),
     agent: { id: identity.identity.id, name: identity.identity.name },
     resourceServer: { id: resource.id, name: resource.name },
-    resource: {
-      ...targetResource,
-      authorizationDetailTemplates: resource.authorizationDetails,
-    },
+    authorizationDetail: authorizationDetail
+      ? { ...authorizationDetail, authorizationDetailTemplates: resource.authorizationDetails }
+      : null,
   }
 }
 
-async function resolveApprovalResource(
+async function resolveApprovalAuthorizationDetail(
   deps: Deps,
   resourceServer: NonNullable<Awaited<ReturnType<Deps['authorization']['findResource']>>>,
   request: AgentAccessRequestRecord,
 ) {
   const detail = request.authorizationDetails[0]
-  if (!detail) {
-    return {
-      id: 'service',
-      name: resourceServer.name,
-      type: 'service',
-      description: resourceServer.description,
-      metadata: {},
-    }
-  }
+  if (!detail) return null
   if (isRealmrootResourceServer(resourceServer.id)) {
     const display = await realmrootAuthorityDisplay(deps, detail)
     return {
-      id: resourceIdentifier(detail),
       name: display.label,
-      type: detail.type,
       description: display.description,
       metadata: display.metadata,
     }
@@ -1487,18 +1403,15 @@ async function resolveApprovalResource(
   if (!request.connectionId) throw notFound('Resource account connection was not found.')
   const connection = await deps.externalResources.findConnection(request.connectionId)
   if (!connection || connection.status !== 'active') throw notFound('Active resource account connection was not found.')
-  const targetId = resourceIdentifier(detail)
   for (let offset = 0; ; ) {
     const catalog = await readResourceCatalog(deps, resourceServer, connection, request.agentIdentityId, {
       limit: 100,
       offset,
     })
-    const match = catalog.items.find((item) => resourceIdentifier(item.authorizationDetail) === targetId)
+    const match = catalog.items.find((item) => exactAuthorizationDetails([item.authorizationDetail], [detail]))
     if (match) {
       return {
-        id: targetId,
         name: match.display.label,
-        type: detail.type,
         description: match.display.description ?? null,
         metadata: match.display.metadata ?? {},
       }
@@ -1506,7 +1419,7 @@ async function resolveApprovalResource(
     if (!catalog.pagination.hasMore || catalog.pagination.nextOffset === null) break
     offset = catalog.pagination.nextOffset
   }
-  throw notFound('Resource was not found.')
+  throw notFound('Authorization detail was not found.')
 }
 
 export async function getControllerAccessRequestByToken(deps: Deps, token: string, actorUserId: string) {
@@ -1921,17 +1834,9 @@ export async function createAccessRequestCredential(
     throw forbidden('Approved Resource access is required.')
   }
   const token = await issueTargetAccessToken(deps, request.id, dpopProof, credentialRequestUrl, principal, signer)
-  const origin = new URL(credentialRequestUrl).origin
   return {
     ...token,
     resourceIndicator: token.resourceUrl,
-    resource: {
-      href: resourceHref(
-        origin,
-        request.resourceId,
-        request.authorizationDetails[0] ? resourceIdentifier(request.authorizationDetails[0]) : 'service',
-      ),
-    },
   }
 }
 
@@ -2350,12 +2255,11 @@ async function activeResourceScopes(
   ].sort()
 }
 
-async function realmrootAuthorityResources(
+async function realmrootAuthorityDetailsCatalog(
   deps: Deps,
   identity: Awaited<ReturnType<typeof requireActiveIdentityAndBinding>>,
   agentIdentityId: string,
   resource: NonNullable<Awaited<ReturnType<Deps['authorization']['findResource']>>>,
-  apiOrigin: string,
 ) {
   const details = await realmrootAuthorityDetails(deps, identity)
   return Promise.all(
@@ -2367,17 +2271,13 @@ async function realmrootAuthorityResources(
         resource,
         detail,
       )
-      return toResourceServerResource(
-        resource.id,
-        detail,
-        {
-          ...display,
-          connectionStatus: 'not_required',
-          authorizedScopes: await activeResourceScopes(deps, agentIdentityId, resource.id, [detail]),
-          requestableScopes,
-        },
-        apiOrigin,
-      )
+      return toResourceServerAuthorizationDetail({
+        authorizationDetail: detail,
+        display,
+        connectionStatus: 'not_required',
+        authorizedScopes: await activeResourceScopes(deps, agentIdentityId, resource.id, [detail]),
+        requestableScopes,
+      })
     }),
   )
 }
@@ -2459,35 +2359,25 @@ async function realmrootAuthorityEffectiveScopes(
   return []
 }
 
-async function toResourceServerResource(
-  resourceServerId: string,
-  authorizationDetail: AuthorizationDetail | null,
-  input: {
+function toResourceServerAuthorizationDetail(input: {
+  authorizationDetail: AuthorizationDetail
+  display: {
     label: string
-    description: string | null
-    metadata: Record<string, string>
-    connectionStatus: 'authorized' | 'authorization_required' | 'not_required'
-    authorizedScopes: string[]
-    requestableScopes: string[]
-  },
-  apiOrigin: string,
-) {
-  const id = authorizationDetail ? resourceIdentifier(authorizationDetail) : 'service'
+    description?: string | null
+    metadata?: Record<string, string>
+  }
+  connectionStatus: 'authorized' | 'authorization_required' | 'not_required'
+  authorizedScopes: string[]
+  requestableScopes: string[]
+}) {
   return {
-    id,
-    type: authorizationDetail?.type ?? 'service',
-    name: input.label,
-    description: input.description,
-    metadata: input.metadata,
-    accountAuthorization: { status: input.connectionStatus },
-    agentAuthorization: {
-      authorizedScopes: input.authorizedScopes,
-      requestableScopes: input.requestableScopes.filter((scope) => !input.authorizedScopes.includes(scope)),
-    },
-    links: {
-      self: resourceHref(apiOrigin, resourceServerId, id),
-      accessRequests: `${apiOrigin.replace(/\/$/, '')}/api/agent/access-requests`,
-    },
+    authorizationDetail: input.authorizationDetail,
+    name: input.display.label,
+    description: input.display.description ?? null,
+    metadata: input.display.metadata ?? {},
+    accountAuthorizationStatus: input.connectionStatus,
+    authorizedScopes: input.authorizedScopes,
+    requestableScopes: input.requestableScopes.filter((scope) => !input.authorizedScopes.includes(scope)),
   }
 }
 
@@ -2514,58 +2404,60 @@ function toResourceServer(
     connection,
     links: {
       self,
-      resources: `${self}/resources`,
+      authorizationDetails: `${self}/authorization-details`,
       connectionRequests: requiresAccountConnection(resource) ? `${self}/connection-requests` : null,
     },
   }
 }
 
-async function resolveResourceReferences(
+async function resolveRequestedAuthorizationDetails(
   deps: Deps,
   resourceServer: NonNullable<Awaited<ReturnType<Deps['authorization']['findResource']>>>,
   connection: ProviderResourceAuthorizationRecord | null,
-  references: Array<{ href: string }>,
+  authorizationDetails: AuthorizationDetail[],
   identity: Awaited<ReturnType<typeof requireActiveIdentityAndBinding>>,
-  apiOrigin: string,
 ) {
-  if (references.length === 0) return []
-  const ids = references.map(({ href }) => parseResourceHref(href, resourceServer.id, apiOrigin))
-  if (new Set(ids).size !== ids.length) throw badRequest('Resources must be unique.')
+  if (authorizationDetails.length === 0) return []
+  if (hasDuplicateAuthorizationDetails(authorizationDetails)) {
+    throw invalidAuthorizationDetails('Authorization details contain duplicate entries.')
+  }
   if (!requiresAccountConnection(resourceServer)) {
     if (!isRealmrootResourceServer(resourceServer.id)) {
-      if (ids.length !== 1 || ids[0] !== 'service') throw notFound('Resource was not found.')
-      return []
+      throw invalidAuthorizationDetails('Native API resources do not accept authorization details.')
     }
-    const available = new Map(
-      (await realmrootAuthorityDetails(deps, identity)).map((detail) => [resourceIdentifier(detail), detail]),
-    )
-    return ids.map((id) => {
-      const detail = available.get(id)
-      if (!detail) throw notFound('Resource was not found.')
-      return detail
-    })
+    const available = await realmrootAuthorityDetails(deps, identity)
+    if (
+      !authorizationDetails.every((detail) =>
+        available.some((candidate) => exactAuthorizationDetails([candidate], [detail])),
+      )
+    ) {
+      throw invalidAuthorizationDetails('Authorization detail is not available to this Agent.')
+    }
+    return authorizationDetails
   }
-  if (!connection) throw badRequest('Connect the Resource Server before selecting Resources.')
+  if (!connection)
+    throw invalidAuthorizationDetails('Connect the Resource Server before selecting authorization details.')
   if (await serviceResourceFallbackAuthorization(deps, resourceServer, connection)) {
-    if (ids.length !== 1 || ids[0] !== 'service') throw notFound('Resource was not found.')
-    return []
+    throw invalidAuthorizationDetails('This Resource Server does not use authorization details.')
   }
-  const available = new Map<string, AuthorizationDetail>()
+  const available: AuthorizationDetail[] = []
   for (let offset = 0; ; ) {
     const catalog = await readResourceCatalog(deps, resourceServer, connection, identity.identity.id, {
       limit: 100,
       offset,
     })
-    for (const item of catalog.items)
-      available.set(resourceIdentifier(item.authorizationDetail), item.authorizationDetail)
+    for (const item of catalog.items) available.push(item.authorizationDetail)
     if (!catalog.pagination.hasMore || catalog.pagination.nextOffset === null) break
     offset = catalog.pagination.nextOffset
   }
-  return ids.map((id) => {
-    const detail = available.get(id)
-    if (!detail) throw notFound('Resource was not found.')
-    return detail
-  })
+  if (
+    !authorizationDetails.every((detail) =>
+      available.some((candidate) => exactAuthorizationDetails([candidate], [detail])),
+    )
+  ) {
+    throw invalidAuthorizationDetails('Authorization detail is not available through this Resource Server connection.')
+  }
+  return authorizationDetails
 }
 
 async function serviceResourceFallbackAuthorization(
@@ -2577,38 +2469,6 @@ async function serviceResourceFallbackAuthorization(
   const authorization = await externalOAuthAuthorization(deps, resource, connection.clientGeneration ?? 1)
   if (!authorization) return { authorizationDetailsCatalogScope: null }
   return authorization.authorizationDetailsCatalogEndpoint ? null : authorization
-}
-
-function parseResourceHref(href: string, resourceServerId: string, apiOrigin: string) {
-  const base = apiOrigin || 'https://realmroot.invalid'
-  let parsed: URL
-  try {
-    parsed = new URL(href, base)
-  } catch {
-    throw badRequest('Resource href is invalid.')
-  }
-  if (apiOrigin && parsed.origin !== new URL(apiOrigin).origin)
-    throw badRequest('Resource href belongs to another Realmroot issuer.')
-  const prefix = `/api/resource-servers/${encodeURIComponent(resourceServerId)}/resources/`
-  if (!parsed.pathname.startsWith(prefix))
-    throw badRequest('Resource href does not belong to the selected Resource Server.')
-  const id = decodeURIComponent(parsed.pathname.slice(prefix.length))
-  if (!id || id.includes('/')) throw badRequest('Resource href is invalid.')
-  return id
-}
-
-function resourceHref(apiOrigin: string, resourceServerId: string, resourceId: string) {
-  const origin = apiOrigin.replace(/\/$/, '')
-  return `${origin}/api/resource-servers/${encodeURIComponent(resourceServerId)}/resources/${encodeURIComponent(resourceId)}`
-}
-
-function resourceIdentifier(detail: AuthorizationDetail) {
-  let hash = 0xcbf29ce484222325n
-  for (const byte of new TextEncoder().encode(canonicalJson(detail))) {
-    hash ^= BigInt(byte)
-    hash = BigInt.asUintN(64, hash * 0x100000001b3n)
-  }
-  return `resource_${hash.toString(16).padStart(16, '0')}`
 }
 
 function authorizationDetailDisplay(detail: AuthorizationDetail) {
@@ -3128,7 +2988,7 @@ function assertRealmrootAuthoritySelection(authorizationDetails: AuthorizationDe
     !['organization', 'user'].includes(String(detail.authority)) ||
     typeof detail.id !== 'string'
   ) {
-    throw invalidAuthorizationDetails('Select exactly one Realmroot authority Resource.')
+    throw invalidAuthorizationDetails('Select exactly one Realmroot authority detail.')
   }
 }
 
@@ -3622,9 +3482,7 @@ function toResourceConnectionRequest(
     id: request.id,
     agentId: request.agentIdentityId,
     resourceServerId: request.resourceId,
-    resources: request.authorizationDetails.map((detail) => ({
-      href: resourceHref(origin, request.resourceId, resourceIdentifier(detail)),
-    })),
+    authorizationDetails: request.authorizationDetails,
     scopes: request.scopes,
     reason: request.reason,
     status,
@@ -3668,8 +3526,6 @@ function toAccessRequest(
   apiOrigin = '',
 ): AccessRequest {
   const origin = apiOrigin.replace(/\/$/, '')
-  const resourceId = request.authorizationDetails[0] ? resourceIdentifier(request.authorizationDetails[0]) : 'service'
-  const resource = { href: resourceHref(origin, request.resourceId, resourceId) }
   const interactionStatus =
     request.status === 'pending'
       ? 'pending'
@@ -3682,10 +3538,8 @@ function toAccessRequest(
   return {
     id: request.id,
     agentId: request.agentIdentityId,
-    target: {
-      type: 'resource',
-      resource,
-    },
+    resourceServerId: request.resourceId,
+    authorizationDetails: request.authorizationDetails,
     scopes: request.scopes,
     reason: request.reason,
     status: request.status,
@@ -3736,8 +3590,8 @@ async function agentAccessRequestRepresentation(
     ...representation,
     credentialOffer: {
       type: 'dpop',
-      resource: representation.target.type === 'resource' ? representation.target.resource : { href: '' },
       resourceIndicator: resourceServer.resourceUrl,
+      authorizationDetails: request.authorizationDetails,
       endpoint: credentials,
       proof: {
         algorithm: 'ES256',

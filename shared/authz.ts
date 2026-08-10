@@ -101,7 +101,7 @@ export function requiredResourceScope(method: string, resource: ProtectedResourc
 export const agentBootstrapScopes = [
   'agent:read',
   'resource-servers:read',
-  'resources:read',
+  'authorization-details:read',
   'connection-requests:read',
   'connection-requests:write',
   'access-requests:read',

@@ -16,8 +16,7 @@ import {
   createAgentConnectionRequest,
   getAccessRequest,
   getAgentConnectionRequest,
-  getAgentResourceServerResource,
-  listAgentResourceServerResources,
+  listAgentResourceServerAuthorizationDetails,
 } from '@server/usecases/external-resources'
 import {
   accessRequestSchema,
@@ -31,8 +30,7 @@ import {
   credentialOfferProfile,
   interactiveResourceProfile,
   resourceConnectionRequestSchema,
-  resourceServerResourceSchema,
-  resourceServerResourcesResponseSchema,
+  resourceServerAuthorizationDetailsResponseSchema,
   targetCredentialProofSchema,
   targetTokenSchema,
 } from '@shared/api/agent-api'
@@ -136,33 +134,16 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
     )
   })
 
-  app.get('/resource-servers/:resourceServerId/resources', async (c) => {
-    requireAgentScope(c, 'resources:read')
+  app.get('/resource-servers/:resourceServerId/authorization-details', async (c) => {
+    requireAgentScope(c, 'authorization-details:read')
     const principal = await resourcePrincipal(authApi, getDeps(c), c)
     return c.json(
-      resourceServerResourcesResponseSchema.parse(
-        await listAgentResourceServerResources(
+      resourceServerAuthorizationDetailsResponseSchema.parse(
+        await listAgentResourceServerAuthorizationDetails(
           getDeps(c),
           c.req.param('resourceServerId'),
           principal,
           readQuery(c, paginationQuerySchema),
-          apiOrigin(c),
-        ),
-      ),
-    )
-  })
-
-  app.get('/resource-servers/:resourceServerId/resources/:resourceId', async (c) => {
-    requireAgentScope(c, 'resources:read')
-    const principal = await resourcePrincipal(authApi, getDeps(c), c)
-    return c.json(
-      resourceServerResourceSchema.parse(
-        await getAgentResourceServerResource(
-          getDeps(c),
-          c.req.param('resourceServerId'),
-          c.req.param('resourceId'),
-          principal,
-          apiOrigin(c),
         ),
       ),
     )

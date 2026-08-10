@@ -11,7 +11,7 @@ import { createTestDeps } from '../test-deps'
 
 const now = new Date('2026-08-01T00:00:00.000Z')
 const expiresAt = '2026-08-01T00:10:00.000Z'
-const resourceHref = 'https://auth.example.com/api/resource-servers/resource-1/resources/service'
+const authorizationDetail = { type: 'workspace', identifier: 'workspace-1' }
 
 describe('Agent protocol routes', () => {
   afterEach(() => vi.restoreAllMocks())
@@ -65,7 +65,7 @@ describe('Agent protocol routes', () => {
     expect((await app.request('/api/agent/enrollments/enrollment-1')).status).toBe(200)
   })
 
-  it('lists Resource Servers and provider-owned Resources without exposing RFC 9396 details [spec: agent-identity/agent-resource-server-model]', async () => {
+  it('lists Resource Servers and their authorization details without generated Resource identifiers [spec: agent-identity/agent-resource-server-model]', async () => {
     vi.spyOn(agentIdentities, 'getAgentIdentityByProtocolAgent').mockResolvedValue(activeIdentity())
     vi.spyOn(externalResources, 'listAgentResourceServers').mockResolvedValue({
       items: [
@@ -91,32 +91,31 @@ describe('Agent protocol routes', () => {
           connection: { status: 'connected', displayName: 'Account', authorizedScopes: ['objects:read'] },
           links: {
             self: 'https://auth.example.com/api/resource-servers/resource-1',
-            resources: 'https://auth.example.com/api/resource-servers/resource-1/resources',
+            authorizationDetails: 'https://auth.example.com/api/resource-servers/resource-1/authorization-details',
             connectionRequests: 'https://auth.example.com/api/resource-servers/resource-1/connection-requests',
           },
         },
       ],
       pagination: page(1),
     })
-    vi.spyOn(externalResources, 'listAgentResourceServerResources').mockResolvedValue({
+    vi.spyOn(externalResources, 'listAgentResourceServerAuthorizationDetails').mockResolvedValue({
       items: [
         {
-          id: 'service',
-          type: 'service',
-          name: 'ZPan',
+          authorizationDetail,
+          name: "Ambor's Space",
           description: null,
-          metadata: {},
-          accountAuthorization: { status: 'not_required' },
-          agentAuthorization: { authorizedScopes: [], requestableScopes: ['objects:read'] },
-          links: { self: resourceHref, accessRequests: 'https://auth.example.com/api/access-requests' },
+          metadata: { type: 'personal', role: 'owner' },
+          accountAuthorizationStatus: 'authorized',
+          authorizedScopes: [],
+          requestableScopes: ['objects:read'],
         },
       ],
       pagination: page(1),
     })
     const app = createRouteApp()
-    const resources = await app.request('/api/resource-servers/resource-1/resources')
-    expect(resources.status, await resources.clone().text()).toBe(200)
-    expect(JSON.stringify(await resources.json())).not.toContain('authorizationDetail')
+    const details = await app.request('/api/resource-servers/resource-1/authorization-details')
+    expect(details.status, await details.clone().text()).toBe(200)
+    await expect(details.json()).resolves.toMatchObject({ items: [{ authorizationDetail }] })
   })
 
   it('creates a generic interactive connection request with canonical polling metadata', async () => {
@@ -126,55 +125,16 @@ describe('Agent protocol routes', () => {
     const response = await createRouteApp().request('/api/resource-servers/resource-1/connection-requests', {
       method: 'POST',
       headers: jsonHeaders(),
-      body: JSON.stringify({ resources: [{ href: resourceHref }], scopes: ['objects:read'], reason: 'Use ZPan' }),
+      body: JSON.stringify({
+        authorizationDetails: [authorizationDetail],
+        scopes: ['objects:read'],
+        reason: 'Use ZPan',
+      }),
     })
     expect(response.status).toBe(201)
     expect(response.headers.get('location')).toBe(request.links.self)
     expect(response.headers.get('link')).toContain('interactive-resource')
     expect(response.headers.get('retry-after')).toBe('2')
-  })
-
-  it('dereferences Resource Server and Resource self links', async () => {
-    vi.spyOn(agentIdentities, 'getAgentIdentityByProtocolAgent').mockResolvedValue(activeIdentity())
-    vi.spyOn(externalResources, 'getAgentResourceServer').mockResolvedValue({
-      id: 'resource-1',
-      identifier: 'zpan',
-      name: 'ZPan',
-      description: null,
-      resourceUrl: 'https://drive.example.com/api',
-      accessMode: 'external_oauth',
-      connectorId: 'connector-1',
-      authorizationDetails: [],
-      enabled: true,
-      ownerOrganizationId: 'org-1',
-      visibility: 'public',
-      scopeRegistry: null,
-      availableToAgents: true,
-      authorization: null,
-      createdAt: now.toISOString(),
-      updatedAt: now.toISOString(),
-      availability: { status: 'available', checkedAt: now.toISOString() },
-      scopes: [{ value: 'objects:read', description: 'Read objects' }],
-      connection: { status: 'connected', displayName: 'Account', authorizedScopes: ['objects:read'] },
-      links: {
-        self: 'https://auth.example.com/api/resource-servers/resource-1',
-        resources: 'https://auth.example.com/api/resource-servers/resource-1/resources',
-        connectionRequests: 'https://auth.example.com/api/resource-servers/resource-1/connection-requests',
-      },
-    })
-    vi.spyOn(externalResources, 'getAgentResourceServerResource').mockResolvedValue({
-      id: 'service',
-      type: 'service',
-      name: 'ZPan',
-      description: null,
-      metadata: {},
-      accountAuthorization: { status: 'not_required' },
-      agentAuthorization: { authorizedScopes: [], requestableScopes: ['objects:read'] },
-      links: { self: resourceHref, accessRequests: 'https://auth.example.com/api/access-requests' },
-    })
-    const app = createRouteApp()
-
-    expect((await app.request('/api/resource-servers/resource-1/resources/service')).status).toBe(200)
   })
 
   it('creates Resource access and exchanges its credential offer without exposing a grant', async () => {
@@ -189,7 +149,6 @@ describe('Agent protocol routes', () => {
       scopes: ['objects:read'],
       authorizationDetails: [],
       resourceIndicator: 'https://drive.example.com/api',
-      resource: { href: resourceHref },
       resourceUrl: 'https://drive.example.com/api',
       dpopNonce: 'next-nonce',
     }
@@ -217,7 +176,6 @@ describe('Agent protocol routes', () => {
       scopes: credential.scopes,
       authorizationDetails: credential.authorizationDetails,
       resourceIndicator: credential.resourceIndicator,
-      resource: credential.resource,
     })
   })
 
@@ -313,7 +271,7 @@ function createRouteApp(overrides: { signJWT?: () => Promise<{ token: string }> 
           scopes: [
             'agent:read',
             'resource-servers:read',
-            'resources:read',
+            'authorization-details:read',
             'connection-requests:read',
             'connection-requests:write',
             'access-requests:read',
@@ -357,7 +315,7 @@ function connectionRequest() {
     id: 'connection-request-1',
     agentId: 'identity-1',
     resourceServerId: 'resource-1',
-    resources: [{ href: resourceHref }],
+    authorizationDetails: [authorizationDetail],
     scopes: ['objects:read'],
     reason: 'Use ZPan',
     status: 'pending' as const,
@@ -377,7 +335,8 @@ function accessRequest() {
   return {
     id: 'request-1',
     agentId: 'identity-1',
-    target: { type: 'resource' as const, resource: { href: resourceHref } },
+    resourceServerId: 'resource-1',
+    authorizationDetails: [authorizationDetail],
     scopes: ['objects:read'],
     reason: null,
     status: 'approved' as const,
@@ -388,8 +347,8 @@ function accessRequest() {
     },
     credentialOffer: {
       type: 'dpop' as const,
-      resource: { href: resourceHref },
       resourceIndicator: 'https://drive.example.com/api',
+      authorizationDetails: [authorizationDetail],
       endpoint: 'https://auth.example.com/api/agent/access-requests/request-1/credentials',
       proof: {
         algorithm: 'ES256' as const,

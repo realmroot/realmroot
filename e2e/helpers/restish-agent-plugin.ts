@@ -28,10 +28,9 @@ export interface PendingResourceAccess<T> {
 export interface RestishAgentPlugin {
   firstWhoami(name: string): PendingWhoami
   whoami(): PluginIdentityResult
-  configureManagementCredential(reference: string): void
   inspectAuth(operation: string): string
   listResourceServers<T>(): T
-  listResources<T>(resourceServerId: string): T
+  listAuthorizationDetails<T>(resourceServerId: string): T
   connectResource<T>(resourceId: string, input: unknown): PendingResourceAccess<T>
   requestResourceAccess<T>(input: unknown): PendingResourceAccess<T>
   connectTarget(apiName: string, resourceUrl: string, credentialId: string, reference: string): void
@@ -187,15 +186,8 @@ export function createRestishAgentPlugin(origin: string): RestishAgentPlugin {
 
   return {
     firstWhoami: (name) =>
-      invokePending<PluginIdentityResult>(['agents', 'whoami'], undefined, { REALMROOT_AGENT_NAME: name }),
-    whoami: () => invoke<PluginIdentityResult>(['agents', 'whoami']),
-    configureManagementCredential: (reference) => {
-      execFileSync(
-        'restish',
-        ['api', 'auth', 'add', apiName, 'oauth2', '--source', 'realmroot', '--reference', reference],
-        { cwd: repoRoot, env: environment, encoding: 'utf8' },
-      )
-    },
+      invokePending<PluginIdentityResult>(['agent', 'whoami'], undefined, { REALMROOT_AGENT_NAME: name }),
+    whoami: () => invoke<PluginIdentityResult>(['agent', 'whoami']),
     inspectAuth: (operation) =>
       execFileSync('restish', ['api', 'auth', 'inspect', apiName, '--operation', operation, '--redact'], {
         cwd: repoRoot,
@@ -203,11 +195,13 @@ export function createRestishAgentPlugin(origin: string): RestishAgentPlugin {
         encoding: 'utf8',
       }),
     listResourceServers: <T>() => get<T>(`${origin}/api/resource-servers?limit=100&offset=0`),
-    listResources: <T>(resourceServerId: string) =>
-      get<T>(`${origin}/api/resource-servers/${encodeURIComponent(resourceServerId)}/resources?limit=100&offset=0`),
+    listAuthorizationDetails: <T>(resourceServerId: string) =>
+      get<T>(
+        `${origin}/api/resource-servers/${encodeURIComponent(resourceServerId)}/authorization-details?limit=100&offset=0`,
+      ),
     connectResource: <T>(resourceId: string, input: unknown) =>
       invokePending<T>(['resource-servers', 'connect', resourceId], input),
-    requestResourceAccess: <T>(input: unknown) => invokePending<T>(['agent-access', 'access'], input),
+    requestResourceAccess: <T>(input: unknown) => invokePending<T>(['agent', 'access'], input),
     connectTarget: (targetAPIName, resourceUrl, credentialId, reference) => {
       execFileSync('restish', ['api', 'connect', targetAPIName, resourceUrl, '--no-discover', '--replace', '--yes'], {
         cwd: repoRoot,

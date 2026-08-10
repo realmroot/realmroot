@@ -1,87 +1,33 @@
 [
   {
-    "method": "POST",
-    "path": "/agent/access-requests",
-    "operationId": "createAgentAuthorizationRequest",
-    "semanticHash": "04ac96c09a57831de0e52a5a1c0f06a4b7dc23e25151d610ecb57a1b3c20029f"
-  },
-  {
-    "method": "GET",
-    "path": "/agent/access-requests/{requestId}",
-    "operationId": "getAgentAuthorizationRequest",
-    "semanticHash": "1124ffea0419e8c11b3e61189c22008adbc2272dbeb3dd4983381f90a855695f"
-  },
-  {
-    "method": "GET",
-    "path": "/applications/{applicationId}/authorizations",
-    "operationId": "listApplicationAuthorizations",
-    "semanticHash": "fd50275ab4bc1d2a9d98575bc3ef3ed2d2a4a7b105c87016809673324417bd8a"
-  },
-  {
-    "method": "DELETE",
-    "path": "/applications/{applicationId}/authorizations/{authorizationId}",
-    "operationId": "deleteApplicationAuthorization",
-    "semanticHash": "bbfdd5948da7fc87c0b33ec566004414f6c3ba2e30cb6ec70c57a1567c2c0644"
-  },
-  {
-    "method": "GET",
-    "path": "/applications/{applicationId}/authorizations/{authorizationId}",
-    "operationId": "getApplicationAuthorization",
-    "semanticHash": "582991cb9f0f9fbe26509b97458653f3f27534db2006f0d13c3b9d08799fafd6"
-  },
-  {
-    "method": "GET",
-    "path": "/users/{userId}/application-authorizations",
-    "operationId": "listUserApplicationAuthorizations",
-    "semanticHash": "9ccf6f3c84c7d1922bf1ad7ebf647a6f7b219fa33f61e929646acd8b047760a2"
-  },
-  {
-    "method": "POST",
-    "path": "/agent/access-requests/{requestId}/credentials",
-    "operationId": "createAgentAccessRequestCredential",
-    "semanticHash": "abfdf0b697ced5cd83a1462562257e4289c141086d0fc225c4ab2e447016389c"
-  },
-  {
     "method": "GET",
     "path": "/agent",
     "operationId": "getAgentStatus",
     "semanticHash": "0bf0127cfd10f10f48de12f4437beeae5f6b88c89a0c47924b10b0ae29f63a2d"
   },
   {
+    "method": "POST",
+    "path": "/agent/access-requests",
+    "operationId": "createAgentAuthorizationRequest",
+    "semanticHash": "77665063ce813067b088d148233fab8b008eac5ba3878a9bba677a67a0cb96aa"
+  },
+  {
     "method": "GET",
-    "path": "/agents",
-    "operationId": "listAgents",
-    "semanticHash": "e2f01b2140ed7bdd7972871c368a92089167552b9ea6f7215b4fc3488f4104f5"
+    "path": "/agent/access-requests/{requestId}",
+    "operationId": "getAgentAuthorizationRequest",
+    "semanticHash": "91962fda2017e8f1f23e283360b2cd019d12fb340ba555173035e10c9b1f9991"
+  },
+  {
+    "method": "POST",
+    "path": "/agent/access-requests/{requestId}/credentials",
+    "operationId": "createAgentAccessRequestCredential",
+    "semanticHash": "14a0aeccbba4abbf8d1711fc1d6e9a0e3fb2ccd6008ceba514f5a295fd24750b"
   },
   {
     "method": "DELETE",
     "path": "/agents/{agentId}",
     "operationId": "deleteAgent",
     "semanticHash": "10a850a18474a75fd28323080e26e0c1a5d93998f308e58d1507c68546e77d66"
-  },
-  {
-    "method": "GET",
-    "path": "/agents/{agentId}",
-    "operationId": "getAgent",
-    "semanticHash": "23a2aea6518ee4e0903d8d21970038988193db08d1ca93391bda077d27f99631"
-  },
-  {
-    "method": "GET",
-    "path": "/agents/{agentId}/scope-entitlements",
-    "operationId": "listAgentScopeEntitlements",
-    "semanticHash": "f02a05e6d65941494e89b89b92a155d37f618845ab53ac9d4d3038c34a32a154"
-  },
-  {
-    "method": "DELETE",
-    "path": "/agents/{agentId}/scope-entitlements/{grantId}",
-    "operationId": "deleteAgentScopeEntitlement",
-    "semanticHash": "cf93a4165e554565b74fc1816f37f917b59b48f4e5ec28e7be344e22711c5de1"
-  },
-  {
-    "method": "GET",
-    "path": "/agents/{agentId}/scope-entitlements/{grantId}",
-    "operationId": "getAgentScopeEntitlement",
-    "semanticHash": "e8d7163173cc636f8232e725e02a58864c142f9c73e734b559b91f0a882393f3"
   },
   {
     "method": "DELETE",
@@ -139,6 +85,24 @@
   },
   {
     "method": "GET",
+    "path": "/applications/{applicationId}/authorizations",
+    "operationId": "listApplicationAuthorizations",
+    "semanticHash": "fd50275ab4bc1d2a9d98575bc3ef3ed2d2a4a7b105c87016809673324417bd8a"
+  },
+  {
+    "method": "DELETE",
+    "path": "/applications/{applicationId}/authorizations/{authorizationId}",
+    "operationId": "deleteApplicationAuthorization",
+    "semanticHash": "bbfdd5948da7fc87c0b33ec566004414f6c3ba2e30cb6ec70c57a1567c2c0644"
+  },
+  {
+    "method": "GET",
+    "path": "/applications/{applicationId}/authorizations/{authorizationId}",
+    "operationId": "getApplicationAuthorization",
+    "semanticHash": "582991cb9f0f9fbe26509b97458653f3f27534db2006f0d13c3b9d08799fafd6"
+  },
+  {
+    "method": "GET",
     "path": "/applications/{applicationId}/client-secrets",
     "operationId": "listClientSecrets",
     "semanticHash": "123dd3c4e77480091c62532c13d21a774bd322658c544bd67e9c58507a2c2fee"
@@ -192,28 +156,16 @@
     "semanticHash": "ab34bf12fdf06c8a2bb88f4780a9f3f630dc3eed7cb2c01c4656cfea5fdf928a"
   },
   {
-    "method": "GET",
-    "path": "/applications/{applicationId}/scope-entitlements",
-    "operationId": "listApplicationScopeEntitlements",
-    "semanticHash": "cdf67531dd5188d0d174fa6b272fae88afbb6553c367494aab12993eaabac35b"
-  },
-  {
     "method": "POST",
-    "path": "/applications/{applicationId}/scope-entitlements",
-    "operationId": "createApplicationScopeEntitlement",
-    "semanticHash": "20757d60fe30cdf1244cd88bc98fa1e55e957036cb7f06b0a222b7e2775aea89"
-  },
-  {
-    "method": "DELETE",
-    "path": "/applications/{applicationId}/scope-entitlements/{grantId}",
-    "operationId": "deleteApplicationScopeEntitlement",
-    "semanticHash": "f5614b47f57367bd4dc016846dbb5cf90a2bc2e05b81004ba4c30ee03a093b87"
+    "path": "/assets",
+    "operationId": "createAsset",
+    "semanticHash": "bc410414a41d8e192b6c1c9fe23f8682053becb9c37c0ffbe4f7df834f5a033a"
   },
   {
     "method": "GET",
-    "path": "/applications/{applicationId}/scope-entitlements/{grantId}",
-    "operationId": "getApplicationScopeEntitlement",
-    "semanticHash": "05953ab0593662a26115bbd73a8d0277b4c1c25ec93df006aa2214f35fb849ac"
+    "path": "/assets/{assetId}",
+    "operationId": "getAsset",
+    "semanticHash": "9358c7a2f753e7a139a3717836d48daf3ff5a6a7c19d584e7d1699f70ee8e8bb"
   },
   {
     "method": "GET",
@@ -289,102 +241,6 @@
   },
   {
     "method": "GET",
-    "path": "/organizations/{organizationId}/invitations",
-    "operationId": "listOrganizationInvitations",
-    "semanticHash": "c586aa61874da55e934051f5b3b0b392a8df54fafc7880231245b1de7a09fb66"
-  },
-  {
-    "method": "POST",
-    "path": "/organizations/{organizationId}/invitations",
-    "operationId": "createOrganizationInvitation",
-    "semanticHash": "dd56c7f37a27f3bdb4e92987c7ef2e1dfaa888e1fedd41151a6cec6203a51fb7"
-  },
-  {
-    "method": "DELETE",
-    "path": "/organizations/{organizationId}/invitations/{invitationId}",
-    "operationId": "deleteOrganizationInvitation",
-    "semanticHash": "c5301e654e2f4b72e8037c94085cfba78901b390db06f192465ae04923bdcf4c"
-  },
-  {
-    "method": "GET",
-    "path": "/organizations/{organizationId}/invitations/{invitationId}",
-    "operationId": "getOrganizationInvitation",
-    "semanticHash": "957c2c76b2e38507c3b46fadc20a92a12e27fa73955ef96e56237974b34bfe1c"
-  },
-  {
-    "method": "GET",
-    "path": "/organizations/{organizationId}/members",
-    "operationId": "listOrganizationMembers",
-    "semanticHash": "ff4c2b3ee4cc382a9fbff7f94ad0ad16692929e60b8f1cca9b73a397e134f941"
-  },
-  {
-    "method": "POST",
-    "path": "/organizations/{organizationId}/members",
-    "operationId": "createOrganizationMember",
-    "semanticHash": "ac58e01d338b8df34599e558b8a791c149f3282bc40c32fc507daae491f519c4"
-  },
-  {
-    "method": "DELETE",
-    "path": "/organizations/{organizationId}/members/{memberId}",
-    "operationId": "deleteOrganizationMember",
-    "semanticHash": "95acc7088f0ca2bff3374622910f5c5c84f93b4ef53629201e7b54c0ac8d4e90"
-  },
-  {
-    "method": "GET",
-    "path": "/organizations/{organizationId}/members/{memberId}",
-    "operationId": "getOrganizationMember",
-    "semanticHash": "02efb0b80c59bfc38c1f96bc07b7673c369c2e01a1265f1f90481ab35656cdff"
-  },
-  {
-    "method": "PATCH",
-    "path": "/organizations/{organizationId}/members/{memberId}",
-    "operationId": "updateOrganizationMember",
-    "semanticHash": "2aaa86800032411ec96961f4e485fc70a943bd7d69044ffc14a48a0570da078e"
-  },
-  {
-    "method": "GET",
-    "path": "/organizations/{organizationId}/members/{memberId}/roles",
-    "operationId": "getOrganizationMemberRoles",
-    "semanticHash": "bce312e60490f6f3e453338ef31c5907e3298c33d4c8dbbcb23cab8e491dd0f2"
-  },
-  {
-    "method": "PUT",
-    "path": "/organizations/{organizationId}/members/{memberId}/roles",
-    "operationId": "replaceOrganizationMemberRoles",
-    "semanticHash": "0dfba83e072f2555c16995f5b3d0248627d154b588c940464da75d3eb617dfb3"
-  },
-  {
-    "method": "GET",
-    "path": "/organizations/{organizationId}/roles",
-    "operationId": "listOrganizationRoles",
-    "semanticHash": "c5d7e59b13a23f1d6f96edc3d1f89890f41339b97f0ac93ed2d0c0064ea87e7f"
-  },
-  {
-    "method": "POST",
-    "path": "/organizations/{organizationId}/roles",
-    "operationId": "createOrganizationRole",
-    "semanticHash": "bb4a4c1532aba4f0c5b71411971094ed2e76a8af6c6107a5b6ed6f43c9ae6a43"
-  },
-  {
-    "method": "DELETE",
-    "path": "/organizations/{organizationId}/roles/{roleKey}",
-    "operationId": "deleteOrganizationRole",
-    "semanticHash": "4706a612c759d210b0428b83f86e22229b0954429b48f396860ab9edc38ea8a5"
-  },
-  {
-    "method": "GET",
-    "path": "/organizations/{organizationId}/roles/{roleKey}",
-    "operationId": "getOrganizationRole",
-    "semanticHash": "bd9fa74861aa65714db2f324bc90d29e7557a83402eac56f7d832a74a4673564"
-  },
-  {
-    "method": "PATCH",
-    "path": "/organizations/{organizationId}/roles/{roleKey}",
-    "operationId": "updateOrganizationRole",
-    "semanticHash": "7c21bdedc564041325725d67df099eba54d66945bcc8b90fdcb65876b7aabf7f"
-  },
-  {
-    "method": "GET",
     "path": "/public/agents/{subject}",
     "operationId": "getPublicAgent",
     "semanticHash": "4582f083a3078178cd4a3627b29b574940df7b5943db4a6cfeeacd234d344d5b"
@@ -418,12 +274,6 @@
     "path": "/realm/account-management-policy",
     "operationId": "updateAccountManagementPolicy",
     "semanticHash": "2b1314e0b96c8f1f08932388f537fc8433d15ba9fc6215a9c5ab073dc6320cde"
-  },
-  {
-    "method": "GET",
-    "path": "/realm/audit-events",
-    "operationId": "listAgentAuditEvents",
-    "semanticHash": "3d0d107febdeab3eef0d5d20bfed7bcc1548c4083cf732848f97f66810648734"
   },
   {
     "method": "GET",
@@ -507,13 +357,13 @@
     "method": "GET",
     "path": "/resource-servers",
     "operationId": "listResourceServers",
-    "semanticHash": "cd3d0825036b5e73ea725f4aa49850f326cb7ef369efe5a51c19d644b0cc495f"
+    "semanticHash": "b1ef20c72e8f4a9f641377a37516b3effa4211f72f00a0e230a0b2207a0c9898"
   },
   {
     "method": "POST",
     "path": "/resource-servers",
     "operationId": "createResourceServer",
-    "semanticHash": "83a0bb6cec9aeee0525ff68e6fde4cdebad4f4a83df5cdd0dee0bde308ac9fdd"
+    "semanticHash": "96a45c0f0baaeaf5368f3fe79c909b9f8e139679d2c593a34c6f12bd54a00aa0"
   },
   {
     "method": "DELETE",
@@ -525,43 +375,43 @@
     "method": "GET",
     "path": "/resource-servers/{resourceServerId}",
     "operationId": "getResourceServer",
-    "semanticHash": "c17b84f92ff1cbc701ec7ac3851327735d3693b87e21755caf57b093592f8f5e"
+    "semanticHash": "05298c13bc3670775f8e8a2754a723adaff5dc71a71c052c30018f00a4420afb"
   },
   {
     "method": "PATCH",
     "path": "/resource-servers/{resourceServerId}",
     "operationId": "updateResourceServer",
-    "semanticHash": "290160568e391ed25ac279b13a36ea5a7250a557906c8a6f8bfb340912443558"
+    "semanticHash": "320313ca071cfffe51c6d5d6ad170a29acab8843782bdc99c95989bca2ec1b73"
+  },
+  {
+    "method": "GET",
+    "path": "/resource-servers/{resourceServerId}/authorization-details",
+    "operationId": "listResourceServerAuthorizationDetails",
+    "semanticHash": "fa931b2db93605f5f7cc13ae1935410237bc47f324a8fe8527550dd49d67250a"
+  },
+  {
+    "method": "PUT",
+    "path": "/resource-servers/{resourceServerId}/connection-events/{eventId}",
+    "operationId": "replaceResourceServerConnectionEvent",
+    "semanticHash": "a6ce54897e33561ee9170c23d9d6b8946d6e3639940777c5e243ffd3981ef3ae"
   },
   {
     "method": "POST",
     "path": "/resource-servers/{resourceServerId}/connection-requests",
     "operationId": "createConnectionRequest",
-    "semanticHash": "266f3a67f590fe8864c07ed07c42f0be1bdb6bfbdb2ea4fdfa27d4d36f49f47c"
+    "semanticHash": "2c254305685eaf3e66a039fdb3ea1d14f17181ce21ab88e93ec860f4a8d69918"
   },
   {
     "method": "GET",
     "path": "/resource-servers/{resourceServerId}/connection-requests/{requestId}",
     "operationId": "getConnectionRequest",
-    "semanticHash": "5e6212620d9f37a9aee761964b357f45a69849d674dd8772c7c9233a5e622651"
+    "semanticHash": "6f58cc1503d89d6d452d4669b8bb0fb9c38972a797636a9190a436e59d8700f1"
   },
   {
     "method": "GET",
     "path": "/resource-servers/{resourceServerId}/contract",
     "operationId": "getResourceServerContract",
     "semanticHash": "c8763cb5900ac09992cb166661ab0e250b20538f4fa42438908c47f6024c09e5"
-  },
-  {
-    "method": "GET",
-    "path": "/resource-servers/{resourceServerId}/resources",
-    "operationId": "listResourceServerResources",
-    "semanticHash": "74840a6ca39c240dc013878ed733e6467e9c58d2f6bb848dcd76411813d6ae33"
-  },
-  {
-    "method": "GET",
-    "path": "/resource-servers/{resourceServerId}/resources/{resourceId}",
-    "operationId": "getResourceServerResource",
-    "semanticHash": "0895fa6a870cf0921a40c0a61cd22fb15305d7420e17530c200fdca6adfbb0a2"
   },
   {
     "method": "PUT",
@@ -601,6 +451,12 @@
   },
   {
     "method": "GET",
+    "path": "/users/{userId}/application-authorizations",
+    "operationId": "listUserApplicationAuthorizations",
+    "semanticHash": "9ccf6f3c84c7d1922bf1ad7ebf647a6f7b219fa33f61e929646acd8b047760a2"
+  },
+  {
+    "method": "GET",
     "path": "/users/{userId}/linked-accounts",
     "operationId": "listUserLinkedAccounts",
     "semanticHash": "5de41864c9126228dbe6a30c48ceb10733e9c5eaac072cf7c394ca4f0c081984"
@@ -628,30 +484,6 @@
     "path": "/users/{userId}/password-reset-requests/{requestId}",
     "operationId": "getUserPasswordResetRequest",
     "semanticHash": "6a1574265255842a7a89e11c1e0a571c43ae14cde6aa00736dc5ea0d73f033b7"
-  },
-  {
-    "method": "GET",
-    "path": "/users/{userId}/scope-entitlements",
-    "operationId": "listUserScopeEntitlements",
-    "semanticHash": "ac3110ae1929ec850c5adcfb52f2b8aa4abef7b601c6aa9261fd502613ba9177"
-  },
-  {
-    "method": "POST",
-    "path": "/users/{userId}/scope-entitlements",
-    "operationId": "createUserScopeEntitlement",
-    "semanticHash": "3aef485d1665a1c50e2b5443bd413e9fe3d04f5ccbf9b61a43d245623fa51bb9"
-  },
-  {
-    "method": "DELETE",
-    "path": "/users/{userId}/scope-entitlements/{grantId}",
-    "operationId": "deleteUserScopeEntitlement",
-    "semanticHash": "3ed3180d6914b50cae01e1d5be48bdc92dd61b126e153d8b8f1dae8e27dea5cc"
-  },
-  {
-    "method": "GET",
-    "path": "/users/{userId}/scope-entitlements/{grantId}",
-    "operationId": "getUserScopeEntitlement",
-    "semanticHash": "16df5574908b2db5934098853acf9b26cf743d828268bc274c90686e5f4a622f"
   },
   {
     "method": "DELETE",

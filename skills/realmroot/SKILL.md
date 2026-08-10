@@ -11,10 +11,10 @@ intermediate states.
 
 ## Operating Model
 
-- Select exact deployments, Resource Servers, Resources, scopes, accounts, and
+- Select exact deployments, Resource Servers, authorization details, scopes, accounts, and
   operations only from live responses and published metadata.
 - Request the complete task-scoped authority but no unrelated scope.
-- Bind every credential to exactly one Resource.
+- Bind every credential to exactly one Resource Server authorization context.
 - Hand enrollment, account connection, and access decisions to the controller.
 - Keep Agent protocol secrets in the Realmroot adapter and target DPoP keys,
   proofs, tokens, and cache in Restish custody.
@@ -34,7 +34,7 @@ identifiers and stop.
 
 Read [references/restish-commands.md](references/restish-commands.md)
 completely. Discover every Resource Server page, select the exact service and
-provider-owned Resource from returned metadata, establish any required
+provider authorization detail from returned metadata, establish any required
 controller account connection, inspect the target OpenAPI operation, and
 request the union of its required scopes.
 
@@ -51,7 +51,7 @@ or ready credential as completion. Invoke the requested generated target
 operation and verify its result. After a mutation, read the affected Resource
 back when its contract permits.
 
-If exhaustive discovery finds no matching Resource Server or Resource, report
+If exhaustive discovery finds no matching Resource Server or authorization detail, report
 the missing capability with the original task still open.
 
 The task is complete only when every requested target operation succeeds and no

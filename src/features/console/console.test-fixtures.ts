@@ -264,7 +264,7 @@ export const apiResource = {
   connection: null,
   links: {
     self: 'https://auth.example.com/api/resource-servers/resource-1',
-    resources: 'https://auth.example.com/api/resource-servers/resource-1/resources',
+    authorizationDetails: 'https://auth.example.com/api/resource-servers/resource-1/authorization-details',
     connectionRequests: null,
   },
 }

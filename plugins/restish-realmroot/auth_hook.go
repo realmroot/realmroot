@@ -40,15 +40,13 @@ type agentSelfStatusResponse struct {
 }
 
 type targetTokenResponse struct {
-	AccessToken       string    `json:"accessToken"`
-	TokenType         string    `json:"tokenType"`
-	ExpiresAt         time.Time `json:"expiresAt"`
-	Scopes            []string  `json:"scopes"`
-	ResourceIndicator string    `json:"resourceIndicator"`
-	Resource          struct {
-		Href string `json:"href"`
-	} `json:"resource"`
-	DPoPNonce string `json:"-"`
+	AccessToken          string           `json:"accessToken"`
+	TokenType            string           `json:"tokenType"`
+	ExpiresAt            time.Time        `json:"expiresAt"`
+	Scopes               []string         `json:"scopes"`
+	ResourceIndicator    string           `json:"resourceIndicator"`
+	AuthorizationDetails []map[string]any `json:"authorizationDetails"`
+	DPoPNonce            string           `json:"-"`
 }
 
 type agentConfiguration struct {
@@ -264,7 +262,6 @@ func ensureProtocolCredential(
 			return state, dpopCredential{}, err
 		}
 		credential = &dpopCredential{
-			ResourceHref:       resourceIndicator,
 			ResourceIndicator:  resourceIndicator,
 			CredentialEndpoint: configuration.AgentTokenEndpoint,
 			ProofTarget:        configuration.AgentTokenEndpoint,

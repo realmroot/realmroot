@@ -5,8 +5,7 @@ import {
   createAccessRequestSchema,
   createResourceConnectionRequestSchema,
   resourceConnectionRequestSchema,
-  resourceServerResourceSchema,
-  resourceServerResourcesResponseSchema,
+  resourceServerAuthorizationDetailsResponseSchema,
 } from '@shared/api/agent-api'
 import { providerConnectionEventIdSchema, providerConnectionEventSchema } from '@shared/api/external-resources'
 import { paginationQuerySchema } from '@shared/api/pagination'
@@ -171,27 +170,15 @@ const managementRoutes: ManagementRouteConfig[] = [
   },
   {
     method: 'get',
-    path: '/resource-servers/{resourceServerId}/resources',
-    operationId: 'listResourceServerResources',
-    summary: 'List provider-owned Resources available through a Resource Server',
-    security: [{ agentAuth: ['resources:read'] }],
+    path: '/resource-servers/{resourceServerId}/authorization-details',
+    operationId: 'listResourceServerAuthorizationDetails',
+    summary: 'List authorization details available through a Resource Server',
+    security: [{ agentAuth: ['authorization-details:read'] }],
     request: {
       params: z.object({ resourceServerId: z.string() }),
       query: paginationQuerySchema,
     },
-    response: resourceServerResourcesResponseSchema,
-  },
-  {
-    method: 'get',
-    path: '/resource-servers/{resourceServerId}/resources/{resourceId}',
-    operationId: 'getResourceServerResource',
-    summary: 'Read a provider-owned Resource',
-    security: [{ agentAuth: ['resources:read'] }],
-    request: {
-      params: z.object({ resourceServerId: z.string(), resourceId: z.string() }),
-    },
-    response: resourceServerResourceSchema,
-    errors: { 404: 'The Resource was not found.' },
+    response: resourceServerAuthorizationDetailsResponseSchema,
   },
   {
     method: 'post',

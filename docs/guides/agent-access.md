@@ -8,12 +8,12 @@ key. The Agent-facing model is intentionally small.
 | --- | --- |
 | Agent | Durable non-human identity with a stable issuer and subject. |
 | Resource Server | Registered service, service URL, scope catalog, availability, and connection state. |
-| Resource | Provider-owned object or authorization context exposed by one Resource Server. |
+| Authorization detail | RFC 9396 value selecting provider-owned context. |
 | Connection request | Request for the controller to link or expand the account used by a Resource Server. |
-| Access request | Request for exact scopes on one Resource. |
+| Access request | Request for exact scopes and optional authorization details on one Resource Server. |
 | Resource credential | Short-lived DPoP credential held by the local adapter. |
 
-Account-connection records, provider authorization details, Permissions,
+Account-connection records, Permissions,
 token leases, OAuth client records, refresh credentials, and private keys are
 implementation details. They are never choices in the Agent workflow.
 
@@ -40,7 +40,7 @@ API aliases do not create additional identities.
 - `available` or `unavailable` contract state;
 - `connected`, `not_connected`, or `not_required` account state;
 - scopes held by the connected account;
-- links to the Resource collection and connection-request collection.
+- links to the authorization-detail and connection-request collections.
 
 Every returned `self` or collection link is dereferenceable. An unavailable
 server remains visible with no requestable scopes, without hiding healthy
@@ -58,35 +58,35 @@ personal or organization home space. The Agent requests a connection by
 Resource Server and scopes; it never selects a connection ID.
 
 The controller may connect an account or expand the same account's scopes and
-provider-owned Resources. Realmroot performs OAuth, PKCE, PAR, RAR, refresh,
+provider authorization details. Realmroot performs OAuth, PKCE, PAR, RAR, refresh,
 and subject validation internally. Returning from OAuth completes the
 connection request but does not itself approve Agent access.
 
 Native Resource Servers report `not_required` and skip this step.
 
-## 4. Select A Provider-Owned Resource
+## 4. Select Provider Authorization Details
 
-`GET /api/resource-servers/{resourceServerId}/resources` returns the Resources
-the connected account makes visible. A Resource exposes display metadata and
-two independent authority states:
+`GET /api/resource-servers/{resourceServerId}/authorization-details` returns
+the RFC 9396 values the connected account makes visible. Each item exposes
+flat display metadata and two independent authority states:
 
-- `accountAuthorization.status` says whether the controller's connected
-  account covers the Resource;
-- `agentAuthorization.authorizedScopes` and `requestableScopes` say what the
+- `accountAuthorizationStatus` says whether the controller's connected
+  account covers the authorization detail;
+- `authorizedScopes` and `requestableScopes` say what the
   Agent already has and may request.
 
-The canonical Resource `links.self` is the input to an access request.
-Provider-specific RFC 9396 objects remain server-side. A native Resource Server
-normally exposes a single `service` Resource.
+The item carries `authorizationDetail`, which is copied directly into a
+connection or access request. Realmroot does not generate a Resource ID or URL.
+An unconstrained service returns an empty collection.
 
 ## 5. Request Exact Access
 
-The Agent sends one Resource href, the union of scopes required by its current
-task, and an optional reason to `POST /api/access-requests`. Least privilege is
+The Agent sends one Resource Server ID, optional authorization details, the
+union of scopes required by its current task, and an optional reason to
+`POST /api/agent/access-requests`. Least privilege is
 task-level: exclude unrelated scopes, but do not split a known multi-operation
 task into one access request per HTTP operation. Realmroot resolves the Resource
-Server, provider authorization detail, account connection, and any reusable
-grant.
+Server, account connection, and any reusable Permission.
 
 If existing authority matches exactly, the request completes immediately.
 Otherwise the controller chooses one-time, limited, or persistent approval on
@@ -107,12 +107,12 @@ switch for individual workflows.
 ## 6. Obtain And Use A Short-Lived Credential
 
 An approved access request includes a DPoP credential offer containing the
-Resource href, resource indicator, credential endpoint, and proof target. The
+resource indicator, authorization details, credential endpoint, and proof target. The
 plugin creates the DPoP key locally, obtains the short-lived credential, and
-caches it by Resource. The Agent sees only a safe receipt.
+caches it by Resource Server authorization context. The Agent sees only a safe receipt.
 
 The Agent reuses that credential across the task. It requests another one only
-when it switches Resource, the credential expires or is rejected, or the task
+when it switches authorization details, the credential expires or is rejected, or the task
 requires an additional scope.
 
 For native services, Realmroot signs an audience-bound `at+jwt`. For external

@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -201,6 +202,40 @@ func TestFileStateStoreRejectsLegacyProtocolCredential(t *testing.T) {
 	}
 }
 
+func TestFileStateStoreMigratesObsoleteCredentialsAndPreservesIdentity(t *testing.T) {
+	for _, version := range []int{14, 15} {
+		t.Run(fmt.Sprintf("version-%d", version), func(t *testing.T) {
+			store := &fileStateStore{root: t.TempDir()}
+			target := agentTarget{
+				API: "realmroot-local", Profile: "default", Runtime: defaultAgentRuntime,
+				Origin: "https://auth.example.com", Issuer: "https://auth.example.com/api/auth",
+			}
+			credential := testCredential(t, "", time.Time{})
+			state := newCredentialState(t, credential).state
+			state.Version = version
+			path := store.path(target)
+			if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			encoded, err := json.Marshal(state)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(path, encoded, 0o600); err != nil {
+				t.Fatal(err)
+			}
+
+			migrated, err := store.Load(target)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if migrated.Version != agentStateVersion || migrated.Identity == nil || len(migrated.CredentialSources) != 0 || migrated.ProtocolCredential != nil {
+				t.Fatalf("migrated state = %#v", migrated)
+			}
+		})
+	}
+}
+
 func TestFileStateStoreFindsCredentialOfferByOpaqueReference(t *testing.T) {
 	store := &fileStateStore{root: t.TempDir()}
 	target := agentTarget{
@@ -226,7 +261,10 @@ func TestFileStateStoreFindsCredentialOfferByOpaqueReference(t *testing.T) {
 		AgentKeyID:      "agent-key",
 		AgentPrivateKey: encodePrivateKey(agentPrivateKey),
 		CredentialSources: map[string]credentialSource{
-			testCredentialSourceReference: {ResourceHref: credential.ResourceHref, Offers: []dpopCredential{credential}},
+			testCredentialSourceReference: {
+				ResourceIndicator: credential.ResourceIndicator, AuthorizationDetails: credential.AuthorizationDetails,
+				Offers: []dpopCredential{credential},
+			},
 		},
 	}
 	path := store.path(target)
@@ -245,7 +283,8 @@ func TestFileStateStoreFindsCredentialOfferByOpaqueReference(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if reference.credential.ResourceHref != credential.ResourceHref {
+	if reference.credential.ResourceIndicator != credential.ResourceIndicator ||
+		!sameAuthorizationDetails(reference.credential.AuthorizationDetails, credential.AuthorizationDetails) {
 		t.Fatalf("credential = %#v", reference.credential)
 	}
 }
@@ -254,7 +293,10 @@ func TestAgentStateRejectsResourceURLAsCredentialSourceReference(t *testing.T) {
 	credential := testCredential(t, "", time.Time{})
 	state := newCredentialState(t, credential).state
 	state.CredentialSources = map[string]credentialSource{
-		credential.ResourceHref: {ResourceHref: credential.ResourceHref, Offers: []dpopCredential{credential}},
+		credential.ResourceIndicator: {
+			ResourceIndicator: credential.ResourceIndicator, AuthorizationDetails: credential.AuthorizationDetails,
+			Offers: []dpopCredential{credential},
+		},
 	}
 
 	err := validateAgentStateCredentials(state)

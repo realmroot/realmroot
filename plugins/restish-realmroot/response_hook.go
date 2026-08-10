@@ -36,13 +36,11 @@ type interactiveResponse struct {
 }
 
 type credentialOffer struct {
-	Type     string `json:"type"`
-	Resource struct {
-		Href string `json:"href"`
-	} `json:"resource"`
-	ResourceIndicator string `json:"resourceIndicator"`
-	Endpoint          string `json:"endpoint"`
-	Proof             struct {
+	Type                 string           `json:"type"`
+	ResourceIndicator    string           `json:"resourceIndicator"`
+	AuthorizationDetails []map[string]any `json:"authorizationDetails"`
+	Endpoint             string           `json:"endpoint"`
+	Proof                struct {
 		Algorithm string `json:"algorithm"`
 		Method    string `json:"method"`
 		URI       string `json:"uri"`
@@ -183,7 +181,7 @@ func acceptCredentialOffer(
 	references credentialSourceReferenceGenerator,
 ) (plugin.ResponseMiddlewareOutput, error) {
 	if offer.Type != "dpop" || offer.Proof.Algorithm != "ES256" || offer.Proof.Method != http.MethodPost ||
-		offer.Resource.Href == "" || offer.ResourceIndicator == "" || offer.Endpoint == "" || offer.Proof.URI == "" {
+		offer.ResourceIndicator == "" || offer.Endpoint == "" || offer.Proof.URI == "" {
 		return plugin.ResponseMiddlewareOutput{}, errors.New("Resource credential offer is invalid")
 	}
 	if !sameOrigin(offer.Endpoint, origin) {
@@ -201,19 +199,21 @@ func acceptCredentialOffer(
 	if err != nil {
 		return plugin.ResponseMiddlewareOutput{}, err
 	}
+	authorizationDetails := append([]map[string]any{}, offer.AuthorizationDetails...)
 	credential := dpopCredential{
-		ResourceHref:       offer.Resource.Href,
-		ResourceIndicator:  offer.ResourceIndicator,
-		CredentialEndpoint: offer.Endpoint,
-		ProofTarget:        offer.Proof.URI,
-		Scopes:             append([]string(nil), resource.Scopes...),
+		ResourceIndicator:    offer.ResourceIndicator,
+		AuthorizationDetails: authorizationDetails,
+		CredentialEndpoint:   offer.Endpoint,
+		ProofTarget:          offer.Proof.URI,
+		Scopes:               append([]string(nil), resource.Scopes...),
 	}
 	if reference.state.CredentialSources == nil {
 		reference.state.CredentialSources = make(map[string]credentialSource)
 	}
 	credentialSourceReference := ""
 	for candidateReference, source := range reference.state.CredentialSources {
-		if source.ResourceHref == credential.ResourceHref {
+		if source.ResourceIndicator == credential.ResourceIndicator &&
+			sameAuthorizationDetails(source.AuthorizationDetails, credential.AuthorizationDetails) {
 			if credentialSourceReference != "" {
 				return plugin.ResponseMiddlewareOutput{}, errors.New("multiple credential sources exist for the same Resource")
 			}
@@ -232,8 +232,9 @@ func acceptCredentialOffer(
 			return plugin.ResponseMiddlewareOutput{}, errors.New("generated credential source reference already exists")
 		}
 		reference.state.CredentialSources[credentialSourceReference] = credentialSource{
-			ResourceHref: credential.ResourceHref,
-			Offers:       []dpopCredential{credential},
+			ResourceIndicator:    credential.ResourceIndicator,
+			AuthorizationDetails: append([]map[string]any{}, credential.AuthorizationDetails...),
+			Offers:               []dpopCredential{credential},
 		}
 	} else {
 		source := reference.state.CredentialSources[credentialSourceReference]
@@ -254,10 +255,10 @@ func acceptCredentialOffer(
 		return plugin.ResponseMiddlewareOutput{}, err
 	}
 	return plugin.ResponseMiddlewareOutput{Response: &plugin.HookResponseUpdate{Body: map[string]any{
-		"status":            "ready",
-		"resource":          map[string]any{"href": credential.ResourceHref},
-		"resourceIndicator": credential.ResourceIndicator,
-		"scopes":            resource.Scopes,
+		"status":               "ready",
+		"resourceIndicator":    credential.ResourceIndicator,
+		"authorizationDetails": credential.AuthorizationDetails,
+		"scopes":               resource.Scopes,
 		"credentialSource": map[string]any{
 			"name":      "realmroot",
 			"reference": credentialSourceReference,

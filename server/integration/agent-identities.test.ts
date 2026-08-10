@@ -462,10 +462,7 @@ describe('Agent identity enrollment over real D1', () => {
       principal,
       'http://localhost',
     )
-    expect(accessRequest.target).toEqual({
-      type: 'resource',
-      resource: { href: `http://localhost/api/resource-servers/${resource.id}/resources/service` },
-    })
+    expect(accessRequest).toMatchObject({ resourceServerId: resource.id, authorizationDetails: [] })
     expect(accessRequest).not.toHaveProperty('grantId')
 
     const invalidApproval = await harness.request(`/api/account/access-requests/${accessRequest.id}/decision`, {

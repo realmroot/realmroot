@@ -8,12 +8,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 	"time"
 )
 
 const (
 	stateDirectoryEnv = "REALMROOT_PLUGIN_STATE_DIR"
-	agentStateVersion = 14
+	agentStateVersion = 16
 	hostStateVersion  = 1
 	identityDirectory = "identities"
 	hostDirectory     = "hosts"
@@ -40,19 +42,20 @@ type pendingApproval struct {
 }
 
 type dpopCredential struct {
-	ResourceHref       string     `json:"resource_href"`
-	ResourceIndicator  string     `json:"resource_indicator"`
-	CredentialEndpoint string     `json:"credential_endpoint"`
-	ProofTarget        string     `json:"proof_target"`
-	PrivateKey         string     `json:"private_key,omitempty"`
-	AccessToken        string     `json:"access_token,omitempty"`
-	ExpiresAt          *time.Time `json:"expires_at,omitempty"`
-	Scopes             []string   `json:"scopes,omitempty"`
+	ResourceIndicator    string           `json:"resource_indicator"`
+	AuthorizationDetails []map[string]any `json:"authorization_details,omitempty"`
+	CredentialEndpoint   string           `json:"credential_endpoint"`
+	ProofTarget          string           `json:"proof_target"`
+	PrivateKey           string           `json:"private_key,omitempty"`
+	AccessToken          string           `json:"access_token,omitempty"`
+	ExpiresAt            *time.Time       `json:"expires_at,omitempty"`
+	Scopes               []string         `json:"scopes,omitempty"`
 }
 
 type credentialSource struct {
-	ResourceHref string           `json:"resource_href"`
-	Offers       []dpopCredential `json:"offers"`
+	ResourceIndicator    string           `json:"resource_indicator"`
+	AuthorizationDetails []map[string]any `json:"authorization_details,omitempty"`
+	Offers               []dpopCredential `json:"offers"`
 }
 
 type agentState struct {
@@ -261,6 +264,14 @@ func (s *fileStateStore) loadPath(path string) (agentState, error) {
 	if err := json.Unmarshal(data, &state); err != nil {
 		return agentState{}, fmt.Errorf("decode Agent state: %w", err)
 	}
+	if state.Version == 14 || state.Version == 15 {
+		state.Version = agentStateVersion
+		state.CredentialSources = nil
+		state.ProtocolCredential = nil
+		if err := s.updatePath(path, state); err != nil {
+			return agentState{}, fmt.Errorf("migrate Agent state: %w", err)
+		}
+	}
 	return state, nil
 }
 
@@ -362,8 +373,8 @@ func (s *fileStateStore) RemoveCredentialOffer(reference resourceCredentialRefer
 }
 
 func sameCredentialOffer(left dpopCredential, right dpopCredential) bool {
-	return left.ResourceHref == right.ResourceHref &&
-		left.ResourceIndicator == right.ResourceIndicator &&
+	return left.ResourceIndicator == right.ResourceIndicator &&
+		sameAuthorizationDetails(left.AuthorizationDetails, right.AuthorizationDetails) &&
 		left.CredentialEndpoint == right.CredentialEndpoint &&
 		left.ProofTarget == right.ProofTarget &&
 		sameStringSet(left.Scopes, right.Scopes)
@@ -514,24 +525,29 @@ func validateAgentStateCredentials(state agentState) error {
 	if err != nil || len(key) != ed25519.PrivateKeySize {
 		return errors.New("Agent private key is invalid")
 	}
-	resourceReferences := make(map[string]string, len(state.CredentialSources))
+	authorizationContexts := make(map[string]string, len(state.CredentialSources))
 	for reference, source := range state.CredentialSources {
-		if !isCredentialSourceReference(reference) || source.ResourceHref == "" || len(source.Offers) == 0 {
+		if !isCredentialSourceReference(reference) || source.ResourceIndicator == "" || len(source.Offers) == 0 {
 			return errors.New("Agent state contains invalid DPoP credential metadata")
 		}
-		if existingReference, exists := resourceReferences[source.ResourceHref]; exists {
+		contextKey, err := authorizationContextKey(source.ResourceIndicator, source.AuthorizationDetails)
+		if err != nil {
+			return fmt.Errorf("Agent state authorization details are invalid: %w", err)
+		}
+		if existingReference, exists := authorizationContexts[contextKey]; exists {
 			return fmt.Errorf(
-				"Agent state credential sources %q and %q address the same Resource",
+				"Agent state credential sources %q and %q address the same authorization context",
 				existingReference,
 				reference,
 			)
 		}
-		resourceReferences[source.ResourceHref] = reference
-		if _, err := validatedAbsoluteURL(source.ResourceHref); err != nil {
-			return fmt.Errorf("Agent state credential Resource URL is invalid: %w", err)
+		authorizationContexts[contextKey] = reference
+		if _, err := validatedAbsoluteURL(source.ResourceIndicator); err != nil {
+			return fmt.Errorf("Agent state DPoP resource URL is invalid: %w", err)
 		}
 		for _, credential := range source.Offers {
-			if credential.ResourceHref != source.ResourceHref || credential.ResourceIndicator == "" ||
+			if credential.ResourceIndicator != source.ResourceIndicator ||
+				!sameAuthorizationDetails(credential.AuthorizationDetails, source.AuthorizationDetails) ||
 				credential.CredentialEndpoint == "" || credential.ProofTarget == "" {
 				return errors.New("Agent state contains invalid DPoP credential metadata")
 			}
@@ -565,6 +581,25 @@ func validateAgentStateCredentials(state agentState) error {
 		}
 	}
 	return nil
+}
+
+func authorizationContextKey(resourceIndicator string, details []map[string]any) (string, error) {
+	entries := make([]string, 0, len(details))
+	for _, detail := range details {
+		encoded, err := json.Marshal(detail)
+		if err != nil {
+			return "", err
+		}
+		entries = append(entries, string(encoded))
+	}
+	sort.Strings(entries)
+	return resourceIndicator + "\x00" + strings.Join(entries, "\x00"), nil
+}
+
+func sameAuthorizationDetails(left, right []map[string]any) bool {
+	leftKey, leftErr := authorizationContextKey("", left)
+	rightKey, rightErr := authorizationContextKey("", right)
+	return leftErr == nil && rightErr == nil && leftKey == rightKey
 }
 
 func validateHostState(state hostState, target agentTarget) error {

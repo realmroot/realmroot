@@ -36,7 +36,6 @@ test.describe('new Agent stable identity enrollment', () => {
         subject: result.agent.subject,
       })
 
-      plugin.configureManagementCredential(`${baseURL}/api/resource-servers/res_realmroot/resources/platform`)
       expect(plugin.inspectAuth('getAgentStatus')).toContain('agentAuth')
       expect(plugin.inspectAuth('createResourceServer')).toContain('oauth2')
       expect(plugin.whoami().agent).toMatchObject({

@@ -4,10 +4,10 @@ Use this reference only when the user explicitly requests Realmroot tenant
 administration.
 
 Realmroot is a built-in Resource Server in its own Resource Server inventory.
-Its Resources are authority boundaries: Organization and User. The built-in
+Its authorization details select authority boundaries: Organization and User. The built-in
 Realmroot Platform Organization owns platform-wide administration.
 AgentAuth enrollment establishes identity only. Management requests use a
-short-lived OAuth 2.0 access token bound to the selected Resource with DPoP.
+short-lived OAuth 2.0 access token bound to the selected authorization detail with DPoP.
 
 ## Obtain Management Access
 
@@ -15,8 +15,8 @@ Follow the normal Resource Server flow in
 [restish-commands.md](restish-commands.md):
 
 1. discover the Resource Server whose `identifier` is `realmroot`;
-2. list its `links.resources` collection;
-3. select exactly one Organization or User Resource whose
+2. list its `links.authorizationDetails` collection;
+3. select exactly one Organization or User authorization detail whose
    `requestableScopes` cover the intended operations;
 4. inspect the intended operations in the live OpenAPI document;
 5. request the union of their declared OAuth scopes with the `access` command.
@@ -36,11 +36,11 @@ restish "$API_NAME" agent whoami --rsh-print b -o json
 `getAgentStatus` must remain assigned to the `agentAuth` runtime resolver.
 Never configure `agentAuth` or the legacy `dpop` ID in a Realmroot profile.
 
-Select the Realmroot Platform Organization Resource for platform-wide
-operations. Other Organization and User Resources remain restricted to their
+Select the Realmroot Platform Organization authorization detail for platform-wide
+operations. Other Organization and User details remain restricted to their
 own tenant. Request the union of scopes needed for one management task in one
 approval; every issued token remains short-lived and bound to the selected
-authority Resource.
+authority detail.
 
 Connectors and external Resource Servers are platform resources. Register or
 change them only with the Realmroot Platform Organization Resource. Native
@@ -91,7 +91,7 @@ smallest requested change, and read the resource again afterward. Use
 
 - State the resolved deployment before mutation and obtain confirmation when a
   production mutation was not explicit in the task.
-- Never reuse a token for another Realmroot authority Resource.
+- Never reuse a token for another Realmroot authority detail.
 - Send asset uploads as `multipart/form-data` with one `file` field.
 - Route one-time secrets directly to a user-approved protected destination.
 - Confirm the exact target before destructive operations.

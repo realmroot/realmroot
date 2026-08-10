@@ -182,7 +182,7 @@ func issueTargetCredential(
 	}
 	token.DPoPNonce = nonce
 	if token.TokenType != "DPoP" || token.AccessToken == "" || token.ResourceIndicator != offer.ResourceIndicator ||
-		token.Resource.Href != offer.ResourceHref || !token.ExpiresAt.After(time.Now()) ||
+		!sameAuthorizationDetails(token.AuthorizationDetails, offer.AuthorizationDetails) || !token.ExpiresAt.After(time.Now()) ||
 		!sameStringSet(token.Scopes, offer.Scopes) {
 		return targetTokenResponse{}, errors.New("Realmroot returned an invalid target API access token")
 	}

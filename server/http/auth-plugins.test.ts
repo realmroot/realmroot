@@ -37,7 +37,7 @@ describe('auth.test 2', () => {
       agent_bootstrap_scopes_supported: [
         'agent:read',
         'resource-servers:read',
-        'resources:read',
+        'authorization-details:read',
         'connection-requests:read',
         'connection-requests:write',
         'access-requests:read',

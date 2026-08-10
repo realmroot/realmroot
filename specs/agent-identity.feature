@@ -128,7 +128,7 @@ Feature: Agent identity and delegated API authorization
       But the public profile never returns Host, role, scope, grant, Resource, or authorization state
       And the public profile is never authoritative for authentication or authorization
 
-  Rule: Resource Servers expose provider-owned Resources through one Agent access workflow
+  Rule: Resource Servers expose authorization details through one Agent access workflow
 
     @entrypoint:agent-protocol @journey:realmroot-built-in-resource-server
     Scenario: Realmroot exposes its own API as a system-managed Resource Server
@@ -141,34 +141,34 @@ Feature: Agent identity and delegated API authorization
       And refreshing that registry returns the same current catalog without an external network dependency
       And its account connection status is not-required
       And it cannot be disabled, soft-deleted, or reassigned through tenant management
-      When the Agent lists that Resource Server's Resources
-      Then the built-in platform Organization, ordinary Organization, and personal User Resources reflect the controller tenant boundaries available for approval
-      And the platform Organization Resource supplies platform-wide management scopes
-      And each Organization or User Resource supplies only scopes valid for that tenant boundary
-      And every controller can approve scopes only within the selected Resource boundary
+      When the Agent lists that Resource Server's authorization details
+      Then the built-in platform Organization, ordinary Organization, and personal User details reflect the controller tenant boundaries available for approval
+      And the platform Organization detail supplies platform-wide management scopes
+      And each Organization or User detail supplies only scopes valid for that tenant boundary
+      And every controller can approve scopes only within the selected authorization detail boundary
       And a platform Organization credential retains only the Agent's automatic protocol scopes plus approved management scopes
-      And a token for one Resource cannot authorize another Resource
+      And a token for one authorization detail cannot authorize another authorization detail
       When the Agent reads Resource Servers with either bootstrap or resource-bound authority
       Then Realmroot returns the same canonical Resource Server representation
       And the credential authority changes only which Resource Servers the Agent may read or mutate
 
     @entrypoint:agent-protocol @journey:agent-resource-server-model
-    Scenario: An Agent discovers Resource Servers before provider-owned Resources
+    Scenario: An Agent discovers Resource Servers before provider authorization details
       Given Realmroot has registered native and external Resource Servers
       When the Agent lists Resource Servers
       Then each item identifies one protected API service, its service URL, OAuth resource indicator, availability, and account connection status
       And the Agent-facing contract does not call a Resource Server an API Resource
-      When the Agent lists one Resource Server's Resources
-      Then each item identifies one provider-owned authorization target with safe display metadata
-      And each Resource separately reports account authorization, Agent-authorized scopes, and requestable scopes
+      When the Agent lists one Resource Server's authorization details
+      Then each item exposes one RFC 9396 authorization detail with flat safe display metadata
+      And each item separately reports account authorization status, Agent-authorized scopes, and requestable scopes
       And an Organization owner may approve current assigned scopes of a Resource Server owned by that Organization
-      And provider-specific RFC 9396 authorization details remain internal to Realmroot
+      And an access request copies the selected authorization detail directly without a generated Resource identifier or URL
 
     @entrypoint:agent-protocol @journey:agent-private-resource-server-visibility
     Scenario: A private Resource Server stays inside its owner Organization boundary
       Given a private Resource Server is owned by an Organization and available to Agents
       And a personal Agent's controller is an active member of that Organization
-      When the Agent lists Resource Servers or directly reads that Resource Server's Resources
+      When the Agent lists Resource Servers or that Resource Server's authorization details
       Then the private Resource Server is visible to that Agent
       But it remains hidden from Agents outside the owner Organization
       And discovery grants no Resource scope or credential
@@ -189,7 +189,8 @@ Feature: Agent identity and delegated API authorization
       When the Restish response middleware handles that offer
       Then the plugin generates an opaque local credential source reference
       And stores that reference with the server-supplied offer in the Agent's local state
-      And returns a safe receipt containing the opaque reference rather than a Resource URL
+      And returns a safe receipt containing the opaque reference, resource indicator, and authorization details without a generated Resource URL
+      And represents an unconstrained authorization-details collection as an empty array
       When the Agent adds that credential source to the target Restish API
       Then Restish creates and retains the DPoP private key locally
       And asks the plugin to redeem the offer with a proof for the exact supplied method and URI
@@ -292,9 +293,9 @@ Feature: Agent identity and delegated API authorization
     Scenario: Restish manages target credentials without observing Permissions
       Given Restish stores a DPoP credential obtained through the Realmroot credential source
       When another approved access request returns a credential offer for the same Resource Server
-      Then the plugin reuses the opaque credential source reference for that Resource
+      Then the plugin reuses the opaque credential source reference for that Resource Server and authorization details
       And replaces only an offer with the same scopes
-      And retains every other offer for that Resource while its server-managed authority remains valid
+      And retains every other offer for that authorization context while its server-managed authority remains valid
       And does not alter Restish credentials for other authorization contexts
       And target requests use only the explicitly configured Restish DPoP credential
       When a short-lived credential expires while its server-managed authority remains active
