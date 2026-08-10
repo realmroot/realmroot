@@ -30,7 +30,7 @@ restish api auth add "$API_NAME" oauth2 \
   --source realmroot \
   --reference "$CREDENTIAL_SOURCE_REFERENCE"
 restish api auth inspect "$API_NAME" --operation getAgentStatus --redact
-restish "$API_NAME" agents whoami --rsh-print b -o json
+restish "$API_NAME" agent whoami --rsh-print b -o json
 ```
 
 `getAgentStatus` must remain assigned to the `agentAuth` runtime resolver.
@@ -56,12 +56,12 @@ the OAuth token endpoint and manages DPoP access tokens locally.
 | Resource group | Collection path | OAuth scope prefix |
 | --- | --- | --- |
 | Applications and OIDC clients | `/applications` | `applications` |
-| Application consents | `/access/consents` | `applications` |
+| Application authorizations | `/applications/{applicationId}/authorizations` | `applications` |
 | Resource Servers | `/resource-servers` | `resource-servers` |
 | Organizations | `/organizations` | `organizations` |
 | Users and security state | `/users` | `users` |
 | Agent inventory | `/agents` | `agents` |
-| Agent access requests | `/agent/access-requests` | `access-requests` |
+| Subject permissions | `/users/{userId}/permissions`, `/applications/{applicationId}/permissions`, `/agents/{agentId}/permissions` | `permissions` |
 | Connectors | `/connectors` | `connectors` |
 | Realm settings | `/realm` | `settings` |
 | Realm security policy | `/realm/security-policy` | `security` |

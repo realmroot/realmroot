@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { createApp } from '@server/http/app'
 import { unifiedOpenApi } from '@server/http/openapi/management'
 import { protectedResourceCollectionRoutes } from '@shared/api/management'
@@ -227,6 +228,38 @@ describe('management routes 1', () => {
       { group: 'Agent', name: 'whoami', operationId: 'getAgentStatus' },
       { group: 'Resource Servers', name: 'connect', operationId: 'createConnectionRequest' },
       { group: 'Agent', name: 'access', operationId: 'createAgentAuthorizationRequest' },
+    ])
+  })
+
+  it('keeps the Realmroot Skill aligned with generated Agent commands [spec: management-api/management-restish-command-surface]', () => {
+    const setup = readFileSync(new URL('../../../skills/realmroot/references/setup.md', import.meta.url), 'utf8')
+    const commands = readFileSync(
+      new URL('../../../skills/realmroot/references/restish-commands.md', import.meta.url),
+      'utf8',
+    )
+    const management = readFileSync(
+      new URL('../../../skills/realmroot/references/management.md', import.meta.url),
+      'utf8',
+    )
+
+    expect(setup).toContain('restish "$API_NAME" agent whoami')
+    expect(setup).not.toContain('restish "$API_NAME" agents whoami')
+    expect(commands).toContain('restish "$API_NAME" agent access')
+    expect(commands).not.toContain('agent-access access')
+    expect(commands).toContain('"resourceServerId": "$RESOURCE_SERVER_ID"')
+    expect(commands).not.toContain('"resource": {"href": "$RESOURCE_HREF"}')
+    expect(commands).toContain('"reference": "rrcs_')
+    expect(management).not.toContain('/access/consents')
+
+    const accessRequest = openApiOperationObjects().find(
+      (operation) => operation.operationId === 'createAgentAuthorizationRequest',
+    )
+    const schema = openApiSchemaObject(requestBodyContent(accessRequest?.requestBody).schema)
+    expect(Object.keys(openApiRecord(schema.properties)).sort()).toEqual([
+      'authorizationDetails',
+      'reason',
+      'resourceServerId',
+      'scopes',
     ])
   })
 

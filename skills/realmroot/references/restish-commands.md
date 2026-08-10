@@ -87,9 +87,11 @@ List all pages for the selected Resource Server:
 restish get "$API_NAME/resource-servers/$RESOURCE_SERVER_ID/resources?limit=100&offset=0" --rsh-print b -o json
 ```
 
-Each Resource supplies:
+Each Resource supplies optional provider-owned context for discovery and
+account connection:
 
-- `links.self`: the canonical href used in an access request;
+- `links.self`: the canonical href used for direct reads and resource-specific
+  account connection requests;
 - `name`, `description`, and `metadata`: selection information;
 - `accountAuthorization.status`: whether the controller's account covers it;
 - `agentAuthorization.authorizedScopes`: scopes already approved for this
@@ -97,8 +99,9 @@ Each Resource supplies:
 - `agentAuthorization.requestableScopes`: additional scopes the Agent may ask
   the controller to approve.
 
-Select the exact Resource and canonical href from these responses. If no
-Resource matches, report that result. A native service normally exposes one
+Select a Resource when the task or account-connection flow requires that
+provider-owned context. Access Requests address the Resource Server itself;
+they do not accept a Resource href. A native service normally exposes one
 `service` Resource.
 
 ## 4. Inspect And Connect The Target API
@@ -149,14 +152,20 @@ the selected Resource Server's published contract; do not assume scope names
 from another service.
 
 ```bash
-restish "$API_NAME" agent-access access --rsh-validate --rsh-print b -o json <<JSON
+restish "$API_NAME" agent access --rsh-validate --rsh-print b -o json <<JSON
 {
-  "resource": {"href": "$RESOURCE_HREF"},
+  "resourceServerId": "$RESOURCE_SERVER_ID",
   "scopes": ["$REQUIRED_SCOPE"],
-  "reason": "Perform the requested operation on the selected resource"
+  "reason": "Perform the requested operation on the selected Resource Server"
 }
 JSON
 ```
+
+Send `authorizationDetails` only when the selected operation requires an
+explicit target constraint and its values come from live Resource Server
+metadata. Omit it for an unconstrained Resource Server scope request; Realmroot
+defaults it to an empty array. Never put a Resource URL or href in the Access
+Request representation.
 
 Realmroot decides whether existing controller authority can be reused. If a
 decision is needed, the generic interaction handler opens the hosted approval
