@@ -16,7 +16,18 @@ import (
 
 const (
 	interactiveResourceProfile = "https://realmroot.dev/profiles/interactive-resource"
+	agentEnrollmentProfile     = "https://realmroot.dev/profiles/agent-enrollment"
 )
+
+type responseStateStore interface {
+	stateStore
+	agentStateFinder
+}
+
+type enrollmentResponse struct {
+	Kind   string `json:"kind"`
+	Status string `json:"status"`
+}
 
 type interactiveResponse struct {
 	ID          string   `json:"id"`
@@ -50,11 +61,17 @@ type credentialOffer struct {
 func handleProfiledResponse(
 	input plugin.ResponseMiddlewareInput,
 	opener browserOpener,
-	states agentStateFinder,
+	states responseStateStore,
 	client httpDoer,
 	references credentialSourceReferenceGenerator,
 ) (plugin.ResponseMiddlewareOutput, error) {
-	if input.Response.Status < 200 || input.Response.Status >= 300 || !hasProfile(input.Response.Headers, interactiveResourceProfile) {
+	if input.Response.Status < 200 || input.Response.Status >= 300 {
+		return plugin.ResponseMiddlewareOutput{}, nil
+	}
+	if hasProfile(input.Response.Headers, agentEnrollmentProfile) {
+		return completeProfiledAgentEnrollment(input, states, client)
+	}
+	if !hasProfile(input.Response.Headers, interactiveResourceProfile) {
 		return plugin.ResponseMiddlewareOutput{}, nil
 	}
 	representation, err := decodeHookBody[map[string]any](input.Response.Body)
@@ -81,6 +98,44 @@ func handleProfiledResponse(
 		client,
 		references,
 	)
+}
+
+func completeProfiledAgentEnrollment(
+	input plugin.ResponseMiddlewareInput,
+	states responseStateStore,
+	client httpDoer,
+) (plugin.ResponseMiddlewareOutput, error) {
+	enrollment, err := decodeHookBody[enrollmentResponse](input.Response.Body)
+	if err != nil {
+		return plugin.ResponseMiddlewareOutput{}, fmt.Errorf("decode Agent enrollment response: %w", err)
+	}
+	if enrollment.Kind != "new_identity" || enrollment.Status != "approved" {
+		return plugin.ResponseMiddlewareOutput{}, nil
+	}
+	requestURL, err := url.Parse(input.Request.URI)
+	if err != nil || requestURL.Scheme == "" || requestURL.Host == "" {
+		return plugin.ResponseMiddlewareOutput{}, errors.New("Agent enrollment request URL is invalid")
+	}
+	origin := requestURL.Scheme + "://" + requestURL.Host
+	configuration, err := resolveAgentConfiguration(context.Background(), client, configurationCache(states), origin)
+	if err != nil {
+		return plugin.ResponseMiddlewareOutput{}, err
+	}
+	runtime, err := agentRuntime()
+	if err != nil {
+		return plugin.ResponseMiddlewareOutput{}, err
+	}
+	target := agentTarget{
+		Runtime: runtime, Origin: origin, Issuer: configuration.AgentIdentityIssuer,
+	}
+	state, err := loadAgentRegistration(states, target)
+	if err != nil {
+		return plugin.ResponseMiddlewareOutput{}, err
+	}
+	if err := completeAgentEnrollment(context.Background(), states, client, target, state, configuration); err != nil {
+		return plugin.ResponseMiddlewareOutput{}, fmt.Errorf("complete Realmroot Agent enrollment: %w", err)
+	}
+	return plugin.ResponseMiddlewareOutput{}, nil
 }
 
 func handleInteractiveResource(
@@ -135,7 +190,7 @@ func handleInteractiveResource(
 			case <-timer.C:
 			}
 			var polledRepresentation map[string]any
-			protocol, err := usableProtocolCredential(ctx, client, state)
+			protocol, err := usableProtocolCredential(ctx, client, configurationCache(states), state)
 			if err != nil {
 				return plugin.ResponseMiddlewareOutput{}, err
 			}

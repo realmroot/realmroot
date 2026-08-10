@@ -3,7 +3,7 @@
     "method": "POST",
     "path": "/agent/enrollments",
     "operationId": "createAgentEnrollment",
-    "semanticHash": "648fef27b5961c4582358628c425d70c9b98b71f3b99c35ef2b04621540a4699"
+		"semanticHash": "1c256e63c24e0335ad2a6776cecc6f8bf84bc451b2846be76f868ddc6964ff6a"
   },
   {
     "method": "GET",

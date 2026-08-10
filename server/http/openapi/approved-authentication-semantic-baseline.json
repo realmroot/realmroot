@@ -3,25 +3,25 @@
     "method": "GET",
     "path": "/agent",
     "operationId": "getAgentStatus",
-    "semanticHash": "0bf0127cfd10f10f48de12f4437beeae5f6b88c89a0c47924b10b0ae29f63a2d"
+    "semanticHash": "ac09ba6d79f67fc33163c855a468f072369d201bdfaf0cfefcea825cb741fd7e"
   },
   {
     "method": "POST",
     "path": "/agent/access-requests",
     "operationId": "createAgentAuthorizationRequest",
-    "semanticHash": "77665063ce813067b088d148233fab8b008eac5ba3878a9bba677a67a0cb96aa"
+    "semanticHash": "e17abb69020fd31f0a8e50ca6c5760a673ca8ababf97cde3d998367c1546309e"
   },
   {
     "method": "GET",
     "path": "/agent/access-requests/{requestId}",
     "operationId": "getAgentAuthorizationRequest",
-    "semanticHash": "91962fda2017e8f1f23e283360b2cd019d12fb340ba555173035e10c9b1f9991"
+    "semanticHash": "79a0c47d6d1e9c9e3cc6ee315bd111493a499f01eb970c53dfd05ad98df54128"
   },
   {
     "method": "POST",
     "path": "/agent/access-requests/{requestId}/credentials",
     "operationId": "createAgentAccessRequestCredential",
-    "semanticHash": "14a0aeccbba4abbf8d1711fc1d6e9a0e3fb2ccd6008ceba514f5a295fd24750b"
+    "semanticHash": "40fe3b974798504628bb8f12630a0c387e30262bdbe1305f38c63da7e86eee52"
   },
   {
     "method": "DELETE",
@@ -357,7 +357,7 @@
     "method": "GET",
     "path": "/resource-servers",
     "operationId": "listResourceServers",
-    "semanticHash": "b1ef20c72e8f4a9f641377a37516b3effa4211f72f00a0e230a0b2207a0c9898"
+    "semanticHash": "6e39664469b36e8bac3e38c0691a9c450f5d499b1137ac9831f437fe0651a55f"
   },
   {
     "method": "POST",
@@ -375,7 +375,7 @@
     "method": "GET",
     "path": "/resource-servers/{resourceServerId}",
     "operationId": "getResourceServer",
-    "semanticHash": "05298c13bc3670775f8e8a2754a723adaff5dc71a71c052c30018f00a4420afb"
+    "semanticHash": "fffd14c81d94ed0ce924297a9cf82a87a255456875935134f0cbf6c2fcd45d52"
   },
   {
     "method": "PATCH",
@@ -387,7 +387,7 @@
     "method": "GET",
     "path": "/resource-servers/{resourceServerId}/authorization-details",
     "operationId": "listResourceServerAuthorizationDetails",
-    "semanticHash": "fa931b2db93605f5f7cc13ae1935410237bc47f324a8fe8527550dd49d67250a"
+    "semanticHash": "3725b1fe567aea2662dc709b15e35e50e443e05368cf68a0fe30400cd7137cff"
   },
   {
     "method": "PUT",
@@ -399,13 +399,13 @@
     "method": "POST",
     "path": "/resource-servers/{resourceServerId}/connection-requests",
     "operationId": "createConnectionRequest",
-    "semanticHash": "2c254305685eaf3e66a039fdb3ea1d14f17181ce21ab88e93ec860f4a8d69918"
+    "semanticHash": "226f09bcac1e2234949e2b897f33de089437eb53bfd21436d35676ecf7d38ebc"
   },
   {
     "method": "GET",
     "path": "/resource-servers/{resourceServerId}/connection-requests/{requestId}",
     "operationId": "getConnectionRequest",
-    "semanticHash": "6f58cc1503d89d6d452d4669b8bb0fb9c38972a797636a9190a436e59d8700f1"
+    "semanticHash": "fbca9652cfbb6bf8852ef72ab72fb6a5cead8343891e0d86ecff9c294de7aa3e"
   },
   {
     "method": "GET",

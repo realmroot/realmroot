@@ -28,11 +28,12 @@ test.describe('external API resource authorization', () => {
     const plugin = createRestishAgentPlugin(baseURL)
 
     try {
-      const whoami = plugin.firstWhoami('External Resource E2E Agent')
-      await page.goto(await whoami.approvalUrl)
+      const enrollment = plugin.enroll('External Resource E2E Agent')
+      await page.goto(await enrollment.approvalUrl)
       await page.getByRole('button', { name: 'Approve login' }).click()
       await expect(page.getByRole('heading', { name: 'Authorization successful' })).toBeVisible()
-      const identity = await whoami.result
+      await enrollment.result
+      const identity = plugin.whoami()
 
       const connectorResponse = await page.request.post('/api/connectors', {
         data: {
@@ -169,11 +170,12 @@ test.describe('external API resource authorization', () => {
     const plugin = createRestishAgentPlugin(baseURL)
 
     try {
-      const whoami = plugin.firstWhoami('Realmroot Resource E2E Agent')
-      await page.goto(await whoami.approvalUrl)
+      const enrollment = plugin.enroll('Realmroot Resource E2E Agent')
+      await page.goto(await enrollment.approvalUrl)
       await page.getByRole('button', { name: 'Approve login' }).click()
       await expect(page.getByRole('heading', { name: 'Authorization successful' })).toBeVisible()
-      const _identity = await whoami.result
+      await enrollment.result
+      const _identity = plugin.whoami()
 
       const resourceResponse = await page.request.post('/api/resource-servers', {
         data: {

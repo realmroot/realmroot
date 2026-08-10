@@ -18,14 +18,24 @@ test.describe('new Agent stable identity enrollment', () => {
     const plugin = createRestishAgentPlugin(baseURL)
 
     try {
-      const whoami = plugin.firstWhoami('E2E Build Agent')
-      await page.goto(await whoami.approvalUrl)
+      expect(() => plugin.whoami()).toThrow('restish realmroot agent enroll')
+
+      const enrollment = plugin.enroll('E2E Build Agent')
+      await page.goto(await enrollment.approvalUrl)
       await expect(page.getByRole('heading', { name: 'Approve Agent login' })).toBeVisible()
       await page.getByRole('button', { name: 'Approve login' }).click()
       await expect(page.getByRole('heading', { name: 'Authorization successful' })).toBeVisible()
       await expect(page.getByText('You can safely close this page.')).toBeVisible()
 
-      const result = await whoami.result
+      const completedEnrollment = await enrollment.result
+      expect(completedEnrollment).toMatchObject({ name: 'E2E Build Agent', status: 'approved' })
+      const replayedEnrollment = await plugin.enroll('E2E Build Agent').result
+      expect(replayedEnrollment).toMatchObject({
+        id: completedEnrollment.id,
+        name: 'E2E Build Agent',
+        status: 'approved',
+      })
+      const result = plugin.whoami()
       expect(result.agent).toMatchObject({
         issuer: `${baseURL}/api/auth`,
         name: 'E2E Build Agent',
@@ -36,7 +46,8 @@ test.describe('new Agent stable identity enrollment', () => {
         subject: result.agent.subject,
       })
 
-      expect(plugin.inspectAuth('getAgentStatus')).toContain('agentAuth')
+      expect(plugin.inspectAuth('getAgentStatus')).toContain('oauth2')
+      expect(plugin.inspectAuth('getAgentStatus')).not.toContain('agentAuth')
       expect(plugin.inspectAuth('createResourceServer')).toContain('oauth2')
       expect(plugin.whoami().agent).toMatchObject({
         issuer: result.agent.issuer,
@@ -57,9 +68,9 @@ test.describe('new Agent stable identity enrollment', () => {
 
     const deniedEnrollmentPlugin = createRestishAgentPlugin(baseURL)
     try {
-      const whoami = deniedEnrollmentPlugin.firstWhoami('Denied Enrollment Agent')
-      const enrollmentResult = whoami.result.catch((error: unknown) => error)
-      await page.goto(await whoami.approvalUrl)
+      const enrollment = deniedEnrollmentPlugin.enroll('Denied Enrollment Agent')
+      const enrollmentResult = enrollment.result.catch((error: unknown) => error)
+      await page.goto(await enrollment.approvalUrl)
       await page.getByRole('button', { name: 'Deny' }).click()
       await expect(page.getByRole('heading', { name: 'Authorization denied' })).toBeVisible()
       await expect(page.getByText('You can safely close this page.')).toBeVisible()

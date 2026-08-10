@@ -31,7 +31,8 @@ export function authz(resource: ProtectedResource): MiddlewareHandler {
 
 export function requireAgentScope(c: Context, requiredScope: string) {
   const agent = getPrincipal(c).agent
-  if (agent && !agent.scopes.includes(requiredScope)) {
+  if (!agent) throw unauthorized('An OAuth-authenticated Agent is required.')
+  if (!agent.scopes.includes(requiredScope)) {
     throw forbidden(`OAuth scope "${requiredScope}" is required.`)
   }
 }

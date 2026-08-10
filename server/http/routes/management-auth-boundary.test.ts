@@ -67,10 +67,7 @@ describe('management routes 1', () => {
     expect(operationIds).not.toContain(undefined)
     expect(new Set(operationIds).size).toBe(operationIds.length)
     expect(unifiedOpenApi.security).toBeUndefined()
-    expect(unifiedOpenApi.components.securitySchemes.agentAuth).toMatchObject({
-      type: 'http',
-      scheme: 'DPoP',
-    })
+    expect(unifiedOpenApi.components.securitySchemes).not.toHaveProperty('agentAuth')
     expect(unifiedOpenApi.components.securitySchemes.agentAssertion).toMatchObject({
       type: 'http',
       scheme: 'bearer',
@@ -131,16 +128,15 @@ describe('management routes 1', () => {
   it('[spec: management-api/management-restish-agent-auth] separates Agent protocol and Resource management credentials', () => {
     const operations = new Map(openApiOperationObjects().map((operation) => [operation.operationId, operation]))
 
-    expect(operations.get('getAgentStatus')?.security).toEqual([{ agentAuth: ['agent:read'] }])
+    expect(operations.get('getAgentStatus')?.security).toEqual([{ oauth2: ['agent:read'] }])
     expect(operations.get('createAgentAuthorizationRequest')?.security).toEqual([
-      { agentAuth: ['access-requests:write'] },
+      { oauth2: ['access-requests:read', 'access-requests:write'] },
     ])
     expect(operations.get('createResourceServer')?.security).toEqual([
       { oauth2: ['resource-servers:write'] },
       { sessionCookie: ['resource-servers:write'] },
     ])
     expect(operations.get('listResourceServers')?.security).toEqual([
-      { agentAuth: ['resource-servers:read'] },
       { oauth2: ['resource-servers:read'] },
       { sessionCookie: ['resource-servers:read'] },
     ])
@@ -228,6 +224,7 @@ describe('management routes 1', () => {
       { group: 'Agent', name: 'whoami', operationId: 'getAgentStatus' },
       { group: 'Resource Servers', name: 'connect', operationId: 'createConnectionRequest' },
       { group: 'Agent', name: 'access', operationId: 'createAgentAuthorizationRequest' },
+      { group: 'Agent', name: 'enroll', operationId: 'createAgentEnrollment' },
     ])
   })
 
@@ -243,6 +240,7 @@ describe('management routes 1', () => {
     )
 
     expect(setup).toContain('restish "$API_NAME" agent whoami')
+    expect(setup).toContain('restish "$API_NAME" agent enroll')
     expect(setup).not.toContain('restish "$API_NAME" agents whoami')
     expect(commands).toContain('restish "$API_NAME" agent access')
     expect(commands).not.toContain('agent-access access')
@@ -332,6 +330,7 @@ describe('management routes 1', () => {
         payload: {
           iss: 'http://localhost/api/auth',
           sub: 'agt_1',
+          sub_profile: 'ai_agent',
           client_id: 'protocol-agent-1',
           host_id: 'host-1',
           scope: scopes.join(' '),
@@ -379,7 +378,9 @@ describe('management routes 1', () => {
     const app = createApp(auth, deps)
     const headers = (method: string, path: string) => dpop.headers(method, `http://localhost${path}`)
 
-    const agent = await app.request('/api/agent', { headers: await headers('GET', '/api/agent') })
+    const agent = await app.request('/api/agent', {
+      headers: { ...(await headers('GET', '/api/agent')), 'x-user-id': 'controller-with-browser-session' },
+    })
     expect(agent.status).toBe(200)
     await expect(agent.json()).resolves.toMatchObject({
       agent: { issuer: 'http://localhost/api/auth', subject: 'agt_1' },
@@ -390,6 +391,14 @@ describe('management routes 1', () => {
       headers: await headers('GET', '/api/resource-servers'),
     })
     expect(discovery.status, await discovery.clone().text()).toBe(200)
+
+    const assertionWithBrowserSession = await app.request('/api/resource-servers', {
+      headers: {
+        authorization: 'Bearer agent-assertion',
+        'x-user-id': 'controller-with-browser-session',
+      },
+    })
+    expect(assertionWithBrowserSession.status).toBe(401)
 
     const denied = await app.request('/api/users', { headers: await headers('GET', '/api/users') })
     expect(denied.status, await denied.clone().text()).toBe(403)

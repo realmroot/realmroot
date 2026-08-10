@@ -27,13 +27,14 @@ func TestFileStateStoreProtectsAndValidatesAgentKeys(t *testing.T) {
 		t.Fatal(err)
 	}
 	state := agentState{
-		Version:         agentStateVersion,
-		Origin:          target.Origin,
-		Name:            "Build Agent",
-		AgentID:         "agent-123",
-		HostID:          "host-123",
-		AgentKeyID:      "agent-key",
-		AgentPrivateKey: encodePrivateKey(agentPrivateKey),
+		Version:                  agentStateVersion,
+		Origin:                   target.Origin,
+		Name:                     "Build Agent",
+		AgentID:                  "agent-123",
+		HostID:                   "host-123",
+		AgentKeyID:               "agent-key",
+		AgentPrivateKey:          encodePrivateKey(agentPrivateKey),
+		EnrollmentIdempotencyKey: "enroll_test",
 	}
 
 	path, err := store.Create(target, state)
@@ -236,6 +237,36 @@ func TestFileStateStoreMigratesObsoleteCredentialsAndPreservesIdentity(t *testin
 	}
 }
 
+func TestFileStateStoreAddsEnrollmentIdempotencyWithoutDroppingCurrentCredentials(t *testing.T) {
+	store := &fileStateStore{root: t.TempDir()}
+	target := agentTarget{
+		Runtime: defaultAgentRuntime, Origin: "https://auth.example.com", Issuer: "https://auth.example.com/api/auth",
+	}
+	state := newCredentialState(t, testCredential(t, "", time.Time{})).state
+	state.Version = 16
+	state.EnrollmentIdempotencyKey = ""
+	path := store.path(target)
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := json.Marshal(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, encoded, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	migrated, err := store.Load(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if migrated.EnrollmentIdempotencyKey == "" || migrated.ProtocolCredential == nil ||
+		len(migrated.CredentialSources) != 1 {
+		t.Fatalf("migrated state = %#v", migrated)
+	}
+}
+
 func TestFileStateStoreFindsCredentialOfferByOpaqueReference(t *testing.T) {
 	store := &fileStateStore{root: t.TempDir()}
 	target := agentTarget{
@@ -251,15 +282,16 @@ func TestFileStateStoreFindsCredentialOfferByOpaqueReference(t *testing.T) {
 	}
 	credential := testCredential(t, "", time.Time{})
 	state := agentState{
-		Version:         agentStateVersion,
-		Origin:          target.Origin,
-		Issuer:          target.Issuer,
-		Runtime:         target.Runtime,
-		Name:            "Build Agent",
-		AgentID:         "agent-123",
-		HostID:          "host-123",
-		AgentKeyID:      "agent-key",
-		AgentPrivateKey: encodePrivateKey(agentPrivateKey),
+		Version:                  agentStateVersion,
+		Origin:                   target.Origin,
+		Issuer:                   target.Issuer,
+		Runtime:                  target.Runtime,
+		Name:                     "Build Agent",
+		AgentID:                  "agent-123",
+		HostID:                   "host-123",
+		AgentKeyID:               "agent-key",
+		AgentPrivateKey:          encodePrivateKey(agentPrivateKey),
+		EnrollmentIdempotencyKey: "enroll_test",
 		CredentialSources: map[string]credentialSource{
 			testCredentialSourceReference: {
 				ResourceIndicator: credential.ResourceIndicator, AuthorizationDetails: credential.AuthorizationDetails,
@@ -286,6 +318,85 @@ func TestFileStateStoreFindsCredentialOfferByOpaqueReference(t *testing.T) {
 	if reference.credential.ResourceIndicator != credential.ResourceIndicator ||
 		!sameAuthorizationDetails(reference.credential.AuthorizationDetails, credential.AuthorizationDetails) {
 		t.Fatalf("credential = %#v", reference.credential)
+	}
+}
+
+func TestFileStateStoreRetainsCredentialSourceAfterRemovingItsLastOffer(t *testing.T) {
+	store := &fileStateStore{root: t.TempDir()}
+	target := agentTarget{
+		Runtime: defaultAgentRuntime, Origin: "https://auth.example.com", Issuer: "https://auth.example.com/api/auth",
+	}
+	credential := testCredential(t, "", time.Time{})
+	state := newCredentialState(t, credential).state
+	path := store.path(target)
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := json.Marshal(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, encoded, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	reference, err := store.FindCredentialOffer(testCredentialSourceReference, target.Runtime, credential.Scopes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.RemoveCredentialOffer(reference); err != nil {
+		t.Fatal(err)
+	}
+
+	source, err := store.FindCredentialSource(testCredentialSourceReference, target.Runtime)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if source.source.ResourceIndicator != credential.ResourceIndicator ||
+		!sameAuthorizationDetails(source.source.AuthorizationDetails, credential.AuthorizationDetails) ||
+		len(source.source.Offers) != 0 {
+		t.Fatalf("retained source = %#v", source.source)
+	}
+	if _, err := store.Load(target); err != nil {
+		t.Fatalf("retained empty credential source is invalid: %v", err)
+	}
+}
+
+func TestFileStateStoreSelectsTheLeastBroadOfferThatCoversRequestedScopes(t *testing.T) {
+	store := &fileStateStore{root: t.TempDir()}
+	target := agentTarget{
+		Runtime: defaultAgentRuntime, Origin: "https://auth.example.com", Issuer: "https://auth.example.com/api/auth",
+	}
+	exact := testCredential(t, "", time.Time{})
+	broad := exact
+	broad.Scopes = []string{"files:read", "files:write"}
+	broad.CredentialEndpoint = "https://auth.example.com/api/access-requests/broad/credentials"
+	state := newCredentialState(t, exact).state
+	source := state.CredentialSources[testCredentialSourceReference]
+	source.Offers = []dpopCredential{broad, exact}
+	state.CredentialSources[testCredentialSourceReference] = source
+	path := store.path(target)
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := json.Marshal(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, encoded, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	reference, err := store.FindCredentialOffer(
+		testCredentialSourceReference,
+		target.Runtime,
+		[]string{"files:read"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sameCredentialOffer(reference.credential, exact) {
+		t.Fatalf("selected offer = %#v", reference.credential)
 	}
 }
 

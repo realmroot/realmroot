@@ -23,29 +23,41 @@ Feature: Agent identity and delegated API authorization
   Rule: Agent identities remain stable across hosts and credentials
 
     @e2e @entrypoint:agent-protocol @journey:agent-identity-enrollment
-    Scenario: A new Agent establishes a stable identity on its first protected API operation
+    Scenario: A new Agent explicitly establishes a stable identity
       Given a new Agent connects Restish to the Realmroot OpenAPI contract
-      When the Agent invokes whoami without a local Realmroot identity
-      Then the transparent Restish authentication adapter registers locally generated host and Agent keys
+		When the Agent invokes the generated Agent enrollment command without arguments or a local Realmroot identity
+      Then the Restish authentication adapter registers locally generated host and Agent keys
       And the adapter names the Agent after its detected runtime and the Host after its local device
-      And whoami waits while an authorized controller approves the Agent once from the hosted verification page
+      And enrollment waits while an authorized controller approves the Agent once from the hosted verification page
       And the adapter creates a personal stable identity through the approved Agent session
       Then Realmroot creates an Agent with a stable issuer and subject
       And the Agent belongs to exactly one home space
       And users govern the Agent through explicit Permissions in that space
       And the host registration is bound to that Agent identity
-      And the original whoami operation resumes and returns the stable issuer and subject
+      And the enrollment operation returns the stable Agent enrollment
+      And before the enrollment command returns the adapter resolves and durably stores the stable Agent issuer and subject
+      And losing that successful response and retrying enrollment returns the same enrollment without creating another identity
       And the hosted approval page replaces the request with a clear completion state that says it can be closed
       And later OpenAPI operations reuse the Agent identity without another login command
-      And the adapter requests only the bootstrap scopes published by Agent discovery
+      And whoami only reads the already established identity and never completes enrollment as a side effect
+      And the adapter requests only the exact bootstrap scopes required by each operation
+      And a configured Realmroot Resource credential source delegates published bootstrap scopes to that same Agent identity
       And enrollment alone grants no management or external API resource access
       And an unbound protocol registration cannot exercise Agent identity capabilities
+
+    @entrypoint:restish @journey:agent-whoami-requires-enrollment
+    Scenario: Agent identity inspection never creates an identity implicitly
+      Given Restish has no local Realmroot Agent registration
+      When the Agent invokes the generated whoami command
+      Then the command fails with guidance to invoke the generated Agent enrollment command
+      And Restish does not create keys, open a browser, or create an Agent identity
 
     @entrypoint:restish @journey:agent-single-cli-principal
     Scenario: Command-line operations always use the Agent principal
       Given an Agent has established a stable identity in Restish
       When the Agent invokes any operation discovered from the Realmroot OpenAPI contract
       Then Realmroot authenticates the request as that Agent identity
+      And the Realmroot adapter is the explicit default for Realmroot oauth2 operations unless the caller selects a configured credential override
       And Realmroot never substitutes the approving user's identity for the Agent
       And the controller's browser session is used only to approve enrollment or authority
 
@@ -309,7 +321,7 @@ Feature: Agent identity and delegated API authorization
 
     @entrypoint:restish @journey:restish-explicit-resource-access
     Scenario: Restish requires explicit Resource access before acquiring a target credential
-      Given a target credential binding names a Resource
+      Given a target credential binding names a Resource outside Realmroot's published Agent bootstrap scopes
       And no stored credential offer covers the target operation's scopes
       When Restish asks the plugin to describe that credential source
       Then the plugin returns an error requiring explicit Resource access for those scopes

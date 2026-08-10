@@ -2,6 +2,7 @@ export interface ProtocolAgentSession {
   agentId: string
   agent: {
     id: string
+    name: string
     hostId: string
     mode: string
     capabilityGrants?: Array<{

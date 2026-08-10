@@ -539,23 +539,74 @@ describe('Agent identity lifecycle', () => {
 
   it('creates personal and organization enrollment intents and reads them through controller checks', async () => {
     const deps = enrollmentDeps()
-    vi.mocked(deps.agentIdentities.createIntent).mockImplementation(async (record) => record)
+    vi.mocked(deps.agentIdentities.createIntentIdempotently).mockImplementation(async (record) => ({
+      intent: record,
+      created: true,
+    }))
 
-    const personal = await createAgentEnrollmentIntent(deps, loginInput(), 'user-1')
-    expect(personal).toMatchObject({
+    const personal = await createAgentEnrollmentIntent(deps, loginInput(), 'user-1', 'personal-key')
+    expect(personal.intent).toMatchObject({
       requestedName: 'Build Agent',
       homeSpace: { type: 'personal', userId: 'user-1' },
       status: 'pending',
     })
 
     vi.mocked(deps.authorization.findMemberByOrganizationUser).mockResolvedValue(member('admin'))
-    const organization = await createAgentEnrollmentIntent(deps, { ...loginInput(), organizationId: 'org-1' }, 'user-1')
-    expect(organization.homeSpace).toEqual({ type: 'organization', organizationId: 'org-1' })
+    const organization = await createAgentEnrollmentIntent(
+      deps,
+      { ...loginInput(), organizationId: 'org-1' },
+      'user-1',
+      'organization-key',
+    )
+    expect(organization.intent.homeSpace).toEqual({ type: 'organization', organizationId: 'org-1' })
 
     vi.mocked(deps.agentIdentities.findIntent).mockResolvedValue(intent())
     await expect(getAgentEnrollmentIntent(deps, 'intent-1', 'user-1')).resolves.toMatchObject({ id: 'intent-1' })
     vi.mocked(deps.agentIdentities.findIntent).mockResolvedValue(null)
     await expect(getAgentEnrollmentIntent(deps, 'missing', 'user-1')).rejects.toMatchObject({ status: 404 })
+  })
+
+  it('replays a completed identity enrollment without replacing the stable identity [spec: agent-identity/agent-identity-enrollment]', async () => {
+    const deps = enrollmentDeps()
+    vi.mocked(deps.agentIdentities.findIntentByIdempotencyKey).mockResolvedValue(
+      intent({ idempotencyKey: 'enrollment-key', status: 'approved', approvedAt: new Date() }),
+    )
+
+    const result = await createAgentEnrollmentIntent(deps, loginInput(), 'user-1', 'enrollment-key')
+
+    expect(result).toMatchObject({ replayed: true, intent: { id: 'intent-1', status: 'approved' } })
+    expect(deps.agentIdentities.createIntentIdempotently).not.toHaveBeenCalled()
+    expect(deps.agentIdentities.findBindingByProtocolAgent).not.toHaveBeenCalled()
+  })
+
+  it('returns the approved enrollment when a migrated client uses a new retry key [spec: agent-identity/agent-identity-enrollment]', async () => {
+    const deps = enrollmentDeps()
+    vi.mocked(deps.agentIdentities.findActiveByProtocolAgent).mockResolvedValue(aggregate())
+    vi.mocked(deps.agentIdentities.findLatestApprovedIdentityIntent).mockResolvedValue(
+      intent({ idempotencyKey: null, status: 'approved', approvedAt: new Date() }),
+    )
+
+    const result = await createAgentEnrollmentIntent(deps, loginInput(), 'user-1', 'migrated-key')
+
+    expect(result).toMatchObject({ replayed: true, intent: { id: 'intent-1', status: 'approved' } })
+    expect(deps.agentIdentities.createIntentIdempotently).not.toHaveBeenCalled()
+  })
+
+  it('materializes one approved replay record for a bound legacy identity [spec: agent-identity/agent-identity-enrollment]', async () => {
+    const deps = enrollmentDeps()
+    vi.mocked(deps.agentIdentities.findActiveByProtocolAgent).mockResolvedValue(aggregate())
+    vi.mocked(deps.agentIdentities.createIntentIdempotently).mockImplementation(async (record) => ({
+      intent: record,
+      created: true,
+    }))
+
+    const result = await createAgentEnrollmentIntent(deps, loginInput(), 'user-1', 'migrated-key')
+
+    expect(result).toMatchObject({
+      replayed: true,
+      intent: { requestedName: 'Build Agent', status: 'approved', homeSpace: { type: 'personal', userId: 'user-1' } },
+    })
+    expect(deps.agentIdentities.createIntentIdempotently).toHaveBeenCalledOnce()
   })
 
   it('creates an additional host intent for a controlled non-deleted identity', async () => {

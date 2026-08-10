@@ -15,9 +15,16 @@ export interface PluginIdentityResult {
   local_agent: string
 }
 
-export interface PendingWhoami {
+export interface PluginEnrollmentResult {
+  id: string
+  agentId: string | null
+  name: string
+  status: string
+}
+
+export interface PendingEnrollment {
   approvalUrl: Promise<string>
-  result: Promise<PluginIdentityResult>
+  result: Promise<PluginEnrollmentResult>
 }
 
 export interface PendingResourceAccess<T> {
@@ -26,7 +33,7 @@ export interface PendingResourceAccess<T> {
 }
 
 export interface RestishAgentPlugin {
-  firstWhoami(name: string): PendingWhoami
+  enroll(name: string): PendingEnrollment
   whoami(): PluginIdentityResult
   inspectAuth(operation: string): string
   listResourceServers<T>(): T
@@ -185,8 +192,14 @@ export function createRestishAgentPlugin(origin: string): RestishAgentPlugin {
   }
 
   return {
-    firstWhoami: (name) =>
-      invokePending<PluginIdentityResult>(['agent', 'whoami'], undefined, { REALMROOT_AGENT_NAME: name }),
+    enroll: (name) =>
+      invokePending<PluginEnrollmentResult>(
+        ['agent', 'enroll'],
+        { kind: 'new_identity', name },
+        {
+          REALMROOT_AGENT_NAME: name,
+        },
+      ),
     whoami: () => invoke<PluginIdentityResult>(['agent', 'whoami']),
     inspectAuth: (operation) =>
       execFileSync('restish', ['api', 'auth', 'inspect', apiName, '--operation', operation, '--redact'], {

@@ -581,7 +581,7 @@ async function createIntent(
     return result.intent
   }
   if (!input.name) throw new Error('A new Agent enrollment requires a name.')
-  return createAgentEnrollmentIntent(
+  const result = await createAgentEnrollmentIntent(
     harness.deps,
     {
       name: input.name,
@@ -589,7 +589,9 @@ async function createIntent(
       organizationId: input.organizationId,
     },
     actorUserId,
+    `${input.protocolAgentId}:new-identity`,
   )
+  return result.intent
 }
 
 async function approveIntent(harness: Harness, cookie: string, intentId: string) {

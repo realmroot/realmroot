@@ -10,10 +10,12 @@ OpenAPI contract.
 The plugin performs only work that must happen on the Agent's machine:
 
 - generate and protect Agent, Host, and DPoP private keys;
-- enroll or reuse the stable Agent identity discovered from
+- explicitly enroll or reuse the stable Agent identity discovered from
   `/.well-known/agent-configuration`;
+- cache validated discovery metadata per origin for five minutes;
 - exchange the Agent assertion at the OAuth token endpoint and add a
-  short-lived DPoP access token to Realmroot requests;
+  short-lived DPoP access token containing exactly the selected operation's
+  declared scopes;
 - recognize generic response profiles declared with `Link: ...; rel="profile"`;
 - open a `user-approval` interaction and poll its supplied `links.self`;
 - accept a generic DPoP credential offer, store it under a locally generated
@@ -21,22 +23,32 @@ The plugin performs only work that must happen on the Agent's machine:
 - add `Authorization: DPoP ...` and a fresh proof to matching target requests.
 
 Restish passes the final request URL and one complete OpenAPI security
-alternative to the plugin. Realmroot publishes separate credential IDs:
-`agentAuth` for plugin-managed protocol operations and `oauth2` for
-Resource-bound management operations. Valid same-origin Agent discovery lets
-the plugin resolve `agentAuth` and perform first-use identity enrollment.
-Restish API names and aliases do not affect that decision. No placeholder
-token, provider, issuer, or scope binding is stored for `agentAuth` in a
-Restish profile.
+alternative to the plugin. Realmroot Resource operations use the standard
+`oauth2` credential ID. Valid same-origin Agent discovery lets the plugin
+resolve only OAuth requirements covered by the published Agent bootstrap
+scopes. The `agentAssertion` credential ID is accepted only for the discovered
+Agent enrollment endpoint; it performs AgentAuth registration and controller
+approval before signing that enrollment request.
 
-When both credential lifecycles share the Realmroot Resource URL, distinct
-OpenAPI credential IDs prevent a configured `oauth2` Resource credential from
-shadowing the `agentAuth` protocol resolver.
+Restish selects an explicitly configured `oauth2` credential or
+`--rsh-auth` override before asking this plugin to resolve missing operation
+authentication. When that credential is a Realmroot credential-source
+reference, the source delegates Realmroot's published Agent bootstrap scopes
+to the same local Agent identity. Other scopes must still match an approved
+Resource credential offer. The plugin never guesses between an Agent and an
+Application after an explicit credential has been selected.
 
-The plugin does not recognize Realmroot endpoint paths. It does not list or
-select account connections, grants, authorization details, token endpoints,
-native/external modes, or provider protocols. Realmroot resolves those on the
-server and supplies links and credential-offer metadata.
+Successful new-identity enrollment responses declare the generic
+`agent-enrollment` profile. Before the command returns, the plugin exchanges an
+`agent:read` token, reads the stable issuer and subject, and durably stores that
+identity. The enrollment request carries a locally stable idempotency key, so a
+retry after a lost response returns the same server enrollment. `whoami` only
+reads this completed local identity and never finishes enrollment implicitly.
+
+Restish API names and aliases do not affect those decisions. The plugin does
+not list or select account connections, Permissions, authorization details,
+token endpoints, native/external modes, or provider protocols. Realmroot
+resolves those on the server and supplies links and credential-offer metadata.
 
 ## Generic Interaction Protocol
 
@@ -113,9 +125,16 @@ resource indicator and authorization details. The visible access result contains
 resource indicator, authorization details, scopes, and the opaque credential-source reference. Target traffic
 then goes directly to the Resource Server.
 
+Restish deliberately bypasses response middleware when it streams an HTTP body
+as raw bytes. Scripts that create, resume, or inspect an interactive Resource
+must select a decoded format such as `--rsh-output-format json` so the plugin can
+capture the credential offer before Restish prints the response.
+
 Expired credentials are renewed through the stored offer. If renewal is no
-longer authorized, or the Resource Server returns `401`, the local credential
-is removed and a new access request is required.
+longer authorized, the rejected offer is removed while its opaque credential
+source binding remains available for a later approval. If the Resource Server
+returns `401`, Restish removes the rejected access token. A new access request
+is required in either case.
 
 Credential-source lookup never creates an access request or opens an approval
 interaction. When no stored offer covers the target operation's scopes, the

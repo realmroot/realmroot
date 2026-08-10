@@ -14,6 +14,23 @@ export async function readJson<T extends z.ZodType>(c: Context, schema: T): Prom
   return parse(schema, body)
 }
 
+export async function readOptionalJson<T extends z.ZodType>(c: Context, schema: T): Promise<z.infer<T> | undefined> {
+  let encoded: string
+  try {
+    encoded = await c.req.text()
+  } catch {
+    throw badRequest('Invalid JSON body.')
+  }
+  if (encoded.trim() === '') return undefined
+  let body: unknown
+  try {
+    body = JSON.parse(encoded)
+  } catch {
+    throw badRequest('Invalid JSON body.')
+  }
+  return parse(schema, body)
+}
+
 export function readQuery<T extends z.ZodType>(c: Context, schema: T): z.infer<T> {
   return parse(schema, c.req.query())
 }

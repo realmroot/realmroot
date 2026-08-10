@@ -33,8 +33,9 @@ restish api auth inspect "$API_NAME" --operation getAgentStatus --redact
 restish "$API_NAME" agent whoami --rsh-print b -o json
 ```
 
-`getAgentStatus` must remain assigned to the `agentAuth` runtime resolver.
-Never configure `agentAuth` or the legacy `dpop` ID in a Realmroot profile.
+For `getAgentStatus`, the runtime resolver satisfies the `oauth2` requirement
+from the local AgentAuth identity because `agent:read` is a published bootstrap
+scope. Never configure the removed `agentAuth` or legacy `dpop` credential IDs.
 
 Select the Realmroot Platform Organization authorization detail for platform-wide
 operations. Other Organization and User details remain restricted to their

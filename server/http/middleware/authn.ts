@@ -76,6 +76,29 @@ interface AuthnOptions {
 export function authn(auth: SessionReader, options: AuthnOptions = {}): MiddlewareHandler {
   return async (c, next) => {
     const current = c.get('principal')
+    const explicitAuthorization = c.req.header('Authorization')
+    if (explicitAuthorization && options.oauth) {
+      if (!explicitAuthorization.startsWith('DPoP ')) {
+        throw unauthorized('OAuth Resource API requests require a DPoP access token.')
+      }
+      if (options.allowAgent) {
+        const agent = current?.agent ?? (await authenticateOAuthAgent(auth, c, options.oauth))
+        if (agent) {
+          c.set('principal', { session: null, user: null, application: null, agent })
+          await next()
+          return
+        }
+      }
+      if (options.allowApplication) {
+        const application = current?.application ?? (await authenticateOAuthApplication(auth, c, options.oauth))
+        if (application) {
+          c.set('principal', { session: null, user: null, application, agent: null })
+          await next()
+          return
+        }
+      }
+      throw unauthorized('OAuth access token is not valid for this resource.')
+    }
     const session =
       current?.session === undefined
         ? await auth.api.getSession({ headers: c.req.raw.headers, asResponse: false })
@@ -130,17 +153,12 @@ async function authenticateOAuthApplication(
     .catch(() => null)
   const payload = verified?.payload
   if (!payload) throw unauthorized('OAuth access token is invalid.')
+  if (stringClaim(payload, 'sub_profile') !== 'application') return null
   const applicationId = stringClaim(payload, 'sub')
   const clientId = stringClaim(payload, 'client_id')
   const confirmationJkt = objectStringClaim(payload, 'cnf', 'jkt')
   const proof = c.req.header('DPoP')
-  if (
-    stringClaim(payload, 'sub_profile') !== 'application' ||
-    !applicationId ||
-    !clientId ||
-    !confirmationJkt ||
-    !proof
-  ) {
+  if (!applicationId || !clientId || !confirmationJkt || !proof) {
     throw unauthorized('OAuth access token is missing its Application or DPoP binding.')
   }
   await validateDpopResourceProof(c.get('deps') as Deps, {
@@ -180,6 +198,7 @@ async function authenticateOAuthAgent(
     .catch(() => null)
   const payload = verified?.payload
   if (!payload) throw unauthorized('OAuth access token is invalid.')
+  if (stringClaim(payload, 'sub_profile') !== 'ai_agent') return null
   const subject = stringClaim(payload, 'sub')
   const protocolAgentId = stringClaim(payload, 'client_id')
   const hostId = stringClaim(payload, 'host_id')
@@ -203,7 +222,7 @@ async function authenticateOAuthAgent(
       candidate.protocolAgentId === protocolAgentId && candidate.hostId === hostId && candidate.status === 'active',
   )
   if (!aggregate || !binding || aggregate.identity.issuer !== issuer || aggregate.identity.subject !== subject) {
-    throw forbidden('The OAuth token does not belong to an active Agent identity and Host binding.')
+    throw unauthorized('The OAuth token does not belong to an active Agent identity and Host binding.')
   }
   const scopes = typeof payload.scope === 'string' ? [...new Set(payload.scope.split(/\s+/).filter(Boolean))] : []
   const authority = authorityClaim(payload.realmroot_authority)

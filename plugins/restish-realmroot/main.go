@@ -42,7 +42,7 @@ func main() {
 		if err := plugin.DecMode.Unmarshal(raw, &input); err != nil {
 			exitWithError(fmt.Errorf("decode auth resolver input: %w", err))
 		}
-		output, err := resolveProtocolAuthentication(input, newHTTPClient())
+		output, err := resolveProtocolAuthentication(input, newFileStateStore(), newHTTPClient())
 		if err != nil {
 			exitWithError(err)
 		}

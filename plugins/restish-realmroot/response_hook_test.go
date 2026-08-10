@@ -174,6 +174,74 @@ func TestCredentialOfferReusesResourceReferenceAndPreservesOtherScopes(t *testin
 	}
 }
 
+func TestCredentialOfferReusesSourceReferenceAfterAllOffersWereRejected(t *testing.T) {
+	credential := testCredential(t, "", time.Time{})
+	states := newCredentialState(t, credential)
+	source := states.state.CredentialSources[testCredentialSourceReference]
+	source.Offers = nil
+	states.state.CredentialSources[testCredentialSourceReference] = source
+	representation := completedInteractionWithOffer(credential)
+	resource, err := decodeHookBody[interactiveResponse](representation)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	output, err := acceptCredentialOffer(
+		resource,
+		*resource.CredentialOffer,
+		"https://auth.example.com",
+		states,
+		func() (string, error) {
+			return "", errors.New("reference generator must not replace a retained binding")
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	receipt := output.Response.Body.(map[string]any)["credentialSource"].(map[string]any)
+	if receipt["reference"] != testCredentialSourceReference {
+		t.Fatalf("credential source receipt = %#v", receipt)
+	}
+	if offers := states.state.CredentialSources[testCredentialSourceReference].Offers; len(offers) != 1 ||
+		!sameCredentialOffer(offers[0], credential) {
+		t.Fatalf("restored offers = %#v", offers)
+	}
+}
+
+func TestCredentialOfferUsesSeparateReferenceForDifferentAuthorizationContext(t *testing.T) {
+	existing := testCredential(t, "", time.Time{})
+	states := newCredentialState(t, existing)
+	other := existing
+	other.AuthorizationDetails = []map[string]any{{"type": "workspace", "identifier": "workspace-2"}}
+	other.CredentialEndpoint = "https://auth.example.com/api/access-requests/workspace-2/credentials"
+	representation := completedInteractionWithOffer(other)
+	resource, err := decodeHookBody[interactiveResponse](representation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const otherReference = "rrcs_YWJjZGVmZ2hpamtsbW5vcA"
+
+	output, err := acceptCredentialOffer(
+		resource,
+		*resource.CredentialOffer,
+		"https://auth.example.com",
+		states,
+		func() (string, error) { return otherReference, nil },
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	receipt := output.Response.Body.(map[string]any)["credentialSource"].(map[string]any)
+	if receipt["reference"] != otherReference {
+		t.Fatalf("credential source receipt = %#v", receipt)
+	}
+	if len(states.state.CredentialSources) != 2 ||
+		len(states.state.CredentialSources[testCredentialSourceReference].Offers) != 1 ||
+		len(states.state.CredentialSources[otherReference].Offers) != 1 {
+		t.Fatalf("credential sources = %#v", states.state.CredentialSources)
+	}
+}
+
 func TestProfiledResponseRejectsCrossOriginInteractionLinks(t *testing.T) {
 	states := newCredentialState(t, testCredential(t, "cached", time.Now().Add(time.Minute)))
 	body := pendingInteraction("https://auth.example.com")

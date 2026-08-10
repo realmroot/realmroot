@@ -3,7 +3,6 @@ import { Scalar } from '@scalar/hono-api-reference'
 import type { Auth } from '@server/auth'
 import { ApiError, forbidden, notFound, oauthError } from '@server/domain/errors'
 import { handleApiError } from '@server/http/errors'
-import { createAgentLoginIdentity } from '@server/usecases/agent-identities'
 import { issueAgentBootstrapAccessToken } from '@server/usecases/agent-oauth'
 import { issueApplicationAccessToken } from '@server/usecases/application-oauth'
 import { ensureRealmrootResourceServer } from '@server/usecases/authorization'
@@ -434,19 +433,8 @@ async function issueAgentToken(c: Context, issuer: string, auth: AuthHandler, fo
   if (!session) throw oauthError('invalid_grant', 'The Agent assertion is invalid.')
   const deps = c.get('deps')
   await ensureRealmrootResourceServer(deps, new URL(issuer).origin)
-  let aggregate = await deps.agentIdentities.findActiveByProtocolAgent(session.agent.id)
-  if (!aggregate) {
-    if (!session.host?.userId) throw oauthError('invalid_grant', 'The Agent has no approved controller.')
-    const protocolAgent = await deps.agentIdentities.findProtocolAgent(session.agent.id)
-    await createAgentLoginIdentity(
-      deps,
-      { protocolAgentId: session.agent.id, name: protocolAgent?.name ?? 'Agent' },
-      issuer,
-      session.host.userId,
-    )
-    aggregate = await deps.agentIdentities.findActiveByProtocolAgent(session.agent.id)
-  }
-  if (!aggregate) throw oauthError('invalid_grant', 'The Agent identity could not be established.')
+  const aggregate = await deps.agentIdentities.findActiveByProtocolAgent(session.agent.id)
+  if (!aggregate) throw oauthError('invalid_grant', 'The Agent is not enrolled.')
   const binding = aggregate.bindings.find(
     (candidate) =>
       candidate.protocolAgentId === session.agent.id &&

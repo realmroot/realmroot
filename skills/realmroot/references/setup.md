@@ -59,10 +59,10 @@ restish plugin install "$PLUGIN_BIN_DIR/restish-realmroot" --yes
 restish plugin list
 ```
 
-New Agents use the detected runtime name by default, while each Host uses the
-local device name. Runtimes on the same device share one Host key for each
-Realmroot issuer, but keep separate Agent keys and identities. Optionally
-override the Agent name before its first protected operation:
+New Agents use the detected runtime name for AgentAuth registration, while each
+Host uses the local device name. Runtimes on the same device share one Host key
+for each Realmroot issuer, but keep separate Agent keys and identities. Optionally
+override the AgentAuth registration name before enrollment:
 
 ```bash
 export REALMROOT_AGENT_NAME="Build Agent"
@@ -114,20 +114,20 @@ restish api inspect "$API_NAME"
 restish api sync "$API_NAME"
 ```
 
-The Realmroot contract deliberately separates `agentAuth` from `oauth2`.
-`agentAuth` is resolved by the adapter and must never be configured in a
-Restish profile. `oauth2` is the only credential ID used for Resource-bound
-Realmroot management access. Verify the default Agent protocol path whenever
-Realmroot auth configuration changes:
+The Realmroot Resource API uses `oauth2` for Agent and Application access. The
+adapter resolves Agent-scoped OAuth requirements from the local AgentAuth
+identity; configured Application credentials continue to satisfy Application
+operations. Verify the generated Agent operations whenever Realmroot auth
+configuration changes:
 
 ```bash
 restish api auth inspect "$API_NAME" --operation getAgentStatus --redact
+restish "$API_NAME" agent enroll --help
 restish "$API_NAME" agent whoami --rsh-print b -o json
 ```
 
-The inspection must report that `agentAuth` is evaluated by the runtime auth
-resolver. A configured credential for `agentAuth` or the legacy `dpop` ID is an
-invalid Realmroot profile.
+The inspection must report the operation's `oauth2` requirement. AgentAuth
+Assertions remain limited to enrollment and OAuth token exchange.
 
 Represent an explicitly requested non-production deployment with a `local` or
 `staging` profile under the same API name. External users need only the
@@ -165,17 +165,28 @@ matching `AUTH_ORIGIN` for every later branch command.
 
 ## Establish Identity
 
-Invoke the generated identity operation in the selected profile:
+Invoke the generated enrollment operation in the selected profile:
+
+```bash
+restish "$API_NAME" agent enroll --rsh-validate --rsh-print b -o json <<JSON
+{
+  "kind": "new_identity",
+  "name": "${REALMROOT_AGENT_NAME:-Agent}"
+}
+JSON
+```
+
+The adapter registers AgentAuth keys, opens the controller's approval page,
+waits, and submits the enrollment through the approved Agent session. The
+controller signs in and decides; the Agent remains the Restish request identity.
+
+Repeat `agent enroll` after interruption to resume enrollment. Then inspect the
+established identity without side effects:
 
 ```bash
 restish "$API_NAME" agent whoami --rsh-print b -o json
 ```
 
-On first use, the adapter registers a stable Agent, opens the controller's
-approval page, waits, and resumes the same operation after approval. The
-controller signs in and decides; the Agent remains the Restish request
-identity.
-
-Repeat `whoami` after interruption to resume enrollment. Use
+Use
 `AUTH_ORIGIN/api/auth` as the returned OIDC issuer and consume its discovery
 metadata for OIDC endpoints.

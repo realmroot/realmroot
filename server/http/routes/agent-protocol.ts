@@ -3,13 +3,11 @@ import {
   approveAgentEnrollment,
   createAdditionalAgentEnrollmentIntent,
   createAgentEnrollmentIntent,
-  getAgentIdentityByProtocolAgent,
   getProtocolAgentEnrollment,
   getPublicAgentEnrollment,
   toAgent,
 } from '@server/usecases/agent-identities'
 import type { ProtocolAgentSession } from '@server/usecases/agent-session'
-import type { Deps } from '@server/usecases/deps'
 import {
   createAccessRequest,
   createAccessRequestCredential,
@@ -20,6 +18,7 @@ import {
 } from '@server/usecases/external-resources'
 import {
   accessRequestSchema,
+  agentEnrollmentProfile,
   agentEnrollmentSchema,
   agentInstallationEnrollmentResponseSchema,
   agentInstallationEnrollmentSchema,
@@ -42,7 +41,7 @@ import { requireAgentScope } from '../middleware/authz'
 import { getDeps } from '../middleware/deps'
 import { trustedRequestOrigin } from '../trusted-request-origin'
 import { toBoundaryError } from './auth-api'
-import { readJson, readQuery } from './validation'
+import { readJson, readOptionalJson, readQuery } from './validation'
 
 interface AgentSessionApi {
   getAgentSession?: (context: { headers: Headers; asResponse: false }) => Promise<ProtocolAgentSession | null>
@@ -82,9 +81,14 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
     if (!session.host?.userId) {
       throw forbidden('A controller-approved delegated Agent session is required.')
     }
-    const body = await readJson(c, createAgentSelfEnrollmentSchema)
+    const body = (await readOptionalJson(c, createAgentSelfEnrollmentSchema)) ?? {
+      kind: 'new_identity' as const,
+      name: session.agent.name,
+    }
+    const parsedKey = idempotencyKeySchema.safeParse(c.req.header('Idempotency-Key'))
+    if (!parsedKey.success) throw badRequest('Idempotency-Key header is required and must contain 1 to 200 characters.')
     if (body.kind === 'new_identity') {
-      const intent = await createAgentEnrollmentIntent(
+      const { intent, replayed } = await createAgentEnrollmentIntent(
         getDeps(c),
         {
           protocolAgentId: session.agent.id,
@@ -92,17 +96,20 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
           organizationId: body.organizationId,
         },
         session.host.userId,
+        parsedKey.data,
       )
-      await approveAgentEnrollment(getDeps(c), intent.id, requireOidcIssuer(), session.host.userId)
+      if (intent.status === 'pending') {
+        await approveAgentEnrollment(getDeps(c), intent.id, requireOidcIssuer(), session.host.userId)
+      }
       const enrollment = await getPublicAgentEnrollment(getDeps(c), intent.id, session.host.userId)
       c.header(
         'Location',
         `${new URL(requireOidcIssuer()).origin}/api/agent/enrollments/${encodeURIComponent(intent.id)}`,
       )
+      c.header('Link', `<${agentEnrollmentProfile}>; rel="profile"`)
+      if (replayed) c.header('Idempotency-Replayed', 'true')
       return c.json(agentEnrollmentSchema.parse(enrollment), 201)
     }
-    const parsedKey = idempotencyKeySchema.safeParse(c.req.header('Idempotency-Key'))
-    if (!parsedKey.success) throw badRequest('Idempotency-Key header is required and must contain 1 to 200 characters.')
     const { intent, replayed } = await createAdditionalAgentEnrollmentIntent(
       getDeps(c),
       body.agentId,
@@ -136,7 +143,7 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
 
   app.get('/resource-servers/:resourceServerId/authorization-details', async (c) => {
     requireAgentScope(c, 'authorization-details:read')
-    const principal = await resourcePrincipal(authApi, getDeps(c), c)
+    const principal = resourcePrincipal(c)
     return c.json(
       resourceServerAuthorizationDetailsResponseSchema.parse(
         await listAgentResourceServerAuthorizationDetails(
@@ -151,7 +158,7 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
 
   app.post('/resource-servers/:resourceServerId/connection-requests', async (c) => {
     requireAgentScope(c, 'connection-requests:write')
-    const principal = await resourcePrincipal(authApi, getDeps(c), c)
+    const principal = resourcePrincipal(c)
     const result = await createAgentConnectionRequest(
       getDeps(c),
       c.req.param('resourceServerId'),
@@ -166,7 +173,7 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
 
   app.get('/resource-servers/:resourceServerId/connection-requests/:requestId', async (c) => {
     requireAgentScope(c, 'connection-requests:read')
-    const principal = await resourcePrincipal(authApi, getDeps(c), c)
+    const principal = resourcePrincipal(c)
     const result = await getAgentConnectionRequest(getDeps(c), c.req.param('requestId'), principal, apiOrigin(c))
     if (result.resourceServerId !== c.req.param('resourceServerId')) {
       throw forbidden('Connection request does not belong to this Resource Server.')
@@ -177,7 +184,7 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
 
   app.post('/agent/access-requests', async (c) => {
     requireAgentScope(c, 'access-requests:write')
-    const principal = await resourcePrincipal(authApi, getDeps(c), c)
+    const principal = resourcePrincipal(c)
     const result = await createAccessRequest(
       getDeps(c),
       await readJson(c, createAccessRequestSchema),
@@ -191,7 +198,7 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
 
   app.get('/agent/access-requests/:requestId', async (c) => {
     requireAgentScope(c, 'access-requests:read')
-    const principal = await resourcePrincipal(authApi, getDeps(c), c)
+    const principal = resourcePrincipal(c)
     const result = await getAccessRequest(getDeps(c), c.req.param('requestId'), principal, apiOrigin(c))
     applyInteractionHeaders(c, result)
     return c.json(accessRequestSchema.parse(result))
@@ -200,7 +207,7 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
   app.post('/agent/access-requests/:requestId/credentials', async (c) => {
     requireAgentScope(c, 'access-requests:write')
     if (!authApi.signJWT) throw unauthorized('Agent assertion signing is unavailable.')
-    const principal = await resourcePrincipal(authApi, getDeps(c), c)
+    const principal = resourcePrincipal(c)
     const { proof } = await readJson(c, targetCredentialProofSchema)
     const requestId = c.req.param('requestId')
     const credentialUrl = `${apiOrigin(c)}/api/agent/access-requests/${encodeURIComponent(requestId)}/credentials`
@@ -237,25 +244,15 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
   }
 }
 
-async function resourcePrincipal(authApi: AgentSessionApi, deps: Deps, c: Context) {
+function resourcePrincipal(c: Context) {
   const authenticated = getPrincipal(c).agent
-  if (authenticated) {
-    return {
-      issuer: authenticated.issuer,
-      subject: authenticated.subject,
-      identityId: authenticated.identityId,
-      protocolAgentId: authenticated.protocolAgentId,
-      hostId: authenticated.hostId,
-    }
-  }
-  const session = await requireAgentSession(authApi, c.req.raw.headers)
-  const identity = await getAgentIdentityByProtocolAgent(deps, session.agent.id)
+  if (!authenticated) throw unauthorized('An OAuth-authenticated Agent is required.')
   return {
-    issuer: identity.issuer,
-    subject: identity.subject,
-    identityId: identity.id,
-    protocolAgentId: session.agent.id,
-    hostId: session.agent.hostId,
+    issuer: authenticated.issuer,
+    subject: authenticated.subject,
+    identityId: authenticated.identityId,
+    protocolAgentId: authenticated.protocolAgentId,
+    hostId: authenticated.hostId,
   }
 }
 

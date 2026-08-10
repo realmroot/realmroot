@@ -18,7 +18,8 @@ import (
 )
 
 const (
-	authProvider = "realmroot-agent"
+	authProvider               = "realmroot-agent"
+	agentConfigurationCacheTTL = 5 * time.Minute
 )
 
 type registrationResponse struct {
@@ -73,6 +74,7 @@ type systemPromptWriter struct{}
 
 func authenticateRequest(
 	input plugin.AuthHookInput,
+	requiredScopes []string,
 	states stateStore,
 	client httpDoer,
 	prompt approvalPrompt,
@@ -90,7 +92,7 @@ func authenticateRequest(
 	if err != nil {
 		return plugin.AuthHookOutput{}, err
 	}
-	configuration, err := discoverAgentConfiguration(context.Background(), client, origin)
+	configuration, err := resolveAgentConfiguration(context.Background(), client, configurationCache(states), origin)
 	if err != nil {
 		return plugin.AuthHookOutput{}, err
 	}
@@ -101,11 +103,16 @@ func authenticateRequest(
 		Origin:  origin,
 		Issuer:  configuration.AgentIdentityIssuer,
 	}
-	state, err := ensureAgentIdentity(context.Background(), states, client, prompt, target, configuration)
+	state, err := loadAgentRegistration(states, target)
 	if err != nil {
 		return plugin.AuthHookOutput{}, err
 	}
-	state, credential, err := ensureProtocolCredential(context.Background(), states, client, target, state, configuration)
+	if state.Identity == nil {
+		return plugin.AuthHookOutput{}, errors.New("Realmroot Agent enrollment is incomplete; rerun `restish realmroot agent enroll`")
+	}
+	state, credential, err := ensureProtocolCredential(
+		context.Background(), states, client, target, state, configuration, requiredScopes,
+	)
 	if err != nil {
 		return plugin.AuthHookOutput{}, err
 	}
@@ -132,15 +139,64 @@ func authenticateHookRequest(
 	}
 	if len(input.Requirements) > 0 {
 		if !supportedProtocolAlternative(input.Requirements) ||
-			!protocolAuthenticationSupports(input.Request.URI, input.Requirements, client) {
+			!protocolAuthenticationSupports(input.Request, input.Requirements, configurationCache(states), client) {
 			return plugin.AuthHookOutput{}, errors.New("Realmroot cannot satisfy the selected operation security alternative")
+		}
+		if input.Requirements[0].ID == agentAssertionSchemeID {
+			return authenticateEnrollmentRequest(input, states, client, prompt)
 		}
 		legacy.Params = map[string]string{"provider": authProvider}
 	}
-	return authenticateRequest(legacy, states, client, prompt)
+	var requiredScopes []string
+	if len(input.Requirements) > 0 {
+		requiredScopes = input.Requirements[0].Needs
+	}
+	return authenticateRequest(legacy, requiredScopes, states, client, prompt)
 }
 
-func usableProtocolCredential(ctx context.Context, client httpDoer, state agentState) (dpopCredential, error) {
+func authenticateEnrollmentRequest(
+	input authHookEnvelope,
+	states stateStore,
+	client httpDoer,
+	prompt approvalPrompt,
+) (plugin.AuthHookOutput, error) {
+	runtime, err := agentRuntime()
+	if err != nil {
+		return plugin.AuthHookOutput{}, err
+	}
+	origin, err := realmrootOrigin(input.Request.URI)
+	if err != nil {
+		return plugin.AuthHookOutput{}, err
+	}
+	configuration, err := resolveAgentConfiguration(context.Background(), client, configurationCache(states), origin)
+	if err != nil {
+		return plugin.AuthHookOutput{}, err
+	}
+	target := agentTarget{
+		API: input.API, Profile: input.Profile, Runtime: runtime, Origin: origin, Issuer: configuration.AgentIdentityIssuer,
+	}
+	var state agentState
+	if input.Request.Method == http.MethodPost && input.Request.URI == configuration.AgentEnrollmentEndpoint {
+		state, err = ensureApprovedAgentRegistration(context.Background(), states, client, prompt, target, configuration)
+	} else {
+		state, err = loadAgentRegistration(states, target)
+	}
+	if err != nil {
+		return plugin.AuthHookOutput{}, err
+	}
+	headers := map[string]any{"Authorization": "Bearer " + mustAgentJWT(state, configuration.Issuer)}
+	if input.Request.Method == http.MethodPost && input.Request.URI == configuration.AgentEnrollmentEndpoint {
+		headers["Idempotency-Key"] = state.EnrollmentIdempotencyKey
+	}
+	return plugin.AuthHookOutput{Request: &plugin.HookRequestHeaderUpdate{Headers: headers}}, nil
+}
+
+func usableProtocolCredential(
+	ctx context.Context,
+	client httpDoer,
+	cache agentConfigurationCache,
+	state agentState,
+) (dpopCredential, error) {
 	if state.ProtocolCredential == nil {
 		return dpopCredential{}, errors.New("Realmroot Agent protocol OAuth credential is unavailable")
 	}
@@ -148,14 +204,17 @@ func usableProtocolCredential(ctx context.Context, client httpDoer, state agentS
 	if protocol.AccessToken != "" && protocol.ExpiresAt != nil && time.Now().Add(5*time.Second).Before(*protocol.ExpiresAt) {
 		return protocol, nil
 	}
-	configuration, err := discoverAgentConfiguration(ctx, client, state.Origin)
+	if len(protocol.Scopes) == 0 {
+		return dpopCredential{}, errors.New("Realmroot Agent protocol OAuth credential has no reusable scopes")
+	}
+	configuration, err := resolveAgentConfiguration(ctx, client, cache, state.Origin)
 	if err != nil {
 		return dpopCredential{}, err
 	}
-	return requestProtocolToken(ctx, client, state, protocol, configuration)
+	return requestProtocolToken(ctx, client, state, protocol, configuration, protocol.Scopes)
 }
 
-func ensureAgentIdentity(
+func ensureApprovedAgentRegistration(
 	ctx context.Context,
 	states stateStore,
 	client httpDoer,
@@ -198,6 +257,56 @@ func ensureAgentIdentity(
 	return state, nil
 }
 
+func loadAgentRegistration(states stateStore, target agentTarget) (agentState, error) {
+	state, err := states.Load(target)
+	if errors.Is(err, os.ErrNotExist) {
+		return agentState{}, errors.New("Realmroot Agent is not enrolled; run `restish realmroot agent enroll`")
+	}
+	if err != nil {
+		return agentState{}, err
+	}
+	return state, nil
+}
+
+func completeAgentEnrollment(
+	ctx context.Context,
+	states stateStore,
+	client httpDoer,
+	target agentTarget,
+	state agentState,
+	configuration agentConfiguration,
+) error {
+	if state.Identity != nil {
+		return nil
+	}
+	state, credential, err := ensureProtocolCredential(
+		ctx, states, client, target, state, configuration, []string{"agent:read"},
+	)
+	if err != nil {
+		return err
+	}
+	proof, err := signDPoPProof(
+		credential.PrivateKey, http.MethodGet, configuration.AgentEndpoint, credential.AccessToken, time.Now(),
+	)
+	if err != nil {
+		return err
+	}
+	var status agentSelfStatusResponse
+	if err := requestJSONHeaders(ctx, client, http.MethodGet, configuration.AgentEndpoint, map[string]string{
+		"Authorization": "DPoP " + credential.AccessToken,
+		"DPoP":          proof,
+	}, nil, &status); err != nil {
+		return err
+	}
+	if status.Agent == nil || status.Agent.ID == "" ||
+		status.Agent.Issuer != configuration.AgentIdentityIssuer || status.Agent.Subject == "" {
+		return errors.New("Agent identity response is missing issuer or subject")
+	}
+	state.Identity = status.Agent
+	state.RegistrationApproval = nil
+	return states.Update(target, state)
+}
+
 func discoverAgentConfiguration(
 	ctx context.Context,
 	client httpDoer,
@@ -215,16 +324,53 @@ func discoverAgentConfiguration(
 	); err != nil {
 		return agentConfiguration{}, fmt.Errorf("discover Realmroot Agent support: %w", err)
 	}
+	if err := validateAgentConfiguration(configuration); err != nil {
+		return agentConfiguration{}, err
+	}
+	return configuration, nil
+}
+
+func resolveAgentConfiguration(
+	ctx context.Context,
+	client httpDoer,
+	cache agentConfigurationCache,
+	origin string,
+) (agentConfiguration, error) {
+	if cache != nil {
+		cached, err := cache.LoadAgentConfiguration(origin)
+		if err == nil && time.Now().Before(cached.ExpiresAt) {
+			if err := validateAgentConfiguration(cached.Configuration); err != nil {
+				return agentConfiguration{}, fmt.Errorf("validate cached Agent discovery: %w", err)
+			}
+			return cached.Configuration, nil
+		}
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return agentConfiguration{}, fmt.Errorf("load Agent discovery cache: %w", err)
+		}
+	}
+	configuration, err := discoverAgentConfiguration(ctx, client, origin)
+	if err != nil {
+		return agentConfiguration{}, err
+	}
+	if cache != nil {
+		if err := cache.StoreAgentConfiguration(origin, configuration, time.Now().Add(agentConfigurationCacheTTL)); err != nil {
+			return agentConfiguration{}, err
+		}
+	}
+	return configuration, nil
+}
+
+func validateAgentConfiguration(configuration agentConfiguration) error {
 	if configuration.Version != "1.0-draft" ||
 		configuration.AgentIdentityIssuer == "" ||
 		configuration.AgentIdentityIssuer != configuration.Issuer ||
 		!contains(configuration.Algorithms, "Ed25519") ||
 		!validScopes(configuration.AgentBootstrapScopes) {
-		return agentConfiguration{}, errors.New("Agent discovery has an incompatible issuer, version, or signing algorithm")
+		return errors.New("Agent discovery has an incompatible issuer, version, or signing algorithm")
 	}
 	issuer, err := url.Parse(configuration.Issuer)
 	if err != nil || issuer.Scheme == "" || issuer.Host == "" {
-		return agentConfiguration{}, errors.New("Agent discovery issuer is invalid")
+		return errors.New("Agent discovery issuer is invalid")
 	}
 	issuerOrigin := issuer.Scheme + "://" + issuer.Host
 	for _, endpoint := range []string{
@@ -236,10 +382,15 @@ func discoverAgentConfiguration(
 		configuration.Endpoints["status"],
 	} {
 		if !sameOrigin(endpoint, issuerOrigin) {
-			return agentConfiguration{}, errors.New("Agent discovery endpoints must use the discovered issuer origin")
+			return errors.New("Agent discovery endpoints must use the discovered issuer origin")
 		}
 	}
-	return configuration, nil
+	return nil
+}
+
+func configurationCache(value any) agentConfigurationCache {
+	cache, _ := value.(agentConfigurationCache)
+	return cache
 }
 
 func ensureProtocolCredential(
@@ -249,7 +400,11 @@ func ensureProtocolCredential(
 	target agentTarget,
 	state agentState,
 	configuration agentConfiguration,
+	requiredScopes []string,
 ) (agentState, dpopCredential, error) {
+	if len(requiredScopes) == 0 || !scopesContain(configuration.AgentBootstrapScopes, requiredScopes) {
+		return state, dpopCredential{}, errors.New("Realmroot operation requires unsupported Agent bootstrap scopes")
+	}
 	credential := state.ProtocolCredential
 	if credential == nil {
 		issuerURL, err := validatedAbsoluteURL(configuration.Issuer)
@@ -268,32 +423,16 @@ func ensureProtocolCredential(
 			PrivateKey:         privateKey,
 		}
 	}
-	if credential.AccessToken == "" || credential.ExpiresAt == nil || !time.Now().Add(5*time.Second).Before(*credential.ExpiresAt) {
-		updated, err := requestProtocolToken(ctx, client, state, *credential, configuration)
+	if credential.AccessToken == "" || credential.ExpiresAt == nil ||
+		!time.Now().Add(5*time.Second).Before(*credential.ExpiresAt) ||
+		!sameStringSet(credential.Scopes, requiredScopes) {
+		updated, err := requestProtocolToken(ctx, client, state, *credential, configuration, requiredScopes)
 		if err != nil {
 			return state, dpopCredential{}, err
 		}
 		credential = &updated
 	}
 	state.ProtocolCredential = credential
-	if state.Identity == nil {
-		proof, err := signDPoPProof(credential.PrivateKey, http.MethodGet, configuration.AgentEndpoint, credential.AccessToken, time.Now())
-		if err != nil {
-			return state, dpopCredential{}, err
-		}
-		var status agentSelfStatusResponse
-		if err := requestJSONHeaders(ctx, client, http.MethodGet, configuration.AgentEndpoint, map[string]string{
-			"Authorization": "DPoP " + credential.AccessToken,
-			"DPoP":          proof,
-		}, nil, &status); err != nil {
-			return state, dpopCredential{}, err
-		}
-		if status.Agent == nil || status.Agent.ID == "" || status.Agent.Issuer != configuration.AgentIdentityIssuer || status.Agent.Subject == "" {
-			return state, dpopCredential{}, errors.New("Agent identity response is missing issuer or subject")
-		}
-		state.Identity = status.Agent
-		state.RegistrationApproval = nil
-	}
 	if err := states.Update(target, state); err != nil {
 		return state, dpopCredential{}, err
 	}
@@ -306,6 +445,7 @@ func requestProtocolToken(
 	state agentState,
 	credential dpopCredential,
 	configuration agentConfiguration,
+	requiredScopes []string,
 ) (dpopCredential, error) {
 	proof, err := signDPoPProof(credential.PrivateKey, http.MethodPost, configuration.AgentTokenEndpoint, "", time.Now())
 	if err != nil {
@@ -322,7 +462,7 @@ func requestProtocolToken(
 		"grant_type": {"urn:ietf:params:oauth:grant-type:jwt-bearer"},
 		"assertion":  {mustAgentJWT(state, configuration.Issuer)},
 		"resource":   {credential.ResourceIndicator},
-		"scope":      {strings.Join(configuration.AgentBootstrapScopes, " ")},
+		"scope":      {strings.Join(requiredScopes, " ")},
 	}, &response); err != nil {
 		return credential, fmt.Errorf("obtain Realmroot OAuth access token: %w", err)
 	}
@@ -332,6 +472,7 @@ func requestProtocolToken(
 	credential.AccessToken = response.AccessToken
 	expiresAt := time.Now().Add(time.Duration(response.ExpiresIn) * time.Second)
 	credential.ExpiresAt = &expiresAt
+	credential.Scopes = append([]string(nil), requiredScopes...)
 	return credential, nil
 }
 
@@ -464,16 +605,21 @@ func registerAgent(
 	if registration.Approval.ExpiresIn > 0 {
 		expiresAt = time.Now().Add(time.Duration(registration.Approval.ExpiresIn) * time.Second)
 	}
+	idempotencyKey, err := newEnrollmentIdempotencyKey()
+	if err != nil {
+		return agentState{}, err
+	}
 	state := agentState{
-		Version:         agentStateVersion,
-		Origin:          target.Origin,
-		Issuer:          target.Issuer,
-		Runtime:         target.Runtime,
-		Name:            name,
-		AgentID:         registration.AgentID,
-		HostID:          registration.HostID,
-		AgentKeyID:      agentKeyID,
-		AgentPrivateKey: encodePrivateKey(agentPrivateKey),
+		Version:                  agentStateVersion,
+		Origin:                   target.Origin,
+		Issuer:                   target.Issuer,
+		Runtime:                  target.Runtime,
+		Name:                     name,
+		AgentID:                  registration.AgentID,
+		HostID:                   registration.HostID,
+		AgentKeyID:               agentKeyID,
+		AgentPrivateKey:          encodePrivateKey(agentPrivateKey),
+		EnrollmentIdempotencyKey: idempotencyKey,
 		RegistrationApproval: &pendingApproval{
 			VerificationURIComplete: registration.Approval.VerificationURIComplete,
 			ExpiresAt:               &expiresAt,
@@ -622,9 +768,21 @@ func requestForm(
 	form url.Values,
 	output any,
 ) error {
+	_, err := requestFormHeadersResponse(ctx, client, uri, headers, form, output)
+	return err
+}
+
+func requestFormHeadersResponse(
+	ctx context.Context,
+	client httpDoer,
+	uri string,
+	headers map[string]string,
+	form url.Values,
+	output any,
+) (http.Header, error) {
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, uri, strings.NewReader(form.Encode()))
 	if err != nil {
-		return fmt.Errorf("create Realmroot OAuth request: %w", err)
+		return nil, fmt.Errorf("create Realmroot OAuth request: %w", err)
 	}
 	request.Header.Set("Accept", "application/json")
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -633,20 +791,24 @@ func requestForm(
 	}
 	response, err := client.Do(request)
 	if err != nil {
-		return fmt.Errorf("call Realmroot OAuth endpoint: %w", err)
+		return nil, fmt.Errorf("call Realmroot OAuth endpoint: %w", err)
 	}
 	defer response.Body.Close()
 	encoded, err := io.ReadAll(io.LimitReader(response.Body, 1<<20))
 	if err != nil {
-		return fmt.Errorf("read Realmroot OAuth response: %w", err)
+		return nil, fmt.Errorf("read Realmroot OAuth response: %w", err)
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return &httpResponseError{StatusCode: response.StatusCode, Body: strings.TrimSpace(string(encoded))}
+		return nil, &httpResponseError{
+			StatusCode: response.StatusCode,
+			Header:     response.Header.Clone(),
+			Body:       strings.TrimSpace(string(encoded)),
+		}
 	}
 	if err := json.Unmarshal(encoded, output); err != nil {
-		return fmt.Errorf("decode Realmroot OAuth response: %w", err)
+		return nil, fmt.Errorf("decode Realmroot OAuth response: %w", err)
 	}
-	return nil
+	return response.Header.Clone(), nil
 }
 
 type httpResponseError struct {

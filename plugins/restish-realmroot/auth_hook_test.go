@@ -23,7 +23,7 @@ func fixedCredentialSourceReference() (string, error) {
 }
 
 func TestAuthHookIgnoresUnmarkedProfiles(t *testing.T) {
-	output, err := authenticateRequest(plugin.AuthHookInput{}, &memoryStateStore{}, roundTripFunc(nil), &promptRecorder{})
+	output, err := authenticateRequest(plugin.AuthHookInput{}, nil, &memoryStateStore{}, roundTripFunc(nil), &promptRecorder{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -32,7 +32,7 @@ func TestAuthHookIgnoresUnmarkedProfiles(t *testing.T) {
 	}
 }
 
-func TestAuthHookEnrollsOnceThenSignsOriginalRequest(t *testing.T) {
+func TestEnrollmentAuthRegistersAgentThenWhoamiUsesTheEnrolledIdentity(t *testing.T) {
 	t.Setenv("REALMROOT_AGENT_NAME", "Build Agent")
 	expectedHostName, err := hostDisplayName()
 	if err != nil {
@@ -44,7 +44,7 @@ func TestAuthHookEnrollsOnceThenSignsOriginalRequest(t *testing.T) {
 	client := roundTripFunc(func(request *http.Request) (*http.Response, error) {
 		requests++
 		switch requests {
-		case 1, 6:
+		case 1:
 			return jsonResponse(http.StatusOK, testAgentConfiguration()), nil
 		case 2:
 			var registration struct {
@@ -75,7 +75,7 @@ func TestAuthHookEnrollsOnceThenSignsOriginalRequest(t *testing.T) {
 			}
 			if request.Form.Get("grant_type") != "urn:ietf:params:oauth:grant-type:jwt-bearer" ||
 				request.Form.Get("resource") != "https://auth.example.com/api" ||
-				request.Form.Get("scope") != "agent:read resource-servers:read authorization-details:read connection-requests:read connection-requests:write access-requests:read access-requests:write" ||
+				request.Form.Get("scope") != "agent:read" ||
 				request.Header.Get("DPoP") == "" {
 				t.Fatalf("token request form = %#v", request.Form)
 			}
@@ -94,12 +94,45 @@ func TestAuthHookEnrollsOnceThenSignsOriginalRequest(t *testing.T) {
 			return nil, nil
 		}
 	})
-	input := plugin.AuthHookInput{
-		API: "realmroot", Profile: "default", Params: map[string]string{"provider": authProvider},
-		Request: plugin.HookRequest{Method: http.MethodGet, URI: "https://auth.example.com/api/agent-identities/current"},
+	enrollment := authHookEnvelope{
+		API: "realmroot", Profile: "default",
+		Requirements: []authRequirement{{ID: agentAssertionSchemeID, Kind: "http-bearer"}},
+		Request:      plugin.HookRequest{Method: http.MethodPost, URI: "https://auth.example.com/api/agent/enrollments"},
+	}
+	output, err := authenticateHookRequest(enrollment, states, client, prompt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if authorization, _ := output.Request.Headers["Authorization"].(string); !strings.HasPrefix(authorization, "Bearer ") {
+		t.Fatalf("missing AgentAuth assertion: %q", authorization)
+	}
+	if output.Request.Headers["Idempotency-Key"] == "" {
+		t.Fatal("enrollment request has no durable idempotency key")
+	}
+	if states.state.Identity != nil {
+		t.Fatalf("enrollment authentication persisted an identity before the Resource operation: %#v", states.state.Identity)
+	}
+	_, err = handleProfiledResponse(plugin.ResponseMiddlewareInput{
+		Request: plugin.HookRequest{Method: http.MethodPost, URI: "https://auth.example.com/api/agent/enrollments"},
+		Response: plugin.HookResponse{
+			Status:  http.StatusCreated,
+			Headers: map[string][]string{"Link": {"<" + agentEnrollmentProfile + ">; rel=\"profile\""}},
+			Body:    map[string]any{"kind": "new_identity", "status": "approved"},
+		},
+	}, &browserRecorder{}, states, client, fixedCredentialSourceReference)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if states.state.Identity == nil || states.state.Identity.Subject != "agt_123" {
+		t.Fatalf("enrollment response did not persist identity: %#v", states.state.Identity)
 	}
 
-	output, err := authenticateRequest(input, states, client, prompt)
+	whoami := authHookEnvelope{
+		API: "realmroot", Profile: "default",
+		Requirements: []authRequirement{{ID: oauth2SchemeID, Kind: "oauth2-dpop", Needs: []string{"agent:read"}}},
+		Request:      plugin.HookRequest{Method: http.MethodGet, URI: "https://auth.example.com/api/agent"},
+	}
+	output, err = authenticateHookRequest(whoami, states, client, prompt)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -109,14 +142,38 @@ func TestAuthHookEnrollsOnceThenSignsOriginalRequest(t *testing.T) {
 	if prompt.uri != "https://auth.example.com/agent/approve?code=abc" {
 		t.Fatalf("approval URI = %q", prompt.uri)
 	}
-	if states.state.Identity == nil || states.state.Identity.Subject != "agt_123" {
-		t.Fatalf("identity was not persisted: %#v", states.state.Identity)
-	}
-	if _, err := authenticateRequest(input, states, client, prompt); err != nil {
+	if _, err := authenticateHookRequest(whoami, states, client, prompt); err != nil {
 		t.Fatal(err)
 	}
-	if requests != 6 {
+	if requests != 5 {
 		t.Fatalf("second request repeated enrollment; requests = %d", requests)
+	}
+}
+
+func TestWhoamiWithoutLocalRegistrationRequiresExplicitEnrollment(t *testing.T) {
+	t.Run("[spec: agent-identity/agent-whoami-requires-enrollment]", testWhoamiWithoutLocalRegistrationRequiresExplicitEnrollment)
+}
+
+func testWhoamiWithoutLocalRegistrationRequiresExplicitEnrollment(t *testing.T) {
+	clientRequests := 0
+	client := roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		clientRequests++
+		return jsonResponse(http.StatusOK, testAgentConfiguration()), nil
+	})
+	prompt := &promptRecorder{}
+	_, err := authenticateHookRequest(authHookEnvelope{
+		API: "realmroot", Profile: "default",
+		Requirements: []authRequirement{{ID: oauth2SchemeID, Kind: "oauth2-dpop", Needs: []string{"agent:read"}}},
+		Request:      plugin.HookRequest{Method: http.MethodGet, URI: "https://auth.example.com/api/agent"},
+	}, &memoryStateStore{}, client, prompt)
+	if err == nil || !strings.Contains(err.Error(), "restish realmroot agent enroll") {
+		t.Fatalf("error = %v", err)
+	}
+	if prompt.uri != "" {
+		t.Fatalf("whoami opened approval URI %q", prompt.uri)
+	}
+	if clientRequests != 1 {
+		t.Fatalf("whoami made %d requests, want one cached discovery request", clientRequests)
 	}
 }
 
@@ -199,8 +256,9 @@ func newCredentialState(t *testing.T, credential dpopCredential) *memoryStateSto
 	return &memoryStateStore{exists: true, state: agentState{
 		Version: agentStateVersion, Origin: "https://auth.example.com", Issuer: "https://auth.example.com/api/auth",
 		Runtime: defaultAgentRuntime, AgentID: "agent-123", HostID: "host-123", AgentKeyID: "agent-key",
-		AgentPrivateKey: encodePrivateKey(agentPrivate),
-		Identity:        &stableIdentity{ID: "identity-1", Issuer: "https://auth.example.com/api/auth", Subject: "agt_123"},
+		AgentPrivateKey:          encodePrivateKey(agentPrivate),
+		EnrollmentIdempotencyKey: "enroll_test",
+		Identity:                 &stableIdentity{ID: "identity-1", Issuer: "https://auth.example.com/api/auth", Subject: "agt_123"},
 		CredentialSources: map[string]credentialSource{
 			testCredentialSourceReference: {
 				ResourceIndicator: credential.ResourceIndicator, AuthorizationDetails: credential.AuthorizationDetails,
@@ -212,6 +270,7 @@ func newCredentialState(t *testing.T, credential dpopCredential) *memoryStateSto
 			CredentialEndpoint: "https://auth.example.com/api/auth/oauth2/token",
 			ProofTarget:        "https://auth.example.com/api/auth/oauth2/token", PrivateKey: protocolKey,
 			AccessToken: "protocol-token", ExpiresAt: &protocolExpiresAt,
+			Scopes: []string{"agent:read", "access-requests:read", "access-requests:write"},
 		},
 	}}
 }
@@ -248,10 +307,29 @@ func jsonResponse(status int, body any) *http.Response {
 }
 
 type memoryStateStore struct {
-	state      agentState
-	exists     bool
-	host       hostState
-	hostExists bool
+	state         agentState
+	exists        bool
+	host          hostState
+	hostExists    bool
+	configuration *cachedAgentConfiguration
+}
+
+func (s *memoryStateStore) LoadAgentConfiguration(origin string) (cachedAgentConfiguration, error) {
+	if s.configuration == nil || s.configuration.Origin != origin {
+		return cachedAgentConfiguration{}, os.ErrNotExist
+	}
+	return *s.configuration, nil
+}
+
+func (s *memoryStateStore) StoreAgentConfiguration(
+	origin string,
+	configuration agentConfiguration,
+	expiresAt time.Time,
+) error {
+	s.configuration = &cachedAgentConfiguration{
+		Version: 1, Origin: origin, ExpiresAt: expiresAt, Configuration: configuration,
+	}
+	return nil
 }
 
 func (s *memoryStateStore) Create(_ agentTarget, state agentState) (string, error) {
@@ -327,6 +405,24 @@ func (s *memoryStateStore) FindCredentialOffer(reference, runtime string, scopes
 	return resourceCredentialReference{}, os.ErrNotExist
 }
 
+func (s *memoryStateStore) FindCredentialSource(reference, runtime string) (credentialSourceStateReference, error) {
+	if !s.exists || s.state.Runtime != runtime {
+		return credentialSourceStateReference{}, os.ErrNotExist
+	}
+	source, ok := s.state.CredentialSources[reference]
+	if !ok {
+		return credentialSourceStateReference{}, os.ErrNotExist
+	}
+	return credentialSourceStateReference{
+		path: "memory", state: s.state, reference: reference, source: source,
+	}, nil
+}
+
+func (s *memoryStateStore) UpdateCredentialSourceState(reference credentialSourceStateReference) error {
+	s.state = reference.state
+	return nil
+}
+
 func (s *memoryStateStore) RemoveCredentialOffer(reference resourceCredentialReference) error {
 	source, ok := s.state.CredentialSources[reference.reference]
 	if !ok {
@@ -344,12 +440,8 @@ func (s *memoryStateStore) RemoveCredentialOffer(reference resourceCredentialRef
 	if !removed {
 		return os.ErrNotExist
 	}
-	if len(remaining) == 0 {
-		delete(s.state.CredentialSources, reference.reference)
-	} else {
-		source.Offers = remaining
-		s.state.CredentialSources[reference.reference] = source
-	}
+	source.Offers = remaining
+	s.state.CredentialSources[reference.reference] = source
 	return nil
 }
 

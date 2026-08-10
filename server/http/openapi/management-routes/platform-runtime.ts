@@ -12,6 +12,7 @@ export const platformRuntimeRoutes: ManagementRouteConfig[] = [
     path: '/agent/enrollments',
     operationId: 'createAgentEnrollment',
     summary: 'Create an Agent identity or installation enrollment',
+    cli: { group: 'Agent', name: 'enroll' },
     security: [{ agentAssertion: [] }],
     request: {
       headers: z.object({
@@ -21,16 +22,24 @@ export const platformRuntimeRoutes: ManagementRouteConfig[] = [
           .min(1)
           .max(200)
           .optional()
-          .openapi({ param: { name: 'Idempotency-Key', in: 'header' } }),
+          .openapi({
+            description:
+              'Stable retry key injected by the Agent authentication adapter; direct clients must supply it.',
+            param: { name: 'Idempotency-Key', in: 'header' },
+          }),
       }),
-      body: jsonBody(createAgentSelfEnrollmentSchema),
+      body: { ...jsonBody(createAgentSelfEnrollmentSchema), required: false },
     },
     response: z.union([agentEnrollmentSchema, agentInstallationEnrollmentResponseSchema]),
     status: 201,
     responseHeaders: {
       ...locationResponseHeader,
+      Link: {
+        description: 'Declares the Agent enrollment response profile used to complete local identity state.',
+        schema: { type: 'string' },
+      },
       'Idempotency-Replayed': {
-        description: 'True when an additional-installation enrollment replays an existing idempotent result.',
+        description: 'True when an enrollment replays an existing idempotent result.',
         schema: { type: 'string', enum: ['true'] },
       },
     },

@@ -89,7 +89,7 @@ export const agentGovernanceRoutes: ManagementRouteConfig[] = [
     path: '/agent/access-requests/{requestId}/credentials',
     operationId: 'createAgentAccessRequestCredential',
     summary: 'Create a temporary credential for an approved Agent access request',
-    security: [{ agentAuth: ['access-requests:write'] }],
+    security: [{ oauth2: ['access-requests:write'] }],
     request: {
       params: z.object({ requestId: z.string() }),
       body: jsonBody(targetCredentialProofSchema),

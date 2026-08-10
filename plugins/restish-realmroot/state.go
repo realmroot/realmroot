@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/ed25519"
+	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -14,11 +15,12 @@ import (
 )
 
 const (
-	stateDirectoryEnv = "REALMROOT_PLUGIN_STATE_DIR"
-	agentStateVersion = 16
-	hostStateVersion  = 1
-	identityDirectory = "identities"
-	hostDirectory     = "hosts"
+	stateDirectoryEnv  = "REALMROOT_PLUGIN_STATE_DIR"
+	agentStateVersion  = 17
+	hostStateVersion   = 1
+	identityDirectory  = "identities"
+	hostDirectory      = "hosts"
+	discoveryDirectory = "discovery"
 )
 
 type agentTarget struct {
@@ -69,10 +71,23 @@ type agentState struct {
 	AgentKeyID               string                      `json:"agent_key_id"`
 	AgentPrivateKey          string                      `json:"agent_private_key"`
 	RegistrationApproval     *pendingApproval            `json:"registration_approval,omitempty"`
+	EnrollmentIdempotencyKey string                      `json:"enrollment_idempotency_key"`
 	Identity                 *stableIdentity             `json:"identity,omitempty"`
 	CredentialSources        map[string]credentialSource `json:"credential_sources,omitempty"`
 	ProtocolCredential       *dpopCredential             `json:"protocol_credential,omitempty"`
 	LegacyPlatformCredential *dpopCredential             `json:"platform_credential,omitempty"`
+}
+
+type cachedAgentConfiguration struct {
+	Version       int                `json:"version"`
+	Origin        string             `json:"origin"`
+	ExpiresAt     time.Time          `json:"expires_at"`
+	Configuration agentConfiguration `json:"configuration"`
+}
+
+type agentConfigurationCache interface {
+	LoadAgentConfiguration(origin string) (cachedAgentConfiguration, error)
+	StoreAgentConfiguration(origin string, configuration agentConfiguration, expiresAt time.Time) error
 }
 
 type hostState struct {
@@ -116,9 +131,22 @@ type resourceCredentialReference struct {
 	credential dpopCredential
 }
 
+type credentialSourceStateReference struct {
+	path      string
+	state     agentState
+	reference string
+	source    credentialSource
+}
+
 type credentialOfferStore interface {
+	FindCredentialSource(reference string, runtime string) (credentialSourceStateReference, error)
+	UpdateCredentialSourceState(reference credentialSourceStateReference) error
 	FindCredentialOffer(reference string, runtime string, scopes []string) (resourceCredentialReference, error)
 	RemoveCredentialOffer(reference resourceCredentialReference) error
+}
+
+func (s *fileStateStore) UpdateCredentialSourceState(reference credentialSourceStateReference) error {
+	return s.UpdateStateReference(agentStateReference{path: reference.path, state: reference.state})
 }
 
 type fileStateStore struct {
@@ -268,11 +296,97 @@ func (s *fileStateStore) loadPath(path string) (agentState, error) {
 		state.Version = agentStateVersion
 		state.CredentialSources = nil
 		state.ProtocolCredential = nil
+		state.EnrollmentIdempotencyKey, err = newEnrollmentIdempotencyKey()
+		if err != nil {
+			return agentState{}, fmt.Errorf("migrate Agent enrollment idempotency key: %w", err)
+		}
+		if err := s.updatePath(path, state); err != nil {
+			return agentState{}, fmt.Errorf("migrate Agent state: %w", err)
+		}
+	}
+	if state.Version == 16 {
+		state.Version = agentStateVersion
+		state.EnrollmentIdempotencyKey, err = newEnrollmentIdempotencyKey()
+		if err != nil {
+			return agentState{}, fmt.Errorf("migrate Agent enrollment idempotency key: %w", err)
+		}
+		if state.ProtocolCredential != nil && len(state.ProtocolCredential.Scopes) == 0 {
+			state.ProtocolCredential = nil
+		}
 		if err := s.updatePath(path, state); err != nil {
 			return agentState{}, fmt.Errorf("migrate Agent state: %w", err)
 		}
 	}
 	return state, nil
+}
+
+func newEnrollmentIdempotencyKey() (string, error) {
+	value := make([]byte, 24)
+	if _, err := rand.Read(value); err != nil {
+		return "", fmt.Errorf("generate Agent enrollment idempotency key: %w", err)
+	}
+	return "enroll_" + base64.RawURLEncoding.EncodeToString(value), nil
+}
+
+func (s *fileStateStore) LoadAgentConfiguration(origin string) (cachedAgentConfiguration, error) {
+	path := s.discoveryPath(origin)
+	info, err := os.Lstat(path)
+	if err != nil {
+		return cachedAgentConfiguration{}, err
+	}
+	if !info.Mode().IsRegular() || info.Mode().Perm()&0o077 != 0 {
+		return cachedAgentConfiguration{}, errors.New("Agent discovery cache must be a private regular file")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return cachedAgentConfiguration{}, fmt.Errorf("read Agent discovery cache: %w", err)
+	}
+	var cached cachedAgentConfiguration
+	if err := json.Unmarshal(data, &cached); err != nil {
+		return cachedAgentConfiguration{}, fmt.Errorf("decode Agent discovery cache: %w", err)
+	}
+	if cached.Version != 1 || cached.Origin != origin {
+		return cachedAgentConfiguration{}, errors.New("Agent discovery cache does not match the requested origin")
+	}
+	return cached, nil
+}
+
+func (s *fileStateStore) StoreAgentConfiguration(
+	origin string,
+	configuration agentConfiguration,
+	expiresAt time.Time,
+) error {
+	path := s.discoveryPath(origin)
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return fmt.Errorf("create Agent discovery cache directory: %w", err)
+	}
+	data, err := json.MarshalIndent(cachedAgentConfiguration{
+		Version: 1, Origin: origin, ExpiresAt: expiresAt, Configuration: configuration,
+	}, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode Agent discovery cache: %w", err)
+	}
+	temp, err := os.CreateTemp(filepath.Dir(path), ".discovery-*.json")
+	if err != nil {
+		return fmt.Errorf("create temporary Agent discovery cache: %w", err)
+	}
+	tempPath := temp.Name()
+	defer os.Remove(tempPath)
+	if err := temp.Chmod(0o600); err != nil {
+		_ = temp.Close()
+		return fmt.Errorf("protect temporary Agent discovery cache: %w", err)
+	}
+	if _, err := temp.Write(append(data, '\n')); err != nil {
+		_ = temp.Close()
+		return fmt.Errorf("write temporary Agent discovery cache: %w", err)
+	}
+	if err := temp.Close(); err != nil {
+		return fmt.Errorf("close temporary Agent discovery cache: %w", err)
+	}
+	if err := os.Rename(tempPath, path); err != nil {
+		return fmt.Errorf("replace Agent discovery cache: %w", err)
+	}
+	return nil
 }
 
 func (s *fileStateStore) Update(target agentTarget, state agentState) error {
@@ -309,6 +423,31 @@ func (s *fileStateStore) updatePath(path string, state agentState) error {
 		return fmt.Errorf("replace Agent state: %w", err)
 	}
 	return nil
+}
+
+func (s *fileStateStore) FindCredentialSource(reference string, runtime string) (credentialSourceStateReference, error) {
+	var matched *credentialSourceStateReference
+	err := s.walkStates(func(path string, state agentState) error {
+		if state.Runtime != runtime {
+			return nil
+		}
+		source, ok := state.CredentialSources[reference]
+		if !ok {
+			return nil
+		}
+		if matched != nil {
+			return errors.New("multiple Realmroot Agent identities contain the credential source reference")
+		}
+		matched = &credentialSourceStateReference{path: path, state: state, reference: reference, source: source}
+		return nil
+	})
+	if err != nil {
+		return credentialSourceStateReference{}, fmt.Errorf("find Realmroot credential source: %w", err)
+	}
+	if matched == nil {
+		return credentialSourceStateReference{}, os.ErrNotExist
+	}
+	return *matched, nil
 }
 
 func (s *fileStateStore) FindCredentialOffer(reference string, runtime string, scopes []string) (resourceCredentialReference, error) {
@@ -363,12 +502,8 @@ func (s *fileStateStore) RemoveCredentialOffer(reference resourceCredentialRefer
 	if !removed {
 		return os.ErrNotExist
 	}
-	if len(remaining) == 0 {
-		delete(reference.state.CredentialSources, reference.reference)
-	} else {
-		source.Offers = remaining
-		reference.state.CredentialSources[reference.reference] = source
-	}
+	source.Offers = remaining
+	reference.state.CredentialSources[reference.reference] = source
 	return s.UpdateStateReference(agentStateReference{path: reference.path, state: reference.state})
 }
 
@@ -500,6 +635,10 @@ func (s *fileStateStore) hostPath(target agentTarget) string {
 	return filepath.Join(s.root, hostDirectory, encodeStatePathPart(target.Issuer)+".json")
 }
 
+func (s *fileStateStore) discoveryPath(origin string) string {
+	return filepath.Join(s.root, discoveryDirectory, encodeStatePathPart(origin)+".json")
+}
+
 func encodeStatePathPart(value string) string {
 	return base64.RawURLEncoding.EncodeToString([]byte(value))
 }
@@ -521,13 +660,16 @@ func validateAgentStateCredentials(state agentState) error {
 	if state.AgentID == "" || state.HostID == "" || state.AgentKeyID == "" {
 		return errors.New("Agent state is missing protocol identifiers")
 	}
+	if state.EnrollmentIdempotencyKey == "" {
+		return errors.New("Agent state is missing its enrollment idempotency key")
+	}
 	key, err := base64.RawURLEncoding.DecodeString(state.AgentPrivateKey)
 	if err != nil || len(key) != ed25519.PrivateKeySize {
 		return errors.New("Agent private key is invalid")
 	}
 	authorizationContexts := make(map[string]string, len(state.CredentialSources))
 	for reference, source := range state.CredentialSources {
-		if !isCredentialSourceReference(reference) || source.ResourceIndicator == "" || len(source.Offers) == 0 {
+		if !isCredentialSourceReference(reference) || source.ResourceIndicator == "" {
 			return errors.New("Agent state contains invalid DPoP credential metadata")
 		}
 		contextKey, err := authorizationContextKey(source.ResourceIndicator, source.AuthorizationDetails)

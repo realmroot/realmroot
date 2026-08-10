@@ -119,6 +119,22 @@ export function createDrizzleAgentIdentityRepository(db: Database): AgentIdentit
       return intent ?? null
     },
 
+    async findLatestApprovedIdentityIntent(protocolAgentId) {
+      const [intent] = await db
+        .select()
+        .from(agentEnrollmentIntent)
+        .where(
+          and(
+            eq(agentEnrollmentIntent.protocolAgentId, protocolAgentId),
+            eq(agentEnrollmentIntent.status, 'approved'),
+            isNull(agentEnrollmentIntent.agentIdentityId),
+          ),
+        )
+        .orderBy(desc(agentEnrollmentIntent.approvedAt), desc(agentEnrollmentIntent.createdAt))
+        .limit(1)
+      return intent ?? null
+    },
+
     async findProtocolAgent(id) {
       const [record] = await db.select().from(agent).where(eq(agent.id, id)).limit(1)
       return record ?? null

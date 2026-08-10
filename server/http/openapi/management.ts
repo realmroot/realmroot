@@ -166,7 +166,7 @@ const managementRoutes: ManagementRouteConfig[] = [
     operationId: 'getAgentStatus',
     summary: 'Read the current Agent status',
     cli: { group: 'Agent', name: 'whoami' },
-    security: [{ agentAuth: ['agent:read'] }],
+    security: [{ oauth2: ['agent:read'] }],
     response: agentStatusSchema,
   },
   {
@@ -174,7 +174,7 @@ const managementRoutes: ManagementRouteConfig[] = [
     path: '/resource-servers/{resourceServerId}/authorization-details',
     operationId: 'listResourceServerAuthorizationDetails',
     summary: 'List authorization details available through a Resource Server',
-    security: [{ agentAuth: ['authorization-details:read'] }],
+    security: [{ oauth2: ['authorization-details:read'] }],
     request: {
       params: z.object({ resourceServerId: z.string() }),
       query: paginationQuerySchema,
@@ -187,7 +187,7 @@ const managementRoutes: ManagementRouteConfig[] = [
     operationId: 'createConnectionRequest',
     summary: 'Request a controller-managed Resource Server connection',
     cli: { name: 'connect' },
-    security: [{ agentAuth: ['connection-requests:write'] }],
+    security: [{ oauth2: ['connection-requests:read', 'connection-requests:write'] }],
     request: {
       params: z.object({ resourceServerId: z.string() }),
       body: jsonBody(createResourceConnectionRequestSchema),
@@ -230,7 +230,7 @@ const managementRoutes: ManagementRouteConfig[] = [
     path: '/resource-servers/{resourceServerId}/connection-requests/{requestId}',
     operationId: 'getConnectionRequest',
     summary: 'Read a Resource Server connection request',
-    security: [{ agentAuth: ['connection-requests:read'] }],
+    security: [{ oauth2: ['connection-requests:read'] }],
     request: { params: z.object({ resourceServerId: z.string(), requestId: z.string() }) },
     response: resourceConnectionRequestSchema,
     responseHeaders: interactiveResourceResponseHeaders,
@@ -241,7 +241,7 @@ const managementRoutes: ManagementRouteConfig[] = [
     operationId: 'createAgentAuthorizationRequest',
     summary: 'Create an Agent authorization request',
     cli: { name: 'access' },
-    security: [{ agentAuth: ['access-requests:write'] }],
+    security: [{ oauth2: ['access-requests:read', 'access-requests:write'] }],
     request: { body: jsonBody(createAccessRequestSchema) },
     response: accessRequestSchema,
     status: 201,
@@ -252,7 +252,7 @@ const managementRoutes: ManagementRouteConfig[] = [
     path: '/agent/access-requests/{requestId}',
     operationId: 'getAgentAuthorizationRequest',
     summary: "Get the authenticated Agent's authorization request",
-    security: [{ agentAuth: ['access-requests:read'] }],
+    security: [{ oauth2: ['access-requests:read'] }],
     request: { params: z.object({ requestId: z.string() }) },
     response: accessRequestSchema,
     responseHeaders: interactiveResourceResponseHeaders,
@@ -274,12 +274,6 @@ function createManagementOpenApiApp() {
     in: 'cookie',
     name: 'better-auth.session_token',
     description: 'Authenticated browser session; each operation applies Realm, Organization, or account visibility.',
-  })
-  app.openAPIRegistry.registerComponent('securitySchemes', 'agentAuth', {
-    type: 'http',
-    scheme: 'DPoP',
-    description:
-      'Plugin-managed Realmroot Agent protocol authentication with a short-lived RFC 9449 DPoP access token.',
   })
   app.openAPIRegistry.registerComponent('securitySchemes', 'agentAssertion', {
     type: 'http',

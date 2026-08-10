@@ -20,9 +20,9 @@ Feature: Unified Realmroot resource API
     And Restish v2 exposes the current Agent and resource operations from the same contract
     And resources are not grouped under a management path
     And every protected operation declares its exact authorization scope through an OpenAPI security requirement
-    And the contract declares separate agentAssertion, agentAuth, oauth2, and session-cookie security schemes
-    And agentAuth identifies plugin-managed Agent protocol credentials while oauth2 identifies Resource-bound management credentials
-    And configuring oauth2 management access cannot replace agentAuth for whoami or other Agent protocol operations
+    And the contract declares agentAssertion, oauth2, and session-cookie security schemes
+    And oauth2 identifies all Resource API credentials regardless of whether the principal is an Agent or Application
+    And Agent Resource API operations use oauth2 while AgentAuth assertions remain limited to enrollment and token exchange
     And no API-key, capability extension, or plugin provider name appears as a public security scheme
     And Restish can validate structured authorization detail request bodies without the root OpenAPI document
 
@@ -45,23 +45,27 @@ Feature: Unified Realmroot resource API
     Then routine single-request operations remain discoverable from the published OpenAPI paths
     And those operations use Restish get, post, put, patch, delete, or edit instead of generated commands
     And Resource Server and Resource discovery use Restish's generic get command
-    And only Agent identity, connection approval, and access approval retain generated workflow commands
-    And those workflows are exposed as whoami, connect, and access
+    And only Agent enrollment, Agent identity, connection approval, and access approval retain generated workflow commands
+    And those workflows are exposed as enroll, whoami, connect, and access
     And polling and short-lived credential issuance remain hidden behind the plugin's generic response protocols
 
 
   @entrypoint:restish @journey:management-restish-agent-auth
   Scenario: Restish transparently authenticates as an Agent
     Given Restish is connected to the unified Realmroot API
-    When a new Agent invokes its first protected OpenAPI operation
-    Then the Restish authentication adapter starts Agent enrollment without a login command
+    When a new Agent invokes the generated Agent enrollment operation
+    Then the Restish authentication adapter starts AgentAuth enrollment without a login command
     And the adapter uses the endpoints and issuer published by AgentAuth discovery
     And Realmroot does not provision a shared CLI OAuth application
-    And the original operation waits for one controller approval
+    And the enrollment operation waits for one controller approval
     And the adapter exchanges the Agent identity assertion only at the OAuth token endpoint
     And every later command-line request uses a short-lived audience-restricted DPoP access token
+    And the adapter caches validated Agent discovery metadata per Realmroot origin for a bounded lifetime
+    And each token request contains only the scopes required by the selected operation and its declared polling workflow
     And every protected Realmroot operation authenticates the same Agent issuer and subject from that token
+    And a configured credential override can deliberately select a non-Agent oauth2 principal
     And the approving user's identity is never used as the command-line principal
+    And invoking whoami before enrollment fails without creating identity state
 
 
   @entrypoint:agent-protocol @journey:management-standard-agent-oauth

@@ -65,6 +65,67 @@ describe('Agent protocol routes', () => {
     expect((await app.request('/api/agent/enrollments/enrollment-1')).status).toBe(200)
   })
 
+  it('replays an approved identity enrollment and profiles it for local completion [spec: agent-identity/agent-identity-enrollment]', async () => {
+    const intent = {
+      id: 'enrollment-1',
+      agentIdentityId: null,
+      requestedName: 'Build Agent',
+      homeSpace: { type: 'personal' as const, userId: 'user-1' },
+      protocolAgentId: 'protocol-agent-1',
+      status: 'approved' as const,
+      expiresAt: new Date(expiresAt),
+      approvedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    }
+    const enrollment = {
+      id: intent.id,
+      agentId: null,
+      name: 'Build Agent',
+      kind: 'new_identity' as const,
+      homeSpace: intent.homeSpace,
+      status: intent.status,
+      expiresAt,
+      decidedAt: now.toISOString(),
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+    }
+    const create = vi
+      .spyOn(agentIdentities, 'createAgentEnrollmentIntent')
+      .mockResolvedValue({ intent, replayed: true })
+    const approve = vi.spyOn(agentIdentities, 'approveAgentEnrollment')
+    vi.spyOn(agentIdentities, 'getPublicAgentEnrollment').mockResolvedValue(enrollment)
+
+    const response = await createRouteApp().request('/api/agent/enrollments', {
+      method: 'POST',
+      headers: { authorization: 'Bearer agent-jwt', 'idempotency-key': 'enrollment-key-1' },
+    })
+
+    expect(response.status).toBe(201)
+    expect(response.headers.get('idempotency-replayed')).toBe('true')
+    expect(response.headers.get('link')).toContain('agent-enrollment')
+    expect(create).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ protocolAgentId: 'protocol-agent-1', name: 'Build Agent' }),
+      'user-1',
+      'enrollment-key-1',
+    )
+    expect(approve).not.toHaveBeenCalled()
+  })
+
+  it('requires a retry key for direct identity enrollment clients', async () => {
+    const response = await createRouteApp().request('/api/agent/enrollments', {
+      method: 'POST',
+      headers: jsonHeaders(),
+      body: JSON.stringify({ kind: 'new_identity', name: 'Build Agent' }),
+    })
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toMatchObject({
+      error: { message: 'Idempotency-Key header is required and must contain 1 to 200 characters.' },
+    })
+  })
+
   it('lists Resource Servers and their authorization details without generated Resource identifiers [spec: agent-identity/agent-resource-server-model]', async () => {
     vi.spyOn(agentIdentities, 'getAgentIdentityByProtocolAgent').mockResolvedValue(activeIdentity())
     vi.spyOn(externalResources, 'listAgentResourceServers').mockResolvedValue({
@@ -366,7 +427,7 @@ function accessRequest() {
 function session() {
   return {
     agentId: 'protocol-agent-1',
-    agent: { id: 'protocol-agent-1', hostId: 'host-1', mode: 'delegated', capabilityGrants: [] },
+    agent: { id: 'protocol-agent-1', name: 'Build Agent', hostId: 'host-1', mode: 'delegated', capabilityGrants: [] },
     host: { id: 'host-1', userId: 'user-1', status: 'active' },
   }
 }

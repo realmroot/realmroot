@@ -1039,6 +1039,7 @@ export interface AgentIdentityRepository {
     protocolAgentId: string,
     idempotencyKey: string,
   ): Promise<AgentEnrollmentIntentRecord | null>
+  findLatestApprovedIdentityIntent(protocolAgentId: string): Promise<AgentEnrollmentIntentRecord | null>
   findProtocolAgent(id: string): Promise<AgentRecord | null>
   findBindingByProtocolAgent(id: string): Promise<AgentIdentityBindingRecord | null>
   findActiveByProtocolAgent(id: string): Promise<AgentIdentityAggregate | null>

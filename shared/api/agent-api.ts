@@ -21,6 +21,7 @@ import {
 import { paginationMetadataSchema, paginationQuerySchema } from './pagination'
 
 const nonEmptyString = z.string().trim().min(1)
+export const agentEnrollmentProfile = 'https://realmroot.dev/profiles/agent-enrollment'
 const scopeListSchema = z
   .array(nonEmptyString)
   .min(1)

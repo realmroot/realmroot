@@ -108,6 +108,45 @@ describe('app.test 1', () => {
     expect(auth.handler).toHaveBeenCalledOnce()
   })
 
+  it('rejects Agent token exchange until explicit enrollment creates a binding [spec: agent-identity/agent-whoami-requires-enrollment]', async () => {
+    const auth = createAuthMock()
+    auth.api.getAgentSession.mockResolvedValue({
+      agentId: 'protocol-agent-1',
+      agent: { id: 'protocol-agent-1', hostId: 'host-1', mode: 'delegated', capabilityGrants: [] },
+      host: { id: 'host-1', userId: 'controller-1', status: 'active' },
+    })
+    const baseDeps = createTestDeps()
+    const deps = createTestDeps({
+      authorization: {
+        ...baseDeps.authorization,
+        createResource: vi.fn().mockResolvedValue({}),
+      },
+    })
+    const response = await createApp(auth, deps, { baseURL: 'https://auth.example.com' }).request(
+      'https://auth.example.com/api/auth/oauth2/token',
+      {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+          DPoP: 'proof-is-not-reached-before-enrollment-validation',
+        },
+        body: new URLSearchParams({
+          grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+          assertion: 'agent-assertion',
+          resource: 'https://auth.example.com/api',
+          scope: 'agent:read',
+        }),
+      },
+    )
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({
+      error: 'invalid_grant',
+      error_description: 'The Agent is not enrolled.',
+    })
+    expect(deps.agentIdentities.findProtocolAgent).not.toHaveBeenCalled()
+  })
+
   it('serves OpenID metadata at the issuer-path well-known route', async () => {
     const getOpenIdConfig = vi.fn().mockResolvedValue({
       issuer: 'https://auth.example.com/api/auth',

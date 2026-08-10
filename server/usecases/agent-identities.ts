@@ -267,31 +267,87 @@ export async function createAgentEnrollmentIntent(
   deps: Deps,
   input: CreateAgentEnrollmentIntentRequest,
   actorUserId: string,
-): Promise<AgentEnrollmentIntent> {
+  idempotencyKey: string,
+): Promise<{ intent: AgentEnrollmentIntent; replayed: boolean }> {
   const homeSpace = input.organizationId
     ? ({ type: 'organization', organizationId: input.organizationId } as const)
     : ({ type: 'personal', userId: actorUserId } as const)
+  const existing = await deps.agentIdentities.findIntentByIdempotencyKey(input.protocolAgentId, idempotencyKey)
+  if (existing) {
+    requireMatchingIdentityEnrollment(existing, input.name, homeSpace, actorUserId)
+    return { intent: toIntent(existing), replayed: true }
+  }
+  const boundIdentity = await deps.agentIdentities.findActiveByProtocolAgent(input.protocolAgentId)
+  if (boundIdentity) {
+    const boundHomeSpace = homeSpaceOf(boundIdentity.identity)
+    await assertController(deps, boundHomeSpace, actorUserId)
+    const approved = await deps.agentIdentities.findLatestApprovedIdentityIntent(input.protocolAgentId)
+    if (approved) {
+      requireMatchingIdentityEnrollment(
+        approved,
+        approved.requestedName ?? boundIdentity.identity.name,
+        boundHomeSpace,
+        actorUserId,
+      )
+      return { intent: toIntent(approved), replayed: true }
+    }
+    const now = new Date()
+    const migrated = await deps.agentIdentities.createIntentIdempotently({
+      id: createId('agenr'),
+      agentIdentityId: null,
+      requestedName: boundIdentity.identity.name,
+      ...ownerColumns(boundHomeSpace),
+      protocolAgentId: input.protocolAgentId,
+      idempotencyKey,
+      status: 'approved',
+      createdByUserId: actorUserId,
+      approvedByUserId: actorUserId,
+      expiresAt: new Date(now.getTime() + enrollmentLifetimeMs),
+      approvedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    })
+    requireMatchingIdentityEnrollment(migrated.intent, boundIdentity.identity.name, boundHomeSpace, actorUserId)
+    return { intent: toIntent(migrated.intent), replayed: true }
+  }
   await assertController(deps, homeSpace, actorUserId)
   await assertProtocolAgentCanEnroll(deps, input.protocolAgentId, actorUserId)
 
   const now = new Date()
-  return toIntent(
-    await deps.agentIdentities.createIntent({
-      id: createId('agenr'),
-      agentIdentityId: null,
-      requestedName: input.name,
-      ...ownerColumns(homeSpace),
-      protocolAgentId: input.protocolAgentId,
-      idempotencyKey: null,
-      status: 'pending',
-      createdByUserId: actorUserId,
-      approvedByUserId: null,
-      expiresAt: new Date(now.getTime() + enrollmentLifetimeMs),
-      approvedAt: null,
-      createdAt: now,
-      updatedAt: now,
-    }),
-  )
+  const reserved = await deps.agentIdentities.createIntentIdempotently({
+    id: createId('agenr'),
+    agentIdentityId: null,
+    requestedName: input.name,
+    ...ownerColumns(homeSpace),
+    protocolAgentId: input.protocolAgentId,
+    idempotencyKey,
+    status: 'pending',
+    createdByUserId: actorUserId,
+    approvedByUserId: null,
+    expiresAt: new Date(now.getTime() + enrollmentLifetimeMs),
+    approvedAt: null,
+    createdAt: now,
+    updatedAt: now,
+  })
+  requireMatchingIdentityEnrollment(reserved.intent, input.name, homeSpace, actorUserId)
+  return { intent: toIntent(reserved.intent), replayed: !reserved.created }
+}
+
+function requireMatchingIdentityEnrollment(
+  intent: AgentEnrollmentIntentRecord,
+  name: string,
+  homeSpace: AgentHomeSpace,
+  actorUserId: string,
+) {
+  if (intent.createdByUserId !== actorUserId) throw forbidden('This Agent cannot replay the enrollment request.')
+  const sameOwner =
+    (homeSpace.type === 'personal' && intent.ownerUserId === homeSpace.userId && intent.ownerOrganizationId === null) ||
+    (homeSpace.type === 'organization' &&
+      intent.ownerOrganizationId === homeSpace.organizationId &&
+      intent.ownerUserId === null)
+  if (intent.agentIdentityId !== null || intent.requestedName !== name || !sameOwner) {
+    throw conflict('Idempotency-Key was already used for a different Agent identity enrollment.')
+  }
 }
 
 export async function createAdditionalAgentEnrollmentIntent(
