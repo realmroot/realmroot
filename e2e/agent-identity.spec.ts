@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { uuidV7Pattern } from '../shared/api/identifiers'
 import { baseURL, resetAndBootstrap, signIn } from './helpers/real-app'
 import { createRestishAgentPlugin } from './helpers/restish-agent-plugin'
 
@@ -40,7 +41,7 @@ test.describe('new Agent stable identity enrollment', () => {
         issuer: `${baseURL}/api/auth`,
         name: 'E2E Build Agent',
       })
-      expect(result.agent.subject).toMatch(/^agt_/)
+      expect(result.agent.subject).toMatch(uuidV7Pattern)
       expect(plugin.whoami().agent).toMatchObject({
         issuer: result.agent.issuer,
         subject: result.agent.subject,
