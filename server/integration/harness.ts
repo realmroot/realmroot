@@ -25,9 +25,6 @@ function integrationEnv(): Env {
     ASSETS: { fetch: async () => new Response(null, { status: 404 }) },
     BETTER_AUTH_SECRET: authSecret,
     CREDENTIAL_ENCRYPTION_KEY: 'integration-credential-encryption-key-2026',
-    PROVIDER_CONNECTION_EVENT_SECRETS: JSON.stringify({
-      'https://adapter.example.com/provider': 'integration-provider-connection-event-secret-2026',
-    }),
     BETTER_AUTH_URL: baseURL,
     TRUSTED_ORIGINS: baseURL,
     EMAIL_FROM: 'noreply@example.com',
@@ -40,9 +37,6 @@ function integrationConfig(): RuntimeConfig {
     authSecret,
     baseURL,
     credentialEncryptionKey: 'integration-credential-encryption-key-2026',
-    providerConnectionEventSecrets: {
-      'https://adapter.example.com/provider': 'integration-provider-connection-event-secret-2026',
-    },
     emailFrom: 'noreply@example.com',
     emailFromName: 'Realmroot',
     trustedOrigins: [baseURL],
@@ -110,7 +104,6 @@ export async function createHarness(options: { validAudiences?: string[] } = {})
     baseURL: config.baseURL,
     trustedOrigins: config.trustedOrigins,
     securityPolicy: config.securityPolicy,
-    providerConnectionEventSecrets: config.providerConnectionEventSecrets,
   })
 
   return {

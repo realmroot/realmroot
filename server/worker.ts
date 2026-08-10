@@ -35,7 +35,6 @@ export default {
       baseURL: config.baseURL,
       trustedOrigins: config.trustedOrigins,
       securityPolicy,
-      providerConnectionEventSecrets: config.providerConnectionEventSecrets,
     }).fetch(request, env, ctx)
   },
   async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext) {

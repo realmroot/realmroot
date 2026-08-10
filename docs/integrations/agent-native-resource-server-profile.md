@@ -187,11 +187,11 @@ monitor their row count and D1 footprint; deletion requires an explicit retentio
 policy longer than the provider's delivery retry and identity-reuse window, and
 must not remove recent or unapplied receipts.
 
-The Resource Server authenticates with the Bearer secret configured for the
-exact Resource URI and sends `Realmroot-Timestamp` as Unix seconds plus
-`Realmroot-Signature: sha256=<hex>`. The signature is HMAC-SHA256 over the exact
-bytes `${timestamp}\nPUT\n${pathname}\n${body}`. Realmroot rejects timestamps
-outside five minutes. An event identity is scoped to its Resource URI: an exact
+The Resource Server registers a confidential Application, receives the
+`connection-events:write` Application Permission, and obtains a
+resource-bound DPoP access token through the `client_credentials` grant.
+Realmroot authenticates the Application and requires its owner Organization to
+match the addressed Resource Server owner. An event identity is scoped to its Resource URI: an exact
 replay returns `204`, while the same identity with a different representation
 returns `409`. Realmroot orders mutations only by the Resource Server's
 per-connection `revision`. A higher revision applies even when its provider

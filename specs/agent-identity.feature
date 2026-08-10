@@ -372,9 +372,9 @@ Feature: Agent identity and delegated API authorization
     @entrypoint:agent-protocol @journey:provider-connection-events
     Scenario: A provider reports account connection lifecycle changes
       Given a brokered Resource Server holds a provider account connection for an Agent grant
-      When the Resource Server replaces its signed Connection Event child resource with a unique event identity and positive monotonic revision
+      When the Resource Server Application replaces its Connection Event child resource with a client-credentials access token, unique event identity, and positive monotonic revision
       Then the Resource Server path identifies the event authority without repeating its resource URL in the event representation
-      And Realmroot verifies the signature and applies the authority, resource, suspension, restoration, or revocation change
+      And Realmroot authenticates the Application, authorizes it for the Resource Server, and applies the authority, resource, suspension, restoration, or revocation change
       And Realmroot updates connection-wide scopes separately from the resulting scopes of any selected authority
       And Realmroot persists provider-neutral authorization-detail-to-scope constraints for every current authority
       And an authority change identifies the affected authority and its resulting scopes together
@@ -389,7 +389,7 @@ Feature: Agent identity and delegated API authorization
       And a different event using the current revision is rejected as a conflict
       And an authority reduction racing approval cannot recreate a grant from an older Connection revision
       And later discovery, approval, and credential issuance enforce the persisted scopes of the selected authority
-      And unsigned or invalidly signed Connection Events cannot change Realmroot state
+      And unauthenticated or unauthorized Connection Events cannot change Realmroot state
 
     @entrypoint:product-ui @journey:external-api-resource-registration
     Scenario: An administrator creates an external API resource with an OIDC connector

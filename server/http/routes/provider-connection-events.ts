@@ -1,18 +1,25 @@
-import { badRequest, payloadTooLarge, unauthorized } from '@server/domain/errors'
-import { authenticateProviderConnectionEvent } from '@server/http/provider-connection-event-auth'
+import { badRequest, forbidden, payloadTooLarge, unauthorized } from '@server/domain/errors'
+import { getPrincipal } from '@server/http/middleware/authn'
 import { applyProviderConnectionEvent } from '@server/usecases/provider-connection-events'
 import { providerConnectionEventIdSchema, providerConnectionEventSchema } from '@shared/api/external-resources'
 import { Hono } from 'hono'
 import { getDeps } from '../middleware/deps'
 import { readParam } from './validation'
 
-export function createProviderConnectionEventRoutes(secrets: Record<string, string>) {
+export function createProviderConnectionEventRoutes() {
   const app = new Hono()
 
   app.put('/:resourceServerId/connection-events/:eventId', async (c) => {
     const resourceServer = await getDeps(c).authorization.findResource(c.req.param('resourceServerId'))
-    const secret = resourceServer ? secrets[resourceServer.resourceUrl] : undefined
-    if (!resourceServer || !secret) throw unauthorized('Connection Event credentials are invalid.')
+    if (!resourceServer) throw unauthorized('Connection Event credentials are invalid.')
+    const application = getPrincipal(c).application
+    if (!application) throw unauthorized('Application authentication is required.')
+    if (!application.scopes.includes('connection-events:write')) {
+      throw forbidden('OAuth scope "connection-events:write" is required.')
+    }
+    if (application.ownerOrganizationId !== resourceServer.ownerOrganizationId) {
+      throw forbidden('The Application cannot publish events for this Resource Server.')
+    }
     const eventId = readParam(c, 'eventId', providerConnectionEventIdSchema)
     const rawBody = await readLimitedBody(c.req.raw)
     let representation: unknown
@@ -23,7 +30,6 @@ export function createProviderConnectionEventRoutes(secrets: Record<string, stri
     }
     const parsed = providerConnectionEventSchema.safeParse(representation)
     if (!parsed.success) throw badRequest(parsed.error.issues[0]?.message ?? 'Invalid Connection Event representation.')
-    await authenticateProviderConnectionEvent(c.req.raw, rawBody, secret)
     await applyProviderConnectionEvent(getDeps(c), eventId, resourceServer.resourceUrl, parsed.data, rawBody)
     return c.body(null, 204)
   })

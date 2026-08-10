@@ -1301,10 +1301,10 @@ function credentialDeps(repository: InMemoryTokenExchangeRepository): Deps {
       findById: async (id: string) =>
         id === applicationId ? { id: applicationId, ownerOrganizationId: 'org_1' } : null,
       findByClientId: async (clientId: string) =>
-        clientId === applicationClientId
+        clientId === repository.client?.clientId
           ? {
               id: applicationId,
-              clientId: applicationClientId,
+              clientId,
               ownerOrganizationId: 'org_1',
               disabled: false,
               oidcScopes: clientScopes(repository).filter((scope) => scope === 'offline_access'),

@@ -40,7 +40,6 @@ type RuntimeEnvOverrides = {
   EXTERNAL_HTTP?: Fetcher
   BETTER_AUTH_URL?: string
   CREDENTIAL_ENCRYPTION_KEY?: string
-  PROVIDER_CONNECTION_EVENT_SECRETS?: string
   TRUSTED_ORIGINS?: string
   MFA_POLICY?: string
   PASSKEY_ENABLED?: string
@@ -59,7 +58,6 @@ export interface RuntimeConfig {
   authSecret: string
   baseURL: string
   credentialEncryptionKey: string
-  providerConnectionEventSecrets: Record<string, string>
   emailFrom?: string
   emailFromName?: string
   trustedOrigins: string[]
@@ -92,39 +90,15 @@ export function validateEnv(env: Env, requestUrl: string): RuntimeConfig {
     throw new Error('CREDENTIAL_ENCRYPTION_KEY must contain at least 32 characters.')
   }
 
-  const providerConnectionEventSecrets = parseProviderConnectionEventSecrets(env.PROVIDER_CONNECTION_EVENT_SECRETS)
-
   return {
     authSecret: env.BETTER_AUTH_SECRET,
     baseURL,
     credentialEncryptionKey: env.CREDENTIAL_ENCRYPTION_KEY,
-    providerConnectionEventSecrets,
     emailFrom: env.EMAIL_FROM,
     emailFromName: env.EMAIL_FROM_NAME,
     trustedOrigins,
     securityPolicy,
   }
-}
-
-function parseProviderConnectionEventSecrets(value: string | undefined): Record<string, string> {
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(value ?? '{}')
-  } catch {
-    throw new Error('PROVIDER_CONNECTION_EVENT_SECRETS must be a JSON object keyed by canonical Resource URI.')
-  }
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error('PROVIDER_CONNECTION_EVENT_SECRETS must be a JSON object keyed by canonical Resource URI.')
-  }
-  const entries = Object.entries(parsed as Record<string, unknown>)
-  if (
-    entries.some(([resource, secret]) => !URL.canParse(resource) || typeof secret !== 'string' || secret.length < 32)
-  ) {
-    throw new Error(
-      'PROVIDER_CONNECTION_EVENT_SECRETS must map canonical Resource URIs to secrets of at least 32 characters.',
-    )
-  }
-  return Object.fromEntries(entries) as Record<string, string>
 }
 
 function parseSecurityPolicy(env: Env, baseURL: string, trustedOrigins: string[]): SecurityPolicy {

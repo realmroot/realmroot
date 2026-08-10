@@ -294,9 +294,8 @@ provider-neutral Connection Event resources:
 
 ```http
 PUT /api/resource-servers/ars_example/connection-events/delivery-018f4f92
-Authorization: Bearer <resource-scoped-secret>
-Realmroot-Timestamp: 1786233600
-Realmroot-Signature: sha256=<hmac-sha256-hex>
+Authorization: DPoP <application-access-token>
+DPoP: <request-proof>
 Content-Type: application/json
 
 {
@@ -326,10 +325,13 @@ The five event types are `authorityChanged`, `resourcesChanged`, `suspended`,
 `authorityConstraints` plus `affectedScopes` and `affectedAuthorizationDetails`.
 `resourcesChanged` and `restored` require complete `scopes`,
 `authorizationDetails`, and `authorityConstraints` snapshots. `suspended` and
-`revoked` carry only the common event fields. Sign the exact string
-`${timestamp}\nPUT\n${pathname}\n${rawBody}` with HMAC-SHA256. Realmroot selects
-the verification secret by the exact `resource` URI, rejects signatures older
-than five minutes, and scopes replay identity to `(resource, eventId)`. A
+`revoked` carry only the common event fields. The publisher is a confidential
+Application with the `client_credentials` grant, a configured
+`connection-events:write` scope on the Realmroot Resource Server, and the
+matching Application Permission. It requests a Realmroot API audience token
+and sends the RFC 9449 DPoP-bound credential. Realmroot authenticates the
+Application, checks its scope and Resource Server owner boundary, and scopes
+replay identity to `(resource, eventId)`. A
 successful first application or exact replay returns `204`; conflicting reuse
 returns `409`. `revision` is a required positive integer that the Resource
 Server increases for each provider connection. Realmroot orders events by the

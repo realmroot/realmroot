@@ -9,7 +9,6 @@ preview_urls = false
 BETTER_AUTH_SECRET = "e2e-local-secret-value-with-enough-entropy-2026"
 BETTER_AUTH_URL = "http://localhost:4189"
 CREDENTIAL_ENCRYPTION_KEY = "e2e-credential-encryption-key-with-enough-entropy-2026"
-PROVIDER_CONNECTION_EVENT_SECRETS = '{"https://adapter.example.com/provider":"e2e-provider-connection-event-secret-with-enough-entropy-2026"}'
 TRUSTED_ORIGINS = "http://localhost:4189"
 EMAIL_FROM = "e2e@example.com"
 EMAIL_FROM_NAME = "Realmroot E2E"

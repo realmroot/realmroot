@@ -1,6 +1,7 @@
 import { badRequest, notFound, OAuthError, oauthError } from '@server/domain/errors'
 import { hashProviderSecret } from '@server/usecases/applications-utils'
 import type { Deps } from '@server/usecases/deps'
+import { authenticateApplicationClient } from '@server/usecases/oauth-client-authentication'
 import type {
   ApplicationAggregate,
   CreateFederatedCredentialInput,
@@ -74,8 +75,11 @@ export async function exchangeToken(
     throw oauthError('invalid_request', 'Only access_token requested_token_type is supported.')
   }
 
-  const oauthClient = await authenticateClient(deps, client.clientId, client.clientSecret)
-  const application = await requireApplicationByClientId(deps, oauthClient.clientId)
+  const { client: oauthClient, application } = await authenticateApplicationClient(
+    deps,
+    client.clientId,
+    client.clientSecret,
+  )
   const allowedGrantTypes = parseList(oauthClient.grantTypes)
   if (!allowedGrantTypes.includes(tokenExchangeGrantType)) {
     throw oauthError('unauthorized_client', 'Client is not allowed to use token exchange.')
@@ -159,7 +163,7 @@ export async function refreshToken(
   if (input.grantType !== refreshTokenGrantType) {
     throw oauthError('unsupported_grant_type', 'Unsupported grant_type.')
   }
-  const oauthClient = await authenticateClient(deps, client.clientId, client.clientSecret)
+  const { client: oauthClient } = await authenticateApplicationClient(deps, client.clientId, client.clientSecret)
   const application = await requireApplicationByClientId(deps, oauthClient.clientId)
   if (!parseList(oauthClient.grantTypes).includes(refreshTokenGrantType)) {
     throw oauthError('unauthorized_client', 'Client is not allowed to use refresh tokens.')
@@ -245,7 +249,7 @@ export async function introspectToken(
   client: { clientId: string; clientSecret: string | null },
   issuer: string,
 ) {
-  await authenticateClient(deps, client.clientId, client.clientSecret)
+  await authenticateApplicationClient(deps, client.clientId, client.clientSecret)
   const tokenHash = await hashProviderSecret(token)
   const row = await deps.tokenExchange.findAccessTokenByHash(tokenHash)
   if (row && row.clientId === client.clientId && !row.revokedAt && row.expiresAt.getTime() > Date.now()) {
@@ -366,20 +370,6 @@ async function requireEligibleAudience(deps: Deps, audience: string, organizatio
 async function isEligibleAudience(deps: Deps, audience: string, organizationId: string) {
   const resource = await deps.authorization.findResourceByResourceUrl(audience)
   return Boolean(resource && activeResourceVisibleToOrganization(resource, organizationId))
-}
-
-async function authenticateClient(deps: Deps, clientId: string, clientSecret: string | null) {
-  if (!clientId || !clientSecret) throw invalidClient('Client authentication is required.')
-  const client = await deps.tokenExchange.findClient(clientId)
-  if (!client || client.disabled) throw invalidClient('Invalid client credentials.')
-  if (!client.clientSecret || client.clientSecret !== (await hashProviderSecret(clientSecret))) {
-    throw invalidClient('Invalid client credentials.')
-  }
-  return client
-}
-
-function invalidClient(description: string) {
-  return oauthError('invalid_client', description, 401, {}, { 'WWW-Authenticate': 'Basic realm="Realmroot OAuth"' })
 }
 
 export function parseBasicClientAuthorization(header: string | null) {

@@ -12,6 +12,7 @@ export const realmrootScopeRegistry = {
   'role-assignments:write': { resource: 'role', action: 'write-assignment', organization: true },
   'resource-servers:read': { resource: 'resource-server', action: 'read', organization: true },
   'resource-servers:write': { resource: 'resource-server', action: 'write', organization: true },
+  'connection-events:write': { resource: 'connection-event', action: 'write', organization: true },
   'connectors:read': { resource: 'connector', action: 'read', organization: true },
   'connectors:write': { resource: 'connector', action: 'write', organization: true },
   'settings:read': { resource: 'realm', action: 'read', organization: true },

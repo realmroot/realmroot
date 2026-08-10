@@ -5,6 +5,7 @@ import { ApiError, forbidden, notFound, oauthError } from '@server/domain/errors
 import { handleApiError } from '@server/http/errors'
 import { createAgentLoginIdentity } from '@server/usecases/agent-identities'
 import { issueAgentBootstrapAccessToken } from '@server/usecases/agent-oauth'
+import { issueApplicationAccessToken } from '@server/usecases/application-oauth'
 import { ensureRealmrootResourceServer } from '@server/usecases/authorization'
 import type { Deps } from '@server/usecases/deps'
 import {
@@ -97,12 +98,7 @@ export function createApp(auth: AuthHandler, deps: Deps, config: AppConfig = {})
 
   app.onError((error, c) => {
     if (error instanceof ApiError && error.status === 401 && c.req.path.startsWith('/api/')) {
-      c.header(
-        'WWW-Authenticate',
-        /^\/api\/resource-servers\/[^/]+\/connection-events\//.test(c.req.path)
-          ? 'Bearer realm="resource-server-connection-events"'
-          : `DPoP resource_metadata="${protectedResourceMetadataUrl(config, c.req.url)}"`,
-      )
+      c.header('WWW-Authenticate', `DPoP resource_metadata="${protectedResourceMetadataUrl(config, c.req.url)}"`)
     }
     return handleApiError(error, c)
   })
@@ -213,16 +209,26 @@ function mountApiRoutes(app: Hono, auth: AuthHandler, config: AppConfig) {
     .get('/api/health', (c) => c.json(healthStatus))
     .route('/api/configz', createConfigzRoutes(config.securityPolicy))
     .route('/api/assets', createAssetRoutes())
-    .route('/api/resource-servers', createProviderConnectionEventRoutes(config.providerConnectionEventSecrets ?? {}))
+    .use(
+      '/api/resource-servers/:resourceServerId/connection-events/:eventId',
+      authn(auth, { allowApplication: true, required: true, oauth: realmrootOAuth(config) }),
+    )
+    .route('/api/resource-servers', createProviderConnectionEventRoutes())
     .use('/api/*', unifiedOpenApiDiscoveryHeader())
     .route(
       '/api/public',
       createPublicProfileRoutes((requestUrl) => oauthIssuer(config, requestUrl)),
     )
   protectResourceRoutes(api, auth, config)
-  api.use('/api/agent', authn(auth, { allowAgent: true, required: true, oauth: agentOAuth(config) }))
-  api.use('/api/agent/access-requests', authn(auth, { allowAgent: true, required: true, oauth: agentOAuth(config) }))
-  api.use('/api/agent/access-requests/*', authn(auth, { allowAgent: true, required: true, oauth: agentOAuth(config) }))
+  api.use('/api/agent', authn(auth, { allowAgent: true, required: true, oauth: realmrootOAuth(config) }))
+  api.use(
+    '/api/agent/access-requests',
+    authn(auth, { allowAgent: true, required: true, oauth: realmrootOAuth(config) }),
+  )
+  api.use(
+    '/api/agent/access-requests/*',
+    authn(auth, { allowAgent: true, required: true, oauth: realmrootOAuth(config) }),
+  )
   return api
     .route('/api', createProtectedResourceAssetRoutes())
     .route(
@@ -244,15 +250,15 @@ function mountApiRoutes(app: Hono, auth: AuthHandler, config: AppConfig) {
 
 export function protectResourceRoutes(app: Hono, auth: SessionReader, config: AppConfig = {}) {
   for (const prefix of Object.keys(resourceByRoutePrefix)) {
-    app.use(`/api/${prefix}`, authn(auth, { allowAgent: true, required: true, oauth: agentOAuth(config) }))
-    app.use(`/api/${prefix}/*`, authn(auth, { allowAgent: true, required: true, oauth: agentOAuth(config) }))
+    app.use(`/api/${prefix}`, authn(auth, { allowAgent: true, required: true, oauth: realmrootOAuth(config) }))
+    app.use(`/api/${prefix}/*`, authn(auth, { allowAgent: true, required: true, oauth: realmrootOAuth(config) }))
   }
   const protectAssetCreation = async (c: Context, next: () => Promise<void>) => {
     if ((c.req.method === 'GET' || c.req.method === 'HEAD') && /^\/api\/assets\/[^/]+$/.test(c.req.path)) {
       await next()
       return
     }
-    await authn(auth, { allowAgent: true, required: true, oauth: agentOAuth(config) })(c, async () => {
+    await authn(auth, { allowAgent: true, required: true, oauth: realmrootOAuth(config) })(c, async () => {
       if (getPrincipal(c).user) {
         await authorizePlatformOrganization(c, 'applications:write')
         await next()
@@ -265,7 +271,7 @@ export function protectResourceRoutes(app: Hono, auth: SessionReader, config: Ap
   app.use('/api/assets/*', protectAssetCreation)
 }
 
-function agentOAuth(config: AppConfig) {
+function realmrootOAuth(config: AppConfig) {
   return {
     issuer: (requestUrl: string) => oauthIssuer(config, requestUrl),
     audience: (requestUrl: string) => `${(config.baseURL ?? new URL(requestUrl).origin).replace(/\/$/, '')}/api`,
@@ -319,6 +325,13 @@ async function maybeHandleTokenExchange(c: Context, issuer: string, auth: AuthHa
   if (c.req.path === '/api/auth/oauth2/token' && grantType === 'urn:ietf:params:oauth:grant-type:jwt-bearer') {
     return issueAgentToken(c, issuer, auth, form)
   }
+  if (
+    c.req.path === '/api/auth/oauth2/token' &&
+    grantType === 'client_credentials' &&
+    formString(form, 'resource') === `${new URL(issuer).origin}/api`
+  ) {
+    return issueApplicationToken(c, issuer, auth, form)
+  }
   if (c.req.path === '/api/auth/oauth2/introspect' && !(formString(form, 'token') ?? '').startsWith('fatx_')) {
     return null
   }
@@ -370,6 +383,44 @@ async function maybeHandleTokenExchange(c: Context, issuer: string, auth: AuthHa
 
   const introspection = await introspectToken(deps, formString(form, 'token') ?? '', client, issuer)
   return c.json(introspection)
+}
+
+async function issueApplicationToken(c: Context, issuer: string, auth: AuthHandler, form: FormData) {
+  if (!auth.api.signJWT) throw oauthError('temporarily_unavailable', 'OAuth token issuance is unavailable.', 503)
+  const client = readClientAuthentication(c.req.raw.headers, form)
+  if (!client) {
+    throw oauthError(
+      'invalid_client',
+      'Client authentication is required.',
+      401,
+      {},
+      { 'WWW-Authenticate': 'Basic realm="Realmroot token endpoint"' },
+    )
+  }
+  const dpopProof = c.req.header('DPoP')
+  if (!dpopProof) throw oauthError('invalid_dpop_proof', 'A DPoP proof is required.')
+  await ensureRealmrootResourceServer(c.get('deps'), new URL(issuer).origin)
+  const response = await issueApplicationAccessToken(
+    c.get('deps'),
+    {
+      ...client,
+      scope: formString(form, 'scope') ?? undefined,
+      resource: formString(form, 'resource') ?? '',
+      expectedResource: `${new URL(issuer).origin}/api`,
+      dpopProof,
+      tokenEndpoint: `${issuer.replace(/\/$/, '')}/oauth2/token`,
+    },
+    {
+      issuer,
+      sign: (payload, type) =>
+        auth.api.signJWT!({ body: { payload, overrideOptions: { jwt: { type } } }, asResponse: false }).then(
+          ({ token }) => token,
+        ),
+    },
+  )
+  c.header('Cache-Control', 'no-store')
+  c.header('Pragma', 'no-cache')
+  return c.json(response)
 }
 
 async function issueAgentToken(c: Context, issuer: string, auth: AuthHandler, form: FormData) {

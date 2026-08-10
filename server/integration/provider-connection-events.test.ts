@@ -12,14 +12,16 @@ import {
   resourceScopeEntitlement,
   user,
 } from '@server/db/schema'
+import { ensureRealmrootResourceServer } from '@server/usecases/authorization'
 import { decideAgentAccessRequest } from '@server/usecases/external-resources'
 import type { JsonValue } from '@shared/api/authorization-details'
 import { eq } from 'drizzle-orm'
+import { exportJWK, generateKeyPair, SignJWT } from 'jose'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { createHarness, type Harness, seedAgent, signInAdmin } from './harness'
+import { baseURL, createHarness, type Harness, seedAgent, signInAdmin } from './harness'
 
 const resource = 'https://adapter.example.com/provider'
-const secret = 'integration-provider-connection-event-secret-2026'
+let publisher: { clientId: string; clientSecret: string }
 
 afterEach(async () => {
   await reset()
@@ -32,7 +34,33 @@ describe('Provider Connection Events over real D1', () => {
 
   beforeEach(async () => {
     harness = await createHarness()
-    await signInAdmin(harness)
+    const cookie = await signInAdmin(harness)
+    await ensureRealmrootResourceServer(harness.deps, baseURL)
+    const applicationResponse = await harness.request('/api/applications', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({
+        name: 'Event Publisher',
+        clientType: 'confidential_web',
+        redirectUris: ['https://adapter.example.com/oauth/callback'],
+        ownerOrganizationId: 'org_platform',
+        allowedGrantTypes: ['client_credentials'],
+        resourceScopes: [{ resourceServerId: 'res_realmroot', scopes: ['connection-events:write'] }],
+      }),
+    })
+    expect(applicationResponse.status, await applicationResponse.clone().text()).toBe(201)
+    const application = (await applicationResponse.json()) as {
+      id: string
+      clientId: string
+      clientSecret: string
+    }
+    const permissionResponse = await harness.request(`/api/applications/${application.id}/permissions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ resourceServerId: 'res_realmroot', scope: 'connection-events:write', mode: 'persistent' }),
+    })
+    expect(permissionResponse.status, await permissionResponse.clone().text()).toBe(201)
+    publisher = { clientId: application.clientId, clientSecret: application.clientSecret }
     const [admin] = await harness.db.select({ id: user.id }).from(user).limit(1)
     controllerUserId = admin!.id
     const seededAgent = await seedAgent(harness, admin!.id, 'event')
@@ -758,13 +786,7 @@ describe('Provider Connection Events over real D1', () => {
     }
     expect(contract.paths['/resource-servers/{resourceServerId}/connection-events/{eventId}']?.put).toMatchObject({
       operationId: 'replaceResourceServerConnectionEvent',
-      security: [
-        {
-          providerConnectionEventSecret: [],
-          providerConnectionEventTimestamp: [],
-          providerConnectionEventSignature: [],
-        },
-      ],
+      security: [{ oauth2: ['connection-events:write'] }],
     })
 
     const expansion = {
@@ -1088,27 +1110,54 @@ describe('Provider Connection Events over real D1', () => {
 async function putEvent(harness: Harness, eventId: string, representation: Record<string, unknown>) {
   const path = `/api/resource-servers/event-resource/connection-events/${eventId}`
   const body = JSON.stringify(representation)
-  const timestamp = `${Math.floor(Date.now() / 1000)}`
-  const key = await crypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(secret),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign'],
-  )
-  const signed = `${timestamp}\nPUT\n${path}\n${body}`
-  const bytes = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(signed))
-  const signature = Array.from(new Uint8Array(bytes), (byte) => byte.toString(16).padStart(2, '0')).join('')
+  const key = await generateKeyPair('ES256', { extractable: true })
+  const publicJwk = await exportJWK(key.publicKey)
+  const tokenEndpoint = `${baseURL}/api/auth/oauth2/token`
+  const tokenProof = await dpopProof(key.privateKey, publicJwk, { htm: 'POST', htu: tokenEndpoint })
+  const tokenResponse = await harness.request('/api/auth/oauth2/token', {
+    method: 'POST',
+    headers: {
+      authorization: `Basic ${btoa(`${publisher.clientId}:${publisher.clientSecret}`)}`,
+      'content-type': 'application/x-www-form-urlencoded',
+      DPoP: tokenProof,
+    },
+    body: new URLSearchParams({
+      grant_type: 'client_credentials',
+      resource: `${baseURL}/api`,
+      scope: 'connection-events:write',
+    }),
+  })
+  expect(tokenResponse.status, await tokenResponse.clone().text()).toBe(200)
+  const token = (await tokenResponse.json()) as { access_token: string; token_type: string }
+  expect(token.token_type).toBe('DPoP')
+  const proof = await dpopProof(key.privateKey, publicJwk, {
+    htm: 'PUT',
+    htu: `${baseURL}${path}`,
+    ath: await sha256Base64Url(token.access_token),
+  })
   return harness.request(path, {
     method: 'PUT',
     headers: {
-      Authorization: `Bearer ${secret}`,
+      Authorization: `DPoP ${token.access_token}`,
       'Content-Type': 'application/json',
-      'Realmroot-Timestamp': timestamp,
-      'Realmroot-Signature': `sha256=${signature}`,
+      DPoP: proof,
     },
     body,
   })
+}
+
+async function dpopProof(
+  privateKey: CryptoKey,
+  publicJwk: JsonWebKey,
+  claims: { htm: string; htu: string; ath?: string },
+) {
+  return new SignJWT({ ...claims, iat: Math.floor(Date.now() / 1000), jti: crypto.randomUUID() })
+    .setProtectedHeader({ typ: 'dpop+jwt', alg: 'ES256', jwk: publicJwk })
+    .sign(privateKey)
+}
+
+async function sha256Base64Url(value: string) {
+  return Buffer.from(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))).toString('base64url')
 }
 
 function constraintsFor(authorizationDetails: Array<{ type: string; [key: string]: JsonValue }>, scopes: string[]) {

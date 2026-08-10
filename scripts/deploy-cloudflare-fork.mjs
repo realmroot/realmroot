@@ -81,20 +81,6 @@ if (configuredCredentialEncryptionKey) {
   console.log('Reusing existing CREDENTIAL_ENCRYPTION_KEY.')
 }
 
-const configuredProviderConnectionEventSecrets = process.env.PROVIDER_CONNECTION_EVENT_SECRETS?.trim()
-if (configuredProviderConnectionEventSecrets) {
-  run(
-    'pnpm',
-    ['exec', 'wrangler', 'secret', 'put', 'PROVIDER_CONNECTION_EVENT_SECRETS', '--config', 'wrangler.deployment.toml'],
-    {},
-    configuredProviderConnectionEventSecrets,
-  )
-} else if (secrets.some(({ name }) => name === 'PROVIDER_CONNECTION_EVENT_SECRETS')) {
-  console.log('Reusing existing PROVIDER_CONNECTION_EVENT_SECRETS.')
-} else {
-  console.log('Provider Connection Events remain disabled.')
-}
-
 run('pnpm', ['exec', 'wrangler', 'd1', 'migrations', 'apply', 'DB', '--remote', '--config', 'wrangler.deployment.toml'])
 run('pnpm', ['run', 'build'], { CF_WRANGLER_CONFIG: 'wrangler.deployment.toml' })
 const deployArguments = ['exec', 'wrangler', 'deploy', '--config', 'dist/realmroot/wrangler.json']

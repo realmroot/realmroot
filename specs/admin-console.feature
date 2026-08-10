@@ -299,7 +299,7 @@ Feature: Admin Console
     When that product event occurs
     Then Realmroot posts a stable JSON event envelope to the endpoint
     And an Organization-scoped endpoint receives only events applicable to that Organization
-    And the request includes an event id, timestamp, event type, and HMAC signature
+    And the request includes an event id and event type and uses the Resource Server Application's client-credentials access token
     And every delivery attempt and bounded response is recorded as an independently addressable resource
     And large request or response bodies remain scrollable without hiding request actions
     And retrying a failed delivery creates a new signed delivery attempt under the original request

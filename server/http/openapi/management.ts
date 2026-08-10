@@ -16,6 +16,7 @@ import {
 } from '@shared/api/public-profiles'
 import { usernameSchema } from '@shared/api/users'
 import { agentBootstrapScopes, realmrootOAuthScopes, requiredProtectedScope } from '@shared/authz'
+import { realmrootManagementScopes } from '@shared/scope-registry'
 import { z } from 'zod'
 import { agentGovernanceRoutes } from './management-routes/agent-governance'
 import { applicationAuthorizationRoutes } from './management-routes/applications-authorization'
@@ -200,13 +201,7 @@ const managementRoutes: ManagementRouteConfig[] = [
     path: '/resource-servers/{resourceServerId}/connection-events/{eventId}',
     operationId: 'replaceResourceServerConnectionEvent',
     summary: 'Replace an idempotent Resource Server Connection Event',
-    security: [
-      {
-        providerConnectionEventSecret: [],
-        providerConnectionEventTimestamp: [],
-        providerConnectionEventSignature: [],
-      },
-    ],
+    security: [{ oauth2: ['connection-events:write'] }],
     request: {
       params: z.object({
         resourceServerId: z.string(),
@@ -215,34 +210,19 @@ const managementRoutes: ManagementRouteConfig[] = [
           example: 'delivery-018f4f92',
         }),
       }),
-      headers: z.object({
-        'Realmroot-Timestamp': z
-          .string()
-          .regex(/^\d+$/)
-          .meta({
-            param: { name: 'Realmroot-Timestamp', in: 'header' },
-            example: '1786233600',
-          }),
-        'Realmroot-Signature': z
-          .string()
-          .regex(/^sha256=[a-f0-9]{64}$/)
-          .meta({
-            param: { name: 'Realmroot-Signature', in: 'header' },
-            example: `sha256=${'0'.repeat(64)}`,
-          }),
-      }),
       body: jsonBody(providerConnectionEventSchema),
     },
     status: 204,
     noBody: true,
     errors: {
-      400: 'The event representation, Resource Server, or timestamp is invalid.',
+      400: 'The event representation or Resource Server is invalid.',
       404: 'The referenced Connection was not found.',
       409: 'The event identity or revision conflicts with the current Connection Event state.',
       413: 'The event representation exceeds 64 KiB.',
     },
     additionalResponses: {
-      401: { description: 'The backchannel credential or body signature is missing, stale, or invalid.' },
+      401: { description: 'The OAuth access token or DPoP proof is missing or invalid.' },
+      403: { description: 'The Application lacks the required scope or does not own the Resource Server.' },
     },
   },
   {
@@ -315,25 +295,12 @@ function createManagementOpenApiApp() {
         tokenUrl: '/api/auth/oauth2/token',
         scopes: Object.fromEntries(realmrootOAuthScopes.map((scope) => [scope, oauthScopeDescription(scope)])),
       },
+      clientCredentials: {
+        tokenUrl: '/api/auth/oauth2/token',
+        scopes: Object.fromEntries(realmrootManagementScopes.map((scope) => [scope, oauthScopeDescription(scope)])),
+      },
     },
     description: 'Resource-bound Realmroot OAuth 2.0 management credential with an RFC 9449 DPoP proof.',
-  })
-  app.openAPIRegistry.registerComponent('securitySchemes', 'providerConnectionEventSecret', {
-    type: 'http',
-    scheme: 'bearer',
-    description: 'Resource-scoped provider Connection Event backchannel secret.',
-  })
-  app.openAPIRegistry.registerComponent('securitySchemes', 'providerConnectionEventTimestamp', {
-    type: 'apiKey',
-    in: 'header',
-    name: 'Realmroot-Timestamp',
-    description: 'Unix timestamp within five minutes of Realmroot time.',
-  })
-  app.openAPIRegistry.registerComponent('securitySchemes', 'providerConnectionEventSignature', {
-    type: 'apiKey',
-    in: 'header',
-    name: 'Realmroot-Signature',
-    description: 'HMAC-SHA256 signature over timestamp, method, request path, and exact request body.',
   })
   for (const routeConfig of managementRoutes) app.openAPIRegistry.registerPath(createManagementRoute(routeConfig))
   return app

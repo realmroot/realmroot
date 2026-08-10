@@ -393,7 +393,7 @@
     "method": "PUT",
     "path": "/resource-servers/{resourceServerId}/connection-events/{eventId}",
     "operationId": "replaceResourceServerConnectionEvent",
-    "semanticHash": "a6ce54897e33561ee9170c23d9d6b8946d6e3639940777c5e243ffd3981ef3ae"
+    "semanticHash": "3e25541e4749805667b74784b8b7aeae6cbe7d6f8390a49e50d5db5a4537c7f0"
   },
   {
     "method": "POST",

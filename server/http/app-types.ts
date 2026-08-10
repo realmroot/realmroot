@@ -16,5 +16,4 @@ export interface AppConfig {
   baseURL?: string
   trustedOrigins?: string[]
   securityPolicy?: SecurityPolicy
-  providerConnectionEventSecrets?: Record<string, string>
 }

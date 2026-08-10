@@ -28,6 +28,12 @@ export interface AuthSessionResult {
 export interface PrincipalContext {
   session: AuthSessionResult | null
   user: AuthUser | null
+  application?: {
+    id: string
+    clientId: string
+    ownerOrganizationId: string
+    scopes: string[]
+  } | null
   agent?: {
     issuer: string
     subject: string
@@ -58,6 +64,7 @@ declare module 'hono' {
 
 interface AuthnOptions {
   allowAgent?: boolean
+  allowApplication?: boolean
   oauth?: {
     issuer(requestUrl: string): string
     audience(requestUrl: string): string
@@ -76,7 +83,7 @@ export function authn(auth: SessionReader, options: AuthnOptions = {}): Middlewa
     const user = current?.user === undefined ? (session?.user ?? null) : current.user
 
     if (user) {
-      c.set('principal', { session, user, agent: null })
+      c.set('principal', { session, user, application: null, agent: null })
       await next()
       return
     }
@@ -86,15 +93,74 @@ export function authn(auth: SessionReader, options: AuthnOptions = {}): Middlewa
         current?.agent ??
         (options.oauth ? await authenticateOAuthAgent(auth, c, options.oauth) : await authenticateAgent(auth, c))
       if (agent) {
-        c.set('principal', { session: null, user: null, agent })
+        c.set('principal', { session: null, user: null, application: null, agent })
         await next()
         return
       }
     }
 
-    c.set('principal', { session, user: null, agent: null })
+    if (options.allowApplication && options.oauth) {
+      const application = current?.application ?? (await authenticateOAuthApplication(auth, c, options.oauth))
+      if (application) {
+        c.set('principal', { session: null, user: null, application, agent: null })
+        await next()
+        return
+      }
+    }
+
+    c.set('principal', { session, user: null, application: null, agent: null })
     if (options.required) throw unauthorized()
     await next()
+  }
+}
+
+async function authenticateOAuthApplication(
+  auth: SessionReader,
+  c: Context,
+  oauth: NonNullable<AuthnOptions['oauth']>,
+): Promise<NonNullable<PrincipalContext['application']> | null> {
+  const authorization = c.req.header('Authorization')
+  if (!authorization?.startsWith('DPoP ')) return null
+  if (!auth.api.verifyJWT) throw unauthorized('OAuth access-token verification is unavailable.')
+  const accessToken = authorization.slice('DPoP '.length).trim()
+  const issuer = oauth.issuer(c.req.url)
+  const audience = oauth.audience(c.req.url)
+  const verified = await auth.api
+    .verifyJWT({ body: { token: accessToken, issuer, audience }, asResponse: false })
+    .catch(() => null)
+  const payload = verified?.payload
+  if (!payload) throw unauthorized('OAuth access token is invalid.')
+  const applicationId = stringClaim(payload, 'sub')
+  const clientId = stringClaim(payload, 'client_id')
+  const confirmationJkt = objectStringClaim(payload, 'cnf', 'jkt')
+  const proof = c.req.header('DPoP')
+  if (
+    stringClaim(payload, 'sub_profile') !== 'application' ||
+    !applicationId ||
+    !clientId ||
+    !confirmationJkt ||
+    !proof
+  ) {
+    throw unauthorized('OAuth access token is missing its Application or DPoP binding.')
+  }
+  await validateDpopResourceProof(c.get('deps') as Deps, {
+    proof,
+    accessToken,
+    method: c.req.method,
+    url: oauth.resourceRequestUrl(c.req.url),
+    confirmationJkt,
+  }).catch((error: unknown) => {
+    throw unauthorized(error instanceof Error ? error.message : 'DPoP proof is invalid.')
+  })
+  const application = await (c.get('deps') as Deps).applications.findByClientId(clientId)
+  if (!application || application.disabled || application.id !== applicationId) {
+    throw forbidden('The OAuth token does not belong to an active Application.')
+  }
+  return {
+    id: application.id,
+    clientId: application.clientId,
+    ownerOrganizationId: application.ownerOrganizationId,
+    scopes: scopeClaim(payload),
   }
 }
 
@@ -206,8 +272,12 @@ function objectStringClaim(payload: Record<string, unknown>, objectName: string,
   return typeof member === 'string' ? member : null
 }
 
+function scopeClaim(payload: Record<string, unknown>) {
+  return typeof payload.scope === 'string' ? [...new Set(payload.scope.split(/\s+/).filter(Boolean))] : []
+}
+
 export function getPrincipal(c: Context): PrincipalContext {
-  return c.get('principal') ?? { session: null, user: null, agent: null }
+  return c.get('principal') ?? { session: null, user: null, application: null, agent: null }
 }
 
 export function getActorUserId(c: Context): string | null {
