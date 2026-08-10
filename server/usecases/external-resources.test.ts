@@ -719,7 +719,7 @@ describe('external API resource authorization', () => {
     expect(signer.sign).toHaveBeenLastCalledWith(
       expect.objectContaining({
         sub: 'org-1',
-        connection_id: expect.stringMatching(/^resconnint_/),
+        connection_id: expect.stringMatching(/^00000000-0000-7000-8000-/),
         expected_external_subject: null,
         owner_type: 'organization',
       }),

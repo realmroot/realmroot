@@ -68,7 +68,3 @@ export function isAuthorizationClaim(value: unknown): value is {
 export function dedupe(values: string[]) {
   return [...new Set(values)]
 }
-
-export function createId(prefix: string) {
-  return `${prefix}_${crypto.randomUUID().replaceAll('-', '')}`
-}

@@ -2,7 +2,6 @@ import { badRequest, notFound } from '@server/domain/errors'
 import {
   buildDeniedAuthorizationUrl,
   createClientSecret,
-  createId,
   defaultPagination,
   hashProviderSecret,
   normalizeClientSettings,
@@ -53,13 +52,13 @@ export async function createApplication(
 
   const application = await deps.applications.create({
     application: {
-      id: createId('app'),
+      id: deps.ids.generate(),
       slug: input.slug ?? slugify(input.name),
       name: input.name,
       description: input.description ?? null,
       homepageUrl: input.homepageUrl ?? null,
       iconUrl: input.iconUrl ?? null,
-      clientId: createId('client'),
+      clientId: deps.ids.generate(),
       clientType: input.clientType,
       public: settings.public,
       firstParty: input.firstParty ?? false,
@@ -80,7 +79,7 @@ export async function createApplication(
     },
     clientSecret: secretHash
       ? {
-          id: createId('secret'),
+          id: deps.ids.generate(),
           version: 1,
           secretHash,
           secretPrefix,
@@ -287,7 +286,7 @@ export async function rotateApplicationSecret(
   const secret = await deps.applications.rotateSecret({
     applicationId: id,
     secret: {
-      id: createId('secret'),
+      id: deps.ids.generate(),
       version: 0,
       secretHash: await hashProviderSecret(clientSecret),
       secretPrefix: clientSecret.slice(0, 12),

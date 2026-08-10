@@ -116,7 +116,7 @@ export async function exchangeToken(
     [tenantClaim]: { type: 'organization', id: credential.ownerOrganizationId },
   }
   await deps.tokenExchange.storeAccessToken({
-    id: createId('tex'),
+    id: deps.ids.generate(),
     tokenHash: await hashProviderSecret(accessToken),
     clientId: oauthClient.clientId,
     credentialId: credential.id,
@@ -136,7 +136,7 @@ export async function exchangeToken(
     scope: scopes.join(' '),
   }
   if (scopes.includes('offline_access')) {
-    response.refresh_token = await issueRefreshToken(deps, oauthClient.clientId, createId('trf'), {
+    response.refresh_token = await issueRefreshToken(deps, oauthClient.clientId, deps.ids.generate(), {
       credentialId: credential.id,
       subject,
       subjectTokenIssuer: credential.issuer,
@@ -221,7 +221,7 @@ export async function refreshToken(
     claims: row.claims,
   })
   await deps.tokenExchange.storeAccessToken({
-    id: createId('tex'),
+    id: deps.ids.generate(),
     tokenHash: await hashProviderSecret(accessToken),
     clientId: oauthClient.clientId,
     credentialId: row.credentialId,
@@ -413,7 +413,7 @@ async function issueRefreshToken(
   const token = `${refreshTokenPrefix}${base64Url(randomBytes(32))}`
   const now = new Date()
   const stored = await deps.tokenExchange.storeRefreshToken({
-    id: createId('trt'),
+    id: deps.ids.generate(),
     familyId,
     tokenHash: await hashProviderSecret(token),
     clientId,
@@ -611,10 +611,6 @@ function parseList(value: string | null) {
   if (!value) return []
   const parsed = JSON.parse(value) as unknown
   return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : []
-}
-
-function createId(prefix: string) {
-  return `${prefix}_${crypto.randomUUID().replaceAll('-', '')}`
 }
 
 function randomBytes(length: number) {

@@ -6,6 +6,7 @@ import type {
   SiwePluginOptions,
 } from '@server/auth-test-plugin-types'
 import type { Database } from '@server/db/client'
+import { createIdentifierGeneratorFake } from '@server/usecases/identifier-generator.fake'
 import type { ManagementSignInSettingsResponse } from '@shared/api/management'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -14,6 +15,7 @@ describe('auth.test 4', () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse({ messages: [{ status: '0' }] }))
     const auth = createAuth(
       {} as Database,
+      createIdentifierGeneratorFake(),
       '01234567890123456789012345678901',
       'https://auth.example.com',
       ['https://auth.example.com'],
@@ -71,6 +73,7 @@ describe('auth.test 4', () => {
     const vonage = findPlugin<PhonePluginOptions>(
       createAuth(
         {} as Database,
+        createIdentifierGeneratorFake(),
         '01234567890123456789012345678901',
         'https://auth.example.com',
         ['https://auth.example.com'],
@@ -94,6 +97,7 @@ describe('auth.test 4', () => {
     const messageBird = findPlugin<PhonePluginOptions>(
       createAuth(
         {} as Database,
+        createIdentifierGeneratorFake(),
         '01234567890123456789012345678901',
         'https://auth.example.com',
         ['https://auth.example.com'],
@@ -119,6 +123,7 @@ describe('auth.test 4', () => {
     const brokenTwilio = findPlugin<PhonePluginOptions>(
       createAuth(
         {} as Database,
+        createIdentifierGeneratorFake(),
         '01234567890123456789012345678901',
         'https://auth.example.com',
         ['https://auth.example.com'],
@@ -136,6 +141,7 @@ describe('auth.test 4', () => {
     const unsupported = findPlugin<PhonePluginOptions>(
       createAuth(
         {} as Database,
+        createIdentifierGeneratorFake(),
         '01234567890123456789012345678901',
         'https://auth.example.com',
         ['https://auth.example.com'],
@@ -154,6 +160,7 @@ describe('auth.test 4', () => {
   it('disables direct passkey auth endpoints when passkeys are disabled by deployment policy', () => {
     const auth = createAuth(
       {} as Database,
+      createIdentifierGeneratorFake(),
       '01234567890123456789012345678901',
       'https://auth.example.com',
       ['https://auth.example.com'],

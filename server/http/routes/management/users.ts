@@ -113,8 +113,9 @@ export function managementUserRoutes(authApi: ManagementAuthApi, _options: Manag
         },
         headers: c.req.raw.headers,
       })
-      const request = await getDeps(c).users.createPasswordResetRequest!({
-        id: `prr_${crypto.randomUUID()}`,
+      const deps = getDeps(c)
+      const request = await deps.users.createPasswordResetRequest!({
+        id: deps.ids.generate(),
         userId: user.id,
         status: 'accepted',
         createdAt: new Date(),

@@ -6,6 +6,7 @@ import type {
 } from '@server/auth-test-plugin-types'
 import type { Database } from '@server/db/client'
 import { createApp } from '@server/http/app'
+import { createIdentifierGeneratorFake } from '@server/usecases/identifier-generator.fake'
 import type { ManagementSignInSettingsResponse } from '@shared/api/management'
 import { describe, expect, it, vi } from 'vitest'
 import { createTestDeps } from './test-deps'
@@ -14,6 +15,7 @@ describe('auth.test 1', () => {
   it('publishes RFC 9728 metadata for the DPoP-protected Realmroot API', async () => {
     const auth = createAuth(
       {} as Database,
+      createIdentifierGeneratorFake(),
       '01234567890123456789012345678901',
       'https://auth.example.com',
       ['https://auth.example.com'],
@@ -38,6 +40,7 @@ describe('auth.test 1', () => {
   it('serves OIDC discovery from the mounted Better Auth issuer', async () => {
     const auth = createAuth(
       {} as Database,
+      createIdentifierGeneratorFake(),
       '01234567890123456789012345678901',
       'https://auth.example.com',
       ['https://auth.example.com'],
@@ -78,6 +81,7 @@ describe('auth.test 1', () => {
   it('validates device-code grants at the OAuth Provider token endpoint', async () => {
     const auth = createAuth(
       {} as Database,
+      createIdentifierGeneratorFake(),
       '01234567890123456789012345678901',
       'https://auth.example.com',
       ['https://auth.example.com'],
@@ -103,6 +107,7 @@ describe('auth.test 1', () => {
   it('passes mounted authorize query parameters to Better Auth', async () => {
     const auth = createAuth(
       {} as Database,
+      createIdentifierGeneratorFake(),
       '01234567890123456789012345678901',
       'https://auth.example.com',
       ['https://auth.example.com'],
@@ -128,6 +133,7 @@ describe('auth.test 1', () => {
     const emailSender = createEmailSenderMock()
     const auth = createAuth(
       {} as Database,
+      createIdentifierGeneratorFake(),
       '01234567890123456789012345678901',
       'https://auth.example.com',
       ['https://auth.example.com'],
@@ -203,6 +209,7 @@ describe('auth.test 1', () => {
   it('exposes security, email OTP, username, and organization invitation APIs', () => {
     const auth = createAuth(
       {} as Database,
+      createIdentifierGeneratorFake(),
       '01234567890123456789012345678901',
       'https://auth.example.com',
       ['https://auth.example.com'],
@@ -236,6 +243,7 @@ describe('auth.test 1', () => {
   it('configures AgentAuth only for delegated identity enrollment', async () => {
     const auth = createAuth(
       {} as Database,
+      createIdentifierGeneratorFake(),
       '01234567890123456789012345678901',
       'https://auth.example.com/api/auth',
       ['https://auth.example.com'],

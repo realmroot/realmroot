@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { paginationMetadataSchema, paginationQuerySchema } from './applications'
+import { uuidV7Schema } from './identifiers'
 
 export { idempotencyKeySchema } from './idempotency'
 
@@ -69,7 +70,7 @@ export const webhookEndpointSecretResponseSchema = z.object({
 })
 
 export const webhookEventEnvelopeSchema = z.object({
-  id: z.string().startsWith('evt_'),
+  id: z.union([uuidV7Schema, z.string().startsWith('evt_')]),
   type: webhookEventSchema,
   createdAt: z.string().datetime(),
   data: z.record(z.string(), z.unknown()),

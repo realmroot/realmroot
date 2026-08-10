@@ -1,4 +1,5 @@
 import { conflict } from '@server/domain/errors'
+import type { IdentifierGenerator } from '@server/usecases/identifier-generator'
 import type { AuthorizationRepository, ResourceScopeEntitlementRecord } from '@server/usecases/ports'
 import { decodeRoleScope, encodeRoleScope } from '@shared/organization-access'
 import { and, asc, count, countDistinct, desc, eq, gt, inArray, isNull, like, notExists, or, sql } from 'drizzle-orm'
@@ -35,7 +36,7 @@ import {
 } from './authorization-mappers'
 import { scopeEntitlementStatusCondition } from './resource-scope-entitlement-filters'
 
-export function createDrizzleAuthorizationRepository(db: Database): AuthorizationRepository {
+export function createDrizzleAuthorizationRepository(db: Database, ids: IdentifierGenerator): AuthorizationRepository {
   return {
     async createOrganization(input, owner) {
       const now = new Date()
@@ -802,7 +803,7 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
     async createOrganizationRole(organizationId, input, permission, audit) {
       const now = audit.occurredAt
       const row = {
-        id: `org-role_${crypto.randomUUID()}`,
+        id: ids.generate(),
         organizationId,
         role: input.key,
         permission,

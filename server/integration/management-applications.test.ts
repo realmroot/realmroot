@@ -1,4 +1,5 @@
 import { applyD1Migrations, env, reset } from 'cloudflare:test'
+import { oauthClient, session } from '@server/db/schema'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createHarness, createUser, type Harness, signIn, signInAdmin } from './harness'
 
@@ -77,9 +78,18 @@ describe('applications management over real D1', () => {
     expect(response.status).toBe(400)
   })
 
-  it('creates, reads, updates, and deletes an application through real SQL [spec: management-api/management-restish-oauth-crud]', async () => {
+  it(`creates, reads, updates, and deletes an application through real SQL
+      [spec: management-api/management-restish-oauth-crud]
+      [spec: management-api/management-resource-identifiers]`, async () => {
     const cookie = await signInAdmin(harness)
     const created = await createApplication(harness, cookie)
+    const uuidV7Pattern = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+    expect(created.id).toMatch(uuidV7Pattern)
+    expect(created.clientId).toMatch(uuidV7Pattern)
+    const [authSession] = await harness.db.select({ id: session.id }).from(session).limit(1)
+    const [clientRecord] = await harness.db.select({ id: oauthClient.id }).from(oauthClient).limit(1)
+    expect(authSession?.id).toMatch(uuidV7Pattern)
+    expect(clientRecord?.id).toMatch(uuidV7Pattern)
 
     const fetched = await harness.request(`/api/applications/${created.id}`, { headers: { cookie } })
     expect(fetched.status).toBe(200)

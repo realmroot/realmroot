@@ -164,7 +164,7 @@ describe('Agent identity enrollment over real D1', () => {
       now: new Date(),
     }
     const audit = (result: 'allowed' | 'denied') =>
-      agentGovernanceAuditRecord({
+      agentGovernanceAuditRecord(harness.deps.ids.generate(), {
         action: 'agent.capability_decided',
         result,
         tenant: { type: 'user', id: userId },
@@ -249,15 +249,12 @@ describe('Agent identity enrollment over real D1', () => {
           action: 'approve',
           now: new Date(),
         },
-        {
-          ...agentGovernanceAuditRecord({
-            action: 'agent.capability_decided',
-            result: 'allowed',
-            tenant: { type: 'user', id: claimUserId },
-            controllerUserId: claimUserId,
-          }),
-          id: auditId,
-        },
+        agentGovernanceAuditRecord(auditId, {
+          action: 'agent.capability_decided',
+          result: 'allowed',
+          tenant: { type: 'user', id: claimUserId },
+          controllerUserId: claimUserId,
+        }),
       )
     const outcomes = await Promise.allSettled([
       decide(userId, await hashApprovalCode('CLAIM-1111'), 'controller-claim-audit-first'),

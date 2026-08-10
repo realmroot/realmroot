@@ -1,6 +1,7 @@
 import { createSecretCipher } from '@server/adapters/gateways/secrets'
 import type { WebhookEndpointInsert, WebhookEndpointRow, WebhookRequestRow } from '@server/adapters/repos/webhooks'
 import type { Deps } from '@server/usecases/deps'
+import { createIdentifierGeneratorFake } from '@server/usecases/identifier-generator.fake'
 import type {
   WebhookDeliveryAttemptInsert,
   WebhookDeliveryAttemptRecord,
@@ -30,6 +31,7 @@ function depsWith(
   fetch: (request: Request) => Promise<Response> = async () => new Response(null, { status: 204 }),
 ): Deps {
   return {
+    ids: createIdentifierGeneratorFake(),
     webhooks: repository,
     authorization: { listUserMemberships: async () => [] },
     secrets: createSecretCipher('test-webhook-secret-key-at-least-32-characters'),
@@ -221,7 +223,7 @@ describe('WebhookService', () => {
     const firstBody = await outbound[0]!.clone().text()
     const envelope = JSON.parse(firstBody) as { id: string; type: string; data: unknown }
     expect(envelope).toMatchObject({ type: 'user.created', data: { user: { id: 'user-1' } } })
-    expect(envelope.id).toMatch(/^evt_/)
+    expect(envelope.id).toMatch(/^00000000-0000-7000-8000-/)
     expect(outbound[0]!.headers.get('x-realmroot-event-id')).toBe(envelope.id)
     expect(outbound[0]!.headers.get('x-realmroot-signature')).toMatch(/^v1=[a-f0-9]{64}$/)
     expect(repository.rawEndpoint(created.endpoint.id)?.signingSecret).toMatch(/^v1\./)

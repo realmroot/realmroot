@@ -81,7 +81,7 @@ describe('Agent login identity', () => {
       homeSpace: { type: 'personal', userId: 'user-1' },
       bindings: [{ protocolAgentId: 'protocol-agent-1', hostId: 'host-1', status: 'active' }],
     })
-    expect(identity.subject).toMatch(/^agt_/)
+    expect(identity.subject).toMatch(/^00000000-0000-7000-8000-/)
     expect(deps.agentAudit.append).toHaveBeenCalledWith(
       expect.objectContaining({
         action: 'agent.identity_enrolled',

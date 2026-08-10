@@ -6,7 +6,7 @@ import {
   realmrootResourceServer,
   realmrootResourceUrl,
 } from '@server/domain/realmroot-resource-server'
-import { type AuthorizationTokenClaimInput, createId, toTokenClaims } from '@server/usecases/authorization-utils'
+import { type AuthorizationTokenClaimInput, toTokenClaims } from '@server/usecases/authorization-utils'
 import { refreshDynamicConnectorMetadata } from '@server/usecases/connectors'
 import type { Deps } from '@server/usecases/deps'
 import { resolveOrganizationMembershipScopes } from '@server/usecases/organization-membership-scopes'
@@ -56,7 +56,7 @@ import { realmrootScopeRegistry } from '@shared/scope-registry'
 export function createOrganization(deps: Deps, input: CreateOrganizationRequest, ownerUserId: string) {
   return deps.authorization.createOrganization(
     {
-      id: createId('org'),
+      id: deps.ids.generate(),
       slug: input.slug,
       name: input.name,
       displayName: input.displayName ?? null,
@@ -65,7 +65,7 @@ export function createOrganization(deps: Deps, input: CreateOrganizationRequest,
       disabledReason: null,
     },
     {
-      id: createId('mem'),
+      id: deps.ids.generate(),
       userId: ownerUserId,
       roles: ['owner'],
       title: null,
@@ -105,7 +105,7 @@ export async function addMember(deps: Deps, organizationId: string, input: AddMe
   await getOrganization(deps, organizationId)
   await validateOrganizationRoleKeys(deps, organizationId, input.roles)
   return deps.authorization.addMember(organizationId, {
-    id: createId('mem'),
+    id: deps.ids.generate(),
     organizationId,
     userId: input.userId,
     roles: input.roles,
@@ -131,7 +131,7 @@ export async function removeMember(deps: Deps, organizationId: string, memberId:
     organizationId,
     memberId,
     member.updatedAt,
-    authorizationAudit('organization.member.removed', organizationId, actor, new Date(), {
+    authorizationAudit(deps, 'organization.member.removed', organizationId, actor, new Date(), {
       organizationId,
       memberId,
     }),
@@ -155,7 +155,7 @@ export async function replaceMemberRoles(
     memberId,
     input.roles,
     target.updatedAt,
-    authorizationAudit('organization.member.roles-replaced', organizationId, actor, now, {
+    authorizationAudit(deps, 'organization.member.roles-replaced', organizationId, actor, now, {
       organizationId,
       memberId,
       previousRoles: target.roles,
@@ -175,7 +175,7 @@ export async function createInvitation(
   await getOrganization(deps, organizationId)
   await validateOrganizationRoleKeys(deps, organizationId, input.roles)
   return deps.authorization.createInvitation({
-    id: createId('inv'),
+    id: deps.ids.generate(),
     organizationId,
     email: input.email,
     roles: input.roles,
@@ -226,7 +226,7 @@ export async function createResource(deps: Deps, input: CreateApiResourceRequest
   const contract = synchronized ?? (await readResourceContract(deps, input.resourceUrl))
   if (!contract) throw new Error('Unconditional Resource Server contract read returned no document.')
   return deps.authorization.createResource({
-    id: createId('res'),
+    id: deps.ids.generate(),
     identifier: input.identifier,
     name: contract.name,
     resourceUrl: input.resourceUrl,
@@ -516,13 +516,14 @@ async function requireActiveOrganization(deps: Deps, organizationId: string) {
 }
 
 function resourceMutationAudit(
+  deps: Deps,
   resourceId: string,
   ownerOrganizationId: string,
   occurredAt: Date,
   actor: MutationActor,
 ) {
   return {
-    id: createId('agaudit'),
+    id: deps.ids.generate(),
     action: 'api_resource.deleted',
     result: 'allowed',
     realmOwned: false,
@@ -551,7 +552,7 @@ export async function deleteResource(deps: Deps, id: string, actor: MutationActo
     !(await deps.authorization.deleteResource(
       id,
       now,
-      resourceMutationAudit(id, resource.ownerOrganizationId, now, actor),
+      resourceMutationAudit(deps, id, resource.ownerOrganizationId, now, actor),
     ))
   ) {
     throw notFound('API resource was not found.')
@@ -587,7 +588,7 @@ export async function createUserPermission(
   return toPermissionResponse(
     await deps.authorization.createScopeEntitlement(
       {
-        id: createId('ent'),
+        id: deps.ids.generate(),
         userId,
         applicationId: null,
         agentIdentityId: null,
@@ -680,7 +681,7 @@ export async function createApplicationPermission(
   return toPermissionResponse(
     await deps.authorization.createScopeEntitlement(
       {
-        id: createId('ent'),
+        id: deps.ids.generate(),
         userId: null,
         applicationId: application.id,
         agentIdentityId: null,
@@ -787,7 +788,7 @@ export async function createRole(deps: Deps, organizationId: string, input: Crea
     organizationId,
     { key: input.key, displayName: input.displayName, description: input.description ?? null, scopes },
     toBetterAuthPermission(scopes),
-    authorizationAudit('organization.role.created', organizationId, actor, now, {
+    authorizationAudit(deps, 'organization.role.created', organizationId, actor, now, {
       organizationId,
       roleKey: input.key,
     }),
@@ -843,7 +844,7 @@ export async function updateRole(
     input,
     scopes ? toBetterAuthPermission(scopes) : undefined,
     role.updatedAt!,
-    authorizationAudit('organization.role.updated', organizationId, actor, now, { organizationId, roleKey }),
+    authorizationAudit(deps, 'organization.role.updated', organizationId, actor, now, { organizationId, roleKey }),
   )
   if (!updated) throw preconditionFailed('The Organization Role changed after it was read.')
   return getRole(deps, organizationId, roleKey)
@@ -857,7 +858,7 @@ export async function deleteRole(deps: Deps, organizationId: string, roleKey: st
     organizationId,
     roleKey,
     role.updatedAt!,
-    authorizationAudit('organization.role.deleted', organizationId, actor, now, { organizationId, roleKey }),
+    authorizationAudit(deps, 'organization.role.deleted', organizationId, actor, now, { organizationId, roleKey }),
   )
   if (result === 'assigned') throw conflict('Assigned Organization Roles cannot be deleted.')
   if (result === 'not_found') throw preconditionFailed('The Organization Role changed after it was read.')
@@ -1018,6 +1019,7 @@ async function validateOrganizationRoleKeys(deps: Deps, organizationId: string, 
 }
 
 function authorizationAudit(
+  deps: Deps,
   action: string,
   ownerOrganizationId: string,
   actor: MutationActor,
@@ -1025,7 +1027,7 @@ function authorizationAudit(
   metadata: Record<string, unknown>,
 ) {
   return {
-    id: createId('agaudit'),
+    id: deps.ids.generate(),
     action,
     result: 'allowed',
     realmOwned: false,

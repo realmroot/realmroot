@@ -44,9 +44,10 @@ export function toOAuthClientInsert(
   input: Omit<ApplicationAggregate, 'createdAt' | 'updatedAt'>,
   clientSecret: string | null,
   now: Date,
+  id: string,
 ) {
   return {
-    id: `oauth_${crypto.randomUUID().replaceAll('-', '')}`,
+    id,
     clientId: input.clientId,
     clientSecret,
     disabled: input.disabled,

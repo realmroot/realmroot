@@ -194,10 +194,6 @@ export function slugify(value: string) {
     .replace(/^-+|-+$/g, '')
 }
 
-export function createId(prefix: string) {
-  return `${prefix}_${crypto.randomUUID().replaceAll('-', '')}`
-}
-
 export function createClientSecret() {
   const bytes = new Uint8Array(32)
   crypto.getRandomValues(bytes)

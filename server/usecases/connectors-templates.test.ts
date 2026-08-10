@@ -10,6 +10,7 @@ import {
   updateConnector,
 } from '@server/usecases/connectors'
 import type { Deps } from '@server/usecases/deps'
+import { createIdentifierGeneratorFake } from '@server/usecases/identifier-generator.fake'
 import type { ConnectorRepository } from '@server/usecases/ports'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -101,7 +102,7 @@ describe('service.test 1', () => {
 
   it('stores enabled connector writes with the supplied client secret', async () => {
     const repository = createRepository()
-    const deps = { connectors: repository } as unknown as Deps
+    const deps = { ids: createIdentifierGeneratorFake(), connectors: repository } as unknown as Deps
 
     await expect(
       createConnector(deps, {
@@ -122,7 +123,7 @@ describe('service.test 1', () => {
       clientSecret: null,
     })
     const repository = createRepository({ byId: current, updateResult: { ...current, enabled: false } })
-    const deps = { connectors: repository } as unknown as Deps
+    const deps = { ids: createIdentifierGeneratorFake(), connectors: repository } as unknown as Deps
 
     await expect(updateConnector(deps, 'idp_github', { enabled: false })).resolves.toMatchObject({
       id: 'idp_github',
@@ -142,7 +143,7 @@ describe('service.test 1', () => {
       clientSecret: null,
     })
     const repository = createRepository({ byId: current })
-    const deps = { connectors: repository } as unknown as Deps
+    const deps = { ids: createIdentifierGeneratorFake(), connectors: repository } as unknown as Deps
 
     await expect(updateConnector(deps, 'idp_github', { enabled: true })).rejects.toMatchObject({
       status: 400,
@@ -153,7 +154,7 @@ describe('service.test 1', () => {
 
   it('rejects enabled Cognito writes missing required provider metadata', async () => {
     const repository = createRepository()
-    const deps = { connectors: repository } as unknown as Deps
+    const deps = { ids: createIdentifierGeneratorFake(), connectors: repository } as unknown as Deps
 
     await expect(
       createConnector(deps, {
@@ -173,7 +174,7 @@ describe('service.test 1', () => {
 
   it('rejects OIDC writes without an issuer', async () => {
     const repository = createRepository()
-    const deps = { connectors: repository } as unknown as Deps
+    const deps = { ids: createIdentifierGeneratorFake(), connectors: repository } as unknown as Deps
 
     await expect(
       createConnector(deps, {
@@ -193,7 +194,7 @@ describe('service.test 1', () => {
   it('rejects duplicate provider configuration before inserting', async () => {
     const existing = connector({ providerType: 'generic_oauth', providerId: 'github' })
     const repository = createRepository({ existingProvider: existing })
-    const deps = { connectors: repository } as unknown as Deps
+    const deps = { ids: createIdentifierGeneratorFake(), connectors: repository } as unknown as Deps
 
     await expect(
       createConnector(deps, {
@@ -218,7 +219,7 @@ describe('service.test 1', () => {
       createResult: created,
       updateResult: { ...created, enabled: false },
     })
-    const deps = { connectors: repository } as unknown as Deps
+    const deps = { ids: createIdentifierGeneratorFake(), connectors: repository } as unknown as Deps
 
     await expect(listConnectors(deps, { limit: 25, offset: 0 })).resolves.toMatchObject({
       connectors: [],
@@ -262,7 +263,7 @@ describe('service.test 1', () => {
   })
 
   it('returns not found for missing connector reads, updates, and deletes', async () => {
-    const deps = { connectors: createRepository() } as unknown as Deps
+    const deps = { ids: createIdentifierGeneratorFake(), connectors: createRepository() } as unknown as Deps
 
     await expect(getConnector(deps, 'missing')).rejects.toMatchObject({ status: 404, message: 'Connector not found.' })
     await expect(updateConnector(deps, 'missing', { enabled: false })).rejects.toMatchObject({
@@ -278,7 +279,7 @@ describe('service.test 1', () => {
   it('validates update candidates before persisting enabled connectors', async () => {
     const current = connector({ id: 'idp_google', providerId: 'google' })
     const repository = createRepository({ byId: current })
-    const deps = { connectors: repository } as unknown as Deps
+    const deps = { ids: createIdentifierGeneratorFake(), connectors: repository } as unknown as Deps
 
     await expect(updateConnector(deps, 'idp_google', { clientSecret: null })).rejects.toMatchObject({
       status: 400,
@@ -307,7 +308,7 @@ describe('service.test 1', () => {
   it('accepts disabled incomplete connectors and loads discovered OIDC configuration', async () => {
     const disabled = connector({ enabled: false, clientId: null, clientSecret: null })
     const repository = createRepository({ createResult: disabled })
-    const deps = { connectors: repository } as unknown as Deps
+    const deps = { ids: createIdentifierGeneratorFake(), connectors: repository } as unknown as Deps
     const endpointConfigured = connector({
       providerType: 'generic_oauth',
       providerId: 'generic-oauth',
@@ -342,7 +343,10 @@ describe('service.test 1', () => {
 
   it('reports configuration readiness without exposing secret values', async () => {
     const connectorRow = connector({ id: 'idp_google', providerId: 'google', clientSecret: 'GOOGLE_SECRET' })
-    const deps = { connectors: createRepository({ byId: connectorRow }) } as unknown as Deps
+    const deps = {
+      ids: createIdentifierGeneratorFake(),
+      connectors: createRepository({ byId: connectorRow }),
+    } as unknown as Deps
 
     await expect(connectorReadiness(deps, 'idp_google')).resolves.toEqual({
       connectorId: 'idp_google',
@@ -388,7 +392,10 @@ describe('service.test 1', () => {
       authorizationEndpoint: null,
       tokenEndpoint: null,
     })
-    const deps = { connectors: createRepository({ byId: connectorRow }) } as unknown as Deps
+    const deps = {
+      ids: createIdentifierGeneratorFake(),
+      connectors: createRepository({ byId: connectorRow }),
+    } as unknown as Deps
 
     await expect(connectorReadiness(deps, 'idp_generic')).resolves.toEqual({
       connectorId: 'idp_generic',

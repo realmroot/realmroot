@@ -1,8 +1,9 @@
 import { forbidden } from '@server/domain/errors'
 import { platformOrganization } from '@server/domain/platform-organization'
+import type { IdentifierGenerator } from '@server/usecases/identifier-generator'
 import type { OnboardingRepository } from '@server/usecases/ports'
 
-export function createOnboardingRepository(db: D1Database): OnboardingRepository {
+export function createOnboardingRepository(db: D1Database, ids: IdentifierGenerator): OnboardingRepository {
   return {
     async hasUsers() {
       const row = await db.prepare('select 1 as value from user limit 1').first<{ value: number }>()
@@ -10,9 +11,9 @@ export function createOnboardingRepository(db: D1Database): OnboardingRepository
     },
 
     async createBootstrapAdmin(input) {
-      const userId = crypto.randomUUID()
-      const accountId = crypto.randomUUID()
-      const memberId = crypto.randomUUID()
+      const userId = ids.generate()
+      const accountId = ids.generate()
+      const memberId = ids.generate()
       const statements = [
         db
           .prepare(

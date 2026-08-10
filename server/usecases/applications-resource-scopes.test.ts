@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createApplication, createConsent, loadConsentRequest, updateApplication } from './applications'
 import type { Deps } from './deps'
+import { createIdentifierGeneratorFake } from './identifier-generator.fake'
 import type { ApplicationAggregate } from './ports'
 
 const now = new Date('2026-08-06T00:00:00.000Z')
@@ -41,7 +42,10 @@ function setup() {
     findResourceByResourceUrl: vi.fn().mockResolvedValue(resource),
     findMemberByOrganizationUser: vi.fn().mockResolvedValue({ id: 'member-1' }),
   }
-  return { deps: { applications, authorization } as unknown as Deps, authorization }
+  return {
+    deps: { ids: createIdentifierGeneratorFake(), applications, authorization } as unknown as Deps,
+    authorization,
+  }
 }
 
 const input = {

@@ -1,4 +1,5 @@
 import { getPublicAgentProfile, getPublicUserProfile } from '@server/usecases/public-profiles'
+import { agentSubjectSchema } from '@shared/api/identifiers'
 import {
   publicAgentResponseSchema,
   publicProfileQuerySchema,
@@ -6,13 +7,10 @@ import {
 } from '@shared/api/public-profiles'
 import { usernameSchema } from '@shared/api/users'
 import { type Context, Hono } from 'hono'
-import { z } from 'zod'
 import { getDeps } from '../middleware/deps'
 import { readParam, readQuery } from './validation'
 
 const publicProfileCacheControl = 'public, max-age=60, stale-while-revalidate=300'
-const agentSubjectSchema = z.string().regex(/^agt_[a-zA-Z0-9_-]+$/)
-
 export function createPublicProfileRoutes(resolveIssuer: (requestUrl: string) => string) {
   const app = new Hono()
 

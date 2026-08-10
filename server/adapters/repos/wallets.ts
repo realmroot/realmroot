@@ -1,10 +1,11 @@
 import { badRequest } from '@server/domain/errors'
+import type { IdentifierGenerator } from '@server/usecases/identifier-generator'
 import type { WalletRepository } from '@server/usecases/ports'
 import { and, count, desc, eq } from 'drizzle-orm'
 import type { Database } from '../../db/client'
 import { account, verification, walletAddress } from '../../db/schema'
 
-export function createWalletRepository(db: Database): WalletRepository {
+export function createWalletRepository(db: Database, ids: IdentifierGenerator): WalletRepository {
   return {
     async findWalletAddress(address, chainId) {
       const [row] = await db
@@ -53,7 +54,7 @@ export function createWalletRepository(db: Database): WalletRepository {
       const [created] = await db
         .insert(walletAddress)
         .values({
-          id: createId('wallet'),
+          id: ids.generate(),
           userId,
           address: input.address,
           chainId: input.chainId,
@@ -62,7 +63,7 @@ export function createWalletRepository(db: Database): WalletRepository {
         .returning()
 
       await db.insert(account).values({
-        id: createId('acct'),
+        id: ids.generate(),
         accountId: walletAccountId(input.address, input.chainId),
         providerId: 'siwe',
         userId,
@@ -106,8 +107,4 @@ function parseWalletAccountId(value: string) {
   const chainId = Number(value.slice(separator + 1))
   if (!Number.isInteger(chainId) || chainId <= 0) return null
   return { address, chainId }
-}
-
-function createId(prefix: string) {
-  return `${prefix}_${crypto.randomUUID().replaceAll('-', '')}`
 }

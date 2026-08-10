@@ -1,6 +1,7 @@
 import { createJwksGateway } from '@server/adapters/gateways/jwks'
 import { hashProviderSecret } from '@server/usecases/applications-utils'
 import type { Deps } from '@server/usecases/deps'
+import { createIdentifierGeneratorFake } from '@server/usecases/identifier-generator.fake'
 import type {
   CreateFederatedCredentialInput,
   FederatedCredentialRecord,
@@ -545,6 +546,7 @@ async function fixture(options: { grantTypes?: string[]; scopes?: string[] } = {
   const repository = new InMemoryRepository()
   const configuredScopes = options.scopes ?? ['runner:connect']
   const deps = {
+    ids: createIdentifierGeneratorFake(),
     tokenExchange: repository,
     jwks: createJwksGateway(),
     applications: {

@@ -125,7 +125,7 @@ export async function createResourceConnectionIntent(
   validateRequestedScopes(resource.scopeRegistry, scopes)
   if (broker) {
     if (!signer) throw new Error('Brokered account connections require Realmroot signing.')
-    const id = createId('resconnint')
+    const id = deps.ids.generate()
     const state = randomToken()
     const verifier = randomToken()
     const now = new Date()
@@ -214,7 +214,7 @@ export async function createResourceConnectionIntent(
   const authorization = await requireActiveExternalAuthorization(deps, resourceId, clientGeneration)
   const authorizationDetails = input.authorizationDetails ?? resource.authorizationDetails
   assertAuthorizationDetailsSupported(authorizationDetails, authorization)
-  const id = createId('resconnint')
+  const id = deps.ids.generate()
   const state = randomToken()
   const verifier = randomToken()
   const now = new Date()
@@ -496,7 +496,7 @@ async function ensureProviderConnection(
     }
   }
   return deps.externalResources.upsertProviderConnection({
-    id: existing?.id ?? createId('provconn'),
+    id: existing?.id ?? deps.ids.generate(),
     connectorId: resource.connectorId,
     ownerUserId: intent.ownerUserId,
     ownerOrganizationId: intent.ownerOrganizationId,
@@ -833,7 +833,7 @@ async function revokeBrokeredProviderAuthorization(
       iss: signer.issuer,
       sub: actorUserId,
       aud: resource.resourceUrl,
-      jti: createId('resconnrev'),
+      jti: createProtocolId('resconnrev'),
       iat: Math.floor(now.getTime() / 1000),
       exp: Math.floor(now.getTime() / 1000) + 60,
       connection_id: connection.id,
@@ -1052,7 +1052,7 @@ export async function createAgentConnectionRequest(
   )
   const now = new Date()
   const expiresAt = new Date(now.getTime() + 10 * 60 * 1000)
-  const requestId = createId('connectionreq')
+  const requestId = deps.ids.generate()
   const rawApprovalToken = randomToken()
   const record: AgentConnectionRequestRecord = {
     id: requestId,
@@ -1222,7 +1222,7 @@ export async function createAgentAccessRequest(
   }
   const expiresAt = new Date(now.getTime() + 10 * 60 * 1000)
   const rawApprovalToken = randomToken()
-  const requestId = createId('accessreq')
+  const requestId = deps.ids.generate()
   const request: AgentAccessRequestRecord = {
     id: requestId,
     resourceId: resource.id,
@@ -1546,7 +1546,7 @@ export async function decideAgentAccessRequest(
       return { scope, entitlementId: current.id }
     }
     const entitlement: ResourceScopeEntitlementRecord = {
-      id: createId('ent'),
+      id: deps.ids.generate(),
       userId: null,
       applicationId: null,
       agentIdentityId: request.agentIdentityId,
@@ -1771,7 +1771,7 @@ export async function issueTargetAccessToken(
   if (!exactAuthorizationDetails(issuedAuthorizationDetails, request.authorizationDetails)) {
     throw unauthorized('Target authorization server issued different authorization details.')
   }
-  const leaseId = createId('tokenlease')
+  const leaseId = deps.ids.generate()
   const leaseRecord = {
     id: leaseId,
     entitlementIds,
@@ -1903,7 +1903,7 @@ async function issueNativeAccessToken(
       iss: signer.issuer,
       sub: realmroot ? principal.subject : subject,
       aud: resource.resourceUrl,
-      jti: createId('resat'),
+      jti: createProtocolId('resat'),
       iat: Math.floor(now.getTime() / 1000),
       exp: Math.floor(expiresAt.getTime() / 1000),
       scope: issuedScopes.join(' '),
@@ -1929,7 +1929,7 @@ async function issueNativeAccessToken(
     },
     'at+jwt',
   )
-  const leaseId = createId('tokenlease')
+  const leaseId = deps.ids.generate()
   const leaseRecord = {
     id: leaseId,
     entitlementIds: entitlements.map((entitlement) => entitlement.id),
@@ -2825,7 +2825,7 @@ async function resourceAuditRecord(
     ...(typeof detail.identifier === 'string' ? { identifier: detail.identifier } : {}),
   }))
   return {
-    id: createId('agaudit'),
+    id: deps.ids.generate(),
     action: input.action,
     result: input.result,
     realmOwned: false,
@@ -3683,6 +3683,6 @@ function base64Url(value: Uint8Array) {
     .replace(/=+$/, '')
 }
 
-function createId(prefix: string) {
+function createProtocolId(prefix: string) {
   return `${prefix}_${crypto.randomUUID().replaceAll('-', '')}`
 }

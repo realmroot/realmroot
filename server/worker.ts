@@ -77,6 +77,7 @@ async function getAuth(env: Env, config: RuntimeConfig, deps: ReturnType<typeof 
 
     cachedAuth = createAuth(
       db,
+      deps.ids,
       config.authSecret,
       config.baseURL,
       config.trustedOrigins,

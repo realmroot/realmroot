@@ -176,12 +176,12 @@ export async function createAgentLoginIdentity(
   await assertProtocolAgentCanEnroll(deps, input.protocolAgentId, controllerUserId)
 
   const now = new Date()
-  const identityId = createId('agid')
+  const identityId = deps.ids.generate()
   const aggregate = await deps.agentIdentities.createIdentity({
     identity: {
       id: identityId,
       issuer,
-      subject: createId('agt'),
+      subject: deps.ids.generate(),
       name: input.name,
       ownerUserId: controllerUserId,
       ownerOrganizationId: null,
@@ -191,7 +191,7 @@ export async function createAgentLoginIdentity(
       updatedAt: now,
     },
     binding: {
-      id: createId('agbind'),
+      id: deps.ids.generate(),
       agentIdentityId: identityId,
       protocolAgentId: input.protocolAgentId,
       status: 'active',
@@ -293,7 +293,7 @@ export async function createAgentEnrollmentIntent(
     }
     const now = new Date()
     const migrated = await deps.agentIdentities.createIntentIdempotently({
-      id: createId('agenr'),
+      id: deps.ids.generate(),
       agentIdentityId: null,
       requestedName: boundIdentity.identity.name,
       ...ownerColumns(boundHomeSpace),
@@ -315,7 +315,7 @@ export async function createAgentEnrollmentIntent(
 
   const now = new Date()
   const reserved = await deps.agentIdentities.createIntentIdempotently({
-    id: createId('agenr'),
+    id: deps.ids.generate(),
     agentIdentityId: null,
     requestedName: input.name,
     ...ownerColumns(homeSpace),
@@ -369,7 +369,7 @@ export async function createAdditionalAgentEnrollmentIntent(
 
   const now = new Date()
   const reserved = await deps.agentIdentities.createIntentIdempotently({
-    id: createId('agenr'),
+    id: deps.ids.generate(),
     agentIdentityId: identityId,
     requestedName: null,
     ...ownerColumns(homeSpace),
@@ -420,11 +420,11 @@ export async function approveAgentEnrollment(
     const existing = await requireIdentity(deps, identityId)
     assertSameHomeSpace(homeSpace, homeSpaceOf(existing.identity))
   } else {
-    identityId = createId('agid')
+    identityId = deps.ids.generate()
     identity = {
       id: identityId,
       issuer,
-      subject: createId('agt'),
+      subject: deps.ids.generate(),
       name: intent.requestedName!,
       ...ownerColumns(homeSpace),
       status: 'active',
@@ -438,7 +438,7 @@ export async function approveAgentEnrollment(
     intentId,
     identity,
     binding: {
-      id: createId('agbind'),
+      id: deps.ids.generate(),
       agentIdentityId: identityId,
       protocolAgentId: intent.protocolAgentId,
       status: 'active',
@@ -734,8 +734,4 @@ async function enrollmentAgentName(deps: Deps, intent: AgentEnrollmentIntent) {
 function iso(value: string | Date | null) {
   if (value === null) return null
   return typeof value === 'string' ? value : value.toISOString()
-}
-
-function createId(prefix: string) {
-  return `${prefix}_${crypto.randomUUID().replaceAll('-', '')}`
 }

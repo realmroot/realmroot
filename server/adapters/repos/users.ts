@@ -1,5 +1,6 @@
 import { badRequest, notFound } from '@server/domain/errors'
 import { hashPassword } from '@server/domain/password'
+import type { IdentifierGenerator } from '@server/usecases/identifier-generator'
 import type { UserProfile, UserRepository } from '@server/usecases/ports'
 import { and, asc, count, desc, eq, inArray, like, type SQL } from 'drizzle-orm'
 import type { BatchItem } from 'drizzle-orm/batch'
@@ -8,7 +9,7 @@ import type { AdminUpdateUserInput, AdminUserListQuery } from '../../../shared/a
 import type { Database } from '../../db/client'
 import { account, passwordResetRequest, session, uploadedAsset, user, userProfile } from '../../db/schema'
 
-export function createUserRepository(db: Database): UserRepository {
+export function createUserRepository(db: Database, ids: IdentifierGenerator): UserRepository {
   return {
     async getUser(userId) {
       return findUser(db, userId)
@@ -42,7 +43,7 @@ export function createUserRepository(db: Database): UserRepository {
     },
 
     async createManagedUser(input) {
-      const userId = crypto.randomUUID()
+      const userId = ids.generate()
       const now = new Date()
       const statements: [BatchItem<'sqlite'>, ...BatchItem<'sqlite'>[]] = [
         db.insert(user).values({
@@ -60,7 +61,7 @@ export function createUserRepository(db: Database): UserRepository {
       if (input.password) {
         statements.push(
           db.insert(account).values({
-            id: crypto.randomUUID(),
+            id: ids.generate(),
             accountId: userId,
             providerId: 'credential',
             userId,

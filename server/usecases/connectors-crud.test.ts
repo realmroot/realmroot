@@ -10,6 +10,7 @@ import {
   updateConnector,
 } from '@server/usecases/connectors'
 import type { Deps } from '@server/usecases/deps'
+import { createIdentifierGeneratorFake } from '@server/usecases/identifier-generator.fake'
 import type { ConnectorRepository } from '@server/usecases/ports'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -374,6 +375,7 @@ describe('service.test 2', () => {
         }),
       )
     const deps = {
+      ids: createIdentifierGeneratorFake(),
       connectors: createRepository(),
       externalHttp: { fetch },
     } as unknown as Deps
@@ -413,6 +415,7 @@ describe('service.test 2', () => {
       .mockResolvedValueOnce(new Response(null, { status: 404 }))
       .mockResolvedValueOnce(Response.json(discoveryMetadata({ issuer: 'https://idp.example.com/oauth' })))
     const deps = {
+      ids: createIdentifierGeneratorFake(),
       connectors: createRepository(),
       externalHttp: { fetch },
     } as unknown as Deps
@@ -560,6 +563,7 @@ describe('service.test 2', () => {
       scopes_supported: ['openid', 'offline_access', 'projects:read', 'projects:write'],
     })
     const deps = {
+      ids: createIdentifierGeneratorFake(),
       connectors: createRepository(),
       externalHttp: {
         fetch: vi
@@ -1121,6 +1125,7 @@ describe('service.test 2', () => {
 
   it('creates a manually registered OIDC connector from discovery metadata', async () => {
     const deps = {
+      ids: createIdentifierGeneratorFake(),
       connectors: createRepository(),
       externalHttp: { fetch: vi.fn().mockResolvedValue(Response.json(discoveryMetadata())) },
     } as unknown as Deps

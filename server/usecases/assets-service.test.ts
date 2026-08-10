@@ -7,11 +7,12 @@ import {
   uploadAsset,
 } from '@server/usecases/assets'
 import type { Deps } from '@server/usecases/deps'
+import { createIdentifierGeneratorFake } from '@server/usecases/identifier-generator.fake'
 import type { AssetRepository, AssetStorage } from '@server/usecases/ports'
 import { describe, expect, it, vi } from 'vitest'
 
 function depsWith(assets: AssetRepository, assetStorage: AssetStorage): Deps {
-  return { assets, assetStorage } as unknown as Deps
+  return { ids: createIdentifierGeneratorFake(), assets, assetStorage } as unknown as Deps
 }
 
 describe('AssetService', () => {
@@ -27,7 +28,7 @@ describe('AssetService', () => {
     })
 
     expect(storage.put).toHaveBeenCalledWith(
-      expect.stringMatching(/^avatar\/[a-f0-9]{2}\/asset_[a-f0-9]+-ada-lovelace\.png$/),
+      expect.stringMatching(/^avatar\/[a-f0-9]{2}\/00000000-0000-7000-8000-[a-f0-9]{12}-ada-lovelace\.png$/),
       expect.any(ArrayBuffer),
       { httpMetadata: { contentType: 'image/png' } },
     )

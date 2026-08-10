@@ -8,6 +8,7 @@
 import { createConfiguredEmailSender } from '@server/adapters/gateways/email/sender'
 import { createJwksGateway } from '@server/adapters/gateways/jwks'
 import { createSecretCipher } from '@server/adapters/gateways/secrets'
+import { createUuidV7IdentifierGenerator } from '@server/adapters/identifiers/uuid-v7'
 import { createAgentAuditRepository } from '@server/adapters/repos/agent-audit'
 import { createDrizzleAgentIdentityRepository } from '@server/adapters/repos/agent-identities'
 import { createDrizzleAgentTokenRepository } from '@server/adapters/repos/agent-tokens'
@@ -34,27 +35,29 @@ import { createDb } from './db/client'
  */
 export function createDeps(env: Env, config: RuntimeConfig): Deps {
   const db = createDb(env.DB)
+  const ids = createUuidV7IdentifierGenerator()
   const secrets = createSecretCipher(config.credentialEncryptionKey)
   const configz = createDrizzleConfigzRepository(db)
   return {
+    ids,
     agents: createDrizzleAgentRepository(db),
     agentAudit: createAgentAuditRepository(db),
     agentIdentities: createDrizzleAgentIdentityRepository(db),
     agentTokens: createDrizzleAgentTokenRepository(db),
-    applications: createDrizzleApplicationRepository(db),
+    applications: createDrizzleApplicationRepository(db, ids),
     assets: createDrizzleAssetRepository(db),
     assetStorage: env.ASSET_BUCKET,
-    authorization: createDrizzleAuthorizationRepository(db),
+    authorization: createDrizzleAuthorizationRepository(db, ids),
     configz,
     connectors: createConnectorRepository(db, secrets),
-    externalResources: createExternalResourceRepository(db),
+    externalResources: createExternalResourceRepository(db, ids),
     externalHttp: { fetch: (request) => (env.EXTERNAL_HTTP ? env.EXTERNAL_HTTP.fetch(request) : fetch(request)) },
-    onboarding: createOnboardingRepository(env.DB),
+    onboarding: createOnboardingRepository(env.DB, ids),
     security: createSecurityRepository(db, config.securityPolicy),
     secrets,
-    tokenExchange: createTokenExchangeRepository(db),
-    users: createUserRepository(db),
-    wallets: createWalletRepository(db),
+    tokenExchange: createTokenExchangeRepository(db, ids),
+    users: createUserRepository(db, ids),
+    wallets: createWalletRepository(db, ids),
     webhooks: createWebhookRepository(db),
     email: createConfiguredEmailSender(
       env.EMAIL,

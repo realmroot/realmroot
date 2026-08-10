@@ -29,6 +29,7 @@ import {
   updateRole,
 } from '@server/usecases/authorization'
 import type { Deps } from '@server/usecases/deps'
+import { createIdentifierGeneratorFake } from '@server/usecases/identifier-generator.fake'
 import { organizationUserHasScope } from '@server/usecases/organization-membership-scopes'
 import type {
   ApiResourceResponse,
@@ -110,7 +111,7 @@ describe('authorization CRUD and assignment policy', () => {
       createdAt: timestamp,
       updatedAt: timestamp,
     }))
-    const deps = { authorization } as unknown as Deps
+    const deps = { ids: createIdentifierGeneratorFake(), authorization } as unknown as Deps
 
     const created = await ensureRealmrootResourceServer(deps, 'https://auth.example.com')
     expect(created).toMatchObject({
@@ -183,19 +184,19 @@ describe('authorization CRUD and assignment policy', () => {
     authorization.createInvitation.mockResolvedValue(invitation)
     authorization.listInvitations.mockResolvedValue({ items: [invitation], pagination })
     authorization.findInvitation.mockResolvedValue(invitation)
-    const deps = { authorization } as unknown as Deps
+    const deps = { ids: createIdentifierGeneratorFake(), authorization } as unknown as Deps
 
     await expect(createOrganization(deps, { slug: 'acme', name: 'Acme' }, 'creator-1')).resolves.toBe(organization)
     expect(authorization.createOrganization).toHaveBeenCalledWith(
       expect.objectContaining({
-        id: expect.stringMatching(/^org_/),
+        id: expect.stringMatching(/^00000000-0000-7000-8000-/),
         displayName: null,
         logo: null,
         disabled: false,
         disabledReason: null,
       }),
       expect.objectContaining({
-        id: expect.stringMatching(/^mem_/),
+        id: expect.stringMatching(/^00000000-0000-7000-8000-/),
         userId: 'creator-1',
         roles: ['owner'],
         title: null,
@@ -211,7 +212,7 @@ describe('authorization CRUD and assignment policy', () => {
     await expect(addMember(deps, organization.id, { userId: 'user-1', roles: ['member'] })).resolves.toBe(member)
     expect(authorization.addMember).toHaveBeenCalledWith(
       organization.id,
-      expect.objectContaining({ id: expect.stringMatching(/^mem_/), title: null }),
+      expect.objectContaining({ id: expect.stringMatching(/^00000000-0000-7000-8000-/), title: null }),
     )
     await expect(listMembers(deps, organization.id, { limit: 20, offset: 0 })).resolves.toEqual({
       members: [member],
@@ -225,7 +226,7 @@ describe('authorization CRUD and assignment policy', () => {
     ).resolves.toBe(invitation)
     expect(authorization.createInvitation).toHaveBeenCalledWith(
       expect.objectContaining({
-        id: expect.stringMatching(/^inv_/),
+        id: expect.stringMatching(/^00000000-0000-7000-8000-/),
         status: 'pending',
         inviterId: 'admin-1',
         expiresAt: expect.any(String),
@@ -254,7 +255,7 @@ describe('authorization CRUD and assignment policy', () => {
     const authorization = repository()
     const platformOrganization = { ...organization, id: 'org_platform', slug: 'platform' }
     authorization.findOrganization.mockResolvedValue(platformOrganization)
-    const deps = { authorization } as unknown as Deps
+    const deps = { ids: createIdentifierGeneratorFake(), authorization } as unknown as Deps
 
     await expect(updateOrganization(deps, platformOrganization.id, { name: 'Platform' })).resolves.toBe(
       platformOrganization,
@@ -267,7 +268,7 @@ describe('authorization CRUD and assignment policy', () => {
 
   it('surfaces missing and cross-organization records', async () => {
     const authorization = repository()
-    const deps = { authorization } as unknown as Deps
+    const deps = { ids: createIdentifierGeneratorFake(), authorization } as unknown as Deps
     await expect(getOrganization(deps, 'missing')).rejects.toMatchObject({ status: 404 })
     authorization.findOrganization.mockResolvedValue(organization)
     await expect(updateMember(deps, organization.id, 'missing', {})).rejects.toMatchObject({ status: 404 })
@@ -281,7 +282,7 @@ describe('authorization CRUD and assignment policy', () => {
 
   it('rejects demoting or removing the last Organization Owner', async () => {
     const authorization = repository()
-    const deps = { authorization } as unknown as Deps
+    const deps = { ids: createIdentifierGeneratorFake(), authorization } as unknown as Deps
     authorization.findMember.mockResolvedValue({ ...member, roles: ['owner'] })
     authorization.countMembersByRole.mockResolvedValue(1)
     authorization.removeMember.mockResolvedValue(false)
@@ -299,7 +300,7 @@ describe('authorization CRUD and assignment policy', () => {
 
   it('allows Owner assignment after the caller has role-assignment permission', async () => {
     const authorization = repository()
-    const deps = { authorization } as unknown as Deps
+    const deps = { ids: createIdentifierGeneratorFake(), authorization } as unknown as Deps
     authorization.findOrganization.mockResolvedValue(organization)
     authorization.findMember.mockResolvedValue(member)
     authorization.replaceMemberRoles.mockResolvedValue(true)
@@ -332,7 +333,7 @@ describe('authorization CRUD and assignment policy', () => {
         updatedAt: timestamp,
       },
     ])
-    const deps = { authorization } as unknown as Deps
+    const deps = { ids: createIdentifierGeneratorFake(), authorization } as unknown as Deps
 
     await expect(
       replaceMemberRoles(deps, organization.id, member.id, { roles: ['admin', 'operator'] }, adminActor),
@@ -371,7 +372,7 @@ describe('authorization CRUD and assignment policy', () => {
       createdAt: timestamp,
       updatedAt: timestamp,
     }))
-    const deps = { authorization } as unknown as Deps
+    const deps = { ids: createIdentifierGeneratorFake(), authorization } as unknown as Deps
 
     await expect(getRole(deps, organization.id, 'owner')).resolves.toMatchObject({ predefined: true })
     await expect(updateRole(deps, organization.id, 'owner', { displayName: 'Changed' }, actor)).rejects.toMatchObject({
@@ -425,7 +426,7 @@ describe('authorization CRUD and assignment policy', () => {
     authorization.findOrganizationRole.mockResolvedValue(dynamicRole)
     authorization.updateOrganizationRole.mockResolvedValue(true)
     authorization.deleteOrganizationRole.mockResolvedValue('deleted')
-    const deps = { authorization } as unknown as Deps
+    const deps = { ids: createIdentifierGeneratorFake(), authorization } as unknown as Deps
 
     await expect(listRoles(deps, organization.id, { limit: 2, offset: 0 })).resolves.toMatchObject({
       roles: [{ key: 'admin' }, { key: 'developer' }],
@@ -493,6 +494,7 @@ describe('authorization CRUD and assignment policy', () => {
     })
     authorization.updateOrganizationRole.mockResolvedValue(true)
     const deps = {
+      ids: createIdentifierGeneratorFake(),
       authorization,
       externalHttp: { fetch: vi.fn(resourceScopeOpenApiFetch(resource.resourceUrl, ['projects:read'])) },
     } as unknown as Deps
@@ -555,7 +557,7 @@ describe('authorization CRUD and assignment policy', () => {
     authorization.findResourceByResourceUrl.mockResolvedValue(resource)
     authorization.findOrganization.mockResolvedValue(organization)
     authorization.findMemberByOrganizationUser.mockResolvedValue({ ...member, roles: ['member', 'operator'] })
-    const deps = { authorization } as unknown as Deps
+    const deps = { ids: createIdentifierGeneratorFake(), authorization } as unknown as Deps
     const selection = {
       authorization: true,
       roles: true,
@@ -620,7 +622,7 @@ describe('authorization CRUD and assignment policy', () => {
     authorization.listOrganizationRoleScopes.mockResolvedValue(
       new Map([['custom-deployer', [{ resourceId: 'res_realmroot', scope: 'applications:write' }]]]),
     )
-    const deps = { authorization } as unknown as Deps
+    const deps = { ids: createIdentifierGeneratorFake(), authorization } as unknown as Deps
 
     await expect(organizationUserHasScope(deps, organization.id, member.userId, 'organizations:read')).resolves.toBe(
       true,
@@ -673,6 +675,7 @@ describe('authorization CRUD and assignment policy', () => {
     const openApiFetch = resourceOpenApiFetch(resource.resourceUrl)
     let brokeredNative = false
     const deps = {
+      ids: createIdentifierGeneratorFake(),
       authorization,
       connectors,
       externalHttp: {
@@ -1202,7 +1205,7 @@ describe('authorization CRUD and assignment policy', () => {
     authorization.findResource.mockResolvedValue(registered)
     authorization.updateResource.mockResolvedValue(true)
     authorization.replaceResourceDiscovery.mockResolvedValue(true)
-    const deps = { authorization } as unknown as Deps
+    const deps = { ids: createIdentifierGeneratorFake(), authorization } as unknown as Deps
     await expect(
       updateResource(deps, resource.id, { scopeGrantModes: [{ scope: 'projects:read', grantMode: 'automatic' }] }),
     ).resolves.toBe(registered)
@@ -1249,7 +1252,7 @@ describe('authorization CRUD and assignment policy', () => {
     authorization.findOrganization.mockResolvedValue(organization)
     authorization.listOrganizationRoles.mockResolvedValue([dynamicRole])
     authorization.listOrganizationRoleScopes.mockResolvedValue(new Map())
-    const deps = { authorization } as unknown as Deps
+    const deps = { ids: createIdentifierGeneratorFake(), authorization } as unknown as Deps
     await expect(listRoles(deps, organization.id, { limit: 20, offset: 0 })).resolves.toMatchObject({
       roles: expect.arrayContaining([expect.objectContaining({ key: 'operator', scopes: [] })]),
     })
@@ -1328,6 +1331,7 @@ describe('authorization CRUD and assignment policy', () => {
     authorization.findResource.mockResolvedValue(resource)
     authorization.findOrganization.mockResolvedValue({ ...organization, disabled: true })
     const deps = {
+      ids: createIdentifierGeneratorFake(),
       authorization,
       externalHttp: { fetch: vi.fn(resourceOpenApiFetch(resource.resourceUrl)) },
     } as unknown as Deps
@@ -1421,7 +1425,7 @@ describe('authorization CRUD and assignment policy', () => {
     authorization.findResource.mockResolvedValue(registered)
     authorization.updateResource.mockResolvedValue(true)
     authorization.replaceResourceDiscovery.mockResolvedValue(true)
-    const deps = { authorization } as unknown as Deps
+    const deps = { ids: createIdentifierGeneratorFake(), authorization } as unknown as Deps
 
     await expect(
       updateResource(deps, resource.id, {

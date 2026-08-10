@@ -1,6 +1,7 @@
 import { badRequest, conflict, notFound } from '@server/domain/errors'
 import type { Deps } from '@server/usecases/deps'
 import type { WebhookDeliveryAttemptRecord, WebhookEndpointRecord, WebhookRequestRecord } from '@server/usecases/ports'
+import { uuidV7Pattern } from '@shared/api/identifiers'
 import { type PaginationInput, paginationMetadata } from '@shared/api/pagination'
 import type {
   CreateWebhookEndpointRequest,
@@ -38,7 +39,7 @@ export async function createWebhookEndpoint(
 ): Promise<WebhookEndpointSecretResponse> {
   assertEvents(input.events)
   const signingSecret = createSigningSecret()
-  const id = `wh_${crypto.randomUUID().replaceAll('-', '')}`
+  const id = deps.ids.generate()
   const now = new Date()
   const endpoint = await deps.webhooks.createEndpoint({
     id,
@@ -136,7 +137,7 @@ export async function publishWebhookEvent(
 
   const now = new Date()
   const envelope: WebhookEventEnvelope = {
-    id: `evt_${crypto.randomUUID().replaceAll('-', '')}`,
+    id: deps.ids.generate(),
     type: event,
     createdAt: now.toISOString(),
     data,
@@ -145,7 +146,7 @@ export async function publishWebhookEvent(
   const requests = await Promise.all(
     endpoints.map((endpoint) =>
       deps.webhooks.createRequest({
-        id: `whr_${crypto.randomUUID().replaceAll('-', '')}`,
+        id: deps.ids.generate(),
         endpointId: endpoint.id,
         event,
         status: 'pending',
@@ -181,7 +182,7 @@ async function deliverWebhookRequestWithAttempt(
 
   const attemptedAt = new Date()
   const reservation = await deps.webhooks.reserveAttempt({
-    id: `wha_${crypto.randomUUID().replaceAll('-', '')}`,
+    id: deps.ids.generate(),
     requestId: id,
     idempotencyKey,
     previousAttemptCount: current.attemptCount,
@@ -351,7 +352,7 @@ function webhookSecretContext(endpointId: string) {
 
 function readEventId(body: string) {
   const event = JSON.parse(body) as { id?: unknown }
-  if (typeof event.id !== 'string' || !event.id.startsWith('evt_')) {
+  if (typeof event.id !== 'string' || (!event.id.startsWith('evt_') && !uuidV7Pattern.test(event.id))) {
     throw badRequest('Webhook request contains an invalid event payload.')
   }
   return event.id

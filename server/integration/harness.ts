@@ -85,6 +85,7 @@ export async function createHarness(options: { validAudiences?: string[] } = {})
   const emailSender = deps.email
   const auth = createAuth(
     db,
+    deps.ids,
     config.authSecret,
     config.baseURL,
     config.trustedOrigins,

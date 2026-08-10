@@ -101,7 +101,7 @@ export async function decideAgentApproval(
       userId,
       now: new Date(),
     },
-    agentGovernanceAuditRecord({
+    agentGovernanceAuditRecord(deps.ids.generate(), {
       action: 'agent.capability_decided',
       result: input.action === 'approve' ? 'allowed' : 'denied',
       tenant,

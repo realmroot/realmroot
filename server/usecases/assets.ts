@@ -29,7 +29,7 @@ export async function uploadAsset(
 ): Promise<UploadedAssetResponse> {
   const { bytes, contentType } = await validate(input.purpose, input.file)
   const checksumSha256 = await sha256Hex(bytes)
-  const assetId = createId('asset')
+  const assetId = deps.ids.generate()
   const storageKey = `${input.purpose}/${checksumSha256.slice(0, 2)}/${assetId}-${safeFileName(input.file.name)}`
   const publicUrl = `/api/assets/${assetId}`
 
@@ -116,10 +116,6 @@ function toResponse(asset: UploadedAssetRecord): UploadedAssetResponse['asset'] 
 async function sha256Hex(bytes: ArrayBuffer) {
   const digest = await crypto.subtle.digest('SHA-256', bytes)
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('')
-}
-
-function createId(prefix: string) {
-  return `${prefix}_${crypto.randomUUID().replaceAll('-', '')}`
 }
 
 function safeFileName(name: string) {

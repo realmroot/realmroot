@@ -74,7 +74,7 @@ export async function createConnector(deps: Deps, input: CreateConnectorRequest,
   const oidc = input.providerType === 'generic_oauth' ? await prepareOidcConnector(deps, input, callbackOrigin) : null
   const now = new Date()
   const candidate = {
-    id: `idp_${crypto.randomUUID().replaceAll('-', '')}`,
+    id: deps.ids.generate(),
     slug: input.slug ?? input.providerId,
     providerType: input.providerType,
     providerId: input.providerId,

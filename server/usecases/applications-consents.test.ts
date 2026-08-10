@@ -9,6 +9,7 @@ import {
   updateApplication,
 } from '@server/usecases/applications'
 import type { Deps } from '@server/usecases/deps'
+import { createIdentifierGeneratorFake } from '@server/usecases/identifier-generator.fake'
 import type {
   ApplicationAggregate,
   ApplicationRepository,
@@ -43,7 +44,7 @@ function createApplication(
 describe('service.test 3', () => {
   it('keeps consent bound to the authenticated account after account switching [spec: hosted-auth/oauth-consent-account-switch]', async () => {
     const repository = new InMemoryApplicationRepository()
-    const deps = { applications: repository } as unknown as Deps
+    const deps = { ids: createIdentifierGeneratorFake(), applications: repository } as unknown as Deps
     const issuer = 'https://auth.example.com'
     const application = await createApplication(
       deps,
@@ -79,7 +80,7 @@ describe('service.test 3', () => {
 
   it('revokes consent for the owning user and rejects missing consent', async () => {
     const repository = new InMemoryApplicationRepository()
-    const deps = { applications: repository } as unknown as Deps
+    const deps = { ids: createIdentifierGeneratorFake(), applications: repository } as unknown as Deps
     const issuer = 'https://auth.example.com'
     const created = await createApplication(
       deps,
@@ -106,7 +107,7 @@ describe('service.test 3', () => {
 
   it('lists and revokes active consent from application management [spec: admin-console/admin-application-detail]', async () => {
     const repository = new InMemoryApplicationRepository()
-    const deps = { applications: repository } as unknown as Deps
+    const deps = { ids: createIdentifierGeneratorFake(), applications: repository } as unknown as Deps
     const created = await createApplication(
       deps,
       'https://auth.example.com',
@@ -172,7 +173,7 @@ describe('service.test 3', () => {
       findAuthorization: async (id: string) => (id === authorization.id ? authorization : null),
       revokeAuthorization: async () => true,
     }
-    const deps = { applications } as unknown as Deps
+    const deps = { ids: createIdentifierGeneratorFake(), applications } as unknown as Deps
 
     await expect(listApplicationAuthorizations(deps, { limit: 20, offset: 0 })).resolves.toMatchObject({
       authorizations: [
@@ -188,7 +189,7 @@ describe('service.test 3', () => {
 
   it('handles OAuth consent defaults and rejects disabled or missing clients', async () => {
     const repository = new InMemoryApplicationRepository()
-    const deps = { applications: repository } as unknown as Deps
+    const deps = { ids: createIdentifierGeneratorFake(), applications: repository } as unknown as Deps
     const issuer = 'https://auth.example.com'
     const created = await createApplication(
       deps,
@@ -249,6 +250,7 @@ describe('service.test 3', () => {
   it('[spec: hosted-auth/application-login-without-resource-access] allows every authenticated user to authorize the application', async () => {
     const repository = new InMemoryApplicationRepository()
     const deps = {
+      ids: createIdentifierGeneratorFake(),
       applications: repository,
       authorization: {
         findOrganization: async (id: string) => ({ id, disabled: false }),
@@ -296,7 +298,7 @@ describe('service.test 3', () => {
       findMemberByOrganizationUser: async (_organizationId: string, userId: string) =>
         userId === 'member-1' ? { id: 'membership-1' } : null,
     }
-    const deps = { applications: repository, authorization } as unknown as Deps
+    const deps = { ids: createIdentifierGeneratorFake(), applications: repository, authorization } as unknown as Deps
     const created = await createApplication(
       deps,
       'https://auth.example.com',

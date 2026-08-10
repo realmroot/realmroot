@@ -1,10 +1,4 @@
-import {
-  createId,
-  dedupe,
-  isAuthorizationClaim,
-  selectTokenClaims,
-  toTokenClaims,
-} from '@server/usecases/authorization-utils'
+import { dedupe, isAuthorizationClaim, selectTokenClaims, toTokenClaims } from '@server/usecases/authorization-utils'
 import type { ApiResourceResponse, OrganizationResponse } from '@shared/api/authorization'
 import { describe, expect, it } from 'vitest'
 
@@ -40,8 +34,7 @@ const organization: OrganizationResponse = {
 const roleAuthorization = { roles: ['reader'], scopes: ['projects:read'] }
 
 describe('authorization claim helpers', () => {
-  it('creates entity identifiers and deduplicates claim values', () => {
-    expect(createId('resource')).toMatch(/^resource_[a-f0-9]{32}$/)
+  it('deduplicates claim values', () => {
     expect(dedupe(['reader', 'reader', 'writer'])).toEqual(['reader', 'writer'])
   })
 

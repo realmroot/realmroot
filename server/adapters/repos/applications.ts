@@ -1,3 +1,4 @@
+import type { IdentifierGenerator } from '@server/usecases/identifier-generator'
 import type { ApplicationRepository } from '@server/usecases/ports'
 import { and, count, desc, eq, gt, inArray, isNotNull, isNull, lte, or, sql } from 'drizzle-orm'
 import type { BatchItem } from 'drizzle-orm/batch'
@@ -29,14 +30,14 @@ const _customDataMetadataKey = 'customData'
 const _iconUrlMetadataKey = 'iconUrl'
 const _oidcClaimsMetadataKey = 'oidcClaims'
 
-export function createDrizzleApplicationRepository(db: Database): ApplicationRepository {
+export function createDrizzleApplicationRepository(db: Database, ids: IdentifierGenerator): ApplicationRepository {
   return {
     async create(input) {
       const now = new Date()
       const statements: [BatchItem<'sqlite'>, ...BatchItem<'sqlite'>[]] = [
         db
           .insert(oauthClient)
-          .values(toOAuthClientInsert(input.application, input.clientSecret?.secretHash ?? null, now)),
+          .values(toOAuthClientInsert(input.application, input.clientSecret?.secretHash ?? null, now, ids.generate())),
         db.insert(application).values(toApplicationInsert(input.application, now)),
         db.insert(applicationClientMetadata).values({
           applicationId: input.application.id,
@@ -412,7 +413,7 @@ export function createDrizzleApplicationRepository(db: Database): ApplicationRep
           )
           .limit(1),
       ])
-      const id = existingApplicationConsent[0]?.id ?? `consent_${crypto.randomUUID().replaceAll('-', '')}`
+      const id = existingApplicationConsent[0]?.id ?? ids.generate()
       const applicationStatement = existingApplicationConsent[0]
         ? db
             .update(applicationConsent)
@@ -432,7 +433,7 @@ export function createDrizzleApplicationRepository(db: Database): ApplicationRep
             .set({ scopes: serializeList(input.scopes), updatedAt: now })
             .where(eq(oauthConsent.id, existingOAuthConsent[0].id))
         : db.insert(oauthConsent).values({
-            id: `oauthconsent_${crypto.randomUUID().replaceAll('-', '')}`,
+            id: ids.generate(),
             clientId: input.clientId,
             userId: input.userId,
             scopes: serializeList(input.scopes),

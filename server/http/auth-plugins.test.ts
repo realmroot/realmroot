@@ -4,6 +4,7 @@ import type { Database } from '@server/db/client'
 import { createApp } from '@server/http/app'
 import * as authorizationUsecase from '@server/usecases/authorization'
 import type { Deps } from '@server/usecases/deps'
+import { createIdentifierGeneratorFake } from '@server/usecases/identifier-generator.fake'
 import type { ManagementSignInSettingsResponse } from '@shared/api/management'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createTestDeps } from './test-deps'
@@ -16,6 +17,7 @@ describe('auth.test 2', () => {
   it('publishes Agent identity enrollment without legacy capability execution [spec: admin-console/agent-discovery]', async () => {
     const auth = createAuth(
       {} as Database,
+      createIdentifierGeneratorFake(),
       '01234567890123456789012345678901',
       'https://auth.example.com',
       ['https://auth.example.com'],
@@ -57,6 +59,7 @@ describe('auth.test 2', () => {
   it('configures organization access control with teams disabled', () => {
     const auth = createAuth(
       {} as Database,
+      createIdentifierGeneratorFake(),
       '01234567890123456789012345678901',
       'https://auth.example.com',
       ['https://auth.example.com'],
@@ -76,6 +79,7 @@ describe('auth.test 2', () => {
   it('keeps Realmroot resource capabilities out of OAuth client scopes and userinfo', async () => {
     const auth = createAuth(
       {} as Database,
+      createIdentifierGeneratorFake(),
       '01234567890123456789012345678901',
       'https://auth.example.com',
       ['https://auth.example.com'],

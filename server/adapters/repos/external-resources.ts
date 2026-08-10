@@ -1,3 +1,4 @@
+import type { IdentifierGenerator } from '@server/usecases/identifier-generator'
 import type {
   AgentAccessRequestRecord,
   AgentAuditEventRecord,
@@ -26,7 +27,7 @@ import {
 } from '../../db/schema'
 import { scopeEntitlementStatusCondition } from './resource-scope-entitlement-filters'
 
-export function createExternalResourceRepository(db: Database): ExternalResourceRepository {
+export function createExternalResourceRepository(db: Database, ids: IdentifierGenerator): ExternalResourceRepository {
   async function upsertProviderConnection(input: ProviderConnectionRecord) {
     const inserted = await db.insert(providerConnection).values(input).onConflictDoNothing().returning()
     if (inserted[0]) return inserted[0]
@@ -291,7 +292,7 @@ export function createExternalResourceRepository(db: Database): ExternalResource
         .limit(1)
       if (!connector) return null
       return upsertProviderConnection({
-        id: `provconn_${crypto.randomUUID().replaceAll('-', '')}`,
+        id: ids.generate(),
         connectorId: connector.id,
         ownerUserId: input.userId,
         ownerOrganizationId: null,

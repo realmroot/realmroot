@@ -6,6 +6,7 @@ import {
   updateApplication,
 } from '@server/usecases/applications'
 import type { Deps } from '@server/usecases/deps'
+import { createIdentifierGeneratorFake } from '@server/usecases/identifier-generator.fake'
 import type {
   ApplicationAggregate,
   ApplicationRepository,
@@ -40,7 +41,7 @@ function createApplication(
 describe('service.test 2', () => {
   it('paginates application collection responses', async () => {
     const repository = new InMemoryApplicationRepository()
-    const deps = { applications: repository } as unknown as Deps
+    const deps = { ids: createIdentifierGeneratorFake(), applications: repository } as unknown as Deps
     const issuer = 'https://auth.example.com'
 
     const first = await createApplication(
@@ -85,7 +86,10 @@ describe('service.test 2', () => {
   })
 
   it('validates redirect URIs and client grant settings at the API boundary', async () => {
-    const deps = { applications: new InMemoryApplicationRepository() } as unknown as Deps
+    const deps = {
+      ids: createIdentifierGeneratorFake(),
+      applications: new InMemoryApplicationRepository(),
+    } as unknown as Deps
     const issuer = 'https://auth.example.com'
 
     await expect(
@@ -177,7 +181,7 @@ describe('service.test 2', () => {
 
   it('validates application post sign-out redirects and CORS origins at the API boundary', async () => {
     const repository = new InMemoryApplicationRepository()
-    const deps = { applications: repository } as unknown as Deps
+    const deps = { ids: createIdentifierGeneratorFake(), applications: repository } as unknown as Deps
     const issuer = 'https://auth.example.com'
     const created = await createApplication(
       deps,
@@ -246,7 +250,7 @@ describe('service.test 2', () => {
 
   it('loads consent data for an authorization request and records consent', async () => {
     const repository = new InMemoryApplicationRepository()
-    const deps = { applications: repository } as unknown as Deps
+    const deps = { ids: createIdentifierGeneratorFake(), applications: repository } as unknown as Deps
     const issuer = 'https://auth.example.com'
     const created = await createApplication(
       deps,

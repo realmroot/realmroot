@@ -1,5 +1,6 @@
 import { platformOrganization } from '@server/domain/platform-organization'
 import type { Deps } from '@server/usecases/deps'
+import { createIdentifierGeneratorFake } from '@server/usecases/identifier-generator.fake'
 import type { ProviderConnectionRecord } from '@server/usecases/ports'
 import type { SecurityPolicy } from '@shared/api/security'
 import { vi } from 'vitest'
@@ -50,6 +51,7 @@ export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> =
     roles: ['owner'],
   }
   const base = {
+    ids: createIdentifierGeneratorFake(),
     agents: {
       listHosts: vi.fn().mockResolvedValue(emptyPage()),
       listAgents: vi.fn().mockResolvedValue(emptyPage()),

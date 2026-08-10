@@ -8,6 +8,7 @@ import {
   resourceServerAuthorizationDetailsResponseSchema,
 } from '@shared/api/agent-api'
 import { providerConnectionEventIdSchema, providerConnectionEventSchema } from '@shared/api/external-resources'
+import { agentSubjectSchema } from '@shared/api/identifiers'
 import { paginationQuerySchema } from '@shared/api/pagination'
 import {
   publicAgentResponseSchema,
@@ -121,7 +122,7 @@ const managementRoutes: ManagementRouteConfig[] = [
     summary: 'Get a public Agent representation',
     security: [],
     request: {
-      params: z.object({ subject: z.string().regex(/^agt_[a-zA-Z0-9_-]+$/) }),
+      params: z.object({ subject: agentSubjectSchema }),
       query: publicProfileQuerySchema,
       headers: publicProfileRequestHeaders,
     },

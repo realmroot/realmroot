@@ -13,6 +13,7 @@ import { platformOrganization } from '@server/domain/platform-organization'
 import type { AuthConnectorConfig } from '@server/usecases/connectors'
 import type { Deps } from '@server/usecases/deps'
 import { mayCreateOrganization } from '@server/usecases/developer-access'
+import type { IdentifierGenerator } from '@server/usecases/identifier-generator'
 import { organizationUserHasScope } from '@server/usecases/organization-membership-scopes'
 import type { ApplicationRepository } from '@server/usecases/ports'
 import { APIError, betterAuth } from 'better-auth'
@@ -57,6 +58,7 @@ const oauthScopes = ['openid', 'profile', 'email', 'offline_access']
 
 export function createAuth(
   db: Database,
+  ids: IdentifierGenerator,
   secret: string,
   baseURL: string,
   trustedOrigins: string[],
@@ -76,15 +78,16 @@ export function createAuth(
     publishWebhookEvent?: (event: WebhookEvent, data: Record<string, unknown>) => Promise<void>
   } = {},
 ) {
-  const applications = createDrizzleApplicationRepository(db)
+  const applications = createDrizzleApplicationRepository(db, ids)
   const configz = createDrizzleConfigzRepository(db)
-  const externalResources = createExternalResourceRepository(db)
+  const externalResources = createExternalResourceRepository(db, ids)
   // The better-auth boundary builds its own repos; only the slices the token-claim
   // and agent-capability usecases read are populated here.
   const deps = {
-    authorization: createDrizzleAuthorizationRepository(db),
+    ids,
+    authorization: createDrizzleAuthorizationRepository(db, ids),
     applications,
-    users: createUserRepository(db),
+    users: createUserRepository(db, ids),
     agents: createDrizzleAgentRepository(db),
     agentTokens: createDrizzleAgentTokenRepository(db),
     externalHttp: options.externalHttp,
@@ -93,6 +96,11 @@ export function createAuth(
   return betterAuth({
     appName: 'Realmroot',
     database: drizzleAdapter(db, { provider: 'sqlite', schema }),
+    advanced: {
+      database: {
+        generateId: () => ids.generate(),
+      },
+    },
     secret,
     baseURL,
     experimental: {

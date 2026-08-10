@@ -8,6 +8,7 @@ import type {
 import type { Database } from '@server/db/client'
 import * as authorizationUsecase from '@server/usecases/authorization'
 import type { Deps } from '@server/usecases/deps'
+import { createIdentifierGeneratorFake } from '@server/usecases/identifier-generator.fake'
 import type { ApplicationAggregate } from '@server/usecases/ports'
 import { deviceCodeGrantType } from '@shared/api/applications'
 import type { ManagementSignInSettingsResponse } from '@shared/api/management'
@@ -63,6 +64,7 @@ describe('auth.test 3', () => {
   it('configures account profile fields and email changes', () => {
     const auth = createAuth(
       {} as Database,
+      createIdentifierGeneratorFake(),
       '01234567890123456789012345678901',
       'https://auth.example.com',
       ['https://auth.example.com'],
@@ -89,6 +91,7 @@ describe('auth.test 3', () => {
   it('configures username plugin policy', () => {
     const auth = createAuth(
       {} as Database,
+      createIdentifierGeneratorFake(),
       '01234567890123456789012345678901',
       'https://auth.example.com',
       ['https://auth.example.com'],
@@ -107,6 +110,7 @@ describe('auth.test 3', () => {
   it('installs device authorization with the hosted verification page', () => {
     const auth = createAuth(
       {} as Database,
+      createIdentifierGeneratorFake(),
       '01234567890123456789012345678901',
       'https://auth.example.com',
       ['https://auth.example.com'],
@@ -166,6 +170,7 @@ describe('auth.test 3', () => {
   it('configures deployment security policy for sessions and passkeys', () => {
     const auth = createAuth(
       {} as Database,
+      createIdentifierGeneratorFake(),
       '01234567890123456789012345678901',
       'https://auth.example.com',
       ['https://auth.example.com'],
@@ -212,6 +217,7 @@ describe('auth.test 3', () => {
   it('disables TOTP when authenticator app MFA is disabled by deployment policy', () => {
     const auth = createAuth(
       {} as Database,
+      createIdentifierGeneratorFake(),
       '01234567890123456789012345678901',
       'https://auth.example.com',
       ['https://auth.example.com'],
@@ -234,6 +240,7 @@ describe('auth.test 3', () => {
   it('only exposes two-factor email OTP when the MFA email OTP method is explicitly enabled', () => {
     const defaultAuth = createAuth(
       {} as Database,
+      createIdentifierGeneratorFake(),
       '01234567890123456789012345678901',
       'https://auth.example.com',
       ['https://auth.example.com'],
@@ -242,6 +249,7 @@ describe('auth.test 3', () => {
     )
     const emailOtpAuth = createAuth(
       {} as Database,
+      createIdentifierGeneratorFake(),
       '01234567890123456789012345678901',
       'https://auth.example.com',
       ['https://auth.example.com'],
@@ -252,6 +260,7 @@ describe('auth.test 3', () => {
     )
     const totpOnlyAuth = createAuth(
       {} as Database,
+      createIdentifierGeneratorFake(),
       '01234567890123456789012345678901',
       'https://auth.example.com',
       ['https://auth.example.com'],

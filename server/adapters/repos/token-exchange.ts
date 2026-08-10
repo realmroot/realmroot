@@ -1,3 +1,4 @@
+import type { IdentifierGenerator } from '@server/usecases/identifier-generator'
 import type {
   CreateFederatedCredentialInput,
   FederatedCredentialRecord,
@@ -36,7 +37,7 @@ function toRecord(row: CredentialRow): FederatedCredentialRecord {
   }
 }
 
-export function createTokenExchangeRepository(db: Database): TokenExchangeRepository {
+export function createTokenExchangeRepository(db: Database, ids: IdentifierGenerator): TokenExchangeRepository {
   async function getCredential(applicationId: string, id: string): Promise<FederatedCredentialRecord | null> {
     const rows = await db
       .select()
@@ -113,7 +114,7 @@ export function createTokenExchangeRepository(db: Database): TokenExchangeReposi
     async createFederatedCredential(applicationId: string, input: CreateFederatedCredentialInput) {
       const now = new Date()
       const row: CredentialRow = {
-        id: `fcr_${crypto.randomUUID().replaceAll('-', '')}`,
+        id: ids.generate(),
         applicationId,
         name: input.name,
         issuer: input.issuer,

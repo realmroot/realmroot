@@ -1,5 +1,4 @@
 import type { AuthorizationTenant } from '@server/domain/authorization-context'
-import { createId } from '@server/usecases/applications-utils'
 import type { Deps } from '@server/usecases/deps'
 
 type AgentGovernanceAuditInput = {
@@ -17,12 +16,12 @@ type AgentGovernanceAuditInput = {
 }
 
 export function appendAgentGovernanceAudit(deps: Deps, input: AgentGovernanceAuditInput) {
-  return deps.agentAudit.append(agentGovernanceAuditRecord(input))
+  return deps.agentAudit.append(agentGovernanceAuditRecord(deps.ids.generate(), input))
 }
 
-export function agentGovernanceAuditRecord(input: AgentGovernanceAuditInput) {
+export function agentGovernanceAuditRecord(id: string, input: AgentGovernanceAuditInput) {
   return {
-    id: createId('agaudit'),
+    id,
     action: input.action,
     result: input.result,
     realmOwned: false,

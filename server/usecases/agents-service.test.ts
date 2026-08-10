@@ -12,6 +12,7 @@ import {
   revokeAgentHost,
 } from '@server/usecases/agents'
 import type { Deps } from '@server/usecases/deps'
+import { createIdentifierGeneratorFake } from '@server/usecases/identifier-generator.fake'
 import { describe, expect, it, vi } from 'vitest'
 
 describe('AgentService', () => {
@@ -104,6 +105,7 @@ describe('AgentService', () => {
     ])
     const agentAudit = { append: vi.fn() }
     const deps = {
+      ids: createIdentifierGeneratorFake(),
       agents: repository,
       agentIdentities: createAgentIdentityRepositoryMock(),
       agentAudit,
@@ -159,6 +161,7 @@ describe('AgentService', () => {
     ])
     const agentAudit = { append: vi.fn() }
     const deps = {
+      ids: createIdentifierGeneratorFake(),
       agents: repository,
       agentIdentities: createAgentIdentityRepositoryMock(),
       agentAudit,
@@ -194,7 +197,12 @@ describe('AgentService', () => {
     repository.decideApproval.mockResolvedValue('approved')
     const identities = createAgentIdentityRepositoryMock()
     const agentAudit = { append: vi.fn() }
-    const deps = { agents: repository, agentIdentities: identities, agentAudit } as unknown as Deps
+    const deps = {
+      ids: createIdentifierGeneratorFake(),
+      agents: repository,
+      agentIdentities: identities,
+      agentAudit,
+    } as unknown as Deps
 
     identities.findActiveByProtocolAgent.mockResolvedValueOnce({
       identity: {

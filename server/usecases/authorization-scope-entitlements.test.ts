@@ -2,6 +2,7 @@ import type { ResourceScopeEntitlementRecord } from '@server/usecases/ports'
 import { describe, expect, it, vi } from 'vitest'
 import * as subject from './authorization'
 import type { Deps } from './deps'
+import { createIdentifierGeneratorFake } from './identifier-generator.fake'
 
 const now = new Date('2026-08-06T00:00:00.000Z')
 const adminActor = { controllerUserId: 'admin', agent: null }
@@ -65,7 +66,12 @@ function setup() {
       .mockResolvedValue({ id: 'app-1', ownerOrganizationId: 'org-1', allowedGrantTypes: ['client_credentials'] }),
   }
   return {
-    deps: { authorization, applications, users: { getUser: vi.fn() } } as unknown as Deps,
+    deps: {
+      ids: createIdentifierGeneratorFake(),
+      authorization,
+      applications,
+      users: { getUser: vi.fn() },
+    } as unknown as Deps,
     authorization,
     applications,
   }
@@ -84,7 +90,7 @@ describe('direct scope Entitlements', () => {
     expect(result).toMatchObject({ scope: 'read', mode: 'persistent', status: 'active' })
     expect(authorization.createScopeEntitlement).toHaveBeenCalledWith(
       expect.objectContaining({
-        id: expect.stringMatching(/^ent_/),
+        id: expect.stringMatching(/^00000000-0000-7000-8000-/),
         userId: 'user-1',
         applicationId: null,
         scope: 'read',

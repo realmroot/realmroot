@@ -3,6 +3,8 @@
  * concrete adapters to these ports) is a later phase; this is only the shape
  * the eventual container must satisfy.
  */
+
+import type { IdentifierGenerator } from '@server/usecases/identifier-generator'
 import type {
   AgentAuditRepository,
   AgentIdentityRepository,
@@ -28,6 +30,7 @@ import type {
 } from '@server/usecases/ports'
 
 export interface Deps {
+  ids: IdentifierGenerator
   agents: AgentRepository
   agentAudit: AgentAuditRepository
   agentIdentities: AgentIdentityRepository

@@ -3,7 +3,7 @@
     "method": "GET",
     "path": "/public/agents/{subject}",
     "operationId": "getPublicAgent",
-    "semanticHash": "4582f083a3078178cd4a3627b29b574940df7b5943db4a6cfeeacd234d344d5b"
+    "semanticHash": "ba39bcf7bf3281957114bbc9f60f669ee08923b45243951893a5227bd7c706da"
   },
   {
     "method": "GET",

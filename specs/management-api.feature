@@ -7,6 +7,13 @@ Feature: Unified Realmroot resource API
     Given a first admin exists
 
 
+  @entrypoint:restish @journey:management-resource-identifiers
+  Scenario: Newly created resources use standard opaque identifiers
+    When Realmroot creates a persistent resource or event record
+    Then its identifier is a UUID version 7 without a resource-type prefix
+    And existing prefixed identifiers remain valid resource references
+    And credentials, tokens, protocol nonce values, and request trace identifiers retain their dedicated formats
+
   @entrypoint:restish @journey:management-openapi-discovery
   Scenario: The unified API contract is discoverable
     When an API client requests service discovery

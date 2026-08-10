@@ -9,6 +9,7 @@ import {
   updateApplication,
 } from '@server/usecases/applications'
 import type { Deps } from '@server/usecases/deps'
+import { createIdentifierGeneratorFake } from '@server/usecases/identifier-generator.fake'
 import type {
   ApplicationAggregate,
   ApplicationRepository,
@@ -45,7 +46,11 @@ describe('service.test 1', () => {
   it('requires an explicitly selected owner Organization to be active', async () => {
     const repository = new InMemoryApplicationRepository()
     const findOrganization = vi.fn().mockResolvedValue(null)
-    const deps = { applications: repository, authorization: { findOrganization } } as unknown as Deps
+    const deps = {
+      ids: createIdentifierGeneratorFake(),
+      applications: repository,
+      authorization: { findOrganization },
+    } as unknown as Deps
     const input = {
       name: 'Organization App',
       clientType: 'public_spa' as const,
@@ -68,7 +73,7 @@ describe('service.test 1', () => {
   })
   it('creates, lists, updates, inspects, and deletes confidential clients with one-time secrets', async () => {
     const repository = new InMemoryApplicationRepository()
-    const deps = { applications: repository } as unknown as Deps
+    const deps = { ids: createIdentifierGeneratorFake(), applications: repository } as unknown as Deps
     const issuer = 'https://auth.example.com'
 
     const created = await createApplication(
@@ -140,7 +145,7 @@ describe('service.test 1', () => {
 
   it('derives machine credentials and rejects missing redirects for interactive types', async () => {
     const repository = new InMemoryApplicationRepository()
-    const deps = { applications: repository } as unknown as Deps
+    const deps = { ids: createIdentifierGeneratorFake(), applications: repository } as unknown as Deps
 
     await expect(
       createApplication(
@@ -177,7 +182,7 @@ describe('service.test 1', () => {
 
   it('does not issue or rotate secrets for public clients', async () => {
     const repository = new InMemoryApplicationRepository()
-    const deps = { applications: repository } as unknown as Deps
+    const deps = { ids: createIdentifierGeneratorFake(), applications: repository } as unknown as Deps
     const issuer = 'https://auth.example.com'
 
     const created = await createApplication(
@@ -206,7 +211,7 @@ describe('service.test 1', () => {
 
   it('derives the device-code grant only for native Applications', async () => {
     const repository = new InMemoryApplicationRepository()
-    const deps = { applications: repository } as unknown as Deps
+    const deps = { ids: createIdentifierGeneratorFake(), applications: repository } as unknown as Deps
     const issuer = 'https://auth.example.com'
 
     await expect(
@@ -266,7 +271,7 @@ describe('service.test 1', () => {
 
   it('rotates confidential client secrets and revokes previous secret metadata', async () => {
     const repository = new InMemoryApplicationRepository()
-    const deps = { applications: repository } as unknown as Deps
+    const deps = { ids: createIdentifierGeneratorFake(), applications: repository } as unknown as Deps
     const issuer = 'https://auth.example.com'
     const created = await createApplication(
       deps,
@@ -307,7 +312,7 @@ describe('service.test 1', () => {
 
   it('updates metadata without changing OAuth client settings', async () => {
     const repository = new InMemoryApplicationRepository()
-    const deps = { applications: repository } as unknown as Deps
+    const deps = { ids: createIdentifierGeneratorFake(), applications: repository } as unknown as Deps
     const issuer = 'https://auth.example.com/'
     const created = await createApplication(
       deps,
@@ -331,7 +336,7 @@ describe('service.test 1', () => {
 
   it('round-trips OIDC claim configuration on create and update', async () => {
     const repository = new InMemoryApplicationRepository()
-    const deps = { applications: repository } as unknown as Deps
+    const deps = { ids: createIdentifierGeneratorFake(), applications: repository } as unknown as Deps
     const issuer = 'https://auth.example.com'
     const created = await createApplication(
       deps,
@@ -374,7 +379,7 @@ describe('service.test 1', () => {
 
   it('keeps type-derived OAuth settings while updating redirects and metadata', async () => {
     const repository = new InMemoryApplicationRepository()
-    const deps = { applications: repository } as unknown as Deps
+    const deps = { ids: createIdentifierGeneratorFake(), applications: repository } as unknown as Deps
     const issuer = 'https://auth.example.com'
     const created = await createApplication(
       deps,
@@ -418,6 +423,7 @@ describe('service.test 1', () => {
     const findResource = vi.fn().mockResolvedValue(resource)
     const findResources = vi.fn().mockResolvedValue([resource])
     const deps = {
+      ids: createIdentifierGeneratorFake(),
       applications: repository,
       authorization: {
         findOrganization: vi.fn().mockResolvedValue({ id: 'org-1', disabled: false }),
