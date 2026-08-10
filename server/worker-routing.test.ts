@@ -13,6 +13,7 @@ describe('Workers Assets routing', () => {
 
     expect(runWorkerFirst?.[1]).toContain('"/api/*"')
     expect(runWorkerFirst?.[1]).toContain('"/.well-known/*"')
+    expect(runWorkerFirst?.[1]).toContain('"/oauth/account-connection/*"')
   })
 
   it('routes removed admin paths to the Worker 404', () => {
