@@ -265,6 +265,7 @@ Feature: Admin Console
     Then User Permissions are managed only below the target User
     And Application Permissions are managed only below the target Application
     And only Applications configured as machine principals accept Application Permissions
+    And a delegated Agent administrator is recorded as the Permission grantor without impersonating a User
     And each Permission has an independent lifetime, canonical URI, and audit identity
     And Permission lists show only active records unless inactive history is requested
     And each subject exposes a searchable Authorized Resource Server collection derived from active Permissions

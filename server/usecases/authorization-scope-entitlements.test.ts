@@ -4,6 +4,7 @@ import * as subject from './authorization'
 import type { Deps } from './deps'
 
 const now = new Date('2026-08-06T00:00:00.000Z')
+const adminActor = { controllerUserId: 'admin', agent: null }
 const resource = {
   id: 'resource-1',
   enabled: true,
@@ -31,6 +32,7 @@ function entitlement(overrides: Partial<ResourceScopeEntitlementRecord> = {}): R
     scope: 'read',
     mode: 'persistent',
     grantedByUserId: 'admin',
+    grantedByAgentIdentityId: null,
     sourceAccessRequestId: null,
     expiresAt: null,
     endedAt: null,
@@ -76,7 +78,7 @@ describe('direct scope Entitlements', () => {
       deps,
       'user-1',
       { organizationId: 'org-1', resourceServerId: resource.id, scope: 'read', mode: 'persistent' },
-      'admin',
+      adminActor,
     )
 
     expect(result).toMatchObject({ scope: 'read', mode: 'persistent', status: 'active' })
@@ -103,10 +105,36 @@ describe('direct scope Entitlements', () => {
         mode: 'until',
         expiresAt: '2099-01-01T00:00:00.000Z',
       },
-      'admin',
+      adminActor,
     )
 
     expect(result).toMatchObject({ applicationId: 'app-1', scope: 'read', mode: 'until' })
+  })
+
+  it('records a delegated Agent as the Application Permission grantor', async () => {
+    const { deps, authorization } = setup()
+    const agentActor = {
+      controllerUserId: null,
+      agent: {
+        issuer: 'https://agent.example.com',
+        subject: 'agent-subject',
+        identityId: 'agent-admin',
+        hostId: 'host-1',
+      },
+    }
+
+    const result = await subject.createApplicationPermission(
+      deps,
+      'app-1',
+      { resourceServerId: resource.id, scope: 'read', mode: 'persistent' },
+      agentActor,
+    )
+
+    expect(result.grantedBy).toEqual({ type: 'agent', id: 'agent-admin' })
+    expect(authorization.createScopeEntitlement).toHaveBeenCalledWith(
+      expect.objectContaining({ grantedByUserId: null, grantedByAgentIdentityId: 'agent-admin' }),
+      expect.any(Date),
+    )
   })
 
   it('rejects automatic scopes and invalid lifetime combinations', async () => {
@@ -116,7 +144,7 @@ describe('direct scope Entitlements', () => {
         deps,
         'user-1',
         { resourceServerId: resource.id, scope: 'auto', mode: 'persistent' },
-        'admin',
+        adminActor,
       ),
     ).rejects.toThrow('assigned')
     await expect(
@@ -124,7 +152,7 @@ describe('direct scope Entitlements', () => {
         deps,
         'user-1',
         { resourceServerId: resource.id, scope: 'read', mode: 'until' },
-        'admin',
+        adminActor,
       ),
     ).rejects.toThrow('expiry')
     await expect(
@@ -137,7 +165,7 @@ describe('direct scope Entitlements', () => {
           mode: 'persistent',
           expiresAt: '2099-01-01T00:00:00.000Z',
         },
-        'admin',
+        adminActor,
       ),
     ).rejects.toThrow('cannot expire')
     vi.mocked(authorization.findResource).mockResolvedValueOnce({ ...resource, scopeRegistry: null })
@@ -146,7 +174,7 @@ describe('direct scope Entitlements', () => {
         deps,
         'user-1',
         { resourceServerId: resource.id, scope: 'read', mode: 'persistent' },
-        'admin',
+        adminActor,
       ),
     ).rejects.toThrow('assigned')
   })
@@ -192,7 +220,7 @@ describe('direct scope Entitlements', () => {
         deps,
         'user-1',
         { resourceServerId: resource.id, scope: 'read', mode: 'persistent' },
-        'admin',
+        adminActor,
       ),
     ).rejects.toThrow('active')
 
@@ -203,7 +231,7 @@ describe('direct scope Entitlements', () => {
         deps,
         'user-1',
         { resourceServerId: resource.id, scope: 'read', mode: 'persistent' },
-        'admin',
+        adminActor,
       ),
     ).rejects.toThrow('owner Organization member')
     vi.mocked(authorization.findMemberByOrganizationUser).mockResolvedValueOnce({ id: 'member' })
@@ -212,7 +240,7 @@ describe('direct scope Entitlements', () => {
         deps,
         'user-1',
         { resourceServerId: resource.id, scope: 'read', mode: 'persistent' },
-        'admin',
+        adminActor,
       ),
     ).resolves.toMatchObject({ scope: 'read' })
 
@@ -223,7 +251,7 @@ describe('direct scope Entitlements', () => {
         deps,
         'user-1',
         { organizationId: 'org-2', resourceServerId: resource.id, scope: 'read', mode: 'persistent' },
-        'admin',
+        adminActor,
       ),
     ).rejects.toThrow('contain the target user')
     vi.mocked(authorization.findResource).mockResolvedValueOnce({
@@ -237,7 +265,7 @@ describe('direct scope Entitlements', () => {
         deps,
         'user-1',
         { organizationId: 'org-2', resourceServerId: resource.id, scope: 'read', mode: 'persistent' },
-        'admin',
+        adminActor,
       ),
     ).rejects.toThrow('not visible')
     await expect(
@@ -245,7 +273,7 @@ describe('direct scope Entitlements', () => {
         deps,
         'user-1',
         { resourceServerId: resource.id, scope: 'read', mode: 'until', expiresAt: '2020-01-01T00:00:00.000Z' },
-        'admin',
+        adminActor,
       ),
     ).rejects.toThrow('future')
 
@@ -254,7 +282,7 @@ describe('direct scope Entitlements', () => {
         deps,
         'user-1',
         { resourceServerId: resource.id, scope: 'read', mode: 'persistent' },
-        'admin',
+        adminActor,
       ),
     ).resolves.toMatchObject({ organizationId: null })
     vi.mocked(authorization.endScopeEntitlement).mockResolvedValue(false)
@@ -266,7 +294,7 @@ describe('direct scope Entitlements', () => {
         deps,
         'missing',
         { resourceServerId: resource.id, scope: 'read', mode: 'persistent' },
-        'admin',
+        adminActor,
       ),
     ).rejects.toThrow('not found')
     vi.mocked(applications.findById).mockResolvedValueOnce({
@@ -279,7 +307,7 @@ describe('direct scope Entitlements', () => {
         deps,
         'app-1',
         { resourceServerId: resource.id, scope: 'read', mode: 'persistent' },
-        'admin',
+        adminActor,
       ),
     ).rejects.toThrow('machine-principal')
 
@@ -298,7 +326,7 @@ describe('direct scope Entitlements', () => {
         deps,
         'app-1',
         { resourceServerId: resource.id, scope: 'read', mode: 'persistent' },
-        'admin',
+        adminActor,
       ),
     ).rejects.toThrow('not visible')
     await expect(
@@ -306,7 +334,7 @@ describe('direct scope Entitlements', () => {
         deps,
         'app-1',
         { resourceServerId: resource.id, scope: 'read', mode: 'until' },
-        'admin',
+        adminActor,
       ),
     ).rejects.toThrow('expiry')
     await expect(
@@ -314,7 +342,7 @@ describe('direct scope Entitlements', () => {
         deps,
         'app-1',
         { resourceServerId: resource.id, scope: 'read', mode: 'until', expiresAt: '2020-01-01T00:00:00.000Z' },
-        'admin',
+        adminActor,
       ),
     ).rejects.toThrow('future')
 

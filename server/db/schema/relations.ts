@@ -1,4 +1,5 @@
 import { relations } from 'drizzle-orm'
+import { agentIdentity } from './agent-identity-tables'
 import { agent, agentCapabilityGrant, agentHost, approvalRequest, uploadedAsset } from './agent-tables'
 import {
   account,
@@ -202,6 +203,10 @@ export const resourceScopeEntitlementRelations = relations(resourceScopeEntitlem
     fields: [resourceScopeEntitlement.grantedByUserId],
     references: [user.id],
     relationName: 'entitlementGrantor',
+  }),
+  grantedByAgentIdentity: one(agentIdentity, {
+    fields: [resourceScopeEntitlement.grantedByAgentIdentityId],
+    references: [agentIdentity.id],
   }),
 }))
 

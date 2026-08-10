@@ -620,7 +620,8 @@ export interface ResourceScopeEntitlementRecord {
   authorizationContextHash: string
   scope: string
   mode: ResourceScopeEntitlementMode
-  grantedByUserId: string
+  grantedByUserId: string | null
+  grantedByAgentIdentityId: string | null
   sourceAccessRequestId: string | null
   expiresAt: Date | null
   endedAt: Date | null

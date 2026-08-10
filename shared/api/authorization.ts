@@ -266,7 +266,10 @@ export const permissionResponseSchema = z.object({
   scope: nonEmptyString,
   mode: z.enum(['persistent', 'until', 'once']),
   status: z.enum(['active', 'ended']),
-  grantedByUserId: z.string(),
+  grantedBy: z.discriminatedUnion('type', [
+    z.object({ type: z.literal('user'), id: z.string() }),
+    z.object({ type: z.literal('agent'), id: z.string() }),
+  ]),
   sourceAccessRequestId: z.string().nullable(),
   expiresAt: z.iso.datetime().nullable(),
   endedAt: z.iso.datetime().nullable(),

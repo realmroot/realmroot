@@ -12,6 +12,7 @@ const providerConnectionMigrationName = '20260808175918_brokered_provider_connec
 const resourceAccessModeMigrationName = '20260808205043_talented_the_call.sql'
 const providerConnectionEventMigrationName = '20260809023858_swift_patriot.sql'
 const entitlementMigrationName = '20260809163141_bouncy_madame_hydra.sql'
+const permissionGrantActorMigrationName = '20260810145702_permission_grant_actor.sql'
 
 describe('tenant ownership migration', () => {
   it('backfills authority constraints for existing brokered connections', () => {
@@ -69,6 +70,7 @@ describe('tenant ownership migration', () => {
             resourceAccessModeMigrationName,
             providerConnectionEventMigrationName,
             entitlementMigrationName,
+            permissionGrantActorMigrationName,
           ].includes(name),
       )) {
         database.exec(readFileSync(new URL(`../../migrations/${name}`, import.meta.url), 'utf8'))

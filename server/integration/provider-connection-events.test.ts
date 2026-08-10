@@ -559,6 +559,7 @@ describe('Provider Connection Events over real D1', () => {
             scope: 'issues:write',
             mode: 'persistent',
             grantedByUserId: controllerUserId,
+            grantedByAgentIdentityId: null,
             sourceAccessRequestId: 'post-reduction-request',
             expiresAt: null,
             endedAt: null,

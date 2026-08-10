@@ -23,7 +23,7 @@ import {
   permissionResponseSchema,
 } from '@shared/api/authorization'
 import { Hono } from 'hono'
-import { getPrincipal } from '../../middleware/authn'
+import { getMutationActor, type getPrincipal } from '../../middleware/authn'
 import { authorizedOrganizationIds, authorizeOrganization } from '../../middleware/authz'
 import { getDeps } from '../../middleware/deps'
 import { readJson, readQuery } from '../validation'
@@ -51,7 +51,7 @@ export const managementPermissionsRoute = new Hono()
     const input = await readJson(c, createUserPermissionRequestSchema)
     const resource = await getResource(getDeps(c), input.resourceServerId)
     await authorizeOrganization(c, input.organizationId ?? resource.ownerOrganizationId, 'permissions:write')
-    const grant = await createUserPermission(getDeps(c), c.req.param('userId'), input, actorUserId(c))
+    const grant = await createUserPermission(getDeps(c), c.req.param('userId'), input, getMutationActor(c))
     c.header('Location', grant.links.self)
     return c.json(permissionResponseSchema.parse(grant), 201)
   })
@@ -93,7 +93,7 @@ export const managementPermissionsRoute = new Hono()
   .post('/applications/:applicationId/permissions', async (c) => {
     const input = await readJson(c, createApplicationPermissionRequestSchema)
     const application = await requireApplication(c, 'permissions:write')
-    const grant = await createApplicationPermission(getDeps(c), application.id, input, actorUserId(c))
+    const grant = await createApplicationPermission(getDeps(c), application.id, input, getMutationActor(c))
     c.header('Location', grant.links.self)
     return c.json(permissionResponseSchema.parse(grant), 201)
   })
@@ -119,10 +119,4 @@ async function requireApplication(
   if (!application) throw notFound('Application was not found.')
   await authorizeOrganization(c, application.ownerOrganizationId, scope)
   return application
-}
-
-function actorUserId(c: Parameters<typeof getPrincipal>[0]) {
-  const userId = getPrincipal(c).user?.id
-  if (!userId) throw new Error('User principal is required for Permission administration.')
-  return userId
 }

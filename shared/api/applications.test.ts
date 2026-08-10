@@ -131,6 +131,30 @@ describe('application API pagination contracts', () => {
     ).toEqual([deviceCodeGrantType])
   })
 
+  it('requires redirect URIs only for authorization-code clients', () => {
+    const base = {
+      name: 'Machine client',
+      ownerOrganizationId: 'org-1',
+      clientType: 'confidential_web' as const,
+    }
+
+    expect(createApplicationRequestSchema.safeParse({ ...base, redirectUris: [] }).success).toBe(false)
+    expect(
+      createApplicationRequestSchema.safeParse({
+        ...base,
+        redirectUris: [],
+        allowedGrantTypes: ['client_credentials'],
+      }).success,
+    ).toBe(true)
+    expect(
+      createApplicationRequestSchema.safeParse({
+        ...base,
+        redirectUris: ['https://app.example.com/callback'],
+        allowedGrantTypes: ['authorization_code'],
+      }).success,
+    ).toBe(true)
+  })
+
   it('keeps Realmroot resource capabilities out of user-configurable application requests', () => {
     expect(() =>
       createApplicationRequestSchema.parse({

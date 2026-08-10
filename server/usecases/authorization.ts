@@ -562,7 +562,7 @@ export async function createUserPermission(
   deps: Deps,
   userId: string,
   input: CreateUserPermissionRequest,
-  grantedByUserId: string,
+  actor: MutationActor,
 ) {
   await deps.users.getUser(userId)
   const resource = await getResource(deps, input.resourceServerId)
@@ -598,7 +598,7 @@ export async function createUserPermission(
         authorizationContextHash: await authorizationContextHash([]),
         scope: input.scope,
         mode: input.mode,
-        grantedByUserId,
+        ...entitlementGrantor(actor),
         sourceAccessRequestId: null,
         expiresAt,
         endedAt: null,
@@ -654,7 +654,7 @@ export async function createApplicationPermission(
   deps: Deps,
   applicationId: string,
   input: CreateApplicationPermissionRequest,
-  grantedByUserId: string,
+  actor: MutationActor,
 ) {
   const [resource, application] = await Promise.all([
     getResource(deps, input.resourceServerId),
@@ -691,7 +691,7 @@ export async function createApplicationPermission(
         authorizationContextHash: await authorizationContextHash([]),
         scope: input.scope,
         mode: input.mode,
-        grantedByUserId,
+        ...entitlementGrantor(actor),
         sourceAccessRequestId: null,
         expiresAt,
         endedAt: null,
@@ -743,12 +743,16 @@ function validateAssignedScope(resource: ApiResourceResponse, scope: string) {
 
 function toPermissionResponse(entitlement: Awaited<ReturnType<Deps['authorization']['createScopeEntitlement']>>) {
   const lifecycle = resourceScopeEntitlementLifecycle(entitlement)
+  const { grantedByUserId, grantedByAgentIdentityId, ...representation } = entitlement
   const subjectPath = entitlement.userId
     ? `users/${encodeURIComponent(entitlement.userId)}`
     : `applications/${encodeURIComponent(entitlement.applicationId!)}`
   return {
-    ...entitlement,
+    ...representation,
     ...lifecycle,
+    grantedBy: grantedByUserId
+      ? { type: 'user' as const, id: grantedByUserId }
+      : { type: 'agent' as const, id: grantedByAgentIdentityId! },
     expiresAt: entitlement.expiresAt?.toISOString() ?? null,
     endedAt: entitlement.endedAt?.toISOString() ?? null,
     createdAt: entitlement.createdAt.toISOString(),
@@ -758,6 +762,12 @@ function toPermissionResponse(entitlement: Awaited<ReturnType<Deps['authorizatio
       resourceServer: `/api/resource-servers/${encodeURIComponent(entitlement.resourceServerId)}`,
     },
   }
+}
+
+function entitlementGrantor(actor: MutationActor) {
+  if (actor.controllerUserId) return { grantedByUserId: actor.controllerUserId, grantedByAgentIdentityId: null }
+  if (actor.agent) return { grantedByUserId: null, grantedByAgentIdentityId: actor.agent.identityId }
+  throw new Error('Permission administration requires an authenticated mutation actor.')
 }
 
 async function authorizationContextHash(details: unknown[]) {

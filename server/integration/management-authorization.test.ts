@@ -385,6 +385,7 @@ describe('authorization management over real D1', () => {
             authorizationDetails: [],
             mode: 'persistent',
             grantedByUserId: admin.id,
+            grantedByAgentIdentityId: null,
             sourceAccessRequestId: 'atomic-request',
             expiresAt: null,
             endedAt: null,

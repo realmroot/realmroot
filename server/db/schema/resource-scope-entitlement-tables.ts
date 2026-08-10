@@ -25,9 +25,10 @@ export const resourceScopeEntitlement = sqliteTable(
     authorizationContextHash: text('authorization_context_hash').notNull(),
     scope: text('scope').notNull(),
     mode: text('mode', { enum: ['persistent', 'until', 'once'] }).notNull(),
-    grantedByUserId: text('granted_by_user_id')
-      .notNull()
-      .references(() => user.id, { onDelete: 'restrict' }),
+    grantedByUserId: text('granted_by_user_id').references(() => user.id, { onDelete: 'restrict' }),
+    grantedByAgentIdentityId: text('granted_by_agent_identity_id').references(() => agentIdentity.id, {
+      onDelete: 'restrict',
+    }),
     sourceAccessRequestId: text('source_access_request_id').references(() => agentAccessRequest.id, {
       onDelete: 'restrict',
     }),
@@ -48,6 +49,7 @@ export const resourceScopeEntitlement = sqliteTable(
     index('resourceScopeEntitlement_resourceServerId_idx').on(table.resourceServerId),
     index('resourceScopeEntitlement_connectionId_idx').on(table.connectionId),
     index('resourceScopeEntitlement_sourceAccessRequestId_idx').on(table.sourceAccessRequestId),
+    index('resourceScopeEntitlement_grantedByAgentIdentityId_idx').on(table.grantedByAgentIdentityId),
     uniqueIndex('resourceScopeEntitlement_activeUser_unique')
       .on(
         table.userId,
@@ -88,6 +90,10 @@ export const resourceScopeEntitlement = sqliteTable(
     check(
       'resourceScopeEntitlement_end_check',
       sql`(${table.endedAt} is null and ${table.endReason} is null) or (${table.endedAt} is not null and ${table.endReason} is not null)`,
+    ),
+    check(
+      'resourceScopeEntitlement_exactlyOneGrantor_check',
+      sql`((${table.grantedByUserId} is not null) + (${table.grantedByAgentIdentityId} is not null)) = 1`,
     ),
   ],
 )

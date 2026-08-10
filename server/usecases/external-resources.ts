@@ -1558,6 +1558,7 @@ export async function decideAgentAccessRequest(
       scope,
       mode: input.mode!,
       grantedByUserId: actorUserId,
+      grantedByAgentIdentityId: null,
       sourceAccessRequestId: request.id,
       expiresAt,
       endedAt: null,

@@ -1176,7 +1176,10 @@ export function createExternalResourceRepository(db: Database): ExternalResource
         authorizationContextHash: sql<string>`${input.authorizationContextHash}`.as('authorization_context_hash'),
         scope: sql<string>`${input.scope}`.as('scope'),
         mode: sql<string>`${input.mode}`.as('mode'),
-        grantedByUserId: sql<string>`${input.grantedByUserId}`.as('granted_by_user_id'),
+        grantedByUserId: sql<string | null>`${input.grantedByUserId}`.as('granted_by_user_id'),
+        grantedByAgentIdentityId: sql<string | null>`${input.grantedByAgentIdentityId}`.as(
+          'granted_by_agent_identity_id',
+        ),
         sourceAccessRequestId: agentAccessRequest.id,
         expiresAt: sql<Date | null>`${input.expiresAt?.getTime() ?? null}`.as('expires_at'),
         endedAt: sql<Date | null>`null`.as('ended_at'),

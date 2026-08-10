@@ -84,7 +84,7 @@ describe('admin console user detail lifecycle', () => {
         scope: 'projects:admin',
         mode: 'persistent',
         status: 'active',
-        grantedByUserId: 'admin-1',
+        grantedBy: { type: 'user', id: 'admin-1' },
         expiresAt: null,
         createdAt: '2026-01-01T00:00:00.000Z',
         links: {
@@ -219,7 +219,7 @@ describe('admin console user detail lifecycle', () => {
             scope: body.scope,
             mode: body.mode,
             status: 'active',
-            grantedByUserId: 'admin-1',
+            grantedBy: { type: 'user', id: 'admin-1' },
             expiresAt: body.expiresAt,
             createdAt: '2026-01-02T00:00:00.000Z',
             links: {

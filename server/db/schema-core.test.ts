@@ -278,6 +278,7 @@ describe('schema.test 1', () => {
       expect.arrayContaining([
         'resourceScopeEntitlement_resourceServerId_idx',
         'resourceScopeEntitlement_agentIdentityId_idx',
+        'resourceScopeEntitlement_grantedByAgentIdentityId_idx',
         'resourceScopeEntitlement_activeAgent_unique',
         'resourceScopeEntitlement_activeUser_unique',
         'resourceScopeEntitlement_activeApplication_unique',
