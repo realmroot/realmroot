@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { paginationMetadataSchema, paginationQuerySchema } from './pagination'
 
-export const applicationClientTypes = ['public_spa', 'public_native', 'confidential_web'] as const
+export const applicationClientTypes = ['public_spa', 'public_native', 'confidential_web', 'machine'] as const
 export const deviceCodeGrantType = 'urn:ietf:params:oauth:grant-type:device_code'
 export const tokenExchangeGrantType = 'urn:ietf:params:oauth:grant-type:token-exchange'
 export const applicationGrantTypes = [
@@ -150,55 +150,67 @@ export const createApplicationRequestSchema = z
     homepageUrl: optionalUrl,
     iconUrl: optionalUrl,
     clientType: applicationClientTypeSchema,
-    redirectUris: z.array(nonEmptyString),
+    redirectUris: z.array(nonEmptyString).default([]),
     postLogoutRedirectUris: z.array(nonEmptyString).optional(),
     corsOrigins: z.array(nonEmptyString).optional(),
-    allowedGrantTypes: z.array(applicationGrantTypeSchema).min(1).optional(),
-    oidcScopes: z.array(userConfigurableApplicationScopeSchema).min(1).optional(),
     resourceScopes: applicationResourceScopesSchema.optional(),
     firstParty: z.boolean().optional(),
     trusted: z.boolean().optional(),
     ownerOrganizationId: nonEmptyString,
     oidcClaims: applicationOidcClaimsSchema.optional(),
+    deviceLoginEnabled: z.boolean().optional(),
   })
+  .strict()
   .superRefine((input, context) => {
-    if (
-      (input.allowedGrantTypes ?? ['authorization_code']).includes('authorization_code') &&
-      !input.redirectUris.length
-    ) {
+    if (input.deviceLoginEnabled && input.clientType !== 'public_native') {
+      context.addIssue({
+        code: 'custom',
+        path: ['deviceLoginEnabled'],
+        message: 'Device login is available only for public native clients.',
+      })
+    }
+    if (input.clientType !== 'machine' && !input.redirectUris.length) {
       context.addIssue({
         code: 'custom',
         path: ['redirectUris'],
         message: 'Authorization-code clients require at least one redirect URI.',
       })
     }
+    if (input.clientType === 'machine' && input.redirectUris.length) {
+      context.addIssue({
+        code: 'custom',
+        path: ['redirectUris'],
+        message: 'Machine Applications do not use redirect URIs.',
+      })
+    }
   })
 
-export const updateApplicationRequestSchema = z.object({
-  slug: z
-    .string()
-    .trim()
-    .min(3)
-    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
-    .optional(),
-  name: nonEmptyString.optional(),
-  description: z.string().trim().max(1000).nullable().optional(),
-  homepageUrl: optionalUrl.nullable(),
-  iconUrl: optionalUrl.nullable(),
-  redirectUris: z.array(nonEmptyString).optional(),
-  postLogoutRedirectUris: z.array(nonEmptyString).optional(),
-  corsOrigins: z.array(nonEmptyString).optional(),
-  customData: customDataSchema.optional(),
-  allowedGrantTypes: z.array(applicationGrantTypeSchema).min(1).optional(),
-  oidcScopes: z.array(userConfigurableApplicationScopeSchema).min(1).optional(),
-  resourceScopes: applicationResourceScopesSchema.optional(),
-  firstParty: z.boolean().optional(),
-  trusted: z.boolean().optional(),
-  disabled: z.boolean().optional(),
-  disabledReason: z.string().trim().max(500).nullable().optional(),
-  ownerOrganizationId: nonEmptyString.optional(),
-  oidcClaims: applicationOidcClaimsSchema.optional(),
-})
+export const updateApplicationRequestSchema = z
+  .object({
+    slug: z
+      .string()
+      .trim()
+      .min(3)
+      .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
+      .optional(),
+    name: nonEmptyString.optional(),
+    description: z.string().trim().max(1000).nullable().optional(),
+    homepageUrl: optionalUrl.nullable(),
+    iconUrl: optionalUrl.nullable(),
+    redirectUris: z.array(nonEmptyString).optional(),
+    postLogoutRedirectUris: z.array(nonEmptyString).optional(),
+    corsOrigins: z.array(nonEmptyString).optional(),
+    customData: customDataSchema.optional(),
+    resourceScopes: applicationResourceScopesSchema.optional(),
+    firstParty: z.boolean().optional(),
+    trusted: z.boolean().optional(),
+    disabled: z.boolean().optional(),
+    disabledReason: z.string().trim().max(500).nullable().optional(),
+    ownerOrganizationId: nonEmptyString.optional(),
+    oidcClaims: applicationOidcClaimsSchema.optional(),
+    deviceLoginEnabled: z.boolean().optional(),
+  })
+  .strict()
 
 export const replaceRedirectUrisRequestSchema = z.object({
   redirectUris: z.array(nonEmptyString),

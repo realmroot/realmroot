@@ -145,7 +145,7 @@ describe('console authorization dashboard', () => {
     expect(screen.getByRole('button', { name: 'New resource server' })).toBeTruthy()
   })
 
-  it('creates native applications with device login enabled from the applications page [spec: admin-console/admin-create-application]', async () => {
+  it('creates native applications with derived device login from the applications page [spec: admin-console/admin-create-application]', async () => {
     const requests: Array<{ url: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
@@ -191,9 +191,9 @@ describe('console authorization dashboard', () => {
             name: 'Runner CLI',
             slug: 'runner-cli',
             clientType: 'public_native',
+            deviceLoginEnabled: true,
             firstParty: true,
             ownerOrganizationId: 'org-1',
-            allowedGrantTypes: ['authorization_code', 'refresh_token', deviceCodeGrantType],
             redirectUris: ['com.example.runner:/callback'],
           },
         },

@@ -32,6 +32,7 @@ import {
   listValue,
   MutationError,
   SecretDisclosureDialog,
+  SwitchRow,
 } from '@/features/management/dialogs'
 import { OrganizationOwnerField, ownerLabel } from '@/features/management/ownership-controls'
 import { navigateConsoleTab } from '@/features/management/resource-components'
@@ -330,26 +331,28 @@ function ApplicationOAuth({
 }) {
   return (
     <div className="detailSections">
-      <DetailSection
-        action={
-          <Button onClick={onEditRedirects} variant="outline">
-            {tt('Edit')}
-          </Button>
-        }
-        description="Callbacks and browser origins accepted by this client."
-        title="Redirects and origins"
-      >
-        <DetailRow label="Redirect URIs" value={<CodeList values={application.redirectUris} />} />
-        <DetailRow label="Post sign-out redirects" value={<CodeList values={application.postLogoutRedirectUris} />} />
-        <DetailRow label="CORS origins" value={<CodeList values={application.corsOrigins} />} />
-      </DetailSection>
+      {application.clientType === 'machine' ? null : (
+        <DetailSection
+          action={
+            <Button onClick={onEditRedirects} variant="outline">
+              {tt('Edit')}
+            </Button>
+          }
+          description="Callbacks and browser origins accepted by this client."
+          title="Redirects and origins"
+        >
+          <DetailRow label="Redirect URIs" value={<CodeList values={application.redirectUris} />} />
+          <DetailRow label="Post sign-out redirects" value={<CodeList values={application.postLogoutRedirectUris} />} />
+          <DetailRow label="CORS origins" value={<CodeList values={application.corsOrigins} />} />
+        </DetailSection>
+      )}
       <DetailSection
         action={
           <Button onClick={onEditAuthorization} variant="outline">
             {tt('Edit')}
           </Button>
         }
-        description="OAuth grants and client protections used by this application."
+        description="Type-derived OAuth behavior and Resource Server scope allowlists."
         title="Authorization"
       >
         <DetailRow label="Grant types" value={application.allowedGrantTypes.join(' · ')} />
@@ -389,19 +392,21 @@ function ApplicationOAuth({
           }
         />
       </DetailSection>
-      <DetailSection
-        action={
-          <Button onClick={onEditClaims} variant="outline">
-            {tt('Edit')}
-          </Button>
-        }
-        description="Claims returned to this client after authorization."
-        title="Token claims"
-      >
-        <DetailRow label="Access token" value={enabledClaims(application.oidcClaims.accessToken)} />
-        <DetailRow label="ID token" value={enabledClaims(application.oidcClaims.idToken)} />
-        <DetailRow label="UserInfo" value={enabledClaims(application.oidcClaims.userInfo)} />
-      </DetailSection>
+      {application.clientType === 'machine' ? null : (
+        <DetailSection
+          action={
+            <Button onClick={onEditClaims} variant="outline">
+              {tt('Edit')}
+            </Button>
+          }
+          description="Claims returned to this client after authorization."
+          title="Token claims"
+        >
+          <DetailRow label="Access token" value={enabledClaims(application.oidcClaims.accessToken)} />
+          <DetailRow label="ID token" value={enabledClaims(application.oidcClaims.idToken)} />
+          <DetailRow label="UserInfo" value={enabledClaims(application.oidcClaims.userInfo)} />
+        </DetailSection>
+      )}
       <DetailSection description="Standard endpoints used by OIDC clients and SDKs." title="Integration endpoints">
         <DetailRow label="Issuer" value={<code>{application.oidc.issuer}</code>} />
         <DetailRow label="Discovery" value={<code>{application.oidc.issuer}/.well-known/openid-configuration</code>} />
@@ -797,59 +802,25 @@ function AuthorizationEditor({
   onSave: (input: Parameters<typeof updateApplication>[1]) => void
   resources: ApiResourceResponse[]
 }) {
-  const [grants, setGrants] = useState(application.allowedGrantTypes)
-  const [scopes, setScopes] = useState(application.oidcScopes)
   const [resourceScopes, setResourceScopes] = useState(application.resourceScopes)
-  const refreshTokensEnabled = grants.includes('refresh_token')
-  const grantOptions: Array<[ApplicationResponse['allowedGrantTypes'][number], string]> = [
-    ['authorization_code', 'Authorization code'],
-    ['refresh_token', 'Refresh token'],
-    ...(application.clientType === 'confidential_web'
-      ? ([['client_credentials', 'Client credentials']] as Array<
-          [ApplicationResponse['allowedGrantTypes'][number], string]
-        >)
-      : []),
-    ...(application.clientType === 'public_native'
-      ? ([['urn:ietf:params:oauth:grant-type:device_code', 'Device code']] as Array<
-          [ApplicationResponse['allowedGrantTypes'][number], string]
-        >)
-      : []),
-  ]
+  const [deviceLoginEnabled, setDeviceLoginEnabled] = useState(
+    application.allowedGrantTypes.includes(deviceCodeGrantType),
+  )
   return (
     <form
       className="grid gap-4 px-4 py-5"
       id="application-authorization"
       onSubmit={(event) => {
         event.preventDefault()
-        onSave({ allowedGrantTypes: grants, oidcScopes: scopes, resourceScopes })
+        onSave({
+          resourceScopes,
+          ...(application.clientType === 'public_native' ? { deviceLoginEnabled } : {}),
+        })
       }}
     >
-      <CheckGroup
-        label="Grant types"
-        onChange={(nextGrants) => {
-          setGrants(nextGrants)
-          if (nextGrants.includes('refresh_token')) {
-            setScopes((current) => (current.includes('offline_access') ? current : [...current, 'offline_access']))
-          }
-        }}
-        options={grantOptions}
-        values={grants}
-      />
-      <CheckGroup
-        description={
-          refreshTokensEnabled ? 'Offline access is required while the refresh token grant is enabled.' : undefined
-        }
-        disabledValues={refreshTokensEnabled ? ['offline_access'] : []}
-        label="Allowed scopes"
-        onChange={setScopes}
-        options={[
-          ['openid', 'OpenID'],
-          ['profile', 'Profile'],
-          ['email', 'Email'],
-          ['offline_access', 'Offline access'],
-        ]}
-        values={scopes}
-      />
+      {application.clientType === 'public_native' ? (
+        <SwitchRow checked={deviceLoginEnabled} label={tt('Device login')} onCheckedChange={setDeviceLoginEnabled} />
+      ) : null}
       {resources.map((resource) => {
         const values = resourceScopes.find((item) => item.resourceServerId === resource.id)?.scopes ?? []
         const options = (resource.scopeRegistry?.scopes ?? []).map(
@@ -1133,7 +1104,7 @@ function editorTitle(editor: Editor) {
     {
       details: 'Edit application details',
       redirects: 'Edit redirects and origins',
-      authorization: 'Edit OAuth authorization',
+      authorization: 'Edit Resource Server scope allowlists',
       claims: 'Edit token claims',
       ownership: 'Edit ownership',
       consent: 'Edit consent policy',
@@ -1146,7 +1117,7 @@ function editorDescription(editor: Editor) {
     {
       details: 'Change the name and metadata used to recognize this client.',
       redirects: 'Set the exact callbacks and browser origins accepted by Realmroot.',
-      authorization: 'Choose the grants and scopes this client may request.',
+      authorization: 'Choose the Resource Server scopes this application may request.',
       claims: 'Choose the authorization claims emitted to each token destination.',
       ownership: 'Set the Organization responsible for this client.',
       consent: 'Classify the publisher and decide when users must approve access.',

@@ -1,4 +1,3 @@
-import { deviceCodeGrantType } from '@shared/api/applications'
 import type { OrganizationResponse } from '@shared/api/authorization'
 import { DestructiveConfirmation } from '@/components/destructive-confirmation'
 import { CopyButton, listValue, SwitchRow } from './dialogs'
@@ -32,13 +31,6 @@ import {
   type z,
 } from './shared'
 import { parseForm, setValue } from './utils'
-
-export function createApplicationGrantTypes(clientType: string, deviceLoginEnabled: boolean) {
-  if (clientType === 'public_native' && deviceLoginEnabled) {
-    return ['authorization_code', 'refresh_token', deviceCodeGrantType]
-  }
-  return ['authorization_code', 'refresh_token']
-}
 
 export function CreateApplicationDialog({
   createdApplication,
@@ -119,8 +111,17 @@ export function CreateApplicationDialog({
             ) : (
               <SettingRow label={tt('Client secret')} value="No secret for public clients" />
             )}
-            <SettingRow label={tt('Redirect URIs')} value={listValue(createdApplication.redirectUris, ', ')} />
-            <SettingRow label={tt('Next step')} value="Review redirects, origins, and client metadata." />
+            {createdApplication.clientType === 'machine' ? null : (
+              <SettingRow label={tt('Redirect URIs')} value={listValue(createdApplication.redirectUris, ', ')} />
+            )}
+            <SettingRow
+              label={tt('Next step')}
+              value={
+                createdApplication.clientType === 'machine'
+                  ? 'Configure API access and Permissions.'
+                  : 'Review redirects, origins, and client metadata.'
+              }
+            />
           </div>
           <DialogFooter className="m-0">
             <LinkButton
@@ -143,7 +144,7 @@ export function CreateApplicationDialog({
       ) : (
         <FormDialog
           contentClassName="sm:max-w-2xl"
-          description={tt('Register an OIDC client for a browser, server, native, or device application.')}
+          description={tt('Register an OAuth client for a user-facing or machine application.')}
           error={validationError ?? error}
           onClose={onClose}
           onSubmit={(event) => {
@@ -155,8 +156,8 @@ export function CreateApplicationDialog({
                   ...form,
                   firstParty: true,
                   ownerOrganizationId,
-                  allowedGrantTypes: createApplicationGrantTypes(form.clientType, deviceLoginEnabled),
-                  redirectUris: form.redirectUris.split('\n').filter(Boolean),
+                  ...(form.clientType === 'public_native' ? { deviceLoginEnabled } : {}),
+                  redirectUris: form.clientType === 'machine' ? [] : form.redirectUris.split('\n').filter(Boolean),
                 }),
               )
             } catch (submitError) {
@@ -197,13 +198,15 @@ export function CreateApplicationDialog({
               onCheckedChange={setDeviceLoginEnabled}
             />
           ) : null}
-          <Field label={tt('Redirect URIs')} help={tt('One URI per line.')}>
-            <TextArea
-              name="redirectUris"
-              onChange={(event) => setValue(setForm, 'redirectUris', event.target.value)}
-              required
-            />
-          </Field>
+          {form.clientType === 'machine' ? null : (
+            <Field label={tt('Redirect URIs')} help={tt('One URI per line.')}>
+              <TextArea
+                name="redirectUris"
+                onChange={(event) => setValue(setForm, 'redirectUris', event.target.value)}
+                required
+              />
+            </Field>
+          )}
         </FormDialog>
       )}
     </Dialog>

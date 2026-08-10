@@ -300,10 +300,9 @@ describe('federated credential management over real D1', () => {
       body: JSON.stringify({
         name: 'Federation Client',
         slug: 'federation-client',
-        clientType: 'confidential_web',
-        redirectUris: ['http://localhost/callback'],
+        clientType: 'machine',
+        redirectUris: [],
         ownerOrganizationId: 'org_platform',
-        allowedGrantTypes: ['urn:ietf:params:oauth:grant-type:token-exchange'],
       }),
     })
     const application = (await createApp.json()) as { id: string }

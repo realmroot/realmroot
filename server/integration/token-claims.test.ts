@@ -286,10 +286,9 @@ describe('OAuth token claim building over real D1', () => {
     const application = (await (
       await postJson(harness, cookie, '/api/applications', {
         name: 'Workload Client',
-        clientType: 'confidential_web',
-        redirectUris: ['https://workload.example.com/callback'],
+        clientType: 'machine',
+        redirectUris: [],
         ownerOrganizationId: ownerOrganization.id,
-        allowedGrantTypes: ['client_credentials'],
         resourceScopes: [{ resourceServerId: ownerResource.id, scopes: ['contacts:read'] }],
       })
     ).json()) as { clientId: string; clientSecret: string }

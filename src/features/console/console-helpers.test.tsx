@@ -97,6 +97,7 @@ describe('admin console helpers', () => {
     expect(clientTypeLabel('public_spa')).toBe('Public SPA')
     expect(clientTypeLabel('public_native')).toBe('Public native')
     expect(clientTypeLabel('confidential_web')).toBe('Confidential web')
+    expect(clientTypeLabel('machine')).toBe('Machine-to-machine')
     expect(removeBlankValues({ a: '', b: 'value' })).toEqual({ b: 'value' })
     expect(removeBlankValues(null)).toBeNull()
     expect(shallowEqual({ a: 1 }, { a: 1 })).toBe(true)

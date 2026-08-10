@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { ApplicationTypeCards, createApplicationGrantTypes } from '@/features/management/create-dialogs'
+import { ApplicationTypeCards } from '@/features/management/create-dialogs'
 import { SwitchRow } from '@/features/management/dialogs'
 import { OrganizationOwnerField } from '@/features/management/ownership-controls'
 import { ResourcePage, SetupChecklist } from '@/features/management/resource-components'
@@ -124,8 +124,8 @@ export function ConsoleOnboardingPage() {
                       clientType: form.clientType,
                       firstParty: true,
                       ownerOrganizationId,
-                      allowedGrantTypes: createApplicationGrantTypes(form.clientType, form.deviceLoginEnabled),
-                      redirectUris: form.redirectUris.split('\n').filter(Boolean),
+                      ...(form.clientType === 'public_native' ? { deviceLoginEnabled: form.deviceLoginEnabled } : {}),
+                      redirectUris: form.clientType === 'machine' ? [] : form.redirectUris.split('\n').filter(Boolean),
                     }),
                   )
                 }}
@@ -149,12 +149,7 @@ export function ConsoleOnboardingPage() {
                   <SwitchRow
                     checked={form.deviceLoginEnabled}
                     label={tt('Device login')}
-                    onCheckedChange={(deviceLoginEnabled) =>
-                      setForm((value) => ({
-                        ...value,
-                        deviceLoginEnabled,
-                      }))
-                    }
+                    onCheckedChange={(deviceLoginEnabled) => setForm((value) => ({ ...value, deviceLoginEnabled }))}
                   />
                 ) : null}
                 <Field label={tt('Application name')}>
@@ -181,20 +176,22 @@ export function ConsoleOnboardingPage() {
                     value={form.slug}
                   />
                 </Field>
-                <Field label={tt('Redirect URIs')}>
-                  <TextArea
-                    onChange={(event) =>
-                      setForm((value) => ({
-                        ...value,
-                        redirectUris: event.target.value,
-                      }))
-                    }
-                    required
-                    value={form.redirectUris}
-                  />
-                </Field>
+                {form.clientType === 'machine' ? null : (
+                  <Field label={tt('Redirect URIs')}>
+                    <TextArea
+                      onChange={(event) =>
+                        setForm((value) => ({
+                          ...value,
+                          redirectUris: event.target.value,
+                        }))
+                      }
+                      required
+                      value={form.redirectUris}
+                    />
+                  </Field>
+                )}
                 <Button disabled={createMutation.isPending} type="submit">
-                  <Plus data-icon="inline-start" /> {tt('Create OIDC client')}{' '}
+                  <Plus data-icon="inline-start" /> {tt('Create application')}{' '}
                 </Button>
               </form>
             </CardContent>

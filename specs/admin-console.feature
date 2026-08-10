@@ -71,14 +71,17 @@ Feature: Admin Console
     Then clients and lifecycle controls are visible
 
   @entrypoint:product-ui @journey:admin-create-application
-  Scenario: Applications page creates an OIDC client
+  Scenario: Applications page creates a typed OAuth client
     When I create an application from Console
-    Then the new OIDC client appears in inventory
+    Then the new Application appears in inventory as confidential_web, public_spa, public_native, or machine
     And it records an explicit owner Organization
-    And it records OIDC scopes separately from Resource-server-qualified scope allowlists
+    And its Application type derives grant types, client authentication, PKCE, and OIDC scopes
+    And Machine Applications receive client credentials without a redirect URI or user scopes
+    And Web, SPA, and Native Applications require a redirect URI
+    And the Console and Management API use the same four Application types
+    And it records Resource-server-qualified scope allowlists separately from granted Permissions
     And Resource Server and scope allowlists are bounded at the request boundary
-    And native clients can be created with device login enabled
-    And a client-credentials-only Application does not require a redirect URI
+    And Public Native Applications can enable or disable device login
 
   @entrypoint:product-ui @journey:admin-application-detail
   Scenario: Application detail manages lifecycle, redirects, integration details, and secret rotation

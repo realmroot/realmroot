@@ -80,8 +80,6 @@ describe('service.test 1', () => {
         redirectUris: ['https://app.example.com/callback'],
         postLogoutRedirectUris: ['https://app.example.com/signed-out', 'https://app.example.com/signed-out'],
         corsOrigins: ['https://app.example.com', 'http://localhost:4173'],
-        allowedGrantTypes: ['authorization_code'],
-        oidcScopes: ['openid', 'profile'],
         trusted: true,
       },
       'admin-1',
@@ -140,7 +138,7 @@ describe('service.test 1', () => {
     await expect(getApplication(deps, issuer, created.id)).rejects.toMatchObject({ status: 404 })
   })
 
-  it('allows a client-credentials-only Application without redirect URIs', async () => {
+  it('derives machine credentials and rejects missing redirects for interactive types', async () => {
     const repository = new InMemoryApplicationRepository()
     const deps = { applications: repository } as unknown as Deps
 
@@ -150,16 +148,17 @@ describe('service.test 1', () => {
         'https://auth.example.com',
         {
           name: 'Connection Event Publisher',
-          clientType: 'confidential_web',
+          clientType: 'machine',
           redirectUris: [],
-          allowedGrantTypes: ['client_credentials'],
-          oidcScopes: ['openid'],
         },
         'admin-1',
       ),
     ).resolves.toMatchObject({
       redirectUris: [],
-      allowedGrantTypes: ['client_credentials'],
+      allowedGrantTypes: ['client_credentials', 'urn:ietf:params:oauth:grant-type:token-exchange'],
+      oidcScopes: [],
+      public: false,
+      requirePkce: false,
     })
 
     await expect(
@@ -170,7 +169,6 @@ describe('service.test 1', () => {
           name: 'Broken Browser Client',
           clientType: 'confidential_web',
           redirectUris: [],
-          allowedGrantTypes: ['authorization_code'],
         },
         'admin-1',
       ),
@@ -206,7 +204,7 @@ describe('service.test 1', () => {
     })
   })
 
-  it('allows the device-code grant only for public native clients', async () => {
+  it('derives the device-code grant only for native Applications', async () => {
     const repository = new InMemoryApplicationRepository()
     const deps = { applications: repository } as unknown as Deps
     const issuer = 'https://auth.example.com'
@@ -219,14 +217,14 @@ describe('service.test 1', () => {
           name: 'CLI App',
           clientType: 'public_native',
           redirectUris: ['com.example.cli:/callback'],
-          allowedGrantTypes: ['authorization_code', deviceCodeGrantType],
+          deviceLoginEnabled: true,
         },
         'admin-1',
       ),
     ).resolves.toMatchObject({
       clientType: 'public_native',
       public: true,
-      allowedGrantTypes: ['authorization_code', deviceCodeGrantType],
+      allowedGrantTypes: ['authorization_code', 'refresh_token', deviceCodeGrantType],
       oidc: {
         tokenEndpoint: 'https://auth.example.com/api/auth/oauth2/token',
       },
@@ -240,30 +238,29 @@ describe('service.test 1', () => {
           name: 'Browser App',
           clientType: 'public_spa',
           redirectUris: ['https://spa.example.com/callback'],
-          allowedGrantTypes: [deviceCodeGrantType],
         },
         'admin-1',
       ),
-    ).rejects.toMatchObject({
-      status: 400,
-      message: 'Only public native clients can use the device-code grant.',
+    ).resolves.toMatchObject({
+      allowedGrantTypes: ['authorization_code', 'refresh_token'],
     })
 
+    const nativeWithoutDeviceLogin = await createApplication(
+      deps,
+      issuer,
+      {
+        name: 'Mobile App',
+        clientType: 'public_native',
+        redirectUris: ['com.example.mobile:/callback'],
+      },
+      'admin-1',
+    )
+    expect(nativeWithoutDeviceLogin.allowedGrantTypes).toEqual(['authorization_code', 'refresh_token'])
+
     await expect(
-      createApplication(
-        deps,
-        issuer,
-        {
-          name: 'Server App',
-          clientType: 'confidential_web',
-          redirectUris: ['https://server.example.com/callback'],
-          allowedGrantTypes: [deviceCodeGrantType],
-        },
-        'admin-1',
-      ),
-    ).rejects.toMatchObject({
-      status: 400,
-      message: 'Only public native clients can use the device-code grant.',
+      updateApplication(deps, issuer, nativeWithoutDeviceLogin.id, { deviceLoginEnabled: true }),
+    ).resolves.toMatchObject({
+      allowedGrantTypes: ['authorization_code', 'refresh_token', deviceCodeGrantType],
     })
   })
 
@@ -375,7 +372,7 @@ describe('service.test 1', () => {
     })
   })
 
-  it('normalizes partial OAuth client setting updates against existing values', async () => {
+  it('keeps type-derived OAuth settings while updating redirects and metadata', async () => {
     const repository = new InMemoryApplicationRepository()
     const deps = { applications: repository } as unknown as Deps
     const issuer = 'https://auth.example.com'
@@ -386,22 +383,16 @@ describe('service.test 1', () => {
         name: 'Partial Settings App',
         clientType: 'public_spa',
         redirectUris: ['https://spa.example.com/callback'],
-        oidcScopes: ['openid', 'profile'],
       },
       'admin-1',
     )
 
     await expect(
-      updateApplication(deps, issuer, created.id, { allowedGrantTypes: ['authorization_code'] }),
-    ).resolves.toMatchObject({
-      allowedGrantTypes: ['authorization_code'],
-      oidcScopes: ['openid', 'profile', 'offline_access'],
-      redirectUris: ['https://spa.example.com/callback'],
-    })
-    await expect(
       replaceRedirectUris(deps, issuer, created.id, { redirectUris: ['http://localhost:4173/oidc/callback'] }),
     ).resolves.toMatchObject({
       redirectUris: ['http://localhost:4173/oidc/callback'],
+      allowedGrantTypes: ['authorization_code', 'refresh_token'],
+      oidcScopes: ['openid', 'profile', 'email', 'offline_access'],
     })
     await expect(
       updateApplication(deps, issuer, created.id, {

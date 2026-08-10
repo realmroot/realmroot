@@ -20,6 +20,7 @@ import {
   type CreateApplicationResponse,
   type CreateConsentRequest,
   defaultApplicationOidcClaims,
+  deviceCodeGrantType,
   type ListApplicationAuthorizationsQuery,
   type ListApplicationAuthorizationsResponse,
   type ListApplicationsResponse,
@@ -40,15 +41,10 @@ export async function createApplication(
   input: CreateApplicationRequest,
   actorUserId: string | null,
 ): Promise<CreateApplicationResponse> {
-  const settings = normalizeClientSettings(
-    input.clientType,
-    input.redirectUris,
-    input.allowedGrantTypes,
-    input.oidcScopes,
-  )
+  const settings = normalizeClientSettings(input.clientType, input.redirectUris, input.deviceLoginEnabled ?? false)
   const postLogoutRedirectUris = normalizePostLogoutRedirectUris(input.clientType, input.postLogoutRedirectUris ?? [])
   const corsOrigins = normalizeCorsOrigins(input.corsOrigins ?? [])
-  const clientSecret = input.clientType === 'confidential_web' ? createClientSecret() : null
+  const clientSecret = settings.public ? null : createClientSecret()
   const secretHash = clientSecret ? await hashProviderSecret(clientSecret) : null
   const secretPrefix = clientSecret ? clientSecret.slice(0, 12) : null
   const ownerOrganizationId = input.ownerOrganizationId
@@ -65,7 +61,7 @@ export async function createApplication(
       iconUrl: input.iconUrl ?? null,
       clientId: createId('client'),
       clientType: input.clientType,
-      public: input.clientType !== 'confidential_web',
+      public: settings.public,
       firstParty: input.firstParty ?? false,
       trusted: input.trusted ?? false,
       disabled: false,
@@ -78,8 +74,8 @@ export async function createApplication(
       allowedGrantTypes: settings.allowedGrantTypes,
       oidcScopes: settings.oidcScopes,
       resourceScopes,
-      requirePkce: input.clientType !== 'confidential_web',
-      tokenEndpointAuthMethod: input.clientType === 'confidential_web' ? 'client_secret_basic' : 'none',
+      requirePkce: settings.requirePkce,
+      tokenEndpointAuthMethod: settings.tokenEndpointAuthMethod,
       oidcClaims: input.oidcClaims ?? defaultApplicationOidcClaims,
     },
     clientSecret: secretHash
@@ -135,12 +131,11 @@ export async function updateApplication(
 ): Promise<ApplicationResponse> {
   const application = await requireApplication(deps, id)
   const settings =
-    input.redirectUris || input.allowedGrantTypes || input.oidcScopes
+    input.redirectUris || input.deviceLoginEnabled !== undefined
       ? normalizeClientSettings(
           application.clientType,
           input.redirectUris ?? application.redirectUris,
-          input.allowedGrantTypes ?? application.allowedGrantTypes,
-          input.oidcScopes ?? application.oidcScopes,
+          input.deviceLoginEnabled ?? application.allowedGrantTypes.includes(deviceCodeGrantType),
         )
       : null
   const postLogoutRedirectUris =
@@ -195,8 +190,7 @@ export async function replaceRedirectUris(
   const settings = normalizeClientSettings(
     application.clientType,
     input.redirectUris,
-    application.allowedGrantTypes,
-    application.oidcScopes,
+    application.allowedGrantTypes.includes(deviceCodeGrantType),
   )
   await deps.applications.update(id, { redirectUris: settings.redirectUris })
   return getApplication(deps, issuer, id)

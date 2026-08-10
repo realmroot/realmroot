@@ -221,8 +221,10 @@ export function writeApplicationMetadata(
 }
 
 export function toClientType(value: string | null): ApplicationAggregate['clientType'] {
-  if (value === 'public_spa' || value === 'public_native' || value === 'confidential_web') return value
-  return 'confidential_web'
+  if (value === 'public_spa' || value === 'public_native' || value === 'confidential_web' || value === 'machine') {
+    return value
+  }
+  throw new Error(`Unsupported Application type: ${value ?? 'null'}`)
 }
 
 export function toTokenEndpointAuthMethod(value: string | null): ApplicationAggregate['tokenEndpointAuthMethod'] {

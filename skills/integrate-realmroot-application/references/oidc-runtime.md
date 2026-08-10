@@ -26,13 +26,14 @@ consume discovery metadata.
 | Client type | Runtime | Secret | Required behavior |
 | --- | --- | --- | --- |
 | `public_spa` | Browser-only application | No | Authorization code with PKCE S256 |
-| `public_native` | Mobile, desktop, CLI, runner | No | Authorization code with PKCE S256; device authorization when needed |
+| `public_native` | Mobile, desktop, CLI, runner | No | Authorization code with PKCE S256; optional device authorization |
 | `confidential_web` | Server-side callback and session owner | Yes | Authorization code; authenticate only from the protected server |
+| `machine` | Backend service or Worker | Yes | Client credentials or federated token exchange; no user sign-in |
 
 Request `openid profile email` for a normal sign-in. Add `offline_access` only
-when the product intentionally uses refresh credentials. Use client credentials
-only for an approved confidential workload that acts without a user; it is not
-a user sign-in flow.
+when the product intentionally uses refresh credentials. Use a separate
+`machine` Application for a workload that acts without a user; it is not a user
+sign-in flow.
 
 ## Implement Authorization Code
 

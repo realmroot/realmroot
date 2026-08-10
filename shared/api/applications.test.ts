@@ -119,40 +119,39 @@ describe('application API pagination contracts', () => {
     ).toThrow()
   })
 
-  it('accepts the standard device-code grant in application contracts', () => {
-    expect(
-      createApplicationRequestSchema.parse({
-        name: 'Native app',
-        ownerOrganizationId: 'org-1',
-        clientType: 'public_native',
-        redirectUris: ['com.example.native:/callback'],
-        allowedGrantTypes: [deviceCodeGrantType],
-      }).allowedGrantTypes,
-    ).toEqual([deviceCodeGrantType])
+  it('accepts all four Application types without caller-controlled protocol settings', () => {
+    for (const [clientType, redirectUris] of [
+      ['confidential_web', ['https://web.example.com/callback']],
+      ['public_spa', ['https://spa.example.com/callback']],
+      ['public_native', ['com.example.native:/callback']],
+      ['machine', []],
+    ] as const) {
+      expect(
+        createApplicationRequestSchema.parse({
+          name: `${clientType} app`,
+          ownerOrganizationId: 'org-1',
+          clientType,
+          redirectUris,
+        }),
+      ).toMatchObject({ clientType, redirectUris })
+    }
   })
 
-  it('requires redirect URIs only for authorization-code clients', () => {
-    const base = {
-      name: 'Machine client',
-      ownerOrganizationId: 'org-1',
-      clientType: 'confidential_web' as const,
-    }
-
-    expect(createApplicationRequestSchema.safeParse({ ...base, redirectUris: [] }).success).toBe(false)
+  it('requires redirects for interactive Applications and rejects them for machine Applications', () => {
+    const base = { name: 'Application', ownerOrganizationId: 'org-1' }
+    expect(
+      createApplicationRequestSchema.safeParse({ ...base, clientType: 'confidential_web', redirectUris: [] }).success,
+    ).toBe(false)
+    expect(createApplicationRequestSchema.safeParse({ ...base, clientType: 'machine', redirectUris: [] }).success).toBe(
+      true,
+    )
     expect(
       createApplicationRequestSchema.safeParse({
         ...base,
-        redirectUris: [],
-        allowedGrantTypes: ['client_credentials'],
-      }).success,
-    ).toBe(true)
-    expect(
-      createApplicationRequestSchema.safeParse({
-        ...base,
+        clientType: 'machine',
         redirectUris: ['https://app.example.com/callback'],
-        allowedGrantTypes: ['authorization_code'],
       }).success,
-    ).toBe(true)
+    ).toBe(false)
   })
 
   it('keeps Realmroot resource capabilities out of user-configurable application requests', () => {
@@ -171,7 +170,39 @@ describe('application API pagination contracts', () => {
     ).toThrow()
   })
 
-  it('accepts setup-time post sign-out and CORS origin lists without caller-provided credentials', () => {
+  it('rejects caller-controlled grants, OIDC scopes, and the discarded applicationType field', () => {
+    const base = {
+      name: 'Customer app',
+      ownerOrganizationId: 'org-1',
+      clientType: 'public_spa',
+      redirectUris: ['http://localhost:5173/callback'],
+    }
+    expect(() => createApplicationRequestSchema.parse({ ...base, allowedGrantTypes: [deviceCodeGrantType] })).toThrow()
+    expect(() => createApplicationRequestSchema.parse({ ...base, oidcScopes: ['openid'] })).toThrow()
+    expect(() =>
+      createApplicationRequestSchema.parse({
+        name: 'Legacy app',
+        ownerOrganizationId: 'org-1',
+        applicationType: 'public_spa',
+        redirectUris: ['http://localhost:5173/callback'],
+      }),
+    ).toThrow()
+  })
+
+  it('accepts optional device login only for public native Applications', () => {
+    const base = {
+      name: 'Native app',
+      ownerOrganizationId: 'org-1',
+      redirectUris: ['com.example.native:/callback'],
+      deviceLoginEnabled: true,
+    }
+    expect(createApplicationRequestSchema.parse({ ...base, clientType: 'public_native' })).toMatchObject({
+      deviceLoginEnabled: true,
+    })
+    expect(createApplicationRequestSchema.safeParse({ ...base, clientType: 'public_spa' }).success).toBe(false)
+  })
+
+  it('accepts setup-time redirect lists and rejects caller-provided credentials', () => {
     const request = createApplicationRequestSchema.parse({
       name: 'Customer app',
       ownerOrganizationId: 'org-1',
@@ -179,8 +210,6 @@ describe('application API pagination contracts', () => {
       redirectUris: ['http://localhost:5173/callback'],
       postLogoutRedirectUris: ['http://localhost:5173/signed-out'],
       corsOrigins: ['http://localhost:5173'],
-      clientId: 'caller-client',
-      clientSecret: 'caller-secret',
     })
 
     expect(request).toEqual({
@@ -191,6 +220,16 @@ describe('application API pagination contracts', () => {
       corsOrigins: ['http://localhost:5173'],
       ownerOrganizationId: 'org-1',
     })
+    expect(() =>
+      createApplicationRequestSchema.parse({
+        name: 'Customer app',
+        ownerOrganizationId: 'org-1',
+        clientType: 'public_spa',
+        redirectUris: ['http://localhost:5173/callback'],
+        clientId: 'caller-client',
+        clientSecret: 'caller-secret',
+      }),
+    ).toThrow()
   })
 
   it('validates per-application OIDC claim configuration at API boundaries', () => {

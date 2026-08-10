@@ -2,10 +2,9 @@ import { badRequest } from '@server/domain/errors'
 import type { ClientSecretRecord } from '@server/usecases/ports'
 import {
   type ApplicationResponse,
-  applicationGrantTypes,
-  applicationScopeSchema,
   deviceCodeGrantType,
   type PaginationQuery,
+  tokenExchangeGrantType,
 } from '@shared/api/applications'
 
 export function buildDeniedAuthorizationUrl(redirectUri: string, state: string | undefined) {
@@ -19,54 +18,71 @@ export function buildDeniedAuthorizationUrl(redirectUri: string, state: string |
 export function normalizeClientSettings(
   clientType: ApplicationResponse['clientType'],
   redirectUris: string[],
-  grantTypes: ApplicationResponse['allowedGrantTypes'] = ['authorization_code', 'refresh_token'],
-  scopes: ApplicationResponse['oidcScopes'] = ['openid', 'profile', 'email'],
+  deviceLoginEnabled = false,
 ) {
-  const normalizedGrantTypes = dedupe(grantTypes)
-  const normalizedScopes = dedupe(scopes)
   const normalizedRedirectUris = dedupe(redirectUris)
-
-  if (clientType !== 'confidential_web' && normalizedGrantTypes.includes('client_credentials')) {
-    throw badRequest('Public clients cannot use the client_credentials grant.')
+  if (deviceLoginEnabled && clientType !== 'public_native') {
+    throw badRequest('Device login is available only for public native clients.')
   }
-  if (normalizedGrantTypes.includes(deviceCodeGrantType) && clientType !== 'public_native') {
-    throw badRequest('Only public native clients can use the device-code grant.')
+  if (clientType === 'machine' && normalizedRedirectUris.length > 0) {
+    throw badRequest('Machine Applications do not use redirect URIs.')
   }
-  if (
-    normalizedGrantTypes.includes('urn:ietf:params:oauth:grant-type:token-exchange') &&
-    clientType !== 'confidential_web'
-  ) {
-    throw badRequest('Only confidential clients can use the token-exchange grant.')
-  }
-  if (normalizedGrantTypes.includes('refresh_token') && !normalizedScopes.includes('offline_access')) {
-    normalizedScopes.push('offline_access')
-  }
-  if (normalizedGrantTypes.includes('authorization_code') && normalizedRedirectUris.length === 0) {
+  if (clientType !== 'machine' && normalizedRedirectUris.length === 0) {
     throw badRequest('Authorization-code clients require at least one redirect URI.')
-  }
-  for (const scope of normalizedScopes) {
-    if (!applicationScopeSchema.safeParse(scope).success) {
-      throw badRequest(`Unsupported scope: ${scope}`)
-    }
-  }
-  for (const grantType of normalizedGrantTypes) {
-    if (!applicationGrantTypes.includes(grantType)) {
-      throw badRequest(`Unsupported grant type: ${grantType}`)
-    }
   }
   for (const redirectUri of normalizedRedirectUris) {
     validateRedirectUri(clientType, redirectUri)
   }
 
+  const configuration = clientTypeConfiguration(clientType, deviceLoginEnabled)
   return {
     redirectUris: normalizedRedirectUris,
-    allowedGrantTypes: normalizedGrantTypes,
-    oidcScopes: normalizedScopes,
+    ...configuration,
+  }
+}
+
+export function clientTypeConfiguration(
+  clientType: ApplicationResponse['clientType'],
+  deviceLoginEnabled = false,
+): Pick<
+  ApplicationResponse,
+  'public' | 'allowedGrantTypes' | 'oidcScopes' | 'requirePkce' | 'tokenEndpointAuthMethod'
+> {
+  if (clientType === 'machine') {
+    return {
+      public: false,
+      allowedGrantTypes: ['client_credentials', tokenExchangeGrantType],
+      oidcScopes: [],
+      requirePkce: false,
+      tokenEndpointAuthMethod: 'client_secret_basic',
+    }
+  }
+  if (clientType === 'confidential_web') {
+    return {
+      public: false,
+      allowedGrantTypes: ['authorization_code', 'refresh_token'],
+      oidcScopes: ['openid', 'profile', 'email', 'offline_access'],
+      requirePkce: false,
+      tokenEndpointAuthMethod: 'client_secret_basic',
+    }
+  }
+  return {
+    public: true,
+    allowedGrantTypes:
+      clientType === 'public_native' && deviceLoginEnabled
+        ? ['authorization_code', 'refresh_token', deviceCodeGrantType]
+        : ['authorization_code', 'refresh_token'],
+    oidcScopes: ['openid', 'profile', 'email', 'offline_access'],
+    requirePkce: true,
+    tokenEndpointAuthMethod: 'none',
   }
 }
 
 export function normalizePostLogoutRedirectUris(clientType: ApplicationResponse['clientType'], values: string[]) {
   const redirectUris = dedupe(values)
+  if (clientType === 'machine' && redirectUris.length > 0) {
+    throw badRequest('Machine Applications do not use post sign-out redirect URIs.')
+  }
   for (const redirectUri of redirectUris) {
     validateRedirectUri(clientType, redirectUri, 'Post sign-out redirect URIs')
   }

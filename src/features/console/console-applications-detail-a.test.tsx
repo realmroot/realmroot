@@ -292,18 +292,13 @@ describe('admin console applications-detail-a', () => {
 
     const authorization = screen.getByRole('heading', { name: 'Authorization' }).closest('section') as HTMLElement
     fireEvent.click(within(authorization).getByRole('button', { name: 'Edit' }))
-    expect(screen.queryByRole('checkbox', { name: 'Client credentials' })).toBeNull()
-    fireEvent.click(await screen.findByRole('checkbox', { name: 'Refresh token' }))
-    expect(screen.getByRole('checkbox', { name: 'Offline access' }).getAttribute('aria-checked')).toBe('true')
-    expect(screen.getByRole('checkbox', { name: 'Offline access' })).toHaveProperty('disabled', true)
+    expect(within(screen.getByRole('dialog')).queryByText('Grant types')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
     await waitFor(() =>
       expect(requests).toContainEqual({
         url: '/api/applications/app-1',
         method: 'PATCH',
         body: {
-          allowedGrantTypes: ['authorization_code', 'refresh_token'],
-          oidcScopes: ['openid', 'profile', 'offline_access'],
           resourceScopes: [],
         },
       }),
@@ -459,11 +454,6 @@ describe('admin console applications-detail-a', () => {
 
     expect(await screen.findByText(/Version 1 · created/)).toBeTruthy()
     expect(screen.queryByText('fas_existing')).toBeNull()
-    const authorization = screen.getByRole('heading', { name: 'Authorization' }).closest('section') as HTMLElement
-    fireEvent.click(within(authorization).getByRole('button', { name: 'Edit' }))
-    expect(await screen.findByRole('checkbox', { name: 'Client credentials' })).toBeTruthy()
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Client credentials' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     fireEvent.click(screen.getByRole('button', { name: 'Rotate secret' }))
     const confirmation = await screen.findByRole('alertdialog', { name: 'Rotate client secret?' })
     expect(within(confirmation).getByText(/current client secret will stop working immediately/i)).toBeTruthy()

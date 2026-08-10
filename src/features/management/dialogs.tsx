@@ -302,6 +302,7 @@ export function listValue(value: readonly string[] | undefined, separator: strin
 export function clientTypeLabel(value: ApplicationResponse['clientType']) {
   if (value === 'public_spa') return 'Public SPA'
   if (value === 'public_native') return 'Public native'
+  if (value === 'machine') return 'Machine-to-machine'
   return 'Confidential web'
 }
 export function StatusBadge({

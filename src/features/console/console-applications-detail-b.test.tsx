@@ -1,5 +1,5 @@
-import type { ApplicationResponse } from '@shared/api/applications'
-import { cleanup, fireEvent, screen, within } from '@testing-library/react'
+import { type ApplicationResponse, deviceCodeGrantType } from '@shared/api/applications'
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ApplicationDetailPage } from '@/features/applications/management/application-detail'
 import { UsersPage } from '@/features/console/extracted/users/users-list'
@@ -135,6 +135,7 @@ describe('admin console applications-detail-b', () => {
   })
 
   it('renders ownership, consent, and native-client variants across detail sections', async () => {
+    const updateRequests: unknown[] = []
     let currentApplication = {
       ...application,
       description: null,
@@ -144,6 +145,15 @@ describe('admin console applications-detail-b', () => {
     } as ApplicationResponse
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
+      if (url === '/api/applications/app-1' && init?.method === 'PATCH') {
+        const body = JSON.parse(String(init.body))
+        updateRequests.push(body)
+        currentApplication = {
+          ...currentApplication,
+          allowedGrantTypes: ['authorization_code', 'refresh_token'],
+        }
+        return Promise.resolve(jsonResponse(currentApplication))
+      }
       if (url === '/api/applications/app-1') return Promise.resolve(jsonResponse(currentApplication))
       if (url === '/api/applications/app-1/federated-credentials') {
         return Promise.resolve(jsonResponse({ credentials: [] }))
@@ -183,18 +193,28 @@ describe('admin console applications-detail-b', () => {
     currentApplication = {
       ...currentApplication,
       clientType: 'public_native',
-      allowedGrantTypes: ['authorization_code', 'refresh_token'],
-      oidcScopes: ['openid', 'profile', 'offline_access'],
+      allowedGrantTypes: ['authorization_code', 'refresh_token', deviceCodeGrantType],
+      oidcScopes: ['openid', 'profile', 'email', 'offline_access'],
     }
     renderWithQuery(<ApplicationDetailPage applicationId="app-1" section="oauth" />)
     const authorization = (await screen.findByRole('heading', { name: 'Authorization' })).closest(
       'section',
     ) as HTMLElement
+    expect(within(authorization).getByText((text) => text.includes(deviceCodeGrantType))).toBeTruthy()
     fireEvent.click(within(authorization).getByRole('button', { name: 'Edit' }))
-    expect(await screen.findByRole('checkbox', { name: 'Device code' })).toBeTruthy()
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Refresh token' }))
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Refresh token' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(within(screen.getByRole('dialog')).queryByText('Grant types')).toBeNull()
+    const deviceLogin = screen.getByRole('switch', { name: 'Device login' })
+    expect(deviceLogin.getAttribute('aria-checked')).toBe('true')
+    fireEvent.click(deviceLogin)
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    await waitFor(() =>
+      expect(updateRequests).toEqual([
+        {
+          deviceLoginEnabled: false,
+          resourceScopes: [],
+        },
+      ]),
+    )
   })
 
   it('retries and revokes an authorization from the first page', async () => {
@@ -254,9 +274,11 @@ describe('admin console applications-detail-b', () => {
         return Promise.resolve(
           jsonResponse({
             ...application,
-            clientType: 'confidential_web',
+            clientType: 'machine',
             public: false,
-            allowedGrantTypes: ['client_credentials'],
+            allowedGrantTypes: ['client_credentials', 'urn:ietf:params:oauth:grant-type:token-exchange'],
+            oidcScopes: [],
+            redirectUris: [],
             tokenEndpointAuthMethod: 'client_secret_basic',
           }),
         )

@@ -130,9 +130,10 @@ export function ApplicationsPage({ organizationId }: { organizationId?: string }
           )}
           <SelectInput aria-label={tt('Filter type')} onChange={(event) => setType(event.target.value)} value={type}>
             <option value="">{tt('Any type')}</option>
-            <option value="confidential_web">{tt('Web application')}</option>
+            <option value="confidential_web">{tt('Traditional web app')}</option>
             <option value="public_spa">{tt('Single-page app')}</option>
             <option value="public_native">{tt('Native application')}</option>
+            <option value="machine">{tt('Machine-to-machine')}</option>
           </SelectInput>
         </ListToolbar>
       }

@@ -41,10 +41,9 @@ describe('Provider Connection Events over real D1', () => {
       headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({
         name: 'Event Publisher',
-        clientType: 'confidential_web',
-        redirectUris: ['https://adapter.example.com/oauth/callback'],
+        clientType: 'machine',
+        redirectUris: [],
         ownerOrganizationId: 'org_platform',
-        allowedGrantTypes: ['client_credentials'],
         resourceScopes: [{ resourceServerId: 'res_realmroot', scopes: ['connection-events:write'] }],
       }),
     })

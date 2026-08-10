@@ -10,7 +10,11 @@ afterEach(async () => {
 interface CreatedApplication {
   id: string
   clientId: string
+  clientSecret?: string
+  clientType: 'confidential_web' | 'public_spa' | 'public_native' | 'machine'
   redirectUris: string[]
+  allowedGrantTypes: string[]
+  oidcScopes: string[]
 }
 
 async function createApplication(
@@ -100,6 +104,70 @@ describe('applications management over real D1', () => {
     expect(missing.status).toBe(404)
   })
 
+  it('creates a fully derived machine Application through the Management API [spec: admin-console/admin-create-application]', async () => {
+    const cookie = await signInAdmin(harness)
+    const created = await createApplication(harness, cookie, {
+      name: 'Event Publisher',
+      slug: 'event-publisher',
+      clientType: 'machine',
+      redirectUris: [],
+    })
+
+    expect(created).toMatchObject({
+      clientType: 'machine',
+      redirectUris: [],
+      allowedGrantTypes: ['client_credentials', 'urn:ietf:params:oauth:grant-type:token-exchange'],
+      oidcScopes: [],
+    })
+    expect(created.clientSecret).toMatch(/^fas_/)
+
+    const rejected = await harness.request('/api/applications', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({
+        name: 'Invalid machine',
+        clientType: 'machine',
+        redirectUris: ['https://machine.example.com/callback'],
+        ownerOrganizationId: 'org_platform',
+      }),
+    })
+    expect(rejected.status).toBe(400)
+  })
+
+  it('configures Native device login through the Management API [spec: admin-console/admin-create-application]', async () => {
+    const cookie = await signInAdmin(harness)
+    const created = await createApplication(harness, cookie, {
+      name: 'Runner CLI',
+      slug: 'runner-cli',
+      clientType: 'public_native',
+      redirectUris: ['com.example.runner:/callback'],
+    })
+    expect(created.allowedGrantTypes).toEqual(['authorization_code', 'refresh_token'])
+
+    const enabled = await harness.request(`/api/applications/${created.id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ deviceLoginEnabled: true }),
+    })
+    expect(enabled.status, await enabled.clone().text()).toBe(200)
+    expect(((await enabled.json()) as CreatedApplication).allowedGrantTypes).toEqual([
+      'authorization_code',
+      'refresh_token',
+      'urn:ietf:params:oauth:grant-type:device_code',
+    ])
+
+    const disabled = await harness.request(`/api/applications/${created.id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ deviceLoginEnabled: false }),
+    })
+    expect(disabled.status, await disabled.clone().text()).toBe(200)
+    expect(((await disabled.json()) as CreatedApplication).allowedGrantTypes).toEqual([
+      'authorization_code',
+      'refresh_token',
+    ])
+  })
+
   it('lists, replaces, and re-reads redirect URIs', async () => {
     const cookie = await signInAdmin(harness)
     const created = await createApplication(harness, cookie)
@@ -173,7 +241,6 @@ describe('applications management over real D1', () => {
     const created = await createApplication(harness, cookie, {
       slug: 'consent-app',
       name: 'Consent App',
-      oidcScopes: ['openid', 'profile'],
     })
 
     // loadConsentRequest reads the client + existing consent (findByClientId + findConsent).

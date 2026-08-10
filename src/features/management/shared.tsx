@@ -206,20 +206,26 @@ const applicationTypeOptions = [
   {
     value: 'public_spa',
     title: 'Single-page app',
-    description: 'Browser client using authorization code with PKCE and no client secret.',
+    description: 'Browser application using redirects and PKCE without a client secret.',
     icon: AppWindow,
   },
   {
     value: 'confidential_web',
     title: 'Traditional web app',
-    description: 'Server-rendered or backend app that can hold a confidential client secret.',
+    description: 'Server-side application with redirects and a client secret.',
     icon: Globe2,
   },
   {
     value: 'public_native',
     title: 'Native app',
-    description: 'Mobile or desktop client using app redirects and PKCE protection.',
+    description: 'Mobile, desktop, or CLI application using redirects and PKCE.',
     icon: Smartphone,
+  },
+  {
+    value: 'machine',
+    title: 'Machine-to-machine',
+    description: 'Backend service or Worker using client credentials without redirects.',
+    icon: Server,
   },
 ] as const
 

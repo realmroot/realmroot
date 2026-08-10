@@ -74,10 +74,9 @@ describe('OAuth token exchange over real D1', () => {
       body: JSON.stringify({
         name: 'Exchange Client',
         slug: 'exchange-client',
-        clientType: 'confidential_web',
-        redirectUris: ['http://localhost/callback'],
+        clientType: 'machine',
+        redirectUris: [],
         ownerOrganizationId: 'org_platform',
-        allowedGrantTypes: ['urn:ietf:params:oauth:grant-type:token-exchange'],
       }),
     })
     expect(createApp.status, await createApp.clone().text()).toBe(201)
@@ -170,10 +169,9 @@ describe('OAuth token exchange over real D1', () => {
       body: JSON.stringify({
         name: 'Exchange Client 2',
         slug: 'exchange-client-2',
-        clientType: 'confidential_web',
-        redirectUris: ['http://localhost/callback'],
+        clientType: 'machine',
+        redirectUris: [],
         ownerOrganizationId: 'org_platform',
-        allowedGrantTypes: ['urn:ietf:params:oauth:grant-type:token-exchange'],
       }),
     })
     const application = (await createApp.json()) as { clientId: string; clientSecret: string }

@@ -106,20 +106,6 @@ describe('service.test 2', () => {
         deps,
         issuer,
         {
-          name: 'Bad Native App',
-          clientType: 'public_native',
-          redirectUris: ['com.example.app:/oauth/callback'],
-          allowedGrantTypes: ['client_credentials'],
-        },
-        'admin-1',
-      ),
-    ).rejects.toMatchObject({ status: 400, message: 'Public clients cannot use the client_credentials grant.' })
-
-    await expect(
-      createApplication(
-        deps,
-        issuer,
-        {
           name: 'Executable Native Redirect',
           clientType: 'public_native',
           redirectUris: ['javascript:alert(1)'],
@@ -187,48 +173,6 @@ describe('service.test 2', () => {
       status: 400,
       message: 'Native redirect URI schemes must use a reverse-domain private-use scheme.',
     })
-    await expect(
-      createApplication(
-        deps,
-        issuer,
-        {
-          name: 'Unsupported Scope',
-          clientType: 'public_spa',
-          redirectUris: ['http://localhost:5173/callback'],
-          oidcScopes: ['openid', 'bad-scope' as 'openid'],
-        },
-        'admin-1',
-      ),
-    ).rejects.toMatchObject({ status: 400, message: 'Unsupported scope: bad-scope' })
-    await expect(
-      createApplication(
-        deps,
-        issuer,
-        {
-          name: 'Reserved Management Scope',
-          clientType: 'public_spa',
-          redirectUris: ['http://localhost:5173/callback'],
-          oidcScopes: ['openid', 'applications:read' as 'openid'],
-        },
-        'admin-1',
-      ),
-    ).rejects.toMatchObject({
-      status: 400,
-      message: 'Unsupported scope: applications:read',
-    })
-    await expect(
-      createApplication(
-        deps,
-        issuer,
-        {
-          name: 'Unsupported Grant',
-          clientType: 'confidential_web',
-          redirectUris: ['https://app.example.com/callback'],
-          allowedGrantTypes: ['authorization_code', 'bad-grant' as 'authorization_code'],
-        },
-        'admin-1',
-      ),
-    ).rejects.toMatchObject({ status: 400, message: 'Unsupported grant type: bad-grant' })
   })
 
   it('validates application post sign-out redirects and CORS origins at the API boundary', async () => {
@@ -311,7 +255,6 @@ describe('service.test 2', () => {
         name: 'Consent App',
         clientType: 'public_spa',
         redirectUris: ['https://spa.example.com/callback'],
-        oidcScopes: ['openid', 'profile'],
       },
       'admin-1',
     )

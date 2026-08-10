@@ -27,8 +27,6 @@ import {
   renderWithQuery,
 } from './console.test-utils'
 
-const deviceCodeGrantType = 'urn:ietf:params:oauth:grant-type:device_code'
-
 describe('console onboarding', () => {
   it('returns completed setup to the dashboard [spec: admin-console/admin-onboarding-complete]', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
@@ -101,7 +99,7 @@ describe('console onboarding', () => {
     fireEvent.change(screen.getByLabelText('Redirect URIs'), {
       target: { value: 'http://localhost:4173/oidc/callback' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Create OIDC client' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Create application' }))
 
     await waitFor(() => {
       expect(requests).toEqual([
@@ -111,9 +109,9 @@ describe('console onboarding', () => {
             name: 'Review app',
             slug: 'review-app',
             clientType: 'public_native',
+            deviceLoginEnabled: true,
             firstParty: true,
             ownerOrganizationId: 'org-1',
-            allowedGrantTypes: ['authorization_code', 'refresh_token', deviceCodeGrantType],
             redirectUris: ['http://localhost:4173/oidc/callback'],
           },
         },
@@ -133,7 +131,7 @@ describe('console onboarding', () => {
     })
   })
 
-  it('resets device login when switching away from a native client type', async () => {
+  it('resets device login and adapts the form when switching Application types', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
       if (url.includes('/api/realm/configuration-status')) return Promise.resolve(jsonResponse(readinessIncomplete))
@@ -151,13 +149,17 @@ describe('console onboarding', () => {
     await waitFor(() => expect(clipboard.writeText).toHaveBeenCalled())
     expect(JSON.parse(clipboard.writeText.mock.calls[0]?.[0]).clientId).toBe('<create-client-first>')
 
+    fireEvent.click(screen.getByRole('button', { name: /Machine-to-machine/ }))
+    expect(screen.queryByLabelText('Redirect URIs')).toBeNull()
+    expect(screen.queryByRole('switch', { name: 'Device login' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: /Native app/ }))
-    fireEvent.click(screen.getByRole('switch', { name: 'Device login' }))
-    expect(screen.getByRole('switch', { name: 'Device login' }).getAttribute('aria-checked')).toBe('true')
-    // switching to a non-native type removes the device login control and resets the flag
+    expect(screen.getByLabelText('Redirect URIs')).toBeTruthy()
+    const deviceLogin = screen.getByRole('switch', { name: 'Device login' })
+    expect(deviceLogin.getAttribute('aria-checked')).toBe('false')
+    fireEvent.click(deviceLogin)
+    expect(deviceLogin.getAttribute('aria-checked')).toBe('true')
     fireEvent.click(screen.getByRole('button', { name: /Single-page app/ }))
     expect(screen.queryByRole('switch', { name: 'Device login' })).toBeNull()
-    // switching back to native shows it reset to off
     fireEvent.click(screen.getByRole('button', { name: /Native app/ }))
     expect(screen.getByRole('switch', { name: 'Device login' }).getAttribute('aria-checked')).toBe('false')
   })

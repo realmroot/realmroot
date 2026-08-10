@@ -664,9 +664,8 @@ describe('authorization management over real D1', () => {
       await postJson(harness, cookie, '/api/applications', {
         name: 'Grant Client',
         slug: 'grant-client',
-        clientType: 'confidential_web',
-        redirectUris: ['http://localhost/callback'],
-        allowedGrantTypes: ['client_credentials'],
+        clientType: 'machine',
+        redirectUris: [],
         ownerOrganizationId: 'org_platform',
       })
     ).json()) as { id: string }
@@ -742,7 +741,6 @@ describe('authorization management over real D1', () => {
         slug: 'user-flow-client',
         clientType: 'confidential_web',
         redirectUris: ['http://localhost/user-flow-callback'],
-        allowedGrantTypes: ['authorization_code'],
         ownerOrganizationId: 'org_platform',
       })
     ).json()) as { id: string }

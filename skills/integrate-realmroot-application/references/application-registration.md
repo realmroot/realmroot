@@ -9,7 +9,8 @@ and obtain management authority before following these operations.
 - [Select the client](#select-the-client)
 - [Create a browser client](#create-a-browser-client)
 - [Create a native client](#create-a-native-client)
-- [Create a confidential client](#create-a-confidential-client)
+- [Create a web client](#create-a-web-client)
+- [Create a machine client](#create-a-machine-client)
 - [Update client resources](#update-client-resources)
 - [Use device authorization](#use-device-authorization)
 
@@ -27,12 +28,14 @@ then choose the client by runtime:
 | Client type | Use for | Secret | Typical grants |
 | --- | --- | --- | --- |
 | `public_spa` | Browser apps | No | `authorization_code`, `refresh_token` |
-| `public_native` | Mobile, desktop, CLI, runners | No | `authorization_code`, `refresh_token`, device code |
-| `confidential_web` | Server-side apps that protect secrets | Yes | `authorization_code`, `refresh_token`, optional `client_credentials` |
+| `public_native` | Mobile, desktop, CLI, runners | No | `authorization_code`, `refresh_token`; optional device code |
+| `confidential_web` | Server-side user sign-in | Yes | `authorization_code`, `refresh_token` |
+| `machine` | Backend service or Worker without a user | Yes | `client_credentials`, token exchange |
 
-Use `openid profile email` for common clients. Add `offline_access` with the
-refresh-token grant. Use `client_credentials` only for a confidential backend
-that acts without a user.
+The type derives grants, OIDC scopes, PKCE, client authentication, and whether a
+secret is issued. Do not send these derived fields in create or update requests.
+Use separate Applications when a product needs both user sign-in and machine
+access.
 
 Public clients use PKCE and token endpoint authentication method `none`.
 Confidential clients use `client_secret_basic` or `client_secret_post` as
@@ -47,8 +50,8 @@ Select these authorization dimensions before creation:
   request, selected from current Resource Server responses and contracts;
 - `oidcClaims`: optional access-token, ID-token, and UserInfo claim selection.
 
-Client selection is complete when its runtime, redirects, grants, scopes,
-consent policy, and secret-handling capability are explicit.
+Client selection is complete when its type, redirects, Resource Server scope
+allowlists, consent policy, and secret-handling capability are explicit.
 
 Treat every name, slug, owner, Resource Server, origin, and redirect in the examples
 as a template. Replace it with an exact user-confirmed value before mutation.
@@ -72,15 +75,12 @@ restish post "$API_NAME/applications" --rsh-print b -o json <<JSON
   "ownerOrganizationId": "${OWNER_ORGANIZATION_ID}",
   "redirectUris": ["${APP_ORIGIN}/oidc/callback"],
   "postLogoutRedirectUris": ["${APP_ORIGIN}/signed-out"],
-  "corsOrigins": ["${APP_ORIGIN}"],
-  "allowedGrantTypes": ["authorization_code", "refresh_token"],
-  "oidcScopes": ["openid", "profile", "email", "offline_access"]
+  "corsOrigins": ["${APP_ORIGIN}"]
 }
 JSON
 ```
 
-Replace names, routes, grants, and scopes with the consuming product's exact
-requirements.
+Replace names and routes with the consuming product's exact requirements.
 
 ## Create A Native Client
 
@@ -94,29 +94,15 @@ restish post "$API_NAME/applications" --rsh-print b -o json <<'JSON'
   "clientType": "public_native",
   "ownerOrganizationId": "org_123",
   "redirectUris": ["com.example.desktop:/callback", "http://127.0.0.1:8484/callback"],
-  "allowedGrantTypes": ["authorization_code", "refresh_token"],
-  "oidcScopes": ["openid", "profile", "email", "offline_access"]
+  "deviceLoginEnabled": false
 }
 JSON
 ```
 
-For device authorization:
+Set `deviceLoginEnabled` to `true` only when the Native Application must use
+device authorization.
 
-```bash
-restish post "$API_NAME/applications" --rsh-print b -o json <<'JSON'
-{
-  "name": "Runner CLI",
-  "slug": "runner-cli",
-  "clientType": "public_native",
-  "ownerOrganizationId": "org_123",
-  "redirectUris": ["com.example.runner:/callback"],
-  "allowedGrantTypes": ["urn:ietf:params:oauth:grant-type:device_code"],
-  "oidcScopes": ["openid", "profile", "email", "offline_access"]
-}
-JSON
-```
-
-## Create A Confidential Client
+## Create A Web Client
 
 Validate `APP_ORIGIN` as an absolute origin and remove its optional trailing
 slash. Obtain an exact protected output file path from the user before creating
@@ -135,9 +121,7 @@ CLIENT_OUTPUT_FILE=/protected/path/client.json
   "clientType": "confidential_web",
   "ownerOrganizationId": "${OWNER_ORGANIZATION_ID}",
   "redirectUris": ["${APP_ORIGIN}/oidc/callback"],
-  "postLogoutRedirectUris": ["${APP_ORIGIN}/signed-out"],
-  "allowedGrantTypes": ["authorization_code", "refresh_token"],
-  "oidcScopes": ["openid", "profile", "email", "offline_access"]
+  "postLogoutRedirectUris": ["${APP_ORIGIN}/signed-out"]
 }
 JSON
 )
@@ -147,6 +131,31 @@ test -s "$CLIENT_OUTPUT_FILE"
 The `noclobber` guard requires a new path and the `umask` creates it
 owner-readable only. Report the protected file path and its lifecycle, not the
 returned `clientSecret` or file contents.
+
+## Create A Machine Client
+
+A Machine Application has no redirect URI and returns a one-time client secret:
+
+```bash
+CLIENT_OUTPUT_FILE=/protected/path/machine-client.json
+(
+  umask 077
+  set -o noclobber
+  restish post "$API_NAME/applications" --rsh-print b -o json > "$CLIENT_OUTPUT_FILE" <<'JSON'
+{
+  "name": "Event Publisher",
+  "slug": "event-publisher",
+  "clientType": "machine",
+  "ownerOrganizationId": "org_123"
+}
+JSON
+)
+test -s "$CLIENT_OUTPUT_FILE"
+```
+
+Add `resourceScopes` when the workload needs a Resource Server allowlist. Token
+exchange becomes usable after a federated credential is configured on the
+Application.
 
 ## Update Client Resources
 
@@ -172,9 +181,13 @@ Use `oidcClaims` on create or update to select optional authorization, scopes,
 groups, roles, Organization ID, and Organization name claims independently for
 the access token, ID token, and UserInfo response.
 
+Use `deviceLoginEnabled` on a `public_native` Application to enable or disable
+the device-code grant.
+
 ## Use Device Authorization
 
-Use device authorization only with `public_native` clients and consume the
+Use device authorization only with `public_native` clients that have
+`deviceLoginEnabled: true`, and consume the
 issuer's discovery metadata:
 
 1. Request a device code with `client_id` and product scopes.
