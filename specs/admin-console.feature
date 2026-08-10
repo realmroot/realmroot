@@ -63,6 +63,7 @@ Feature: Admin Console
     And the current page is identified without a redundant link
     And primary Console pages use a compact page header before their navigation or data controls
     And primary inventory filters form the header of the same surface as their table
+    And API documentation opens in a separate browsing context
 
   @entrypoint:product-ui @journey:admin-application-inventory
   Scenario: Applications page lists OIDC clients and status controls

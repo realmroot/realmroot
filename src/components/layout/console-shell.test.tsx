@@ -84,7 +84,7 @@ afterEach(() => {
 })
 
 describe('ConsoleShell', () => {
-  it('renders Console navigation and marks the exact dashboard route active', () => {
+  it('renders Console navigation and marks the exact dashboard route active [spec: admin-console/admin-route-backed-navigation]', () => {
     render(<TestConsoleShell>Dashboard content</TestConsoleShell>)
 
     expect(screen.getAllByText('Console').length).toBeGreaterThan(0)
@@ -101,7 +101,10 @@ describe('ConsoleShell', () => {
     expect(screen.getAllByRole('link', { name: /Dashboard/ })[0].getAttribute('aria-current')).toBe('page')
     expect(screen.getAllByRole('link', { name: /Dashboard/ })[0].className).toContain('is-active')
     expect(screen.getAllByRole('link', { name: /Applications/ })[0].className).not.toContain('is-active')
-    expect(screen.getAllByRole('link', { name: 'API Documentation' })[0].getAttribute('href')).toBe('/api/docs')
+    for (const apiDocumentationLink of screen.getAllByRole('link', { name: 'API Documentation' })) {
+      expect(apiDocumentationLink.getAttribute('href')).toBe('/api/docs')
+      expect(apiDocumentationLink.getAttribute('target')).toBe('_blank')
+    }
     expect(screen.queryByText('Tenant health')).toBeNull()
     expect(screen.queryByText('OIDC clients')).toBeNull()
     expect(screen.queryByRole('link', { name: /Onboarding/ })).toBeNull()

@@ -121,8 +121,13 @@ const consoleNavGroups: ConsoleNavGroup[] = [
 ]
 
 const consoleUtilities = [
-  { href: '/api/docs', label: 'API Documentation', icon: Code2 },
-  { href: 'https://github.com/realmroot/realmroot/tree/main/docs', label: 'Help & documentation', icon: HelpCircle },
+  { href: '/api/docs', label: 'API Documentation', icon: Code2, target: '_blank' },
+  {
+    href: 'https://github.com/realmroot/realmroot/tree/main/docs',
+    label: 'Help & documentation',
+    icon: HelpCircle,
+    target: '_blank',
+  },
 ]
 
 export function ConsoleShell({ children, profile }: { children: ReactNode; profile: UserProfile }) {
@@ -382,13 +387,7 @@ function ConsoleNavigation({
       </nav>
       <div className="consoleNavFooter">
         {consoleUtilities.map((item) => (
-          <a
-            className="consoleNavItem"
-            href={item.href}
-            key={item.label}
-            rel="noreferrer"
-            target={item.href.startsWith('http') ? '_blank' : undefined}
-          >
+          <a className="consoleNavItem" href={item.href} key={item.label} rel="noreferrer" target={item.target}>
             <item.icon aria-hidden="true" />
             <span>{tt(item.label)}</span>
           </a>
