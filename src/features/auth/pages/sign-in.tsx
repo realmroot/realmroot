@@ -43,6 +43,7 @@ import {
   useConfigz,
   useEffect,
   useMemo,
+  useRef,
   useState,
   verifyPhoneNumber,
   verifySignInTotp,
@@ -68,6 +69,7 @@ export function SignInPage() {
   const identifierFirst = enabled?.identifierFirst === true
   const socialProviders = config?.identityProviders ?? []
   const primaryMode = useMemo(() => (enabled ? primarySignInMode(enabled) : null), [enabled])
+  const previousPrimaryMode = useRef(primaryMode)
   const activeMode = mode ?? primaryMode
   const showIdentifierStep = identifierFirst && !identifierConfirmed && activeMode !== null
   const needsEmailIdentifier = identifierFirst && activeMode !== 'password' && !identifier.includes('@')
@@ -80,6 +82,9 @@ export function SignInPage() {
     resetCaptcha()
   }
   useEffect(() => {
+    const previous = previousPrimaryMode.current
+    previousPrimaryMode.current = primaryMode
+    if (previous === null) return
     setMode((current) => (current === primaryMode ? current : null))
     setStep('credential')
     setOtp('')
