@@ -38,7 +38,7 @@ export const resourceAccess = {
     scopes: { read: 'webhooks:read', write: 'webhooks:write' },
   },
   agents: {
-    routePrefixes: ['agents', 'access'],
+    routePrefixes: ['agents'],
     scopes: { read: 'agents:read', write: 'agents:write' },
   },
   auditEvents: {
@@ -69,10 +69,6 @@ export const resourceByRoutePrefix = Object.fromEntries(
 
 export function protectedResourceForPath(path: string): ProtectedResource | null {
   const [prefix, child] = path.replace(/^\/+/, '').split('/')
-  if (prefix === 'access') {
-    if (child === 'consents') return 'applications'
-    if (child === 'requests') return 'agents'
-  }
   if (prefix === 'realm') {
     if (child === 'security-policy') return 'security'
     if (child === 'audit-events') return 'auditEvents'

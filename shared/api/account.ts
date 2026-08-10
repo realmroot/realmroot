@@ -152,17 +152,6 @@ export type LinkedAccountsResponse = {
   }>
 }
 
-export type ConsentedApplicationsResponse = {
-  applications: Array<{
-    id: string
-    applicationName: string
-    applicationSlug: string
-    scopes: string[]
-    grantedAt: string
-    expiresAt: string | null
-  }>
-}
-
 export type AccountSessionsResponse = {
   sessions: Array<{
     id: string

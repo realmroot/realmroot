@@ -13,12 +13,14 @@ Feature: Unified Realmroot resource API
     Then /api/openapi.json returns the OpenAPI 3.1 contract
     And /api/docs renders interactive API documentation from that contract
     And every operation is grouped under a declared domain tag
+    And every Realm resource operation is grouped under the Platform tag
+    And every Realmroot-owned API operation except Account Center, hosted OAuth UI, health, hosted configuration, first-run onboarding, and Better Auth protocol operations appears in the contract
     And API responses advertise that contract with Restish-compatible Link headers
     And the default hosted Restish profile targets https://id.realmroot.dev/api
     And Restish v2 exposes the current Agent and resource operations from the same contract
     And resources are not grouped under a management path
     And every protected operation declares its exact authorization scope through an OpenAPI security requirement
-    And the contract declares separate agentAuth and oauth2 security schemes plus the session-cookie scheme
+    And the contract declares separate agentAssertion, agentAuth, oauth2, and session-cookie security schemes
     And agentAuth identifies plugin-managed Agent protocol credentials while oauth2 identifies Resource-bound management credentials
     And configuring oauth2 management access cannot replace agentAuth for whoami or other Agent protocol operations
     And no API-key, capability extension, or plugin provider name appears as a public security scheme

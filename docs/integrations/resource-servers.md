@@ -293,7 +293,7 @@ Brokered Resource Servers translate provider lifecycle notifications into
 provider-neutral Connection Event resources:
 
 ```http
-PUT /api/provider-connection-events/delivery-018f4f92
+PUT /api/resource-servers/ars_example/connection-events/delivery-018f4f92
 Authorization: Bearer <resource-scoped-secret>
 Realmroot-Timestamp: 1786233600
 Realmroot-Signature: sha256=<hmac-sha256-hex>
@@ -301,7 +301,6 @@ Content-Type: application/json
 
 {
   "type": "authorityChanged",
-  "resource": "https://adapter.example.com/provider",
   "brokerReference": "connection-opaque-id",
   "occurredAt": "2026-08-08T20:00:00.000Z",
   "revision": 42,
@@ -457,7 +456,7 @@ whose relevant metadata is:
 {
   "client_name": "Realmroot External API Resource",
   "redirect_uris": [
-    "https://realmroot.example.com/api/account-connections/oauth/callback"
+    "https://realmroot.example.com/oauth/account-connection/callback"
   ],
   "grant_types": [
     "authorization_code",

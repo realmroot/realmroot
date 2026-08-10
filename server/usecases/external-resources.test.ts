@@ -2377,7 +2377,7 @@ describe('external API resource authorization', () => {
           },
           links: {
             self: expect.stringContaining('/api/resource-servers/resource-1/resources/'),
-            accessRequests: 'https://auth.example.com/api/access/requests',
+            accessRequests: 'https://auth.example.com/api/agent/access-requests',
           },
         },
         {
@@ -2390,7 +2390,7 @@ describe('external API resource authorization', () => {
           agentAuthorization: { authorizedScopes: [], requestableScopes: [] },
           links: {
             self: expect.stringContaining('/api/resource-servers/resource-1/resources/'),
-            accessRequests: 'https://auth.example.com/api/access/requests',
+            accessRequests: 'https://auth.example.com/api/agent/access-requests',
           },
         },
       ],
@@ -2730,7 +2730,7 @@ describe('external API resource authorization', () => {
       deps,
       request.id,
       proof,
-      'https://auth.example.com/api/access/requests/request-1/credentials',
+      'https://auth.example.com/api/agent/access-requests/request-1/credentials',
       principal(),
       { issuer: 'https://auth.example.com/api/auth', sign },
     )
@@ -2776,7 +2776,7 @@ describe('external API resource authorization', () => {
         deps,
         grant.id,
         proof,
-        'https://auth.example.com/api/access/requests/request-1/credentials',
+        'https://auth.example.com/api/agent/access-requests/request-1/credentials',
         principal(),
         { issuer: principal().issuer, sign },
       ),
@@ -2787,7 +2787,7 @@ describe('external API resource authorization', () => {
         deps,
         grant.id,
         proof,
-        'https://auth.example.com/api/access/requests/request-1/credentials',
+        'https://auth.example.com/api/agent/access-requests/request-1/credentials',
         principal(),
         { issuer: principal().issuer, sign },
       ),
@@ -2803,7 +2803,7 @@ describe('external API resource authorization', () => {
         deps,
         grant.id,
         proof,
-        'https://auth.example.com/api/access/requests/request-1/credentials',
+        'https://auth.example.com/api/agent/access-requests/request-1/credentials',
         principal(),
         { issuer: principal().issuer, sign },
       ),
@@ -2814,7 +2814,7 @@ describe('external API resource authorization', () => {
         deps,
         grant.id,
         proof,
-        'https://auth.example.com/api/access/requests/request-1/credentials',
+        'https://auth.example.com/api/agent/access-requests/request-1/credentials',
         principal(),
         { issuer: principal().issuer, sign },
       ),
@@ -2826,7 +2826,7 @@ describe('external API resource authorization', () => {
         deps,
         grant.id,
         proof,
-        'https://auth.example.com/api/access/requests/request-1/credentials',
+        'https://auth.example.com/api/agent/access-requests/request-1/credentials',
         principal(),
         { issuer: principal().issuer, sign },
       ),
@@ -2838,7 +2838,7 @@ describe('external API resource authorization', () => {
         deps,
         grant.id,
         proof,
-        'https://auth.example.com/api/access/requests/request-1/credentials',
+        'https://auth.example.com/api/agent/access-requests/request-1/credentials',
         principal(),
         { issuer: principal().issuer, sign },
       ),
@@ -2850,7 +2850,7 @@ describe('external API resource authorization', () => {
         deps,
         grant.id,
         proof,
-        'https://auth.example.com/api/access/requests/request-1/credentials',
+        'https://auth.example.com/api/agent/access-requests/request-1/credentials',
         principal(),
         { issuer: principal().issuer, sign },
       ),
@@ -2862,7 +2862,7 @@ describe('external API resource authorization', () => {
         deps,
         grant.id,
         proof,
-        'https://auth.example.com/api/access/requests/request-1/credentials',
+        'https://auth.example.com/api/agent/access-requests/request-1/credentials',
         principal(),
         { issuer: principal().issuer, sign },
       ),
@@ -2874,7 +2874,7 @@ describe('external API resource authorization', () => {
         deps,
         grant.id,
         proof,
-        'https://auth.example.com/api/access/requests/request-1/credentials',
+        'https://auth.example.com/api/agent/access-requests/request-1/credentials',
         principal(),
         { issuer: principal().issuer, sign },
       ),
@@ -2890,7 +2890,7 @@ describe('external API resource authorization', () => {
         deps,
         grant.id,
         proof,
-        'https://auth.example.com/api/access/requests/request-1/credentials',
+        'https://auth.example.com/api/agent/access-requests/request-1/credentials',
         principal(),
         { issuer: principal().issuer, sign },
       ),
@@ -2907,7 +2907,7 @@ describe('external API resource authorization', () => {
         deps,
         grant.id,
         proof,
-        'https://auth.example.com/api/access/requests/request-1/credentials',
+        'https://auth.example.com/api/agent/access-requests/request-1/credentials',
         principal(),
         { issuer: principal().issuer, sign },
       ),
@@ -2919,7 +2919,7 @@ describe('external API resource authorization', () => {
         deps,
         grant.id,
         proof,
-        'https://auth.example.com/api/access/requests/request-1/credentials',
+        'https://auth.example.com/api/agent/access-requests/request-1/credentials',
         principal(),
         { issuer: principal().issuer, sign },
       ),
@@ -2936,7 +2936,7 @@ describe('external API resource authorization', () => {
         deps,
         grant.id,
         proof,
-        'https://auth.example.com/api/access/requests/request-1/credentials',
+        'https://auth.example.com/api/agent/access-requests/request-1/credentials',
         principal(),
         { issuer: principal().issuer, sign },
       ),
@@ -2948,7 +2948,7 @@ describe('external API resource authorization', () => {
         deps,
         grant.id,
         proof,
-        'https://auth.example.com/api/access/requests/request-1/credentials',
+        'https://auth.example.com/api/agent/access-requests/request-1/credentials',
         principal(),
         { issuer: principal().issuer, sign },
       ),
@@ -2960,7 +2960,7 @@ describe('external API resource authorization', () => {
         deps,
         grant.id,
         proof,
-        'https://auth.example.com/api/access/requests/request-1/credentials',
+        'https://auth.example.com/api/agent/access-requests/request-1/credentials',
         principal(),
         { issuer: principal().issuer, sign },
       ),
@@ -2973,7 +2973,7 @@ describe('external API resource authorization', () => {
         deps,
         grant.id,
         proof,
-        'https://auth.example.com/api/access/requests/request-1/credentials',
+        'https://auth.example.com/api/agent/access-requests/request-1/credentials',
         principal(),
         { issuer: principal().issuer, sign },
       ),
@@ -3056,7 +3056,7 @@ describe('external API resource authorization', () => {
         deps,
         grant.id,
         await createDpopProof('https://projects.example.com/token'),
-        'https://auth.example.com/api/access/requests/request-1/credentials',
+        'https://auth.example.com/api/agent/access-requests/request-1/credentials',
         principal(),
         { issuer: principal().issuer, sign: vi.fn().mockResolvedValue('agent-assertion') },
       )
@@ -3723,8 +3723,9 @@ describe('external API resource authorization', () => {
     const created = await createAccessRequest(
       deps,
       {
-        resource: { href: '/api/resource-servers/resource-1/resources/service' },
+        resourceServerId: 'resource-1',
         scopes: ['projects:read'],
+        authorizationDetails: [],
         reason: 'Read projects',
       },
       principal(),
@@ -3751,8 +3752,9 @@ describe('external API resource authorization', () => {
       createAccessRequest(
         deps,
         {
-          resource: { href: '/api/resource-servers/resource-1/resources/service' },
+          resourceServerId: 'resource-1',
           scopes: ['projects:read'],
+          authorizationDetails: [],
         },
         principal(),
         'https://auth.example.com/',
@@ -3763,7 +3765,7 @@ describe('external API resource authorization', () => {
     await expect(
       createAccessRequest(
         deps,
-        { resource: { href: '/api/resource-servers/resource-1/resources/service' }, scopes: ['projects:read'] },
+        { resourceServerId: 'resource-1', scopes: ['projects:read'], authorizationDetails: [] },
         principal(),
         'https://auth.example.com/',
       ),
@@ -4128,7 +4130,7 @@ describe('external API resource authorization', () => {
       mode: 'persistent',
     })
     const signer = { issuer: principal().issuer, sign: vi.fn().mockResolvedValue('credential-token') }
-    const endpoint = `https://auth.example.com/api/access/requests/${approved.id}/credentials`
+    const endpoint = `https://auth.example.com/api/agent/access-requests/${approved.id}/credentials`
 
     await expect(
       createAccessRequestCredential(deps, approved.id, await createDpopProof(endpoint), endpoint, principal(), signer),
@@ -4199,40 +4201,11 @@ describe('external API resource authorization', () => {
     vi.mocked(deps.externalResources.listActiveEntitlementsByAgent).mockResolvedValue([])
     const created = await createAccessRequest(
       deps,
-      { resource: { href: catalog.items[0]!.links.self }, scopes: ['projects:read'] },
+      { resourceServerId: external.id, scopes: ['projects:read'], authorizationDetails: [detail] },
       principal(),
       'https://auth.example.com',
     )
     expect(created.target).toEqual({ type: 'resource', resource: { href: catalog.items[0]!.links.self } })
-
-    await expect(
-      createAccessRequest(
-        deps,
-        { resource: { href: catalog.items[0]!.links.self }, scopes: ['projects:read'] },
-        principal(),
-        'https://different.example.com',
-      ),
-    ).rejects.toThrow('another Realmroot issuer')
-    await expect(
-      createAccessRequest(
-        deps,
-        { resource: { href: 'not a valid URL%' }, scopes: ['projects:read'] },
-        principal(),
-        'https://auth.example.com',
-      ),
-    ).rejects.toThrow('Resource href is invalid')
-
-    await expect(
-      createAccessRequest(
-        deps,
-        {
-          resource: { href: `/api/resource-servers/${external.id}/resources/value%2Fwith-slash` },
-          scopes: ['projects:read'],
-        },
-        principal(),
-        'https://auth.example.com',
-      ),
-    ).rejects.toThrow('Resource href is invalid')
   })
 
   it('renders Realmroot authority approval and credential offers', async () => {
@@ -4303,7 +4276,7 @@ describe('external API resource authorization', () => {
     })
   })
 
-  it('rejects invalid Resource references at each server boundary', async () => {
+  it('validates optional authorization details against the selected Resource Server', async () => {
     const nativeDeps = createTestDeps()
     const native = nativeResource()
     vi.mocked(nativeDeps.authorization.findResource).mockResolvedValue(native)
@@ -4312,49 +4285,15 @@ describe('external API resource authorization', () => {
     await expect(
       createAccessRequest(
         nativeDeps,
-        { resource: { href: `/api/resource-servers/${native.id}/resources/not-service` }, scopes: ['projects:read'] },
-        principal(),
-        'https://auth.example.com',
-      ),
-    ).rejects.toThrow('Resource was not found.')
-    await expect(
-      createAccessRequest(
-        nativeDeps,
-        { resource: { href: 'http://[' }, scopes: ['projects:read'] },
-        principal(),
-        'https://auth.example.com',
-      ),
-    ).rejects.toThrow('Resource href is invalid.')
-    await expect(
-      createAccessRequest(
-        nativeDeps,
         {
-          resource: { href: `https://other.example/api/resource-servers/${native.id}/resources/service` },
+          resourceServerId: native.id,
           scopes: ['projects:read'],
+          authorizationDetails: [{ type: 'project_access', project_id: 'project-1' }],
         },
         principal(),
         'https://auth.example.com',
       ),
-    ).rejects.toThrow('another Realmroot issuer')
-    await expect(
-      createAccessRequest(
-        nativeDeps,
-        {
-          resource: { href: `/api/resource-servers/${native.id}/resources/a%2Fb` },
-          scopes: ['projects:read'],
-        },
-        principal(),
-        'https://auth.example.com',
-      ),
-    ).rejects.toThrow('Resource href is invalid')
-    await expect(
-      createAccessRequest(
-        nativeDeps,
-        { resource: { href: '/not-a-resource' }, scopes: ['projects:read'] },
-        principal(),
-        'https://auth.example.com',
-      ),
-    ).rejects.toThrow('Resource href is invalid.')
+    ).rejects.toThrow('Native API resources do not accept authorization details.')
 
     const realmrootDeps = createTestDeps()
     const builtIn = { ...native, id: 'res_realmroot', resourceUrl: 'https://auth.example.com/api' }
@@ -4369,11 +4308,11 @@ describe('external API resource authorization', () => {
     await expect(
       createAccessRequest(
         realmrootDeps,
-        { resource: { href: `/api/resource-servers/${builtIn.id}/resources/missing` }, scopes: ['users:read'] },
+        { resourceServerId: builtIn.id, scopes: ['users:read'] },
         principal(),
         'https://auth.example.com',
       ),
-    ).rejects.toThrow('Resource was not found.')
+    ).rejects.toThrow('Select exactly one Realmroot authority Resource.')
 
     const externalDeps = createTestDeps()
     authorizationDeps(externalDeps)
@@ -4382,24 +4321,25 @@ describe('external API resource authorization', () => {
     await expect(
       createAccessRequest(
         externalDeps,
-        { resource: { href: `/api/resource-servers/${resource().id}/resources/service` }, scopes: ['projects:read'] },
+        { resourceServerId: resource().id, scopes: ['projects:read'] },
         principal(),
         'https://auth.example.com',
       ),
-    ).rejects.toThrow('Connect the Resource Server')
+    ).rejects.toThrow('Active resource account connection was not found.')
 
     vi.mocked(externalDeps.externalResources.findConnectionByOwnerResource).mockResolvedValue(connectionRecord())
     await expect(
       createAccessRequest(
         externalDeps,
         {
-          resource: { href: `/api/resource-servers/${resource().id}/resources/not-service` },
+          resourceServerId: resource().id,
           scopes: ['projects:read'],
+          authorizationDetails: [{ type: 'unsupported' }],
         },
         principal(),
         'https://auth.example.com',
       ),
-    ).rejects.toThrow('Resource was not found.')
+    ).rejects.toThrow('does not use authorization details')
   })
 
   it('rejects malformed Realmroot authority approval records', async () => {
@@ -5029,7 +4969,7 @@ describe('external API resource authorization', () => {
     const publicJwk = await exportJWK(publicKey)
     const proof = await new SignJWT({
       htm: 'POST',
-      htu: 'https://auth.example.com/api/access/requests/request-1/credentials',
+      htu: 'https://auth.example.com/api/agent/access-requests/request-1/credentials',
       jti: crypto.randomUUID(),
       iat: Math.floor(Date.now() / 1000),
     })
@@ -5042,7 +4982,7 @@ describe('external API resource authorization', () => {
         deps,
         'request-1',
         proof,
-        'https://auth.example.com/api/access/requests/request-1/credentials',
+        'https://auth.example.com/api/agent/access-requests/request-1/credentials',
         principal(),
         { issuer: principal().issuer, sign },
       ),
@@ -5075,7 +5015,7 @@ describe('external API resource authorization', () => {
         deps,
         'request-1',
         proof,
-        'https://auth.example.com/api/access/requests/request-1/credentials',
+        'https://auth.example.com/api/agent/access-requests/request-1/credentials',
         principal(),
         { issuer: principal().issuer, sign },
       ),
@@ -5146,7 +5086,7 @@ describe('external API resource authorization', () => {
     ])
     const { privateKey, publicKey } = await generateKeyPair('ES256', { extractable: true })
     const publicJwk = await exportJWK(publicKey)
-    const tokenUrl = 'https://auth.example.com/api/access/requests/request-1/credentials'
+    const tokenUrl = 'https://auth.example.com/api/agent/access-requests/request-1/credentials'
     const proof = await new SignJWT({
       htm: 'POST',
       htu: tokenUrl,
@@ -5160,7 +5100,7 @@ describe('external API resource authorization', () => {
 
     await expect(getAccessRequest(deps, 'request-1', principal(), 'https://auth.example.com')).resolves.toMatchObject({
       credentialOffer: {
-        proof: { uri: 'https://auth.example.com/api/access/requests/request-1/credentials' },
+        proof: { uri: 'https://auth.example.com/api/agent/access-requests/request-1/credentials' },
       },
     })
     await expect(
@@ -5412,15 +5352,6 @@ describe('external API resource authorization', () => {
     await expect(getAgentAccessRequest(deps, 'request-1', principal())).rejects.toThrow(
       'Agent access request was not found.',
     )
-    await expect(
-      createAccessRequest(
-        deps,
-        { resource: { href: '/api/resource-servers/missing/resources/service' }, scopes: [] },
-        principal(),
-        'https://auth.example.com',
-      ),
-    ).rejects.toThrow('Resource href does not belong to the selected Resource Server.')
-
     vi.mocked(deps.externalResources.findAccessRequest).mockResolvedValue({
       ...requestRecord(),
       status: 'approved',
@@ -5787,7 +5718,7 @@ describe('external API resource authorization', () => {
       approvedEntitlements: [{ scope: 'projects:read', entitlementId: 'ent_1' }],
     })
     const signer = { issuer: principal().issuer, sign: vi.fn().mockResolvedValue('native-token') }
-    const tokenUrl = 'https://auth.example.com/api/access/requests/request-1/credentials'
+    const tokenUrl = 'https://auth.example.com/api/agent/access-requests/request-1/credentials'
 
     vi.mocked(deps.externalResources.findAccessRequest).mockResolvedValueOnce({
       ...requestRecord(),
@@ -5927,7 +5858,7 @@ describe('external API resource authorization', () => {
       approvedEntitlements: [{ scope: 'users:read', entitlementId: 'ent_1' }],
     })
     const signer = { issuer: principal().issuer, sign: vi.fn().mockResolvedValue('realmroot-token') }
-    const tokenUrl = 'https://auth.example.com/api/access/requests/request-1/credentials'
+    const tokenUrl = 'https://auth.example.com/api/agent/access-requests/request-1/credentials'
 
     const result = await issueTargetAccessToken(
       deps,

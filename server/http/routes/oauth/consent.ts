@@ -13,7 +13,7 @@ export function createOAuthConsentRoute() {
 
   app.use('*', authenticatedUser())
 
-  app.get('/', zValidator('query', consentRequestQuerySchema), async (c) => {
+  app.get('/application-authorization-request', zValidator('query', consentRequestQuerySchema), async (c) => {
     const { user } = getPrincipal(c)
     const query = c.req.valid('query')
     const consent = await loadConsentRequest(
@@ -31,7 +31,7 @@ export function createOAuthConsentRoute() {
     return c.json(consent)
   })
 
-  app.post('/', async (c) => {
+  app.post('/application-authorizations', async (c) => {
     const { user } = getPrincipal(c)
     const body = await readJson(c, hostedConsentApprovalRequestSchema)
     const consent = await createConsent(getDeps(c), body, user!.id)

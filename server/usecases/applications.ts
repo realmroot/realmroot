@@ -256,6 +256,11 @@ function toApplicationAuthorization(authorization: ApplicationAuthorizationRecor
   return {
     id: authorization.id,
     applicationId: authorization.applicationId,
+    application: {
+      id: authorization.applicationId,
+      name: authorization.applicationName,
+      slug: authorization.applicationSlug,
+    },
     user: {
       id: authorization.userId,
       displayName: authorization.userDisplayName,

@@ -123,7 +123,7 @@ describe('admin console user detail lifecycle', () => {
           }),
         )
       }
-      if (url.startsWith('/api/access/consents')) {
+      if (url.startsWith('/api/users/user-1/application-authorizations')) {
         return Promise.resolve(
           jsonResponse({
             authorizations: [
@@ -293,7 +293,7 @@ describe('admin console user detail lifecycle', () => {
     expect(await screen.findByText('Customer portal')).toBeTruthy()
     expect(screen.getByText('Reports')).toBeTruthy()
     expect(screen.getByText('Never')).toBeTruthy()
-    expect(requestedUrls).toContain('/api/access/consents?userId=user-1&status=active&limit=100')
+    expect(requestedUrls).toContain('/api/users/user-1/application-authorizations?limit=100')
 
     fireEvent.mouseDown(screen.getByRole('tab', { name: 'Settings' }), { button: 0, ctrlKey: false })
     fireEvent.click(await screen.findByRole('button', { name: 'Send password reset' }))

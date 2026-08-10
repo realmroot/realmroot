@@ -42,8 +42,8 @@ describe('account API client', () => {
     })
     await account.unlinkWalletAddress('siwe:1:0x0000000000000000000000000000000000000001')
     await account.unlinkAccount('google', 'google-account-1')
-    await account.listConsentedApplications()
-    await account.revokeApplicationConsent('consent-1')
+    await account.listAccountApplicationAuthorizations()
+    await account.revokeAccountApplicationAuthorization('authorization-1')
     await account.listAccountSessions()
     await account.getAccountSecurity()
     await account.startTotpEnrollment({ password: 'password' })
@@ -76,8 +76,8 @@ describe('account API client', () => {
       ],
       ['walletAddress.delete', { param: { accountId: 'siwe:1:0x0000000000000000000000000000000000000001' } }],
       ['linkedAccounts.delete', { param: { providerId: 'google' }, query: { accountId: 'google-account-1' } }],
-      ['applications.get'],
-      ['applicationConsent.delete', { param: { consentId: 'consent-1' } }],
+      ['applicationAuthorizations.get', { query: {} }],
+      ['applicationAuthorization.delete', { param: { authorizationId: 'authorization-1' } }],
       ['sessions.get'],
       ['security.get'],
       ['totpEnrollment.post', { json: { password: 'password' } }],
@@ -362,9 +362,9 @@ async function loadAccountApi() {
             $post: endpoint('walletAddress.post'),
             ':accountId': { $delete: endpoint('walletAddress.delete') },
           },
-          applications: {
-            $get: endpoint('applications.get'),
-            ':consentId': { $delete: endpoint('applicationConsent.delete') },
+          'application-authorizations': {
+            $get: endpoint('applicationAuthorizations.get'),
+            ':authorizationId': { $delete: endpoint('applicationAuthorization.delete') },
           },
           sessions: { $get: endpoint('sessions.get') },
           security: {

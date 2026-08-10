@@ -147,7 +147,7 @@ describe('hosted auth pages 5', () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
       if (url.startsWith('/api/configz')) return Promise.resolve(jsonResponse(configz))
-      if (url.startsWith('/api/oauth/consent') && init?.method !== 'POST') {
+      if (url.startsWith('/api/account/application-authorization-request')) {
         return Promise.resolve(jsonResponse(consentResponse))
       }
       requests.push({ url, body: init?.body ? JSON.parse(String(init.body)) : null })
@@ -167,7 +167,7 @@ describe('hosted auth pages 5', () => {
     await waitFor(() => {
       expect(requests).toEqual([
         {
-          url: '/api/oauth/consent',
+          url: '/api/account/application-authorizations',
           body: { clientId: 'client-1', scopes: ['openid', 'profile'] },
         },
       ])
@@ -188,7 +188,9 @@ describe('hosted auth pages 5', () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
       if (url.startsWith('/api/configz')) return Promise.resolve(jsonResponse(configz))
-      if (url.startsWith('/api/oauth/consent')) return Promise.resolve(jsonResponse(consentResponse))
+      if (url.startsWith('/api/account/application-authorization-request')) {
+        return Promise.resolve(jsonResponse(consentResponse))
+      }
       requests.push({ url, body: init?.body ? JSON.parse(String(init.body)) : null })
       return Promise.resolve(jsonResponse({}))
     })
@@ -227,10 +229,10 @@ describe('hosted auth pages 5', () => {
       '',
       '/oauth/consent?client_id=client-1&redirect_uri=https%3A%2F%2Fclient.example.com%2Fcallback&state=state-1',
     )
-    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+    vi.spyOn(window, 'fetch').mockImplementation((input, _init) => {
       const url = String(input)
       if (url.startsWith('/api/configz')) return Promise.resolve(jsonResponse(configz))
-      if (url.startsWith('/api/oauth/consent') && init?.method !== 'POST') {
+      if (url.startsWith('/api/account/application-authorization-request')) {
         return Promise.resolve(
           jsonResponse({
             ...consentResponse,

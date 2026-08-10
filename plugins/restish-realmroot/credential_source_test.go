@@ -166,7 +166,7 @@ func TestCredentialSourceReturnsNextDPoPNonceWithIssuedCredential(t *testing.T) 
 func TestCredentialSourceRemovesOnlyTerminallyRejectedOffer(t *testing.T) {
 	readOffer := testCredential(t, "", time.Time{})
 	writeOffer := readOffer
-	writeOffer.CredentialEndpoint = "https://auth.example.com/api/access/requests/write/credentials"
+	writeOffer.CredentialEndpoint = "https://auth.example.com/api/agent/access-requests/write/credentials"
 	writeOffer.Scopes = []string{"files:write"}
 	states := newCredentialState(t, readOffer)
 	source := states.state.CredentialSources[testCredentialSourceReference]

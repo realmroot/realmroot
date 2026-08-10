@@ -241,12 +241,6 @@ function createUserRepositoryMock() {
       limit: 25,
       offset: 50,
     }),
-    listConsentedApplications: vi.fn().mockResolvedValue({
-      items: [{ id: 'consent-1' }],
-      total: 1,
-      limit: 10,
-      offset: 0,
-    }),
   }
 }
 

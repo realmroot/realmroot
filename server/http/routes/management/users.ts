@@ -1,6 +1,11 @@
 import { badRequest, forbidden, notFound } from '@server/domain/errors'
 import { validateEmailPolicy, validatePasswordPolicy } from '@server/domain/security/policy'
+import { listApplicationAuthorizations } from '@server/usecases/applications'
 import { publishWebhookEvent } from '@server/usecases/webhooks'
+import {
+  listApplicationAuthorizationsQuerySchema,
+  listApplicationAuthorizationsResponseSchema,
+} from '@shared/api/applications'
 import {
   listManagementUsersResponseSchema,
   managementUserDetailResponseSchema,
@@ -67,6 +72,20 @@ export function managementUserRoutes(authApi: ManagementAuthApi, _options: Manag
     const user = await users.createManagedUser(body)
     await publishWebhookEvent(getDeps(c), 'user.created', { user: managementUserWebhookData(user) })
     return c.json({ user }, 201)
+  })
+
+  app.get('/:id/application-authorizations', async (c) => {
+    await requireManagedUserRead(c, c.req.param('id'))
+    const query = readQuery(c, listApplicationAuthorizationsQuerySchema)
+    return c.json(
+      listApplicationAuthorizationsResponseSchema.parse(
+        await listApplicationAuthorizations(
+          getDeps(c),
+          { ...query, userId: c.req.param('id'), status: 'active' },
+          await authorizedOrganizationIds(c, 'applications:read'),
+        ),
+      ),
+    )
   })
 
   app.get('/:id', async (c) => {

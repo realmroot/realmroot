@@ -7,7 +7,7 @@ import { readQuery } from './validation'
 export function createResourceConnectionRoutes(canonicalOrigin?: string) {
   const app = new Hono()
 
-  app.get('/oauth/callback', async (c) => {
+  app.get('/callback', async (c) => {
     const origin = canonicalOrigin ?? new URL(c.req.url).origin
     const callback = readQuery(c, resourceConnectionCallbackQuerySchema)
     if (callback.error !== undefined) {

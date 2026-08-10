@@ -151,7 +151,7 @@ Feature: Account Center
   @entrypoint:product-ui @journey:authorized-app-revoke
   Scenario: Authorized application access can be revoked
     Given I have granted an application access
-    When I revoke the grant
+    When I revoke it from the Account application-authorization collection
     Then the application is removed from authorized apps
 
   @entrypoint:product-ui @journey:authorized-app-separation
@@ -159,7 +159,7 @@ Feature: Account Center
     Given I connected an external Provider account for Agent access
     And I granted an application access to my Realmroot identity
     When I open /applications
-    Then I see only applications authorized to access my Realmroot identity
+    Then the Account application-authorization collection shows only applications authorized to access my Realmroot identity
     When I open /connections
     Then I see the external Provider account and its Resource authorization summary
 

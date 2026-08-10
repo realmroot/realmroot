@@ -1,0 +1,14 @@
+[
+  {
+    "method": "POST",
+    "path": "/agent/enrollments",
+    "operationId": "createAgentEnrollment",
+    "semanticHash": "648fef27b5961c4582358628c425d70c9b98b71f3b99c35ef2b04621540a4699"
+  },
+  {
+    "method": "GET",
+    "path": "/agent/enrollments/{enrollmentId}",
+    "operationId": "getAgentEnrollment",
+    "semanticHash": "4143186cfb7f51c7b8bec8a4190a5ba3276f9d6fb6d1e3519ef086b0e2949089"
+  }
+]

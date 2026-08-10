@@ -62,7 +62,7 @@ canonical polling link:
     "expiresAt": "2026-08-03T16:30:00Z"
   },
   "links": {
-    "self": "https://id.realmroot.dev/api/access/requests/request-1"
+    "self": "https://id.realmroot.dev/api/agent/access-requests/request-1"
   }
 }
 ```
@@ -89,7 +89,7 @@ An approved access request may include:
     "type": "dpop",
     "resource": {"href": "https://id.realmroot.dev/api/resource-servers/zpan/resources/workspace-1"},
     "resourceIndicator": "https://drive.zpan.space/api",
-    "endpoint": "https://id.realmroot.dev/api/access/requests/request-1/credentials",
+    "endpoint": "https://id.realmroot.dev/api/agent/access-requests/request-1/credentials",
     "proof": {
       "algorithm": "ES256",
       "method": "POST",

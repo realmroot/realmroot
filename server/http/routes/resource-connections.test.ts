@@ -18,10 +18,10 @@ describe('Resource connection callback routes', () => {
     const app = new Hono()
       .use('*', depsMiddleware(createTestDeps()))
       .onError((error, c) => handleApiError(error, c))
-      .route('/api/account-connections', createResourceConnectionRoutes('https://auth.example.com'))
+      .route('/oauth/account-connection', createResourceConnectionRoutes('https://auth.example.com'))
 
     const response = await app.request(
-      'https://auth.example.com/api/account-connections/oauth/callback?state=state-1&error=invalid_target&error_description=Workspace+resource+is+not+configured',
+      'https://auth.example.com/oauth/account-connection/callback?state=state-1&error=invalid_target&error_description=Workspace+resource+is+not+configured',
     )
 
     expect(response.status).toBe(302)

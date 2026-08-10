@@ -56,7 +56,7 @@ describe('management account settings routes', () => {
       body: JSON.stringify({ currentPassword: 'old-password', newPassword: 'new-password' }),
     })
     const linkedAccounts = await app.request('/api/account/linked-accounts', { headers })
-    const applications = await app.request('/api/account/applications', { headers })
+    const applications = await app.request('/api/account/application-authorizations', { headers })
     const sessions = await app.request('/api/account/sessions', { headers })
     expect(profile.status).toBe(403)
     expect(email.status).toBe(403)
@@ -68,7 +68,6 @@ describe('management account settings routes', () => {
     expect(auth.api.changeEmail).not.toHaveBeenCalled()
     expect(auth.api.changePassword).not.toHaveBeenCalled()
     expect(users.listLinkedAccounts).not.toHaveBeenCalled()
-    expect(users.listConsentedApplications).not.toHaveBeenCalled()
     expect(users.listSessions).not.toHaveBeenCalled()
   })
 
@@ -194,17 +193,21 @@ describe('management account settings routes', () => {
 
   it('serves account read APIs from the current end-user session', async () => {
     const users = createUserRepositoryMock()
-    const app = createApp(createAuthMock(), createTestDeps({ users }))
+    const deps = createTestDeps({ users })
+    deps.applications.listAuthorizations = vi.fn().mockResolvedValue({
+      items: [],
+      pagination: { limit: 3, offset: 6, total: 10, hasMore: true, nextOffset: 9 },
+    })
+    const app = createApp(createAuthMock(), deps)
     const headers = userHeaders()
 
     await app.request('/api/account/profile', { headers })
     const accounts = await app.request('/api/account/linked-accounts?limit=2&offset=4', { headers })
-    const applications = await app.request('/api/account/applications?limit=3&offset=6', { headers })
+    const applications = await app.request('/api/account/application-authorizations?limit=3&offset=6', { headers })
     const sessions = await app.request('/api/account/sessions?limit=4&offset=8', { headers })
 
     expect(users.getPublicProfile).toHaveBeenCalledWith('user-1')
     expect(users.listLinkedAccounts).toHaveBeenCalledWith('user-1', { limit: 2, offset: 4 })
-    expect(users.listConsentedApplications).toHaveBeenCalledWith('user-1', { limit: 3, offset: 6 })
     expect(users.listSessions).toHaveBeenCalledWith('user-1', { limit: 4, offset: 8 })
     await expect(accounts.json()).resolves.toMatchObject({
       accounts: [],
@@ -217,7 +220,7 @@ describe('management account settings routes', () => {
       },
     })
     await expect(applications.json()).resolves.toMatchObject({
-      applications: [],
+      authorizations: [],
       pagination: {
         limit: 3,
         offset: 6,
@@ -367,7 +370,6 @@ function createUserRepositoryMock(): UserRepository {
     assertAccountAvatarReference: vi.fn().mockResolvedValue(undefined),
     assertAdminAvatarReference: vi.fn().mockResolvedValue(undefined),
     listLinkedAccounts: vi.fn().mockImplementation((_userId, page) => Promise.resolve(createPage(page))),
-    listConsentedApplications: vi.fn().mockImplementation((_userId, page) => Promise.resolve(createPage(page))),
     listSessions: vi.fn().mockImplementation((_userId, page) => Promise.resolve(createPage(page))),
     getSessionToken: vi.fn().mockResolvedValue('session-token-1'),
     deleteSessions: vi.fn().mockResolvedValue([]),

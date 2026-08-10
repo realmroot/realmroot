@@ -2,10 +2,10 @@ import type {
   AccountProfileResponse,
   AccountSecurityResponse,
   AccountSessionsResponse,
-  ConsentedApplicationsResponse,
   LinkedAccountsResponse,
 } from '@shared/api/account'
 import type { AccountAgent, AccountAgentGrant } from '@shared/api/agents'
+import type { ApplicationAuthorization } from '@shared/api/applications'
 import type { ConfigzConfigResponse } from '@shared/api/configz'
 import type { PasskeysResponse } from '@shared/api/security'
 import type { ReactNode } from 'react'
@@ -14,7 +14,7 @@ export type UserProfile = AccountProfileResponse['user']
 export type LinkedAccount = LinkedAccountsResponse['accounts'][number]
 export type IdentityProvider = ConfigzConfigResponse['identityProviders'][number]
 export type Web3WalletProvider = ConfigzConfigResponse['builtInProviders']['web3Wallet']
-export type ConsentedApplication = ConsentedApplicationsResponse['applications'][number]
+export type AccountApplicationAuthorization = ApplicationAuthorization
 export type UserSessionDevice = AccountSessionsResponse['sessions'][number]
 export type SecurityState = AccountSecurityResponse['security']
 export type Passkey = PasskeysResponse['passkeys'][number]

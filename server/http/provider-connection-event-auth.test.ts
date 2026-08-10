@@ -9,8 +9,8 @@ vi.mock('crypto', async (importOriginal) => {
 })
 
 const secret = 'provider-connection-event-secret-for-tests-2026'
-const url = 'https://auth.example.com/api/provider-connection-events/delivery-1'
-const path = '/api/provider-connection-events/delivery-1'
+const url = 'https://auth.example.com/api/resource-servers/event-resource/connection-events/delivery-1'
+const path = '/api/resource-servers/event-resource/connection-events/delivery-1'
 const body = new TextEncoder().encode('{"type":"authorityChanged"}')
 const now = new Date('2026-08-08T20:00:00.000Z')
 const timestamp = `${Math.floor(now.getTime() / 1000)}`

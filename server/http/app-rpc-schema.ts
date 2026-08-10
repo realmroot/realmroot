@@ -9,7 +9,6 @@ import type {
   AccountSecurityResponse,
   AccountSessionsResponse,
   AccountWalletAddressLinkInput,
-  ConsentedApplicationsResponse,
   DeveloperConsoleAccessResponse,
   LinkedAccountsResponse,
 } from '@shared/api/account'
@@ -21,16 +20,13 @@ import type {
   ListAgentAuditEventsQuery,
   ListAgentPermissionsQuery,
   ListAgentsQuery,
-  ListManagementAgentAccessRequestsQuery,
   ManagementAgent,
-  ManagementAgentAccessRequest,
   ManagementAgentAuditEvent,
   ManagementAgentInstallation,
   updateApiResourceSchema,
 } from '@shared/api/agent-api'
 import type {
   ApplicationAuthorization,
-  ApplicationAuthorizationRevocation,
   ApplicationResponse,
   ConsentApprovalResponse,
   ConsentRequestResponse,
@@ -163,12 +159,11 @@ export type RpcSchema = {
       201
     >
   }
-  '/api/oauth/consent': {
+  '/api/account/application-authorization-request': {
     $get: RpcEndpoint<
       { query: { client_id: string; redirect_uri: string; scope?: string; state?: string } },
       ConsentRequestResponse
     >
-    $post: RpcEndpoint<{ json: HostedConsentApprovalRequest }, ConsentApprovalResponse, 201>
   }
   '/api/account/profile': {
     $get: RpcEndpoint<RpcNoInput, AccountProfileResponse>
@@ -205,11 +200,15 @@ export type RpcSchema = {
   '/api/account/linked-accounts/:providerId': {
     $delete: RpcEndpoint<{ param: { providerId: string }; query: { accountId: string } }, EmptyResponse>
   }
-  '/api/account/applications': {
-    $get: RpcEndpoint<RpcNoInput, ConsentedApplicationsResponse>
+  '/api/account/application-authorizations': {
+    $get: RpcEndpoint<
+      { query?: Partial<Record<keyof ListApplicationAuthorizationsQuery, string>> },
+      ListApplicationAuthorizationsResponse
+    >
+    $post: RpcEndpoint<{ json: HostedConsentApprovalRequest }, ConsentApprovalResponse, 201>
   }
-  '/api/account/applications/:consentId': {
-    $delete: RpcEndpoint<{ param: { consentId: string } }, EmptyResponse, 204>
+  '/api/account/application-authorizations/:authorizationId': {
+    $delete: RpcEndpoint<{ param: { authorizationId: string } }, EmptyResponse, 204>
   }
   '/api/account/sessions': {
     $get: RpcEndpoint<RpcNoInput, AccountSessionsResponse>
@@ -308,19 +307,18 @@ export type RpcSchema = {
     >
     $post: RpcEndpoint<{ param: { id: string } }, RotateClientSecretResponse, 201>
   }
-  '/api/access/consents': {
+  '/api/applications/:id/authorizations': {
     $get: RpcEndpoint<
       {
+        param: { id: string }
         query?: Partial<Record<keyof ListApplicationAuthorizationsQuery, string>>
       },
       ListApplicationAuthorizationsResponse
     >
   }
-  '/api/access/consents/:authorizationId': {
-    $get: RpcEndpoint<{ param: { authorizationId: string } }, ApplicationAuthorization>
-  }
-  '/api/access/consents/:authorizationId/revocation': {
-    $put: RpcEndpoint<{ param: { authorizationId: string } }, ApplicationAuthorizationRevocation>
+  '/api/applications/:id/authorizations/:authorizationId': {
+    $get: RpcEndpoint<{ param: { id: string; authorizationId: string } }, ApplicationAuthorization>
+    $delete: RpcEndpoint<{ param: { id: string; authorizationId: string } }, EmptyResponse, 204>
   }
   '/api/applications/:applicationId/federated-credentials': {
     $get: RpcEndpoint<{ param: { applicationId: string } }, ListManagementFederatedCredentialsResponse>
@@ -345,6 +343,15 @@ export type RpcSchema = {
     $get: RpcEndpoint<{ param: { id: string } }, ManagementUserDetailResponse>
     $patch: RpcEndpoint<{ param: { id: string }; json: ManagementUpdateUserRequest }, { user: ManagementUserResponse }>
     $delete: RpcEndpoint<{ param: { id: string } }, EmptyResponse>
+  }
+  '/api/users/:id/application-authorizations': {
+    $get: RpcEndpoint<
+      {
+        param: { id: string }
+        query?: Partial<Record<keyof ListApplicationAuthorizationsQuery, string>>
+      },
+      ListApplicationAuthorizationsResponse
+    >
   }
   '/api/users/:userId/permissions': {
     $get: RpcEndpoint<
@@ -527,15 +534,6 @@ export type RpcSchema = {
   '/api/agents/:agentId/permissions/:permissionId': {
     $get: RpcEndpoint<{ param: { agentId: string; permissionId: string } }, AgentPermission>
     $delete: RpcEndpoint<{ param: { agentId: string; permissionId: string } }, EmptyResponse, 204>
-  }
-  '/api/access/requests': {
-    $get: RpcEndpoint<
-      { query?: Partial<Record<keyof ListManagementAgentAccessRequestsQuery, string>> },
-      { items: ManagementAgentAccessRequest[]; pagination: PaginationMetadata }
-    >
-  }
-  '/api/access/requests/:requestId': {
-    $get: RpcEndpoint<{ param: { requestId: string } }, ManagementAgentAccessRequest>
   }
   '/api/realm/audit-events': {
     $get: RpcEndpoint<

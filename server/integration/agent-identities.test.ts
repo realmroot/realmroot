@@ -455,7 +455,7 @@ describe('Agent identity enrollment over real D1', () => {
     const accessRequest = await createAccessRequest(
       harness.deps,
       {
-        resource: { href: `/api/resource-servers/${resource.id}/resources/service` },
+        resourceServerId: resource.id,
         scopes: ['repo:read'],
         reason: 'Read repositories',
       },

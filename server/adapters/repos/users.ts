@@ -1,21 +1,12 @@
 import { badRequest, notFound } from '@server/domain/errors'
 import { hashPassword } from '@server/domain/password'
 import type { UserProfile, UserRepository } from '@server/usecases/ports'
-import { and, asc, count, desc, eq, inArray, isNull, like, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, eq, inArray, like, type SQL } from 'drizzle-orm'
 import type { BatchItem } from 'drizzle-orm/batch'
 import type { AccountProfileUpdateInput } from '../../../shared/api/account'
 import type { AdminUpdateUserInput, AdminUserListQuery } from '../../../shared/api/users'
 import type { Database } from '../../db/client'
-import {
-  account,
-  application,
-  applicationConsent,
-  passwordResetRequest,
-  session,
-  uploadedAsset,
-  user,
-  userProfile,
-} from '../../db/schema'
+import { account, passwordResetRequest, session, uploadedAsset, user, userProfile } from '../../db/schema'
 
 export function createUserRepository(db: Database): UserRepository {
   return {
@@ -181,32 +172,6 @@ export function createUserRepository(db: Database): UserRepository {
       }
     },
 
-    async listConsentedApplications(userId, page) {
-      const where = and(eq(applicationConsent.userId, userId), isNull(applicationConsent.revokedAt))
-      const rows = await db
-        .select({
-          id: applicationConsent.id,
-          applicationId: application.id,
-          applicationName: application.name,
-          applicationSlug: application.slug,
-          scopes: applicationConsent.scopes,
-          grantedAt: applicationConsent.grantedAt,
-          expiresAt: applicationConsent.expiresAt,
-        })
-        .from(applicationConsent)
-        .innerJoin(application, eq(applicationConsent.applicationId, application.id))
-        .where(where)
-        .orderBy(desc(applicationConsent.grantedAt))
-        .limit(page.limit)
-        .offset(page.offset)
-
-      return {
-        items: rows,
-        total: await countRows(db, applicationConsent, where),
-        ...page,
-      }
-    },
-
     async listSessions(userId, page) {
       const rows = await db
         .select({
@@ -278,7 +243,7 @@ export function createUserRepository(db: Database): UserRepository {
 
 async function countRows(
   db: Database,
-  table: typeof account | typeof applicationConsent | typeof session,
+  table: typeof account | typeof session,
   where: ReturnType<typeof eq> | ReturnType<typeof and>,
 ): Promise<number> {
   const [row] = await db.select({ value: count() }).from(table).where(where)

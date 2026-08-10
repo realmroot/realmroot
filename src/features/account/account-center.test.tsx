@@ -156,7 +156,8 @@ function mockAccountFetch() {
     if (path.startsWith('/api/account/provider-connections')) {
       return Promise.resolve(jsonResponse({ items: [], pagination }))
     }
-    if (path === '/api/account/applications') return Promise.resolve(jsonResponse({ applications: [] }))
+    if (path === '/api/account/application-authorizations')
+      return Promise.resolve(jsonResponse({ authorizations: [], pagination }))
     if (path === '/api/account/agents') return Promise.resolve(jsonResponse({ items: [], pagination }))
     if (path === '/api/account/api-resources') return Promise.resolve(jsonResponse({ items: [], pagination }))
     if (path === '/api/account/account-connections') return Promise.resolve(jsonResponse({ items: [], pagination }))

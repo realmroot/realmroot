@@ -294,6 +294,8 @@ export function createDrizzleApplicationRepository(db: Database): ApplicationRep
         .select({
           id: applicationConsent.id,
           applicationId: applicationConsent.applicationId,
+          applicationName: application.name,
+          applicationSlug: application.slug,
           userId: user.id,
           userDisplayName: user.name,
           userEmail: user.email,
@@ -327,6 +329,8 @@ export function createDrizzleApplicationRepository(db: Database): ApplicationRep
         .select({
           id: applicationConsent.id,
           applicationId: applicationConsent.applicationId,
+          applicationName: application.name,
+          applicationSlug: application.slug,
           userId: user.id,
           userDisplayName: user.name,
           userEmail: user.email,
@@ -337,6 +341,7 @@ export function createDrizzleApplicationRepository(db: Database): ApplicationRep
           revokedAt: applicationConsent.revokedAt,
         })
         .from(applicationConsent)
+        .innerJoin(application, eq(applicationConsent.applicationId, application.id))
         .innerJoin(user, eq(applicationConsent.userId, user.id))
         .where(eq(applicationConsent.id, authorizationId))
         .limit(1)

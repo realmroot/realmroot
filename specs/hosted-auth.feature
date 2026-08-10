@@ -138,6 +138,7 @@ Feature: Hosted authentication
     Then Realmroot redirects to the client callback with an authorization result
     And the access token retains the approved resource scopes
     And an incomplete consent URL shows a recovery state without exposing validation internals
+    And the hosted consent helpers remain private Account APIs outside the public OpenAPI contract
 
   @entrypoint:product-ui @journey:oauth-consent-account-switch
   Scenario: OAuth consent can switch accounts without losing the request

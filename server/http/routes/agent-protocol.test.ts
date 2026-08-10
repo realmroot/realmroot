@@ -18,7 +18,7 @@ describe('Agent protocol routes', () => {
 
   it('exposes the stable identity at its canonical resource path', async () => {
     vi.spyOn(agentIdentities, 'getAgentIdentityByProtocolAgent').mockResolvedValue(activeIdentity())
-    const response = await createRouteApp().request('/api/agent/status', {
+    const response = await createRouteApp().request('/api/agent', {
       headers: { authorization: 'Bearer agent-jwt' },
     })
     expect(response.status).toBe(200)
@@ -195,14 +195,14 @@ describe('Agent protocol routes', () => {
     }
     vi.spyOn(externalResources, 'createAccessRequestCredential').mockResolvedValue(credential)
     const app = createRouteApp({ signJWT: vi.fn().mockResolvedValue({ token: 'signed' }) })
-    const created = await app.request('/api/access/requests', {
+    const created = await app.request('/api/agent/access-requests', {
       method: 'POST',
       headers: jsonHeaders(),
-      body: JSON.stringify({ resource: { href: resourceHref }, scopes: ['objects:read'] }),
+      body: JSON.stringify({ resourceServerId: 'resource-1', scopes: ['objects:read'] }),
     })
     expect(created.status).toBe(201)
     expect(await created.clone().json()).not.toHaveProperty('grantId')
-    const issued = await app.request('/api/access/requests/request-1/credentials', {
+    const issued = await app.request('/api/agent/access-requests/request-1/credentials', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ proof: { type: 'dpop+jwt', value: 'proof' } }),
@@ -233,7 +233,7 @@ describe('Agent protocol routes', () => {
       ),
     )
     const response = await createRouteApp({ signJWT: vi.fn().mockResolvedValue({ token: 'signed' }) }).request(
-      '/api/access/requests/request-1/credentials',
+      '/api/agent/access-requests/request-1/credentials',
       {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -383,18 +383,18 @@ function accessRequest() {
     status: 'approved' as const,
     interaction: { type: 'user-approval' as const, status: 'completed' as const, url: null, expiresAt: null },
     links: {
-      self: 'https://auth.example.com/api/access/requests/request-1',
-      credentials: 'https://auth.example.com/api/access/requests/request-1/credentials',
+      self: 'https://auth.example.com/api/agent/access-requests/request-1',
+      credentials: 'https://auth.example.com/api/agent/access-requests/request-1/credentials',
     },
     credentialOffer: {
       type: 'dpop' as const,
       resource: { href: resourceHref },
       resourceIndicator: 'https://drive.example.com/api',
-      endpoint: 'https://auth.example.com/api/access/requests/request-1/credentials',
+      endpoint: 'https://auth.example.com/api/agent/access-requests/request-1/credentials',
       proof: {
         algorithm: 'ES256' as const,
         method: 'POST' as const,
-        uri: 'https://auth.example.com/api/access/requests/request-1/credentials',
+        uri: 'https://auth.example.com/api/agent/access-requests/request-1/credentials',
       },
     },
     expiresAt,

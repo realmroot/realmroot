@@ -74,14 +74,14 @@ export function getConfigz() {
 
 export function getConsentRequest(search: string) {
   return readRpcResponse(
-    apiClient.api.oauth.consent.$get({
+    apiClient.api.account['application-authorization-request'].$get({
       query: query(search) as { client_id: string; redirect_uri: string; scope?: string; state?: string },
     }),
   )
 }
 
 export function createConsent(input: HostedConsentApprovalRequest) {
-  return readRpcResponse(apiClient.api.oauth.consent.$post({ json: input }))
+  return readRpcResponse(apiClient.api.account['application-authorizations'].$post({ json: input }))
 }
 
 export function getOnboardingStatus(): Promise<{ required: boolean }> {

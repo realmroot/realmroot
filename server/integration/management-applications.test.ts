@@ -178,14 +178,14 @@ describe('applications management over real D1', () => {
 
     // loadConsentRequest reads the client + existing consent (findByClientId + findConsent).
     const loaded = await harness.request(
-      `/api/oauth/consent?client_id=${created.clientId}&redirect_uri=${encodeURIComponent('http://localhost/callback')}&scope=openid%20profile`,
+      `/api/account/application-authorization-request?client_id=${created.clientId}&redirect_uri=${encodeURIComponent('http://localhost/callback')}&scope=openid%20profile`,
       { headers: { cookie } },
     )
     expect(loaded.status, await loaded.clone().text()).toBe(200)
     expect(((await loaded.json()) as { existingConsent: unknown }).existingConsent).toBeNull()
 
     // createConsent writes applicationConsent + oauthConsent rows.
-    const granted = await harness.request('/api/oauth/consent', {
+    const granted = await harness.request('/api/account/application-authorizations', {
       method: 'POST',
       headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({ clientId: created.clientId, resourceServerId: null, scopes: ['openid', 'profile'] }),
@@ -194,7 +194,7 @@ describe('applications management over real D1', () => {
     const grantedBody = (await granted.json()) as { consent: { id: string } }
     const consentId = grantedBody.consent.id
 
-    const regranted = await harness.request('/api/oauth/consent', {
+    const regranted = await harness.request('/api/account/application-authorizations', {
       method: 'POST',
       headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({ clientId: created.clientId, resourceServerId: null, scopes: ['openid'] }),
@@ -202,13 +202,12 @@ describe('applications management over real D1', () => {
     expect(regranted.status, await regranted.clone().text()).toBe(201)
     expect(((await regranted.json()) as { consent: { id: string } }).consent.id).toBe(consentId)
 
-    // listConsentedApplications joins applicationConsent + application.
-    const apps = await harness.request('/api/account/applications', { headers: { cookie } })
+    const apps = await harness.request('/api/account/application-authorizations', { headers: { cookie } })
     expect(apps.status).toBe(200)
-    const appsBody = (await apps.json()) as { applications: Array<{ id: string }> }
-    expect(appsBody.applications.filter((item) => item.id === consentId)).toHaveLength(1)
+    const appsBody = (await apps.json()) as { authorizations: Array<{ id: string }> }
+    expect(appsBody.authorizations.filter((item) => item.id === consentId)).toHaveLength(1)
 
-    const managed = await harness.request(`/api/access/consents?applicationId=${created.id}&status=active`, {
+    const managed = await harness.request(`/api/applications/${created.id}/authorizations?status=active`, {
       headers: { cookie },
     })
     expect(managed.status, await managed.clone().text()).toBe(200)
@@ -216,36 +215,19 @@ describe('applications management over real D1', () => {
       authorizations: [{ id: consentId, scopes: ['openid'], user: { email: 'admin@example.com' } }],
       pagination: { total: 1 },
     })
-    const unrelatedUser = await harness.request('/api/access/consents?userId=user-without-consent&status=active', {
-      headers: { cookie },
-    })
-    expect(unrelatedUser.status, await unrelatedUser.clone().text()).toBe(200)
-    await expect(unrelatedUser.json()).resolves.toMatchObject({
-      authorizations: [],
-      pagination: { total: 0 },
-    })
-    const authorizationInventory = await harness.request('/api/access/consents', {
-      headers: { cookie },
-    })
-    expect(authorizationInventory.status).toBe(200)
-    await expect(authorizationInventory.json()).resolves.toMatchObject({
-      authorizations: [expect.objectContaining({ id: consentId, applicationId: created.id })],
-    })
-
-    // revokeConsent updates applicationConsent + clears oauth grant rows.
-    const revoked = await harness.request(`/api/account/applications/${consentId}`, {
+    const revoked = await harness.request(`/api/account/application-authorizations/${consentId}`, {
       method: 'DELETE',
       headers: { cookie },
     })
     expect(revoked.status).toBe(204)
 
-    const revokeMissing = await harness.request(`/api/account/applications/${consentId}`, {
+    const repeatedRevocation = await harness.request(`/api/account/application-authorizations/${consentId}`, {
       method: 'DELETE',
       headers: { cookie },
     })
-    expect(revokeMissing.status).toBe(404)
+    expect(repeatedRevocation.status).toBe(204)
 
-    const grantedAgain = await harness.request('/api/oauth/consent', {
+    const grantedAgain = await harness.request('/api/account/application-authorizations', {
       method: 'POST',
       headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({ clientId: created.clientId, resourceServerId: null, scopes: ['openid'] }),
@@ -253,17 +235,23 @@ describe('applications management over real D1', () => {
     expect(grantedAgain.status, await grantedAgain.clone().text()).toBe(201)
     const managedConsentId = ((await grantedAgain.json()) as { consent: { id: string } }).consent.id
 
-    const managedRevocation = await harness.request(`/api/access/consents/${managedConsentId}/revocation`, {
-      method: 'PUT',
-      headers: { cookie },
-    })
-    expect(managedRevocation.status).toBe(200)
-    const revokedAuthorization = await harness.request(`/api/access/consents/${managedConsentId}`, {
-      headers: { cookie },
-    })
+    const managedRevocation = await harness.request(
+      `/api/applications/${created.id}/authorizations/${managedConsentId}`,
+      {
+        method: 'DELETE',
+        headers: { cookie },
+      },
+    )
+    expect(managedRevocation.status).toBe(204)
+    const revokedAuthorization = await harness.request(
+      `/api/applications/${created.id}/authorizations/${managedConsentId}`,
+      {
+        headers: { cookie },
+      },
+    )
     await expect(revokedAuthorization.json()).resolves.toMatchObject({ id: managedConsentId, status: 'revoked' })
     const afterManagedRevocation = await harness.request(
-      `/api/access/consents?applicationId=${created.id}&status=active`,
+      `/api/applications/${created.id}/authorizations?status=active`,
       { headers: { cookie } },
     )
     await expect(afterManagedRevocation.json()).resolves.toMatchObject({

@@ -155,8 +155,8 @@ issuer JWKS and permanently invalidates the referenced provider credential.
 Adapters SHOULD implement this endpoint; a later profile version may require it.
 
 Provider lifecycle changes flow back through the generic Connection Event
-resource at `PUT /api/provider-connection-events/{eventId}`. The event
-representation contains the canonical `resource`, opaque `brokerReference`,
+resource at `PUT /api/resource-servers/{resourceServerId}/connection-events/{eventId}`. The event
+representation contains the opaque `brokerReference`,
 `occurredAt`, a positive monotonic `revision`, and one of `authorityChanged`,
 `resourcesChanged`, `suspended`, `restored`, or `revoked`. `authorityChanged`
 requires complete connection-wide `scopes` and `authorityConstraints` plus its

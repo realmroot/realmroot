@@ -29,7 +29,7 @@ import {
   leaveAccountOrganization,
   rejectAccountOrganizationInvitation,
   removeAccountOrganizationMember,
-  revokeApplicationConsent,
+  revokeAccountApplicationAuthorization,
   setActiveAccountOrganization,
   updateAccountOrganization,
   updateAccountOrganizationMemberRole,
@@ -51,6 +51,7 @@ import {
   accountQueryKeys,
   useAccountAccessRequests,
   useAccountAgents,
+  useAccountApplicationAuthorizations,
   useAccountMutation,
   useAccountOrganization,
   useAccountOrganizationAgents,
@@ -59,9 +60,8 @@ import {
   useAccountOrganizations,
   useAccountSecurity,
   useAccountSessions,
-  useConsentedApplications,
 } from './queries'
-import type { ConsentedApplication } from './types'
+import type { AccountApplicationAuthorization } from './types'
 import { formatDate, formatSessionDevice } from './utils'
 
 export function AccountOverviewPage() {
@@ -224,11 +224,11 @@ function AccountMetric({ detail, label, value }: { detail: string; label: string
 }
 
 export function AccountApplicationsPage() {
-  const applicationsQuery = useConsentedApplications(true)
+  const applicationsQuery = useAccountApplicationAuthorizations(true)
   const mutate = useAccountMutation()
-  const [selected, setSelected] = useState<ConsentedApplication | null>(null)
+  const [selected, setSelected] = useState<AccountApplicationAuthorization | null>(null)
   const [confirmation, setConfirmation] = useDestructiveConfirmation()
-  const applications = applicationsQuery.data?.applications ?? []
+  const applications = applicationsQuery.data?.authorizations ?? []
   return (
     <AccountSurface>
       {() => (
@@ -263,7 +263,7 @@ export function AccountApplicationsPage() {
                     }
                     description={tt('Authorized {{date}}', { date: formatDate(application.grantedAt) })}
                     key={application.id}
-                    label={application.applicationName}
+                    label={application.application.name}
                     value={<code>{application.scopes.join(' ')}</code>}
                   />
                 ))}
@@ -281,19 +281,23 @@ export function AccountApplicationsPage() {
             onClose={() => setSelected(null)}
             onRevoke={(application) => {
               setConfirmation({
-                title: tt('Revoke access to {{application}}?', { application: application.applicationName }),
+                title: tt('Revoke access to {{application}}?', { application: application.application.name }),
                 description: tt(
                   'This application will lose access to your identity immediately. You may be asked to authorize it again the next time you use it.',
                 ),
                 actionLabel: tt('Revoke access'),
                 onConfirm: async () => {
                   let failed = false
-                  await mutate('Application access revoked.', () => revokeApplicationConsent(application.id), {
-                    invalidate: [accountQueryKeys.applications],
-                    onError: () => {
-                      failed = true
+                  await mutate(
+                    'Application access revoked.',
+                    () => revokeAccountApplicationAuthorization(application.id),
+                    {
+                      invalidate: [accountQueryKeys.applications],
+                      onError: () => {
+                        failed = true
+                      },
                     },
-                  })
+                  )
                   if (!failed) setSelected(null)
                 },
               })
@@ -311,22 +315,22 @@ function ApplicationReviewDialog({
   onClose,
   onRevoke,
 }: {
-  application: ConsentedApplication | null
+  application: AccountApplicationAuthorization | null
   onClose: () => void
-  onRevoke: (application: ConsentedApplication) => void
+  onRevoke: (application: AccountApplicationAuthorization) => void
 }) {
   return (
     <Dialog onOpenChange={(open) => !open && onClose()} open={application !== null}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{application?.applicationName}</DialogTitle>
+          <DialogTitle>{application?.application.name}</DialogTitle>
           <DialogDescription>
             {tt('Review the identity access this application can use on your behalf.')}
           </DialogDescription>
         </DialogHeader>
         {application ? (
           <AccountRows className="rounded-lg border px-2">
-            <AccountRow label={tt('Application')} value={application.applicationName} />
+            <AccountRow label={tt('Application')} value={application.application.name} />
             <AccountRow label={tt('Authorized')} value={formatDate(application.grantedAt)} />
             <AccountRow
               label={tt('Expires')}

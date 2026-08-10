@@ -32,7 +32,6 @@ export const providerAuthorityConstraintSchema = z
 export const providerAuthorityConstraintsSchema = z.array(providerAuthorityConstraintSchema)
 
 const providerConnectionEventCommonShape = {
-  resource: z.url(),
   brokerReference: nonEmptyString,
   occurredAt: z.iso
     .datetime({ offset: true })

@@ -206,7 +206,7 @@ describe('app.test 1', () => {
     expect(metadata).toMatchObject({
       issuer: 'https://tenant.example.net/api/auth',
       agent_identity_issuer: 'https://tenant.example.net/api/auth',
-      agent_endpoint: 'https://tenant.example.net/api/agent/status',
+      agent_endpoint: 'https://tenant.example.net/api/agent',
       agent_enrollment_endpoint: 'https://tenant.example.net/api/agent/enrollments',
       agent_profile_uri_template: 'https://tenant.example.net/api/public/agents/{subject}',
       modes: ['delegated'],
@@ -521,7 +521,6 @@ function _createUserRepositoryMock() {
     assertAccountAvatarReference: vi.fn().mockResolvedValue(undefined),
     assertAdminAvatarReference: vi.fn().mockResolvedValue(undefined),
     listLinkedAccounts: vi.fn().mockResolvedValue(createPage()),
-    listConsentedApplications: vi.fn().mockResolvedValue(createPage()),
     listSessions: vi.fn().mockResolvedValue(createPage()),
     getSessionToken: vi.fn().mockResolvedValue('session-token-1'),
     deleteSessions: vi.fn().mockResolvedValue([]),

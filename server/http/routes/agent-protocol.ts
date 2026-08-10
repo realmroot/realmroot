@@ -62,7 +62,7 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
   }
   const apiOrigin = (c: Context) => trustedRequestOrigin(requestOriginConfig, c.req.url)
 
-  app.get('/agent/status', async (c) => {
+  app.get('/agent', async (c) => {
     const principal = getPrincipal(c).agent
     if (!principal) throw unauthorized('An OAuth-authenticated Agent is required.')
     if (!principal.scopes.includes('agent:read')) throw forbidden('OAuth scope "agent:read" is required.')
@@ -194,7 +194,7 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
     return c.json(resourceConnectionRequestSchema.parse(result))
   })
 
-  app.post('/access/requests', async (c) => {
+  app.post('/agent/access-requests', async (c) => {
     requireAgentScope(c, 'access-requests:write')
     const principal = await resourcePrincipal(authApi, getDeps(c), c)
     const result = await createAccessRequest(
@@ -208,7 +208,7 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
     return c.json(accessRequestSchema.parse(result), 201)
   })
 
-  app.get('/access/requests/:requestId', async (c) => {
+  app.get('/agent/access-requests/:requestId', async (c) => {
     requireAgentScope(c, 'access-requests:read')
     const principal = await resourcePrincipal(authApi, getDeps(c), c)
     const result = await getAccessRequest(getDeps(c), c.req.param('requestId'), principal, apiOrigin(c))
@@ -216,13 +216,13 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
     return c.json(accessRequestSchema.parse(result))
   })
 
-  app.post('/access/requests/:requestId/credentials', async (c) => {
+  app.post('/agent/access-requests/:requestId/credentials', async (c) => {
     requireAgentScope(c, 'access-requests:write')
     if (!authApi.signJWT) throw unauthorized('Agent assertion signing is unavailable.')
     const principal = await resourcePrincipal(authApi, getDeps(c), c)
     const { proof } = await readJson(c, targetCredentialProofSchema)
     const requestId = c.req.param('requestId')
-    const credentialUrl = `${apiOrigin(c)}/api/access/requests/${encodeURIComponent(requestId)}/credentials`
+    const credentialUrl = `${apiOrigin(c)}/api/agent/access-requests/${encodeURIComponent(requestId)}/credentials`
     const result = await createAccessRequestCredential(getDeps(c), requestId, proof.value, credentialUrl, principal, {
       issuer: requireOidcIssuer(),
       sign: (payload, type) =>

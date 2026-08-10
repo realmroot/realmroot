@@ -43,13 +43,13 @@ describe('management resource routes', () => {
     await expectJson(app, '/applications/app-1/client-secrets', 'POST', undefined, 201)
     await expectJson(
       app,
-      '/application-authorizations?applicationId=app-1&userId=user-1&status=active&limit=10&offset=0',
+      '/applications/app-1/authorizations?userId=user-1&status=active&limit=10&offset=0',
       'GET',
       undefined,
       200,
     )
-    await expectJson(app, '/application-authorizations/authorization-1', 'GET', undefined, 200)
-    await expectJson(app, '/application-authorizations/authorization-1/revocation', 'PUT', undefined, 200)
+    await expectJson(app, '/applications/app-1/authorizations/authorization-1', 'GET', undefined, 200)
+    await expectStatus(app, '/applications/app-1/authorizations/authorization-1', 'DELETE', undefined, 204)
 
     expect(applicationService.list).toHaveBeenCalledWith({ limit: 10, offset: 0 })
     expect(applicationService.create).toHaveBeenCalledWith(
@@ -258,12 +258,9 @@ async function loadAppRoutes() {
     applicationService.revokeAuthorization(authorizationId),
   )
 
-  const { managementApplicationAuthorizationsRoute, managementApplicationsRoute } = await import(
-    '@server/http/routes/management/applications'
-  )
+  const { managementApplicationsRoute } = await import('@server/http/routes/management/applications')
   const app = withAdminContext()
   app.route('/applications', managementApplicationsRoute)
-  app.route('/application-authorizations', managementApplicationAuthorizationsRoute)
   return { app, applicationService }
 }
 
@@ -444,6 +441,7 @@ function applicationServiceMock() {
     getAuthorization: vi.fn().mockResolvedValue({
       id: 'authorization-1',
       applicationId: 'app-1',
+      application: { id: 'app-1', name: 'Portal', slug: 'portal' },
       resourceServerId: null,
       user: { id: 'user-1', displayName: 'User', email: 'user@example.com' },
       scopes: ['openid'],

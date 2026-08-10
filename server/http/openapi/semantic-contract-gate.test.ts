@@ -35,6 +35,9 @@ describe('OpenAPI semantic contract gate', () => {
     const permissionContract = JSON.parse(
       readFileSync(new URL('./approved-permission-semantic-baseline.json', import.meta.url), 'utf8'),
     ) as typeof unchanged
+    const runtimeApiContract = JSON.parse(
+      readFileSync(new URL('./approved-runtime-api-semantic-baseline.json', import.meta.url), 'utf8'),
+    ) as typeof unchanged
     const brokeredNativeChanges = new Set(brokeredNativeContract.map(({ method, path }) => `${method}:${path}`))
     const resourceDiscoveryChanges = new Set(resourceDiscoveryContract.map(({ method, path }) => `${method}:${path}`))
     const approvedChanges = new Set(
@@ -52,6 +55,17 @@ describe('OpenAPI semantic contract gate', () => {
         `${method}:/agents/{agentId}/retirement`,
         `${method}:/resource-servers/{resourceServerId}/archival`,
       ]),
+      'GET:/access/consents',
+      'GET:/access/consents/{consentId}',
+      'GET:/access/consents/{consentId}/revocation',
+      'PUT:/access/consents/{consentId}/revocation',
+      'GET:/access/requests',
+      'POST:/access/requests',
+      'GET:/access/requests/{requestId}',
+      'POST:/access/requests/{requestId}/credentials',
+      'GET:/access/requests/{requestId}/decision',
+      'PUT:/access/requests/{requestId}/decision',
+      'GET:/agent/status',
       'POST:/agents/{agentId}/scope-entitlements/{grantId}/credentials',
     ])
     const priorBaseline = [
@@ -61,7 +75,9 @@ describe('OpenAPI semantic contract gate', () => {
       ...authorizationContract,
       ...ownerSelectorContract.filter(
         ({ method, path }) =>
-          !resourceDiscoveryChanges.has(`${method}:${path}`) && !brokeredNativeChanges.has(`${method}:${path}`),
+          !resourceDiscoveryChanges.has(`${method}:${path}`) &&
+          !brokeredNativeChanges.has(`${method}:${path}`) &&
+          !approvedRemovals.has(`${method}:${path}`),
       ),
       ...documentationContract,
       ...resourceDiscoveryContract.filter(({ method, path }) => !brokeredNativeChanges.has(`${method}:${path}`)),
@@ -84,6 +100,7 @@ describe('OpenAPI semantic contract gate', () => {
     const baseline = [
       ...authenticationBaseline.filter((operation) => !permissionSurface(operation)),
       ...permissionContract,
+      ...runtimeApiContract,
     ].sort((left, right) => `${left.path}:${left.method}`.localeCompare(`${right.path}:${right.method}`))
 
     expect(openApiSemanticSnapshot(unifiedOpenApi as unknown as Record<string, unknown>, () => true)).toEqual(baseline)

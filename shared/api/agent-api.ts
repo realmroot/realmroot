@@ -123,29 +123,6 @@ const managementAgentResourceSchema = z.object({
   identifier: z.string(),
   name: z.string(),
 })
-export const managementAgentAccessRequestSchema = z.object({
-  id: z.string(),
-  agentId: z.string(),
-  resource: managementAgentResourceSchema,
-  scopes: z.array(z.string()),
-  authorizationDetails: authorizationDetailsSchema,
-  reason: z.string().nullable(),
-  status: agentAccessRequestStatusSchema,
-  expiresAt: z.iso.datetime(),
-  decidedAt: z.iso.datetime().nullable(),
-  createdAt: z.iso.datetime(),
-})
-export const managementAgentAccessRequestsResponseSchema = z.object({
-  items: z.array(managementAgentAccessRequestSchema),
-  pagination: paginationMetadataSchema,
-})
-export const listManagementAgentAccessRequestsQuerySchema = paginationQuerySchema.extend({
-  agentId: nonEmptyString.optional(),
-  organizationId: nonEmptyString.optional(),
-  resourceId: nonEmptyString.optional(),
-  status: agentAccessRequestStatusSchema.optional(),
-})
-
 export const agentPermissionSchema = z.object({
   id: z.string(),
   agentId: z.string(),
@@ -454,8 +431,9 @@ export const accessTargetSchema = z.discriminatedUnion('type', [
 
 export const createAccessRequestSchema = z
   .object({
-    resource: resourceReferenceSchema,
+    resourceServerId: nonEmptyString,
     scopes: scopeListSchema,
+    authorizationDetails: authorizationDetailsSchema.default([]),
     reason: z.string().trim().max(500).nullable().optional(),
   })
   .strict()
@@ -541,8 +519,6 @@ export type Agent = z.infer<typeof agentSchema>
 export type ManagementAgent = z.infer<typeof managementAgentSchema>
 export type ManagementAgentInstallation = z.infer<typeof managementAgentInstallationSchema>
 export type ManagementAgentAuditEvent = z.infer<typeof managementAgentAuditEventSchema>
-export type ManagementAgentAccessRequest = z.infer<typeof managementAgentAccessRequestSchema>
-export type ListManagementAgentAccessRequestsQuery = z.infer<typeof listManagementAgentAccessRequestsQuerySchema>
 export type ListAgentPermissionsQuery = z.infer<typeof listAgentPermissionsQuerySchema>
 export type AgentEnrollment = z.infer<typeof agentEnrollmentSchema>
 export type ApiResource = ResourceServer

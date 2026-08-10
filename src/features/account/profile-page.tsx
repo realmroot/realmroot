@@ -18,9 +18,9 @@ import {
   changeAccountPassword,
   confirmAccountEmailChange,
   listAccountAgents,
+  listAccountApplicationAuthorizations,
   listAccountOrganizations,
   listAccountSessions,
-  listConsentedApplications,
   listLinkedAccounts,
   requestAccountEmailChange,
   updateAccountProfile,
@@ -250,7 +250,9 @@ async function downloadAccountData(
   const [organizations, agents, applications, linkedAccounts, sessions] = await Promise.all([
     listAccountOrganizations(),
     listAccountAgents(),
-    options.includeApplications ? listConsentedApplications() : Promise.resolve({ applications: [] }),
+    options.includeApplications
+      ? listAccountApplicationAuthorizations()
+      : Promise.resolve({ authorizations: [], pagination: null }),
     options.includeLinkedAccounts ? listLinkedAccounts() : Promise.resolve({ accounts: [] }),
     options.includeSessions ? listAccountSessions() : Promise.resolve({ sessions: [], pagination: null }),
   ])
@@ -262,7 +264,7 @@ async function downloadAccountData(
     profile,
     organizations,
     agents: agents.items,
-    applications: applications.applications,
+    applications: applications.authorizations,
     linkedAccounts: linkedAccounts.accounts,
     sessions: sessions.sessions,
   }

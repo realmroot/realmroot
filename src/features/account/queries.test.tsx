@@ -5,13 +5,13 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 import { createAccountServer, createAccountStore } from './account.test-utils'
 import {
   useAccountAgents,
+  useAccountApplicationAuthorizations,
   useAccountConfig,
   useAccountMutation,
   useAccountPasskeys,
   useAccountProfile,
   useAccountSecurity,
   useAccountSessions,
-  useConsentedApplications,
   useLinkedAccounts,
 } from './queries'
 
@@ -75,7 +75,7 @@ describe('account query hooks', () => {
     await waitFor(() => expect(enabled.result.current.isSuccess).toBe(true))
 
     const linked = renderHook(() => useLinkedAccounts(true), { wrapper: wrapper(client) })
-    const apps = renderHook(() => useConsentedApplications(true), { wrapper: wrapper(client) })
+    const apps = renderHook(() => useAccountApplicationAuthorizations(true), { wrapper: wrapper(client) })
     const agents = renderHook(() => useAccountAgents(), { wrapper: wrapper(client) })
     await waitFor(() => expect(linked.result.current.isSuccess).toBe(true))
     await waitFor(() => expect(apps.result.current.isSuccess).toBe(true))

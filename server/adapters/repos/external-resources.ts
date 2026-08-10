@@ -7,23 +7,7 @@ import type {
   ProviderResourceAuthorizationRecord,
   ResourceScopeEntitlementRecord,
 } from '@server/usecases/ports'
-import {
-  and,
-  count,
-  desc,
-  eq,
-  exists,
-  gt,
-  inArray,
-  isNotNull,
-  isNull,
-  lt,
-  lte,
-  ne,
-  or,
-  type SQL,
-  sql,
-} from 'drizzle-orm'
+import { and, count, desc, eq, exists, gt, inArray, isNotNull, isNull, lt, ne, or, type SQL, sql } from 'drizzle-orm'
 import type { Database } from '../../db/client'
 import {
   account,
@@ -696,48 +680,6 @@ export function createExternalResourceRepository(db: Database): ExternalResource
         .where(eq(agentAccessRequest.approvalTokenHash, tokenHash))
         .limit(1)
       return row ?? null
-    },
-
-    async listAccessRequests(query, scope) {
-      const now = new Date()
-      const statusCondition =
-        query.status === 'expired'
-          ? and(eq(agentAccessRequest.status, 'pending'), lte(agentAccessRequest.expiresAt, now))
-          : query.status === 'pending'
-            ? and(eq(agentAccessRequest.status, 'pending'), gt(agentAccessRequest.expiresAt, now))
-            : query.status
-              ? eq(agentAccessRequest.status, query.status)
-              : undefined
-      const condition = and(
-        query.agentId ? eq(agentAccessRequest.agentIdentityId, query.agentId) : undefined,
-        query.resourceId ? eq(agentAccessRequest.resourceId, query.resourceId) : undefined,
-        query.organizationId ? eq(agentIdentity.ownerOrganizationId, query.organizationId) : undefined,
-        authorityOwnerCondition(scope),
-        isNull(agentIdentity.deletedAt),
-        isNull(apiResource.deletedAt),
-        statusCondition,
-      )
-      const [items, totals] = await Promise.all([
-        db
-          .select({
-            request: agentAccessRequest,
-            resource: { id: apiResource.id, identifier: apiResource.identifier, name: apiResource.name },
-          })
-          .from(agentAccessRequest)
-          .innerJoin(agentIdentity, eq(agentAccessRequest.agentIdentityId, agentIdentity.id))
-          .innerJoin(apiResource, eq(agentAccessRequest.resourceId, apiResource.id))
-          .where(condition)
-          .orderBy(desc(agentAccessRequest.createdAt), desc(agentAccessRequest.id))
-          .limit(query.limit)
-          .offset(query.offset),
-        db
-          .select({ value: count() })
-          .from(agentAccessRequest)
-          .innerJoin(agentIdentity, eq(agentAccessRequest.agentIdentityId, agentIdentity.id))
-          .innerJoin(apiResource, eq(agentAccessRequest.resourceId, apiResource.id))
-          .where(condition),
-      ])
-      return { items, total: totals[0]?.value ?? 0, ...query }
     },
 
     async listPendingAccessRequestsByAgent(agentIdentityId, now) {

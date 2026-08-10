@@ -1,18 +1,13 @@
 import {
-  accessRequestSchema,
   agentAuthorizedResourceServersResponseSchema,
   agentPermissionSchema,
   agentPermissionsResponseSchema,
   auditEventsResponseSchema,
-  decideAccessRequestSchema,
   dpopNonceErrorResponseSchema,
   listAgentAuditEventsQuerySchema,
   listAgentAuthorizedResourceServersQuerySchema,
   listAgentPermissionsQuerySchema,
   listAgentsQuerySchema,
-  listManagementAgentAccessRequestsQuerySchema,
-  managementAgentAccessRequestSchema,
-  managementAgentAccessRequestsResponseSchema,
   managementAgentInstallationsResponseSchema,
   managementAgentResponseSchema,
   managementAgentsResponseSchema,
@@ -24,25 +19,6 @@ import { paginationQuerySchema } from '@shared/api/pagination'
 import { jsonBody, type ManagementRouteConfig, z } from './helpers'
 
 export const agentGovernanceRoutes: ManagementRouteConfig[] = [
-  {
-    method: 'get',
-    path: '/access/requests/{requestId}/decision',
-    operationId: 'getAgentAuthorizationRequestDecision',
-    summary: 'Get an Agent authorization request decision',
-    request: { params: z.object({ requestId: z.string() }) },
-    response: z.object({ accessRequestId: z.string(), status: z.string(), decidedAt: z.string().nullable() }),
-  },
-  {
-    method: 'put',
-    path: '/access/requests/{requestId}/decision',
-    operationId: 'replaceAgentAuthorizationRequestDecision',
-    summary: 'Create or replace an Agent authorization request decision',
-    request: {
-      params: z.object({ requestId: z.string() }),
-      body: { content: { 'application/json': { schema: decideAccessRequestSchema } } },
-    },
-    response: z.object({ accessRequestId: z.string(), status: z.string(), decidedAt: z.string().nullable() }),
-  },
   {
     method: 'get',
     path: '/agents',
@@ -67,29 +43,6 @@ export const agentGovernanceRoutes: ManagementRouteConfig[] = [
     request: { params: z.object({ agentId: z.string() }), query: paginationQuerySchema },
     response: managementAgentInstallationsResponseSchema,
     errors: { 400: 'The pagination query is invalid.', 404: 'The Agent was not found.' },
-  },
-  {
-    method: 'get',
-    path: '/access/requests',
-    operationId: 'listAgentAuthorizationRequests',
-    summary: 'List Agent authorization requests',
-    request: { query: listManagementAgentAccessRequestsQuerySchema },
-    response: managementAgentAccessRequestsResponseSchema,
-    errors: { 400: 'The collection query is invalid.' },
-  },
-  {
-    method: 'get',
-    path: '/access/requests/{requestId}',
-    operationId: 'getManagedAgentAuthorizationRequest',
-    summary: 'Get an Agent authorization request',
-    security: [
-      { agentAuth: ['access-requests:read'] },
-      { oauth2: ['agents:read'] },
-      { sessionCookie: ['agents:read'] },
-    ],
-    request: { params: z.object({ requestId: z.string() }) },
-    response: z.union([managementAgentAccessRequestSchema, accessRequestSchema]),
-    errors: { 404: 'The Agent access request was not found.' },
   },
   {
     method: 'get',
@@ -133,7 +86,7 @@ export const agentGovernanceRoutes: ManagementRouteConfig[] = [
   },
   {
     method: 'post',
-    path: '/access/requests/{requestId}/credentials',
+    path: '/agent/access-requests/{requestId}/credentials',
     operationId: 'createAgentAccessRequestCredential',
     summary: 'Create a temporary credential for an approved Agent access request',
     security: [{ agentAuth: ['access-requests:write'] }],

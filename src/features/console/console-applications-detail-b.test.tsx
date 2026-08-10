@@ -203,7 +203,7 @@ describe('admin console applications-detail-b', () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
       if (url === '/api/applications/app-1') return Promise.resolve(jsonResponse(application))
-      if (url === '/api/access/consents?applicationId=app-1&status=active&limit=50&offset=0') {
+      if (url === '/api/applications/app-1/authorizations?status=active&limit=50&offset=0') {
         attempts += 1
         if (attempts === 1) {
           return Promise.resolve(jsonResponse({ error: { message: 'Authorizations unavailable.' } }, 503))
@@ -229,7 +229,7 @@ describe('admin console applications-detail-b', () => {
           }),
         )
       }
-      if (url === '/api/access/consents/authorization-1/revocation' && init?.method === 'PUT') {
+      if (url === '/api/applications/app-1/authorizations/authorization-1' && init?.method === 'DELETE') {
         active = false
         return Promise.resolve(
           jsonResponse({ applicationAuthorizationId: 'authorization-1', revokedAt: '2026-07-02T00:00:00.000Z' }),

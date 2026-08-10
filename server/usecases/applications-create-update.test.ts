@@ -540,6 +540,8 @@ class InMemoryApplicationRepository implements ApplicationRepository {
       .map(([key, consent]) => ({
         ...consent,
         applicationId: key.slice(0, key.indexOf(':')),
+        applicationName: 'Test application',
+        applicationSlug: 'test-application',
         userId: key.slice(key.indexOf(':') + 1),
         userDisplayName: 'Test user',
         userEmail: 'user@example.com',
@@ -562,6 +564,8 @@ class InMemoryApplicationRepository implements ApplicationRepository {
     return {
       ...consent,
       applicationId,
+      applicationName: 'Test application',
+      applicationSlug: 'test-application',
       userId: key.slice(applicationId.length + 1),
       userDisplayName: 'Test user',
       userEmail: 'user@example.com',

@@ -506,13 +506,11 @@ export const managementPasswordResetRequestSchema = adminPasswordResetSchema
 
 export const protectedResourceCollectionRoutes = [
   '/applications',
-  '/access/consents',
   '/users',
   '/organizations',
   '/resource-servers',
   '/connectors',
   '/agents',
-  '/access/requests',
 ] as const
 
 export { paginationQuerySchema }

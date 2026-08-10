@@ -241,7 +241,6 @@ function createUserRepositoryMock() {
     assertAccountAvatarReference: vi.fn().mockResolvedValue(undefined),
     assertAdminAvatarReference: vi.fn().mockResolvedValue(undefined),
     listLinkedAccounts: vi.fn().mockResolvedValue(createPage()),
-    listConsentedApplications: vi.fn().mockResolvedValue(createPage()),
     listSessions: vi.fn().mockResolvedValue(createPage()),
     getSessionToken: vi.fn().mockResolvedValue('session-token-1'),
     deleteSessions: vi.fn().mockResolvedValue([]),

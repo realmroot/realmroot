@@ -6,10 +6,9 @@ import { describe, expect, it, vi } from 'vitest'
 import { createTestDeps } from '../test-deps'
 
 const secret = 'provider-connection-event-secret-for-tests-2026'
-const path = '/api/provider-connection-events/delivery-1'
+const path = '/api/resource-servers/event-resource/connection-events/delivery-1'
 const body = JSON.stringify({
   type: 'authorityChanged',
-  resource: 'https://adapter.example.com/provider',
   brokerReference: 'installation-1',
   occurredAt: '2026-08-09T01:28:27.000-04:00',
   revision: 1,
@@ -69,14 +68,12 @@ describe('Provider Connection Event routes', () => {
       }),
       JSON.stringify({
         type: 'resourcesChanged',
-        resource: valid.resource,
         brokerReference: valid.brokerReference,
         occurredAt: valid.occurredAt,
         revision: valid.revision,
       }),
       JSON.stringify({
         type: 'resourcesChanged',
-        resource: valid.resource,
         brokerReference: valid.brokerReference,
         occurredAt: valid.occurredAt,
         revision: valid.revision,
@@ -85,7 +82,6 @@ describe('Provider Connection Event routes', () => {
       }),
       JSON.stringify({
         type: 'resourcesChanged',
-        resource: valid.resource,
         brokerReference: valid.brokerReference,
         occurredAt: valid.occurredAt,
         revision: valid.revision,
@@ -100,7 +96,6 @@ describe('Provider Connection Event routes', () => {
       }),
       JSON.stringify({
         type: 'suspended',
-        resource: valid.resource,
         brokerReference: valid.brokerReference,
         occurredAt: valid.occurredAt,
         revision: valid.revision,
@@ -129,10 +124,6 @@ describe('Provider Connection Event routes', () => {
     const stale = `${Math.floor(Date.now() / 1000) - 301}`
     const invalid = await signedHeaders(current, body)
     invalid.set('Realmroot-Signature', 'sha256=deadbeef')
-    const otherResourceBody = body.replace(
-      'https://adapter.example.com/provider',
-      'https://other-adapter.example.com/provider',
-    )
     const missingRevisionBody = body.replace(',"revision":1', '')
 
     const responses = await Promise.all([
@@ -143,10 +134,10 @@ describe('Provider Connection Event routes', () => {
         body,
       }),
       app.request(`https://auth.example.com${path}`, { method: 'PUT', headers: invalid, body }),
-      app.request(`https://auth.example.com${path}`, {
+      app.request('https://auth.example.com/api/resource-servers/unknown/connection-events/delivery-1', {
         method: 'PUT',
-        headers: await signedHeaders(current, otherResourceBody),
-        body: otherResourceBody,
+        headers: await signedHeaders(current, body),
+        body,
       }),
       app.request(`https://auth.example.com${path}`, {
         method: 'PUT',
@@ -193,11 +184,16 @@ describe('Provider Connection Event routes', () => {
 })
 
 function testApp(deps: ReturnType<typeof createTestDeps>) {
+  vi.mocked(deps.authorization.findResource).mockImplementation(async (id) =>
+    id === 'event-resource'
+      ? ({ id: 'event-resource', resourceUrl: 'https://adapter.example.com/provider' } as never)
+      : null,
+  )
   return new Hono()
     .use('*', depsMiddleware(deps))
     .onError((error, c) => handleApiError(error, c))
     .route(
-      '/api/provider-connection-events',
+      '/api/resource-servers',
       createProviderConnectionEventRoutes({ 'https://adapter.example.com/provider': secret }),
     )
 }

@@ -1,4 +1,4 @@
-import { badRequest, forbidden } from '@server/domain/errors'
+import { badRequest, forbidden, notFound } from '@server/domain/errors'
 import { validateEmailPolicy, validatePasswordPolicy } from '@server/domain/security/policy'
 import { listAccountOrganizationAgents } from '@server/usecases/account-organizations'
 import {
@@ -13,7 +13,11 @@ import {
   toAgent,
 } from '@server/usecases/agent-identities'
 import { decideAgentApproval } from '@server/usecases/agents'
-import { revokeConsent } from '@server/usecases/applications'
+import {
+  getApplicationAuthorization,
+  listApplicationAuthorizations,
+  putApplicationAuthorizationRevocation,
+} from '@server/usecases/applications'
 import { getConfig } from '@server/usecases/configz'
 import { resolveDeveloperAccess } from '@server/usecases/developer-access'
 import {
@@ -62,6 +66,10 @@ import {
   resourceConnectionApprovalSchema,
 } from '@shared/api/agent-api'
 import { decideAgentApprovalResponseSchema } from '@shared/api/agents'
+import {
+  listApplicationAuthorizationsQuerySchema,
+  listApplicationAuthorizationsResponseSchema,
+} from '@shared/api/applications'
 import { linkAccountRequestSchema, unlinkAccountQuerySchema } from '@shared/api/connectors'
 import { paginationMetadata, paginationQuerySchema } from '@shared/api/pagination'
 import type { SecurityPolicy } from '@shared/api/security'
@@ -336,28 +344,36 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
     }
   })
 
-  app.get('/applications', async (c) => {
+  app.get('/application-authorizations', async (c) => {
     await assertAccountCenterAllowed(
       c,
       'connectedAccountsEnabled',
       'Authorized application access is disabled for this account center.',
       securityPolicy,
     )
-    const page = await getDeps(c).users.listConsentedApplications(
-      getPrincipal(c).user!.id,
-      readQuery(c, paginationQuerySchema),
+    return c.json(
+      listApplicationAuthorizationsResponseSchema.parse(
+        await listApplicationAuthorizations(getDeps(c), {
+          ...readQuery(c, listApplicationAuthorizationsQuerySchema),
+          userId: getPrincipal(c).user!.id,
+          status: 'active',
+        }),
+      ),
     )
-    return c.json({ applications: page.items, pagination: paginationMetadata(page) })
   })
 
-  app.delete('/applications/:consentId', async (c) => {
+  app.delete('/application-authorizations/:authorizationId', async (c) => {
     await assertAccountCenterAllowed(
       c,
       'connectedAccountsEnabled',
       'Authorized application access is disabled for this account center.',
       securityPolicy,
     )
-    await revokeConsent(getDeps(c), c.req.param('consentId'), getPrincipal(c).user!.id)
+    const authorization = await getApplicationAuthorization(getDeps(c), c.req.param('authorizationId'))
+    if (authorization.user.id !== getPrincipal(c).user!.id) {
+      throw notFound('Application authorization was not found.')
+    }
+    await putApplicationAuthorizationRevocation(getDeps(c), authorization.id)
     return c.body(null, 204)
   })
 

@@ -389,7 +389,7 @@ describe('account self-service over real D1', () => {
     expect(linked.status).toBe(200)
     expect(((await linked.json()) as { accounts: unknown[] }).accounts.length).toBeGreaterThanOrEqual(1)
 
-    const apps = await harness.request('/api/account/applications', { headers: { cookie } })
+    const apps = await harness.request('/api/account/application-authorizations', { headers: { cookie } })
     expect(apps.status).toBe(200)
   })
 

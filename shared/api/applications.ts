@@ -209,6 +209,11 @@ export const listClientSecretsResponseSchema = z.object({
 export const applicationAuthorizationSchema = z.object({
   id: z.string(),
   applicationId: z.string(),
+  application: z.object({
+    id: z.string(),
+    name: z.string(),
+    slug: z.string(),
+  }),
   user: z.object({
     id: z.string(),
     displayName: z.string(),
@@ -283,6 +288,14 @@ export const createConsentRequestSchema = z
 
 export const hostedConsentApprovalRequestSchema = createConsentRequestSchema
 
+export const consentApprovalResponseSchema = z.object({
+  consent: z.object({
+    id: z.string(),
+    scopes: z.array(z.string()),
+    grantedAt: z.string(),
+  }),
+})
+
 export type ApplicationResponse = z.infer<typeof applicationResponseSchema>
 export type ApplicationOidcClaims = z.infer<typeof applicationOidcClaimsSchema>
 export type CreateApplicationResponse = z.infer<typeof createApplicationResponseSchema>
@@ -303,10 +316,4 @@ export type ApplicationAuthorizationRevocation = z.infer<typeof applicationAutho
 export type ConsentRequestResponse = z.infer<typeof consentRequestResponseSchema>
 export type CreateConsentRequest = z.infer<typeof createConsentRequestSchema>
 export type HostedConsentApprovalRequest = z.infer<typeof hostedConsentApprovalRequestSchema>
-export type ConsentApprovalResponse = {
-  consent: {
-    id: string
-    scopes: string[]
-    grantedAt: string
-  }
-}
+export type ConsentApprovalResponse = z.infer<typeof consentApprovalResponseSchema>

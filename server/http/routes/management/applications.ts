@@ -1,3 +1,4 @@
+import { notFound } from '@server/domain/errors'
 import {
   createApplication,
   deleteApplication,
@@ -22,7 +23,6 @@ import {
 import { publishWebhookEvent } from '@server/usecases/webhooks'
 import {
   type ApplicationResponse,
-  applicationAuthorizationRevocationSchema,
   applicationAuthorizationSchema,
   createApplicationRequestSchema,
   listApplicationAuthorizationsQuerySchema,
@@ -51,41 +51,6 @@ import { getDeps } from '../../middleware/deps'
 import { readJson, readQuery } from '../validation'
 
 export const managementApplicationsRoute = new Hono()
-export const managementApplicationAuthorizationsRoute = new Hono()
-
-managementApplicationAuthorizationsRoute.get('/', async (c) => {
-  const query = readQuery(c, listApplicationAuthorizationsQuerySchema)
-  return c.json(
-    listApplicationAuthorizationsResponseSchema.parse(
-      await listApplicationAuthorizations(getDeps(c), query, await authorizedOrganizationIds(c, 'applications:read')),
-    ),
-  )
-})
-
-managementApplicationAuthorizationsRoute.get('/:authorizationId', async (c) => {
-  const authorization = await getApplicationAuthorization(getDeps(c), c.req.param('authorizationId'))
-  await requireApplicationAccess(c, authorization.applicationId)
-  return c.json(applicationAuthorizationSchema.parse(authorization))
-})
-
-managementApplicationAuthorizationsRoute.put('/:authorizationId/revocation', async (c) => {
-  const authorization = await getApplicationAuthorization(getDeps(c), c.req.param('authorizationId'))
-  await requireApplicationAccess(c, authorization.applicationId)
-  return c.json(
-    applicationAuthorizationRevocationSchema.parse(
-      await putApplicationAuthorizationRevocation(getDeps(c), c.req.param('authorizationId')),
-    ),
-  )
-})
-
-managementApplicationAuthorizationsRoute.get('/:authorizationId/revocation', async (c) => {
-  const authorization = await getApplicationAuthorization(getDeps(c), c.req.param('authorizationId'))
-  await requireApplicationAccess(c, authorization.applicationId)
-  return c.json({
-    applicationAuthorizationId: authorization.id,
-    revokedAt: authorization.revokedAt,
-  })
-})
 
 managementApplicationsRoute.get('/', async (c) => {
   const query = readQuery(c, listApplicationsQuerySchema)
@@ -97,6 +62,31 @@ managementApplicationsRoute.get('/', async (c) => {
       await filterOrganizationSelection(c, query.ownerOrganizationId, 'applications:read'),
     ),
   )
+})
+
+managementApplicationsRoute.get('/:id/authorizations', async (c) => {
+  await requireApplicationAccess(c, c.req.param('id'))
+  const query = readQuery(c, listApplicationAuthorizationsQuerySchema)
+  return c.json(
+    listApplicationAuthorizationsResponseSchema.parse(
+      await listApplicationAuthorizations(
+        getDeps(c),
+        { ...query, applicationId: c.req.param('id') },
+        await authorizedOrganizationIds(c, 'applications:read'),
+      ),
+    ),
+  )
+})
+
+managementApplicationsRoute.get('/:id/authorizations/:authorizationId', async (c) => {
+  const authorization = await requireNestedApplicationAuthorization(c)
+  return c.json(applicationAuthorizationSchema.parse(authorization))
+})
+
+managementApplicationsRoute.delete('/:id/authorizations/:authorizationId', async (c) => {
+  await requireNestedApplicationAuthorization(c)
+  await putApplicationAuthorizationRevocation(getDeps(c), c.req.param('authorizationId'))
+  return c.body(null, 204)
 })
 
 managementApplicationsRoute.post('/', async (c) => {
@@ -277,6 +267,15 @@ async function requireApplicationAccess(c: Context, applicationId = c.req.param(
     c.req.method === 'GET' || c.req.method === 'HEAD' ? 'applications:read' : 'applications:write',
   )
   return application
+}
+
+async function requireNestedApplicationAuthorization(c: Context) {
+  await requireApplicationAccess(c, c.req.param('id'))
+  const authorization = await getApplicationAuthorization(getDeps(c), c.req.param('authorizationId')!)
+  if (authorization.applicationId !== c.req.param('id')) {
+    throw notFound('Application authorization was not found.')
+  }
+  return authorization
 }
 
 async function filterOrganizationSelection(

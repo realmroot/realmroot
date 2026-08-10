@@ -9,7 +9,10 @@ import { readParam } from './validation'
 export function createProviderConnectionEventRoutes(secrets: Record<string, string>) {
   const app = new Hono()
 
-  app.put('/:eventId', async (c) => {
+  app.put('/:resourceServerId/connection-events/:eventId', async (c) => {
+    const resourceServer = await getDeps(c).authorization.findResource(c.req.param('resourceServerId'))
+    const secret = resourceServer ? secrets[resourceServer.resourceUrl] : undefined
+    if (!resourceServer || !secret) throw unauthorized('Connection Event credentials are invalid.')
     const eventId = readParam(c, 'eventId', providerConnectionEventIdSchema)
     const rawBody = await readLimitedBody(c.req.raw)
     let representation: unknown
@@ -20,10 +23,8 @@ export function createProviderConnectionEventRoutes(secrets: Record<string, stri
     }
     const parsed = providerConnectionEventSchema.safeParse(representation)
     if (!parsed.success) throw badRequest(parsed.error.issues[0]?.message ?? 'Invalid Connection Event representation.')
-    const secret = secrets[parsed.data.resource]
-    if (!secret) throw unauthorized('Connection Event credentials are invalid.')
     await authenticateProviderConnectionEvent(c.req.raw, rawBody, secret)
-    await applyProviderConnectionEvent(getDeps(c), eventId, parsed.data, rawBody)
+    await applyProviderConnectionEvent(getDeps(c), eventId, resourceServer.resourceUrl, parsed.data, rawBody)
     return c.body(null, 204)
   })
 

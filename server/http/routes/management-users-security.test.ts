@@ -167,7 +167,6 @@ describe('management routes 2', () => {
     const users = createUserRepositoryMock()
     users.getUser = vi.fn().mockResolvedValue({ id: 'user-1', email: 'user-1@example.com' })
     users.listLinkedAccounts = vi.fn().mockImplementation((_userId, page) => Promise.resolve(createPage(page)))
-    users.listConsentedApplications = vi.fn().mockImplementation((_userId, page) => Promise.resolve(createPage(page)))
     users.listSessions = vi.fn().mockImplementation((_userId, page) => Promise.resolve(createPage(page)))
     const app = createApp(auth, createTestDeps({ users }))
     const headers = adminHeaders()

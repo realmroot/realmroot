@@ -68,8 +68,8 @@ describe('management API client', () => {
     await management.replaceApplicationRedirectUris('app-1', { redirectUris: ['https://app.example.com/callback'] })
     await management.listApplicationClientSecrets('app-1', { limit: 5 })
     await management.rotateApplicationClientSecret('app-1')
-    await management.listApplicationAuthorizations({ applicationId: 'app-1', limit: 25, offset: 50 })
-    await management.revokeApplicationAuthorization('authorization-1')
+    await management.listApplicationAuthorizations('app-1', { limit: 25, offset: 50 })
+    await management.revokeApplicationAuthorization('app-1', 'authorization-1')
     await management.uploadApplicationLogo('app-1', new File(['logo'], 'logo.png'))
     await management.listUsers({ search: 'jane', limit: 50, offset: undefined })
     await management.createUser({ email: 'jane@example.com', displayName: 'Jane Doe' })
@@ -203,8 +203,8 @@ describe('management API client', () => {
       ['redirectUris.put', { param: { id: 'app-1' }, json: { redirectUris: ['https://app.example.com/callback'] } }],
       ['clientSecrets.get', { param: { id: 'app-1' }, query: { limit: '5' } }],
       ['clientSecrets.post', { param: { id: 'app-1' } }],
-      ['applicationAuthorizations.get', { query: { applicationId: 'app-1', limit: '25', offset: '50' } }],
-      ['applicationAuthorizationRevocation.put', { param: { authorizationId: 'authorization-1' } }],
+      ['applicationAuthorizations.get', { param: { id: 'app-1' }, query: { limit: '25', offset: '50' } }],
+      ['applicationAuthorization.delete', { param: { id: 'app-1', authorizationId: 'authorization-1' } }],
       ['uploadAsset', 'application_logo', expect.any(File)],
       ['applications.patch', { param: { id: 'app-1' }, json: { iconUrl: '/api/assets/asset-1' } }],
       ['users.get', { query: { search: 'jane', limit: '50' } }],
@@ -381,12 +381,6 @@ async function loadManagementApi(options: { userSecurity?: unknown } = {}) {
     apiClient: {
       api: {
         access: {
-          consents: {
-            $get: endpoint('applicationAuthorizations.get'),
-            ':authorizationId': {
-              revocation: { $put: endpoint('applicationAuthorizationRevocation.put') },
-            },
-          },
           requests: { $get: endpoint('agentAccessRequests.get') },
           roles: {
             $get: endpoint('roles.get'),
@@ -429,6 +423,10 @@ async function loadManagementApi(options: { userSecurity?: unknown } = {}) {
             $get: endpoint('application.get'),
             $patch: endpoint('applications.patch'),
             $delete: endpoint('applications.delete'),
+            authorizations: {
+              $get: endpoint('applicationAuthorizations.get'),
+              ':authorizationId': { $delete: endpoint('applicationAuthorization.delete') },
+            },
             'redirect-uris': {
               $get: endpoint('redirectUris.get'),
               $put: endpoint('redirectUris.put'),
@@ -473,7 +471,7 @@ async function loadManagementApi(options: { userSecurity?: unknown } = {}) {
               ':sessionId': { $delete: endpoint('userSession.delete') },
             },
             'linked-accounts': { $get: endpoint('userLinkedAccounts.get') },
-            applications: { $get: endpoint('userApplications.get') },
+            'application-authorizations': { $get: endpoint('userApplications.get') },
             security: { $get: endpoint('userSecurity.get') },
             passkeys: {
               $get: endpoint('userPasskeys.get'),

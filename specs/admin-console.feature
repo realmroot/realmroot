@@ -86,8 +86,8 @@ Feature: Admin Console
     Then settings, branding, redirect URIs, integration details, and secret rotation are available
     And Resource access is visible only when the Application can act as a machine principal
     And User authorizations remain separate from Application Permissions
-    And active user authorizations are read from the canonical Application authorization collection
-    And revoking one creates its durable revocation state without deleting its authorization history
+    And active user authorizations are read from the Application authorization subresource collection
+    And revoking one removes the active authorization while preserving its audit history
     And rotating a client secret requires confirmation because the current secret stops working
     And enabling refresh tokens keeps the required offline access scope selected
     And saving authorization silently removes allowlist references to deleted Resource Servers
@@ -110,7 +110,7 @@ Feature: Admin Console
     When I open user detail
     Then profile update, password reset, and session revocation controls work
     And direct Resource Server assignments are managed from Permissions
-    And Authorized apps shows only the user's active application consents
+    And Authorized apps shows only the User's active Application authorization subresources
 
   @entrypoint:product-ui @journey:admin-create-connector
   Scenario: Connectors page creates a draft social connector

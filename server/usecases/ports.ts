@@ -228,16 +228,6 @@ export interface LinkedAccount {
   updatedAt: Date
 }
 
-export interface ConsentedApplication {
-  id: string
-  applicationId: string
-  applicationName: string
-  applicationSlug: string
-  scopes: string[]
-  grantedAt: Date
-  expiresAt: Date | null
-}
-
 export interface UserRepository {
   getUser(userId: string): Promise<UserProfile>
   getPublicProfile(userId: string): Promise<UserPublicProfile>
@@ -252,7 +242,6 @@ export interface UserRepository {
   assertAccountAvatarReference(userId: string, avatarAssetId: string | null | undefined): Promise<void>
   assertAdminAvatarReference(avatarAssetId: string | null | undefined): Promise<void>
   listLinkedAccounts(userId: string, page: PaginationInput): Promise<PaginatedResult<LinkedAccount>>
-  listConsentedApplications(userId: string, page: PaginationInput): Promise<PaginatedResult<ConsentedApplication>>
   listSessions(userId: string, page: PaginationInput): Promise<PaginatedResult<UserSessionDevice>>
   getSessionToken(userId: string, sessionId: string): Promise<string>
   deleteSessions(userId: string, sessionId?: string): Promise<UserSessionDevice[]>
@@ -653,11 +642,6 @@ export interface AgentGovernanceResourceRecord {
   name: string
 }
 
-export interface AgentAccessRequestProjection {
-  request: AgentAccessRequestRecord
-  resource: AgentGovernanceResourceRecord
-}
-
 export interface AgentPermissionProjection {
   entitlement: ResourceScopeEntitlementRecord
   resource: AgentGovernanceResourceRecord
@@ -807,15 +791,6 @@ export interface ExternalResourceRepository {
   ): Promise<AgentAccessRequestRecord | null>
   findAccessRequest(id: string): Promise<AgentAccessRequestRecord | null>
   findAccessRequestByApprovalTokenHash(tokenHash: string): Promise<AgentAccessRequestRecord | null>
-  listAccessRequests(
-    query: PaginationInput & {
-      agentId?: string
-      organizationId?: string
-      resourceId?: string
-      status?: 'pending' | 'approved' | 'denied' | 'consumed' | 'expired'
-    },
-    scope?: AgentAuthorityInventoryScope,
-  ): Promise<PaginatedResult<AgentAccessRequestProjection>>
   listPendingAccessRequestsByAgent(agentIdentityId: string, now: Date): Promise<AgentAccessRequestRecord[]>
   listPendingAccessRequests(now: Date): Promise<AgentAccessRequestRecord[]>
   decideAccessRequest(
@@ -1220,6 +1195,8 @@ export interface ConsentRecord {
 export interface ApplicationAuthorizationRecord {
   id: string
   applicationId: string
+  applicationName: string
+  applicationSlug: string
   userId: string
   userDisplayName: string
   userEmail: string

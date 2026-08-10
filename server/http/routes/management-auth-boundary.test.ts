@@ -26,7 +26,7 @@ import {
 } from './management.test-utils'
 
 const operationsWithExplicitSecurity = new Set([
-  'GET /access/requests/{param}',
+  'GET /agent/access-requests/{param}',
   'GET /resource-servers',
   'GET /resource-servers/{param}',
   'GET /agents/{param}/permissions',
@@ -70,6 +70,10 @@ describe('management routes 1', () => {
       type: 'http',
       scheme: 'DPoP',
     })
+    expect(unifiedOpenApi.components.securitySchemes.agentAssertion).toMatchObject({
+      type: 'http',
+      scheme: 'bearer',
+    })
     expect(unifiedOpenApi.components.securitySchemes.oauth2).toMatchObject({
       type: 'oauth2',
       'x-dpop-required': true,
@@ -84,7 +88,7 @@ describe('management routes 1', () => {
         continue
       }
 
-      if (operation.key !== 'GET /assets/{param}' && !operation.key.startsWith('GET /public/')) {
+      if (!Array.isArray(operation.security) || operation.security.length !== 0) {
         expect(operation.responses, operation.key).toHaveProperty('401')
         expect(operation.responses, operation.key).toHaveProperty('403')
       }
@@ -174,8 +178,20 @@ describe('management routes 1', () => {
       expect(operation.tags, operation.key).toHaveLength(1)
       expect(declaredTags.has(operation.tags?.[0] ?? ''), operation.key).toBe(true)
     }
+    for (const operation of openApiOperationObjects().filter(({ key }) => /^\w+ \/realm(?:\/|$)/.test(key))) {
+      expect(operation.tags, operation.key).toEqual(['Platform'])
+    }
+    expect(declaredTags.has('Security')).toBe(false)
+    expect(declaredTags.has('Audit Events')).toBe(false)
+    expect(unifiedOpenApi.paths).not.toHaveProperty('/onboarding/status')
+    expect(unifiedOpenApi.paths).not.toHaveProperty('/onboarding/admin-users')
+    expect(unifiedOpenApi.paths).not.toHaveProperty('/health')
+    expect(unifiedOpenApi.paths).not.toHaveProperty('/configz')
+    expect(unifiedOpenApi.paths).not.toHaveProperty('/oauth/consent')
+    expect(unifiedOpenApi.paths).not.toHaveProperty('/account-connections/oauth/callback')
+    expect(unifiedOpenApi.paths).not.toHaveProperty('/provider-connection-events/{eventId}')
 
-    const accessRequest = openApiOperationObjects().find((operation) => operation.key === 'POST /access/requests')
+    const accessRequest = openApiOperationObjects().find((operation) => operation.key === 'POST /agent/access-requests')
     const standaloneRequestSchema = requestBodyContent(accessRequest?.requestBody).schema
     expect(JSON.stringify(standaloneRequestSchema)).not.toContain('#/components/')
 
@@ -208,9 +224,9 @@ describe('management routes 1', () => {
       }))
 
     expect(generatedCommands).toEqual([
-      { group: 'Agents', name: 'whoami', operationId: 'getAgentStatus' },
+      { group: 'Agent', name: 'whoami', operationId: 'getAgentStatus' },
       { group: 'Resource Servers', name: 'connect', operationId: 'createConnectionRequest' },
-      { group: 'Agent Access', name: 'access', operationId: 'createAgentAuthorizationRequest' },
+      { group: 'Agent', name: 'access', operationId: 'createAgentAuthorizationRequest' },
     ])
   })
 
@@ -330,7 +346,7 @@ describe('management routes 1', () => {
     const app = createApp(auth, deps)
     const headers = (method: string, path: string) => dpop.headers(method, `http://localhost${path}`)
 
-    const agent = await app.request('/api/agent/status', { headers: await headers('GET', '/api/agent/status') })
+    const agent = await app.request('/api/agent', { headers: await headers('GET', '/api/agent') })
     expect(agent.status).toBe(200)
     await expect(agent.json()).resolves.toMatchObject({
       agent: { issuer: 'http://localhost/api/auth', subject: 'agt_1' },

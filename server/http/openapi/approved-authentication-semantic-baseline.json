@@ -1,69 +1,51 @@
 [
   {
-    "method": "GET",
-    "path": "/access/consents",
-    "operationId": "listApplicationConsents",
-    "semanticHash": "ec0c7090209de51de661793957160be75a39621f1a8db325223a566f4d82f951"
-  },
-  {
-    "method": "GET",
-    "path": "/access/consents/{consentId}",
-    "operationId": "getApplicationConsent",
-    "semanticHash": "091052cbe41e9fb1e31d6126b050a0b81d4607d361d653ca62de1520bd08f97d"
-  },
-  {
-    "method": "GET",
-    "path": "/access/consents/{consentId}/revocation",
-    "operationId": "getApplicationConsentRevocation",
-    "semanticHash": "f8a9b488b567863b215f29ad4c26ec2f3c54326d096fae9806b17793eb8a10af"
-  },
-  {
-    "method": "PUT",
-    "path": "/access/consents/{consentId}/revocation",
-    "operationId": "replaceApplicationConsentRevocation",
-    "semanticHash": "9eb3d547866eb9649852097cf614eb7f1983559cfd6c31a8966ee10d27eaf729"
-  },
-  {
-    "method": "GET",
-    "path": "/access/requests",
-    "operationId": "listAgentAuthorizationRequests",
-    "semanticHash": "f9895014021b5e99cfb5e53a04eb7c534244a7c27aa1db6e2c3f995fec235d2f"
-  },
-  {
     "method": "POST",
-    "path": "/access/requests",
+    "path": "/agent/access-requests",
     "operationId": "createAgentAuthorizationRequest",
-    "semanticHash": "c8ca4d6cb065ca4fe61f2f4d3d24c2f567cd68482fa5181aa2429b57fb200860"
+    "semanticHash": "04ac96c09a57831de0e52a5a1c0f06a4b7dc23e25151d610ecb57a1b3c20029f"
   },
   {
     "method": "GET",
-    "path": "/access/requests/{requestId}",
-    "operationId": "getManagedAgentAuthorizationRequest",
-    "semanticHash": "fb3bf289a19ca7b6035eae1ca52f5b0c72a8a26d0c8d74d3d21551e903bb906d"
+    "path": "/agent/access-requests/{requestId}",
+    "operationId": "getAgentAuthorizationRequest",
+    "semanticHash": "1124ffea0419e8c11b3e61189c22008adbc2272dbeb3dd4983381f90a855695f"
+  },
+  {
+    "method": "GET",
+    "path": "/applications/{applicationId}/authorizations",
+    "operationId": "listApplicationAuthorizations",
+    "semanticHash": "fd50275ab4bc1d2a9d98575bc3ef3ed2d2a4a7b105c87016809673324417bd8a"
+  },
+  {
+    "method": "DELETE",
+    "path": "/applications/{applicationId}/authorizations/{authorizationId}",
+    "operationId": "deleteApplicationAuthorization",
+    "semanticHash": "bbfdd5948da7fc87c0b33ec566004414f6c3ba2e30cb6ec70c57a1567c2c0644"
+  },
+  {
+    "method": "GET",
+    "path": "/applications/{applicationId}/authorizations/{authorizationId}",
+    "operationId": "getApplicationAuthorization",
+    "semanticHash": "582991cb9f0f9fbe26509b97458653f3f27534db2006f0d13c3b9d08799fafd6"
+  },
+  {
+    "method": "GET",
+    "path": "/users/{userId}/application-authorizations",
+    "operationId": "listUserApplicationAuthorizations",
+    "semanticHash": "9ccf6f3c84c7d1922bf1ad7ebf647a6f7b219fa33f61e929646acd8b047760a2"
   },
   {
     "method": "POST",
-    "path": "/access/requests/{requestId}/credentials",
+    "path": "/agent/access-requests/{requestId}/credentials",
     "operationId": "createAgentAccessRequestCredential",
     "semanticHash": "abfdf0b697ced5cd83a1462562257e4289c141086d0fc225c4ab2e447016389c"
   },
   {
     "method": "GET",
-    "path": "/access/requests/{requestId}/decision",
-    "operationId": "getAgentAuthorizationRequestDecision",
-    "semanticHash": "4bfc87576c78b0cce0cd5b30cbd6c86064697750b15eb3a49b578a2f15f8f72e"
-  },
-  {
-    "method": "PUT",
-    "path": "/access/requests/{requestId}/decision",
-    "operationId": "replaceAgentAuthorizationRequestDecision",
-    "semanticHash": "7111cc04c2a6dd5a18db2aab73f6c9cbc3c6ff3a6f105b7304f59482e1ce0372"
-  },
-  {
-    "method": "GET",
-    "path": "/agent/status",
+    "path": "/agent",
     "operationId": "getAgentStatus",
-    "semanticHash": "c69cc1d3cdfdb86ab8f3c44e36e544caa34ea57e82b8bbb26036f2d8b567d52c"
+    "semanticHash": "0bf0127cfd10f10f48de12f4437beeae5f6b88c89a0c47924b10b0ae29f63a2d"
   },
   {
     "method": "GET",
@@ -400,12 +382,6 @@
     "path": "/organizations/{organizationId}/roles/{roleKey}",
     "operationId": "updateOrganizationRole",
     "semanticHash": "7c21bdedc564041325725d67df099eba54d66945bcc8b90fdcb65876b7aabf7f"
-  },
-  {
-    "method": "PUT",
-    "path": "/provider-connection-events/{eventId}",
-    "operationId": "replaceProviderConnectionEvent",
-    "semanticHash": "2decee4c9698ffc136db2b7f581a25f13d367515e4fa6d810484baea9bbf2dee"
   },
   {
     "method": "GET",

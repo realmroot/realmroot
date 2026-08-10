@@ -1501,14 +1501,9 @@ describe('authorization management over real D1', () => {
     await expect(agentDetail.json()).resolves.toMatchObject({
       agent: { pendingRequestCount: 0, activeScopeCount: 0 },
     })
-    const requests = await harness.request('/api/access/requests?agentId=deleted-identity', {
-      headers: { cookie },
-    })
-    expect(requests.status).toBe(200)
-    await expect(requests.json()).resolves.toMatchObject({
-      items: [],
-      pagination: { total: 0 },
-    })
+    expect(
+      (await harness.request('/api/access/requests?agentId=deleted-identity', { headers: { cookie } })).status,
+    ).toBe(404)
     expect((await harness.request('/api/access/requests/deleted-request', { headers: { cookie } })).status).toBe(404)
     const grants = await harness.request('/api/agents/deleted-identity/permissions', {
       headers: { cookie },
@@ -1567,11 +1562,9 @@ describe('authorization management over real D1', () => {
         .set({ status: 'inactive', deletedAt: now })
         .where(eq(agentIdentity.id, 'deleted-identity')),
     ])
-    const deletedAgentRequests = await harness.request('/api/access/requests?agentId=deleted-identity', {
-      headers: { cookie },
-    })
-    expect(deletedAgentRequests.status).toBe(200)
-    await expect(deletedAgentRequests.json()).resolves.toMatchObject({ items: [], pagination: { total: 0 } })
+    expect(
+      (await harness.request('/api/access/requests?agentId=deleted-identity', { headers: { cookie } })).status,
+    ).toBe(404)
     await harness.db
       .update(agentAccessRequest)
       .set({ resourceId: resource.id })

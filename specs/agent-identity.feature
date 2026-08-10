@@ -14,7 +14,8 @@ Feature: Agent identity and delegated API authorization
       Given Agent identity uses protocol registrations, host credentials, and identity bindings internally
       And external authorization uses discovery metadata, OAuth clients, connection state, and token leases internally
       When an Agent, controller, or administrator reads the Realmroot API contract
-      Then the public resources are Agents, Agent installations, Agent installation enrollments, API resources, account connections, access requests, Permissions, and audit events
+      Then the public resources are Agents, Agent installations, Agent installation enrollments, API resources, account connections, Agent access requests, Permissions, and audit events
+      And the authenticated Agent addresses its access requests below `/agent/access-requests`
       And Agent registrations, hosts, identity bindings, connection intents, OAuth integration records, and token leases remain private implementation records
       And each public resource has one canonical URI in its caller boundary
       And Agent installation representations never expose internal Host identifiers
@@ -229,8 +230,9 @@ Feature: Agent identity and delegated API authorization
       Given an enabled native API resource belongs to the Agent's home space
       When the Agent lists available resources
       Then Realmroot returns that resource and its protected resource URL without requiring an account connection
-      When Restish reads the target OpenAPI operation and the Agent requests its exact scope set
+      When Restish reads the target OpenAPI operation and the Agent requests its Resource Server and exact scope set
       Then Realmroot validates that scope set against the local target scope registry
+      And concrete authorization details are optional constraints rather than a required Resource reference
       And Realmroot verifies the controller currently holds every requested scope
       And Realmroot creates the same pending access-request resource used for external APIs
       And it does not require a user-created authority grant or grant identifier
@@ -369,8 +371,9 @@ Feature: Agent identity and delegated API authorization
     @entrypoint:agent-protocol @journey:provider-connection-events
     Scenario: A provider reports account connection lifecycle changes
       Given a brokered Resource Server holds a provider account connection for an Agent grant
-      When the Resource Server sends a signed Connection Event with a unique event identity and positive monotonic revision
-      Then Realmroot verifies the signature and applies the authority, resource, suspension, restoration, or revocation change
+      When the Resource Server replaces its signed Connection Event child resource with a unique event identity and positive monotonic revision
+      Then the Resource Server path identifies the event authority without repeating its resource URL in the event representation
+      And Realmroot verifies the signature and applies the authority, resource, suspension, restoration, or revocation change
       And Realmroot updates connection-wide scopes separately from the resulting scopes of any selected authority
       And Realmroot persists provider-neutral authorization-detail-to-scope constraints for every current authority
       And an authority change identifies the affected authority and its resulting scopes together

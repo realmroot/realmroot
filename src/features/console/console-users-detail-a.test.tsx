@@ -80,8 +80,8 @@ describe('admin console users-detail-a', () => {
       if (url.startsWith('/api/users/user-1/linked-accounts')) {
         return Promise.resolve(jsonResponse({ accounts: [], pagination: emptyPagination }))
       }
-      if (url.startsWith('/api/users/user-1/applications')) {
-        return Promise.resolve(jsonResponse({ applications: [], pagination: emptyPagination }))
+      if (url.startsWith('/api/users/user-1/application-authorizations')) {
+        return Promise.resolve(jsonResponse({ authorizations: [], pagination: emptyPagination }))
       }
       if (url === '/api/users/user-1/security') {
         return Promise.resolve(jsonResponse({ security: consoleSecurity }))
@@ -143,8 +143,8 @@ describe('admin console users-detail-a', () => {
       if (url.startsWith('/api/users/user-1/linked-accounts')) {
         return Promise.resolve(jsonResponse({ accounts: [], pagination: emptyPagination }))
       }
-      if (url.startsWith('/api/users/user-1/applications')) {
-        return Promise.resolve(jsonResponse({ applications: [], pagination: emptyPagination }))
+      if (url.startsWith('/api/users/user-1/application-authorizations')) {
+        return Promise.resolve(jsonResponse({ authorizations: [], pagination: emptyPagination }))
       }
       if (url === '/api/users/user-1/security') {
         return Promise.resolve(jsonResponse({ security: consoleSecurity }))
@@ -222,8 +222,8 @@ describe('admin console users-detail-a', () => {
       if (url.startsWith('/api/users/user-1/linked-accounts')) {
         return Promise.resolve(jsonResponse({ accounts: [], pagination: emptyPagination }))
       }
-      if (url.startsWith('/api/users/user-1/applications')) {
-        return Promise.resolve(jsonResponse({ applications: [], pagination: emptyPagination }))
+      if (url.startsWith('/api/users/user-1/application-authorizations')) {
+        return Promise.resolve(jsonResponse({ authorizations: [], pagination: emptyPagination }))
       }
       if (url === '/api/users/user-1/security') {
         return Promise.resolve(
@@ -301,8 +301,8 @@ describe('admin console users-detail-a', () => {
       if (url.startsWith('/api/users/user-1/linked-accounts')) {
         return Promise.resolve(jsonResponse({ accounts: [], pagination: emptyPagination }))
       }
-      if (url.startsWith('/api/users/user-1/applications')) {
-        return Promise.resolve(jsonResponse({ applications: [], pagination: emptyPagination }))
+      if (url.startsWith('/api/users/user-1/application-authorizations')) {
+        return Promise.resolve(jsonResponse({ authorizations: [], pagination: emptyPagination }))
       }
       if (url === '/api/users/user-1/security') {
         return Promise.resolve(jsonResponse({ security: consoleSecurity }))

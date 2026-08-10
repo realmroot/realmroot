@@ -141,7 +141,7 @@ Collection responses include:
 
 `nextOffset` is `null` when there is no next page.
 
-`/application-authorizations`, `/role-assignments`, and `/access/requests` are
+`/application-authorizations`, `/role-assignments`, and `/agent/access-requests` are
 canonical Realm inventories. Direct Resource authority is exposed beneath its
 subject at `/users/{userId}/permissions`,
 `/applications/{applicationId}/permissions`, or

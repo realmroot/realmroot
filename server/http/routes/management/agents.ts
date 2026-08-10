@@ -4,34 +4,21 @@ import {
   emergencyDeleteAgentIdentity,
   getAgent,
   getManagementAgent,
-  getManagementAgentAccessRequest,
   getManagementAgentPermission,
   listAllAgents,
-  listManagementAgentAccessRequests,
   listManagementAgentAuthorizedResourceServers,
   listManagementAgentInstallations,
   listManagementAgentPermissions,
 } from '@server/usecases/agent-identities'
+import { getAgentPermission, listAgentPermissions, revokeAgentPermission } from '@server/usecases/external-resources'
 import {
-  decideAccessRequest,
-  getAccessRequest,
-  getAgentPermission,
-  listAgentPermissions,
-  revokeAgentPermission,
-} from '@server/usecases/external-resources'
-import {
-  accessRequestSchema,
   agentAuthorizedResourceServersResponseSchema,
   agentPermissionSchema,
   agentPermissionsResponseSchema,
-  decideAccessRequestSchema,
   listAgentAuditEventsQuerySchema,
   listAgentAuthorizedResourceServersQuerySchema,
   listAgentPermissionsQuerySchema,
   listAgentsQuerySchema,
-  listManagementAgentAccessRequestsQuerySchema,
-  managementAgentAccessRequestSchema,
-  managementAgentAccessRequestsResponseSchema,
   managementAgentAuditEventSchema,
   managementAgentInstallationsResponseSchema,
   managementAgentResponseSchema,
@@ -47,7 +34,7 @@ import {
   requireAgentScope,
 } from '../../middleware/authz'
 import { getDeps } from '../../middleware/deps'
-import { readJson, readQuery } from '../validation'
+import { readQuery } from '../validation'
 
 export const managementAgentsRoute = new Hono()
 
@@ -73,54 +60,6 @@ managementAgentsRoute.get('/agents/:agentId/installations', async (c) => {
       await listManagementAgentInstallations(getDeps(c), c.req.param('agentId'), readQuery(c, paginationQuerySchema)),
     ),
   )
-})
-
-managementAgentsRoute.get('/access/requests', async (c) => {
-  const query = readQuery(c, listManagementAgentAccessRequestsQuerySchema)
-  const principal = getPrincipal(c).agent
-  if (principal) requireAgentScope(c, 'access-requests:read')
-  return c.json(
-    managementAgentAccessRequestsResponseSchema.parse(
-      await listManagementAgentAccessRequests(
-        getDeps(c),
-        principal ? { ...query, agentId: principal.identityId } : query,
-        principal ? undefined : await authorityInventoryScope(c, query.organizationId),
-      ),
-    ),
-  )
-})
-
-managementAgentsRoute.get('/access/requests/:requestId', async (c) => {
-  const principal = getPrincipal(c).agent
-  if (principal) {
-    requireAgentScope(c, 'access-requests:read')
-    return c.json(
-      accessRequestSchema.parse(
-        await getAccessRequest(getDeps(c), c.req.param('requestId'), principal, new URL(c.req.url).origin),
-      ),
-    )
-  }
-  const request = await getManagementAgentAccessRequest(getDeps(c), c.req.param('requestId'))
-  await requireAgentByIdAccess(c, request.agentId)
-  return c.json(managementAgentAccessRequestSchema.parse(request))
-})
-
-managementAgentsRoute.get('/access/requests/:requestId/decision', async (c) => {
-  const request = await getManagementAgentAccessRequest(getDeps(c), c.req.param('requestId'))
-  await requireAgentByIdAccess(c, request.agentId)
-  return c.json({ accessRequestId: request.id, status: request.status, decidedAt: request.decidedAt })
-})
-
-managementAgentsRoute.put('/access/requests/:requestId/decision', async (c) => {
-  const request = await getManagementAgentAccessRequest(getDeps(c), c.req.param('requestId'))
-  await requireAgentByIdAccess(c, request.agentId)
-  const decided = await decideAccessRequest(
-    getDeps(c),
-    request.id,
-    await readJson(c, decideAccessRequestSchema),
-    getActorUserId(c)!,
-  )
-  return c.json({ accessRequestId: decided.id, status: decided.status, decidedAt: decided.decidedAt })
 })
 
 managementAgentsRoute.get('/agents/:agentId/authorized-resource-servers', async (c) => {
@@ -265,11 +204,6 @@ managementAgentsRoute.get('/realm/audit-events', async (c) => {
 async function requireAgentByIdConsoleAccess(c: Parameters<typeof getDeps>[0], agentId: string) {
   const agent = await getAgent(getDeps(c), agentId)
   await requireAgentAccess(c, agent)
-}
-
-async function requireAgentByIdAccess(c: Parameters<typeof getDeps>[0], agentId: string) {
-  const agent = await getAgent(getDeps(c), agentId)
-  await requireAgentAccess(c, agent, c.req.method !== 'GET' && c.req.method !== 'HEAD')
 }
 
 async function requireAgentByIdPermissionAccess(c: Parameters<typeof getDeps>[0], agentId: string, write = false) {

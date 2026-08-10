@@ -29,6 +29,7 @@ import {
   type ManagementRouteConfig,
   uploadedAssetResponseSchema,
 } from './management-routes/helpers'
+import { platformRuntimeRoutes } from './management-routes/platform-runtime'
 import { platformWebhookRoutes } from './management-routes/platform-webhooks'
 import { userSecurityRoutes } from './management-routes/users-security'
 
@@ -59,19 +60,16 @@ export const unifiedOpenApiLinkHeader = [
 
 const managementOpenApiTags = [
   { name: 'Assets', description: 'Uploaded assets used by Realmroot resources.' },
+  { name: 'Agent', description: 'Authenticated Agent bootstrap and access protocol resources.' },
   { name: 'Agents', description: 'Agent identities, installations, and lifecycle.' },
-  { name: 'Agent Access', description: 'Agent access requests and approval decisions.' },
   { name: 'Applications', description: 'OIDC and machine-to-machine client applications.' },
-  { name: 'Consents', description: 'User consent records for delegated Application access.' },
   { name: 'Resource Servers', description: 'Protected Resource Servers, contracts, and connections.' },
   { name: 'Organizations', description: 'Organizations, memberships, invitations, and roles.' },
   { name: 'Users', description: 'Realmroot users and account security resources.' },
   { name: 'Connectors', description: 'External identity and resource connectors.' },
-  { name: 'Realm Configuration', description: 'Realm-wide hosted experience and platform configuration.' },
-  { name: 'Security', description: 'Realm-wide authentication and security policy.' },
   { name: 'Webhooks', description: 'Webhook endpoints, deliveries, attempts, and secrets.' },
-  { name: 'Audit Events', description: 'Immutable Realmroot governance audit events.' },
   { name: 'Public Profiles', description: 'Public representations of User and Agent identities.' },
+  { name: 'Platform', description: 'Realm-wide resources, service health, and operational metadata.' },
 ] as const
 
 const publicProfileResponseHeaders = {
@@ -164,10 +162,10 @@ const managementRoutes: ManagementRouteConfig[] = [
   },
   {
     method: 'get',
-    path: '/agent/status',
+    path: '/agent',
     operationId: 'getAgentStatus',
     summary: 'Read the current Agent status',
-    cli: { group: 'Agents', name: 'whoami' },
+    cli: { group: 'Agent', name: 'whoami' },
     security: [{ agentAuth: ['agent:read'] }],
     response: agentStatusSchema,
   },
@@ -212,9 +210,9 @@ const managementRoutes: ManagementRouteConfig[] = [
   },
   {
     method: 'put',
-    path: '/provider-connection-events/{eventId}',
-    operationId: 'replaceProviderConnectionEvent',
-    summary: 'Apply an idempotent provider Connection Event',
+    path: '/resource-servers/{resourceServerId}/connection-events/{eventId}',
+    operationId: 'replaceResourceServerConnectionEvent',
+    summary: 'Replace an idempotent Resource Server Connection Event',
     security: [
       {
         providerConnectionEventSecret: [],
@@ -224,6 +222,7 @@ const managementRoutes: ManagementRouteConfig[] = [
     ],
     request: {
       params: z.object({
+        resourceServerId: z.string(),
         eventId: providerConnectionEventIdSchema.meta({
           param: { name: 'eventId', in: 'path' },
           example: 'delivery-018f4f92',
@@ -250,7 +249,7 @@ const managementRoutes: ManagementRouteConfig[] = [
     status: 204,
     noBody: true,
     errors: {
-      400: 'The event representation, resource, or timestamp is invalid.',
+      400: 'The event representation, Resource Server, or timestamp is invalid.',
       404: 'The referenced Connection was not found.',
       409: 'The event identity or revision conflicts with the current Connection Event state.',
       413: 'The event representation exceeds 64 KiB.',
@@ -271,7 +270,7 @@ const managementRoutes: ManagementRouteConfig[] = [
   },
   {
     method: 'post',
-    path: '/access/requests',
+    path: '/agent/access-requests',
     operationId: 'createAgentAuthorizationRequest',
     summary: 'Create an Agent authorization request',
     cli: { name: 'access' },
@@ -281,10 +280,22 @@ const managementRoutes: ManagementRouteConfig[] = [
     status: 201,
     responseHeaders: { ...locationResponseHeader, ...interactiveResourceResponseHeaders },
   },
+  {
+    method: 'get',
+    path: '/agent/access-requests/{requestId}',
+    operationId: 'getAgentAuthorizationRequest',
+    summary: "Get the authenticated Agent's authorization request",
+    security: [{ agentAuth: ['access-requests:read'] }],
+    request: { params: z.object({ requestId: z.string() }) },
+    response: accessRequestSchema,
+    responseHeaders: interactiveResourceResponseHeaders,
+    errors: { 404: 'The Agent access request was not found.' },
+  },
   ...agentGovernanceRoutes,
   ...applicationAuthorizationRoutes,
   ...userSecurityRoutes,
   ...platformWebhookRoutes,
+  ...platformRuntimeRoutes,
 ]
 const openApiApp = createManagementOpenApiApp()
 export const unifiedOpenApi = buildUnifiedOpenApi()
@@ -302,6 +313,11 @@ function createManagementOpenApiApp() {
     scheme: 'DPoP',
     description:
       'Plugin-managed Realmroot Agent protocol authentication with a short-lived RFC 9449 DPoP access token.',
+  })
+  app.openAPIRegistry.registerComponent('securitySchemes', 'agentAssertion', {
+    type: 'http',
+    scheme: 'bearer',
+    description: 'Short-lived Agent protocol assertion used only to create and read Agent enrollments.',
   })
   app.openAPIRegistry.registerComponent('securitySchemes', 'oauth2', {
     type: 'oauth2',
@@ -392,25 +408,25 @@ function oauthScopeDescription(scope: string) {
 function managementTagForPath(path: string): (typeof managementOpenApiTags)[number]['name'] {
   if (path.startsWith('/public/')) return 'Public Profiles'
   if (path.startsWith('/assets')) return 'Assets'
-  if (path === '/agent/status' || path.startsWith('/agents')) return 'Agents'
-  if (path.startsWith('/access/requests')) return 'Agent Access'
-  if (path.startsWith('/access/consents')) return 'Consents'
+  if (path === '/agent' || path.startsWith('/agent/')) return 'Agent'
+  if (path.startsWith('/agents')) return 'Agents'
   if (path.startsWith('/applications')) return 'Applications'
   if (path.startsWith('/resource-servers')) return 'Resource Servers'
-  if (path.startsWith('/provider-connection-events')) return 'Resource Servers'
   if (path.startsWith('/organizations')) return 'Organizations'
   if (path.startsWith('/users')) return 'Users'
   if (path.startsWith('/connectors')) return 'Connectors'
-  if (path === '/realm/security-policy') return 'Security'
-  if (path === '/realm/audit-events') return 'Audit Events'
-  if (path.startsWith('/realm')) return 'Realm Configuration'
+  if (path === '/realm' || path.startsWith('/realm/')) return 'Platform'
   if (path.startsWith('/webhooks')) return 'Webhooks'
   throw new Error(`Management OpenAPI route has no domain tag: ${path}`)
 }
 
 function routeResponses(routeConfig: ManagementRouteConfig) {
   const responses: Record<string, unknown> = {}
-  if (routeConfig.noBody) responses[routeConfig.status ?? 204] = { description: routeConfig.summary }
+  if (routeConfig.noBody)
+    responses[routeConfig.status ?? 204] = {
+      description: routeConfig.summary,
+      ...(routeConfig.responseHeaders ? { headers: routeConfig.responseHeaders } : {}),
+    }
   else
     responses[routeConfig.status ?? 200] = {
       description: routeConfig.summary,

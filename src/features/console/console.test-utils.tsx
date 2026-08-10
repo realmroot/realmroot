@@ -106,7 +106,7 @@ export function consoleSharedFetch(input: RequestInfo | URL, init?: RequestInit)
   if (url === '/api/realm/audit-events') {
     return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
   }
-  if (url.startsWith('/api/access/consents')) {
+  if (url.includes('/authorizations') || url.includes('/application-authorizations')) {
     return Promise.resolve(jsonResponse({ authorizations: [], pagination: emptyPagination }))
   }
   if (url === '/api/applications' || url.startsWith('/api/applications?')) {
@@ -139,7 +139,8 @@ export function accountRouteFetch(input: RequestInfo | URL, init?: RequestInit) 
     return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
   }
   if (url === '/api/account/linked-accounts') return Promise.resolve(jsonResponse({ accounts: [] }))
-  if (url === '/api/account/applications') return Promise.resolve(jsonResponse({ applications: [] }))
+  if (url === '/api/account/application-authorizations')
+    return Promise.resolve(jsonResponse({ authorizations: [], pagination: emptyPagination }))
   if (url === '/api/account/agents') return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
   if (url === '/api/account/api-resources')
     return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))

@@ -350,7 +350,6 @@ describe('Provider Connection Events over real D1', () => {
       (
         await putEvent(harness, 'delivery-new-broker-first', {
           type: 'authorityChanged',
-          resource,
           brokerReference: 'installation-2',
           occurredAt: '2026-08-08T20:03:00.000Z',
           revision: 1,
@@ -368,7 +367,6 @@ describe('Provider Connection Events over real D1', () => {
       (
         await putEvent(harness, 'delivery-old-broker-replay', {
           type: 'revoked',
-          resource,
           brokerReference: 'installation-1',
           occurredAt: '2026-08-08T20:04:00.000Z',
           revision: 8,
@@ -413,7 +411,6 @@ describe('Provider Connection Events over real D1', () => {
       (
         await putEvent(harness, 'delivery-same-broker-equal-revision', {
           type: 'authorityChanged',
-          resource,
           brokerReference: 'installation-2',
           occurredAt: '2026-08-08T20:06:00.000Z',
           revision: 1,
@@ -449,7 +446,6 @@ describe('Provider Connection Events over real D1', () => {
       (
         await putEvent(harness, 'delivery-isolated-authority', {
           type: 'authorityChanged',
-          resource,
           brokerReference: 'installation-1',
           occurredAt: '2026-08-08T20:01:00.000Z',
           revision: 1,
@@ -586,7 +582,6 @@ describe('Provider Connection Events over real D1', () => {
   it('[spec: agent-identity/provider-connection-events] serializes concurrent revisions and event-identity replay over real D1', async () => {
     const first = {
       type: 'authorityChanged',
-      resource,
       brokerReference: 'installation-1',
       occurredAt: '2026-08-08T20:01:00.000Z',
       revision: 1,
@@ -688,7 +683,6 @@ describe('Provider Connection Events over real D1', () => {
       (
         await putEvent(harness, 'delivery-restore-suspend', {
           type: 'suspended',
-          resource,
           brokerReference: 'installation-1',
           occurredAt: '2026-08-08T20:01:00.000Z',
           revision: 1,
@@ -699,7 +693,6 @@ describe('Provider Connection Events over real D1', () => {
       (
         await putEvent(harness, 'delivery-restore-reduced', {
           type: 'restored',
-          resource,
           brokerReference: 'installation-1',
           occurredAt: '2026-08-08T20:02:00.000Z',
           revision: 2,
@@ -736,7 +729,6 @@ describe('Provider Connection Events over real D1', () => {
       (
         await putEvent(harness, 'delivery-resource-reduced', {
           type: 'resourcesChanged',
-          resource,
           brokerReference: 'installation-1',
           occurredAt: '2026-08-08T20:01:00.000Z',
           revision: 1,
@@ -764,8 +756,8 @@ describe('Provider Connection Events over real D1', () => {
     const contract = (await discovery.json()) as {
       paths: Record<string, { put?: { operationId?: string; security?: unknown[] } }>
     }
-    expect(contract.paths['/provider-connection-events/{eventId}']?.put).toMatchObject({
-      operationId: 'replaceProviderConnectionEvent',
+    expect(contract.paths['/resource-servers/{resourceServerId}/connection-events/{eventId}']?.put).toMatchObject({
+      operationId: 'replaceResourceServerConnectionEvent',
       security: [
         {
           providerConnectionEventSecret: [],
@@ -777,7 +769,6 @@ describe('Provider Connection Events over real D1', () => {
 
     const expansion = {
       type: 'authorityChanged',
-      resource,
       brokerReference: 'installation-1',
       occurredAt: '2026-08-08T20:01:00.000Z',
       revision: 1,
@@ -800,7 +791,6 @@ describe('Provider Connection Events over real D1', () => {
 
     const authority = {
       type: 'authorityChanged',
-      resource,
       brokerReference: 'installation-1',
       occurredAt: '2026-08-08T20:01:00.000Z',
       revision: 2,
@@ -876,7 +866,6 @@ describe('Provider Connection Events over real D1', () => {
       (
         await putEvent(harness, 'delivery-resource-expansion', {
           type: 'resourcesChanged',
-          resource,
           brokerReference: 'installation-1',
           occurredAt: '2026-08-08T20:01:30.000Z',
           revision: 3,
@@ -909,7 +898,6 @@ describe('Provider Connection Events over real D1', () => {
       (
         await putEvent(harness, 'delivery-stale', {
           type: 'revoked',
-          resource,
           brokerReference: 'installation-1',
           occurredAt: '2026-08-08T20:01:00.000Z',
           revision: 1,
@@ -931,7 +919,6 @@ describe('Provider Connection Events over real D1', () => {
       (
         await putEvent(harness, 'delivery-2', {
           type: 'suspended',
-          resource,
           brokerReference: 'installation-1',
           occurredAt: '2026-08-08T20:02:00.000Z',
           revision: 4,
@@ -979,7 +966,6 @@ describe('Provider Connection Events over real D1', () => {
       (
         await putEvent(harness, 'delivery-3', {
           type: 'restored',
-          resource,
           brokerReference: 'installation-1',
           occurredAt: '2026-08-08T20:03:00.000Z',
           revision: 5,
@@ -993,7 +979,6 @@ describe('Provider Connection Events over real D1', () => {
       (
         await putEvent(harness, 'delivery-4', {
           type: 'revoked',
-          resource,
           brokerReference: 'installation-1',
           occurredAt: '2026-08-08T20:04:00.000Z',
           revision: 6,
@@ -1017,7 +1002,6 @@ describe('Provider Connection Events over real D1', () => {
     const expansionOccurredAt = '2026-08-08T20:02:00.000Z'
     const expanded = {
       type: 'resourcesChanged',
-      resource,
       brokerReference: 'installation-1',
       occurredAt: expansionOccurredAt,
       revision: 1,
@@ -1102,7 +1086,7 @@ describe('Provider Connection Events over real D1', () => {
 })
 
 async function putEvent(harness: Harness, eventId: string, representation: Record<string, unknown>) {
-  const path = `/api/provider-connection-events/${eventId}`
+  const path = `/api/resource-servers/event-resource/connection-events/${eventId}`
   const body = JSON.stringify(representation)
   const timestamp = `${Math.floor(Date.now() / 1000)}`
   const key = await crypto.subtle.importKey(

@@ -247,15 +247,34 @@ describe('account security passkey routes', () => {
       users: createUserRepositoryMock(),
       security: createSecurityRepositoryMock(),
     })
+    const authorization = {
+      id: 'consent-1',
+      applicationId: 'application-1',
+      applicationName: 'Example application',
+      applicationSlug: 'example-application',
+      userId: 'user-1',
+      userDisplayName: 'Example User',
+      userEmail: 'user@example.com',
+      resourceServerId: null,
+      scopes: ['openid'],
+      grantedAt: new Date('2026-01-01T00:00:00.000Z'),
+      expiresAt: null,
+      revokedAt: null,
+    }
+    deps.applications.findAuthorization = vi
+      .fn()
+      .mockResolvedValueOnce(authorization)
+      .mockResolvedValueOnce(authorization)
+      .mockResolvedValueOnce({ ...authorization, revokedAt: new Date('2026-01-02T00:00:00.000Z') })
     const app = createApp(createAuthMock(), deps, { securityPolicy: securityPolicy() })
 
-    const response = await app.request('/api/account/applications/consent-1', {
+    const response = await app.request('/api/account/application-authorizations/consent-1', {
       method: 'DELETE',
       headers: userHeaders(),
     })
 
     expect(response.status).toBe(204)
-    expect(deps.applications.revokeConsent).toHaveBeenCalledWith('consent-1', 'user-1')
+    expect(deps.applications.revokeAuthorization).toHaveBeenCalledWith('consent-1')
   })
 })
 
@@ -331,7 +350,6 @@ function createUserRepositoryMock(): UserRepository {
     assertAccountAvatarReference: vi.fn().mockResolvedValue(undefined),
     assertAdminAvatarReference: vi.fn().mockResolvedValue(undefined),
     listLinkedAccounts: vi.fn().mockImplementation((_userId, page) => Promise.resolve(createPage(page))),
-    listConsentedApplications: vi.fn().mockImplementation((_userId, page) => Promise.resolve(createPage(page))),
     listSessions: vi.fn().mockImplementation((_userId, page) => Promise.resolve(createPage(page))),
     getSessionToken: vi.fn().mockResolvedValue('session-token-1'),
     deleteSessions: vi.fn().mockResolvedValue([]),

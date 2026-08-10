@@ -1,8 +1,8 @@
 [
   {
     "method": "PUT",
-    "path": "/provider-connection-events/{eventId}",
-    "operationId": "replaceProviderConnectionEvent",
-    "semanticHash": "2decee4c9698ffc136db2b7f581a25f13d367515e4fa6d810484baea9bbf2dee"
+    "path": "/resource-servers/{resourceServerId}/connection-events/{eventId}",
+    "operationId": "replaceResourceServerConnectionEvent",
+    "semanticHash": "a6ce54897e33561ee9170c23d9d6b8946d6e3639940777c5e243ffd3981ef3ae"
   }
 ]

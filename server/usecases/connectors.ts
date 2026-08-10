@@ -693,7 +693,7 @@ function registrationRequest(
     client_name: `Realmroot ${displayName}`,
     redirect_uris: [
       `${origin}/api/auth/callback/${encodeURIComponent(providerId)}`,
-      `${origin}/api/account-connections/oauth/callback`,
+      `${origin}/oauth/account-connection/callback`,
     ],
     grant_types: [
       'authorization_code',

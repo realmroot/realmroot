@@ -99,8 +99,8 @@ export function createApp(auth: AuthHandler, deps: Deps, config: AppConfig = {})
     if (error instanceof ApiError && error.status === 401 && c.req.path.startsWith('/api/')) {
       c.header(
         'WWW-Authenticate',
-        c.req.path.startsWith('/api/provider-connection-events/')
-          ? 'Bearer realm="provider-connection-events"'
+        /^\/api\/resource-servers\/[^/]+\/connection-events\//.test(c.req.path)
+          ? 'Bearer realm="resource-server-connection-events"'
           : `DPoP resource_metadata="${protectedResourceMetadataUrl(config, c.req.url)}"`,
       )
     }
@@ -131,7 +131,7 @@ export function createApp(auth: AuthHandler, deps: Deps, config: AppConfig = {})
         endpoints,
         agent_identity_issuer: issuer,
         agent_enrollment_endpoint: new URL('/api/agent/enrollments', issuer).toString(),
-        agent_endpoint: new URL('/api/agent/status', issuer).toString(),
+        agent_endpoint: new URL('/api/agent', issuer).toString(),
         agent_profile_uri_template: publicAgentProfileUriTemplate(issuer),
         agent_token_endpoint: `${issuer}/oauth2/token`,
         agent_bootstrap_scopes_supported: agentBootstrapScopes,
@@ -211,20 +211,18 @@ function mountApiRoutes(app: Hono, auth: AuthHandler, config: AppConfig) {
   const issuer = canonicalOrigin ? `${canonicalOrigin}/api/auth` : ''
   const api = app
     .get('/api/health', (c) => c.json(healthStatus))
-    .route('/api/oauth/consent', oauthConsentRoute)
     .route('/api/configz', createConfigzRoutes(config.securityPolicy))
     .route('/api/assets', createAssetRoutes())
-    .route(
-      '/api/provider-connection-events',
-      createProviderConnectionEventRoutes(config.providerConnectionEventSecrets ?? {}),
-    )
+    .route('/api/resource-servers', createProviderConnectionEventRoutes(config.providerConnectionEventSecrets ?? {}))
     .use('/api/*', unifiedOpenApiDiscoveryHeader())
     .route(
       '/api/public',
       createPublicProfileRoutes((requestUrl) => oauthIssuer(config, requestUrl)),
     )
   protectResourceRoutes(api, auth, config)
-  api.use('/api/agent/status', authn(auth, { allowAgent: true, required: true, oauth: agentOAuth(config) }))
+  api.use('/api/agent', authn(auth, { allowAgent: true, required: true, oauth: agentOAuth(config) }))
+  api.use('/api/agent/access-requests', authn(auth, { allowAgent: true, required: true, oauth: agentOAuth(config) }))
+  api.use('/api/agent/access-requests/*', authn(auth, { allowAgent: true, required: true, oauth: agentOAuth(config) }))
   return api
     .route('/api', createProtectedResourceAssetRoutes())
     .route(
@@ -237,9 +235,10 @@ function mountApiRoutes(app: Hono, auth: AuthHandler, config: AppConfig) {
       }),
     )
     .route('/api/onboarding', onboardingRoutes(canonicalOrigin || undefined))
+    .route('/api/account', oauthConsentRoute)
     .route('/api/account', accountRoutes(managementApi, config.securityPolicy, canonicalOrigin || undefined))
     .route('/api/account', createAccountAssetRoutes(config.securityPolicy))
-    .route('/api/account-connections', createResourceConnectionRoutes(canonicalOrigin || undefined))
+    .route('/oauth/account-connection', createResourceConnectionRoutes(canonicalOrigin || undefined))
     .route('/api', createAgentProtocolRoutes(auth.api, issuer || undefined, config.trustedOrigins))
 }
 

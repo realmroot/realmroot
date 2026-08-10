@@ -10,12 +10,7 @@ import type {
   AgentIdentityRecord,
 } from '@server/usecases/ports'
 import { resourceScopeEntitlementLifecycle } from '@server/usecases/resource-scope-entitlements'
-import type {
-  Agent,
-  AgentEnrollment,
-  ListAgentPermissionsQuery,
-  ListManagementAgentAccessRequestsQuery,
-} from '@shared/api/agent-api'
+import type { Agent, AgentEnrollment, ListAgentPermissionsQuery } from '@shared/api/agent-api'
 import type {
   AgentEnrollmentIntent,
   AgentHomeSpace,
@@ -102,50 +97,6 @@ export async function listManagementAgentInstallations(deps: Deps, agentId: stri
       }
     }),
     pagination: paginationMetadata({ ...page, total: allBindings.length }),
-  }
-}
-
-export async function listManagementAgentAccessRequests(
-  deps: Deps,
-  query: ListManagementAgentAccessRequestsQuery,
-  scope?: AgentAuthorityInventoryScope,
-) {
-  const result = await deps.externalResources.listAccessRequests(query, scope)
-  const now = Date.now()
-  return {
-    items: result.items.map(({ request, resource }) => ({
-      id: request.id,
-      agentId: request.agentIdentityId,
-      resource,
-      scopes: request.scopes,
-      authorizationDetails: request.authorizationDetails,
-      reason: request.reason,
-      status:
-        request.status === 'pending' && request.expiresAt.getTime() <= now ? ('expired' as const) : request.status,
-      expiresAt: request.expiresAt.toISOString(),
-      decidedAt: request.decidedAt?.toISOString() ?? null,
-      createdAt: request.createdAt.toISOString(),
-    })),
-    pagination: paginationMetadata(result),
-  }
-}
-
-export async function getManagementAgentAccessRequest(deps: Deps, requestId: string) {
-  const request = await deps.externalResources.findAccessRequest(requestId)
-  if (!request) throw notFound('Agent access request was not found.')
-  await requireIdentity(deps, request.agentIdentityId)
-  const resource = await getManagementResource(deps, request.resourceId, 'Agent access request was not found.')
-  return {
-    id: request.id,
-    agentId: request.agentIdentityId,
-    resource,
-    scopes: request.scopes,
-    authorizationDetails: request.authorizationDetails,
-    reason: request.reason,
-    status: request.status,
-    expiresAt: request.expiresAt.toISOString(),
-    decidedAt: request.decidedAt?.toISOString() ?? null,
-    createdAt: request.createdAt.toISOString(),
   }
 }
 
@@ -639,12 +590,6 @@ function toManagementAgent(
     activeResourceCount: access.activeResourceCount,
     activeScopeCount: access.activeScopeCount,
   }
-}
-
-async function getManagementResource(deps: Deps, resourceId: string, missingDetail: string) {
-  const resource = await deps.authorization.findResource(resourceId)
-  if (!resource) throw notFound(missingDetail)
-  return { id: resource.id, identifier: resource.identifier, name: resource.name }
 }
 
 function homeSpaceOf(

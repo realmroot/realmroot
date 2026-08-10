@@ -1,13 +1,13 @@
 [
   {
     "method": "POST",
-    "path": "/access/requests",
+    "path": "/agent/access-requests",
     "operationId": "createAgentAuthorizationRequest",
     "semanticHash": "dfd105aaf5bcfb3365c59392965df35a12179739494d14360854ccdcf4004797"
   },
   {
     "method": "GET",
-    "path": "/agent/status",
+    "path": "/agent",
     "operationId": "getAgentStatus",
     "semanticHash": "fa6e9f83216ccee06eace773a427d0ee55c1d5179526bbcb11a30ee7c25f38e8"
   },

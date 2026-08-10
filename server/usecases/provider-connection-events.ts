@@ -5,6 +5,7 @@ import type { ProviderConnectionEvent } from '@shared/api/external-resources'
 export async function applyProviderConnectionEvent(
   deps: Deps,
   id: string,
+  resource: string,
   event: ProviderConnectionEvent,
   rawBody: Uint8Array<ArrayBuffer>,
   now = new Date(),
@@ -32,7 +33,7 @@ export async function applyProviderConnectionEvent(
   const common = {
     id,
     fingerprint: await sha256(rawBody),
-    resource: event.resource,
+    resource,
     brokerReference: event.brokerReference,
     occurredAt,
     revision: event.revision,

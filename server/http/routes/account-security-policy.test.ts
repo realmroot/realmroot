@@ -24,8 +24,8 @@ describe('account security policy routes', () => {
     deps.applications.revokeConsent = vi.fn().mockResolvedValue(false)
     const app = createApp(createAuthMock(), deps, { securityPolicy: securityPolicy() })
 
-    const unauthorized = await app.request('/api/account/applications/consent-1', { method: 'DELETE' })
-    const missing = await app.request('/api/account/applications/consent-1', {
+    const unauthorized = await app.request('/api/account/application-authorizations/consent-1', { method: 'DELETE' })
+    const missing = await app.request('/api/account/application-authorizations/consent-1', {
       method: 'DELETE',
       headers: userHeaders(),
     })
@@ -33,7 +33,7 @@ describe('account security policy routes', () => {
     expect(unauthorized.status).toBe(401)
     expect(missing.status).toBe(404)
     await expect(missing.json()).resolves.toMatchObject({
-      error: { code: 'not_found', message: 'Application consent was not found.' },
+      error: { code: 'not_found', message: 'Application authorization was not found.' },
     })
   })
 
@@ -109,7 +109,7 @@ describe('account security policy routes', () => {
 
     const profileResponse = await app.request('/api/account/profile', { headers: userHeaders() })
     const configResponse = await app.request('/api/configz', { headers: userHeaders() })
-    const protectedResponse = await app.request('/api/account/applications', { headers: userHeaders() })
+    const protectedResponse = await app.request('/api/account/application-authorizations', { headers: userHeaders() })
     const assetResponse = await app.request('/api/assets/asset-1', { headers: userHeaders() })
     const enrollmentResponse = await app.request('/api/account/security/mfa/totp-enrollment', {
       method: 'POST',
@@ -313,7 +313,6 @@ function createUserRepositoryMock(): UserRepository {
     assertAccountAvatarReference: vi.fn().mockResolvedValue(undefined),
     assertAdminAvatarReference: vi.fn().mockResolvedValue(undefined),
     listLinkedAccounts: vi.fn().mockImplementation((_userId, page) => Promise.resolve(createPage(page))),
-    listConsentedApplications: vi.fn().mockImplementation((_userId, page) => Promise.resolve(createPage(page))),
     listSessions: vi.fn().mockImplementation((_userId, page) => Promise.resolve(createPage(page))),
     getSessionToken: vi.fn().mockResolvedValue('session-token-1'),
     deleteSessions: vi.fn().mockResolvedValue([{ id: 'session-1' }]),

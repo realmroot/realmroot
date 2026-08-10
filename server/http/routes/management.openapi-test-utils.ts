@@ -65,7 +65,6 @@ export function createUserRepositoryMock(): UserRepository {
     assertAccountAvatarReference: vi.fn().mockResolvedValue(undefined),
     assertAdminAvatarReference: vi.fn().mockResolvedValue(undefined),
     listLinkedAccounts: vi.fn().mockResolvedValue(createPage({ limit: 50, offset: 0 })),
-    listConsentedApplications: vi.fn().mockResolvedValue(createPage({ limit: 50, offset: 0 })),
     listSessions: vi.fn().mockResolvedValue(createPage({ limit: 50, offset: 0 })),
     getSessionToken: vi.fn().mockResolvedValue('session-token-1'),
     deleteSessions: vi.fn().mockResolvedValue([{ id: 'session-1' }]),
@@ -170,32 +169,22 @@ export function toManagementOperationKey(route: HonoRoute) {
   if (route.path === '/api/openapi.json') {
     return `${route.method} /openapi.json`
   }
-  if (route.path === '/api/agent/enrollments' || route.path.startsWith('/api/agent/enrollments/')) return null
-  const agentResourcePaths = [
-    '/api/agent',
-    '/api/resource-servers',
-    '/api/provider-connection-events',
-    '/api/access',
-    '/api/assets',
-    '/api/public',
-  ]
-  if (agentResourcePaths.some((path) => route.path === path || route.path.startsWith(`${path}/`))) {
-    return `${route.method} ${normalizeManagementPath(route.path.replace('/api', ''))}`
-  }
-  const tenantPaths = [
-    '/api/applications',
-    '/api/agents',
-    '/api/organizations',
-    '/api/users',
-    '/api/realm',
-    '/api/connectors',
-    '/api/webhooks',
-  ]
-  if (!tenantPaths.some((path) => route.path === path || route.path.startsWith(`${path}/`))) {
+  if (
+    !route.path.startsWith('/api/') ||
+    route.path === '/api/docs' ||
+    route.path === '/api/openapi.json' ||
+    route.path === '/api/health' ||
+    route.path === '/api/configz' ||
+    route.path === '/api/account' ||
+    route.path.startsWith('/api/account/') ||
+    route.path === '/api/onboarding' ||
+    route.path.startsWith('/api/onboarding/') ||
+    route.path === '/api/auth' ||
+    route.path.startsWith('/api/auth/')
+  ) {
     return null
   }
-
-  return `${route.method} ${normalizeManagementPath(route.path.replace('/api', ''))}`
+  return `${route.method} ${normalizeManagementPath(route.path.slice('/api'.length))}`
 }
 
 export function normalizeManagementPath(path: string) {
@@ -353,7 +342,6 @@ export const operationsWithoutRequestBody = new Set([
   'POST /users/{param}/password-reset-requests',
   'POST /webhooks/{param}/secrets',
   'POST /webhooks/{param}/deliveries/{param}/attempts',
-  'PUT /access/consents/{param}/revocation',
   'PUT /access/assignments/{param}/revocation',
 ])
 

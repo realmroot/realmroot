@@ -16,7 +16,7 @@ describe('OAuth consent routes', () => {
 
   it('requires authentication before creating consent', async () => {
     const service = createConsentServiceMock()
-    const response = await createTestApp(service).request('/api/oauth/consent', {
+    const response = await createTestApp(service).request('/api/account/application-authorizations', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ clientId: 'client-1', scopes: ['openid'] }),
@@ -29,7 +29,7 @@ describe('OAuth consent routes', () => {
   it('loads consent for the authenticated user', async () => {
     const service = createConsentServiceMock()
     const response = await createTestApp(service).request(
-      '/api/oauth/consent?client_id=client-1&redirect_uri=https%3A%2F%2Fclient.example.com%2Fcallback&response_type=code&scope=openid%20profile&state=state-1&code_challenge=challenge-1&code_challenge_method=S256&nonce=nonce-1',
+      '/api/account/application-authorization-request?client_id=client-1&redirect_uri=https%3A%2F%2Fclient.example.com%2Fcallback&response_type=code&scope=openid%20profile&state=state-1&code_challenge=challenge-1&code_challenge_method=S256&nonce=nonce-1',
       {
         headers: userHeaders(),
       },
@@ -59,7 +59,7 @@ describe('OAuth consent routes', () => {
 
   it('validates hosted consent approval without accepting client permissions', async () => {
     const service = createConsentServiceMock()
-    const response = await createTestApp(service).request('/api/oauth/consent', {
+    const response = await createTestApp(service).request('/api/account/application-authorizations', {
       method: 'POST',
       headers: { ...userHeaders(), 'content-type': 'application/json' },
       body: JSON.stringify({ clientId: 'client-1', scopes: ['openid'], permissions: ['admin:all'] }),
@@ -71,7 +71,7 @@ describe('OAuth consent routes', () => {
 
   it('creates consent for the authenticated user and returns 201', async () => {
     const service = createConsentServiceMock()
-    const response = await createTestApp(service).request('/api/oauth/consent', {
+    const response = await createTestApp(service).request('/api/account/application-authorizations', {
       method: 'POST',
       headers: { ...userHeaders(), 'content-type': 'application/json' },
       body: JSON.stringify({ clientId: 'client-1', resourceServerId: null, scopes: ['openid', 'profile'] }),
@@ -114,7 +114,7 @@ function createTestApp(service: ReturnType<typeof createConsentServiceMock>) {
     c.set('deps', deps)
     await next()
   })
-  app.route('/api/oauth/consent', createOAuthConsentRoute())
+  app.route('/api/account', createOAuthConsentRoute())
   return app
 }
 

@@ -3,7 +3,7 @@ import { Hono } from 'hono'
 import type { ManagementAuthApi } from '../auth-api'
 import { managementAgentsRoute } from './agents'
 import { createManagementApiResourcesRoute } from './api-resources'
-import { managementApplicationAuthorizationsRoute, managementApplicationsRoute } from './applications'
+import { managementApplicationsRoute } from './applications'
 import { createManagementConnectorRoutes } from './connectors'
 import { managementOrganizationsRoute } from './organizations'
 import { managementPermissionsRoute } from './permissions'
@@ -24,7 +24,6 @@ export function createProtectedResourceRoutes(options: ProtectedResourceRoutesOp
   const app = new Hono()
 
   app.route('/applications', managementApplicationsRoute)
-  app.route('/access/consents', managementApplicationAuthorizationsRoute)
   app.route(
     '/resource-servers',
     createManagementApiResourcesRoute({ baseURL: options.canonicalOrigin, trustedOrigins: options.trustedOrigins }),

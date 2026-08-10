@@ -118,7 +118,7 @@ describe('AccountProfilePage', () => {
     let protectedDataRequests = 0
     server.use(
       http.get(`${base}/api/configz`, () => HttpResponse.json(limited)),
-      http.get(`${base}/api/account/applications`, () => {
+      http.get(`${base}/api/account/application-authorizations`, () => {
         protectedDataRequests += 1
         return HttpResponse.json({ applications: [] })
       }),

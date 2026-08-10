@@ -225,18 +225,22 @@ export function rotateApplicationClientSecret(id: string): Promise<RotateClientS
 }
 
 export function listApplicationAuthorizations(
+  applicationId: string,
   query: Partial<ListApplicationAuthorizationsQuery> = {},
 ): Promise<ListApplicationAuthorizationsResponse> {
   return readRpcResponse(
-    apiClient.api.access.consents.$get({
+    apiClient.api.applications[':id'].authorizations.$get({
+      param: { id: applicationId },
       query: stringifyQuery(query),
     }),
   )
 }
 
-export function revokeApplicationAuthorization(authorizationId: string) {
+export function revokeApplicationAuthorization(applicationId: string, authorizationId: string) {
   return readRpcResponse(
-    apiClient.api.access.consents[':authorizationId'].revocation.$put({ param: { authorizationId } }),
+    apiClient.api.applications[':id'].authorizations[':authorizationId'].$delete({
+      param: { id: applicationId, authorizationId },
+    }),
   )
 }
 
@@ -315,7 +319,12 @@ export async function listUserApplications(
   query: Partial<PaginationQuery> = {},
 ): Promise<ListManagementUserApplicationsResponse> {
   const [result, inventory] = await Promise.all([
-    listApplicationAuthorizations({ ...query, userId: id, status: 'active', limit: query.limit ?? 100 }),
+    readRpcResponse(
+      apiClient.api.users[':id']['application-authorizations'].$get({
+        param: { id },
+        query: stringifyQuery({ ...query, limit: query.limit ?? 100 }),
+      }),
+    ),
     listApplications({ limit: 100 }),
   ])
   const applicationsById = new Map(inventory.applications.map((application) => [application.id, application]))
@@ -532,12 +541,6 @@ export function listAgentInstallations(agentId: string, query: Partial<Paginatio
   return readRpcResponse(
     apiClient.api.agents[':agentId'].installations.$get({ param: { agentId }, query: stringifyQuery(query) }),
   )
-}
-
-export function listAgentAccessRequests(
-  query: Partial<import('@shared/api/agent-api').ListManagementAgentAccessRequestsQuery> = {},
-) {
-  return readRpcResponse(apiClient.api.access.requests.$get({ query: stringifyQuery(query) }))
 }
 
 export function listAgentPermissions(

@@ -152,7 +152,7 @@ describe('admin console applications-detail-a', () => {
       if (url === '/api/applications/app-1' && method === 'GET') {
         return Promise.resolve(jsonResponse(application))
       }
-      if (url === '/api/access/consents?applicationId=app-1&status=active&limit=50&offset=0' && method === 'GET') {
+      if (url === '/api/applications/app-1/authorizations?status=active&limit=50&offset=0' && method === 'GET') {
         return Promise.resolve(
           jsonResponse({
             authorizations: active ? [authorization] : [],
@@ -166,7 +166,7 @@ describe('admin console applications-detail-a', () => {
           }),
         )
       }
-      if (url === '/api/access/consents?applicationId=app-1&status=active&limit=50&offset=50' && method === 'GET') {
+      if (url === '/api/applications/app-1/authorizations?status=active&limit=50&offset=50' && method === 'GET') {
         return Promise.resolve(
           jsonResponse({
             authorizations: active
@@ -182,7 +182,7 @@ describe('admin console applications-detail-a', () => {
           }),
         )
       }
-      if (url === '/api/access/consents/authorization-1/revocation' && method === 'PUT') {
+      if (url === '/api/applications/app-1/authorizations/authorization-1' && method === 'DELETE') {
         revocations += 1
         active = false
         return Promise.resolve(

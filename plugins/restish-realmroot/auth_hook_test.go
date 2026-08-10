@@ -83,7 +83,7 @@ func TestAuthHookEnrollsOnceThenSignsOriginalRequest(t *testing.T) {
 				"access_token": "protocol-token", "token_type": "DPoP", "expires_in": 300,
 			}), nil
 		case 5:
-			if request.Method != http.MethodGet || request.URL.String() != "https://auth.example.com/api/agent/status" {
+			if request.Method != http.MethodGet || request.URL.String() != "https://auth.example.com/api/agent" {
 				t.Fatalf("status request = %s %s", request.Method, request.URL)
 			}
 			return jsonResponse(http.StatusCreated, map[string]any{"agent": map[string]any{
@@ -218,7 +218,7 @@ func testAgentConfiguration() map[string]any {
 		"version": "1.0-draft", "issuer": "https://auth.example.com/api/auth", "algorithms": []string{"Ed25519"},
 		"agent_identity_issuer":     "https://auth.example.com/api/auth",
 		"agent_enrollment_endpoint": "https://auth.example.com/api/agent/enrollments",
-		"agent_endpoint":            "https://auth.example.com/api/agent/status",
+		"agent_endpoint":            "https://auth.example.com/api/agent",
 		"agent_token_endpoint":      "https://auth.example.com/api/auth/oauth2/token",
 		"agent_bootstrap_scopes_supported": []string{
 			"agent:read", "resource-servers:read", "resources:read", "connection-requests:read",

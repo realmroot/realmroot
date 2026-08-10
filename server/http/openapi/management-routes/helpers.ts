@@ -12,7 +12,6 @@ export {
   requestAgentCapabilitiesSchema,
 } from '@shared/api/agents'
 export {
-  applicationAuthorizationRevocationSchema,
   applicationAuthorizationSchema,
   applicationResponseSchema,
   createApplicationRequestSchema,
@@ -119,7 +118,7 @@ export interface ManagementRouteConfig {
   operationId: string
   summary: string
   cli?: {
-    group?: 'Agents'
+    group?: 'Agent'
     name: string
   }
   request?: {
@@ -141,7 +140,7 @@ export interface ManagementRouteConfig {
   >
   errors?: Partial<
     Record<
-      400 | 404 | 409 | 412 | 413 | 422 | 428 | 429 | 502,
+      400 | 403 | 404 | 409 | 412 | 413 | 422 | 428 | 429 | 502,
       | string
       | {
           description: string
@@ -186,7 +185,6 @@ export function params(...names: string[]) {
 export const idParam = params('id')
 export const applicationIdParam = params('applicationId')
 export const applicationAuthorizationParam = params('applicationId', 'authorizationId')
-export const authorizationIdParam = params('consentId')
 export const federatedCredentialParam = params('applicationId', 'credentialId')
 export const organizationIdParam = params('organizationId')
 export const resourceServerIdParam = params('resourceServerId')

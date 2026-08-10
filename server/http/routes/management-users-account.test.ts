@@ -134,7 +134,6 @@ describe('management users and account routes', () => {
     expect(users.getUser).toHaveBeenCalledWith('user-1')
     expect(auth.api.getUser).not.toHaveBeenCalled()
     expect(users.listLinkedAccounts).not.toHaveBeenCalled()
-    expect(users.listConsentedApplications).not.toHaveBeenCalled()
     expect(users.listSessions).not.toHaveBeenCalled()
   })
 
@@ -372,7 +371,6 @@ function createUserRepositoryMock(): UserRepository {
     assertAccountAvatarReference: vi.fn().mockResolvedValue(undefined),
     assertAdminAvatarReference: vi.fn().mockResolvedValue(undefined),
     listLinkedAccounts: vi.fn().mockImplementation((_userId, page) => Promise.resolve(createPage(page))),
-    listConsentedApplications: vi.fn().mockImplementation((_userId, page) => Promise.resolve(createPage(page))),
     listSessions: vi.fn().mockImplementation((_userId, page) => Promise.resolve(createPage(page))),
     getSessionToken: vi.fn().mockResolvedValue('session-token-1'),
     deleteSessions: vi.fn().mockResolvedValue([{ id: 'session-1' }]),

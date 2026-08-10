@@ -202,7 +202,30 @@ export function accountHandlers(store: AccountStore, config: ReturnType<typeof c
         pagination: { limit: 50, offset: 0, total: 0, hasMore: false, nextOffset: null },
       }),
     ),
-    http.get(`${base}/api/account/applications`, () => HttpResponse.json({ applications: store.applications })),
+    http.get(`${base}/api/account/application-authorizations`, () =>
+      HttpResponse.json({
+        authorizations: store.applications.map((authorization) => ({
+          ...authorization,
+          applicationId: `app-${authorization.id}`,
+          application: {
+            id: `app-${authorization.id}`,
+            name: authorization.applicationName,
+            slug: authorization.applicationName.toLowerCase().replaceAll(' ', '-'),
+          },
+          user: { id: store.profile.id, displayName: store.profile.displayName, email: store.profile.email },
+          resourceServerId: null,
+          revokedAt: null,
+          status: 'active',
+        })),
+        pagination: {
+          limit: 50,
+          offset: 0,
+          total: store.applications.length,
+          hasMore: false,
+          nextOffset: null,
+        },
+      }),
+    ),
     http.get(`${base}/api/account/agents`, () =>
       HttpResponse.json({
         items: store.agentIdentities,

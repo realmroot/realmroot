@@ -1340,30 +1340,12 @@ export async function createAccessRequest(
   principal: AgentResourcePrincipal,
   approvalOrigin: string,
 ): Promise<AccessRequest> {
-  const reference = parseAnyResourceHref(input.resource.href, approvalOrigin)
-  const resourceServer = await requireEnabledResource(deps, reference.resourceServerId)
-  const identity = await requireActiveIdentityAndBinding(deps, principal)
-  const connection = !requiresAccountConnection(resourceServer)
-    ? null
-    : await deps.externalResources.findConnectionByOwnerResource({
-        resourceId: resourceServer.id,
-        ownerUserId: identity.identity.ownerUserId,
-        ownerOrganizationId: identity.identity.ownerOrganizationId,
-      })
-  const authorizationDetails = await resolveResourceReferences(
-    deps,
-    resourceServer,
-    connection?.status === 'active' ? connection : null,
-    [input.resource],
-    identity,
-    approvalOrigin,
-  )
   const request = await createAgentAccessRequest(
     deps,
     {
-      resourceId: resourceServer.id,
+      resourceId: input.resourceServerId,
       scopes: input.scopes,
-      authorizationDetails,
+      authorizationDetails: input.authorizationDetails,
       reason: input.reason,
     },
     principal,
@@ -2504,7 +2486,7 @@ async function toResourceServerResource(
     },
     links: {
       self: resourceHref(apiOrigin, resourceServerId, id),
-      accessRequests: `${apiOrigin.replace(/\/$/, '')}/api/access/requests`,
+      accessRequests: `${apiOrigin.replace(/\/$/, '')}/api/agent/access-requests`,
     },
   }
 }
@@ -2613,20 +2595,6 @@ function parseResourceHref(href: string, resourceServerId: string, apiOrigin: st
   const id = decodeURIComponent(parsed.pathname.slice(prefix.length))
   if (!id || id.includes('/')) throw badRequest('Resource href is invalid.')
   return id
-}
-
-function parseAnyResourceHref(href: string, apiOrigin: string) {
-  let parsed: URL
-  try {
-    parsed = new URL(href, apiOrigin)
-  } catch {
-    throw badRequest('Resource href is invalid.')
-  }
-  if (parsed.origin !== new URL(apiOrigin).origin)
-    throw badRequest('Resource href belongs to another Realmroot issuer.')
-  const match = /^\/api\/resource-servers\/([^/]+)\/resources\/([^/]+)$/.exec(parsed.pathname)
-  if (!match) throw badRequest('Resource href is invalid.')
-  return { resourceServerId: decodeURIComponent(match[1]!), resourceId: decodeURIComponent(match[2]!) }
 }
 
 function resourceHref(apiOrigin: string, resourceServerId: string, resourceId: string) {
@@ -3710,7 +3678,7 @@ function toAccessRequest(
         : request.status === 'expired'
           ? 'expired'
           : 'completed'
-  const self = `${origin}/api/access/requests/${encodeURIComponent(request.id)}`
+  const self = `${origin}/api/agent/access-requests/${encodeURIComponent(request.id)}`
   return {
     id: request.id,
     agentId: request.agentIdentityId,
@@ -3813,7 +3781,7 @@ function redactSubject(subject: string) {
 }
 
 function resourceConnectionCallbackUrl(origin: string) {
-  return `${origin.replace(/\/$/, '')}/api/account-connections/oauth/callback`
+  return `${origin.replace(/\/$/, '')}/oauth/account-connection/callback`
 }
 
 function connectionIntentContext(intentId: string) {

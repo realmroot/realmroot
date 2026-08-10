@@ -9,6 +9,7 @@ import {
   getAccountSecurity,
   getDeveloperConsoleAccess,
   listAccountAgents,
+  listAccountApplicationAuthorizations,
   listAccountConnections,
   listAccountOrganizationAgents,
   listAccountOrganizationInvitations,
@@ -18,7 +19,6 @@ import {
   listAccountProviderConnectors,
   listAccountSessions,
   listAgentResourceRequests,
-  listConsentedApplications,
   listExternalApiResources,
   listLinkedAccounts,
   listPasskeys,
@@ -154,11 +154,11 @@ export function useAccountProviderConnections(enabled = true) {
   })
 }
 
-export function useConsentedApplications(enabled: boolean) {
+export function useAccountApplicationAuthorizations(enabled: boolean) {
   return useQuery({
     enabled,
     queryKey: accountQueryKeys.applications,
-    queryFn: listConsentedApplications,
+    queryFn: listAccountApplicationAuthorizations,
     ...accountQueryOptions,
   })
 }

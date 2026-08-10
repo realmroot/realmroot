@@ -4,10 +4,10 @@ import type { ProviderConnectionEvent } from '@shared/api/external-resources'
 import { describe, expect, it, vi } from 'vitest'
 
 const now = new Date('2026-08-08T20:00:00.000Z')
+const resource = 'https://adapter.example.com/github'
 const authorityDetail = { type: 'provider_installation', installation_id: 'installation-1' }
 const event: ProviderConnectionEvent = {
   type: 'authorityChanged',
-  resource: 'https://adapter.example.com/github',
   brokerReference: 'installation-1',
   occurredAt: '2026-08-08T19:59:00.000Z',
   revision: 1,
@@ -21,10 +21,11 @@ describe('Provider Connection Events', () => {
   it('persists connection-wide and affected-authority scopes independently', async () => {
     const deps = createTestDeps()
 
-    await applyProviderConnectionEvent(deps, 'delivery-1', event, raw('{}'), now)
+    await applyProviderConnectionEvent(deps, 'delivery-1', resource, event, raw('{}'), now)
     await applyProviderConnectionEvent(
       deps,
       'delivery-2',
+      resource,
       {
         ...event,
         scopes: ['contents:read', 'issues:write'],
@@ -62,9 +63,9 @@ describe('Provider Connection Events', () => {
     await applyProviderConnectionEvent(
       deps,
       'delivery-1',
+      resource,
       {
         type: 'resourcesChanged',
-        resource: event.resource,
         brokerReference: event.brokerReference,
         occurredAt: event.occurredAt,
         revision: event.revision,
@@ -78,9 +79,9 @@ describe('Provider Connection Events', () => {
     await applyProviderConnectionEvent(
       deps,
       'delivery-3',
+      resource,
       {
         type: 'restored',
-        resource: event.resource,
         brokerReference: event.brokerReference,
         occurredAt: event.occurredAt,
         revision: event.revision,
@@ -94,9 +95,9 @@ describe('Provider Connection Events', () => {
     await applyProviderConnectionEvent(
       deps,
       'delivery-2',
+      resource,
       {
         type: 'suspended',
-        resource: event.resource,
         brokerReference: event.brokerReference,
         occurredAt: event.occurredAt,
         revision: event.revision,
@@ -126,6 +127,7 @@ describe('Provider Connection Events', () => {
       applyProviderConnectionEvent(
         deps,
         'delivery-1',
+        resource,
         { ...event, occurredAt: '2026-08-08T20:05:00.001Z' },
         raw('{}'),
         now,
@@ -141,6 +143,7 @@ describe('Provider Connection Events', () => {
       applyProviderConnectionEvent(
         deps,
         'delivery-1',
+        resource,
         { ...event, affectedScopes: ['contents:read', 'issues:write'] },
         raw('{}'),
         now,
@@ -150,6 +153,7 @@ describe('Provider Connection Events', () => {
       applyProviderConnectionEvent(
         deps,
         'delivery-2',
+        resource,
         {
           ...event,
           scopes: ['contents:read'],
@@ -173,9 +177,9 @@ describe('Provider Connection Events', () => {
       applyProviderConnectionEvent(
         deps,
         'delivery-1',
+        resource,
         {
           type,
-          resource: event.resource,
           brokerReference: event.brokerReference,
           occurredAt: event.occurredAt,
           revision: event.revision,
@@ -208,9 +212,9 @@ describe('Provider Connection Events', () => {
     await applyProviderConnectionEvent(
       deps,
       'delivery-1',
+      resource,
       {
         type: 'resourcesChanged',
-        resource: event.resource,
         brokerReference: event.brokerReference,
         occurredAt: event.occurredAt,
         revision: event.revision,
@@ -243,7 +247,9 @@ describe('Provider Connection Events', () => {
     const deps = createTestDeps()
     vi.mocked(deps.externalResources.applyProviderConnectionEvent).mockResolvedValue(result)
 
-    await expect(applyProviderConnectionEvent(deps, 'delivery-1', event, raw('{}'), now)).rejects.toMatchObject({
+    await expect(
+      applyProviderConnectionEvent(deps, 'delivery-1', resource, event, raw('{}'), now),
+    ).rejects.toMatchObject({
       status,
     })
   })

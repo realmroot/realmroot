@@ -126,10 +126,10 @@ describe('ConsentPage error and fallback paths', () => {
       const url = String(input)
       requests.push(url)
       if (url.startsWith('/api/configz')) return Promise.resolve(jsonResponse(configz))
-      if (url.startsWith('/api/oauth/consent') && init?.method !== 'POST') {
+      if (url.startsWith('/api/account/application-authorization-request')) {
         return Promise.resolve(jsonResponse(consentResponse))
       }
-      if (url.startsWith('/api/oauth/consent'))
+      if (url.startsWith('/api/account/application-authorizations'))
         return Promise.resolve(jsonResponse({ consent: { id: 'consent-1' } }, 201))
       if (url.startsWith('/api/auth/oauth2/consent')) {
         expect(JSON.parse(String(init?.body))).toEqual({
@@ -146,14 +146,22 @@ describe('ConsentPage error and fallback paths', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Allow' }))
 
     await waitFor(() => expect(assign).toHaveBeenCalledWith('https://client.example.com/callback?code=code-1'))
-    expect(requests).toEqual(expect.arrayContaining(['/api/oauth/consent', '/api/auth/oauth2/consent']))
+    expect(requests).toEqual(
+      expect.arrayContaining([
+        '/api/account/application-authorization-request?client_id=client-1&redirect_uri=https%3A%2F%2Fclient.example.com',
+        '/api/account/application-authorizations',
+        '/api/auth/oauth2/consent',
+      ]),
+    )
   })
 
   it('completes denial through the OAuth server [spec: hosted-auth/oauth-consent-deny]', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
       if (url.startsWith('/api/configz')) return Promise.resolve(jsonResponse(configz))
-      if (url.startsWith('/api/oauth/consent')) return Promise.resolve(jsonResponse(consentResponse))
+      if (url.startsWith('/api/account/application-authorization-request')) {
+        return Promise.resolve(jsonResponse(consentResponse))
+      }
       if (url.startsWith('/api/auth/oauth2/consent')) {
         expect(JSON.parse(String(init?.body))).toEqual({
           accept: false,
@@ -200,10 +208,10 @@ describe('ConsentPage error and fallback paths', () => {
   })
 
   it('surfaces approval failures without redirecting', async () => {
-    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+    vi.spyOn(window, 'fetch').mockImplementation((input, _init) => {
       const url = String(input)
       if (url.startsWith('/api/configz')) return Promise.resolve(jsonResponse(configz))
-      if (url.startsWith('/api/oauth/consent') && init?.method !== 'POST') {
+      if (url.startsWith('/api/account/application-authorization-request')) {
         return Promise.resolve(jsonResponse(consentResponse))
       }
       return Promise.resolve(jsonResponse({ error: 'Approval rejected.' }, 400))
@@ -267,10 +275,10 @@ describe('ConsentPage error and fallback paths', () => {
   })
 
   it('uses a generic message for non-Error approval rejections', async () => {
-    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+    vi.spyOn(window, 'fetch').mockImplementation((input, _init) => {
       const url = String(input)
       if (url.startsWith('/api/configz')) return Promise.resolve(jsonResponse(configz))
-      if (url.startsWith('/api/oauth/consent') && init?.method === 'POST') return Promise.reject('boom')
+      if (url.startsWith('/api/account/application-authorizations')) return Promise.reject('boom')
       return Promise.resolve(jsonResponse(consentResponse))
     })
 

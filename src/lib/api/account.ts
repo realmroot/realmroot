@@ -221,12 +221,14 @@ export async function unlinkWalletAddress(accountId: string) {
   return readRpcResponse(apiClient.api.account['wallet-addresses'][':accountId'].$delete({ param: { accountId } }))
 }
 
-export function listConsentedApplications() {
-  return readRpcResponse(apiClient.api.account.applications.$get())
+export function listAccountApplicationAuthorizations() {
+  return readRpcResponse(apiClient.api.account['application-authorizations'].$get({ query: {} }))
 }
 
-export function revokeApplicationConsent(consentId: string) {
-  return readRpcResponse(apiClient.api.account.applications[':consentId'].$delete({ param: { consentId } }))
+export function revokeAccountApplicationAuthorization(authorizationId: string) {
+  return readRpcResponse(
+    apiClient.api.account['application-authorizations'][':authorizationId'].$delete({ param: { authorizationId } }),
+  )
 }
 
 export function listAccountSessions() {

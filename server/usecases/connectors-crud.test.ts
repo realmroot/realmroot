@@ -394,7 +394,7 @@ describe('service.test 2', () => {
     await expect(registrationRequest.json()).resolves.toMatchObject({
       redirect_uris: [
         'https://auth.example.com/api/auth/callback/projects',
-        'https://auth.example.com/api/account-connections/oauth/callback',
+        'https://auth.example.com/oauth/account-connection/callback',
       ],
       jwks_uri: 'https://auth.example.com/api/auth/jwks',
       authorization_details_types: ['project_access'],
@@ -734,7 +734,7 @@ describe('service.test 2', () => {
         client_name: 'Realmroot Projects',
         redirect_uris: [
           'https://auth.example.com/api/auth/callback/projects',
-          'https://auth.example.com/api/account-connections/oauth/callback',
+          'https://auth.example.com/oauth/account-connection/callback',
         ],
         grant_types: [
           'authorization_code',
@@ -781,7 +781,7 @@ describe('service.test 2', () => {
           client_name: 'Realmroot Projects',
           redirect_uris: [
             'https://old-auth.example.com/api/auth/callback/projects',
-            'https://old-auth.example.com/api/account-connections/oauth/callback',
+            'https://old-auth.example.com/oauth/account-connection/callback',
           ],
           grant_types: [
             'authorization_code',
@@ -813,7 +813,7 @@ describe('service.test 2', () => {
     await expect(updateRequest.json()).resolves.toMatchObject({
       redirect_uris: [
         'https://auth.example.com/api/auth/callback/projects',
-        'https://auth.example.com/api/account-connections/oauth/callback',
+        'https://auth.example.com/oauth/account-connection/callback',
       ],
       jwks_uri: 'https://auth.example.com/api/auth/jwks',
     })

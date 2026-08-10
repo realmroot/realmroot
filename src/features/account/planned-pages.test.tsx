@@ -226,7 +226,7 @@ describe('planned Account Center journeys', () => {
     ]
     let revoked = false
     server.use(
-      http.delete(`${base}/api/account/applications/consent-1`, () => {
+      http.delete(`${base}/api/account/application-authorizations/consent-1`, () => {
         revoked = true
         return new Response(null, { status: 204 })
       }),
@@ -262,7 +262,7 @@ describe('planned Account Center journeys', () => {
       },
     ]
     server.use(
-      http.delete(`${base}/api/account/applications/consent-failure`, () =>
+      http.delete(`${base}/api/account/application-authorizations/consent-failure`, () =>
         json({ message: 'Revoke failed.' }, { status: 500 }),
       ),
     )
