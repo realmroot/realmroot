@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import forkDeploymentWorkflow from '../deploy/realmroot-fork.yml?raw'
+import packageJson from '../package.json?raw'
 import forkDeploymentScript from '../scripts/deploy-cloudflare-fork.mjs?raw'
 import wranglerConfig from '../wrangler.toml?raw'
 
@@ -35,6 +36,15 @@ describe('Cloudflare deployment configuration', () => {
     )
     expect(forkDeploymentScript).toContain('Reusing existing PROVIDER_CONNECTION_EVENT_SECRETS.')
     expect(forkDeploymentScript).toContain('Provider Connection Events remain disabled.')
+  })
+
+  it('deploys the exact Worker artifact produced by Vite [spec: platform-onboarding/cloudflare-deployment-isolation]', () => {
+    const scripts = JSON.parse(packageJson).scripts as Record<string, string>
+
+    expect(scripts.deploy).toContain('wrangler deploy --config dist/realmroot/wrangler.json')
+    expect(forkDeploymentScript).toContain(
+      "const deployArguments = ['exec', 'wrangler', 'deploy', '--config', 'dist/realmroot/wrangler.json']",
+    )
   })
 
   it('isolates fork resources and canonical origins [spec: platform-onboarding/cloudflare-deployment-isolation]', () => {

@@ -9,7 +9,7 @@
     "build": "vite build",
     "plugin:build": "cd plugins/restish-realmroot && go build -o restish-realmroot .",
     "plugin:test": "cd plugins/restish-realmroot && go test ./...",
-    "deploy": "pnpm run db:migrate:remote && pnpm run build && wrangler deploy",
+    "deploy": "pnpm run db:migrate:remote && pnpm run build && wrangler deploy --config dist/realmroot/wrangler.json",
     "deploy:check": "node scripts/check-cloudflare-config.mjs",
     "deploy:fork": "node scripts/deploy-cloudflare-fork.mjs",
     "deploy:self": "pnpm run deploy",
