@@ -1,58 +1,29 @@
 ---
 name: realmroot
-description: Use Realmroot as a stable Agent identity to discover, request access to, and operate authenticated or paid private Resources without borrowing a person's login or manually provisioned API key. Use for Agent enrollment or identity, private capability discovery, Resource and scope selection, controller approval, account connection, direct Resource Server operations, x402-paid operations, or explicit Realmroot tenant administration through its Resource API.
+description: Use Realmroot as the Agent's identity to discover available services, request the permissions needed for a task, call service operations, or run supported native tools such as git, gh, and wrangler. Use whenever a task needs private data, an authenticated service, controller approval, or Realmroot administration.
 ---
 
 # Use Realmroot
 
-Complete the user's requested Resource operation as a stable Agent. Treat
-identity, discovery, account connection, approval, and credential readiness as
-intermediate states.
+Use the `realmroot` command to complete the user's requested operation as the
+Agent. Do not borrow the user's login or ask for an API key.
 
-## Operating Model
+## 1. Confirm Identity
 
-- Select exact deployments, Resource Servers, authorization details, scopes, accounts, and
-  operations only from live responses and published metadata.
-- Request the complete task-scoped authority but no unrelated scope.
-- Bind every credential to exactly one Resource Server authorization context.
-- Hand enrollment, account connection, and access decisions to the controller.
-- Keep Agent protocol secrets in the Realmroot adapter and target DPoP keys,
-  proofs, tokens, and cache in Restish custody.
-- Call the target Resource Server directly; Realmroot does not proxy business
-  traffic.
+Read [references/setup.md](references/setup.md) and confirm the Agent identity.
 
-## Step 1: Establish Identity
+## 2. Discover And Use A Service
 
-Read [references/setup.md](references/setup.md) completely and follow its
-deployment, Restish, profile, and identity procedure.
+Read [references/toolbox-commands.md](references/toolbox-commands.md). Discover
+the available Resource Servers, inspect the operation needed for the task,
+request its exact scopes, and execute it.
 
-This step is complete only when `whoami` returns both `agent.issuer` and
-`agent.subject`. If the user requested identity only, return those non-secret
-identifiers and stop.
+If the selected server is `platform`, also read
+[references/management.md](references/management.md).
 
-## Step 2: Discover And Operate The Resource
+If an operation requires an x402 payment, also read
+[references/x402.md](references/x402.md).
 
-Read [references/restish-commands.md](references/restish-commands.md)
-completely. Discover every Resource Server page, select the exact service and
-provider authorization detail from returned metadata, establish any required
-controller account connection, inspect the target OpenAPI operation, and
-request the union of its required scopes.
-
-When the selected Resource Server has `identifier: realmroot`, also read
-[references/management.md](references/management.md) for its authority
-boundaries and mutation rules.
-
-When the target returns an x402 payment requirement, also read
-[references/x402.md](references/x402.md) before starting the live payment
-exchange.
-
-Do not treat a matching Resource Server, connected account, approved request,
-or ready credential as completion. Invoke the requested generated target
-operation and verify its result. After a mutation, read the affected Resource
-back when its contract permits.
-
-If exhaustive discovery finds no matching Resource Server or authorization detail, report
-the missing capability with the original task still open.
-
-The task is complete only when every requested target operation succeeds and no
-unrelated Resource changes.
+Do not stop after discovery or approval. The task is complete only when the
+requested service operation or native command succeeds. After changing a
+Resource, read it again when possible to verify the result.
