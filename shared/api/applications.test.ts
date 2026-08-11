@@ -33,7 +33,15 @@ describe('application Resource Server scope contracts', () => {
       applicationResourceScopesSchema.safeParse([
         {
           resourceServerId: 'resource-1',
-          scopes: Array.from({ length: 101 }, (_, index) => `scope:${index}`),
+          scopes: Array.from({ length: 383 }, (_, index) => `scope:${index}`),
+        },
+      ]).success,
+    ).toBe(true)
+    expect(
+      applicationResourceScopesSchema.safeParse([
+        {
+          resourceServerId: 'resource-1',
+          scopes: Array.from({ length: 1_001 }, (_, index) => `scope:${index}`),
         },
       ]).success,
     ).toBe(false)

@@ -5,6 +5,7 @@ import {
   conflict,
   forbidden,
   notFound,
+  OAuthError,
   oauthError,
   unauthorized,
 } from '@server/domain/errors'
@@ -194,7 +195,8 @@ export async function createResourceConnectionIntent(
       updatedAt: now.toISOString(),
     }
   }
-  const currentAuthorization = await requireActiveExternalAuthorization(deps, resourceId)
+  const connectorBackedNative = resource.accessMode === 'realmroot'
+  const currentAuthorization = await requireActiveConnectorAuthorization(deps, resourceId)
   const requestedScopes = [
     ...new Set([
       ...scopes,
@@ -211,7 +213,7 @@ export async function createResourceConnectionIntent(
     requestedScopes,
     callbackOrigin,
   )
-  const authorization = await requireActiveExternalAuthorization(deps, resourceId, clientGeneration)
+  const authorization = await requireActiveConnectorAuthorization(deps, resourceId, clientGeneration)
   const authorizationDetails = input.authorizationDetails ?? resource.authorizationDetails
   assertAuthorizationDetailsSupported(authorizationDetails, authorization)
   const id = deps.ids.generate()
@@ -224,16 +226,16 @@ export async function createResourceConnectionIntent(
     prompt: 'consent',
     client_id: authorization.clientId,
     redirect_uri: redirectUri,
-    resource: resource.resourceUrl,
     scope: requestedScopes.join(' '),
     state,
     code_challenge: await sha256(verifier),
     code_challenge_method: 'S256',
+    ...(connectorBackedNative ? {} : { resource: resource.resourceUrl }),
     ...(authorizationDetails.length > 0 ? { authorization_details: JSON.stringify(authorizationDetails) } : {}),
   }
   const expiresAt = new Date(now.getTime() + 10 * 60 * 1000)
   let authorizationUrl: string
-  if (authorizationDetails.length > 0) {
+  if (!connectorBackedNative && authorizationDetails.length > 0) {
     const pushed = await postPushedAuthorizationRequest(
       deps,
       authorization.pushedAuthorizationRequestEndpoint!,
@@ -298,7 +300,7 @@ export async function completeResourceConnectionIntent(
   if (intent.authorizationMode === 'brokered') {
     return completeBrokeredResourceConnectionIntent(deps, intent, input.code)
   }
-  const authorization = await requireActiveExternalAuthorization(deps, intent.resourceId, intent.clientGeneration ?? 1)
+  const authorization = await requireActiveConnectorAuthorization(deps, intent.resourceId, intent.clientGeneration ?? 1)
   const clientSecret = authorizationClientSecret(authorization)
   const verifier = await deps.secrets.open(intent.encryptedPkceVerifier, connectionIntentContext(intent.id))
   const token = await postForm(
@@ -351,6 +353,9 @@ export async function completeResourceConnectionIntent(
     authorizationDetails,
     authorityConstraints: [],
     clientGeneration: intent.clientGeneration ?? 1,
+    credentialVersion: (existing?.credentialVersion ?? 0) + 1,
+    refreshClaimId: null,
+    refreshClaimExpiresAt: null,
     status: 'active' as const,
     credentialExpiresAt: expiresAt,
     revokedAt: null,
@@ -439,6 +444,9 @@ async function completeBrokeredResourceConnectionIntent(
     authorizationDetails,
     authorityConstraints,
     clientGeneration: 1,
+    credentialVersion: (existing?.credentialVersion ?? 0) + 1,
+    refreshClaimId: null,
+    refreshClaimExpiresAt: null,
     status: 'active' as const,
     credentialExpiresAt: null,
     revokedAt: null,
@@ -859,11 +867,47 @@ async function revokeBrokeredProviderAuthorization(
 
 export async function revokeResourceConnection(deps: Deps, connectionId: string, actorUserId: string) {
   const connection = await requireControlledConnection(deps, connectionId, actorUserId)
+  await revokeRealmrootCustodiedProviderAuthorization(deps, connection)
   const entitlements = await deps.externalResources.listActiveEntitlementsByConnection(connection.id, new Date())
   for (const entitlement of entitlements) await revokeAgentPermission(deps, entitlement.id, actorUserId)
   if (!(await deps.externalResources.revokeConnection(connectionId, new Date()))) {
     throw badRequest('Resource account connection is already revoked.')
   }
+}
+
+async function revokeRealmrootCustodiedProviderAuthorization(
+  deps: Deps,
+  connection: ProviderResourceAuthorizationRecord,
+) {
+  if (connection.credentialCustody !== 'realmroot' || !connection.encryptedTokens) return
+  const resource = await deps.authorization.findResource(connection.resourceId)
+  if (!resource) throw notFound('Resource Server was not found.')
+  const authorization = await connectorOAuthAuthorization(deps, resource, connection.clientGeneration ?? 1)
+  if (!authorization) throw badGateway('Provider authorization configuration is unavailable.')
+  const payload = JSON.parse(
+    await deps.secrets.open(connection.encryptedTokens, connectionTokensContext(connection.id)),
+  ) as Record<string, unknown>
+  const clientSecret = authorizationClientSecret(authorization)
+  await postEmptyForm(
+    deps,
+    authorization.revocationEndpoint,
+    {
+      token: requiredString(payload, 'refreshToken', 'Stored resource connection'),
+      token_type_hint: 'refresh_token',
+    },
+    authorization.clientId,
+    clientSecret,
+  )
+  await postEmptyForm(
+    deps,
+    authorization.revocationEndpoint,
+    {
+      token: requiredString(payload, 'accessToken', 'Stored resource connection'),
+      token_type_hint: 'access_token',
+    },
+    authorization.clientId,
+    clientSecret,
+  )
 }
 
 export async function discoverAgentResources(deps: Deps, principal: AgentResourcePrincipal) {
@@ -1699,7 +1743,7 @@ export async function issueTargetAccessToken(
   assertAuthorizationDetailsSelection(resource, connection, request.authorizationDetails)
   assertAuthorizationDetailsSubset(request.authorizationDetails, connection.authorizationDetails, 'connected account')
   const confirmationJkt = await validateDpopTokenProof(deps, dpopProof, authorization.tokenEndpoint)
-  const subjectToken = await refreshConnectionToken(deps, connection, authorization)
+  const subjectToken = (await refreshConnectionToken(deps, connection, authorization)).accessToken
   const nowSeconds = Math.floor(Date.now() / 1000)
   const agentAssertion = await signer.sign(
     {
@@ -1856,14 +1900,16 @@ async function issueNativeAccessToken(
 ) {
   const { entitlements, request, resource, identity } = context
   const brokered = brokeredAccountConnection(resource)
-  if (request.connectionId !== null && !brokered) {
+  const connectorBackedNative = resource.accessMode === 'realmroot' && resource.connectorId !== null
+  if (request.connectionId !== null && !brokered && !connectorBackedNative) {
     throw forbidden('Native API resource grants cannot use account connections.')
   }
-  const connection = brokered
-    ? request.connectionId
-      ? await deps.externalResources.findConnection(request.connectionId)
+  const connection =
+    brokered || connectorBackedNative
+      ? request.connectionId
+        ? await deps.externalResources.findConnection(request.connectionId)
+        : null
       : null
-    : null
   if (
     brokered &&
     (!connection ||
@@ -1874,6 +1920,16 @@ async function issueNativeAccessToken(
   ) {
     throw forbidden('Active brokered account connection is required.')
   }
+  if (
+    connectorBackedNative &&
+    (!connection ||
+      connection.status !== 'active' ||
+      connection.resourceId !== resource.id ||
+      connection.credentialCustody !== 'realmroot' ||
+      !connection.encryptedTokens)
+  ) {
+    throw forbidden('Active provider account connection is required.')
+  }
   if (brokered) {
     assertScopeSubset(request.scopes, connection!.grantedScopes, 'connected account')
     assertAuthorizationDetailsSubset(
@@ -1882,6 +1938,9 @@ async function issueNativeAccessToken(
       'connected account',
     )
     assertAuthorityConstraintScopes(request.scopes, connection!, request.authorizationDetails)
+  }
+  if (connectorBackedNative) {
+    assertScopeSubset(request.scopes, connection!.grantedScopes, 'connected account')
   }
   if (signer.issuer !== principal.issuer) {
     throw forbidden('Agent identity does not belong to the active OAuth issuer.')
@@ -1915,7 +1974,10 @@ async function issueNativeAccessToken(
             : [],
       client_id: principal.protocolAgentId,
       ...(connection
-        ? { connection_id: connection.brokerReference, authorization_details: request.authorizationDetails }
+        ? {
+            connection_id: brokered ? connection.brokerReference : connection.id,
+            authorization_details: request.authorizationDetails,
+          }
         : {}),
       ...(realmroot
         ? { host_id: principal.hostId, sub_profile: 'ai_agent', realmroot_authority: realmrootAuthority }
@@ -1974,6 +2036,114 @@ async function issueNativeAccessToken(
     authorizationDetails: realmroot || brokered ? request.authorizationDetails : [],
     resourceUrl: resource.resourceUrl,
     dpopNonce: null,
+  }
+}
+
+export async function exchangeAgentConnectionCredential(
+  deps: Deps,
+  input: {
+    subjectToken: string
+    claims: Record<string, unknown>
+    audience: string
+    scopes: string[]
+  },
+) {
+  const now = new Date()
+  const lease = await deps.externalResources.findActiveTokenLeaseByTokenHash(await sha256(input.subjectToken), now)
+  if (!lease) throw oauthError('invalid_grant', 'Agent access token lease is not active.')
+  const storedToken = await deps.secrets.open(lease.encryptedAccessToken, tokenLeaseContext(lease.id))
+  if (storedToken !== input.subjectToken) throw oauthError('invalid_grant', 'Agent access token lease is invalid.')
+
+  const request = await deps.externalResources.findAccessRequest(lease.requestId)
+  if (
+    !request ||
+    (request.status !== 'approved' && request.status !== 'consumed') ||
+    request.bindingId !== lease.bindingId ||
+    !request.connectionId ||
+    !exactScopes(request.scopes, lease.scopes)
+  ) {
+    throw oauthError('invalid_grant', 'Agent access request is no longer valid.')
+  }
+  const [identity, connection, resource, entitlements] = await Promise.all([
+    deps.agentIdentities.findIdentity(request.agentIdentityId),
+    deps.externalResources.findConnection(request.connectionId),
+    deps.authorization.findResource(request.resourceId),
+    deps.externalResources.findEntitlements(lease.entitlementIds),
+  ])
+  const binding = identity?.bindings.find(
+    (candidate) => candidate.id === request.bindingId && candidate.status === 'active',
+  )
+  if (!identity || identity.identity.status !== 'active' || !binding) {
+    throw oauthError('invalid_grant', 'Agent identity or host binding is no longer active.')
+  }
+  if (
+    !resource?.enabled ||
+    resource.accessMode !== 'realmroot' ||
+    !resource.connectorId ||
+    resource.resourceUrl !== input.audience
+  ) {
+    throw oauthError('invalid_target', 'Agent token audience is not a connector-backed native Resource Server.')
+  }
+  if (
+    !connection ||
+    connection.status !== 'active' ||
+    connection.id !== request.connectionId ||
+    connection.resourceId !== resource.id ||
+    connection.credentialCustody !== 'realmroot' ||
+    !connection.encryptedTokens
+  ) {
+    throw oauthError('invalid_grant', 'Provider account connection is no longer active.')
+  }
+  if (
+    connection.ownerUserId !== identity.identity.ownerUserId ||
+    connection.ownerOrganizationId !== identity.identity.ownerOrganizationId
+  ) {
+    throw oauthError('invalid_grant', 'Provider account connection is outside the Agent home space.')
+  }
+  if (
+    entitlements.length !== lease.entitlementIds.length ||
+    entitlements.some(
+      (entitlement) =>
+        entitlement.agentIdentityId !== identity.identity.id ||
+        entitlement.resourceServerId !== resource.id ||
+        entitlement.connectionId !== connection.id ||
+        entitlement.endedAt !== null ||
+        (entitlement.expiresAt !== null && entitlement.expiresAt.getTime() <= now.getTime()) ||
+        !lease.scopes.includes(entitlement.scope),
+    )
+  ) {
+    throw oauthError('invalid_grant', 'Agent Permissions are no longer active.')
+  }
+
+  const act = recordValue(input.claims.act)
+  const confirmation = recordValue(input.claims.cnf)
+  const subject = identity.identity.ownerUserId ?? identity.identity.ownerOrganizationId
+  const tokenScopes = scopeString(input.claims.scope) ?? []
+  if (
+    input.claims.aud !== resource.resourceUrl ||
+    input.claims.sub !== subject ||
+    input.claims.client_id !== binding.protocolAgentId ||
+    input.claims.connection_id !== connection.id ||
+    act?.iss !== identity.identity.issuer ||
+    act?.sub !== identity.identity.subject ||
+    act?.sub_profile !== 'ai_agent' ||
+    confirmation?.jkt !== lease.confirmationJkt ||
+    !exactScopes(tokenScopes, lease.scopes)
+  ) {
+    throw oauthError('invalid_grant', 'Agent access token claims do not match its active authority.')
+  }
+  assertOAuthScopeSubset(input.scopes, tokenScopes, 'Agent access token')
+  assertOAuthScopeSubset(input.scopes, connection.grantedScopes, 'connected provider account')
+
+  const authorization = await requireActiveConnectorAuthorization(deps, resource.id, connection.clientGeneration ?? 1)
+  const credential = await refreshConnectionToken(deps, connection, authorization)
+  if (!credential.expiresAt) {
+    throw oauthError('temporarily_unavailable', 'Provider access token does not expose a usable expiry.', 503)
+  }
+  return {
+    accessToken: credential.accessToken,
+    expiresIn: Math.max(1, Math.floor((credential.expiresAt.getTime() - Date.now()) / 1000)),
+    scopes: credential.scopes,
   }
 }
 
@@ -2106,7 +2276,7 @@ async function readAuthorizationDetailCatalog(
   if (!connection.grantedScopes.includes(requiredScope)) {
     throw badRequest('Resource account must be reauthorized for the authorization detail catalog scope.')
   }
-  const accessToken = await refreshConnectionToken(deps, connection, authorization)
+  const accessToken = (await refreshConnectionToken(deps, connection, authorization)).accessToken
   const catalogUrl = new URL(endpoint)
   catalogUrl.searchParams.set('limit', String(pagination.limit))
   catalogUrl.searchParams.set('offset', String(pagination.offset))
@@ -2467,7 +2637,7 @@ async function serviceResourceFallbackAuthorization(
   connection: ProviderResourceAuthorizationRecord,
 ) {
   if (connection.authorizationDetails.length > 0) return null
-  const authorization = await externalOAuthAuthorization(deps, resource, connection.clientGeneration ?? 1)
+  const authorization = await connectorOAuthAuthorization(deps, resource, connection.clientGeneration ?? 1)
   if (!authorization) return { authorizationDetailsCatalogScope: null }
   return authorization.authorizationDetailsCatalogEndpoint ? null : authorization
 }
@@ -2501,10 +2671,11 @@ async function isConnectionUsable(
   const resource = await deps.authorization.findResource(resourceId)
   if (resource && brokeredAccountConnection(resource)) return true
   try {
-    const authorization = await requireActiveExternalAuthorization(deps, resourceId, connection.clientGeneration ?? 1)
+    const authorization = await requireActiveConnectorAuthorization(deps, resourceId, connection.clientGeneration ?? 1)
     await refreshConnectionToken(deps, connection, authorization)
     return true
   } catch (error) {
+    if (error instanceof OAuthError && ['invalid_grant', 'temporarily_unavailable'].includes(error.error)) return false
     if (!(error instanceof ApiError)) throw error
     if (error.status === 502) return false
     if (error.status !== 401) throw error
@@ -2531,48 +2702,89 @@ async function refreshConnectionToken(
     await deps.secrets.open(connection.encryptedTokens, connectionTokensContext(connection.id)),
   ) as Record<string, unknown>
   if (connection.credentialExpiresAt && connection.credentialExpiresAt.getTime() > Date.now() + 30_000) {
-    return requiredString(payload, 'accessToken', 'Stored resource connection')
+    return {
+      accessToken: requiredString(payload, 'accessToken', 'Stored resource connection'),
+      expiresAt: connection.credentialExpiresAt,
+      scopes: connection.grantedScopes,
+    }
+  }
+  const expectedVersion = connection.credentialVersion ?? 1
+  const claimId = deps.ids.generate()
+  const now = new Date()
+  if (
+    !(await deps.externalResources.claimConnectionRefresh({
+      id: connection.id,
+      expectedVersion,
+      claimId,
+      now,
+      claimExpiresAt: new Date(now.getTime() + 15_000),
+    }))
+  ) {
+    throw oauthError(
+      'temporarily_unavailable',
+      'Provider credential refresh is already in progress.',
+      503,
+      {},
+      { 'Retry-After': '1' },
+    )
   }
   const refreshToken = requiredString(payload, 'refreshToken', 'Stored resource connection')
   const clientSecret = authorizationClientSecret(authorization)
-  const token = await postForm(
-    deps,
-    authorization.tokenEndpoint,
-    {
-      grant_type: 'refresh_token',
-      refresh_token: refreshToken,
-      ...(connection.authorizationDetails.length > 0
-        ? { authorization_details: JSON.stringify(connection.authorizationDetails) }
-        : {}),
-    },
-    authorization.clientId,
-    clientSecret,
-  )
-  const accessToken = requiredString(token, 'access_token', 'OAuth refresh response')
-  const nextRefreshToken = optionalString(token, 'refresh_token') ?? refreshToken
-  const scopes = scopeString(token.scope) ?? connection.grantedScopes
-  const authorizationDetails =
-    token.authorization_details === undefined
-      ? connection.authorizationDetails
-      : readAuthorizationDetails(
-          token.authorization_details,
-          connection.authorizationDetails.length > 0,
-          connection.authorizationDetails.map((detail) => detail.type),
-          'OAuth refresh response',
-        )
-  if (!exactAuthorizationDetails(authorizationDetails, connection.authorizationDetails)) {
-    throw unauthorized('Target authorization server changed authorization details during refresh.')
+  try {
+    const token = await postForm(
+      deps,
+      authorization.tokenEndpoint,
+      {
+        grant_type: 'refresh_token',
+        refresh_token: refreshToken,
+        ...(connection.authorizationDetails.length > 0
+          ? { authorization_details: JSON.stringify(connection.authorizationDetails) }
+          : {}),
+      },
+      authorization.clientId,
+      clientSecret,
+      new Headers(),
+      true,
+    )
+    const accessToken = requiredString(token, 'access_token', 'OAuth refresh response')
+    const nextRefreshToken = optionalString(token, 'refresh_token') ?? refreshToken
+    const scopes = scopeString(token.scope) ?? connection.grantedScopes
+    const authorizationDetails =
+      token.authorization_details === undefined
+        ? connection.authorizationDetails
+        : readAuthorizationDetails(
+            token.authorization_details,
+            connection.authorizationDetails.length > 0,
+            connection.authorizationDetails.map((detail) => detail.type),
+            'OAuth refresh response',
+          )
+    if (!exactAuthorizationDetails(authorizationDetails, connection.authorizationDetails)) {
+      throw unauthorized('Target authorization server changed authorization details during refresh.')
+    }
+    const refreshedAt = new Date()
+    const expiresAt = tokenExpiry(token, refreshedAt)
+    const updated = await deps.externalResources.completeConnectionRefresh(connection.id, {
+      expectedVersion,
+      claimId,
+      encryptedTokens: await deps.secrets.seal(
+        JSON.stringify({ accessToken, refreshToken: nextRefreshToken, scope: scopes.join(' ') }),
+        connectionTokensContext(connection.id),
+      ),
+      credentialExpiresAt: expiresAt,
+      updatedAt: refreshedAt,
+    })
+    if (!updated) {
+      throw oauthError('temporarily_unavailable', 'Provider credential refresh changed concurrently.', 503)
+    }
+    return { accessToken, expiresAt, scopes }
+  } catch (error) {
+    if (error instanceof OAuthError && error.error === 'invalid_grant') {
+      await deps.externalResources.revokeConnection(connection.id, new Date())
+      throw error
+    }
+    await deps.externalResources.releaseConnectionRefresh(connection.id, expectedVersion, claimId, new Date())
+    throw error
   }
-  const now = new Date()
-  await deps.externalResources.updateConnectionTokens(connection.id, {
-    encryptedTokens: await deps.secrets.seal(
-      JSON.stringify({ accessToken, refreshToken: nextRefreshToken, scope: scopes.join(' ') }),
-      connectionTokensContext(connection.id),
-    ),
-    credentialExpiresAt: tokenExpiry(token, now),
-    updatedAt: now,
-  })
-  return accessToken
 }
 
 async function requirePendingAccessRequestByToken(deps: Deps, token: string) {
@@ -2631,6 +2843,14 @@ async function requireExternalResource(deps: Deps, resourceId: string) {
 }
 
 async function requireActiveExternalAuthorization(deps: Deps, resourceId: string, clientGeneration?: number) {
+  const resource = await deps.authorization.findResource(resourceId)
+  if (resource?.accessMode !== 'external_oauth') {
+    throw notFound('Active external API resource authorization was not found.')
+  }
+  return requireActiveConnectorAuthorization(deps, resourceId, clientGeneration)
+}
+
+async function requireActiveConnectorAuthorization(deps: Deps, resourceId: string, clientGeneration?: number) {
   const authorization = await findExternalAuthorization(deps, resourceId, clientGeneration)
   if (!authorization || authorization.status !== 'active') {
     throw notFound('Active external API resource authorization was not found.')
@@ -2644,7 +2864,7 @@ async function findExternalAuthorization(
   clientGeneration?: number,
 ): Promise<ResolvedExternalAuthorization | null> {
   const resource = await deps.authorization.findResource(resourceId)
-  if (resource?.accessMode !== 'external_oauth' || !resource.connectorId) return null
+  if (!resource?.connectorId || resource.accessMode === 'brokered') return null
   const connector = await deps.connectors.findById(resource.connectorId)
   if (
     !connector ||
@@ -2717,7 +2937,7 @@ function brokeredAccountConnection(resource: NonNullable<Awaited<ReturnType<Deps
 }
 
 function requiresAccountConnection(resource: NonNullable<Awaited<ReturnType<Deps['authorization']['findResource']>>>) {
-  return resource.accessMode !== 'realmroot'
+  return resource.connectorId !== null
 }
 
 async function externalOAuthAuthorization(
@@ -2729,10 +2949,19 @@ async function externalOAuthAuthorization(
   return requireActiveExternalAuthorization(deps, resource.id, clientGeneration)
 }
 
+async function connectorOAuthAuthorization(
+  deps: Deps,
+  resource: NonNullable<Awaited<ReturnType<Deps['authorization']['findResource']>>>,
+  clientGeneration?: number,
+) {
+  if (!resource.connectorId || resource.accessMode === 'brokered') return null
+  return requireActiveConnectorAuthorization(deps, resource.id, clientGeneration)
+}
+
 async function requireEnabledResource(deps: Deps, resourceId: string) {
   const resource = await deps.authorization.findResource(resourceId)
   if (!resource?.enabled) throw notFound('Enabled Resource Server was not found.')
-  await externalOAuthAuthorization(deps, resource)
+  await connectorOAuthAuthorization(deps, resource)
   return resource
 }
 
@@ -3169,8 +3398,9 @@ async function postForm(
   clientId: string,
   clientSecret: string,
   extraHeaders = new Headers(),
+  preserveInvalidGrant = false,
 ) {
-  return (await postFormResponse(deps, url, body, clientId, clientSecret, extraHeaders)).body
+  return (await postFormResponse(deps, url, body, clientId, clientSecret, extraHeaders, preserveInvalidGrant)).body
 }
 
 async function postFormResponse(
@@ -3180,6 +3410,7 @@ async function postFormResponse(
   clientId: string,
   clientSecret: string,
   extraHeaders = new Headers(),
+  preserveInvalidGrant = false,
 ) {
   const headers = new Headers(extraHeaders)
   headers.set('accept', 'application/json')
@@ -3195,6 +3426,9 @@ async function postFormResponse(
   }
   if (!response.ok) {
     const providerError = await readOAuthError(response)
+    if (preserveInvalidGrant && providerError?.error === 'invalid_grant') {
+      throw oauthError('invalid_grant', 'Provider refresh token is no longer valid.')
+    }
     if (providerError?.error === 'use_dpop_nonce') {
       const nonce = response.headers.get('dpop-nonce')
       if (!nonce || !validDpopNonce(nonce)) {
@@ -3292,9 +3526,14 @@ async function postEmptyForm(
     authorization: `Basic ${base64(`${clientId}:${clientSecret}`)}`,
     'content-type': 'application/x-www-form-urlencoded',
   })
-  const response = await deps.externalHttp.fetch(
-    new Request(url, { method: 'POST', headers, body: new URLSearchParams(body) }),
-  )
+  let response: Response
+  try {
+    response = await deps.externalHttp.fetch(
+      new Request(url, { method: 'POST', headers, body: new URLSearchParams(body) }),
+    )
+  } catch {
+    throw badGateway('External authorization server revocation is unavailable.')
+  }
   if (!response.ok) throw unauthorized('External authorization server rejected the revocation request.')
 }
 
@@ -3312,6 +3551,10 @@ function requiredString(value: Record<string, unknown>, field: string, label: st
 
 function optionalString(value: Record<string, unknown>, field: string) {
   return typeof value[field] === 'string' && value[field].length > 0 ? value[field] : null
+}
+
+function recordValue(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null
 }
 
 function requiredPositiveInteger(value: Record<string, unknown>, field: string, label: string) {
@@ -3335,6 +3578,11 @@ function tokenExpiry(token: Record<string, unknown>, now: Date) {
 function assertScopeSubset(requested: string[], allowed: string[], boundary: string) {
   const missing = requested.filter((scope) => !allowed.includes(scope))
   if (missing.length > 0) throw badRequest(`Requested scopes exceed the ${boundary} boundary: ${missing.join(', ')}.`)
+}
+
+function assertOAuthScopeSubset(requested: string[], allowed: string[], boundary: string) {
+  const missing = requested.filter((scope) => !allowed.includes(scope))
+  if (missing.length > 0) throw oauthError('invalid_scope', `Requested scopes exceed the ${boundary} boundary.`)
 }
 
 function exactScopes(left: string[], right: string[]) {

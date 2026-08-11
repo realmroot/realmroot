@@ -219,7 +219,7 @@ Feature: Agent identity and delegated API authorization
       When an administrator creates an API resource with native authorization mode
       Then the administrator configures one protected resource URL
       And Realmroot uses that URL as the OAuth resource identifier and access-token audience
-      And no external authorization server, OAuth client, or account connection is configured
+      And without a Provider Connector no external authorization server, OAuth client, or account connection is configured
       And the product API validates Realmroot access tokens with the published issuer and JWKS
       And the protected resource publishes its requestable scopes through RFC 9728 metadata
       And the protected resource advertises its OpenAPI contract with a standard service-desc link
@@ -228,6 +228,29 @@ Feature: Agent identity and delegated API authorization
       And OpenAPI may add descriptions and maps operations only to advertised scopes
       And advertised scopes remain valid even when no public operation references them
       And Realmroot stores only discovered scope metadata and local grant modes, never either source document
+
+    @entrypoint:product-ui @journey:connector-backed-native-resource-registration
+    Scenario: An administrator connects a native Resource Server to a provider OAuth account
+      Given a generic OAuth Connector has discovered authorization, token, UserInfo, signing-key, and revocation endpoints
+      And its OAuth client supports authorization code, refresh token, confidential client authentication, and S256 PKCE
+      When an administrator creates a native Resource Server and selects that Connector
+      Then Realmroot keeps native access-token validation while requiring a provider account connection
+      And every Resource Server scope is allowed by the Connector OAuth client
+      And Realmroot rejects rich authorization, pushed authorization, target resource indicators, JWT bearer grants, and target token exchange for that connection
+      And the Connector remains reusable by other compatible Resource Servers without binding the Resource Server to an Application
+
+    @entrypoint:agent-protocol @journey:connector-backed-native-agent-connection
+    Scenario: An Agent obtains exact provider authority through a native Resource Server
+      Given an enabled native Resource Server uses a generic OAuth Connector
+      When an Agent requests exact Resource Server scopes that are not yet connected
+      Then Realmroot asks the controller to authorize only those scopes plus OpenID and offline access
+      And the authorization request uses authorization code with S256 PKCE without a target resource, authorization details, or pushed authorization
+      When the controller completes provider consent
+      Then Realmroot validates the callback and UserInfo and stores encrypted provider credentials in the Agent home space connection
+      And Realmroot never exposes the provider access token or refresh token to the Agent
+      When the controller approves Agent access
+      Then the Realmroot DPoP token binds the Agent, approved scopes, active Permission snapshots, and internal account connection
+      And a connection from another home space or Resource Server cannot satisfy the request
 
     @entrypoint:product-ui @journey:api-resource-contract-validation
     Scenario: API resources require a discoverable OpenAPI contract
@@ -348,6 +371,32 @@ Feature: Agent identity and delegated API authorization
       And the external DPoP proof remains bound to the target platform's discovered token endpoint
 
   Rule: Workload token exchange preserves authorization boundaries
+
+    @entrypoint:agent-protocol @journey:application-provider-token-exchange
+    Scenario: A confidential Application exchanges an Agent token for a connected provider token
+      Given an active connector-backed native account connection and an approved Agent DPoP token exist
+      And a confidential Application is allowed to use token exchange for that Resource Server
+      When the Application exchanges the Agent access token at the standard token endpoint
+      Then Realmroot verifies the Agent token, active Token Lease, access request, binding, Agent, Permissions, connection, and Resource Server
+      And requested scopes are bounded by the Agent token, Application resource scopes, Application Permissions, and connected provider grant
+      And Realmroot returns the current provider Bearer token with its remaining lifetime and actual scopes without a refresh token
+      But a revoked or mismatched authority returns a standard OAuth token-exchange error
+
+    @entrypoint:agent-protocol @journey:provider-token-refresh-concurrency
+    Scenario: Provider token refresh is serialized across Realmroot instances
+      Given a connector-backed account connection has an expired access token and a rotating refresh token
+      When two Applications exchange valid Agent tokens concurrently
+      Then exactly one caller claims and rotates the refresh token
+      And the other caller receives a retryable temporarily-unavailable response
+      And a crashed refresh claim expires so a later caller can continue
+      But an upstream invalid grant revokes the local connection and prevents later exchange
+
+    @entrypoint:product-ui @journey:connector-backed-connection-revocation
+    Scenario: Revoking a connector-backed account connection revokes provider authority first
+      Given an active connector-backed account connection has provider access and refresh tokens
+      When its controller revokes the connection
+      Then Realmroot revokes the provider refresh token and access token before ending Permissions, Token Leases, and local connection state
+      But a temporary provider failure leaves the local connection active and returns an explicit retryable failure
 
     @entrypoint:agent-protocol @journey:workload-token-exchange-claims
     Scenario: Introspection reports only authorization-server controlled security claims

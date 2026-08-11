@@ -8,7 +8,23 @@ import type {
   ProviderResourceAuthorizationRecord,
   ResourceScopeEntitlementRecord,
 } from '@server/usecases/ports'
-import { and, count, desc, eq, exists, gt, inArray, isNotNull, isNull, lt, ne, or, type SQL, sql } from 'drizzle-orm'
+import {
+  and,
+  count,
+  desc,
+  eq,
+  exists,
+  gt,
+  inArray,
+  isNotNull,
+  isNull,
+  lt,
+  lte,
+  ne,
+  or,
+  type SQL,
+  sql,
+} from 'drizzle-orm'
 import type { Database } from '../../db/client'
 import {
   account,
@@ -456,6 +472,11 @@ export function createExternalResourceRepository(db: Database, ids: IdentifierGe
                 NonNullable<typeof input.authorityConstraints>
               >`${JSON.stringify(input.authorityConstraints ?? [])}`.as('authority_constraints'),
               clientGeneration: sql<number>`${input.clientGeneration ?? 1}`.as('client_generation'),
+              credentialVersion: sql<number>`${input.credentialVersion ?? 1}`.as('credential_version'),
+              refreshClaimId: sql<string | null>`${input.refreshClaimId ?? null}`.as('refresh_claim_id'),
+              refreshClaimExpiresAt: sql<Date | null>`${input.refreshClaimExpiresAt?.getTime() ?? null}`.as(
+                'refresh_claim_expires_at',
+              ),
               status: sql<string>`${input.status}`.as('status'),
               credentialExpiresAt: sql<Date | null>`${input.credentialExpiresAt?.getTime() ?? null}`.as(
                 'credential_expires_at',
@@ -549,6 +570,67 @@ export function createExternalResourceRepository(db: Database, ids: IdentifierGe
       if (!row) return null
       const connection = await findProviderConnection(db, row.providerConnectionId)
       return toProviderResourceAuthorization(row, connection)
+    },
+
+    async claimConnectionRefresh(input) {
+      const [row] = await db
+        .update(providerResourceAuthorization)
+        .set({ refreshClaimId: input.claimId, refreshClaimExpiresAt: input.claimExpiresAt, updatedAt: input.now })
+        .where(
+          and(
+            eq(providerResourceAuthorization.id, input.id),
+            eq(providerResourceAuthorization.status, 'active'),
+            eq(providerResourceAuthorization.credentialVersion, input.expectedVersion),
+            or(
+              isNull(providerResourceAuthorization.refreshClaimId),
+              isNull(providerResourceAuthorization.refreshClaimExpiresAt),
+              lte(providerResourceAuthorization.refreshClaimExpiresAt, input.now),
+            ),
+          ),
+        )
+        .returning({ id: providerResourceAuthorization.id })
+      return Boolean(row)
+    },
+
+    async completeConnectionRefresh(id, input) {
+      const [row] = await db
+        .update(providerResourceAuthorization)
+        .set({
+          encryptedTokens: input.encryptedTokens,
+          credentialExpiresAt: input.credentialExpiresAt,
+          credentialVersion: input.expectedVersion + 1,
+          refreshClaimId: null,
+          refreshClaimExpiresAt: null,
+          updatedAt: input.updatedAt,
+        })
+        .where(
+          and(
+            eq(providerResourceAuthorization.id, id),
+            eq(providerResourceAuthorization.status, 'active'),
+            eq(providerResourceAuthorization.credentialVersion, input.expectedVersion),
+            eq(providerResourceAuthorization.refreshClaimId, input.claimId),
+          ),
+        )
+        .returning()
+      if (!row) return null
+      const connection = await findProviderConnection(db, row.providerConnectionId)
+      return toProviderResourceAuthorization(row, connection)
+    },
+
+    async releaseConnectionRefresh(id, expectedVersion, claimId, now) {
+      const [row] = await db
+        .update(providerResourceAuthorization)
+        .set({ refreshClaimId: null, refreshClaimExpiresAt: null, updatedAt: now })
+        .where(
+          and(
+            eq(providerResourceAuthorization.id, id),
+            eq(providerResourceAuthorization.status, 'active'),
+            eq(providerResourceAuthorization.credentialVersion, expectedVersion),
+            eq(providerResourceAuthorization.refreshClaimId, claimId),
+          ),
+        )
+        .returning({ id: providerResourceAuthorization.id })
+      return Boolean(row)
     },
 
     async revokeConnection(id, now) {
@@ -1050,6 +1132,21 @@ export function createExternalResourceRepository(db: Database, ids: IdentifierGe
             isNull(externalTokenLease.revokedAt),
           ),
         )
+    },
+
+    async findActiveTokenLeaseByTokenHash(tokenHash, now) {
+      const [row] = await db
+        .select()
+        .from(externalTokenLease)
+        .where(
+          and(
+            eq(externalTokenLease.tokenHash, tokenHash),
+            gt(externalTokenLease.expiresAt, now),
+            isNull(externalTokenLease.revokedAt),
+          ),
+        )
+        .limit(1)
+      return row ?? null
     },
 
     async revokeTokenLease(id, now) {

@@ -14,11 +14,13 @@ import {
   getResource,
   getResourceContract,
   getRole,
+  listApplicationAuthorizedResourceServers,
   listInvitations,
   listMembers,
   listOrganizations,
   listResources,
   listRoles,
+  listUserAuthorizedResourceServers,
   refreshResourceScopeRegistry,
   removeMember,
   replaceMemberRoles,
@@ -145,6 +147,17 @@ describe('authorization CRUD and assignment policy', () => {
           scopes: expect.arrayContaining([expect.objectContaining({ value: 'resource-servers:write' })]),
         }),
       }),
+    )
+
+    authorization.findResource.mockResolvedValueOnce(staleRegistry)
+    authorization.replaceResourceDiscovery.mockResolvedValueOnce(false)
+    await expect(ensureRealmrootResourceServer(deps, 'https://auth.example.com')).rejects.toThrow(
+      'could not be reconciled',
+    )
+
+    authorization.findResource.mockResolvedValueOnce(staleRegistry).mockResolvedValueOnce(null)
+    await expect(ensureRealmrootResourceServer(deps, 'https://auth.example.com')).rejects.toThrow(
+      'could not be reconciled',
     )
 
     authorization.findResource.mockResolvedValueOnce(stale)
@@ -637,7 +650,9 @@ describe('authorization CRUD and assignment policy', () => {
     )
   })
 
-  it('[spec: admin-console/provider-connection-authority] manages native, brokered, and external API resources', async () => {
+  it(`[spec: admin-console/provider-connection-authority]
+      [spec: agent-identity/connector-backed-native-resource-registration]
+      manages native, connector-backed, brokered, and external API resources`, async () => {
     const authorization = repository()
     authorization.listEnabledResources.mockResolvedValue([])
     authorization.findOrganization.mockResolvedValue(organization)
@@ -656,6 +671,7 @@ describe('authorization CRUD and assignment policy', () => {
       userInfoEndpoint: `${resource.resourceUrl}/userinfo`,
       jwksEndpoint: `${resource.resourceUrl}/jwks`,
       revocationEndpoint: `${resource.resourceUrl}/revoke`,
+      registeredScopes: ['openid', 'offline_access', 'projects:read'],
       providerMetadata: {
         grant_types_supported: [
           'authorization_code',
@@ -664,6 +680,8 @@ describe('authorization CRUD and assignment policy', () => {
           'urn:ietf:params:oauth:grant-type:token-exchange',
         ],
         dpop_signing_alg_values_supported: ['ES256'],
+        code_challenge_methods_supported: ['S256'],
+        token_endpoint_auth_methods_supported: ['client_secret_basic'],
         authorization_details_types_supported: ['payment_initiation'],
         authorization_details_catalog_endpoint: `${resource.resourceUrl}/authorization-details`,
         authorization_details_catalog_scope: 'authorization-details:read',
@@ -760,15 +778,16 @@ describe('authorization CRUD and assignment policy', () => {
         ownerOrganizationId: 'org_platform',
       }),
     ).rejects.toThrow('External OAuth access requires a Provider Connector')
-    await expect(
-      createResource(deps, {
-        identifier: 'realmroot-with-connector',
-        resourceUrl: resource.resourceUrl,
-        accessMode: 'realmroot',
-        connectorId: 'connector-1',
-        ownerOrganizationId: 'org_platform',
-      }),
-    ).rejects.toThrow('Realmroot access cannot select a Provider Connector')
+    await createResource(deps, {
+      identifier: 'realmroot-with-connector',
+      resourceUrl: resource.resourceUrl,
+      accessMode: 'realmroot',
+      connectorId: 'connector-1',
+      ownerOrganizationId: 'org_platform',
+    })
+    expect(authorization.createResource).toHaveBeenLastCalledWith(
+      expect.objectContaining({ accessMode: 'realmroot', connectorId: 'connector-1' }),
+    )
     brokeredNative = true
     await expect(
       createResource(deps, {
@@ -1237,6 +1256,11 @@ describe('authorization CRUD and assignment policy', () => {
         }),
       }),
     )
+    authorization.findResource.mockResolvedValueOnce(realmroot).mockResolvedValueOnce(realmroot)
+    authorization.replaceResourceDiscovery.mockResolvedValueOnce(false)
+    await expect(refreshResourceScopeRegistry(deps, 'res_realmroot')).rejects.toThrow(
+      'Resource Server is no longer active.',
+    )
   })
 
   it('covers Role defaults, visibility, and derived token scopes', async () => {
@@ -1495,6 +1519,35 @@ describe('authorization CRUD and assignment policy', () => {
       'Business resource must advertise its OpenAPI document',
     )
     expect(authorization.updateResource).not.toHaveBeenCalled()
+  })
+
+  it('lists authorized Resource Servers only for existing users and Applications', async () => {
+    const authorization = {
+      ...repository(),
+      listAuthorizedResourceServers: vi.fn().mockResolvedValue({ items: [], pagination }),
+    }
+    const deps = {
+      authorization,
+      users: { getUser: vi.fn().mockResolvedValue({ id: 'user-1' }) },
+      applications: { findById: vi.fn().mockResolvedValue({ id: 'application-1' }) },
+    } as unknown as Deps
+
+    await expect(listUserAuthorizedResourceServers(deps, 'user-1', { limit: 20, offset: 0 })).resolves.toEqual({
+      items: [],
+      pagination,
+    })
+    await expect(
+      listApplicationAuthorizedResourceServers(deps, 'application-1', { limit: 20, offset: 0 }),
+    ).resolves.toEqual({
+      items: [],
+      pagination,
+    })
+    expect(authorization.listAuthorizedResourceServers).toHaveBeenCalledTimes(2)
+
+    vi.mocked(deps.applications.findById).mockResolvedValue(null)
+    await expect(listApplicationAuthorizedResourceServers(deps, 'missing', { limit: 20, offset: 0 })).rejects.toThrow(
+      'Application was not found',
+    )
   })
 })
 

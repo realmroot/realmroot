@@ -365,18 +365,42 @@ async function maybeHandleTokenExchange(c: Context, issuer: string, auth: AuthHa
       )
       return c.json(response)
     }
+    const subjectToken = formString(form, 'subject_token') ?? ''
+    const subjectTokenType = formString(form, 'subject_token_type') ?? ''
+    let verifiedSubjectClaims: Record<string, unknown> | undefined
+    if (subjectTokenType === 'urn:ietf:params:oauth:token-type:access_token') {
+      if (!auth.api.verifyJWT)
+        throw oauthError('temporarily_unavailable', 'Agent token verification is unavailable.', 503)
+      try {
+        const verified = await auth.api.verifyJWT({
+          body: {
+            token: subjectToken,
+            issuer,
+            audience: formString(form, 'audience') ?? '',
+          },
+          asResponse: false,
+        })
+        verifiedSubjectClaims = verified.payload ?? undefined
+      } catch {
+        throw oauthError('invalid_grant', 'Agent subject token is invalid.')
+      }
+      if (!verifiedSubjectClaims) throw oauthError('invalid_grant', 'Agent subject token is invalid.')
+    }
     const response = await exchangeToken(
       deps,
       {
         grantType: grantType ?? '',
-        subjectToken: formString(form, 'subject_token') ?? '',
-        subjectTokenType: formString(form, 'subject_token_type') ?? '',
+        subjectToken,
+        subjectTokenType,
         audience: formString(form, 'audience') ?? '',
         scope: formString(form, 'scope') ?? undefined,
         requestedTokenType: formString(form, 'requested_token_type') ?? undefined,
+        verifiedSubjectClaims,
       },
       client,
     )
+    c.header('Cache-Control', 'no-store')
+    c.header('Pragma', 'no-cache')
     return c.json(response)
   }
 

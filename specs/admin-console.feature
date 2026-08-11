@@ -218,11 +218,13 @@ Feature: Admin Console
     And it records an explicit owner Organization
     And its visibility is private by default and can be changed to public
     And I explicitly select Realmroot, external OAuth, or brokered provider access
-    And Realmroot access forbids a Provider Connector
+    And Realmroot access optionally selects an enabled generic OAuth Connector for provider account credentials
+    And Realmroot access without a Connector remains an ordinary native Resource Server
+    And Realmroot access with a Connector is displayed as Realmroot Token plus Provider Connection
     And external OAuth access requires a standard OIDC Connector
     And brokered provider access requires its Provider Connector without changing Realmroot token validation
     And the Connector association no longer determines the Resource Server access mode
-    And its access mode and Provider Connector cannot change after creation
+    And its access mode cannot change after creation while its compatible Provider Connector can be selected or replaced explicitly
     And its protected resource URL is the OAuth resource identifier and access-token audience
     And its name and description are synchronized from the OpenAPI contract and cannot be edited manually
     And OAuth scopes advertised by the business resource server protected-resource metadata remain the scope authority

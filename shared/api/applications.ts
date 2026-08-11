@@ -23,6 +23,7 @@ const nonEmptyString = z.string().trim().min(1)
 const managedAssetUrlSchema = z.union([z.url(), z.string().regex(/^\/api\/assets\/[A-Za-z0-9_-]+$/)])
 const optionalUrl = managedAssetUrlSchema.optional()
 const customDataSchema = z.record(z.string(), z.unknown())
+const maxScopesPerApplicationResource = 1_000
 
 export const applicationResourceScopesSchema = z
   .array(
@@ -31,7 +32,7 @@ export const applicationResourceScopesSchema = z
         resourceServerId: nonEmptyString.max(200),
         scopes: z
           .array(nonEmptyString.max(200))
-          .max(100)
+          .max(maxScopesPerApplicationResource)
           .transform((scopes) => [...new Set(scopes)].sort()),
       })
       .strict(),

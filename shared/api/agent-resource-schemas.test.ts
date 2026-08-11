@@ -20,7 +20,7 @@ describe('Agent resource schemas', () => {
     expect(createApiResourceSchema.safeParse({ ...input, accessMode: undefined }).success).toBe(false)
     expect(createApiResourceSchema.safeParse({ ...input, connectorId: '' }).success).toBe(false)
     expect(updateApiResourceSchema.safeParse({ accessMode: 'realmroot' }).success).toBe(false)
-    expect(updateApiResourceSchema.safeParse({ connectorId: null }).success).toBe(false)
+    expect(updateApiResourceSchema.safeParse({ connectorId: null }).success).toBe(true)
   })
 
   it('preserves opaque JSON authorization details and rejects malformed values', () => {

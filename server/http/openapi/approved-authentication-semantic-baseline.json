@@ -381,7 +381,7 @@
     "method": "PATCH",
     "path": "/resource-servers/{resourceServerId}",
     "operationId": "updateResourceServer",
-    "semanticHash": "320313ca071cfffe51c6d5d6ad170a29acab8843782bdc99c95989bca2ec1b73"
+    "semanticHash": "573a4d9c22be7c1712c6ca7fdd61b835a9fa93e78a0cdf672ebfca302b979804"
   },
   {
     "method": "GET",

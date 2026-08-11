@@ -87,6 +87,44 @@ export async function validateExternalResourceConnector(
   return protectedMetadata
 }
 
+export async function validateConnectorBackedNativeResource(deps: Deps, connectorId: string, resourceScopes: string[]) {
+  const connector = await deps.connectors.findById(connectorId)
+  if (!connector || connector.providerType !== 'generic_oauth') {
+    throw notFound('OIDC connector was not found.')
+  }
+  if (!connector.enabled || !connector.clientId || !connector.clientSecret || !connector.issuer) {
+    throw badRequest('OIDC connector must be enabled and have complete client credentials.')
+  }
+  if (
+    !connector.authorizationEndpoint ||
+    !connector.tokenEndpoint ||
+    !connector.userInfoEndpoint ||
+    !connector.jwksEndpoint ||
+    !connector.revocationEndpoint
+  ) {
+    throw badRequest('OIDC connector is missing endpoints required for provider account connections.')
+  }
+
+  const grants = stringArray(connector.providerMetadata?.grant_types_supported)
+  if (!grants.includes('authorization_code') || !grants.includes('refresh_token')) {
+    throw badRequest('OIDC connector must support authorization_code and refresh_token.')
+  }
+  const codeChallengeMethods = stringArray(connector.providerMetadata?.code_challenge_methods_supported)
+  if (!codeChallengeMethods.includes('S256')) {
+    throw badRequest('OIDC connector must support S256 PKCE.')
+  }
+  const authenticationMethods = stringArray(connector.providerMetadata?.token_endpoint_auth_methods_supported)
+  if (authenticationMethods.length > 0 && !authenticationMethods.includes('client_secret_basic')) {
+    throw badRequest('OIDC connector must support client_secret_basic token endpoint authentication.')
+  }
+
+  const allowedScopes = new Set(connector.registeredScopes ?? connector.scopes ?? [])
+  const unsupportedScopes = resourceScopes.filter((scope) => !allowedScopes.has(scope))
+  if (unsupportedScopes.length > 0) {
+    throw badRequest('Resource Server scopes exceed the selected Connector OAuth client scope allowlist.')
+  }
+}
+
 function requireNetworkUrl(value: string, label: string) {
   const url = new URL(value)
   const loopback = url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '::1'

@@ -32,6 +32,9 @@ export const providerResourceAuthorization = sqliteTable(
       .notNull()
       .default(sql`'[]'`),
     clientGeneration: integer('client_generation').default(1).notNull(),
+    credentialVersion: integer('credential_version').default(1).notNull(),
+    refreshClaimId: text('refresh_claim_id'),
+    refreshClaimExpiresAt: integer('refresh_claim_expires_at', { mode: 'timestamp_ms' }),
     status: text('status').notNull().default('active'),
     credentialExpiresAt: integer('credential_expires_at', { mode: 'timestamp_ms' }),
     revokedAt: integer('revoked_at', { mode: 'timestamp_ms' }),

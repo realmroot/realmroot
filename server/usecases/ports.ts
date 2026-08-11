@@ -542,6 +542,9 @@ export interface ProviderResourceAuthorizationRecord {
   authorizationDetails: AuthorizationDetail[]
   authorityConstraints?: ProviderAuthorityConstraint[]
   clientGeneration?: number
+  credentialVersion?: number
+  refreshClaimId?: string | null
+  refreshClaimExpiresAt?: Date | null
   status: string
   credentialExpiresAt: Date | null
   revokedAt: Date | null
@@ -764,6 +767,9 @@ export interface ExternalResourceRepository {
       authorizationDetails: AuthorizationDetail[]
       authorityConstraints: ProviderAuthorityConstraint[]
       clientGeneration?: number
+      credentialVersion?: number
+      refreshClaimId?: null
+      refreshClaimExpiresAt?: null
       providerEventOccurredAt?: Date | null
       providerEventRevision?: number | null
       status: 'active'
@@ -779,6 +785,24 @@ export interface ExternalResourceRepository {
     id: string,
     input: { encryptedTokens: string; credentialExpiresAt: Date | null; updatedAt: Date },
   ): Promise<ProviderResourceAuthorizationRecord | null>
+  claimConnectionRefresh(input: {
+    id: string
+    expectedVersion: number
+    claimId: string
+    now: Date
+    claimExpiresAt: Date
+  }): Promise<boolean>
+  completeConnectionRefresh(
+    id: string,
+    input: {
+      expectedVersion: number
+      claimId: string
+      encryptedTokens: string
+      credentialExpiresAt: Date | null
+      updatedAt: Date
+    },
+  ): Promise<ProviderResourceAuthorizationRecord | null>
+  releaseConnectionRefresh(id: string, expectedVersion: number, claimId: string, now: Date): Promise<boolean>
   revokeConnection(id: string, now: Date): Promise<boolean>
   createConnectionIntent(input: ResourceConnectionIntentRecord): Promise<ResourceConnectionIntentRecord | null>
   consumeConnectionIntent(stateHash: string, now: Date): Promise<ResourceConnectionIntentRecord | null>
@@ -872,6 +896,7 @@ export interface ExternalResourceRepository {
   ): Promise<ExternalTokenLeaseRecord | null>
   listActiveTokenLeasesByEntitlement(entitlementId: string, now: Date): Promise<ExternalTokenLeaseRecord[]>
   listActiveTokenLeasesByBinding(bindingId: string, now: Date): Promise<ExternalTokenLeaseRecord[]>
+  findActiveTokenLeaseByTokenHash(tokenHash: string, now: Date): Promise<ExternalTokenLeaseRecord | null>
   revokeTokenLease(id: string, now: Date): Promise<boolean>
 }
 

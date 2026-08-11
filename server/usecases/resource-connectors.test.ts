@@ -1,6 +1,9 @@
 import type { ConnectorRow } from '@server/adapters/repos/connectors'
 import type { Deps } from '@server/usecases/deps'
-import { validateExternalResourceConnector } from '@server/usecases/resource-connectors'
+import {
+  validateConnectorBackedNativeResource,
+  validateExternalResourceConnector,
+} from '@server/usecases/resource-connectors'
 import { describe, expect, it, vi } from 'vitest'
 
 const resourceUrl = 'https://api.example.com/v1?tenant=acme'
@@ -227,6 +230,69 @@ describe('external resource connector validation', () => {
     await expect(
       validateExternalResourceConnector(incompleteCatalog, resourceUrl, 'connector-1', authorizationDetails),
     ).rejects.toThrow('must provide a valid endpoint, scope, and version 1 together')
+  })
+})
+
+describe('connector-backed native resource connector validation', () => {
+  const completeNativeMetadata = {
+    grant_types_supported: ['authorization_code', 'refresh_token'],
+    code_challenge_methods_supported: ['S256'],
+    token_endpoint_auth_methods_supported: ['client_secret_basic'],
+  }
+
+  it.each([
+    ['missing connector', null, 'OIDC connector was not found'],
+    ['wrong connector type', connector({ providerType: 'social' }), 'OIDC connector was not found'],
+    ['disabled connector', connector({ enabled: false }), 'must be enabled'],
+    ['missing endpoint', connector({ revocationEndpoint: null }), 'is missing endpoints'],
+    [
+      'missing refresh grant',
+      connector({
+        providerMetadata: {
+          ...completeNativeMetadata,
+          grant_types_supported: ['authorization_code'],
+        },
+      }),
+      'must support authorization_code and refresh_token',
+    ],
+    [
+      'missing S256',
+      connector({
+        providerMetadata: {
+          ...completeNativeMetadata,
+          code_challenge_methods_supported: ['plain'],
+        },
+      }),
+      'must support S256 PKCE',
+    ],
+    [
+      'unsupported client authentication',
+      connector({
+        providerMetadata: {
+          ...completeNativeMetadata,
+          token_endpoint_auth_methods_supported: ['client_secret_post'],
+        },
+      }),
+      'must support client_secret_basic',
+    ],
+  ])('rejects %s', async (_label, connectorValue, message) => {
+    const deps = createDeps({ connector: connectorValue })
+
+    await expect(validateConnectorBackedNativeResource(deps, 'connector-1', [])).rejects.toThrow(message)
+  })
+
+  it('enforces the Connector OAuth scope allowlist and accepts exact scopes', async () => {
+    const deps = createDeps({
+      connector: connector({
+        registeredScopes: ['openid', 'offline_access', 'projects:read'],
+        providerMetadata: completeNativeMetadata,
+      }),
+    })
+
+    await expect(validateConnectorBackedNativeResource(deps, 'connector-1', ['projects:write'])).rejects.toThrow(
+      'scope allowlist',
+    )
+    await expect(validateConnectorBackedNativeResource(deps, 'connector-1', ['projects:read'])).resolves.toBeUndefined()
   })
 })
 

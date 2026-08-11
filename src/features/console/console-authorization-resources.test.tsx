@@ -274,12 +274,16 @@ describe('console API resources and roles', () => {
     expect(await screen.findByText('Disabled API')).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: 'New resource server' }))
+    expect(
+      screen.getByText('Optional. Uses Realmroot Token plus Provider Connection for delegated provider credentials.'),
+    ).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     fireEvent.click(screen.getByRole('button', { name: 'New resource server' }))
     fireEvent.change(screen.getByLabelText('Identifier'), { target: { value: 'selected-api' } })
     fireEvent.change(screen.getByLabelText('Protected resource URL'), {
       target: { value: 'https://selected.example.com/api' },
     })
+    fireEvent.change(screen.getByLabelText('Provider connector'), { target: { value: genericConnector.id } })
     fireEvent.change(screen.getByLabelText('Owner'), { target: { value: betaOrganization.id } })
     fireEvent.change(screen.getByLabelText('Visibility'), { target: { value: 'public' } })
     fireEvent.click(screen.getByRole('switch', { name: 'Available to Agents' }))
@@ -291,6 +295,7 @@ describe('console API resources and roles', () => {
           identifier: 'selected-api',
           resourceUrl: 'https://selected.example.com/api',
           accessMode: 'realmroot',
+          connectorId: genericConnector.id,
           authorizationDetails: [],
           ownerOrganizationId: betaOrganization.id,
           visibility: 'public',
@@ -581,6 +586,36 @@ describe('console API resources and roles', () => {
     cleanup()
     selected = {
       ...apiResource,
+      connectorId: 'connector-1',
+    }
+    renderWithQuery(<ApiResourceDetailPage resourceId="resource-1" section="settings" />)
+    const delegatedProvider = await screen.findByRole('heading', { name: 'Provider access' })
+    const delegatedProviderSection = delegatedProvider.closest('section') as HTMLElement
+    expect(
+      within(delegatedProviderSection).getByText(
+        'Realmroot Token plus Provider Connection for delegated provider credentials.',
+      ),
+    ).toBeTruthy()
+    expect(within(delegatedProviderSection).queryByText('Authorization detail templates')).toBeNull()
+    fireEvent.click(within(delegatedProviderSection).getByRole('button', { name: 'Edit' }))
+    fireEvent.change(await screen.findByLabelText('Provider connector'), { target: { value: 'connector-2' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    await waitFor(() =>
+      expect(requests).toContainEqual({
+        url: '/api/resource-servers/resource-1',
+        method: 'PATCH',
+        body: {
+          connectorId: 'connector-2',
+          authorizationDetails: [],
+        },
+      }),
+    )
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Overview' }), { button: 0, ctrlKey: false })
+    expect(await screen.findByText('Realmroot Token plus Provider Connection')).toBeTruthy()
+
+    cleanup()
+    selected = {
+      ...apiResource,
       accessMode: 'external_oauth',
       connectorId: 'connector-1',
       authorizationDetails: [{ type: 'project_access', actions: ['read'], project_id: 'project-1' }],
@@ -624,6 +659,7 @@ describe('console API resources and roles', () => {
         url: '/api/resource-servers/resource-1',
         method: 'PATCH',
         body: {
+          connectorId: 'connector-1',
           authorizationDetails: [{ type: 'project_access', actions: ['read'], project_id: 'project-1' }],
         },
       }),

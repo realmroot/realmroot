@@ -1,6 +1,7 @@
-import { badRequest, notFound, OAuthError, oauthError } from '@server/domain/errors'
+import { ApiError, badRequest, notFound, OAuthError, oauthError } from '@server/domain/errors'
 import { hashProviderSecret } from '@server/usecases/applications-utils'
 import type { Deps } from '@server/usecases/deps'
+import { exchangeAgentConnectionCredential } from '@server/usecases/external-resources'
 import { authenticateApplicationClient } from '@server/usecases/oauth-client-authentication'
 import type {
   ApplicationAggregate,
@@ -30,6 +31,7 @@ export interface TokenExchangeRequest {
   audience: string
   scope?: string
   requestedTokenType?: string
+  verifiedSubjectClaims?: Record<string, unknown>
 }
 
 export interface TokenExchangeResponse {
@@ -68,9 +70,6 @@ export async function exchangeToken(
   if (input.grantType !== tokenExchangeGrantType) {
     throw oauthError('unsupported_grant_type', 'Unsupported grant_type.')
   }
-  if (input.subjectTokenType !== jwtTokenType) {
-    throw oauthError('invalid_request', 'Only JWT subject_token_type is supported.')
-  }
   if (input.requestedTokenType && input.requestedTokenType !== accessTokenType) {
     throw oauthError('invalid_request', 'Only access_token requested_token_type is supported.')
   }
@@ -83,6 +82,12 @@ export async function exchangeToken(
   const allowedGrantTypes = parseList(oauthClient.grantTypes)
   if (!allowedGrantTypes.includes(tokenExchangeGrantType)) {
     throw oauthError('unauthorized_client', 'Client is not allowed to use token exchange.')
+  }
+  if (input.subjectTokenType === accessTokenType) {
+    return exchangeAgentAccessToken(deps, input, application)
+  }
+  if (input.subjectTokenType !== jwtTokenType) {
+    throw oauthError('invalid_request', 'Unsupported subject_token_type.')
   }
 
   const assertion = parseJwt(input.subjectToken)
@@ -146,6 +151,64 @@ export async function exchangeToken(
     })
   }
   return response
+}
+
+async function exchangeAgentAccessToken(
+  deps: Deps,
+  input: TokenExchangeRequest,
+  application: ApplicationAggregate,
+): Promise<TokenExchangeResponse> {
+  const claims = input.verifiedSubjectClaims
+  if (!claims) throw oauthError('invalid_grant', 'Agent subject token could not be verified.')
+  const parsed = parseJwt(input.subjectToken)
+  if (readString(parsed.header.typ)?.toLowerCase() !== 'at+jwt') {
+    throw oauthError('invalid_grant', 'Agent subject token type is invalid.')
+  }
+  const resource = await deps.authorization.findResourceByResourceUrl(input.audience)
+  if (
+    !resource?.enabled ||
+    resource.accessMode !== 'realmroot' ||
+    !resource.connectorId ||
+    resource.ownerOrganizationId !== application.ownerOrganizationId
+  ) {
+    throw oauthError('invalid_target', 'Requested audience is not delegated to this Application tenant.')
+  }
+  const subjectScopes = parseScope(readString(claims.scope))
+  const requestedScopes = normalizeScopes(input.scope ?? subjectScopes.join(' '), subjectScopes)
+  const applicationScopes = await resolveApplicationTokenScopes(
+    deps,
+    application,
+    input.audience,
+    requestedScopes.join(' '),
+  )
+  if (!sameStrings(applicationScopes, requestedScopes)) {
+    throw oauthError('invalid_scope', 'Requested scopes exceed the Application Permissions boundary.')
+  }
+  let provider: Awaited<ReturnType<typeof exchangeAgentConnectionCredential>>
+  try {
+    provider = await exchangeAgentConnectionCredential(deps, {
+      subjectToken: input.subjectToken,
+      claims,
+      audience: input.audience,
+      scopes: requestedScopes,
+    })
+  } catch (error) {
+    if (error instanceof OAuthError) throw error
+    if (error instanceof ApiError && error.code === 'bad_gateway') {
+      throw oauthError('temporarily_unavailable', 'Provider authorization server is unavailable.', 503)
+    }
+    throw oauthError('invalid_grant', 'Agent or provider authority is no longer valid.')
+  }
+  if (!requestedScopes.every((scope) => provider.scopes.includes(scope))) {
+    throw oauthError('invalid_scope', 'Provider grant no longer covers the requested scopes.')
+  }
+  return {
+    access_token: provider.accessToken,
+    issued_token_type: accessTokenType,
+    token_type: 'Bearer',
+    expires_in: provider.expiresIn,
+    scope: provider.scopes.join(' '),
+  }
 }
 
 async function resolveCredential(deps: Deps, applicationClientId: string, issuer: string, subject: string) {
@@ -611,6 +674,14 @@ function parseList(value: string | null) {
   if (!value) return []
   const parsed = JSON.parse(value) as unknown
   return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : []
+}
+
+function parseScope(value: string | null) {
+  return value ? [...new Set(value.split(/\s+/).filter(Boolean))].sort() : []
+}
+
+function sameStrings(left: string[], right: string[]) {
+  return left.length === right.length && [...left].sort().every((value, index) => value === [...right].sort()[index])
 }
 
 function randomBytes(length: number) {

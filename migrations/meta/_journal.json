@@ -309,6 +309,13 @@
       "when": 1786376074001,
       "tag": "20260810153434_application_types",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "6",
+      "when": 1786401775728,
+      "tag": "20260810224255_polite_tombstone",
+      "breakpoints": true
     }
   ]
 }

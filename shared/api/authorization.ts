@@ -163,6 +163,7 @@ export const updateApiResourceRequestSchema = z
   .object({
     identifier: nonEmptyString.optional(),
     resourceUrl: z.url().optional(),
+    connectorId: nonEmptyString.nullable().optional(),
     authorizationDetails: authorizationDetailsSchema.optional(),
     enabled: z.boolean().optional(),
     ownerOrganizationId: nonEmptyString.optional(),
