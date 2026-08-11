@@ -1557,6 +1557,33 @@ describe('external API resource authorization', () => {
     expect(deps.externalResources.revokeConnection).toHaveBeenCalledWith('connection-1', expect.any(Date))
   })
 
+  it('finishes Agent resource discovery when a Provider token refresh does not respond [spec: agent-identity/agent-resource-discovery]', async () => {
+    vi.useFakeTimers()
+    try {
+      const deps = createTestDeps()
+      authorizationDeps(deps)
+      vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
+      vi.mocked(deps.externalResources.listConnectionsByOrganizations).mockResolvedValue([
+        {
+          ...connectionRecord(),
+          credentialExpiresAt: new Date(Date.now() - 60_000),
+        },
+      ])
+      vi.mocked(deps.externalHttp.fetch).mockReturnValue(new Promise<Response>(() => {}))
+
+      const discovery = discoverAgentResources(deps, principal())
+      const result = expect(discovery).resolves.toMatchObject({
+        resources: [{ connection: { status: 'not_connected' } }],
+      })
+      await vi.advanceTimersByTimeAsync(5_000)
+
+      await result
+      expect(vi.mocked(deps.externalHttp.fetch).mock.calls[0]?.[0].signal.aborted).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('[spec: agent-identity/resource-account-connection-expansion] preserves active account authority while connection expansion awaits OAuth', async () => {
     const deps = createTestDeps()
     authorizationDeps(deps)

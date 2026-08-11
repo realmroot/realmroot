@@ -56,6 +56,7 @@ import { activePublicResource, activeResourceVisibleToOrganization } from './res
 const tokenExchangeGrantType = 'urn:ietf:params:oauth:grant-type:token-exchange'
 const jwtBearerGrantType = 'urn:ietf:params:oauth:grant-type:jwt-bearer'
 const accessTokenType = 'urn:ietf:params:oauth:token-type:access_token'
+const externalAuthorizationTimeoutMs = 5_000
 export interface AgentResourcePrincipal {
   issuer: string
   subject: string
@@ -3418,7 +3419,8 @@ async function postFormResponse(
   headers.set('content-type', 'application/x-www-form-urlencoded')
   let response: Response
   try {
-    response = await deps.externalHttp.fetch(
+    response = await fetchExternalAuthorization(
+      deps,
       new Request(url, { method: 'POST', headers, body: new URLSearchParams(body) }),
     )
   } catch {
@@ -3456,6 +3458,23 @@ async function postFormResponse(
   return {
     body: await readObject(response, 'External authorization server response is invalid.'),
     dpopNonce,
+  }
+}
+
+async function fetchExternalAuthorization(deps: Deps, request: Request) {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), externalAuthorizationTimeoutMs)
+  try {
+    return await Promise.race([
+      deps.externalHttp.fetch(new Request(request, { signal: controller.signal })),
+      new Promise<never>((_, reject) => {
+        controller.signal.addEventListener('abort', () => reject(new Error('external authorization timeout')), {
+          once: true,
+        })
+      }),
+    ])
+  } finally {
+    clearTimeout(timeout)
   }
 }
 
