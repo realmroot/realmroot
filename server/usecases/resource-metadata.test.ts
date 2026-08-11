@@ -27,6 +27,8 @@ describe('protected resource scope discovery', () => {
         account_connection_authorization_endpoint: 'https://orders.example.com/api/account-connection-authorizations',
         account_connection_token_endpoint: 'https://orders.example.com/api/account-connection-credentials',
         account_connection_revocation_endpoint: 'https://orders.example.com/api/account-connection-revocations',
+        account_connection_authorization_details_endpoint:
+          'https://orders.example.com/api/account-connection-authorization-details',
       }),
     )
 
@@ -36,6 +38,7 @@ describe('protected resource scope discovery', () => {
         authorizationEndpoint: 'https://orders.example.com/api/account-connection-authorizations',
         tokenEndpoint: 'https://orders.example.com/api/account-connection-credentials',
         revocationEndpoint: 'https://orders.example.com/api/account-connection-revocations',
+        authorizationDetailsEndpoint: 'https://orders.example.com/api/account-connection-authorization-details',
       },
     })
   })

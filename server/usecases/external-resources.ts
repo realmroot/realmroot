@@ -2276,6 +2276,54 @@ async function readAuthorizationDetailCatalog(
     throw badRequest('Resource account must be reauthorized for the authorization detail catalog scope.')
   }
   const accessToken = (await refreshConnectionToken(deps, connection, authorization)).accessToken
+  const catalog = await requestAuthorizationDetailCatalog(deps, endpoint, accessToken, resource, pagination)
+  const entitlements = (await deps.externalResources.listActiveEntitlementsByAgent(agentIdentityId, new Date())).filter(
+    (entitlement) => entitlement.resourceServerId === resource.id && entitlement.connectionId === connection.id,
+  )
+  const items = catalog.items.map((item) => {
+    const connectionAuthorized = connection.authorizationDetails.some((detail) =>
+      exactAuthorizationDetails([detail], [item.authorizationDetail]),
+    )
+    const authorizedScopes = new Set(
+      entitlements
+        .filter((entitlement) =>
+          entitlement.authorizationDetails.some((detail) =>
+            exactAuthorizationDetails([detail], [item.authorizationDetail]),
+          ),
+        )
+        .map((entitlement) => entitlement.scope),
+    )
+    return {
+      ...item,
+      connectionStatus: connectionAuthorized ? ('authorized' as const) : ('authorization_required' as const),
+      authorizedScopes: connectionAuthorized ? [...authorizedScopes].sort() : [],
+      requestableScopes: connectionAuthorized
+        ? authorityConstraintScopes(connection, [item.authorizationDetail])
+            .filter(
+              (scope) =>
+                scope !== 'openid' &&
+                scope !== 'offline_access' &&
+                scope !== requiredScope &&
+                !authorizedScopes.has(scope),
+            )
+            .sort()
+        : [],
+    }
+  })
+  return {
+    items,
+    pagination: catalog.pagination,
+    connection: { status: 'connected' as const },
+  }
+}
+
+async function requestAuthorizationDetailCatalog(
+  deps: Deps,
+  endpoint: string,
+  bearer: string,
+  resource: NonNullable<Awaited<ReturnType<Deps['authorization']['findResource']>>>,
+  pagination: PaginationInput,
+) {
   const catalogUrl = new URL(endpoint)
   catalogUrl.searchParams.set('limit', String(pagination.limit))
   catalogUrl.searchParams.set('offset', String(pagination.offset))
@@ -2283,7 +2331,7 @@ async function readAuthorizationDetailCatalog(
   try {
     response = await deps.externalHttp.fetch(
       new Request(catalogUrl, {
-        headers: { accept: 'application/json', authorization: `Bearer ${accessToken}` },
+        headers: { accept: 'application/json', authorization: `Bearer ${bearer}` },
       }),
     )
   } catch {
@@ -2323,44 +2371,7 @@ async function readAuthorizationDetailCatalog(
       url: endpoint,
     })
   }
-  const entitlements = (await deps.externalResources.listActiveEntitlementsByAgent(agentIdentityId, new Date())).filter(
-    (entitlement) => entitlement.resourceServerId === resource.id && entitlement.connectionId === connection.id,
-  )
-  const items = parsed.data.items.map((item) => {
-    const connectionAuthorized = connection.authorizationDetails.some((detail) =>
-      exactAuthorizationDetails([detail], [item.authorizationDetail]),
-    )
-    const authorizedScopes = new Set(
-      entitlements
-        .filter((entitlement) =>
-          entitlement.authorizationDetails.some((detail) =>
-            exactAuthorizationDetails([detail], [item.authorizationDetail]),
-          ),
-        )
-        .map((entitlement) => entitlement.scope),
-    )
-    return {
-      ...item,
-      connectionStatus: connectionAuthorized ? ('authorized' as const) : ('authorization_required' as const),
-      authorizedScopes: connectionAuthorized ? [...authorizedScopes].sort() : [],
-      requestableScopes: connectionAuthorized
-        ? authorityConstraintScopes(connection, [item.authorizationDetail])
-            .filter(
-              (scope) =>
-                scope !== 'openid' &&
-                scope !== 'offline_access' &&
-                scope !== requiredScope &&
-                !authorizedScopes.has(scope),
-            )
-            .sort()
-        : [],
-    }
-  })
-  return {
-    items,
-    pagination: parsed.data.pagination,
-    connection: { status: 'connected' as const },
-  }
+  return parsed.data
 }
 
 async function readResourceCatalog(
@@ -2373,6 +2384,56 @@ async function readResourceCatalog(
   const authorization = await externalOAuthAuthorization(deps, resource, connection.clientGeneration ?? 1)
   if (authorization?.authorizationDetailsCatalogEndpoint && authorization.authorizationDetailsCatalogScope) {
     return readAuthorizationDetailCatalog(deps, resource, connection, agentIdentityId, pagination)
+  }
+  const brokered = brokeredAccountConnection(resource)
+  if (brokered?.authorizationDetailsEndpoint) {
+    if (!connection.brokerReference) throw badRequest('Brokered account connection has no usable reference.')
+    const catalog = await requestAuthorizationDetailCatalog(
+      deps,
+      brokered.authorizationDetailsEndpoint,
+      connection.brokerReference,
+      resource,
+      pagination,
+    )
+    const connectedDetails = new Set(connection.authorizationDetails.map(canonicalJson))
+    if (
+      catalog.pagination.total !== connection.authorizationDetails.length ||
+      catalog.items.some((item) => !connectedDetails.has(canonicalJson(item.authorizationDetail)))
+    ) {
+      throw badGateway('Authorization detail catalog does not match the active brokered connection.', {
+        url: brokered.authorizationDetailsEndpoint,
+      })
+    }
+    const entitlements = (
+      await deps.externalResources.listActiveEntitlementsByAgent(agentIdentityId, new Date())
+    ).filter(
+      (entitlement) => entitlement.resourceServerId === resource.id && entitlement.connectionId === connection.id,
+    )
+    return {
+      items: catalog.items.map((item) => {
+        const authorizedScopes = [
+          ...new Set(
+            entitlements
+              .filter((entitlement) =>
+                entitlement.authorizationDetails.some((detail) =>
+                  exactAuthorizationDetails([detail], [item.authorizationDetail]),
+                ),
+              )
+              .map((entitlement) => entitlement.scope),
+          ),
+        ].sort()
+        return {
+          ...item,
+          connectionStatus: 'authorized' as const,
+          authorizedScopes,
+          requestableScopes: authorityConstraintScopes(connection, [item.authorizationDetail])
+            .filter((scope) => scope !== 'openid' && scope !== 'offline_access' && !authorizedScopes.includes(scope))
+            .sort(),
+        }
+      }),
+      pagination: catalog.pagination,
+      connection: { status: 'connected' as const },
+    }
   }
   const details = connection.authorizationDetails.slice(pagination.offset, pagination.offset + pagination.limit)
   const entitlements = (await deps.externalResources.listActiveEntitlementsByAgent(agentIdentityId, new Date())).filter(

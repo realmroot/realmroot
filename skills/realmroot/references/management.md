@@ -10,8 +10,13 @@ realmroot toolbox platform --search "<management capability>"
 realmroot toolbox platform <group> <operation> --help
 ```
 
-Select the authorization detail shown for the intended organization or user.
+Select the Context shown for the intended organization or user.
 Use the Realmroot Platform Organization only for platform-wide administration.
+
+```bash
+realmroot toolbox platform context
+realmroot toolbox platform context use <name>
+```
 
 Request the scopes shown by the selected operation:
 
@@ -19,7 +24,7 @@ Request the scopes shown by the selected operation:
 realmroot agent request \
   --resource-server platform \
   --scope <scope> \
-  --authorization-detail '<exact-json-from-toolbox>' \
+  --context <name> \
   --reason "Perform the requested Realmroot administration"
 ```
 

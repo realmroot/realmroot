@@ -22,8 +22,21 @@ realmroot toolbox <resource-server> --search "<capability>"
 realmroot toolbox <resource-server> --scope <scope>
 ```
 
-Use only Resource Server names, operations, scopes, and authorization details
+Use only Resource Server names, operations, scopes, and Contexts
 shown by these commands.
+
+When a Resource Server has more than one account, workspace, installation, or
+similar operating Context, list and select it by name:
+
+```bash
+realmroot toolbox <resource-server> context
+realmroot toolbox <resource-server> context show <name>
+realmroot toolbox <resource-server> context use <name>
+```
+
+The selected Context is the default for later operations. Use `--context
+<name>` on an operation, permission request, or native command for a one-time
+override.
 
 ## Inspect The Operation
 
@@ -44,14 +57,12 @@ Request all scopes needed for the current task together:
 realmroot agent request \
   --resource-server <resource-server> \
   --scope <scope> \
-  --authorization-detail '<exact-json-from-toolbox>' \
+  --context <name> \
   --reason "Perform the requested operation"
 ```
 
-Repeat `--scope` when the task needs multiple scopes. Include
-`--authorization-detail` only when the service overview provides a specific
-account, organization, repository, or other target to select. Copy that JSON
-exactly.
+Repeat `--scope` when the task needs multiple scopes. Omit `--context` when the
+service has no Context or the selected default is correct.
 
 The command opens controller approval when needed and waits for the result.
 Do not run each business command once merely to discover missing permission;
@@ -79,6 +90,8 @@ realmroot exec github -- git <arguments>
 realmroot exec github -- gh <arguments>
 realmroot exec cloudflare -- wrangler <arguments>
 ```
+
+Add `--context <name>` before `--` only for a one-time Context override.
 
 Call `realmroot agent request` before `exec`; native commands do not request
 permissions themselves. Preserve the native command's normal arguments and

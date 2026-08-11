@@ -176,6 +176,16 @@ Feature: Agent identity and delegated API authorization
       And an Organization owner may approve current assigned scopes of a Resource Server owned by that Organization
       And an access request copies the selected authorization detail directly without a generated Resource identifier or URL
 
+    @entrypoint:agent-protocol @journey:brokered-resource-context-catalog
+    Scenario: An Agent discovers display-safe Contexts from a brokered Resource Server
+      Given a brokered Resource Server advertises an authorization-detail catalog endpoint
+      And the Agent's controller has an active brokered account connection
+      When the Agent lists that Resource Server's authorization details
+      Then Realmroot authenticates the catalog read with the Resource Server's opaque connection reference
+      And each connected detail uses the Resource Server supplied display name, description, and safe attributes
+      And Realmroot reports the Agent's authorized and requestable scopes for that exact detail
+      But the connection reference is never returned to the Agent
+
     @entrypoint:agent-protocol @journey:agent-private-resource-server-visibility
     Scenario: A private Resource Server stays inside its owner Organization boundary
       Given a private Resource Server is owned by an Organization and available to Agents
