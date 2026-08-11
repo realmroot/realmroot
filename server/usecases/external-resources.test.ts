@@ -1533,7 +1533,7 @@ describe('external API resource authorization', () => {
     })
   })
 
-  it('reports an expired connection as disconnected when its refresh grant is rejected', async () => {
+  it('discovers stored connections without contacting the Provider [spec: agent-identity/agent-resource-discovery]', async () => {
     const deps = createTestDeps()
     authorizationDeps(deps)
     vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
@@ -1542,46 +1542,13 @@ describe('external API resource authorization', () => {
       credentialExpiresAt: new Date(Date.now() - 60_000),
     }
     vi.mocked(deps.externalResources.listConnectionsByOrganizations).mockResolvedValue([expiredConnection])
-    vi.mocked(deps.externalResources.revokeConnection).mockResolvedValue(true)
-    const resourceFetch = vi.mocked(deps.externalHttp.fetch).getMockImplementation()!
-    vi.mocked(deps.externalHttp.fetch).mockImplementation(async (request) => {
-      if (request.url === 'https://projects.example.com/token') {
-        return Response.json({ error: 'invalid_grant', error_description: 'session not found' }, { status: 400 })
-      }
-      return resourceFetch(request)
-    })
+    vi.mocked(deps.externalHttp.fetch).mockReturnValue(new Promise<Response>(() => {}))
 
     await expect(discoverAgentResources(deps, principal())).resolves.toMatchObject({
-      resources: [{ connection: { status: 'not_connected' } }],
+      resources: [{ connection: { status: 'connected' } }],
     })
-    expect(deps.externalResources.revokeConnection).toHaveBeenCalledWith('connection-1', expect.any(Date))
-  })
-
-  it('finishes Agent resource discovery when a Provider token refresh does not respond [spec: agent-identity/agent-resource-discovery]', async () => {
-    vi.useFakeTimers()
-    try {
-      const deps = createTestDeps()
-      authorizationDeps(deps)
-      vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
-      vi.mocked(deps.externalResources.listConnectionsByOrganizations).mockResolvedValue([
-        {
-          ...connectionRecord(),
-          credentialExpiresAt: new Date(Date.now() - 60_000),
-        },
-      ])
-      vi.mocked(deps.externalHttp.fetch).mockReturnValue(new Promise<Response>(() => {}))
-
-      const discovery = discoverAgentResources(deps, principal())
-      const result = expect(discovery).resolves.toMatchObject({
-        resources: [{ connection: { status: 'not_connected' } }],
-      })
-      await vi.advanceTimersByTimeAsync(5_000)
-
-      await result
-      expect(vi.mocked(deps.externalHttp.fetch).mock.calls[0]?.[0].signal.aborted).toBe(true)
-    } finally {
-      vi.useRealTimers()
-    }
+    expect(deps.externalHttp.fetch).not.toHaveBeenCalled()
+    expect(deps.externalResources.revokeConnection).not.toHaveBeenCalled()
   })
 
   it('[spec: agent-identity/resource-account-connection-expansion] preserves active account authority while connection expansion awaits OAuth', async () => {
@@ -2708,7 +2675,11 @@ describe('external API resource authorization', () => {
     }
     let exchangeStatus = 200
     let exchangeHeaders: Record<string, string> = {}
-    let exchangeFailure: 'network' | 'invalid-json' | null = null
+    let exchangeFailure: 'network' | 'timeout' | 'invalid-json' | null = null
+    let notifyTimeoutRequestStarted = () => {}
+    const timeoutRequestStarted = new Promise<void>((resolve) => {
+      notifyTimeoutRequestStarted = resolve
+    })
     vi.mocked(deps.externalHttp.fetch).mockImplementation(async (outbound) => {
       if (outbound.url === resource().resourceUrl || outbound.url === 'https://projects.example.com/openapi.json') {
         return openApiFetch(outbound)
@@ -2739,6 +2710,10 @@ describe('external API resource authorization', () => {
       expect(form.get('actor_token_type')).toBe('urn:ietf:params:oauth:token-type:access_token')
       expect(form.get('scope')).toBe('projects:read')
       if (exchangeFailure === 'network') throw new Error('connection reset')
+      if (exchangeFailure === 'timeout') {
+        notifyTimeoutRequestStarted()
+        return new Promise<Response>(() => {})
+      }
       if (exchangeFailure === 'invalid-json') return new Response('upstream failure', { status: 502 })
       return Response.json(exchangeResponse, { status: exchangeStatus, headers: exchangeHeaders })
     })
@@ -3001,6 +2976,25 @@ describe('external API resource authorization', () => {
         { issuer: principal().issuer, sign },
       ),
     ).rejects.toThrow('External authorization server is unavailable')
+
+    exchangeFailure = 'timeout'
+    vi.useFakeTimers()
+    try {
+      const issue = issueTargetAccessToken(
+        deps,
+        grant.id,
+        proof,
+        'https://auth.example.com/api/agent/access-requests/request-1/credentials',
+        principal(),
+        { issuer: principal().issuer, sign },
+      )
+      const result = expect(issue).rejects.toThrow('External authorization server is unavailable')
+      await timeoutRequestStarted
+      await vi.advanceTimersByTimeAsync(5_000)
+      await result
+    } finally {
+      vi.useRealTimers()
+    }
 
     exchangeFailure = 'invalid-json'
     await expect(
@@ -5021,7 +5015,7 @@ describe('external API resource authorization', () => {
     ).rejects.toThrow('mismatched pagination metadata')
   })
 
-  it('rejects duplicate authorization details and propagates non-OAuth connection failures', async () => {
+  it('rejects duplicate authorization details', async () => {
     const duplicateDeps = createTestDeps()
     authorizationDeps(duplicateDeps)
     vi.mocked(duplicateDeps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
@@ -5048,15 +5042,6 @@ describe('external API resource authorization', () => {
         '',
       ),
     ).resolves.toMatchObject({ resourceServerId: resource().id, status: 'connected' })
-
-    const discoveryDeps = createTestDeps()
-    authorizationDeps(discoveryDeps)
-    vi.mocked(discoveryDeps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
-    vi.mocked(discoveryDeps.externalResources.listConnectionsByOrganizations).mockResolvedValue([
-      { ...connectionRecord(), credentialExpiresAt: new Date(0) },
-    ])
-    vi.mocked(discoveryDeps.secrets.open).mockRejectedValueOnce(new Error('credential storage failed'))
-    await expect(discoverAgentResources(discoveryDeps, principal())).rejects.toThrow('credential storage failed')
   })
 
   it('discovers enabled resources independently of deleted database history', async () => {

@@ -936,9 +936,7 @@ export async function discoverAgentResources(deps: Deps, principal: AgentResourc
         return null
       }
       const scopes = discoverAgentResourceScopes(resource)
-      const storedConnection = activeConnections.find((candidate) => candidate.resourceId === resourceId) ?? null
-      const connection =
-        storedConnection && (await isConnectionUsable(deps, resourceId, storedConnection)) ? storedConnection : null
+      const connection = activeConnections.find((candidate) => candidate.resourceId === resourceId) ?? null
       return {
         id: resource.id,
         identifier: resource.identifier,
