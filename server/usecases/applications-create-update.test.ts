@@ -83,6 +83,68 @@ describe('service.test 1', () => {
       updateApplication(deps, 'https://auth.example.com', created.id, { ownerOrganizationId: 'org-1' }),
     ).resolves.toMatchObject({ ownerOrganizationId: 'org-1' })
   })
+
+  it('restricts User consent policy configuration to platform-owned Applications', async () => {
+    const repository = new InMemoryApplicationRepository()
+    const deps = {
+      ids: createIdentifierGeneratorFake(),
+      applications: repository,
+      authorization: {
+        findOrganization: vi.fn().mockResolvedValue({ id: 'org-1', disabled: false }),
+      },
+    } as unknown as Deps
+    const input = {
+      name: 'Organization App',
+      clientType: 'public_spa' as const,
+      redirectUris: ['https://spa.example.com/callback'],
+      ownerOrganizationId: 'org-1',
+    }
+
+    await expect(
+      createApplication(deps, 'https://auth.example.com', { ...input, consentRequired: false }, 'admin-1'),
+    ).rejects.toMatchObject({
+      status: 400,
+      message: 'User consent policy can be configured only for Applications owned by the platform Organization.',
+    })
+
+    const created = await createApplication(deps, 'https://auth.example.com', input, 'admin-1')
+    await expect(
+      updateApplication(deps, 'https://auth.example.com', created.id, { consentRequired: false }),
+    ).rejects.toMatchObject({
+      status: 400,
+      message: 'User consent policy can be configured only for Applications owned by the platform Organization.',
+    })
+  })
+
+  it('restores User consent when an Application leaves the platform Organization', async () => {
+    const repository = new InMemoryApplicationRepository()
+    const deps = {
+      ids: createIdentifierGeneratorFake(),
+      applications: repository,
+      authorization: {
+        findOrganization: vi.fn().mockResolvedValue({ id: 'org-1', disabled: false }),
+      },
+    } as unknown as Deps
+    const created = await createApplication(
+      deps,
+      'https://auth.example.com',
+      {
+        name: 'Platform App',
+        clientType: 'public_spa',
+        redirectUris: ['https://spa.example.com/callback'],
+        consentRequired: false,
+      },
+      'admin-1',
+    )
+
+    await expect(
+      updateApplication(deps, 'https://auth.example.com', created.id, { ownerOrganizationId: 'org-1' }),
+    ).resolves.toMatchObject({
+      ownerOrganizationId: 'org-1',
+      consentRequired: true,
+    })
+  })
+
   it('creates, lists, updates, inspects, and deletes confidential clients with one-time secrets', async () => {
     const repository = new InMemoryApplicationRepository()
     const deps = { ids: createIdentifierGeneratorFake(), applications: repository } as unknown as Deps

@@ -220,11 +220,18 @@ describe('service.test 3', () => {
         {
           clientId: created.clientId,
           redirectUri: 'https://spa.example.com/callback',
+          scope: 'openid profile email offline_access',
         },
         { id: 'user-1' },
       ),
     ).resolves.toMatchObject({
-      requestedScopes: ['openid'],
+      requestedScopes: ['openid', 'profile', 'email', 'offline_access'],
+      requestedPermissions: [
+        { value: 'openid', description: 'Confirm your identity with Realmroot.' },
+        { value: 'profile', description: 'Share basic profile details such as your name and avatar.' },
+        { value: 'email', description: 'Share your email address and verification status.' },
+        { value: 'offline_access', description: 'Allow continued access when you are away.' },
+      ],
       existingConsent: null,
       state: null,
     })
