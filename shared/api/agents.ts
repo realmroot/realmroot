@@ -38,7 +38,7 @@ export const agentIdentitySchema = z.object({
 })
 
 export const listAgentIdentitiesResponseSchema = z.object({
-  identities: z.array(agentIdentitySchema),
+  items: z.array(agentIdentitySchema),
 })
 
 export const createAgentEnrollmentIntentRequestSchema = z.object({
@@ -154,12 +154,12 @@ export const agentAuditEventSchema = z.object({
 })
 
 export const listAgentIdentityInventoryResponseSchema = z.object({
-  identities: z.array(agentIdentitySchema),
+  items: z.array(agentIdentitySchema),
   pagination: paginationMetadataSchema,
 })
 
 export const listAgentAuditEventsResponseSchema = z.object({
-  events: z.array(agentAuditEventSchema),
+  items: z.array(agentAuditEventSchema),
   pagination: paginationMetadataSchema,
 })
 
@@ -195,7 +195,7 @@ export const accountAgentSchema = z.object({
 })
 
 export const accountAgentsResponseSchema = z.object({
-  agents: z.array(accountAgentSchema),
+  items: z.array(accountAgentSchema),
   pagination: paginationMetadataSchema,
 })
 
@@ -408,6 +408,6 @@ export interface AccountAgent {
 }
 
 export interface AccountAgentsResponse {
-  agents: AccountAgent[]
+  items: AccountAgent[]
   pagination: AgentProtocolPage<AccountAgent>['pagination']
 }

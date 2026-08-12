@@ -324,7 +324,7 @@ export const managementFederatedCredentialResponseSchema = z.object({
 })
 
 export const listManagementFederatedCredentialsResponseSchema = z.object({
-  credentials: z.array(managementFederatedCredentialResponseSchema),
+  items: z.array(managementFederatedCredentialResponseSchema),
 })
 
 export const createManagementFederatedCredentialRequestSchema = z
@@ -408,7 +408,7 @@ export const passwordResetRequestResponseSchema = z.object({
 })
 
 export const listManagementUsersResponseSchema = z.object({
-  users: z.array(managementUserResponseSchema),
+  items: z.array(managementUserResponseSchema),
   pagination: paginationMetadataSchema,
 })
 
@@ -424,7 +424,7 @@ export const managementUserSessionSchema = z.object({
 })
 
 export const listManagementUserSessionsResponseSchema = z.object({
-  sessions: z.array(managementUserSessionSchema),
+  items: z.array(managementUserSessionSchema),
   pagination: paginationMetadataSchema,
 })
 
@@ -437,7 +437,7 @@ export const managementUserLinkedAccountSchema = z.object({
 })
 
 export const listManagementUserLinkedAccountsResponseSchema = z.object({
-  accounts: z.array(managementUserLinkedAccountSchema),
+  items: z.array(managementUserLinkedAccountSchema),
   pagination: paginationMetadataSchema,
 })
 
@@ -452,7 +452,7 @@ export const managementUserApplicationSchema = z.object({
 })
 
 export const listManagementUserApplicationsResponseSchema = z.object({
-  applications: z.array(managementUserApplicationSchema),
+  items: z.array(managementUserApplicationSchema),
   pagination: paginationMetadataSchema,
 })
 
@@ -472,7 +472,7 @@ export const managementUserPasskeySchema = z.object({
 })
 
 export const listManagementUserPasskeysResponseSchema = z.object({
-  passkeys: z.array(managementUserPasskeySchema),
+  items: z.array(managementUserPasskeySchema),
   pagination: paginationMetadataSchema,
 })
 

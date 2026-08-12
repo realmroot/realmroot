@@ -52,7 +52,7 @@ function mountConnectors(options?: {
     if (url === '/api/realm/sign-in-policy') return Promise.resolve(jsonResponse(options?.signIn ?? signInSettings))
     if (url === '/api/realm/security-policy') return Promise.resolve(jsonResponse(options?.security ?? securityPolicy))
     if (url === '/api/connectors') {
-      return Promise.resolve(jsonResponse({ connectors: options?.connectors ?? [], pagination }))
+      return Promise.resolve(jsonResponse({ items: options?.connectors ?? [], pagination }))
     }
     if (url.startsWith('/api/connectors/')) {
       const found = (options?.connectors ?? []).find((c) => (c as { id: string }).id === url.split('/').pop())
@@ -313,7 +313,7 @@ describe('console connectors built-in drawers', () => {
       }
       if (url === '/api/realm/sign-in-policy') return Promise.resolve(jsonResponse(signInSettings))
       if (url === '/api/realm/security-policy') return Promise.resolve(jsonResponse(securityPolicy))
-      if (url === '/api/connectors') return Promise.resolve(jsonResponse({ connectors: [], pagination }))
+      if (url === '/api/connectors') return Promise.resolve(jsonResponse({ items: [], pagination }))
       return consoleSharedFetch(input, init)
     })
     renderWithQuery(<ConnectorsPage />)

@@ -328,7 +328,7 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
                     emptyLabel={tt('No users found')}
                     label={tt('Approved users')}
                     onChange={(approvedUserIds) => setSaved((current) => ({ ...current, approvedUserIds }))}
-                    options={userOptions(users.data?.users ?? [])}
+                    options={userOptions(users.data?.items ?? [])}
                     placeholder={tt('Select users')}
                     value={saved.approvedUserIds}
                   />

@@ -100,7 +100,7 @@ describe('Account Organization detail', () => {
       ),
       http.get(`${base}/api/organizations/org-family/roles`, () =>
         json({
-          roles: ['owner', 'admin', 'developer', 'member'].map((key) => ({ key, displayName: key, predefined: true })),
+          items: ['owner', 'admin', 'developer', 'member'].map((key) => ({ key, displayName: key, predefined: true })),
           pagination: { limit: 100, offset: 0, total: 4, hasMore: false, nextOffset: null },
         }),
       ),

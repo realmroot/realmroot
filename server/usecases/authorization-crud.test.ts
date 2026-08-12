@@ -216,7 +216,7 @@ describe('authorization CRUD and assignment policy', () => {
       }),
     )
     await expect(listOrganizations(deps, { limit: 20, offset: 0 })).resolves.toEqual({
-      organizations: [organization],
+      items: [organization],
       pagination,
     })
     await expect(getOrganization(deps, organization.id)).resolves.toBe(organization)
@@ -228,7 +228,7 @@ describe('authorization CRUD and assignment policy', () => {
       expect.objectContaining({ id: expect.stringMatching(/^00000000-0000-7000-8000-/), title: null }),
     )
     await expect(listMembers(deps, organization.id, { limit: 20, offset: 0 })).resolves.toEqual({
-      members: [member],
+      items: [member],
       pagination,
     })
     await expect(updateMember(deps, organization.id, member.id, { title: 'Owner' })).resolves.toBe(member)
@@ -255,7 +255,7 @@ describe('authorization CRUD and assignment policy', () => {
       expect.objectContaining({ expiresAt: timestamp, inviterId: 'admin-1' }),
     )
     await expect(listInvitations(deps, organization.id, { limit: 20, offset: 0 })).resolves.toEqual({
-      invitations: [invitation],
+      items: [invitation],
       pagination,
     })
     await expect(cancelInvitation(deps, organization.id, invitation.id)).resolves.toBeUndefined()
@@ -442,7 +442,7 @@ describe('authorization CRUD and assignment policy', () => {
     const deps = { ids: createIdentifierGeneratorFake(), authorization } as unknown as Deps
 
     await expect(listRoles(deps, organization.id, { limit: 2, offset: 0 })).resolves.toMatchObject({
-      roles: [{ key: 'admin' }, { key: 'developer' }],
+      items: [{ key: 'admin' }, { key: 'developer' }],
       pagination: { limit: 2, offset: 0, total: 5, hasMore: true },
     })
     await expect(getRole(deps, organization.id, 'operator')).resolves.toMatchObject({
@@ -1278,7 +1278,7 @@ describe('authorization CRUD and assignment policy', () => {
     authorization.listOrganizationRoleScopes.mockResolvedValue(new Map())
     const deps = { ids: createIdentifierGeneratorFake(), authorization } as unknown as Deps
     await expect(listRoles(deps, organization.id, { limit: 20, offset: 0 })).resolves.toMatchObject({
-      roles: expect.arrayContaining([expect.objectContaining({ key: 'operator', scopes: [] })]),
+      items: expect.arrayContaining([expect.objectContaining({ key: 'operator', scopes: [] })]),
     })
 
     authorization.findResource.mockResolvedValueOnce({

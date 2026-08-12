@@ -115,17 +115,17 @@ export type OrganizationDashboard = {
 }
 
 type ListOrganizationsResponse = {
-  organizations: OrganizationResponse[]
+  items: OrganizationResponse[]
   pagination: PaginationMetadata
 }
 
 type ListRolesResponse = {
-  roles: RoleResponse[]
+  items: RoleResponse[]
   pagination: PaginationMetadata
 }
 
 type ListApiResourcesResponse = {
-  resources: ApiResourceResponse[]
+  items: ApiResourceResponse[]
   pagination: PaginationMetadata
 }
 
@@ -143,7 +143,7 @@ export function getAdminDashboard(): Promise<AdminDashboard> {
     users,
     connectors,
     organizations,
-    apiResources: { resources: apiResources.items, pagination: apiResources.pagination },
+    apiResources,
     signIn,
     security,
   }))
@@ -327,8 +327,8 @@ export async function listUserApplications(
     ),
     listApplications({ limit: 100 }),
   ])
-  const applicationsById = new Map(inventory.applications.map((application) => [application.id, application]))
-  const applications = result.authorizations.map((authorization) => {
+  const applicationsById = new Map(inventory.items.map((application) => [application.id, application]))
+  const applications = result.items.map((authorization) => {
     const application = applicationsById.get(authorization.applicationId)
     return {
       id: authorization.id,
@@ -341,7 +341,7 @@ export async function listUserApplications(
     }
   })
   return {
-    applications,
+    items: applications,
     pagination: result.pagination,
   }
 }
@@ -694,7 +694,7 @@ export async function listWebhookRequests(
 ): Promise<ListWebhookRequestsResponse> {
   const endpointIds = query.endpointId
     ? [query.endpointId]
-    : (await listWebhookEndpoints({ organizationId: query.organizationId, limit: 100 })).endpoints.map(({ id }) => id)
+    : (await listWebhookEndpoints({ organizationId: query.organizationId, limit: 100 })).items.map(({ id }) => id)
   const childQuery = { ...query, endpointId: undefined }
   const responses = await Promise.all(
     endpointIds.map((id) =>
@@ -703,9 +703,9 @@ export async function listWebhookRequests(
       ),
     ),
   )
-  const requests = responses.flatMap((response) => response.requests)
+  const requests = responses.flatMap((response) => response.items)
   return {
-    requests,
+    items: requests,
     pagination: { offset: 0, limit: requests.length, total: requests.length, hasMore: false, nextOffset: null },
   }
 }

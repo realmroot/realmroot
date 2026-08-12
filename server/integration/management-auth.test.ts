@@ -93,7 +93,7 @@ describe('resource access over real D1 and real Better Auth sessions', () => {
       headers: { cookie: memberCookie },
     })
     expect(filtered.status).toBe(200)
-    await expect(filtered.json()).resolves.toMatchObject({ applications: [], pagination: { total: 0 } })
+    await expect(filtered.json()).resolves.toMatchObject({ items: [], pagination: { total: 0 } })
   })
 
   it('lists applications for a signed-in admin and reflects a real D1 write', async () => {

@@ -67,7 +67,7 @@ export function MetricCard({ detail, label, value }: { detail: string; label: st
 
 function RealmReadiness({ dashboard }: { dashboard: AdminDashboard }) {
   const enabledMethods = hostedMethodCount(dashboard)
-  const enabledConnectors = dashboard.connectors.connectors.filter((connector) => connector.enabled).length
+  const enabledConnectors = dashboard.connectors.items.filter((connector) => connector.enabled).length
   const rows = [
     {
       label: tt('Hosted sign-in methods'),
@@ -183,7 +183,7 @@ function hostedMethodCount(dashboard: AdminDashboard) {
     signIn.passwordEnabled,
     signIn.emailOtpEnabled && builtInProviders.email.enabled,
     signIn.socialLoginEnabled &&
-      dashboard.connectors.connectors.some((connector) => connector.enabled && connector.loginEnabled),
+      dashboard.connectors.items.some((connector) => connector.enabled && connector.loginEnabled),
     dashboard.security.policy.passkeys.enabled,
     builtInProviders.phone.enabled,
     builtInProviders.web3Wallet.enabled,

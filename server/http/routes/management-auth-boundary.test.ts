@@ -316,7 +316,7 @@ describe('management routes 1', () => {
     )
 
     expect(response.status).toBe(200)
-    await expect(response.json()).resolves.toMatchObject({ users: [] })
+    await expect(response.json()).resolves.toMatchObject({ items: [] })
   })
 
   it('uses one Agent principal for permission-gated management operations [spec: agent-identity/agent-single-cli-principal] [spec: agent-identity/agent-management-authority] [spec: management-api/management-restish-agent-auth] [spec: management-api/management-restish-user-crud] [spec: agent-identity/agent-public-resource-model]', async () => {

@@ -55,7 +55,7 @@ describe('admin console applications-detail-b', () => {
         return Promise.resolve(jsonResponse(application))
       }
       if (url === '/api/applications/app-1/client-secrets') {
-        return Promise.resolve(jsonResponse({ secrets: [], pagination: emptyPagination }))
+        return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
       }
       return consoleSharedFetch(input, init)
     })
@@ -156,7 +156,7 @@ describe('admin console applications-detail-b', () => {
       }
       if (url === '/api/applications/app-1') return Promise.resolve(jsonResponse(currentApplication))
       if (url === '/api/applications/app-1/federated-credentials') {
-        return Promise.resolve(jsonResponse({ credentials: [] }))
+        return Promise.resolve(jsonResponse({ items: [] }))
       }
       if (url === '/api/resource-servers') {
         return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
@@ -230,7 +230,7 @@ describe('admin console applications-detail-b', () => {
         }
         return Promise.resolve(
           jsonResponse({
-            authorizations: active
+            items: active
               ? [
                   {
                     id: 'authorization-1',
@@ -336,7 +336,7 @@ describe('admin console applications-detail-b', () => {
         return Promise.resolve(jsonResponse({ error: { message: 'Email already exists.' } }, 400))
       }
       if (url.startsWith('/api/users')) {
-        return Promise.resolve(jsonResponse({ users: [user], pagination }))
+        return Promise.resolve(jsonResponse({ items: [user], pagination }))
       }
       return consoleSharedFetch(input, init)
     })

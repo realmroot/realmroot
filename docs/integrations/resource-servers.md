@@ -513,7 +513,10 @@ the connection ID and replaces its encrypted credentials, granted scopes,
 display name, and expiry while restoring active status. Returning with a
 different subject is rejected until the existing account is disconnected.
 After OAuth, the controller returns to the pending request and decides the
-Agent scopes and lifetime separately.
+Agent scopes and lifetime on the same hosted approval. Realmroot binds the
+resulting connection and selected authorization details to that original access
+request in the approval transaction; the Agent does not create or track a
+second connection approval.
 
 ### Support Rich Authorization And Resource Contexts
 

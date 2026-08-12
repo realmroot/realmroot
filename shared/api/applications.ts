@@ -223,12 +223,12 @@ export const rotateClientSecretResponseSchema = z.object({
 })
 
 export const listApplicationsResponseSchema = z.object({
-  applications: z.array(applicationResponseSchema),
+  items: z.array(applicationResponseSchema),
   pagination: paginationMetadataSchema,
 })
 
 export const listClientSecretsResponseSchema = z.object({
-  secrets: z.array(applicationSecretMetadataSchema),
+  items: z.array(applicationSecretMetadataSchema),
   pagination: paginationMetadataSchema,
 })
 
@@ -260,7 +260,7 @@ export const listApplicationAuthorizationsQuerySchema = paginationQuerySchema.ex
 })
 
 export const listApplicationAuthorizationsResponseSchema = z.object({
-  authorizations: z.array(applicationAuthorizationSchema),
+  items: z.array(applicationAuthorizationSchema),
   pagination: paginationMetadataSchema,
 })
 
@@ -270,7 +270,7 @@ export const applicationAuthorizationRevocationSchema = z.object({
 })
 
 export const listRedirectUrisResponseSchema = z.object({
-  redirectUris: z.array(z.string()),
+  items: z.array(z.string()),
   pagination: paginationMetadataSchema,
 })
 

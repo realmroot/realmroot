@@ -43,9 +43,9 @@ describe('deployment settings operations', () => {
     vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
       const request = requestDetails(input, init)
       if (request.path === '/api/organizations') {
-        return jsonResponse({ organizations: [organization], pagination })
+        return jsonResponse({ items: [organization], pagination })
       }
-      if (request.path === '/api/users') return jsonResponse({ users: [user], pagination })
+      if (request.path === '/api/users') return jsonResponse({ items: [user], pagination })
       if (request.path === '/api/realm/organization-creation-policy' && request.method === 'PUT') {
         const body = await request.body
         writes.push({ path: request.path, body })
@@ -139,9 +139,9 @@ describe('deployment settings operations', () => {
     vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
       const request = requestDetails(input, init)
       if (request.path === '/api/organizations') {
-        return jsonResponse({ organizations: [nameOnlyOrganization], pagination })
+        return jsonResponse({ items: [nameOnlyOrganization], pagination })
       }
-      if (request.path === '/api/users') return jsonResponse({ users: [displayNameUser], pagination })
+      if (request.path === '/api/users') return jsonResponse({ items: [displayNameUser], pagination })
       if (request.path === '/api/realm/organization-creation-policy') {
         if (request.method === 'PUT') return jsonResponse(await request.body, 200, { ETag: '"org-policy-v2"' })
         return jsonResponse(

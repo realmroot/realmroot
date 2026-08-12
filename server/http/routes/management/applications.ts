@@ -38,6 +38,7 @@ import {
   listManagementFederatedCredentialsResponseSchema,
   updateManagementFederatedCredentialRequestSchema,
 } from '@shared/api/management'
+import { paginationMetadata } from '@shared/api/pagination'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
 import { getActorUserId } from '../../middleware/authn'
@@ -133,7 +134,7 @@ managementApplicationsRoute.get('/:applicationId/redirect-uris', async (c) => {
   const pagination = readQuery(c, paginationQuerySchema)
   const redirectUris = application.redirectUris.slice(pagination.offset, pagination.offset + pagination.limit)
   return c.json({
-    redirectUris,
+    items: redirectUris,
     pagination: {
       ...pagination,
       total: application.redirectUris.length,
@@ -151,7 +152,14 @@ managementApplicationsRoute.put('/:applicationId/redirect-uris', async (c) => {
   const body = await readJson(c, replaceRedirectUrisRequestSchema)
   const application = await replaceRedirectUris(getDeps(c), issuerFor(c), c.req.param('applicationId'), body)
   await publishWebhookEvent(getDeps(c), 'application.updated', { application: applicationWebhookData(application) })
-  return c.json({ redirectUris: application.redirectUris })
+  return c.json({
+    items: application.redirectUris,
+    pagination: paginationMetadata({
+      limit: application.redirectUris.length || 1,
+      offset: 0,
+      total: application.redirectUris.length,
+    }),
+  })
 })
 
 function applicationWebhookData(application: ApplicationResponse) {
@@ -194,7 +202,7 @@ managementApplicationsRoute.get('/:applicationId/federated-credentials', async (
   const credentials = await listFederatedCredentials(getDeps(c), c.req.param('applicationId'))
   return c.json(
     listManagementFederatedCredentialsResponseSchema.parse({
-      credentials: credentials.map(federatedCredentialResponse),
+      items: credentials.map(federatedCredentialResponse),
     }),
   )
 })

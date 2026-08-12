@@ -293,7 +293,7 @@ describe('account self-service over real D1', () => {
     const roles = await harness.request(`/api/organizations/${organizationId}/roles`, { headers: { cookie } })
     expect(roles.status, await roles.clone().text()).toBe(200)
     await expect(roles.json()).resolves.toMatchObject({
-      roles: expect.arrayContaining([expect.objectContaining({ key: 'owner', predefined: true })]),
+      items: expect.arrayContaining([expect.objectContaining({ key: 'owner', predefined: true })]),
     })
     await harness.db.insert(resourceScopeEntitlement).values([
       {
@@ -385,11 +385,11 @@ describe('account self-service over real D1', () => {
 
     const sessions = await harness.request('/api/account/sessions', { headers: { cookie } })
     expect(sessions.status).toBe(200)
-    expect(((await sessions.json()) as { sessions: unknown[] }).sessions.length).toBeGreaterThanOrEqual(1)
+    expect(((await sessions.json()) as { items: unknown[] }).items.length).toBeGreaterThanOrEqual(1)
 
     const linked = await harness.request('/api/account/linked-accounts', { headers: { cookie } })
     expect(linked.status).toBe(200)
-    expect(((await linked.json()) as { accounts: unknown[] }).accounts.length).toBeGreaterThanOrEqual(1)
+    expect(((await linked.json()) as { items: unknown[] }).items.length).toBeGreaterThanOrEqual(1)
 
     const apps = await harness.request('/api/account/application-authorizations', { headers: { cookie } })
     expect(apps.status).toBe(200)

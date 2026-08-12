@@ -419,7 +419,7 @@ function applicationServiceMock() {
   }
   return {
     list: vi.fn().mockResolvedValue({
-      applications: [application],
+      items: [application],
       pagination: { limit: 10, offset: 0, total: 1, hasMore: false, nextOffset: null },
     }),
     create: vi.fn().mockResolvedValue(application),
@@ -430,12 +430,12 @@ function applicationServiceMock() {
       .fn()
       .mockResolvedValue({ ...application, redirectUris: ['https://next.example.com/callback'] }),
     listSecrets: vi.fn().mockResolvedValue({
-      secrets: [],
+      items: [],
       pagination: { limit: 50, offset: 0, total: 0, hasMore: false, nextOffset: null },
     }),
     rotateSecret: vi.fn().mockResolvedValue({ id: 'secret-1' }),
     listAuthorizations: vi.fn().mockResolvedValue({
-      authorizations: [],
+      items: [],
       pagination: { limit: 10, offset: 0, total: 0, hasMore: false, nextOffset: null },
     }),
     getAuthorization: vi.fn().mockResolvedValue({
@@ -522,7 +522,7 @@ function authorizationServiceMock() {
     getResource: vi.fn().mockResolvedValue({ id: 'resource-1' }),
     updateResource: vi.fn().mockResolvedValue({ id: 'resource-1' }),
     deleteResource: vi.fn().mockResolvedValue(undefined),
-    listRoles: vi.fn().mockResolvedValue({ roles: [role], pagination: page.pagination }),
+    listRoles: vi.fn().mockResolvedValue({ items: [role], pagination: page.pagination }),
     createRole: vi.fn().mockResolvedValue(role),
     getRole: vi.fn().mockResolvedValue(role),
     updateRole: vi.fn().mockResolvedValue(role),
@@ -559,7 +559,7 @@ function connectorServiceMock() {
   }
   return {
     listTemplates: vi.fn().mockReturnValue({
-      templates: [
+      items: [
         {
           providerType: 'social',
           providerId: 'github',
@@ -579,7 +579,7 @@ function connectorServiceMock() {
       ],
     }),
     list: vi.fn().mockResolvedValue({
-      connectors: [connector],
+      items: [connector],
       pagination: { limit: 10, offset: 0, total: 1, hasMore: false, nextOffset: null },
     }),
     create: vi.fn().mockResolvedValue(connector),

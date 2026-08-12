@@ -356,7 +356,7 @@ describe('management API client', () => {
       users: { key: 'users.get' },
       connectors: { key: 'connectors.get' },
       organizations: { key: 'organizations.get' },
-      apiResources: { resources: [] },
+      apiResources: { items: [] },
       signIn: { key: 'signIn.get' },
       security: { key: 'security.get' },
     })

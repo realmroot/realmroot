@@ -266,7 +266,7 @@ export function builtInProvidersFixture() {
 export function createConnectorServiceMock() {
   return {
     list: vi.fn().mockResolvedValue({
-      connectors: [connectorFixture()],
+      items: [connectorFixture()],
       pagination: {
         limit: 1,
         offset: 0,
@@ -276,7 +276,7 @@ export function createConnectorServiceMock() {
       },
     }),
     listTemplates: vi.fn().mockReturnValue({
-      templates: [
+      items: [
         {
           providerType: 'social',
           providerId: 'google',
@@ -311,7 +311,7 @@ export function createWebhookServiceMock() {
   return {
     listEndpoints: vi.fn().mockImplementation((query) =>
       Promise.resolve({
-        endpoints: [webhookEndpointResponse()],
+        items: [webhookEndpointResponse()],
         pagination: { limit: query.limit, offset: query.offset, total: 1, hasMore: false, nextOffset: null },
       }),
     ),
@@ -328,13 +328,13 @@ export function createWebhookServiceMock() {
     }),
     listRequests: vi.fn().mockImplementation((query) =>
       Promise.resolve({
-        requests: [webhookRequestResponse()],
+        items: [webhookRequestResponse()],
         pagination: { limit: query.limit, offset: query.offset, total: 1, hasMore: false, nextOffset: null },
       }),
     ),
     getRequest: vi.fn().mockResolvedValue(webhookRequestResponse()),
     listAttempts: vi.fn().mockResolvedValue({
-      attempts: [webhookDeliveryAttemptResponse()],
+      items: [webhookDeliveryAttemptResponse()],
       pagination: { limit: 50, offset: 0, total: 1, hasMore: false, nextOffset: null },
     }),
     getAttempt: vi.fn().mockResolvedValue(webhookDeliveryAttemptResponse()),

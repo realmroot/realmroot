@@ -189,7 +189,7 @@ describe('account security passkey routes', () => {
     await app.request('/api/account/security/sessions', { method: 'DELETE', headers: userHeaders() })
 
     await expect(sessions.json()).resolves.toEqual({
-      sessions: [],
+      items: [],
       pagination: {
         limit: 2,
         offset: 4,

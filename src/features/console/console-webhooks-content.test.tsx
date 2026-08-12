@@ -44,12 +44,12 @@ describe('admin console authorization creation and Organization detail', () => {
         return Promise.resolve(jsonResponse(apiResource, 201))
       }
       if (url === '/api/organizations') {
-        return Promise.resolve(jsonResponse({ organizations: [organization], pagination }))
+        return Promise.resolve(jsonResponse({ items: [organization], pagination }))
       }
       if (url === '/api/organizations/org-1/members') {
         return Promise.resolve(jsonResponse({ members: [], pagination: emptyPagination }))
       }
-      if (url === '/api/organizations/org-1/roles') return Promise.resolve(jsonResponse({ roles: [role], pagination }))
+      if (url === '/api/organizations/org-1/roles') return Promise.resolve(jsonResponse({ items: [role], pagination }))
       if (url === '/api/resource-servers') {
         return Promise.resolve(jsonResponse({ items: [{ ...apiResource, authorization: null }], pagination }))
       }

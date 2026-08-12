@@ -574,6 +574,7 @@ describe('Provider Connection Events over real D1', () => {
           status: 'approved',
           approvedEntitlements: [{ scope: 'issues:write', entitlementId: 'stale-revision-grant' }],
           connectionId: 'event-connection',
+          authorizationDetails: [],
           decidedAt: staleApprovalAt,
           updatedAt: staleApprovalAt,
         },

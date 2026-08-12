@@ -45,7 +45,7 @@ export function oauthClientCorsOrigins() {
         limit: 100,
         offset,
       })
-      for (const application of result.applications) {
+      for (const application of result.items) {
         if (application.disabled) continue
         for (const origin of application.corsOrigins) origins.add(origin)
       }

@@ -47,7 +47,7 @@ function oidcConnector(overrides: Record<string, unknown> = {}) {
 function emptyConnectorFetch(input: RequestInfo | URL, init?: RequestInit) {
   const url = String(input)
   if (url === '/api/connectors')
-    return Promise.resolve(jsonResponse({ connectors: [], pagination: { ...pagination, total: 0 } }))
+    return Promise.resolve(jsonResponse({ items: [], pagination: { ...pagination, total: 0 } }))
   if (url === '/api/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
   if (url === '/api/realm/sign-in-policy') return Promise.resolve(jsonResponse(signInSettings))
   if (url === '/api/realm/security-policy') return Promise.resolve(jsonResponse(securityPolicy))
@@ -147,7 +147,7 @@ describe('admin console Identity providers', () => {
         return Promise.resolve(new Response(null, { status: 204 }))
       }
       if (url === '/api/connectors/connector-oidc') return Promise.resolve(jsonResponse(detail))
-      if (url === '/api/connectors') return Promise.resolve(jsonResponse({ connectors: [selected], pagination }))
+      if (url === '/api/connectors') return Promise.resolve(jsonResponse({ items: [selected], pagination }))
       if (url === '/api/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
       return consoleSharedFetch(input, init)
     })
@@ -216,7 +216,7 @@ describe('admin console Identity providers', () => {
     const selected = oidcConnector({ enabled: true })
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       if (String(input) === '/api/connectors') {
-        return Promise.resolve(jsonResponse({ connectors: [connector, selected], pagination }))
+        return Promise.resolve(jsonResponse({ items: [connector, selected], pagination }))
       }
       return consoleSharedFetch(input, init)
     })

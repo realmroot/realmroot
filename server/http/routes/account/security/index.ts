@@ -115,7 +115,7 @@ export function accountSecurityRoutes(authApi: ManagementAuthApi, accountCenterS
     const page = await getDeps(c).users.listSessions(authContext.user!.id, readQuery(c, paginationQuerySchema))
     const currentSessionId = authContext.session?.session.id
     return c.json({
-      sessions: page.items.map((session) => ({ ...session, current: session.id === currentSessionId })),
+      items: page.items.map((session) => ({ ...session, current: session.id === currentSessionId })),
       pagination: paginationMetadata(page),
     })
   })

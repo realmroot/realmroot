@@ -100,7 +100,7 @@ describe('admin console user detail lifecycle', () => {
       const method = init?.method ?? 'GET'
       if (url === '/api/users/user-1' && method === 'GET') return Promise.resolve(jsonResponse({ user: currentUser }))
       if (url === '/api/users/user-1/sessions' && method === 'GET') {
-        return Promise.resolve(jsonResponse({ sessions, pagination: { ...pagination, total: sessions.length } }))
+        return Promise.resolve(jsonResponse({ items: sessions, pagination: { ...pagination, total: sessions.length } }))
       }
       if (url === '/api/users/user-1/sessions/session-1' && method === 'DELETE') {
         requests.push({ method, url })
@@ -115,7 +115,7 @@ describe('admin console user detail lifecycle', () => {
       if (url === '/api/users/user-1/linked-accounts') {
         return Promise.resolve(
           jsonResponse({
-            accounts: [
+            items: [
               { id: 'account-1', accountId: 'user-1', providerId: 'credential', createdAt: '2026-01-01T00:00:00.000Z' },
               { id: 'account-2', accountId: 'octocat', providerId: 'github', createdAt: '2026-01-02T00:00:00.000Z' },
             ],
@@ -126,7 +126,7 @@ describe('admin console user detail lifecycle', () => {
       if (url.startsWith('/api/users/user-1/application-authorizations')) {
         return Promise.resolve(
           jsonResponse({
-            authorizations: [
+            items: [
               {
                 id: 'consent-1',
                 applicationId: 'app-1',
@@ -155,7 +155,7 @@ describe('admin console user detail lifecycle', () => {
       if (url === '/api/applications' || url.startsWith('/api/applications?')) {
         return Promise.resolve(
           jsonResponse({
-            applications: [
+            items: [
               { id: 'app-1', name: 'Customer portal', slug: 'customer-portal' },
               { id: 'app-2', name: 'Reports', slug: 'reports' },
             ],
@@ -182,7 +182,7 @@ describe('admin console user detail lifecycle', () => {
         return Promise.resolve(new Response(null, { status: 204 }))
       }
       if (url === '/api/users/user-1/passkeys') {
-        return Promise.resolve(jsonResponse({ passkeys, pagination: { ...pagination, total: passkeys.length } }))
+        return Promise.resolve(jsonResponse({ items: passkeys, pagination: { ...pagination, total: passkeys.length } }))
       }
       if (url === '/api/agents') {
         return Promise.resolve(

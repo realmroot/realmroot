@@ -78,7 +78,7 @@ export function createOrganization(deps: Deps, input: CreateOrganizationRequest,
 
 export function listOrganizations(deps: Deps, pagination: PaginationQuery, organizationIds?: string[]) {
   return deps.authorization.listOrganizations(pagination, organizationIds).then((page) => ({
-    organizations: page.items,
+    items: page.items,
     pagination: page.pagination,
   }))
 }
@@ -119,7 +119,7 @@ export async function addMember(deps: Deps, organizationId: string, input: AddMe
 export async function listMembers(deps: Deps, organizationId: string, pagination: PaginationQuery) {
   await getOrganization(deps, organizationId)
   const page = await deps.authorization.listMembers(organizationId, pagination)
-  return { members: page.items, pagination: page.pagination }
+  return { items: page.items, pagination: page.pagination }
 }
 
 export async function updateMember(deps: Deps, organizationId: string, memberId: string, input: UpdateMemberRequest) {
@@ -191,7 +191,7 @@ export async function createInvitation(
 export async function listInvitations(deps: Deps, organizationId: string, pagination: PaginationQuery) {
   await getOrganization(deps, organizationId)
   const page = await deps.authorization.listInvitations(organizationId, pagination)
-  return { invitations: page.items, pagination: page.pagination }
+  return { items: page.items, pagination: page.pagination }
 }
 
 export async function cancelInvitation(deps: Deps, organizationId: string, id: string) {
@@ -821,7 +821,7 @@ export async function listRoles(deps: Deps, organizationId: string, pagination: 
   )
   const paged = roles.slice(pagination.offset, pagination.offset + pagination.limit)
   return {
-    roles: paged,
+    items: paged,
     pagination: {
       limit: pagination.limit,
       offset: pagination.offset,

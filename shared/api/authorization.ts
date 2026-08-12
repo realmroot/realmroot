@@ -211,22 +211,22 @@ export const memberRolesResponseSchema = z.object({ roles: z.array(roleKeySchema
 export const replaceMemberRolesRequestSchema = z.object({ roles: rolesSchema })
 
 export const listOrganizationsResponseSchema = z.object({
-  organizations: z.array(organizationResponseSchema),
+  items: z.array(organizationResponseSchema),
   pagination: paginationMetadataSchema,
 })
 
 export const listMembersResponseSchema = z.object({
-  members: z.array(memberResponseSchema),
+  items: z.array(memberResponseSchema),
   pagination: paginationMetadataSchema,
 })
 
 export const listInvitationsResponseSchema = z.object({
-  invitations: z.array(invitationResponseSchema),
+  items: z.array(invitationResponseSchema),
   pagination: paginationMetadataSchema,
 })
 
 export const listApiResourcesResponseSchema = z.object({
-  resources: z.array(apiResourceResponseSchema),
+  items: z.array(apiResourceResponseSchema),
   pagination: paginationMetadataSchema,
 })
 
@@ -326,7 +326,7 @@ export const listAuthorizedResourceServersResponseSchema = z.object({
 })
 
 export const listRolesResponseSchema = z.object({
-  roles: z.array(roleResponseSchema),
+  items: z.array(roleResponseSchema),
   pagination: paginationMetadataSchema,
 })
 

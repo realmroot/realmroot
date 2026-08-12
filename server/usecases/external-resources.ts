@@ -526,7 +526,7 @@ export async function failResourceConnectionIntent(deps: Deps, state: string) {
 
 export async function listResourceConnections(deps: Deps, actorUserId: string) {
   const connections = await deps.externalResources.listConnectionsByUser(actorUserId)
-  return { connections: connections.map(toResourceConnection) }
+  return { items: connections.map(toResourceConnection) }
 }
 
 export async function createAccountConnection(
@@ -691,7 +691,7 @@ export async function listConnectableExternalResources(deps: Deps) {
       resourceUrl: authorization.resourceUrl,
     })
   }
-  return { resources: connectable }
+  return { items: connectable }
 }
 
 export async function listAccountProviderConnectors(deps: Deps, pagination: PaginationInput) {
@@ -970,7 +970,7 @@ export async function discoverAgentResources(deps: Deps, principal: AgentResourc
       }
     }),
   )
-  return { resources: resources.filter((resource) => resource !== null) }
+  return { items: resources.filter((resource) => resource !== null) }
 }
 
 function discoverAgentResourceScopes(
@@ -1003,7 +1003,7 @@ export async function listAgentResourceServers(
 ) {
   const origin = apiOrigin.replace(/\/$/, '')
   const resources = await Promise.all(
-    (await discoverAgentResources(deps, principal)).resources.map(async (resource) =>
+    (await discoverAgentResources(deps, principal)).items.map(async (resource) =>
       toResourceServer(await getApiResourceConfiguration(deps, resource.id), origin, resource.connection),
     ),
   )
@@ -1019,7 +1019,7 @@ export async function getAgentResourceServer(
   principal: AgentResourcePrincipal,
   apiOrigin: string,
 ) {
-  const resource = (await discoverAgentResources(deps, principal)).resources.find(
+  const resource = (await discoverAgentResources(deps, principal)).items.find(
     (candidate) => candidate.id === resourceServerId,
   )
   if (!resource) throw notFound('Resource Server was not found.')
@@ -1222,15 +1222,13 @@ export async function createAgentAccessRequest(
         ownerUserId: identity.identity.ownerUserId,
         ownerOrganizationId: identity.identity.ownerOrganizationId,
       })
-  if (requiresAccountConnection(resource)) {
-    if (!connection || connection.status !== 'active') {
-      throw notFound('Active resource account connection was not found.')
-    }
-  }
   validateResourceRequestedScopes(resource, input.scopes)
-  const authorizationDetails = input.authorizationDetails ?? []
-  assertAccessRequestAuthorizationDetails(resource, connection, authorizationDetails)
-  if (connection && brokeredAccountConnection(resource)) {
+  const authorizationDetails = accessRequestAuthorizationDetails(
+    resource,
+    connection?.status === 'active' ? connection : null,
+    input.authorizationDetails ?? [],
+  )
+  if (connection?.status === 'active' && brokeredAccountConnection(resource) && input.authorizationDetails?.length) {
     assertAuthorityConstraintScopes(input.scopes, connection, authorizationDetails)
   }
   await requireAgentResourceVisibility(deps, resource, identity.identity)
@@ -1443,7 +1441,10 @@ async function resolveApprovalAuthorizationDetail(
       metadata: display.metadata,
     }
   }
-  if (!request.connectionId) throw notFound('Resource account connection was not found.')
+  if (resourceServer.authorizationDetails.some((template) => canonicalJson(template) === canonicalJson(detail))) {
+    return null
+  }
+  if (!request.connectionId) return null
   const connection = await deps.externalResources.findConnection(request.connectionId)
   if (!connection || connection.status !== 'active') throw notFound('Active resource account connection was not found.')
   for (let offset = 0; ; ) {
@@ -1528,11 +1529,22 @@ export async function decideAgentAccessRequest(
     ? await realmrootAuthorityEffectiveScopes(deps, actorUserId, resource, authorizationDetails[0]!)
     : await userEffectiveResourceScopes(deps, actorUserId, resource)
   assertScopeSubset(request.scopes, grantorScopes, 'controller effective scope')
-  const connectionId = request.connectionId
+  let connectionId = request.connectionId
   let connection: ProviderResourceAuthorizationRecord | null = null
   if (requiresAccountConnection(resource)) {
-    if (!connectionId) throw badRequest('An account connection is required to approve external API access.')
-    connection = await requireControlledConnection(deps, connectionId, actorUserId)
+    connection = controlledConnection
+    if (!connection) {
+      const ownerConnection = await deps.externalResources.findConnectionByOwnerResource({
+        resourceId: request.resourceId,
+        ownerUserId: requestIdentity.identity.ownerUserId,
+        ownerOrganizationId: requestIdentity.identity.ownerOrganizationId,
+      })
+      if (ownerConnection) {
+        connection = await requireControlledConnection(deps, ownerConnection.id, actorUserId)
+      }
+    }
+    if (!connection) throw badRequest('An account connection is required to approve external API access.')
+    connectionId = connection.id
     if (connection.resourceId !== resource.id || connection.status !== 'active') {
       throw badRequest('The selected account connection does not belong to this API resource.')
     }
@@ -1632,6 +1644,7 @@ export async function decideAgentAccessRequest(
       status: 'approved',
       approvedEntitlements,
       connectionId,
+      authorizationDetails,
       decidedAt: now,
       updatedAt: now,
     },
@@ -3270,6 +3283,32 @@ function assertAccessRequestAuthorizationDetails(
   }
 }
 
+function accessRequestAuthorizationDetails(
+  resource: NonNullable<Awaited<ReturnType<Deps['authorization']['findResource']>>>,
+  connection: ProviderResourceAuthorizationRecord | null,
+  authorizationDetails: AuthorizationDetail[],
+) {
+  if (!requiresAccountConnection(resource) || resource.authorizationDetails.length === 0) {
+    assertAccessRequestAuthorizationDetails(resource, connection, authorizationDetails)
+    return authorizationDetails
+  }
+  if (authorizationDetails.length === 0) return resource.authorizationDetails
+  const templates = resource.authorizationDetails
+  if (
+    authorizationDetails.some(
+      (detail) => !templates.some((template) => authorizationDetailMatchesTemplate(detail, template)),
+    ) ||
+    hasDuplicateAuthorizationDetails(authorizationDetails)
+  ) {
+    throw invalidAuthorizationDetails('Requested authorization details contain an unsupported or duplicate entry.')
+  }
+  const concrete = authorizationDetails.filter(
+    (detail) => !templates.some((template) => canonicalJson(template) === canonicalJson(detail)),
+  )
+  if (concrete.length > 0) assertAccessRequestAuthorizationDetails(resource, connection, concrete)
+  return authorizationDetails
+}
+
 function assertRealmrootAuthoritySelection(authorizationDetails: AuthorizationDetail[]) {
   const detail = authorizationDetails[0]
   if (
@@ -3381,7 +3420,19 @@ function exactAuthorizationDetails(left: AuthorizationDetail[], right: Authoriza
 }
 
 function authorizationDetailsMatchRequest(approved: AuthorizationDetail[], requested: AuthorizationDetail[]) {
-  return new Set(approved.map(canonicalJson)).size === approved.length && exactAuthorizationDetails(approved, requested)
+  if (approved.length !== requested.length || new Set(approved.map(canonicalJson)).size !== approved.length)
+    return false
+  const remaining = [...approved]
+  for (const requirement of requested) {
+    const index = remaining.findIndex(
+      (candidate) =>
+        canonicalJson(candidate) === canonicalJson(requirement) ||
+        authorizationDetailMatchesTemplate(candidate, requirement),
+    )
+    if (index === -1) return false
+    remaining.splice(index, 1)
+  }
+  return true
 }
 
 function assertConcreteAuthorizationDetails(

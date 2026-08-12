@@ -59,7 +59,7 @@ export function RolesPage({ organizationId }: { organizationId: string }) {
         />
       }
       description={tt('Organization Roles map human membership to tenant-bound scopes.')}
-      empty={(query.data?.roles.length ?? 0) === 0}
+      empty={(query.data?.items.length ?? 0) === 0}
       emptyDescription={tt('Create a dynamic Organization Role for this tenant.')}
       emptyTitle={tt('No Roles')}
       error={query.error}
@@ -77,7 +77,7 @@ export function RolesPage({ organizationId }: { organizationId: string }) {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {(query.data?.roles ?? []).map((role) => (
+          {(query.data?.items ?? []).map((role) => (
             <TableRow key={role.key}>
               <TableCell>
                 <Link
@@ -98,7 +98,7 @@ export function RolesPage({ organizationId }: { organizationId: string }) {
               <TableCell>{role.scopes.length}</TableCell>
             </TableRow>
           ))}
-          {(query.data?.roles.length ?? 0) === 0 ? (
+          {(query.data?.items.length ?? 0) === 0 ? (
             <TableEmptyRow
               colSpan={4}
               description={tt('Create a dynamic Role for this Organization.')}

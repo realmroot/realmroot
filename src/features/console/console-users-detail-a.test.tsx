@@ -75,22 +75,22 @@ describe('admin console users-detail-a', () => {
         return Promise.resolve(jsonResponse({ success: true }))
       }
       if (url.startsWith('/api/users/user-1/sessions')) {
-        return Promise.resolve(jsonResponse({ sessions: [], pagination: emptyPagination }))
+        return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
       }
       if (url.startsWith('/api/users/user-1/linked-accounts')) {
-        return Promise.resolve(jsonResponse({ accounts: [], pagination: emptyPagination }))
+        return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
       }
       if (url.startsWith('/api/users/user-1/application-authorizations')) {
-        return Promise.resolve(jsonResponse({ authorizations: [], pagination: emptyPagination }))
+        return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
       }
       if (url === '/api/users/user-1/security') {
         return Promise.resolve(jsonResponse({ security: consoleSecurity }))
       }
       if (url.startsWith('/api/users/user-1/passkeys')) {
-        return Promise.resolve(jsonResponse({ passkeys: [], pagination: emptyPagination }))
+        return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
       }
       if (url.startsWith('/api/users')) {
-        return Promise.resolve(jsonResponse({ users: [], pagination: emptyPagination }))
+        return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
       }
       return consoleSharedFetch(input, init)
     })
@@ -138,19 +138,19 @@ describe('admin console users-detail-a', () => {
         return Promise.resolve(jsonResponse({ user: { ...profile, role: 'user', banned: false } }))
       }
       if (url.startsWith('/api/users/user-1/sessions')) {
-        return Promise.resolve(jsonResponse({ sessions: [consoleSession], pagination }))
+        return Promise.resolve(jsonResponse({ items: [consoleSession], pagination }))
       }
       if (url.startsWith('/api/users/user-1/linked-accounts')) {
-        return Promise.resolve(jsonResponse({ accounts: [], pagination: emptyPagination }))
+        return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
       }
       if (url.startsWith('/api/users/user-1/application-authorizations')) {
-        return Promise.resolve(jsonResponse({ authorizations: [], pagination: emptyPagination }))
+        return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
       }
       if (url === '/api/users/user-1/security') {
         return Promise.resolve(jsonResponse({ security: consoleSecurity }))
       }
       if (url.startsWith('/api/users/user-1/passkeys')) {
-        return Promise.resolve(jsonResponse({ passkeys: [consolePasskey], pagination }))
+        return Promise.resolve(jsonResponse({ items: [consolePasskey], pagination }))
       }
       return consoleSharedFetch(input, init)
     })
@@ -216,14 +216,14 @@ describe('admin console users-detail-a', () => {
       }
       if (url.startsWith('/api/users/user-1/sessions')) {
         return Promise.resolve(
-          jsonResponse({ sessions: [{ ...consoleSession, ipAddress: null, userAgent: null }], pagination }),
+          jsonResponse({ items: [{ ...consoleSession, ipAddress: null, userAgent: null }], pagination }),
         )
       }
       if (url.startsWith('/api/users/user-1/linked-accounts')) {
-        return Promise.resolve(jsonResponse({ accounts: [], pagination: emptyPagination }))
+        return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
       }
       if (url.startsWith('/api/users/user-1/application-authorizations')) {
-        return Promise.resolve(jsonResponse({ authorizations: [], pagination: emptyPagination }))
+        return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
       }
       if (url === '/api/users/user-1/security') {
         return Promise.resolve(
@@ -240,7 +240,7 @@ describe('admin console users-detail-a', () => {
       if (url.startsWith('/api/users/user-1/passkeys')) {
         return Promise.resolve(
           jsonResponse({
-            passkeys: [{ ...consolePasskey, name: null, backedUp: false, createdAt: null }],
+            items: [{ ...consolePasskey, name: null, backedUp: false, createdAt: null }],
             pagination,
           }),
         )
@@ -296,19 +296,19 @@ describe('admin console users-detail-a', () => {
         return Promise.resolve(jsonResponse({ user: { ...profile, role: ['admin', 'viewer'], banned: false } }))
       }
       if (url.startsWith('/api/users/user-1/sessions')) {
-        return Promise.resolve(jsonResponse({ sessions: [], pagination: emptyPagination }))
+        return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
       }
       if (url.startsWith('/api/users/user-1/linked-accounts')) {
-        return Promise.resolve(jsonResponse({ accounts: [], pagination: emptyPagination }))
+        return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
       }
       if (url.startsWith('/api/users/user-1/application-authorizations')) {
-        return Promise.resolve(jsonResponse({ authorizations: [], pagination: emptyPagination }))
+        return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
       }
       if (url === '/api/users/user-1/security') {
         return Promise.resolve(jsonResponse({ security: consoleSecurity }))
       }
       if (url.startsWith('/api/users/user-1/passkeys')) {
-        return Promise.resolve(jsonResponse({ passkeys: [], pagination: emptyPagination }))
+        return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
       }
       return consoleSharedFetch(input, init)
     })

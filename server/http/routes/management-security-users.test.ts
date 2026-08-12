@@ -35,7 +35,7 @@ describe('management security user routes', () => {
     })
 
     await expect(passkeys.json()).resolves.toEqual({
-      passkeys: [],
+      items: [],
       pagination: {
         limit: 2,
         offset: 4,
@@ -45,7 +45,7 @@ describe('management security user routes', () => {
       },
     })
     await expect(sessions.json()).resolves.toEqual({
-      sessions: [],
+      items: [],
       pagination: {
         limit: 3,
         offset: 6,

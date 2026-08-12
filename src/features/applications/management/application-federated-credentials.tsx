@@ -133,7 +133,7 @@ export function ApplicationFederatedCredentialsPanel({ applicationId }: { applic
       setDeleteCredential(null)
     },
   })
-  const credentials = credentialsQuery.data?.credentials ?? []
+  const credentials = credentialsQuery.data?.items ?? []
 
   return (
     <section className="detailSection mt-7">

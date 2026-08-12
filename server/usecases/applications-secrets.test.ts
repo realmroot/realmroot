@@ -66,7 +66,7 @@ describe('service.test 2', () => {
     )
 
     await expect(listApplications(deps, issuer, { limit: 1, offset: 0 })).resolves.toMatchObject({
-      applications: [{ id: first.id }],
+      items: [{ id: first.id }],
       pagination: {
         limit: 1,
         offset: 0,
@@ -75,7 +75,7 @@ describe('service.test 2', () => {
       },
     })
     await expect(listApplications(deps, issuer, { limit: 1, offset: 1 })).resolves.toMatchObject({
-      applications: [{ id: second.id }],
+      items: [{ id: second.id }],
       pagination: {
         limit: 1,
         offset: 1,

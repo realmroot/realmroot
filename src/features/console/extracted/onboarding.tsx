@@ -62,8 +62,8 @@ export function ConsoleOnboardingPage() {
 
   useEffect(() => {
     if (ownerOrganizationId) return
-    setOwnerOrganizationId(organizationsQuery.data?.organizations[0]?.id ?? '')
-  }, [organizationsQuery.data?.organizations, ownerOrganizationId, setOwnerOrganizationId])
+    setOwnerOrganizationId(organizationsQuery.data?.items[0]?.id ?? '')
+  }, [organizationsQuery.data?.items, ownerOrganizationId, setOwnerOrganizationId])
 
   useEffect(() => {
     if (!setupComplete || application) return
@@ -132,7 +132,7 @@ export function ConsoleOnboardingPage() {
               >
                 <OrganizationOwnerField
                   onChange={setOwnerOrganizationId}
-                  organizations={organizationsQuery.data?.organizations ?? []}
+                  organizations={organizationsQuery.data?.items ?? []}
                   value={ownerOrganizationId}
                 />
                 <ApplicationTypeCards

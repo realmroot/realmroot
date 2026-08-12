@@ -57,7 +57,7 @@ describe('console route navigation', () => {
           }),
         )
       }
-      if (url === '/api/applications') return Promise.resolve(jsonResponse({ applications: [], pagination }))
+      if (url === '/api/applications') return Promise.resolve(jsonResponse({ items: [], pagination }))
       return consoleSharedFetch(input, init)
     })
     window.history.pushState(null, '', '/console/applications')
@@ -176,25 +176,25 @@ describe('console route navigation', () => {
       }
       if (url === '/api/applications/app-1') return Promise.resolve(jsonResponse(application))
       if (url === '/api/applications/app-1/client-secrets') {
-        return Promise.resolve(jsonResponse({ secrets: [], pagination: emptyPagination }))
+        return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
       }
       if (url === '/api/users/user-1') {
         return Promise.resolve(jsonResponse({ user: { ...profile, role: 'admin', banned: false } }))
       }
       if (url.startsWith('/api/users/user-1/sessions')) {
-        return Promise.resolve(jsonResponse({ sessions: [consoleSession], pagination }))
+        return Promise.resolve(jsonResponse({ items: [consoleSession], pagination }))
       }
       if (url.startsWith('/api/users/user-1/linked-accounts')) {
-        return Promise.resolve(jsonResponse({ accounts: [linkedAccount], pagination }))
+        return Promise.resolve(jsonResponse({ items: [linkedAccount], pagination }))
       }
       if (url.startsWith('/api/users/user-1/applications')) {
-        return Promise.resolve(jsonResponse({ applications: [userApplication], pagination }))
+        return Promise.resolve(jsonResponse({ items: [userApplication], pagination }))
       }
       if (url === '/api/users/user-1/security') {
         return Promise.resolve(jsonResponse({ security: consoleSecurity }))
       }
       if (url.startsWith('/api/users/user-1/passkeys')) {
-        return Promise.resolve(jsonResponse({ passkeys: [consolePasskey], pagination }))
+        return Promise.resolve(jsonResponse({ items: [consolePasskey], pagination }))
       }
       if (url === '/api/organizations/org-1/roles/role-1') {
         return Promise.resolve(
@@ -207,7 +207,7 @@ describe('console route navigation', () => {
         )
       }
       if (url === '/api/organizations/org-1/roles') {
-        return Promise.resolve(jsonResponse({ roles: [role], pagination }))
+        return Promise.resolve(jsonResponse({ items: [role], pagination }))
       }
       if (url === '/api/resource-servers') {
         return Promise.resolve(jsonResponse({ items: [{ ...apiResource, authorization: null }], pagination }))

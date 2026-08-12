@@ -11,11 +11,11 @@ import type { PasskeysResponse } from '@shared/api/security'
 import type { ReactNode } from 'react'
 
 export type UserProfile = AccountProfileResponse['user']
-export type LinkedAccount = LinkedAccountsResponse['accounts'][number]
+export type LinkedAccount = LinkedAccountsResponse['items'][number]
 export type IdentityProvider = ConfigzConfigResponse['identityProviders'][number]
 export type Web3WalletProvider = ConfigzConfigResponse['builtInProviders']['web3Wallet']
 export type AccountApplicationAuthorization = ApplicationAuthorization
-export type UserSessionDevice = AccountSessionsResponse['sessions'][number]
+export type UserSessionDevice = AccountSessionsResponse['items'][number]
 export type SecurityState = AccountSecurityResponse['security']
 export type Passkey = PasskeysResponse['passkeys'][number]
 export type { AccountAgent, AccountAgentGrant }

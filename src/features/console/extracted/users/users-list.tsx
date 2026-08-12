@@ -68,7 +68,7 @@ export function UsersPage() {
       })
     },
   })
-  const users = query.data?.users ?? []
+  const users = query.data?.items ?? []
   return (
     <ResourcePage
       title={tt('Users')}
@@ -190,7 +190,7 @@ export function UsersPage() {
             )}
           </TableBody>
         </Table>
-        {query.data && query.data.users.length > 0 ? (
+        {query.data && query.data.items.length > 0 ? (
           <div className="flex flex-wrap items-center justify-between gap-2 px-4 pb-4 text-sm text-muted-foreground">
             <span>
               {' '}

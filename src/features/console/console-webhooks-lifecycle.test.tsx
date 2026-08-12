@@ -58,10 +58,10 @@ describe('webhook endpoint and delivery operations', () => {
     vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
       const request = requestDetails(input, init)
       if (request.path === '/api/organizations') {
-        return jsonResponse({ organizations: [organization, nameOnlyOrganization], pagination })
+        return jsonResponse({ items: [organization, nameOnlyOrganization], pagination })
       }
       if (request.path.startsWith('/api/webhooks') && request.method === 'GET') {
-        return jsonResponse({ endpoints: endpointRows, pagination })
+        return jsonResponse({ items: endpointRows, pagination })
       }
       if (request.path === '/api/webhooks' && request.method === 'POST') {
         mutations.push({ ...request, body: await request.body })
@@ -178,12 +178,12 @@ describe('webhook endpoint and delivery operations', () => {
     ]
     vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
       const request = requestDetails(input, init)
-      if (request.path === '/api/organizations') return jsonResponse({ organizations: [organization], pagination })
+      if (request.path === '/api/organizations') return jsonResponse({ items: [organization], pagination })
       if (request.path.startsWith('/api/webhooks?')) {
-        return jsonResponse({ endpoints: [webhookEndpoint], pagination: { ...pagination, total: 1 } })
+        return jsonResponse({ items: [webhookEndpoint], pagination: { ...pagination, total: 1 } })
       }
       if (request.path.startsWith('/api/webhooks/wh_1/deliveries') && request.method === 'GET') {
-        return jsonResponse({ requests, pagination: { ...pagination, total: requests.length } })
+        return jsonResponse({ items: requests, pagination: { ...pagination, total: requests.length } })
       }
       if (request.path === '/api/webhooks/wh_1/deliveries/whr_1/attempts' && request.method === 'POST') {
         retries.push(await request.body)
@@ -222,7 +222,7 @@ describe('webhook endpoint and delivery operations', () => {
     vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
       const request = requestDetails(input, init)
       if (request.path === '/api/organizations') {
-        return jsonResponse({ organizations: [organization, nameOnlyOrganization], pagination })
+        return jsonResponse({ items: [organization, nameOnlyOrganization], pagination })
       }
       if (request.path.startsWith('/api/webhooks/wh_1/deliveries')) {
         return jsonResponse({ error: 'Webhook requests unavailable.' }, 500)
@@ -230,7 +230,7 @@ describe('webhook endpoint and delivery operations', () => {
       if (request.path.startsWith('/api/webhooks')) {
         if (fail) return jsonResponse({ error: 'Webhook inventory unavailable.' }, 500)
         const endpoints = failRequests ? [webhookEndpoint] : []
-        return jsonResponse({ endpoints, pagination: { ...emptyPagination, total: endpoints.length } })
+        return jsonResponse({ items: endpoints, pagination: { ...emptyPagination, total: endpoints.length } })
       }
       throw new Error(`Unexpected request: ${request.method} ${request.path}`)
     })

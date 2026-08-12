@@ -69,12 +69,12 @@ export function WebhooksPage({
   const organizationNames = useMemo(
     () =>
       new Map(
-        (organizations.data?.organizations ?? []).map((organization) => [
+        (organizations.data?.items ?? []).map((organization) => [
           organization.id,
           organization.displayName ?? organization.name,
         ]),
       ),
-    [organizations.data?.organizations],
+    [organizations.data?.items],
   )
   const endpoints = useQuery({
     queryKey: [...consoleQueryKeys.webhookEndpoints, search, status, effectiveOrganizationFilter],
@@ -205,7 +205,7 @@ export function WebhooksPage({
                 value={organizationFilter}
               >
                 <option value="">{tt('Any scope')}</option>
-                {organizations.data?.organizations.map((item) => (
+                {organizations.data?.items.map((item) => (
                   <option key={item.id} value={item.id}>
                     {item.displayName ?? item.name}
                   </option>
@@ -229,8 +229,8 @@ export function WebhooksPage({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {endpoints.data?.endpoints.length ? (
-                endpoints.data.endpoints.map((endpoint) => (
+              {endpoints.data?.items.length ? (
+                endpoints.data.items.map((endpoint) => (
                   <TableRow key={endpoint.id}>
                     <TableCell className="max-w-80">
                       <span className="block truncate font-medium" title={endpoint.url}>
@@ -307,8 +307,8 @@ export function WebhooksPage({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {requests.data?.requests.length ? (
-                requests.data.requests.map((item) => (
+              {requests.data?.items.length ? (
+                requests.data.items.map((item) => (
                   <TableRow key={item.id}>
                     <TableCell>
                       <button className="font-medium hover:underline" onClick={() => setRequest(item)} type="button">
@@ -363,7 +363,7 @@ export function WebhooksPage({
           fixedOrganizationId={organizationId}
           onClose={() => setCreateOpen(false)}
           onSubmit={(input) => create.mutate({ ...input, enabled: true })}
-          organizations={organizations.data?.organizations ?? []}
+          organizations={organizations.data?.items ?? []}
           pending={create.isPending}
         />
       ) : null}
@@ -374,7 +374,7 @@ export function WebhooksPage({
           fixedOrganizationId={organizationId}
           onClose={() => setEditEndpoint(null)}
           onSubmit={(input) => update.mutate({ id: editEndpoint.id, input })}
-          organizations={organizations.data?.organizations ?? []}
+          organizations={organizations.data?.items ?? []}
           pending={update.isPending}
         />
       ) : null}
@@ -412,7 +412,7 @@ function EndpointDialog({
   fixedOrganizationId?: string
   onClose: () => void
   onSubmit: (input: Pick<Parameters<typeof createWebhookEndpoint>[0], 'url' | 'events' | 'organizationId'>) => void
-  organizations: Awaited<ReturnType<typeof listOrganizations>>['organizations']
+  organizations: Awaited<ReturnType<typeof listOrganizations>>['items']
   pending: boolean
 }) {
   const [events, setEvents] = useState<WebhookEvent[]>(endpoint?.events ?? ['user.created'])

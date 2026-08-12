@@ -142,7 +142,7 @@ export const connector = {
 }
 
 export const connectorTemplates = {
-  templates: [
+  items: [
     {
       providerType: 'social',
       providerId: 'google',

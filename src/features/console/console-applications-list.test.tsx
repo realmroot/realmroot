@@ -34,7 +34,7 @@ describe('admin console applications-list', () => {
       const url = request ? new URL(request.url) : new URL(String(input), window.location.origin)
       requests.push(`${url.pathname}${url.search}`)
       if (url.pathname === '/api/applications') {
-        return Promise.resolve(jsonResponse({ applications: [application], pagination }))
+        return Promise.resolve(jsonResponse({ items: [application], pagination }))
       }
       return consoleSharedFetch(input, init)
     })
@@ -59,7 +59,7 @@ describe('admin console applications-list', () => {
         return Promise.resolve(jsonResponse(application, 201))
       }
       if (url.startsWith('/api/applications')) {
-        return Promise.resolve(jsonResponse({ applications: [application], pagination }))
+        return Promise.resolve(jsonResponse({ items: [application], pagination }))
       }
       return consoleSharedFetch(input, init)
     })
@@ -118,7 +118,7 @@ describe('admin console applications-list', () => {
         return Promise.resolve(jsonResponse({ ...application, disabled: true }))
       }
       if (url === '/api/applications') {
-        return Promise.resolve(jsonResponse({ applications: [application], pagination }))
+        return Promise.resolve(jsonResponse({ items: [application], pagination }))
       }
       return consoleSharedFetch(input, init)
     })
@@ -149,7 +149,7 @@ describe('admin console applications-list', () => {
         return Promise.resolve(jsonResponse({ ...thirdPartyApplication, disabled: true }))
       }
       if (url === '/api/applications') {
-        return Promise.resolve(jsonResponse({ applications: [thirdPartyApplication], pagination }))
+        return Promise.resolve(jsonResponse({ items: [thirdPartyApplication], pagination }))
       }
       return consoleSharedFetch(input, init)
     })
@@ -187,7 +187,7 @@ describe('admin console applications-list', () => {
         )
       }
       if (url === '/api/applications') {
-        return Promise.resolve(jsonResponse({ applications: [application], pagination }))
+        return Promise.resolve(jsonResponse({ items: [application], pagination }))
       }
       return consoleSharedFetch(input, init)
     })
@@ -256,7 +256,7 @@ describe('admin console applications-list', () => {
         )
       }
       if (url === '/api/applications') {
-        return Promise.resolve(jsonResponse({ applications: [application], pagination }))
+        return Promise.resolve(jsonResponse({ items: [application], pagination }))
       }
       return consoleSharedFetch(input, init)
     })
@@ -300,7 +300,7 @@ describe('admin console applications-list', () => {
         return Promise.resolve(jsonResponse(application, 201))
       }
       if (url === '/api/applications') {
-        return Promise.resolve(jsonResponse({ applications: [application], pagination }))
+        return Promise.resolve(jsonResponse({ items: [application], pagination }))
       }
       return consoleSharedFetch(input, init)
     })
@@ -330,7 +330,7 @@ describe('admin console applications-list', () => {
         })
       }
       if (url === '/api/applications') {
-        return Promise.resolve(jsonResponse({ applications: [application], pagination }))
+        return Promise.resolve(jsonResponse({ items: [application], pagination }))
       }
       return consoleSharedFetch(input, init)
     })
@@ -359,7 +359,7 @@ describe('admin console applications-list', () => {
         return Promise.resolve(
           attempts === 1
             ? jsonResponse({ message: 'inventory unavailable' }, 503)
-            : jsonResponse({ applications: [application], pagination }),
+            : jsonResponse({ items: [application], pagination }),
         )
       }
       return consoleSharedFetch(input, init)

@@ -56,18 +56,18 @@ describe('console collections', () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
       if (url === '/api/applications') {
-        return Promise.resolve(jsonResponse({ applications: [application], pagination }))
+        return Promise.resolve(jsonResponse({ items: [application], pagination }))
       }
       if (url.startsWith('/api/users')) {
-        return Promise.resolve(jsonResponse({ users: [user], pagination }))
+        return Promise.resolve(jsonResponse({ items: [user], pagination }))
       }
       if (url === '/api/connectors') {
-        return Promise.resolve(jsonResponse({ connectors: [connector], pagination }))
+        return Promise.resolve(jsonResponse({ items: [connector], pagination }))
       }
       if (url === '/api/organizations') {
-        return Promise.resolve(jsonResponse({ organizations: [organization], pagination }))
+        return Promise.resolve(jsonResponse({ items: [organization], pagination }))
       }
-      if (url === '/api/organizations/org-1/roles') return Promise.resolve(jsonResponse({ roles: [role], pagination }))
+      if (url === '/api/organizations/org-1/roles') return Promise.resolve(jsonResponse({ items: [role], pagination }))
       if (url === '/api/resource-servers') {
         return Promise.resolve(jsonResponse({ items: [{ ...apiResource, authorization: null }], pagination }))
       }
@@ -117,7 +117,7 @@ describe('console collections', () => {
       const url = String(input)
       requests.push({ method: init?.method ?? 'GET', url })
       if (url.startsWith('/api/webhooks')) {
-        return Promise.resolve(jsonResponse({ endpoints: [], pagination }))
+        return Promise.resolve(jsonResponse({ items: [], pagination }))
       }
       return consoleSharedFetch(input, init)
     })
@@ -173,15 +173,15 @@ describe('console collections', () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
       if (url === '/api/connectors') {
-        return Promise.resolve(jsonResponse({ connectors: [connector, githubConnector], pagination }))
+        return Promise.resolve(jsonResponse({ items: [connector, githubConnector], pagination }))
       }
       if (url === '/api/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
       if (url === '/api/realm/sign-in-policy') return Promise.resolve(jsonResponse(signInSettings))
       if (url === '/api/organizations') {
-        return Promise.resolve(jsonResponse({ organizations: [organization, northwindOrganization], pagination }))
+        return Promise.resolve(jsonResponse({ items: [organization, northwindOrganization], pagination }))
       }
       if (url === '/api/organizations/org-1/roles') {
-        return Promise.resolve(jsonResponse({ roles: [role, billingManagerRole, ordersReaderRole], pagination }))
+        return Promise.resolve(jsonResponse({ items: [role, billingManagerRole, ordersReaderRole], pagination }))
       }
       if (url === '/api/resource-servers') {
         return Promise.resolve(
@@ -255,7 +255,7 @@ describe('console collections', () => {
       if (url === '/api/organizations') {
         return Promise.resolve(
           jsonResponse({
-            organizations: [{ ...organization, displayName: null }, secondOrganization],
+            items: [{ ...organization, displayName: null }, secondOrganization],
             pagination,
           }),
         )
@@ -339,13 +339,13 @@ describe('console collections', () => {
       {
         component: <ApplicationsPage />,
         matches: (url: string) => url === '/api/applications',
-        success: { applications: [application], pagination },
+        success: { items: [application], pagination },
         text: 'Customer portal',
       },
       {
         component: <ConnectorsPage />,
         matches: (url: string) => url === '/api/connectors',
-        success: { connectors: [connector], pagination },
+        success: { items: [connector], pagination },
         text: 'Google',
       },
       {
@@ -381,13 +381,13 @@ describe('console collections', () => {
       {
         component: <OrganizationsPage />,
         matches: (url: string) => url === '/api/organizations',
-        success: { organizations: [organization], pagination },
+        success: { items: [organization], pagination },
         text: 'Acme Inc.',
       },
       {
         component: organizationRolesPage,
         matches: (url: string) => url === '/api/organizations/org-1/roles',
-        success: { roles: [role], pagination },
+        success: { items: [role], pagination },
         text: 'Admin',
       },
       {

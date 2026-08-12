@@ -72,7 +72,7 @@ describe('AgentService', () => {
     const deps = { users: createUserRepositoryMock(), agents: repository } as unknown as Deps
 
     await expect(listAccountAgents(deps, 'user-1', { limit: 10, offset: 0 })).resolves.toMatchObject({
-      agents: [
+      items: [
         {
           id: 'agent-1',
           host: { id: 'host-1', name: 'Desktop Host', status: 'active' },

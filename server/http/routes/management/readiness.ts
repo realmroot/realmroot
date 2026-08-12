@@ -32,7 +32,7 @@ export function createManagementReadinessRoute({ securityPolicy }: { securityPol
       getConfig(deps, options),
       getEmailDeliveryConfiguration(deps, options),
     ])
-    const hasOidcApplication = applications.applications.length > 0
+    const hasOidcApplication = applications.items.length > 0
     const identityProviderCount =
       'identityProviders' in config && Array.isArray(config.identityProviders) ? config.identityProviders.length : 0
     const hasSocialSignInMethod = config.signIn.socialLoginEnabled && identityProviderCount > 0

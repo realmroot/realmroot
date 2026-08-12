@@ -78,7 +78,7 @@ export function AccountOverviewPage() {
   const requests = requestsQuery.data?.items ?? []
   const invitations = (invitationsQuery.data ?? []).filter((invitation) => invitation.status === 'pending')
   const security = securityQuery.data?.security
-  const sessions = sessionsQuery.data?.sessions ?? []
+  const sessions = sessionsQuery.data?.items ?? []
   const securityStrong = Boolean(security?.mfa.enabled || security?.passkeys.count)
   return (
     <AccountSurface>
@@ -228,7 +228,7 @@ export function AccountApplicationsPage() {
   const mutate = useAccountMutation()
   const [selected, setSelected] = useState<AccountApplicationAuthorization | null>(null)
   const [confirmation, setConfirmation] = useDestructiveConfirmation()
-  const applications = applicationsQuery.data?.authorizations ?? []
+  const applications = applicationsQuery.data?.items ?? []
   return (
     <AccountSurface>
       {() => (
@@ -1163,7 +1163,7 @@ export function AccountOrganizationDetailPage({
               open={inviteOpen}
               roleError={organizationRolesQuery.error instanceof Error ? organizationRolesQuery.error.message : null}
               roleLoading={organizationRolesQuery.isLoading}
-              roles={organizationRolesQuery.data?.roles ?? []}
+              roles={organizationRolesQuery.data?.items ?? []}
             />
             <OrganizationMemberDialog
               member={selectedMember}

@@ -60,7 +60,7 @@ export const updateWebhookEndpointRequestSchema = z
   .refine((value) => Object.keys(value).length > 0, 'At least one field is required.')
 
 export const listWebhookEndpointsResponseSchema = z.object({
-  endpoints: z.array(webhookEndpointSchema),
+  items: z.array(webhookEndpointSchema),
   pagination: paginationMetadataSchema,
 })
 
@@ -101,7 +101,7 @@ export const listWebhookRequestsQuerySchema = paginationQuerySchema.extend({
 })
 
 export const listWebhookRequestsResponseSchema = z.object({
-  requests: z.array(webhookRequestSchema),
+  items: z.array(webhookRequestSchema),
   pagination: paginationMetadataSchema,
 })
 
@@ -120,7 +120,7 @@ export const webhookDeliveryAttemptSchema = z.object({
 export const listWebhookDeliveryAttemptsQuerySchema = paginationQuerySchema
 
 export const listWebhookDeliveryAttemptsResponseSchema = z.object({
-  attempts: z.array(webhookDeliveryAttemptSchema),
+  items: z.array(webhookDeliveryAttemptSchema),
   pagination: paginationMetadataSchema,
 })
 

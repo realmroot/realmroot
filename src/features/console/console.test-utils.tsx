@@ -93,7 +93,7 @@ export function consoleSharedFetch(input: RequestInfo | URL, init?: RequestInit)
   }
   if (url === '/api/realm/branding') return Promise.resolve(jsonResponse(brandingSettings))
   if (url === '/api/realm/security-policy') return Promise.resolve(jsonResponse(securityPolicy))
-  if (url === '/api/connectors') return Promise.resolve(jsonResponse({ connectors: [connector], pagination }))
+  if (url === '/api/connectors') return Promise.resolve(jsonResponse({ items: [connector], pagination }))
   if (url === '/api/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
   if (url === '/api/realm/configuration-status') {
     return Promise.resolve(
@@ -107,16 +107,16 @@ export function consoleSharedFetch(input: RequestInfo | URL, init?: RequestInit)
     return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
   }
   if (url.includes('/authorizations') || url.includes('/application-authorizations')) {
-    return Promise.resolve(jsonResponse({ authorizations: [], pagination: emptyPagination }))
+    return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
   }
   if (url === '/api/applications' || url.startsWith('/api/applications?')) {
-    return Promise.resolve(jsonResponse({ applications: [], pagination: emptyPagination }))
+    return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
   }
   if (/^\/api\/users(?:\?|$)/.test(url)) {
-    return Promise.resolve(jsonResponse({ users: [user], pagination }))
+    return Promise.resolve(jsonResponse({ items: [user], pagination }))
   }
   if (url === '/api/organizations') {
-    return Promise.resolve(jsonResponse({ organizations: [organization], pagination }))
+    return Promise.resolve(jsonResponse({ items: [organization], pagination }))
   }
   if (url === '/api/resource-servers') {
     return Promise.resolve(jsonResponse({ items: [{ ...apiResource, authorization: null }], pagination }))
@@ -138,15 +138,19 @@ export function accountRouteFetch(input: RequestInfo | URL, init?: RequestInit) 
   if (url === '/api/account/provider-connections?limit=100&offset=0') {
     return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
   }
-  if (url === '/api/account/linked-accounts') return Promise.resolve(jsonResponse({ accounts: [] }))
+  if (url === '/api/account/linked-accounts') {
+    return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
+  }
   if (url === '/api/account/application-authorizations')
-    return Promise.resolve(jsonResponse({ authorizations: [], pagination: emptyPagination }))
+    return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
   if (url === '/api/account/agents') return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
   if (url === '/api/account/api-resources')
     return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
   if (url === '/api/account/account-connections')
     return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
-  if (url === '/api/account/sessions') return Promise.resolve(jsonResponse({ sessions: [] }))
+  if (url === '/api/account/sessions') {
+    return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
+  }
   if (url === '/api/account/security') return Promise.resolve(jsonResponse({ security: accountSecurity }))
   if (url === '/api/account/security/passkeys') return Promise.resolve(jsonResponse({ passkeys: [] }))
   return Promise.resolve(jsonResponse(init?.method ? { ok: true } : {}))
@@ -167,29 +171,28 @@ export function consoleRouteFetch(input: RequestInfo | URL) {
     )
   }
   if (url === '/api/applications') {
-    return Promise.resolve(jsonResponse({ applications: [application], pagination }))
+    return Promise.resolve(jsonResponse({ items: [application], pagination }))
   }
   if (url === '/api/applications/app-1') return Promise.resolve(jsonResponse(application))
-  if (url.startsWith('/api/users')) return Promise.resolve(jsonResponse({ users: [user], pagination }))
+  if (url.startsWith('/api/users')) return Promise.resolve(jsonResponse({ items: [user], pagination }))
   if (url === '/api/connectors') {
-    return Promise.resolve(jsonResponse({ connectors: [connector], pagination }))
+    return Promise.resolve(jsonResponse({ items: [connector], pagination }))
   }
   if (url === '/api/connectors/templates') {
     return Promise.resolve(jsonResponse(connectorTemplates))
   }
   if (url === '/api/organizations') {
-    return Promise.resolve(jsonResponse({ organizations: [organization], pagination }))
+    return Promise.resolve(jsonResponse({ items: [organization], pagination }))
   }
   if (url === '/api/organizations/org-1') return Promise.resolve(jsonResponse(organization))
-  if (url === '/api/organizations/org-1/roles') return Promise.resolve(jsonResponse({ roles: [role], pagination }))
+  if (url === '/api/organizations/org-1/roles') return Promise.resolve(jsonResponse({ items: [role], pagination }))
   if (url === '/api/resource-servers') {
     return Promise.resolve(jsonResponse({ items: [{ ...apiResource, authorization: null }], pagination }))
   }
   if (/^\/api\/webhooks\/[^/]+\/deliveries/.test(url)) {
-    return Promise.resolve(jsonResponse({ requests: [webhookRequest], pagination }))
+    return Promise.resolve(jsonResponse({ items: [webhookRequest], pagination }))
   }
-  if (url.startsWith('/api/webhooks'))
-    return Promise.resolve(jsonResponse({ endpoints: [webhookEndpoint], pagination }))
+  if (url.startsWith('/api/webhooks')) return Promise.resolve(jsonResponse({ items: [webhookEndpoint], pagination }))
   if (url === '/api/realm/security-policy') return Promise.resolve(jsonResponse(securityPolicy))
   if (url === '/api/realm/branding') return Promise.resolve(jsonResponse(brandingSettings))
   return consoleSharedFetch(input)

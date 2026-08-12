@@ -112,7 +112,7 @@ export async function listApplications(
     ),
   )
   return {
-    applications,
+    items: applications,
     pagination: result.pagination,
   }
 }
@@ -208,7 +208,7 @@ export async function listApplicationSecrets(
   await requireApplication(deps, id)
   const result = await deps.applications.listSecrets(id, pagination)
   return {
-    secrets: result.items.map(toSecretMetadata),
+    items: result.items.map(toSecretMetadata),
     pagination: result.pagination,
   }
 }
@@ -220,7 +220,7 @@ export async function listApplicationAuthorizations(
 ): Promise<ListApplicationAuthorizationsResponse> {
   const result = await deps.applications.listAuthorizations(query, ownerOrganizationIds)
   return {
-    authorizations: result.items.map(toApplicationAuthorization),
+    items: result.items.map(toApplicationAuthorization),
     pagination: result.pagination,
   }
 }

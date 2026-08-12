@@ -65,16 +65,16 @@ describe('application API pagination contracts', () => {
       nextOffset: null,
     }
 
-    expect(listApplicationsResponseSchema.parse({ applications: [], pagination })).toEqual({
-      applications: [],
+    expect(listApplicationsResponseSchema.parse({ items: [], pagination })).toEqual({
+      items: [],
       pagination,
     })
-    expect(listClientSecretsResponseSchema.parse({ secrets: [], pagination })).toEqual({ secrets: [], pagination })
-    expect(listRedirectUrisResponseSchema.parse({ redirectUris: [], pagination })).toEqual({
-      redirectUris: [],
+    expect(listClientSecretsResponseSchema.parse({ items: [], pagination })).toEqual({ items: [], pagination })
+    expect(listRedirectUrisResponseSchema.parse({ items: [], pagination })).toEqual({
+      items: [],
       pagination,
     })
-    expect(() => listApplicationsResponseSchema.parse({ applications: [] })).toThrow()
+    expect(() => listApplicationsResponseSchema.parse({ items: [] })).toThrow()
   })
 
   it('makes one-time client secret material explicit in create responses only', () => {
@@ -122,9 +122,7 @@ describe('application API pagination contracts', () => {
     }
 
     expect(createApplicationResponseSchema.parse(response).clientSecret).toBe('fas_secret')
-    expect(() =>
-      listApplicationsResponseSchema.parse({ applications: [response], pagination: pagination(1) }),
-    ).toThrow()
+    expect(() => listApplicationsResponseSchema.parse({ items: [response], pagination: pagination(1) })).toThrow()
   })
 
   it('accepts all four Application types without caller-controlled protocol settings', () => {

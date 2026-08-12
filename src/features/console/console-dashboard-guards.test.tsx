@@ -41,17 +41,17 @@ describe('console dashboard guards', () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
       if (url === '/api/applications') {
-        return Promise.resolve(jsonResponse({ applications: [application], pagination }))
+        return Promise.resolve(jsonResponse({ items: [application], pagination }))
       }
       if (url === '/api/applications/app-1') {
         return Promise.resolve(jsonResponse(application))
       }
-      if (url.startsWith('/api/users')) return Promise.resolve(jsonResponse({ users: [user], pagination }))
+      if (url.startsWith('/api/users')) return Promise.resolve(jsonResponse({ items: [user], pagination }))
       if (url === '/api/connectors') {
-        return Promise.resolve(jsonResponse({ connectors: [connector], pagination }))
+        return Promise.resolve(jsonResponse({ items: [connector], pagination }))
       }
       if (url.startsWith('/api/organizations')) {
-        return Promise.resolve(jsonResponse({ organizations: [organization], pagination }))
+        return Promise.resolve(jsonResponse({ items: [organization], pagination }))
       }
       if (url === '/api/resource-servers') {
         return Promise.resolve(jsonResponse({ items: [{ ...apiResource, authorization: null }], pagination }))
@@ -79,16 +79,16 @@ describe('console dashboard guards', () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
       if (url === '/api/applications') {
-        return Promise.resolve(jsonResponse({ applications: [], pagination: emptyPagination }))
+        return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
       }
       if (url.startsWith('/api/users')) {
-        return Promise.resolve(jsonResponse({ users: [], pagination: emptyPagination }))
+        return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
       }
       if (url === '/api/connectors') {
-        return Promise.resolve(jsonResponse({ connectors: [], pagination: emptyPagination }))
+        return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
       }
       if (url.startsWith('/api/organizations')) {
-        return Promise.resolve(jsonResponse({ organizations: [], pagination: emptyPagination }))
+        return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
       }
       if (url === '/api/resource-servers') {
         return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
@@ -131,13 +131,13 @@ describe('console dashboard guards', () => {
         return Promise.resolve(jsonResponse({ error: { message: 'Management unavailable.' } }, 503))
       }
       if (url.startsWith('/api/users')) {
-        return Promise.resolve(jsonResponse({ users: [], pagination: emptyPagination }))
+        return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
       }
       if (url === '/api/connectors') {
-        return Promise.resolve(jsonResponse({ connectors: [], pagination: emptyPagination }))
+        return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
       }
       if (url.startsWith('/api/organizations')) {
-        return Promise.resolve(jsonResponse({ organizations: [], pagination: emptyPagination }))
+        return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
       }
       if (url === '/api/resource-servers') {
         return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
@@ -163,13 +163,13 @@ describe('console dashboard guards', () => {
         })
       }
       if (url.startsWith('/api/users')) {
-        return Promise.resolve(jsonResponse({ users: [], pagination: emptyPagination }))
+        return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
       }
       if (url === '/api/connectors') {
-        return Promise.resolve(jsonResponse({ connectors: [], pagination: emptyPagination }))
+        return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
       }
       if (url.startsWith('/api/organizations')) {
-        return Promise.resolve(jsonResponse({ organizations: [], pagination: emptyPagination }))
+        return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
       }
       if (url === '/api/resource-servers') {
         return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
@@ -180,7 +180,7 @@ describe('console dashboard guards', () => {
     renderWithQuery(<ConsoleDashboardPage />)
 
     expect(await screen.findByText('Loading Console dashboard')).toBeTruthy()
-    deferred.resolve(jsonResponse({ applications: [], pagination: emptyPagination }))
+    deferred.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
     await waitFor(() => expect(screen.queryByText('Loading Console dashboard')).toBeNull())
   })
 

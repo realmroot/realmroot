@@ -210,7 +210,7 @@ describe('management account settings routes', () => {
     expect(users.listLinkedAccounts).toHaveBeenCalledWith('user-1', { limit: 2, offset: 4 })
     expect(users.listSessions).toHaveBeenCalledWith('user-1', { limit: 4, offset: 8 })
     await expect(accounts.json()).resolves.toMatchObject({
-      accounts: [],
+      items: [],
       pagination: {
         limit: 2,
         offset: 4,
@@ -220,7 +220,7 @@ describe('management account settings routes', () => {
       },
     })
     await expect(applications.json()).resolves.toMatchObject({
-      authorizations: [],
+      items: [],
       pagination: {
         limit: 3,
         offset: 6,
@@ -230,7 +230,7 @@ describe('management account settings routes', () => {
       },
     })
     await expect(sessions.json()).resolves.toMatchObject({
-      sessions: [],
+      items: [],
       pagination: {
         limit: 4,
         offset: 8,

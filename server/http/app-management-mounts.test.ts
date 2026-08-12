@@ -303,7 +303,7 @@ function configFixture(overrides: Record<string, unknown> = {}) {
 
 function mockApplicationCors(origins: string[]) {
   return vi.spyOn(applications, 'listApplications').mockResolvedValue({
-    applications: [
+    items: [
       applicationResponse({ corsOrigins: origins }),
       applicationResponse({ disabled: true, corsOrigins: ['https://disabled.example.com'] }),
     ],

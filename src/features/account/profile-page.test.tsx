@@ -120,15 +120,15 @@ describe('AccountProfilePage', () => {
       http.get(`${base}/api/configz`, () => HttpResponse.json(limited)),
       http.get(`${base}/api/account/application-authorizations`, () => {
         protectedDataRequests += 1
-        return HttpResponse.json({ applications: [] })
+        return HttpResponse.json({ items: [] })
       }),
       http.get(`${base}/api/account/linked-accounts`, () => {
         protectedDataRequests += 1
-        return HttpResponse.json({ accounts: [] })
+        return HttpResponse.json({ items: [], pagination: null })
       }),
       http.get(`${base}/api/account/sessions`, () => {
         protectedDataRequests += 1
-        return HttpResponse.json({ sessions: [] })
+        return HttpResponse.json({ items: [], pagination: null })
       }),
     )
     Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:limited-export') })
@@ -293,7 +293,7 @@ describe('AccountProfilePage', () => {
       http.get(`${base}/api/configz`, () => HttpResponse.json(limited)),
       http.get(`${base}/api/account/linked-accounts`, () => {
         linkedAccountRequests += 1
-        return HttpResponse.json({ accounts: [] })
+        return HttpResponse.json({ items: [], pagination: null })
       }),
     )
     store.profile.links = [

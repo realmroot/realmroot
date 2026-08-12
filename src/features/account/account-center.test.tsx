@@ -145,11 +145,13 @@ function mockAccountFetch() {
         }),
       )
     }
+    const pagination = { limit: 50, offset: 0, total: 0, hasMore: false, nextOffset: null }
     if (path === '/api/account/security') return Promise.resolve(jsonResponse({ security }))
     if (path === '/api/account/security/passkeys') return Promise.resolve(jsonResponse({ passkeys: [] }))
-    if (path === '/api/account/sessions') return Promise.resolve(jsonResponse({ sessions: [] }))
-    const pagination = { limit: 50, offset: 0, total: 0, hasMore: false, nextOffset: null }
-    if (path === '/api/account/linked-accounts') return Promise.resolve(jsonResponse({ accounts: linkedAccounts }))
+    if (path === '/api/account/sessions') return Promise.resolve(jsonResponse({ items: [], pagination }))
+    if (path === '/api/account/linked-accounts') {
+      return Promise.resolve(jsonResponse({ items: linkedAccounts, pagination }))
+    }
     if (path.startsWith('/api/account/provider-connectors')) {
       return Promise.resolve(jsonResponse({ items: [], pagination }))
     }
@@ -157,7 +159,7 @@ function mockAccountFetch() {
       return Promise.resolve(jsonResponse({ items: [], pagination }))
     }
     if (path === '/api/account/application-authorizations')
-      return Promise.resolve(jsonResponse({ authorizations: [], pagination }))
+      return Promise.resolve(jsonResponse({ items: [], pagination }))
     if (path === '/api/account/agents') return Promise.resolve(jsonResponse({ items: [], pagination }))
     if (path === '/api/account/api-resources') return Promise.resolve(jsonResponse({ items: [], pagination }))
     if (path === '/api/account/account-connections') return Promise.resolve(jsonResponse({ items: [], pagination }))

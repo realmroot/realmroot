@@ -194,19 +194,19 @@ export function UserDetailPage({ userId, section = 'overview' }: { userId: strin
           </TabsList>
           <TabsContent className="mt-5" value="overview">
             <UserOverview
-              applications={applications.data!.applications.length}
+              applications={applications.data!.items.length}
               agents={userAgents.length}
-              linked={linkedAccounts.data!.accounts.length}
+              linked={linkedAccounts.data!.items.length}
               realmDetails
-              sessions={sessions.data!.sessions.length}
+              sessions={sessions.data!.items.length}
               user={user}
             />
           </TabsContent>
           <TabsContent className="mt-5" value="authentication">
             <UserAuthentication
-              accounts={linkedAccounts.data!.accounts}
+              accounts={linkedAccounts.data!.items}
               onDeletePasskey={setPasskeyToDelete}
-              passkeys={passkeys.data!.passkeys}
+              passkeys={passkeys.data!.items}
               security={userQuery.data?.security}
             />
           </TabsContent>
@@ -214,7 +214,7 @@ export function UserDetailPage({ userId, section = 'overview' }: { userId: strin
             <UserSessions
               onRevoke={setSessionToRevoke}
               onRevokeAll={() => setRevokeAllOpen(true)}
-              sessions={sessions.data!.sessions}
+              sessions={sessions.data!.items}
             />
           </TabsContent>
           <TabsContent className="mt-5" value="permissions">
@@ -224,7 +224,7 @@ export function UserDetailPage({ userId, section = 'overview' }: { userId: strin
             <UserAgents agents={userAgents} />
           </TabsContent>
           <TabsContent className="mt-5" value="authorized-apps">
-            <UserApplications applications={applications.data!.applications} />
+            <UserApplications applications={applications.data!.items} />
           </TabsContent>
           <TabsContent className="mt-5" value="settings">
             <UserSettings
@@ -350,9 +350,9 @@ function UserAuthentication({
   passkeys,
   security,
 }: {
-  accounts: Awaited<ReturnType<typeof listUserLinkedAccounts>>['accounts']
+  accounts: Awaited<ReturnType<typeof listUserLinkedAccounts>>['items']
   onDeletePasskey: (id: string) => void
-  passkeys: Awaited<ReturnType<typeof listUserPasskeys>>['passkeys']
+  passkeys: Awaited<ReturnType<typeof listUserPasskeys>>['items']
   security?: Awaited<ReturnType<typeof getUser>>['security']
 }) {
   return (
@@ -460,7 +460,7 @@ function UserSessions({
 }: {
   onRevoke: (id: string) => void
   onRevokeAll: () => void
-  sessions: Awaited<ReturnType<typeof listUserSessions>>['sessions']
+  sessions: Awaited<ReturnType<typeof listUserSessions>>['items']
 }) {
   return (
     <div className="grid gap-4">
@@ -576,7 +576,7 @@ function UserAgents({ agents }: { agents: Awaited<ReturnType<typeof getAgentInve
 function UserApplications({
   applications,
 }: {
-  applications: Awaited<ReturnType<typeof listUserApplications>>['applications']
+  applications: Awaited<ReturnType<typeof listUserApplications>>['items']
 }) {
   return (
     <div className="overflow-hidden rounded-xl border">

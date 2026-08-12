@@ -221,10 +221,10 @@ describe('Agent identity lifecycle', () => {
     vi.mocked(deps.authorization.findMemberByOrganizationUser).mockResolvedValue(member('owner'))
 
     await expect(listPersonalAgentIdentities(deps, 'user-1')).resolves.toMatchObject({
-      identities: [{ homeSpace: { type: 'personal', userId: 'user-1' } }],
+      items: [{ homeSpace: { type: 'personal', userId: 'user-1' } }],
     })
     await expect(listOrganizationAgentIdentities(deps, 'org-1', 'user-1')).resolves.toMatchObject({
-      identities: [{ homeSpace: { type: 'organization', organizationId: 'org-1' } }],
+      items: [{ homeSpace: { type: 'organization', organizationId: 'org-1' } }],
     })
     await expect(listAllAgentIdentities(deps, { limit: 20, offset: 5 })).resolves.toMatchObject({
       total: 2,

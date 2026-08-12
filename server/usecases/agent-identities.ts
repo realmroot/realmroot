@@ -22,11 +22,8 @@ import { type PaginationInput, paginationMetadata } from '@shared/api/pagination
 
 const enrollmentLifetimeMs = 10 * 60 * 1000
 
-export async function listPersonalAgentIdentities(
-  deps: Deps,
-  userId: string,
-): Promise<{ identities: AgentIdentity[] }> {
-  return { identities: (await deps.agentIdentities.listPersonal(userId)).map(toIdentity) }
+export async function listPersonalAgentIdentities(deps: Deps, userId: string): Promise<{ items: AgentIdentity[] }> {
+  return { items: (await deps.agentIdentities.listPersonal(userId)).map(toIdentity) }
 }
 
 export async function listPersonalAgents(deps: Deps, userId: string, page: PaginationInput) {
@@ -49,9 +46,9 @@ export async function listOrganizationAgentIdentities(
   deps: Deps,
   organizationId: string,
   actorUserId: string,
-): Promise<{ identities: AgentIdentity[] }> {
+): Promise<{ items: AgentIdentity[] }> {
   await assertController(deps, { type: 'organization', organizationId }, actorUserId)
-  return { identities: (await deps.agentIdentities.listOrganization(organizationId)).map(toIdentity) }
+  return { items: (await deps.agentIdentities.listOrganization(organizationId)).map(toIdentity) }
 }
 
 export async function listAllAgentIdentities(deps: Deps, page: { limit: number; offset: number }) {
