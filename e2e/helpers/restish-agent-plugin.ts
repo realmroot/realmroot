@@ -18,7 +18,9 @@ export interface PluginIdentityResult {
 export interface PluginEnrollmentResult {
   id: string
   agentId: string | null
-  name: string
+  nickname: string
+  username: string | null
+  runtime: string | null
   status: string
 }
 
@@ -33,7 +35,7 @@ export interface PendingResourceAccess<T> {
 }
 
 export interface RestishAgentPlugin {
-  enroll(name: string): PendingEnrollment
+  enroll(username: string, nickname: string): PendingEnrollment
   whoami(): PluginIdentityResult
   inspectAuth(operation: string): string
   listResourceServers<T>(): T
@@ -192,12 +194,12 @@ export function createRestishAgentPlugin(origin: string): RestishAgentPlugin {
   }
 
   return {
-    enroll: (name) =>
+    enroll: (username, nickname) =>
       invokePending<PluginEnrollmentResult>(
         ['agent', 'enroll'],
-        { kind: 'new_identity', name },
+        { kind: 'new_identity', username, nickname, runtime: 'codex' },
         {
-          REALMROOT_AGENT_NAME: name,
+          REALMROOT_AGENT_NAME: nickname,
         },
       ),
     whoami: () => invoke<PluginIdentityResult>(['agent', 'whoami']),
