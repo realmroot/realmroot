@@ -118,6 +118,18 @@ describe('Public profiles', () => {
     expect(JSON.stringify(profile)).not.toContain('resource-1')
   })
 
+  it('resolves the same public Agent by its immutable username [spec: agent-identity/public-agent-profile]', async () => {
+    const deps = createTestDeps()
+    const identity = agentIdentity()
+    vi.mocked(deps.agentIdentities.findByIssuerUsername).mockResolvedValue(identity)
+
+    await expect(
+      getPublicAgentProfile(deps, identity.issuer, identity.username!, 'summary', now),
+    ).resolves.toMatchObject({ subject: identity.subject, username: identity.username })
+    expect(deps.agentIdentities.findByIssuerUsername).toHaveBeenCalledWith(identity.issuer, identity.username)
+    expect(deps.agentIdentities.findByIssuerSubject).not.toHaveBeenCalled()
+  })
+
   it('computes current and longest streaks from an injected clock', async () => {
     const deps = createTestDeps()
     vi.mocked(deps.agentIdentities.findByIssuerSubject).mockResolvedValue(agentIdentity())
@@ -227,6 +239,7 @@ function agentIdentity(): AgentIdentityRecord {
     id: 'identity-1',
     issuer: 'https://identity.example.com/api/auth',
     subject: 'agt_stable',
+    username: 'build-agent.00000000000000000000000000000004',
     name: 'Build Agent',
     ownerUserId: 'user-1',
     ownerOrganizationId: null,

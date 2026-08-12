@@ -258,10 +258,10 @@ function seedCurrentSchema(database: DatabaseSync) {
       id, state_hash, resource_id, owner_user_id, owner_organization_id, scopes,
       encrypted_pkce_verifier, status, expires_at, created_at, updated_at
     ) values ('intent-org', 'state-1', 'resource-1', 'user-1', 'org-1', '[]', 'sealed', 'pending', 100, 1, 1);
-    insert into agent_identity (id, issuer, subject, name, owner_organization_id, status, created_at, updated_at)
-    values ('agent-1', 'https://issuer.example.test', 'agent-1', 'Agent', 'org-1', 'active', 1, 1);
-    insert into agent_identity (id, issuer, subject, name, owner_organization_id, status, created_at, updated_at)
-    values ('platform-agent', 'https://issuer.example.test', 'platform-agent', 'Platform Agent', 'org_platform', 'active', 1, 1);
+    insert into agent_identity (id, issuer, subject, username, name, owner_organization_id, status, created_at, updated_at)
+    values ('agent-1', 'https://issuer.example.test', 'agent-1', 'agent.00000000000000000000000000000001', 'Agent', 'org-1', 'active', 1, 1);
+    insert into agent_identity (id, issuer, subject, username, name, owner_organization_id, status, created_at, updated_at)
+    values ('platform-agent', 'https://issuer.example.test', 'platform-agent', 'platform-agent.00000000000000000000000000000002', 'Platform Agent', 'org_platform', 'active', 1, 1);
     insert into agent_access_grant (
       id, resource_id, agent_identity_id, scopes, mode, status, granted_by_user_id, created_at, updated_at
     ) values ('platform-grant', 'resource-1', 'platform-agent', '[]', 'direct', 'active', 'user-1', 1, 1);

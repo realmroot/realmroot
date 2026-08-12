@@ -166,23 +166,27 @@ export async function getAgentIdentityByProtocolAgent(deps: Deps, protocolAgentI
 
 export async function createAgentLoginIdentity(
   deps: Deps,
-  input: { protocolAgentId: string; name: string },
+  input: { protocolAgentId: string; username: string; nickname?: string; runtime: string },
   issuer: string,
   controllerUserId: string,
 ): Promise<AgentIdentity> {
   const existing = await deps.agentIdentities.findActiveByProtocolAgent(input.protocolAgentId)
-  if (existing) return toIdentity(existing)
+  if (existing) return toIdentity(await requireOrClaimIdentityProfile(deps, existing, input))
 
   await assertProtocolAgentCanEnroll(deps, input.protocolAgentId, controllerUserId)
 
   const now = new Date()
+  await requireAvailableAgentUsername(deps, input.username)
   const identityId = deps.ids.generate()
+  const nickname = input.nickname ?? input.runtime
   const aggregate = await deps.agentIdentities.createIdentity({
     identity: {
       id: identityId,
       issuer,
       subject: deps.ids.generate(),
-      name: input.name,
+      username: input.username,
+      name: nickname,
+      runtime: input.runtime,
       ownerUserId: controllerUserId,
       ownerOrganizationId: null,
       status: 'active',
@@ -222,7 +226,7 @@ export async function getPublicAgentEnrollment(
   actorUserId: string,
 ): Promise<AgentEnrollment> {
   const intent = await getAgentEnrollmentIntent(deps, enrollmentId, actorUserId)
-  return toAgentEnrollment(intent, await enrollmentAgentName(deps, intent))
+  return toAgentEnrollment(intent, await enrollmentAgentProfile(deps, intent))
 }
 
 export async function getProtocolAgentEnrollment(
@@ -234,7 +238,7 @@ export async function getProtocolAgentEnrollment(
   if (!intent) throw notFound('Agent enrollment was not found.')
   if (intent.protocolAgentId !== protocolAgentId) throw forbidden('This Agent cannot read the enrollment.')
   const enrollmentIntent = toIntent(intent)
-  return toAgentEnrollment(enrollmentIntent, await enrollmentAgentName(deps, enrollmentIntent))
+  return toAgentEnrollment(enrollmentIntent, await enrollmentAgentProfile(deps, enrollmentIntent))
 }
 
 export async function emergencyDeleteAgentIdentity(deps: Deps, identityId: string, actorUserId: string | null) {
@@ -269,23 +273,48 @@ export async function createAgentEnrollmentIntent(
   actorUserId: string,
   idempotencyKey: string,
 ): Promise<{ intent: AgentEnrollmentIntent; replayed: boolean }> {
+  const profile = {
+    username: input.username,
+    nickname: input.nickname ?? input.runtime,
+    runtime: input.runtime,
+  }
   const homeSpace = input.organizationId
     ? ({ type: 'organization', organizationId: input.organizationId } as const)
     : ({ type: 'personal', userId: actorUserId } as const)
   const existing = await deps.agentIdentities.findIntentByIdempotencyKey(input.protocolAgentId, idempotencyKey)
   if (existing) {
-    requireMatchingIdentityEnrollment(existing, input.name, homeSpace, actorUserId)
-    return { intent: toIntent(existing), replayed: true }
+    const profiledIntent = existing.requestedUsername
+      ? existing
+      : {
+          ...existing,
+          requestedName: profile.nickname,
+          requestedUsername: profile.username,
+          requestedRuntime: profile.runtime,
+        }
+    requireMatchingIdentityEnrollment(profiledIntent, profile, homeSpace, actorUserId)
+    if (!existing.requestedUsername) {
+      const bound = await deps.agentIdentities.findActiveByProtocolAgent(input.protocolAgentId)
+      if (!bound) throw conflict('The existing Agent enrollment cannot claim a username without its identity.')
+      await requireOrClaimIdentityProfile(deps, bound, input)
+    }
+    return { intent: toIntent(profiledIntent), replayed: true }
   }
   const boundIdentity = await deps.agentIdentities.findActiveByProtocolAgent(input.protocolAgentId)
   if (boundIdentity) {
+    const profiledIdentity = await requireOrClaimIdentityProfile(deps, boundIdentity, input)
     const boundHomeSpace = homeSpaceOf(boundIdentity.identity)
     await assertController(deps, boundHomeSpace, actorUserId)
     const approved = await deps.agentIdentities.findLatestApprovedIdentityIntent(input.protocolAgentId)
     if (approved) {
       requireMatchingIdentityEnrollment(
         approved,
-        approved.requestedName ?? boundIdentity.identity.name,
+        approved.requestedUsername
+          ? {
+              username: approved.requestedUsername,
+              nickname: approved.requestedName!,
+              runtime: approved.requestedRuntime!,
+            }
+          : profile,
         boundHomeSpace,
         actorUserId,
       )
@@ -295,7 +324,9 @@ export async function createAgentEnrollmentIntent(
     const migrated = await deps.agentIdentities.createIntentIdempotently({
       id: deps.ids.generate(),
       agentIdentityId: null,
-      requestedName: boundIdentity.identity.name,
+      requestedName: profiledIdentity.identity.name,
+      requestedUsername: profiledIdentity.identity.username,
+      requestedRuntime: profiledIdentity.identity.runtime,
       ...ownerColumns(boundHomeSpace),
       protocolAgentId: input.protocolAgentId,
       idempotencyKey,
@@ -307,17 +338,20 @@ export async function createAgentEnrollmentIntent(
       createdAt: now,
       updatedAt: now,
     })
-    requireMatchingIdentityEnrollment(migrated.intent, boundIdentity.identity.name, boundHomeSpace, actorUserId)
+    requireMatchingIdentityEnrollment(migrated.intent, profile, boundHomeSpace, actorUserId)
     return { intent: toIntent(migrated.intent), replayed: true }
   }
   await assertController(deps, homeSpace, actorUserId)
   await assertProtocolAgentCanEnroll(deps, input.protocolAgentId, actorUserId)
+  await requireAvailableAgentUsername(deps, input.username)
 
   const now = new Date()
   const reserved = await deps.agentIdentities.createIntentIdempotently({
     id: deps.ids.generate(),
     agentIdentityId: null,
-    requestedName: input.name,
+    requestedName: profile.nickname,
+    requestedUsername: profile.username,
+    requestedRuntime: profile.runtime,
     ...ownerColumns(homeSpace),
     protocolAgentId: input.protocolAgentId,
     idempotencyKey,
@@ -329,13 +363,13 @@ export async function createAgentEnrollmentIntent(
     createdAt: now,
     updatedAt: now,
   })
-  requireMatchingIdentityEnrollment(reserved.intent, input.name, homeSpace, actorUserId)
+  requireMatchingIdentityEnrollment(reserved.intent, profile, homeSpace, actorUserId)
   return { intent: toIntent(reserved.intent), replayed: !reserved.created }
 }
 
 function requireMatchingIdentityEnrollment(
   intent: AgentEnrollmentIntentRecord,
-  name: string,
+  profile: { username: string; nickname: string; runtime: string },
   homeSpace: AgentHomeSpace,
   actorUserId: string,
 ) {
@@ -345,7 +379,13 @@ function requireMatchingIdentityEnrollment(
     (homeSpace.type === 'organization' &&
       intent.ownerOrganizationId === homeSpace.organizationId &&
       intent.ownerUserId === null)
-  if (intent.agentIdentityId !== null || intent.requestedName !== name || !sameOwner) {
+  if (
+    intent.agentIdentityId !== null ||
+    intent.requestedName !== profile.nickname ||
+    intent.requestedUsername !== profile.username ||
+    intent.requestedRuntime !== profile.runtime ||
+    !sameOwner
+  ) {
     throw conflict('Idempotency-Key was already used for a different Agent identity enrollment.')
   }
 }
@@ -372,6 +412,8 @@ export async function createAdditionalAgentEnrollmentIntent(
     id: deps.ids.generate(),
     agentIdentityId: identityId,
     requestedName: null,
+    requestedUsername: null,
+    requestedRuntime: null,
     ...ownerColumns(homeSpace),
     protocolAgentId,
     idempotencyKey,
@@ -425,7 +467,9 @@ export async function approveAgentEnrollment(
       id: identityId,
       issuer,
       subject: deps.ids.generate(),
+      username: intent.requestedUsername!,
       name: intent.requestedName!,
+      runtime: intent.requestedRuntime!,
       ...ownerColumns(homeSpace),
       status: 'active',
       deletedAt: null,
@@ -662,7 +706,9 @@ function toIntent(record: AgentEnrollmentIntentRecord): AgentEnrollmentIntent {
   return {
     id: record.id,
     agentIdentityId: record.agentIdentityId,
-    requestedName: record.requestedName,
+    requestedNickname: record.requestedName,
+    requestedUsername: record.requestedUsername ?? null,
+    requestedRuntime: record.requestedRuntime ?? null,
     homeSpace: homeSpaceOf(record),
     protocolAgentId: record.protocolAgentId,
     status: record.status as AgentEnrollmentIntent['status'],
@@ -679,7 +725,9 @@ function toIdentity(aggregate: AgentIdentityAggregate): AgentIdentity {
     id: record.id,
     issuer: record.issuer,
     subject: record.subject,
+    username: record.username,
     name: record.name,
+    runtime: record.runtime ?? null,
     homeSpace: homeSpaceOf(record),
     status: record.status as AgentIdentity['status'],
     createdAt: record.createdAt,
@@ -701,7 +749,9 @@ export function toAgent(identity: AgentIdentityAggregate | AgentIdentity): Agent
     id: value.id,
     issuer: value.issuer,
     subject: value.subject,
+    username: value.username,
     name: value.name,
+    runtime: value.runtime ?? null,
     homeSpace: value.homeSpace,
     status: value.status,
     createdAt: iso(value.createdAt)!,
@@ -709,12 +759,14 @@ export function toAgent(identity: AgentIdentityAggregate | AgentIdentity): Agent
   }
 }
 
-export function toAgentEnrollment(intent: AgentEnrollmentIntent, name = intent.requestedName): AgentEnrollment {
-  if (!name) throw new Error(`Agent enrollment ${intent.id} does not resolve to an Agent name.`)
+export function toAgentEnrollment(
+  intent: AgentEnrollmentIntent,
+  profile: { username: string | null; nickname: string; runtime: string | null },
+): AgentEnrollment {
   return {
     id: intent.id,
     agentId: intent.agentIdentityId,
-    name,
+    ...profile,
     kind: intent.agentIdentityId ? 'additional_host' : 'new_identity',
     homeSpace: intent.homeSpace,
     status: intent.status === 'approved' ? 'approved' : intent.status,
@@ -725,10 +777,42 @@ export function toAgentEnrollment(intent: AgentEnrollmentIntent, name = intent.r
   }
 }
 
-async function enrollmentAgentName(deps: Deps, intent: AgentEnrollmentIntent) {
-  if (intent.requestedName) return intent.requestedName
+async function enrollmentAgentProfile(deps: Deps, intent: AgentEnrollmentIntent) {
+  if (intent.requestedNickname) {
+    return {
+      username: intent.requestedUsername,
+      nickname: intent.requestedNickname,
+      runtime: intent.requestedRuntime,
+    }
+  }
   if (!intent.agentIdentityId) throw new Error(`Agent enrollment ${intent.id} has no requested or existing identity.`)
-  return (await requireIdentity(deps, intent.agentIdentityId)).identity.name
+  const identity = (await requireIdentity(deps, intent.agentIdentityId)).identity
+  return { username: identity.username, nickname: identity.name, runtime: identity.runtime ?? null }
+}
+
+async function requireAvailableAgentUsername(deps: Deps, username: string) {
+  if (await deps.agentIdentities.findByUsername(username))
+    throw conflict(`Agent username "${username}" is unavailable.`)
+}
+
+async function requireOrClaimIdentityProfile(
+  deps: Deps,
+  aggregate: AgentIdentityAggregate,
+  input: { username: string; nickname?: string; runtime: string },
+) {
+  if (aggregate.identity.username) {
+    if (aggregate.identity.username !== input.username) throw conflict('Agent username is immutable.')
+    return aggregate
+  }
+  await requireAvailableAgentUsername(deps, input.username)
+  const claimed = await deps.agentIdentities.claimIdentityProfile(aggregate.identity.id, {
+    username: input.username,
+    name: input.nickname ?? input.runtime,
+    runtime: input.runtime,
+    updatedAt: new Date(),
+  })
+  if (!claimed) throw conflict('Agent username has already been assigned.')
+  return claimed
 }
 
 function iso(value: string | Date | null) {

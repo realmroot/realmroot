@@ -8,7 +8,7 @@ import {
   resourceServerAuthorizationDetailsResponseSchema,
 } from '@shared/api/agent-api'
 import { providerConnectionEventIdSchema, providerConnectionEventSchema } from '@shared/api/external-resources'
-import { agentSubjectSchema } from '@shared/api/identifiers'
+import { agentPublicIdentifierSchema } from '@shared/api/identifiers'
 import { paginationQuerySchema } from '@shared/api/pagination'
 import {
   publicAgentResponseSchema,
@@ -122,14 +122,14 @@ const managementRoutes: ManagementRouteConfig[] = [
     summary: 'Get a public Agent representation',
     security: [],
     request: {
-      params: z.object({ subject: agentSubjectSchema }),
+      params: z.object({ subject: agentPublicIdentifierSchema }),
       query: publicProfileQuerySchema,
       headers: publicProfileRequestHeaders,
     },
     response: publicAgentResponseSchema,
     responseHeaders: publicProfileResponseHeaders,
     additionalResponses: publicProfileAdditionalResponses,
-    errors: { 400: 'The subject or view is invalid.', 404: 'The public Agent was not found.' },
+    errors: { 400: 'The Agent identifier or view is invalid.', 404: 'The public Agent was not found.' },
   },
   {
     method: 'post',

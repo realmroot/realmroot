@@ -100,6 +100,26 @@ export function createDrizzleAgentIdentityRepository(db: Database): AgentIdentit
       return identity ?? null
     },
 
+    async findByIssuerUsername(issuer, username) {
+      const [identity] = await db
+        .select()
+        .from(agentIdentity)
+        .where(
+          and(eq(agentIdentity.issuer, issuer), eq(agentIdentity.username, username), isNull(agentIdentity.deletedAt)),
+        )
+        .limit(1)
+      return identity ?? null
+    },
+
+    async findByUsername(username) {
+      const [identity] = await db
+        .select()
+        .from(agentIdentity)
+        .where(and(eq(agentIdentity.username, username), isNull(agentIdentity.deletedAt)))
+        .limit(1)
+      return identity ?? null
+    },
+
     async findIntent(id) {
       const [intent] = await db.select().from(agentEnrollmentIntent).where(eq(agentEnrollmentIntent.id, id)).limit(1)
       return intent ?? null
@@ -170,6 +190,16 @@ export function createDrizzleAgentIdentityRepository(db: Database): AgentIdentit
       const result = await this.findIdentity(input.identity.id)
       if (!result) throw new Error('Agent identity was not persisted.')
       return result
+    },
+
+    async claimIdentityProfile(identityId, input) {
+      const rows = await db
+        .update(agentIdentity)
+        .set(input)
+        .where(and(eq(agentIdentity.id, identityId), isNull(agentIdentity.username), isNull(agentIdentity.deletedAt)))
+        .returning({ id: agentIdentity.id })
+      if (rows.length === 0) return null
+      return this.findIdentity(identityId)
     },
 
     async createIntent(input) {

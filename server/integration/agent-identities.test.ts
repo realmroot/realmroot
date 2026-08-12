@@ -293,6 +293,7 @@ describe('Agent identity enrollment over real D1', () => {
 
     expect(approved.agent).toMatchObject({
       issuer: 'http://localhost/api/auth',
+      username: 'agent-identity-first',
       name: 'Release Agent',
       status: 'active',
       homeSpace: { type: 'personal', userId },
@@ -311,6 +312,15 @@ describe('Agent identity enrollment over real D1', () => {
       activity: { total: expect.any(Number) },
       activityDays: expect.any(Array),
       recentActivity: expect.any(Array),
+    })
+
+    const usernameProfile = await harness.request(
+      `/api/public/agents/${encodeURIComponent(approved.agent.username)}?view=summary`,
+    )
+    expect(usernameProfile.status, await usernameProfile.clone().text()).toBe(200)
+    await expect(usernameProfile.json()).resolves.toMatchObject({
+      subject: stableSubject,
+      username: approved.agent.username,
     })
 
     const second = await seedAgent(harness, userId, 'identity-second')
@@ -581,7 +591,9 @@ async function createIntent(
   const result = await createAgentEnrollmentIntent(
     harness.deps,
     {
-      name: input.name,
+      nickname: input.name,
+      username: input.protocolAgentId,
+      runtime: 'codex',
       protocolAgentId: input.protocolAgentId,
       organizationId: input.organizationId,
     },
@@ -603,6 +615,7 @@ async function approveIntent(harness: Harness, cookie: string, intentId: string)
       id: string
       issuer: string
       subject: string
+      username: string
       status: string
     }
   }

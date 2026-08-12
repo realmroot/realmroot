@@ -40,7 +40,7 @@ describe('agent protocol management over real D1', () => {
     const seeded = await seedAgent(harness, userId)
     const stableAgent = await createAgentLoginIdentity(
       harness.deps,
-      { protocolAgentId: seeded.agentId, name: 'Managed Agent' },
+      { protocolAgentId: seeded.agentId, username: 'managed-agent', nickname: 'Managed Agent', runtime: 'codex' },
       'http://localhost/api/auth',
       userId,
     )
@@ -79,7 +79,7 @@ describe('agent protocol management over real D1', () => {
     const seeded = await seedAgent(harness, userId, 'self')
     const stableAgent = await createAgentLoginIdentity(
       harness.deps,
-      { protocolAgentId: seeded.agentId, name: 'Self Agent' },
+      { protocolAgentId: seeded.agentId, username: 'self-agent', nickname: 'Self Agent', runtime: 'codex' },
       'http://localhost/api/auth',
       userId,
     )
@@ -98,6 +98,7 @@ describe('agent protocol management over real D1', () => {
         id: 'authorized-org-agent',
         issuer: 'http://localhost/api/auth',
         subject: 'authorized-org-subject',
+        username: 'authorized-org-agent.00000000000000000000000000000007',
         name: 'Authorized Organization Agent',
         ownerUserId: null,
         ownerOrganizationId: authorizedOrganization,
@@ -110,6 +111,7 @@ describe('agent protocol management over real D1', () => {
         id: 'unauthorized-org-agent',
         issuer: 'http://localhost/api/auth',
         subject: 'unauthorized-org-subject',
+        username: 'unauthorized-org-agent.00000000000000000000000000000008',
         name: 'Unauthorized Organization Agent',
         ownerUserId: null,
         ownerOrganizationId: unauthorizedOrganization,

@@ -29,7 +29,9 @@ describe('Agent protocol routes', () => {
     const intent = {
       id: 'enrollment-1',
       agentIdentityId: 'identity-1',
-      requestedName: null,
+      requestedNickname: null,
+      requestedUsername: null,
+      requestedRuntime: null,
       homeSpace: { type: 'personal' as const, userId: 'user-1' },
       protocolAgentId: 'protocol-agent-1',
       status: 'pending' as const,
@@ -41,7 +43,9 @@ describe('Agent protocol routes', () => {
     const enrollment = {
       id: intent.id,
       agentId: 'identity-1',
-      name: 'Build Agent',
+      nickname: 'Build Agent',
+      username: 'build-agent',
+      runtime: 'codex',
       kind: 'additional_host' as const,
       homeSpace: intent.homeSpace,
       status: intent.status,
@@ -69,7 +73,9 @@ describe('Agent protocol routes', () => {
     const intent = {
       id: 'enrollment-1',
       agentIdentityId: null,
-      requestedName: 'Build Agent',
+      requestedNickname: 'Build Agent',
+      requestedUsername: 'build-agent',
+      requestedRuntime: 'codex',
       homeSpace: { type: 'personal' as const, userId: 'user-1' },
       protocolAgentId: 'protocol-agent-1',
       status: 'approved' as const,
@@ -81,7 +87,9 @@ describe('Agent protocol routes', () => {
     const enrollment = {
       id: intent.id,
       agentId: null,
-      name: 'Build Agent',
+      nickname: 'Build Agent',
+      username: 'build-agent',
+      runtime: 'codex',
       kind: 'new_identity' as const,
       homeSpace: intent.homeSpace,
       status: intent.status,
@@ -98,7 +106,8 @@ describe('Agent protocol routes', () => {
 
     const response = await createRouteApp().request('/api/agent/enrollments', {
       method: 'POST',
-      headers: { authorization: 'Bearer agent-jwt', 'idempotency-key': 'enrollment-key-1' },
+      headers: { ...jsonHeaders(), authorization: 'Bearer agent-jwt', 'idempotency-key': 'enrollment-key-1' },
+      body: JSON.stringify({ kind: 'new_identity', username: 'build-agent', runtime: 'codex' }),
     })
 
     expect(response.status).toBe(201)
@@ -106,7 +115,7 @@ describe('Agent protocol routes', () => {
     expect(response.headers.get('link')).toContain('agent-enrollment')
     expect(create).toHaveBeenCalledWith(
       expect.anything(),
-      expect.objectContaining({ protocolAgentId: 'protocol-agent-1', name: 'Build Agent' }),
+      expect.objectContaining({ protocolAgentId: 'protocol-agent-1', username: 'build-agent', runtime: 'codex' }),
       'user-1',
       'enrollment-key-1',
     )
@@ -117,7 +126,7 @@ describe('Agent protocol routes', () => {
     const response = await createRouteApp().request('/api/agent/enrollments', {
       method: 'POST',
       headers: jsonHeaders(),
-      body: JSON.stringify({ kind: 'new_identity', name: 'Build Agent' }),
+      body: JSON.stringify({ kind: 'new_identity', username: 'build-agent', runtime: 'codex' }),
     })
 
     expect(response.status).toBe(400)
@@ -287,7 +296,9 @@ function createRouteApp(overrides: { signJWT?: () => Promise<{ token: string }> 
       id: 'identity-1',
       issuer: 'https://auth.example.com/api/auth',
       subject: 'agt_1',
+      username: 'build-agent.00000000000000000000000000000004',
       name: 'Build Agent',
+      runtime: 'codex',
       ownerUserId: 'user-1',
       ownerOrganizationId: null,
       status: 'active',
@@ -352,7 +363,9 @@ function activeIdentity() {
     id: 'identity-1',
     issuer: 'https://auth.example.com/api/auth',
     subject: 'agt_1',
+    username: 'build-agent.00000000000000000000000000000004',
     name: 'Build Agent',
+    runtime: 'codex',
     homeSpace: { type: 'personal' as const, userId: 'user-1' },
     status: 'active' as const,
     deletedAt: null,

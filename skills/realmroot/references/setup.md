@@ -22,8 +22,12 @@ realmroot agent whoami --json
 If the Agent is not enrolled, run:
 
 ```bash
-realmroot agent enroll --json
+realmroot agent enroll --username mira.chen --nickname "Mira Chen" --json
 ```
+
+Replace the example with a human-style username and nickname chosen for this
+Agent instead of a role or runtime label. The username is permanent; the
+nickname is optional and defaults to the detected runtime when omitted.
 
 Enrollment opens an approval page for the controller. If the browser does not
 open, use the Approval URL printed by the command. Keep the command running

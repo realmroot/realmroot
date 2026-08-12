@@ -44,6 +44,9 @@ describe('OpenAPI semantic contract gate', () => {
     const brokeredContextCatalogContract = JSON.parse(
       readFileSync(new URL('./approved-brokered-context-catalog-semantic-baseline.json', import.meta.url), 'utf8'),
     ) as typeof unchanged
+    const agentUsernameContract = JSON.parse(
+      readFileSync(new URL('./approved-agent-username-semantic-baseline.json', import.meta.url), 'utf8'),
+    ) as typeof unchanged
     const brokeredNativeChanges = new Set(brokeredNativeContract.map(({ method, path }) => `${method}:${path}`))
     const resourceDiscoveryChanges = new Set(resourceDiscoveryContract.map(({ method, path }) => `${method}:${path}`))
     const approvedChanges = new Set(
@@ -111,7 +114,7 @@ describe('OpenAPI semantic contract gate', () => {
     const brokeredContextCatalogChanges = new Set(
       brokeredContextCatalogContract.map(({ method, path }) => `${method}:${path}`),
     )
-    const baseline = [
+    const preAgentUsernameBaseline = [
       ...authenticationBaseline.filter(
         (operation) =>
           !permissionSurface(operation) &&
@@ -122,6 +125,11 @@ describe('OpenAPI semantic contract gate', () => {
       ...runtimeApiContract.filter(({ method, path }) => !brokeredContextCatalogChanges.has(`${method}:${path}`)),
       ...m2mApplicationContract.filter(({ method, path }) => !brokeredContextCatalogChanges.has(`${method}:${path}`)),
       ...brokeredContextCatalogContract,
+    ].sort((left, right) => `${left.path}:${left.method}`.localeCompare(`${right.path}:${right.method}`))
+    const agentUsernameChanges = new Set(agentUsernameContract.map(({ method, path }) => `${method}:${path}`))
+    const baseline = [
+      ...preAgentUsernameBaseline.filter(({ method, path }) => !agentUsernameChanges.has(`${method}:${path}`)),
+      ...agentUsernameContract,
     ].sort((left, right) => `${left.path}:${left.method}`.localeCompare(`${right.path}:${right.method}`))
 
     expect(openApiSemanticSnapshot(unifiedOpenApi as unknown as Record<string, unknown>, () => true)).toEqual(baseline)

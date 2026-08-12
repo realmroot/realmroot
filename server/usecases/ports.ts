@@ -1006,7 +1006,9 @@ export interface AgentIdentityRecord {
   id: string
   issuer: string
   subject: string
+  username: string | null
   name: string
+  runtime?: string | null
   ownerUserId: string | null
   ownerOrganizationId: string | null
   status: 'active' | 'inactive'
@@ -1031,6 +1033,8 @@ export interface AgentEnrollmentIntentRecord {
   id: string
   agentIdentityId: string | null
   requestedName: string | null
+  requestedUsername?: string | null
+  requestedRuntime?: string | null
   ownerUserId: string | null
   ownerOrganizationId: string | null
   protocolAgentId: string
@@ -1059,6 +1063,8 @@ export interface AgentIdentityRepository {
   listAll(page: PaginationInput): Promise<PaginatedResult<AgentIdentityAggregate>>
   findIdentity(id: string): Promise<AgentIdentityAggregate | null>
   findByIssuerSubject(issuer: string, subject: string): Promise<AgentIdentityRecord | null>
+  findByIssuerUsername(issuer: string, username: string): Promise<AgentIdentityRecord | null>
+  findByUsername(username: string): Promise<AgentIdentityRecord | null>
   findIntent(id: string): Promise<AgentEnrollmentIntentRecord | null>
   findIntentByIdempotencyKey(
     protocolAgentId: string,
@@ -1072,6 +1078,10 @@ export interface AgentIdentityRepository {
     identity: AgentIdentityRecord
     binding: Omit<AgentIdentityBindingRecord, 'hostId'>
   }): Promise<AgentIdentityAggregate>
+  claimIdentityProfile(
+    identityId: string,
+    input: { username: string; name: string; runtime: string; updatedAt: Date },
+  ): Promise<AgentIdentityAggregate | null>
   createIntent(input: AgentEnrollmentIntentRecord): Promise<AgentEnrollmentIntentRecord>
   createIntentIdempotently(
     input: AgentEnrollmentIntentRecord & { idempotencyKey: string },

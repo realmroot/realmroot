@@ -6848,6 +6848,7 @@ function identityAggregate(): AgentIdentityAggregate {
       id: 'identity-1',
       issuer: 'https://auth.example.com/api/auth',
       subject: 'agt_stable',
+      username: 'project-agent.00000000000000000000000000000001',
       name: 'Project Agent',
       ownerUserId: null,
       ownerOrganizationId: 'org-1',

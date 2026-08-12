@@ -94,7 +94,7 @@ export function AgentIdentityApproval() {
           <dl className="decisionFacts">
             <div>
               <dt>Agent</dt>
-              <dd>{intent.name}</dd>
+              <dd>{intent.nickname}</dd>
             </div>
             <div>
               <dt>Request</dt>

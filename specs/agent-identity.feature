@@ -25,12 +25,14 @@ Feature: Agent identity and delegated API authorization
     @e2e @entrypoint:agent-protocol @journey:agent-identity-enrollment
     Scenario: A new Agent explicitly establishes a stable identity
       Given a new Agent connects Restish to the Realmroot OpenAPI contract
-		When the Agent invokes the generated Agent enrollment command without arguments or a local Realmroot identity
+		When the Agent invokes enrollment with an explicit username, optional nickname, and its detected runtime
       Then the Restish authentication adapter registers locally generated host and Agent keys
-      And the adapter names the Agent after its detected runtime and the Host after its local device
+      And Realmroot preserves the requested username without deriving it from another field
+      And an omitted nickname defaults to the detected runtime while the Host is named after its local device
       And enrollment waits while an authorized controller approves the Agent once from the hosted verification page
       And the adapter creates a personal stable identity through the approved Agent session
       Then Realmroot creates an Agent with a stable issuer and subject
+      And Realmroot assigns the requested immutable username independently of the Agent's nickname
       And the Agent belongs to exactly one home space
       And users govern the Agent through explicit Permissions in that space
       And the host registration is bound to that Agent identity
@@ -129,8 +131,9 @@ Feature: Agent identity and delegated API authorization
     @entrypoint:product-ui @journey:public-agent-profile
     Scenario: External visitors resolve a stable public Agent profile
       Given a non-deleted Agent has a stable issuer and subject
-      When an external visitor requests the Agent by its stable subject
+      When an external visitor requests the Agent by its stable subject or immutable username
       Then Realmroot returns the Agent's public identity
+      And the public identity includes its immutable human-readable username
       And picture resolves to the Realmroot static file "/agent-picture-v1.svg" until the Agent has a custom picture
       And the default summary omits owner and activity
       And the full view includes the public owner, activity overview, annual heatmap, and sanitized recent activity

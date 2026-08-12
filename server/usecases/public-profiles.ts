@@ -1,6 +1,7 @@
 import { notFound } from '@server/domain/errors'
 import type { Deps } from '@server/usecases/deps'
 import type { AgentAuditEventRecord, AgentIdentityRecord } from '@server/usecases/ports'
+import { agentSubjectSchema } from '@shared/api/identifiers'
 import type {
   AccountProfileLink,
   PublicActivity,
@@ -80,11 +81,14 @@ export async function getPublicUserProfile(
 export async function getPublicAgentProfile(
   deps: Deps,
   issuer: string,
-  subject: string,
+  identifier: string,
   view: PublicProfileView,
   now = new Date(),
 ): Promise<PublicAgentResponse> {
-  const identity = await deps.agentIdentities.findByIssuerSubject(issuer, subject)
+  const bySubject = agentSubjectSchema.safeParse(identifier).success
+    ? await deps.agentIdentities.findByIssuerSubject(issuer, identifier)
+    : null
+  const identity = bySubject ?? (await deps.agentIdentities.findByIssuerUsername(issuer, identifier))
   if (!identity) throw notFound('Public Agent profile was not found.')
 
   const base = {
@@ -116,7 +120,9 @@ export async function getPublicAgentProfile(
 function agentSummary(identity: AgentIdentityRecord) {
   return {
     subject: identity.subject,
+    username: identity.username,
     name: identity.name,
+    runtime: identity.runtime ?? null,
     picture: new URL('/agent-picture-v1.svg', identity.issuer).toString(),
     createdAt: identity.createdAt.toISOString(),
     updatedAt: identity.updatedAt.toISOString(),

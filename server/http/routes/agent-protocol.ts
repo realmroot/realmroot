@@ -41,7 +41,7 @@ import { requireAgentScope } from '../middleware/authz'
 import { getDeps } from '../middleware/deps'
 import { trustedRequestOrigin } from '../trusted-request-origin'
 import { toBoundaryError } from './auth-api'
-import { readJson, readOptionalJson, readQuery } from './validation'
+import { readJson, readQuery } from './validation'
 
 interface AgentSessionApi {
   getAgentSession?: (context: { headers: Headers; asResponse: false }) => Promise<ProtocolAgentSession | null>
@@ -81,10 +81,7 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
     if (!session.host?.userId) {
       throw forbidden('A controller-approved delegated Agent session is required.')
     }
-    const body = (await readOptionalJson(c, createAgentSelfEnrollmentSchema)) ?? {
-      kind: 'new_identity' as const,
-      name: session.agent.name,
-    }
+    const body = await readJson(c, createAgentSelfEnrollmentSchema)
     const parsedKey = idempotencyKeySchema.safeParse(c.req.header('Idempotency-Key'))
     if (!parsedKey.success) throw badRequest('Idempotency-Key header is required and must contain 1 to 200 characters.')
     if (body.kind === 'new_identity') {
@@ -92,7 +89,9 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
         getDeps(c),
         {
           protocolAgentId: session.agent.id,
-          name: body.name,
+          username: body.username,
+          nickname: body.nickname,
+          runtime: body.runtime,
           organizationId: body.organizationId,
         },
         session.host.userId,
