@@ -17,6 +17,15 @@ async function assignControllerScope(page: Page, resourceServerId: string) {
   expect(entitlementResponse.status(), await entitlementResponse.text()).toBe(201)
 }
 
+async function platformOrganizationId(page: Page) {
+  const response = await page.request.get('/api/organizations?limit=100&offset=0')
+  expect(response.status(), await response.text()).toBe(200)
+  const organizations = (await response.json()) as { items: Array<{ id: string; slug: string }> }
+  const platform = organizations.items.find((organization) => organization.slug === 'realmroot')
+  expect(platform).toBeDefined()
+  return platform!.id
+}
+
 test.describe('external API resource authorization', () => {
   test.beforeEach(resetAndBootstrap)
 
@@ -47,12 +56,13 @@ test.describe('external API resource authorization', () => {
       })
       expect(connectorResponse.status(), await connectorResponse.text()).toBe(201)
       const connector = (await connectorResponse.json()) as { id: string }
+      const ownerOrganizationId = await platformOrganizationId(page)
       const resourceResponse = await page.request.post('/api/resource-servers', {
         data: {
           identifier: 'e2e-projects',
           resourceUrl: externalResource,
           accessMode: 'external_oauth',
-          ownerOrganizationId: 'org_platform',
+          ownerOrganizationId,
           connectorId: connector.id,
           visibility: 'public',
         },
@@ -176,13 +186,14 @@ test.describe('external API resource authorization', () => {
       await expect(page.getByRole('heading', { name: 'Authorization successful' })).toBeVisible()
       await enrollment.result
       const _identity = plugin.whoami()
+      const ownerOrganizationId = await platformOrganizationId(page)
 
       const resourceResponse = await page.request.post('/api/resource-servers', {
         data: {
           identifier: 'e2e-realmroot-projects',
           resourceUrl: realmrootResource,
           accessMode: 'realmroot',
-          ownerOrganizationId: 'org_platform',
+          ownerOrganizationId,
           visibility: 'public',
         },
       })
