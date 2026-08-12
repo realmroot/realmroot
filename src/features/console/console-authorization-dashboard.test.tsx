@@ -192,7 +192,6 @@ describe('console authorization dashboard', () => {
             slug: 'runner-cli',
             clientType: 'public_native',
             deviceLoginEnabled: true,
-            firstParty: true,
             ownerOrganizationId: 'org-1',
             redirectUris: ['com.example.runner:/callback'],
           },

@@ -445,6 +445,7 @@ function applicationServiceMock() {
       resourceServerId: null,
       user: { id: 'user-1', displayName: 'User', email: 'user@example.com' },
       scopes: ['openid'],
+      authorizationSource: 'user_consent',
       grantedAt: '2026-08-01T00:00:00.000Z',
       expiresAt: null,
       revokedAt: null,

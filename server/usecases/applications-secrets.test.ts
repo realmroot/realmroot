@@ -24,18 +24,29 @@ function createApplication(
   actorUserId: string,
 ) {
   const ownerOrganizationId = input.ownerOrganizationId ?? 'org_platform'
-  return createApplicationUsecase(
-    {
-      ...deps,
-      authorization: {
-        ...deps.authorization,
-        findOrganization: deps.authorization?.findOrganization ?? (async () => ({ disabled: false })),
-      },
-    } as Deps,
-    issuer,
-    { ...input, ownerOrganizationId },
-    actorUserId,
-  )
+  deps.authorization = {
+    ...deps.authorization,
+    findOrganization: deps.authorization?.findOrganization ?? (async () => ({ disabled: false })),
+    listOrganizations:
+      deps.authorization?.listOrganizations ??
+      (async () => ({
+        items: [
+          {
+            id: 'org_platform',
+            slug: 'realmroot',
+            name: 'Realmroot Platform',
+            displayName: null,
+            logo: null,
+            disabled: false,
+            disabledReason: null,
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+        pagination: { limit: 100, offset: 0, total: 1, hasMore: false, nextOffset: null },
+      })),
+  } as Deps['authorization']
+  return createApplicationUsecase(deps, issuer, { ...input, ownerOrganizationId }, actorUserId)
 }
 
 describe('service.test 2', () => {
@@ -493,10 +504,28 @@ class InMemoryApplicationRepository implements ApplicationRepository {
       id: `consent-${this.consents.size + 1}`,
       resourceServerId: input.resourceServerId,
       scopes: input.scopes,
+      authorizationSource: 'user_consent' as const,
       grantedAt: new Date('2026-05-18T15:00:00.000Z'),
     }
     this.consents.set(consentKey(input.applicationId, input.userId), consent)
     return consent
+  }
+
+  async recordPolicyAuthorization(input: {
+    applicationId: string
+    userId: string
+    resourceServerId: string | null
+    scopes: string[]
+  }) {
+    const authorization = {
+      id: `authorization-${this.consents.size + 1}`,
+      resourceServerId: input.resourceServerId,
+      scopes: input.scopes,
+      authorizationSource: 'platform_policy' as const,
+      grantedAt: new Date('2026-05-18T15:00:00.000Z'),
+    }
+    this.consents.set(consentKey(input.applicationId, input.userId), authorization)
+    return authorization
   }
 }
 

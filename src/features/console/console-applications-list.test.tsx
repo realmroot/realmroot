@@ -100,7 +100,6 @@ describe('admin console applications-list', () => {
             name: 'Admin console',
             slug: 'admin-console',
             clientType: 'confidential_web',
-            firstParty: true,
             ownerOrganizationId: 'org-1',
             redirectUris: ['https://app.example.com/callback'],
           },
@@ -141,7 +140,7 @@ describe('admin console applications-list', () => {
 
   it('toggles third-party application availability from the unified list', async () => {
     const requests: Array<{ url: string; body: unknown }> = []
-    const thirdPartyApplication = { ...application, id: 'app-2', name: 'Partner app', firstParty: false }
+    const thirdPartyApplication = { ...application, id: 'app-2', name: 'Partner app' }
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
       if (url === '/api/applications/app-2' && init?.method === 'PATCH') {
@@ -221,7 +220,6 @@ describe('admin console applications-list', () => {
           name: 'Server app',
           slug: 'server-app',
           clientType: 'confidential_web',
-          firstParty: true,
           ownerOrganizationId: 'org-1',
           redirectUris: ['https://server.example.com/callback'],
         },
@@ -282,7 +280,6 @@ describe('admin console applications-list', () => {
           name: 'Event publisher',
           slug: 'event-publisher',
           clientType: 'machine',
-          firstParty: true,
           ownerOrganizationId: 'org-1',
           redirectUris: [],
         },

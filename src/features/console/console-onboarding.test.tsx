@@ -110,7 +110,6 @@ describe('console onboarding', () => {
             slug: 'review-app',
             clientType: 'public_native',
             deviceLoginEnabled: true,
-            firstParty: true,
             ownerOrganizationId: 'org-1',
             redirectUris: ['http://localhost:4173/oidc/callback'],
           },

@@ -1,6 +1,6 @@
 import { applyD1Migrations, env, reset } from 'cloudflare:test'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { createHarness, createUser, type Harness, signIn, signInAdmin } from './harness'
+import { createHarness, createUser, type Harness, platformOrganizationId, signIn, signInAdmin } from './harness'
 
 afterEach(async () => {
   await reset()
@@ -97,7 +97,7 @@ describe('asset upload + read over real D1 and an in-memory bucket', () => {
           slug: 'logo-app',
           clientType: 'confidential_web',
           redirectUris: ['http://localhost/callback'],
-          ownerOrganizationId: 'org_platform',
+          ownerOrganizationId: platformOrganizationId,
         }),
       })
     ).json()) as { id: string }

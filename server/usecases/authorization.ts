@@ -1,6 +1,6 @@
 import { ApiError, badRequest, conflict, forbidden, notFound, preconditionFailed } from '@server/domain/errors'
 import type { MutationActor } from '@server/domain/mutation-actor'
-import { platformOrganization } from '@server/domain/platform-organization'
+import { isPlatformOrganization } from '@server/domain/platform-organization'
 import {
   isRealmrootResourceServer,
   realmrootResourceServer,
@@ -24,10 +24,10 @@ import {
 } from '@server/usecases/resource-openapi'
 import { resourceScopeEntitlementLifecycle } from '@server/usecases/resource-scope-entitlements'
 import { activeResourceVisibleToOrganization } from '@server/usecases/resource-visibility'
+import { findRealmrootResourceServer, requirePlatformOrganization } from '@server/usecases/system-resources'
 
 export type { AuthorizationTokenClaimInput } from '@server/usecases/authorization-utils'
 
-import { realmrootResourceServer as internalResourceServer } from '@server/domain/realmroot-resource-server'
 import { tokenExchangeGrantType } from '@shared/api/applications'
 import type {
   AddMemberRequest,
@@ -90,8 +90,8 @@ export async function getOrganization(deps: Deps, id: string) {
 }
 
 export async function updateOrganization(deps: Deps, id: string, input: UpdateOrganizationRequest) {
-  await getOrganization(deps, id)
-  if (id === platformOrganization.id && input.disabled === true) {
+  const organization = await getOrganization(deps, id)
+  if (isPlatformOrganization(organization) && input.disabled === true) {
     throw conflict('The built-in platform Organization cannot be disabled.')
   }
   await deps.authorization.updateOrganization(id, input)
@@ -99,8 +99,8 @@ export async function updateOrganization(deps: Deps, id: string, input: UpdateOr
 }
 
 export async function deleteOrganization(deps: Deps, id: string) {
-  await getOrganization(deps, id)
-  if (id === platformOrganization.id) throw conflict('The built-in platform Organization cannot be deleted.')
+  const organization = await getOrganization(deps, id)
+  if (isPlatformOrganization(organization)) throw conflict('The built-in platform Organization cannot be deleted.')
   await deps.authorization.deleteOrganization(id)
 }
 
@@ -205,10 +205,8 @@ export async function cancelInvitation(deps: Deps, organizationId: string, id: s
 export async function createResource(deps: Deps, input: CreateApiResourceRequest) {
   const enabled = input.enabled ?? true
   const ownerOrganizationId = input.ownerOrganizationId
-  if (
-    providerConnectedResource(input.accessMode, input.connectorId ?? null) &&
-    ownerOrganizationId !== platformOrganization.id
-  ) {
+  const providerConnected = providerConnectedResource(input.accessMode, input.connectorId ?? null)
+  if (providerConnected && ownerOrganizationId !== (await requirePlatformOrganization(deps)).id) {
     throw badRequest('Provider-connected Resource Servers must be owned by the built-in platform Organization.')
   }
   await requireActiveOrganization(deps, ownerOrganizationId)
@@ -251,8 +249,11 @@ export async function createResource(deps: Deps, input: CreateApiResourceRequest
 export async function ensureRealmrootResourceServer(deps: Deps, apiOrigin: string) {
   const existing = await reconcileRealmrootResourceServer(deps, apiOrigin)
   if (existing) return existing
+  const platform = await requirePlatformOrganization(deps)
   return deps.authorization.createResource({
+    id: deps.ids.generate(),
     ...realmrootResourceServer,
+    ownerOrganizationId: platform.id,
     resourceUrl: realmrootResourceUrl(apiOrigin),
     accessMode: 'realmroot',
     connectorId: null,
@@ -266,9 +267,10 @@ export async function ensureRealmrootResourceServer(deps: Deps, apiOrigin: strin
 
 export async function reconcileRealmrootResourceServer(deps: Deps, apiOrigin: string) {
   const resourceUrl = realmrootResourceUrl(apiOrigin)
-  const existing = await deps.authorization.findResource(realmrootResourceServer.id)
+  const existing = await findRealmrootResourceServer(deps)
   if (existing) {
-    assertRealmrootResourceServerIdentity(existing)
+    const platform = await requirePlatformOrganization(deps)
+    assertRealmrootResourceServerIdentity(existing, platform.id)
     const registry = realmrootRegistry(apiOrigin)
     const resourceUrlChanged = existing.resourceUrl !== resourceUrl
     const registryChanged = !isCurrentRealmrootRegistry(existing.scopeRegistry, registry)
@@ -290,7 +292,7 @@ export async function reconcileRealmrootResourceServer(deps: Deps, apiOrigin: st
     if (!reconciled) {
       throw new Error('The persisted Realmroot Resource Server could not be reconciled.')
     }
-    assertRealmrootResourceServerIdentity(reconciled)
+    assertRealmrootResourceServerIdentity(reconciled, platform.id)
     if (reconciled.resourceUrl !== resourceUrl || !isCurrentRealmrootRegistry(reconciled.scopeRegistry, registry)) {
       throw new Error('The persisted Realmroot Resource Server could not be reconciled.')
     }
@@ -299,10 +301,10 @@ export async function reconcileRealmrootResourceServer(deps: Deps, apiOrigin: st
   return null
 }
 
-function assertRealmrootResourceServerIdentity(resource: ApiResourceResponse) {
+function assertRealmrootResourceServerIdentity(resource: ApiResourceResponse, platformOrganizationId: string) {
   if (
     resource.identifier !== realmrootResourceServer.identifier ||
-    resource.ownerOrganizationId !== realmrootResourceServer.ownerOrganizationId ||
+    resource.ownerOrganizationId !== platformOrganizationId ||
     resource.accessMode !== 'realmroot' ||
     resource.connectorId !== null
   ) {
@@ -324,7 +326,7 @@ export async function getResource(deps: Deps, id: string) {
 
 export async function getResourceContract(deps: Deps, id: string) {
   const resource = await getResource(deps, id)
-  const contract = isRealmrootResourceServer(id)
+  const contract = isRealmrootResourceServer(resource)
     ? await readResourceContractDocument(
         deps,
         resource.scopeRegistry?.discovery.sourceUrl ?? `${resource.resourceUrl}/openapi.json`,
@@ -348,7 +350,7 @@ export async function getResourceContract(deps: Deps, id: string) {
 export async function refreshResourceScopeRegistry(deps: Deps, id: string) {
   const resource = await getResource(deps, id)
   if (!resource.enabled) throw badRequest('Resource Server must be active before synchronizing scopes.')
-  if (isRealmrootResourceServer(id)) {
+  if (isRealmrootResourceServer(resource)) {
     const registry = realmrootRegistry(new URL(resource.resourceUrl).origin)
     if (
       !(await deps.authorization.replaceResourceDiscovery(id, {
@@ -397,7 +399,7 @@ export async function refreshResourceScopeRegistry(deps: Deps, id: string) {
 
 export async function synchronizeEnabledResourceScopeRegistries(deps: Deps) {
   const resources = (await deps.authorization.listEnabledResources()).filter(
-    (resource) => !isRealmrootResourceServer(resource.id),
+    (resource) => !isRealmrootResourceServer(resource),
   )
   for (const resource of resources) {
     try {
@@ -416,12 +418,15 @@ function synchronizationError(error: unknown) {
 
 export async function updateResource(deps: Deps, id: string, input: UpdateApiResourceRequest) {
   const resource = await getResource(deps, id)
-  if (isRealmrootResourceServer(id)) throw badRequest('The Realmroot Resource Server is system-managed.')
+  if (isRealmrootResourceServer(resource)) throw badRequest('The Realmroot Resource Server is system-managed.')
   if (input.resourceUrl !== undefined) validateResourceUrl(input.resourceUrl)
   if (input.ownerOrganizationId) await requireActiveOrganization(deps, input.ownerOrganizationId)
   const connectorId = input.connectorId === undefined ? resource.connectorId : (input.connectorId ?? null)
   const ownerOrganizationId = input.ownerOrganizationId ?? resource.ownerOrganizationId
-  if (providerConnectedResource(resource.accessMode, connectorId) && ownerOrganizationId !== platformOrganization.id) {
+  if (
+    providerConnectedResource(resource.accessMode, connectorId) &&
+    ownerOrganizationId !== (await requirePlatformOrganization(deps)).id
+  ) {
     throw badRequest('Provider-connected Resource Servers must be owned by the built-in platform Organization.')
   }
   const resourceUrl = input.resourceUrl ?? resource.resourceUrl
@@ -560,7 +565,7 @@ function resourceMutationAudit(
 
 export async function deleteResource(deps: Deps, id: string, actor: MutationActor) {
   const resource = await getResource(deps, id)
-  if (isRealmrootResourceServer(id)) throw badRequest('The Realmroot Resource Server is system-managed.')
+  if (isRealmrootResourceServer(resource)) throw badRequest('The Realmroot Resource Server is system-managed.')
   const now = new Date()
   if (
     !(await deps.authorization.deleteResource(
@@ -816,7 +821,7 @@ export async function listRoles(deps: Deps, organizationId: string, pagination: 
     ...role,
     scopes: dynamicScopes.get(role.key) ?? [],
   }))
-  const roles = [...predefinedRoleRepresentations(), ...dynamic].sort((left, right) =>
+  const roles = [...(await predefinedRoleRepresentations(deps)), ...dynamic].sort((left, right) =>
     left.key.localeCompare(right.key),
   )
   const paged = roles.slice(pagination.offset, pagination.offset + pagination.limit)
@@ -832,7 +837,7 @@ export async function listRoles(deps: Deps, organizationId: string, pagination: 
 }
 
 export async function getRole(deps: Deps, organizationId: string, roleKey: string): Promise<RoleResponse> {
-  const predefined = predefinedRoleRepresentations().find((role) => role.key === roleKey)
+  const predefined = (await predefinedRoleRepresentations(deps)).find((role) => role.key === roleKey)
   if (predefined) return predefined
   const role = await deps.authorization.findOrganizationRole(organizationId, roleKey)
   if (!role) throw notFound('Organization Role was not found.')
@@ -878,14 +883,16 @@ export async function deleteRole(deps: Deps, organizationId: string, roleKey: st
   if (result === 'not_found') throw preconditionFailed('The Organization Role changed after it was read.')
 }
 
-function predefinedRoleRepresentations(): RoleResponse[] {
+async function predefinedRoleRepresentations(deps: Pick<Deps, 'authorization'>): Promise<RoleResponse[]> {
+  const resource = await findRealmrootResourceServer(deps)
+  if (!resource) throw new Error('The Realmroot Resource Server is unavailable.')
   return predefinedOrganizationRoleKeys.map((key) => ({
     key,
     displayName: key[0]!.toUpperCase() + key.slice(1),
     description: null,
     predefined: true,
     scopes: predefinedOrganizationRoleScopes[key].map((scope) => ({
-      resourceId: internalResourceServer.id,
+      resourceId: resource.id,
       scope,
     })),
     createdAt: null,
@@ -907,7 +914,7 @@ async function validateRoleScopes(deps: Deps, organizationId: string, scopes: Ro
     if (!activeResourceVisibleToOrganization(resource, organizationId)) {
       throw badRequest('Resource Server is not visible to this Organization.')
     }
-    if (resourceId === internalResourceServer.id) {
+    if (isRealmrootResourceServer(resource)) {
       if (requestedScopes.some((scope) => !(scope in realmrootScopeRegistry))) {
         throw badRequest('Requested scope is not declared by the Realmroot Scope Registry.')
       }

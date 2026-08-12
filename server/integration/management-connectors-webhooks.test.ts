@@ -2,7 +2,7 @@ import { applyD1Migrations, env, reset } from 'cloudflare:test'
 import { identityProviderConnector, webhookEndpoint } from '@server/db/schema'
 import { eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { createHarness, type Harness, signInAdmin } from './harness'
+import { createHarness, type Harness, platformOrganizationId, signInAdmin } from './harness'
 
 afterEach(async () => {
   await reset()
@@ -151,13 +151,13 @@ describe('webhook management over real D1', () => {
       body: JSON.stringify({
         url: 'https://example.com/realm-hook',
         events: ['user.created'],
-        organizationId: 'org_platform',
+        organizationId: platformOrganizationId,
       }),
     })
 
     expect(response.status, await response.clone().text()).toBe(201)
     expect(((await response.json()) as { endpoint: { organizationId: string | null } }).endpoint.organizationId).toBe(
-      'org_platform',
+      platformOrganizationId,
     )
   })
 

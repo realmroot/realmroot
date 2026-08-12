@@ -1,5 +1,4 @@
 import { badRequest } from '@server/domain/errors'
-import { platformOrganization } from '@server/domain/platform-organization'
 import {
   createResource,
   deleteResource,
@@ -13,6 +12,7 @@ import {
   listAgentResourceServers,
   listApiResources,
 } from '@server/usecases/external-resources'
+import { requirePlatformOrganization } from '@server/usecases/system-resources'
 import {
   createApiResourceSchema,
   resourceServerSchema,
@@ -64,7 +64,8 @@ export function createManagementApiResourcesRoute(config: Pick<AppConfig, 'baseU
 
   app.post('/', async (c) => {
     const input = await readJson(c, createApiResourceSchema)
-    if (input.accessMode !== 'realmroot' && input.ownerOrganizationId !== platformOrganization.id) {
+    const platform = await requirePlatformOrganization(getDeps(c))
+    if (input.accessMode !== 'realmroot' && input.ownerOrganizationId !== platform.id) {
       throw badRequest('External Resource Servers must be owned by the built-in platform Organization.')
     }
     const owner = await authorizeOrganizationOwner(c, input.ownerOrganizationId, 'resource-servers:write')
@@ -109,7 +110,7 @@ export function createManagementApiResourcesRoute(config: Pick<AppConfig, 'baseU
     if (
       resource.accessMode !== 'realmroot' &&
       input.ownerOrganizationId &&
-      input.ownerOrganizationId !== platformOrganization.id
+      input.ownerOrganizationId !== (await requirePlatformOrganization(getDeps(c))).id
     ) {
       throw badRequest('External Resource Servers must be owned by the built-in platform Organization.')
     }

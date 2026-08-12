@@ -1,3 +1,4 @@
+import { platformOrganization } from '@server/domain/platform-organization'
 import {
   createApplication as createApplicationUsecase,
   deleteApplication,
@@ -28,18 +29,29 @@ function createApplication(
   actorUserId: string,
 ) {
   const ownerOrganizationId = input.ownerOrganizationId ?? 'org_platform'
-  return createApplicationUsecase(
-    {
-      ...deps,
-      authorization: {
-        ...deps.authorization,
-        findOrganization: deps.authorization?.findOrganization ?? (async () => ({ disabled: false })),
-      },
-    } as Deps,
-    issuer,
-    { ...input, ownerOrganizationId },
-    actorUserId,
-  )
+  deps.authorization = {
+    ...deps.authorization,
+    findOrganization: deps.authorization?.findOrganization ?? (async () => ({ disabled: false })),
+    listOrganizations:
+      deps.authorization?.listOrganizations ??
+      (async () => ({
+        items: [
+          {
+            id: 'org_platform',
+            slug: platformOrganization.slug,
+            name: platformOrganization.name,
+            displayName: null,
+            logo: null,
+            disabled: false,
+            disabledReason: null,
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+        pagination: { limit: 100, offset: 0, total: 1, hasMore: false, nextOffset: null },
+      })),
+  } as Deps['authorization']
+  return createApplicationUsecase(deps, issuer, { ...input, ownerOrganizationId }, actorUserId)
 }
 
 describe('service.test 1', () => {
@@ -71,6 +83,68 @@ describe('service.test 1', () => {
       updateApplication(deps, 'https://auth.example.com', created.id, { ownerOrganizationId: 'org-1' }),
     ).resolves.toMatchObject({ ownerOrganizationId: 'org-1' })
   })
+
+  it('restricts User consent policy configuration to platform-owned Applications', async () => {
+    const repository = new InMemoryApplicationRepository()
+    const deps = {
+      ids: createIdentifierGeneratorFake(),
+      applications: repository,
+      authorization: {
+        findOrganization: vi.fn().mockResolvedValue({ id: 'org-1', disabled: false }),
+      },
+    } as unknown as Deps
+    const input = {
+      name: 'Organization App',
+      clientType: 'public_spa' as const,
+      redirectUris: ['https://spa.example.com/callback'],
+      ownerOrganizationId: 'org-1',
+    }
+
+    await expect(
+      createApplication(deps, 'https://auth.example.com', { ...input, consentRequired: false }, 'admin-1'),
+    ).rejects.toMatchObject({
+      status: 400,
+      message: 'User consent policy can be configured only for Applications owned by the platform Organization.',
+    })
+
+    const created = await createApplication(deps, 'https://auth.example.com', input, 'admin-1')
+    await expect(
+      updateApplication(deps, 'https://auth.example.com', created.id, { consentRequired: false }),
+    ).rejects.toMatchObject({
+      status: 400,
+      message: 'User consent policy can be configured only for Applications owned by the platform Organization.',
+    })
+  })
+
+  it('restores User consent when an Application leaves the platform Organization', async () => {
+    const repository = new InMemoryApplicationRepository()
+    const deps = {
+      ids: createIdentifierGeneratorFake(),
+      applications: repository,
+      authorization: {
+        findOrganization: vi.fn().mockResolvedValue({ id: 'org-1', disabled: false }),
+      },
+    } as unknown as Deps
+    const created = await createApplication(
+      deps,
+      'https://auth.example.com',
+      {
+        name: 'Platform App',
+        clientType: 'public_spa',
+        redirectUris: ['https://spa.example.com/callback'],
+        consentRequired: false,
+      },
+      'admin-1',
+    )
+
+    await expect(
+      updateApplication(deps, 'https://auth.example.com', created.id, { ownerOrganizationId: 'org-1' }),
+    ).resolves.toMatchObject({
+      ownerOrganizationId: 'org-1',
+      consentRequired: true,
+    })
+  })
+
   it('creates, lists, updates, inspects, and deletes confidential clients with one-time secrets', async () => {
     const repository = new InMemoryApplicationRepository()
     const deps = { ids: createIdentifierGeneratorFake(), applications: repository } as unknown as Deps
@@ -85,7 +159,7 @@ describe('service.test 1', () => {
         redirectUris: ['https://app.example.com/callback'],
         postLogoutRedirectUris: ['https://app.example.com/signed-out', 'https://app.example.com/signed-out'],
         corsOrigins: ['https://app.example.com', 'http://localhost:4173'],
-        trusted: true,
+        consentRequired: false,
       },
       'admin-1',
     )
@@ -96,7 +170,7 @@ describe('service.test 1', () => {
     expect(created).toMatchObject({
       name: 'Admin Portal',
       public: false,
-      trusted: true,
+      consentRequired: false,
       tokenEndpointAuthMethod: 'client_secret_basic',
       requirePkce: false,
       redirectUris: ['https://app.example.com/callback'],
@@ -637,10 +711,28 @@ class InMemoryApplicationRepository implements ApplicationRepository {
       id: `consent-${this.consents.size + 1}`,
       resourceServerId: input.resourceServerId,
       scopes: input.scopes,
+      authorizationSource: 'user_consent' as const,
       grantedAt: new Date('2026-05-18T15:00:00.000Z'),
     }
     this.consents.set(consentKey(input.applicationId, input.userId), consent)
     return consent
+  }
+
+  async recordPolicyAuthorization(input: {
+    applicationId: string
+    userId: string
+    resourceServerId: string | null
+    scopes: string[]
+  }) {
+    const authorization = {
+      id: `authorization-${this.consents.size + 1}`,
+      resourceServerId: input.resourceServerId,
+      scopes: input.scopes,
+      authorizationSource: 'platform_policy' as const,
+      grantedAt: new Date('2026-05-18T15:00:00.000Z'),
+    }
+    this.consents.set(consentKey(input.applicationId, input.userId), authorization)
+    return authorization
   }
 }
 

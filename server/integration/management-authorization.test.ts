@@ -23,7 +23,16 @@ import { discoverAgentResources } from '@server/usecases/external-resources'
 import { encodeRoleScope } from '@shared/organization-access'
 import { eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { createHarness, createUser, type Harness, resourceOpenApiFetch, signIn, signInAdmin } from './harness'
+import {
+  createHarness,
+  createUser,
+  type Harness,
+  platformOrganizationId,
+  realmrootResourceServerId,
+  resourceOpenApiFetch,
+  signIn,
+  signInAdmin,
+} from './harness'
 
 afterEach(async () => {
   await reset()
@@ -91,11 +100,11 @@ describe('authorization management over real D1', () => {
     const listResponse = await harness.request('/api/organizations', { headers: { cookie } })
     expect(listResponse.status).toBe(200)
     expect((await listResponse.json()) as { items: Array<{ id: string }> }).toMatchObject({
-      items: expect.arrayContaining([expect.objectContaining({ id: 'org_platform' })]),
+      items: expect.arrayContaining([expect.objectContaining({ id: platformOrganizationId })]),
     })
     for (const request of [
-      harness.request('/api/organizations/org_platform', { headers: { cookie } }),
-      harness.request('/api/organizations/org_platform/members', { headers: { cookie } }),
+      harness.request(`/api/organizations/${platformOrganizationId}`, { headers: { cookie } }),
+      harness.request(`/api/organizations/${platformOrganizationId}/members`, { headers: { cookie } }),
     ]) {
       const response = await request
       expect(response.status).toBe(200)
@@ -150,7 +159,7 @@ describe('authorization management over real D1', () => {
       identifier: 'personal-audit-resource',
       resourceUrl: 'https://personal-audit.example.com/api',
       accessMode: 'realmroot',
-      ownerOrganizationId: 'org_platform',
+      ownerOrganizationId: platformOrganizationId,
     })
     await harness.db.insert(agentAuditEvent).values({
       id: 'personal-audit-event',
@@ -295,7 +304,7 @@ describe('authorization management over real D1', () => {
       identifier: 'atomic-agent-api',
       resourceUrl: 'https://atomic-agent.example.com/api',
       accessMode: 'realmroot',
-      ownerOrganizationId: 'org_platform',
+      ownerOrganizationId: platformOrganizationId,
     })
     await harness.db.insert(agentHost).values({
       id: 'atomic-host',
@@ -668,7 +677,7 @@ describe('authorization management over real D1', () => {
         slug: 'grant-client',
         clientType: 'machine',
         redirectUris: [],
-        ownerOrganizationId: 'org_platform',
+        ownerOrganizationId: platformOrganizationId,
       })
     ).json()) as { id: string }
     const resource = (await (
@@ -676,7 +685,7 @@ describe('authorization management over real D1', () => {
         identifier: 'grant-api',
         resourceUrl: 'https://grant.example.com/api',
         accessMode: 'realmroot',
-        ownerOrganizationId: 'org_platform',
+        ownerOrganizationId: platformOrganizationId,
         visibility: 'public',
       })
     ).json()) as { id: string }
@@ -743,7 +752,7 @@ describe('authorization management over real D1', () => {
         slug: 'user-flow-client',
         clientType: 'confidential_web',
         redirectUris: ['http://localhost/user-flow-callback'],
-        ownerOrganizationId: 'org_platform',
+        ownerOrganizationId: platformOrganizationId,
       })
     ).json()) as { id: string }
     expect(
@@ -915,7 +924,7 @@ describe('authorization management over real D1', () => {
       resourceUrl: 'https://projects.example.com/api',
       accessMode: 'external_oauth',
       connectorId: connector.id,
-      ownerOrganizationId: 'org_platform',
+      ownerOrganizationId: platformOrganizationId,
       authorizationDetails,
     })
     const resource = (await created.json()) as { id: string; authorizationDetails: unknown }
@@ -950,7 +959,7 @@ describe('authorization management over real D1', () => {
       identifier: 'projects-api',
       resourceUrl: 'https://projects.example.com/api',
       accessMode: 'realmroot' as const,
-      ownerOrganizationId: 'org_platform',
+      ownerOrganizationId: platformOrganizationId,
     }
 
     const enabled = await harness.request('/api/resource-servers', {
@@ -1025,7 +1034,7 @@ describe('authorization management over real D1', () => {
       resourceUrl: 'https://projects.example.com/api',
       accessMode: 'external_oauth',
       connectorId: connector.id,
-      ownerOrganizationId: 'org_platform',
+      ownerOrganizationId: platformOrganizationId,
     })
 
     const response = await harness.request(`/api/resource-servers/${resource.id}`, {
@@ -1048,7 +1057,7 @@ describe('authorization management over real D1', () => {
         identifier: 'https://api.example.com',
         resourceUrl: 'https://api.example.com',
         accessMode: 'realmroot',
-        ownerOrganizationId: 'org_platform',
+        ownerOrganizationId: platformOrganizationId,
       })
     ).json()) as { id: string }
 
@@ -1113,7 +1122,7 @@ describe('authorization management over real D1', () => {
         identifier: 'history-api',
         resourceUrl: 'https://history.example.com/api',
         accessMode: 'realmroot',
-        ownerOrganizationId: 'org_platform',
+        ownerOrganizationId: platformOrganizationId,
       })
     ).json()) as { id: string }
     const retainedResource = (await (
@@ -1121,7 +1130,7 @@ describe('authorization management over real D1', () => {
         identifier: 'retained-history-api',
         resourceUrl: 'https://retained-history.example.com/api',
         accessMode: 'realmroot',
-        ownerOrganizationId: 'org_platform',
+        ownerOrganizationId: platformOrganizationId,
       })
     ).json()) as { id: string }
     const configuredApplication = (await (
@@ -1130,7 +1139,7 @@ describe('authorization management over real D1', () => {
         slug: 'deleted-resource-client',
         clientType: 'confidential_web',
         redirectUris: ['http://localhost/deleted-resource-callback'],
-        ownerOrganizationId: 'org_platform',
+        ownerOrganizationId: platformOrganizationId,
         resourceScopes: [
           { resourceServerId: resource.id, scopes: ['resource:read'] },
           { resourceServerId: retainedResource.id, scopes: ['resource:read'] },
@@ -1141,7 +1150,7 @@ describe('authorization management over real D1', () => {
     const now = new Date()
     await harness.db.insert(organizationRole).values({
       id: 'role-resource-history',
-      organizationId: 'org_platform',
+      organizationId: platformOrganizationId,
       role: 'resource-history',
       displayName: 'Resource history',
       permission: {
@@ -1242,7 +1251,7 @@ describe('authorization management over real D1', () => {
         .where(eq(application.id, configuredApplication.id)),
     ).resolves.toEqual([{ resourceScopes: [] }])
 
-    const boundedResourceIds = ['res_realmroot']
+    const boundedResourceIds = [realmrootResourceServerId]
     for (let index = 0; index < 99; index += 1) {
       const id = `bounded-resource-${index}`
       boundedResourceIds.push(id)
@@ -1251,7 +1260,7 @@ describe('authorization management over real D1', () => {
         identifier: id,
         name: `Bounded resource ${index}`,
         resourceUrl: `https://bounded-${index}.example.com/api`,
-        ownerOrganizationId: 'org_platform',
+        ownerOrganizationId: platformOrganizationId,
         scopeRegistry: null,
         createdAt: now,
         updatedAt: now,
@@ -1332,7 +1341,7 @@ describe('authorization management over real D1', () => {
       resourceUrl: 'https://conditional.example.com/api',
       accessMode: 'external_oauth',
       connectorId: connector.id,
-      ownerOrganizationId: 'org_platform',
+      ownerOrganizationId: platformOrganizationId,
     })
 
     const deleted = await harness.request(`/api/resource-servers/${resource.id}`, {
@@ -1356,7 +1365,7 @@ describe('authorization management over real D1', () => {
         identifier: 'deleted-api',
         resourceUrl: 'https://deleted.example.com/api',
         accessMode: 'realmroot',
-        ownerOrganizationId: 'org_platform',
+        ownerOrganizationId: platformOrganizationId,
       })
     ).json()) as { id: string }
     const [admin] = await harness.db.select({ id: user.id }).from(user).where(eq(user.email, 'admin@example.com'))
@@ -1387,7 +1396,7 @@ describe('authorization management over real D1', () => {
       username: 'deleted-identity.0000000000000000000000000000000a',
       name: 'Deleted identity',
       ownerUserId: null,
-      ownerOrganizationId: 'org_platform',
+      ownerOrganizationId: platformOrganizationId,
       status: 'active',
       createdAt: now,
       updatedAt: now,
@@ -1534,7 +1543,7 @@ describe('authorization management over real D1', () => {
         hostId: 'deleted-host',
       }),
     ).resolves.toMatchObject({
-      items: [expect.objectContaining({ id: 'res_realmroot', identifier: 'realmroot' })],
+      items: [expect.objectContaining({ id: realmrootResourceServerId, identifier: 'realmroot' })],
     })
 
     const [[resourceRow], [connection], [intent], [request], [grant], [lease]] = await Promise.all([
@@ -1557,7 +1566,7 @@ describe('authorization management over real D1', () => {
     await Promise.all([
       harness.db
         .update(agentAccessRequest)
-        .set({ resourceId: 'res_realmroot' })
+        .set({ resourceId: realmrootResourceServerId })
         .where(eq(agentAccessRequest.id, 'deleted-request')),
       harness.db
         .update(agentIdentity)

@@ -51,8 +51,7 @@ const consentResponse = {
     clientId: 'client-1',
     clientType: 'public_spa',
     public: true,
-    firstParty: false,
-    trusted: false,
+    consentRequired: true,
     disabled: false,
     disabledReason: null,
     redirectUris: ['https://client.example.com/callback'],
@@ -81,7 +80,15 @@ const consentResponse = {
     approveUrl: '/api/auth/oauth2/authorize?client_id=client-1',
     denyUrl: 'https://client.example.com/callback?error=access_denied&state=state-1',
   },
+  resourceServerId: null,
   requestedScopes: ['openid', 'profile'],
+  requestedPermissions: [
+    { value: 'openid', description: 'Confirm your identity with Realmroot.' },
+    { value: 'profile', description: 'Share your name, profile image, and basic account details.' },
+  ],
+  addedScopes: ['openid', 'profile'],
+  previouslyApprovedScopes: [],
+  consentReason: 'initial',
   existingConsent: null,
   state: 'state-1',
 }
@@ -98,6 +105,7 @@ afterEach(() => {
   cleanup()
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
+  document.querySelector('link[rel="icon"]')?.remove()
   window.history.pushState(null, '', '/')
 })
 
@@ -116,7 +124,7 @@ describe('ConsentPage error and fallback paths', () => {
     expect(
       await screen.findByText('This consent request is incomplete. Start sign-in again from the application.'),
     ).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'Allow' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Authorize' })).toBeNull()
     expect(screen.queryByText(/expected string|invalid_type/)).toBeNull()
   })
 
@@ -143,7 +151,7 @@ describe('ConsentPage error and fallback paths', () => {
     })
 
     render(<ConsentPage />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Allow' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Authorize' }))
 
     await waitFor(() => expect(assign).toHaveBeenCalledWith('https://client.example.com/callback?code=code-1'))
     expect(requests).toEqual(
@@ -178,6 +186,73 @@ describe('ConsentPage error and fallback paths', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }))
 
     await waitFor(() => expect(assign).toHaveBeenCalledWith('https://client.example.com/callback?error=access_denied'))
+  })
+
+  it('surfaces a missing denial callback URL', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url.startsWith('/api/configz')) return Promise.resolve(jsonResponse(configz))
+      if (url.startsWith('/api/account/application-authorization-request')) {
+        return Promise.resolve(jsonResponse(consentResponse))
+      }
+      if (url.startsWith('/api/auth/oauth2/consent'))
+        return Promise.resolve(jsonResponse({ redirect: false, url: null }))
+      throw new Error(`Unexpected request: ${url}`)
+    })
+
+    render(<ConsentPage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }))
+
+    expect(await screen.findByText('The authorization server did not return a callback URL.')).toBeTruthy()
+    expect(assign).not.toHaveBeenCalled()
+  })
+
+  it('renders application imagery, branded legal links, and permissions without descriptions', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url.startsWith('/api/configz')) {
+        return Promise.resolve(
+          jsonResponse({
+            ...configz,
+            branding: { ...configz.branding, faviconUrl: 'https://realmroot.example/favicon.svg' },
+            links: {
+              ...configz.links,
+              privacyUri: 'https://realmroot.example/privacy',
+              termsUri: '/terms',
+            },
+          }),
+        )
+      }
+      return Promise.resolve(
+        jsonResponse({
+          ...consentResponse,
+          application: {
+            ...consentResponse.application,
+            homepageUrl: null,
+            iconUrl: 'https://client.example.com/icon.png',
+          },
+          user: {
+            email: 'jane@example.com',
+            displayName: 'jane@example.com',
+            image: 'https://client.example.com/jane.png',
+          },
+          requestedScopes: ['custom:read'],
+          requestedPermissions: [{ value: 'custom:read', description: null }],
+          addedScopes: ['custom:read'],
+        }),
+      )
+    })
+
+    render(<ConsentPage />)
+
+    expect(await screen.findByRole('heading', { name: 'Client App' })).toBeTruthy()
+    expect(document.querySelector<HTMLLinkElement>('link[rel="icon"]')?.href).toBe(
+      'https://realmroot.example/favicon.svg',
+    )
+    expect(screen.getByRole('link', { name: 'Privacy' }).getAttribute('href')).toBe('https://realmroot.example/privacy')
+    expect(screen.getByRole('link', { name: 'Terms' }).getAttribute('href')).toBe('/terms')
+    expect(screen.getByText('custom:read')).toBeTruthy()
+    expect(screen.queryByText('client.example.com')).toBeNull()
   })
 
   it('shows a load error when the consent request cannot be fetched', async () => {
@@ -219,10 +294,10 @@ describe('ConsentPage error and fallback paths', () => {
 
     render(<ConsentPage />)
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Allow' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Authorize' }))
     expect(await screen.findByText('Approval rejected.')).toBeTruthy()
     expect(assign).not.toHaveBeenCalled()
-    expect((screen.getByRole('button', { name: 'Allow' }) as HTMLButtonElement).disabled).toBe(false)
+    expect((screen.getByRole('button', { name: 'Authorize' }) as HTMLButtonElement).disabled).toBe(false)
   })
 
   it('surfaces account switch failures without leaving the page', async () => {
@@ -235,7 +310,7 @@ describe('ConsentPage error and fallback paths', () => {
 
     render(<ConsentPage />)
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Switch account' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Change' }))
     expect(await screen.findByText('Sign out failed.')).toBeTruthy()
     expect(assign).not.toHaveBeenCalled()
   })
@@ -248,6 +323,9 @@ describe('ConsentPage error and fallback paths', () => {
         jsonResponse({
           ...consentResponse,
           user: { email: 'jane@example.com', displayName: null, image: null },
+          addedScopes: [],
+          previouslyApprovedScopes: ['openid', 'profile'],
+          consentReason: 'reauthorization',
           existingConsent: { id: 'consent-1', scopes: ['openid'], grantedAt: '2026-01-02T00:00:00.000Z' },
         }),
       )
@@ -255,11 +333,11 @@ describe('ConsentPage error and fallback paths', () => {
 
     render(<ConsentPage />)
 
-    await screen.findByRole('heading', { name: 'Client App wants to access your Realmroot account' })
+    await screen.findByRole('heading', { name: 'Client App' })
     const emails = screen.getAllByText('jane@example.com')
     expect(emails).toHaveLength(1)
     expect(emails[0]?.tagName).toBe('STRONG')
-    expect(screen.getByText(/Previously approved on/)).toBeTruthy()
+    expect(screen.getByText('Confirm existing access')).toBeTruthy()
   })
 
   it('uses a generic message for non-Error load rejections', async () => {
@@ -283,7 +361,7 @@ describe('ConsentPage error and fallback paths', () => {
     })
 
     render(<ConsentPage />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Allow' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Authorize' }))
     expect(await screen.findByText('Unable to approve consent.')).toBeTruthy()
   })
 
@@ -296,7 +374,7 @@ describe('ConsentPage error and fallback paths', () => {
     })
 
     render(<ConsentPage />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Switch account' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Change' }))
     expect(await screen.findByText('Unable to switch accounts.')).toBeTruthy()
   })
 

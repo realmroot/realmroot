@@ -35,6 +35,15 @@ const externalResource: ApiResourceResponse = {
   updatedAt: '2026-08-05T00:00:00.000Z',
 }
 
+const internalResource: ApiResourceResponse = {
+  ...externalResource,
+  ...realmrootResourceServer,
+  id: 'resource-realmroot',
+  resourceUrl: 'https://auth.example.com/api',
+  enabled: true,
+  visibility: 'public',
+}
+
 describe('Organization membership scope resolution', () => {
   it('unions predefined and dynamic Realmroot scopes through one resolver', async () => {
     const deps = dependencies()
@@ -43,8 +52,8 @@ describe('Organization membership scope resolution', () => {
         [
           'operator',
           [
-            { resourceId: realmrootResourceServer.id, scope: 'applications:write' },
-            { resourceId: realmrootResourceServer.id, scope: 'removed:scope' },
+            { resourceId: internalResource.id, scope: 'applications:write' },
+            { resourceId: internalResource.id, scope: 'removed:scope' },
           ],
         ],
       ]),
@@ -52,7 +61,7 @@ describe('Organization membership scope resolution', () => {
     deps.authorization.findMemberByOrganizationUser = vi.fn().mockResolvedValue({ roles: ['member', 'operator'] })
 
     await expect(
-      resolveOrganizationMembershipScopes(deps, 'org-1', ['member', 'operator'], realmrootResourceServer.id),
+      resolveOrganizationMembershipScopes(deps, 'org-1', ['member', 'operator'], internalResource.id),
     ).resolves.toEqual(['applications:write', 'organizations:read', 'users:read'])
     await expect(organizationUserHasScope(deps, 'org-1', 'user-1', 'applications:write')).resolves.toBe(true)
   })
@@ -110,7 +119,7 @@ describe('Organization membership scope resolution', () => {
     await expect(resolveOrganizationMembershipScopes(deps, 'org-1', ['member'], externalResource.id)).resolves.toEqual(
       [],
     )
-    expect(deps.authorization.findResource).not.toHaveBeenCalled()
+    expect(deps.authorization.findResource).toHaveBeenCalledWith(externalResource.id)
 
     deps.authorization.findResource = vi.fn().mockResolvedValue(null)
     await expect(
@@ -139,13 +148,6 @@ describe('Organization membership scope resolution', () => {
 
   it('filters direct internal Resource Server scopes without external discovery', async () => {
     const deps = dependencies()
-    const internalResource: ApiResourceResponse = {
-      ...externalResource,
-      ...realmrootResourceServer,
-      resourceUrl: 'https://auth.example.com/api',
-      enabled: true,
-      visibility: 'public',
-    }
 
     expect(filterCurrentResourceScopes(internalResource, 'org-1', [])).toEqual([])
     expect(filterCurrentResourceScopes(internalResource, 'org-1', ['organizations:read', 'removed:scope'])).toEqual([
@@ -162,7 +164,11 @@ function dependencies() {
   return {
     authorization: {
       findMemberByOrganizationUser: vi.fn().mockResolvedValue(null),
-      findResource: vi.fn().mockResolvedValue(null),
+      findResource: vi.fn().mockImplementation(async (id) => (id === internalResource.id ? internalResource : null)),
+      listResources: vi.fn().mockResolvedValue({
+        items: [internalResource],
+        pagination: { limit: 100, offset: 0, total: 1, hasMore: false, nextOffset: null },
+      }),
       listOrganizationRoleScopes: vi.fn().mockResolvedValue(new Map()),
     },
     externalHttp: { fetch: vi.fn() },

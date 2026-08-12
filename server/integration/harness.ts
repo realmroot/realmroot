@@ -10,6 +10,8 @@ import { publishWebhookEvent } from '@server/usecases/webhooks'
 import type { SecurityPolicy } from '@shared/api/security'
 
 export const baseURL = 'http://localhost'
+export let platformOrganizationId = ''
+export let realmrootResourceServerId = ''
 const authSecret = 'integration-secret-with-enough-entropy-2026-realmroot'
 
 /**
@@ -141,6 +143,13 @@ export async function bootstrapAdmin(harness: Harness): Promise<void> {
   if (response.status !== 201) {
     throw new Error(`admin bootstrap failed (${response.status}): ${await response.text()}`)
   }
+  const organizations = await harness.deps.authorization.listOrganizations({ limit: 100, offset: 0 })
+  const platform = organizations.items.find((organization) => organization.slug === 'realmroot')
+  const resources = await harness.deps.authorization.listResources({ limit: 100, offset: 0 })
+  const realmroot = resources.items.find((resource) => resource.identifier === 'realmroot')
+  if (!platform || !realmroot) throw new Error('admin bootstrap did not create the built-in system resources')
+  platformOrganizationId = platform.id
+  realmrootResourceServerId = realmroot.id
 }
 
 function sessionCookie(response: Response): string {

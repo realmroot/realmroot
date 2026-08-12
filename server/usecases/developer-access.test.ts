@@ -18,12 +18,13 @@ describe('Developer Console access', () => {
       membership('org-selected', 'developer'),
       membership('org-unselected', 'owner'),
       membership('org-disabled', 'owner'),
-      membership('org_platform', 'owner'),
+      membership('org-platform', 'owner'),
       membership('org-missing', 'owner'),
       membership('org-selected', 'member'),
     ])
     vi.mocked(deps.authorization.findOrganization).mockImplementation(async (id) => {
       if (id === 'org-missing') return null
+      if (id === 'org-platform') return { ...organization(id, false), slug: 'realmroot' }
       return organization(id, id === 'org-disabled')
     })
 
@@ -69,6 +70,33 @@ describe('Developer Console access', () => {
       platformOperator: false,
       consoleOrganizations: [],
     })
+  })
+
+  it('shows Organizations when the user only has a pending invitation', async () => {
+    const deps = createTestDeps()
+    vi.mocked(deps.configz.getOrganizationCreationPolicy).mockResolvedValue({
+      mode: 'admins_only',
+      approvedUserIds: [],
+    })
+    vi.mocked(deps.configz.getDeveloperConsoleAccessPolicy).mockResolvedValue({
+      mode: 'realm_operators',
+      eligibleAccessLevels: ['owner'],
+      selectedOrganizationIds: [],
+    })
+    vi.mocked(deps.authorization.listUserMemberships).mockResolvedValue([])
+    vi.mocked(deps.authorization.hasPendingInvitation).mockResolvedValue(true)
+
+    await expect(
+      resolveDeveloperAccess(deps, {
+        id: 'user-1',
+        email: 'invited@example.com',
+        emailVerified: false,
+      }),
+    ).resolves.toMatchObject({
+      canCreateOrganization: false,
+      showOrganizations: true,
+    })
+    expect(deps.authorization.hasPendingInvitation).toHaveBeenCalledWith('invited@example.com', expect.any(Date))
   })
 
   it('handles platform authority, approved users, and verified users', () => {

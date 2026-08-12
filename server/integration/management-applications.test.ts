@@ -1,7 +1,7 @@
 import { applyD1Migrations, env, reset } from 'cloudflare:test'
 import { oauthClient, session } from '@server/db/schema'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { createHarness, createUser, type Harness, signIn, signInAdmin } from './harness'
+import { createHarness, createUser, type Harness, platformOrganizationId, signIn, signInAdmin } from './harness'
 
 afterEach(async () => {
   await reset()
@@ -31,9 +31,8 @@ async function createApplication(
       slug: 'customer-portal',
       clientType: 'confidential_web',
       redirectUris: ['http://localhost/callback'],
-      ownerOrganizationId: 'org_platform',
-      firstParty: true,
-      trusted: true,
+      ownerOrganizationId: platformOrganizationId,
+      consentRequired: false,
       ...overrides,
     }),
   })
@@ -138,7 +137,7 @@ describe('applications management over real D1', () => {
         name: 'Invalid machine',
         clientType: 'machine',
         redirectUris: ['https://machine.example.com/callback'],
-        ownerOrganizationId: 'org_platform',
+        ownerOrganizationId: platformOrganizationId,
       }),
     })
     expect(rejected.status).toBe(400)
@@ -286,7 +285,7 @@ describe('applications management over real D1', () => {
     })
     expect(managed.status, await managed.clone().text()).toBe(200)
     await expect(managed.json()).resolves.toMatchObject({
-      items: [{ id: consentId, scopes: ['openid'], user: { email: 'admin@example.com' } }],
+      items: [{ id: consentId, scopes: ['openid', 'profile'], user: { email: 'admin@example.com' } }],
       pagination: { total: 1 },
     })
     const revoked = await harness.request(`/api/account/application-authorizations/${consentId}`, {

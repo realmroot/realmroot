@@ -1915,8 +1915,7 @@ textarea {
   color: var(--warning);
 }
 
-.identitySummary,
-.consentAccount {
+.identitySummary {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -1927,16 +1926,13 @@ textarea {
   background: var(--soft);
 }
 
-.identitySummary span,
-.consentAccount span,
-.consentAccount small {
+.identitySummary span {
   color: var(--muted);
   font-size: 13px;
   line-height: 1.4;
 }
 
-.identitySummary strong,
-.consentAccount strong {
+.identitySummary strong {
   min-width: 0;
   overflow-wrap: anywhere;
 }
@@ -3945,146 +3941,632 @@ textarea {
   line-height: 1.5;
 }
 
-.consentStack {
-  display: grid;
-  gap: 14px;
+.consentPage {
+  position: relative;
+  min-height: 100dvh;
+  padding: 32px 20px 48px;
+  background:
+    radial-gradient(circle at 50% -10rem, color-mix(in srgb, var(--brand-primary) 11%, transparent), transparent 36rem),
+    color-mix(in srgb, var(--brand-background) 24%, var(--soft));
 }
 
-.consentStack .buttonRow {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+.consentPage > .brand {
+  justify-content: center;
+  gap: 9px;
+  width: min(100%, 660px);
+  margin: 0 auto 22px;
+  color: var(--foreground);
+  font-size: 14px;
+  letter-spacing: -0.015em;
 }
 
-.applicationSummary {
+.consentPage > .brand .brandMark,
+.consentPage > .brand .brandLogo {
+  width: 28px;
+  height: 28px;
+}
+
+.consentFrame {
+  width: min(100%, 660px);
+  margin: 0 auto;
+}
+
+.consentCard {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: var(--panel);
+  box-shadow: 0 30px 80px rgb(24 58 53 / 10%), 0 2px 7px rgb(24 58 53 / 4%);
+}
+
+.consentContext {
+  padding: 32px 40px 0;
+}
+
+.consentApplication {
   display: flex;
-  gap: 12px;
-  align-items: flex-start;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
 }
 
-.consentAccount {
-  margin-bottom: 0;
+.consentApplicationMark {
+  display: grid;
+  width: 60px;
+  height: 60px;
+  place-items: center;
+  margin-bottom: 12px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--panel);
+  box-shadow: 0 7px 20px rgb(34 54 50 / 9%);
 }
 
-.consentAccount img {
-  width: 40px;
-  height: 40px;
-  border-radius: 8px;
+.consentApplicationLogo,
+.consentApplicationFallback {
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+}
+
+.consentApplicationLogo {
   object-fit: cover;
 }
 
-.consentAccount div {
+.consentApplicationFallback {
   display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--brand-primary) 12%, var(--panel));
+  color: var(--brand-primary);
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.consentApplicationIdentity {
+  width: min(100%, 430px);
   min-width: 0;
 }
 
-.consentSwitchButton {
-  margin-left: auto;
+.consentApplicationIdentity h1 {
+  display: -webkit-box;
+  max-width: 100%;
+  margin: 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 22px;
+  font-weight: 760;
+  line-height: 1.28;
+  letter-spacing: -0.025em;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.consentApplicationOrigin {
+  display: flex;
+  max-width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin-top: 4px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 550;
+}
+
+.consentApplicationOrigin svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+.consentApplicationOrigin span {
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.applicationSummary img {
-  width: 44px;
-  height: 44px;
-  border-radius: 8px;
+.consentRequestSummary {
+  max-width: 430px;
+  margin: 13px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.consentAccount {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 20px;
+  padding: 12px 13px;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  background: var(--soft);
+}
+
+.consentAccount img,
+.consentAvatarFallback {
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+}
+
+.consentAccount img {
   object-fit: cover;
 }
 
-.applicationSummary h2 {
-  margin: 0 0 4px;
-  font-size: 18px;
-  line-height: 1.25;
-}
-
-.applicationSummary p {
-  margin: 0;
+.consentAvatarFallback {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
   color: var(--muted);
+  background: var(--panel);
+}
+
+.consentAccount > div {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+}
+
+.consentAccount > div > span,
+.consentAccount > div > small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.consentAccount strong {
+  overflow: hidden;
+  margin-top: 1px;
+  color: var(--ink);
   font-size: 13px;
-  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.scopeList {
-  display: grid;
-  max-height: 220px;
-  gap: 0;
-  margin: 0;
-  padding: 0;
-  overflow-y: auto;
-  list-style: none;
+.consentSwitchButton {
+  width: auto !important;
+  min-height: 40px;
+  margin-left: auto;
+  padding-inline: 12px;
+  color: var(--brand-primary);
+  font-size: 12px;
+  font-weight: 750;
+  white-space: nowrap;
 }
 
-.scopeItem {
-  display: grid;
-  grid-template-columns: 24px minmax(0, 1fr);
-  gap: 10px;
-  align-items: start;
-  padding: 11px 0;
+.consentDecisionBody {
+  padding: 18px 40px 20px;
+}
+
+.consentPermissions {
+  min-width: 0;
+  padding-top: 18px;
   border-top: 1px solid var(--line);
 }
 
-.scopeItem:first-child {
+.consentPermissionsHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 9px;
+}
+
+.consentPermissionsHeader h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+
+.consentPermissionsHeader > span {
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--brand-primary) 8%, var(--panel));
+  color: var(--brand-primary);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.consentPermissionsIntro {
+  margin: -2px 0 10px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.consentPermissionTable {
+  max-height: 210px;
+  margin: 0;
+  padding: 0;
+  overflow: hidden auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  background: var(--panel);
+  scrollbar-color: transparent transparent;
+  scrollbar-width: thin;
+  list-style: none;
+}
+
+.consentPermissionTable:hover {
+  scrollbar-color: color-mix(in srgb, var(--muted) 55%, transparent) transparent;
+}
+
+.consentPermissionTable::-webkit-scrollbar {
+  width: 8px;
+}
+
+.consentPermissionTable::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.consentPermissionTable::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  background-clip: padding-box;
+}
+
+.consentPermissionTable:hover::-webkit-scrollbar-thumb {
+  background-color: color-mix(in srgb, var(--muted) 55%, transparent);
+}
+
+.consentPermissionRow {
+  display: grid;
+  grid-template-columns: minmax(145px, 178px) minmax(0, 1fr);
+  min-width: 0;
+  border-top: 1px solid var(--line);
+}
+
+.consentPermissionRow:first-child {
   border-top: 0;
 }
 
-.scopeItem > svg {
-  width: 18px;
-  height: 18px;
-  margin-top: 1px;
+.consentPermissionRow code,
+.consentPermissionRow > span {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  padding: 10px 14px;
+  line-height: 1.4;
+}
+
+.consentPermissionRow code {
+  border-right: 1px solid var(--line);
+  background: color-mix(in srgb, var(--brand-primary) 2.5%, var(--soft));
   color: var(--brand-primary);
-}
-
-.scopeItem > span {
-  display: grid;
-  gap: 2px;
-}
-
-.scopeItem small {
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.consentPermissions h2 {
-  margin: 0 0 4px;
-  font-size: 14px;
+  overflow-wrap: anywhere;
+  font-size: 10px;
   font-weight: 650;
 }
 
-.consentScopes {
-  border-block: 1px solid var(--line);
-  padding: 10px 0;
+.consentPermissionRow > span {
+  color: var(--foreground);
+  font-size: 11px;
+  font-weight: 550;
 }
 
-.consentScopes summary {
-  color: var(--muted);
+.consentExistingAccess {
+  margin-top: 12px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: var(--soft);
+}
+
+.consentExistingAccess summary {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+  color: var(--muted-foreground);
   cursor: pointer;
   font-size: 12px;
-  font-weight: 650;
+  font-weight: 700;
+  list-style: none;
 }
 
-.consentScopes > div {
-  display: flex;
-  max-height: 96px;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 10px;
-  overflow-y: auto;
+.consentExistingAccess summary::-webkit-details-marker {
+  display: none;
 }
 
-.consentScopes code {
-  padding: 3px 6px;
-  border-radius: 5px;
-  background: var(--soft);
+.consentExistingAccess summary svg {
+  width: 16px;
+  height: 16px;
+  transition: transform 160ms ease;
+}
+
+.consentExistingAccess[open] summary svg {
+  transform: rotate(90deg);
+}
+
+.consentExistingAccess summary span {
+  flex: 1;
+}
+
+.consentExistingAccess summary small {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 11px;
+  font-weight: 550;
+}
+
+.consentExistingAccess .consentPermissionTable {
+  max-height: 170px;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
 }
 
 .consentControlNote {
-  margin: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin: 18px 2px 0;
   color: var(--muted);
   font-size: 11px;
   line-height: 1.5;
+}
+
+.consentControlNote svg {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.consentActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 18px 40px;
+  border-top: 1px solid var(--line);
+  background: var(--soft);
+}
+
+.consentActions .uiButton-secondary,
+.consentActions [data-slot='button'] {
+  width: auto;
+  min-height: 44px;
+  padding-inline: 21px;
+  border-radius: 11px;
+  font-size: 13px;
+  font-weight: 750;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease;
+}
+
+.consentActions [data-variant='default'] {
+  min-width: 178px;
+  border-color: var(--brand-primary);
+  background: var(--brand-primary);
+  color: #ffffff;
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--brand-primary) 17%, transparent);
+}
+
+.consentActions [data-variant='default']:hover {
+  border-color: var(--brand-primary-active);
+  background: var(--brand-primary-active);
+}
+
+.consentActions [data-variant='ghost'] {
+  color: var(--muted-foreground);
+}
+
+.consentActions [data-variant='ghost']:hover {
+  background: color-mix(in srgb, var(--muted) 12%, var(--panel));
+  color: var(--foreground);
+}
+
+.consentFooter {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 14px auto 0;
+  color: var(--muted);
+  font-size: 11px;
   text-align: center;
+}
+
+.consentFooterLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.consentFooter a {
+  color: var(--muted-foreground);
+  font-size: 11px;
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+@media (max-width: 720px) {
+  .consentPage {
+    padding: 24px 16px 32px;
+  }
+
+  .consentPage > .brand {
+    margin-bottom: 18px;
+  }
+
+  .consentContext,
+  .consentDecisionBody,
+  .consentActions {
+    padding-inline: 28px;
+  }
+
+  .consentPermissionRow {
+    grid-template-columns: minmax(124px, 150px) minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 560px) {
+  .consentPage {
+    min-height: 100dvh;
+    padding: 0;
+    background: var(--panel);
+  }
+
+  .consentPage > .brand {
+    justify-content: flex-start;
+    margin: 0;
+    padding: max(18px, env(safe-area-inset-top)) 20px 0;
+  }
+
+  .consentFrame {
+    width: 100%;
+    margin: 0;
+  }
+
+  .consentCard {
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .consentContext {
+    padding: 22px 20px 0;
+  }
+
+  .consentApplicationMark {
+    width: 52px;
+    height: 52px;
+    margin-bottom: 10px;
+    border-radius: 15px;
+  }
+
+  .consentApplicationIdentity h1 {
+    font-size: 20px;
+  }
+
+  .consentDecisionBody {
+    padding: 16px 20px 18px;
+  }
+
+  .consentAccount {
+    padding: 11px 12px;
+  }
+
+  .consentAccount small {
+    display: block;
+  }
+
+  .consentSwitchButton {
+    min-width: 64px;
+    min-height: 44px;
+  }
+
+  .consentPermissions {
+    padding-top: 16px;
+  }
+
+  .consentPermissionTable {
+    max-height: min(210px, 32dvh);
+  }
+
+  .consentPermissionRow {
+    grid-template-columns: minmax(108px, 36%) minmax(0, 1fr);
+  }
+
+  .consentPermissionRow code,
+  .consentPermissionRow > span {
+    padding: 10px;
+  }
+
+  .consentExistingAccess summary {
+    padding-inline: 12px;
+  }
+
+  .consentExistingAccess summary small {
+    white-space: nowrap;
+  }
+
+  .consentActions {
+    position: sticky;
+    bottom: 0;
+    z-index: 10;
+    display: grid;
+    grid-template-columns: minmax(0, 0.75fr) minmax(0, 1.4fr);
+    padding: 13px 20px max(13px, env(safe-area-inset-bottom));
+    box-shadow: 0 -8px 24px rgb(29 58 54 / 7%);
+  }
+
+  .consentActions [data-slot='button'],
+  .consentActions [data-variant='default'] {
+    width: 100%;
+    min-width: 0;
+    padding-inline: 10px;
+  }
+
+  .consentFooter {
+    display: none;
+  }
+}
+
+@media (max-width: 460px) {
+  .consentPermissionRow {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .consentPermissionRow code {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .consentPermissionRow code,
+  .consentPermissionRow > span {
+    padding: 8px 12px;
+  }
+}
+
+@media (max-width: 900px) and (max-height: 560px) {
+  .consentPage {
+    padding-top: 16px;
+  }
+
+  .consentPage > .brand {
+    margin-bottom: 12px;
+  }
+
+  .consentContext {
+    padding-top: 20px;
+  }
+
+  .consentApplicationMark {
+    width: 48px;
+    height: 48px;
+    margin-bottom: 8px;
+  }
+
+  .consentApplicationIdentity h1 {
+    font-size: 19px;
+  }
+
+  .consentAccount {
+    margin-top: 14px;
+  }
+
+  .consentDecisionBody {
+    padding-top: 14px;
+  }
 }
 
 .spin {
@@ -4485,7 +4967,6 @@ textarea {
   }
 
   .segmented,
-  .consentStack .buttonRow,
   .accountNav {
     grid-template-columns: 1fr;
   }
@@ -4578,10 +5059,6 @@ textarea {
 
   .accountContent .uiButton {
     min-height: 44px;
-  }
-
-  .consentStack .buttonRow .uiButton-secondary {
-    width: 100%;
   }
 
   .consentSwitchButton {

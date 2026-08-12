@@ -193,7 +193,16 @@ export async function filterOAuthAccessTokenScopes(
     if (requestedScopes.some((scope) => !oidcScopeSet.has(scope))) {
       throw oauthProviderError('invalid_scope', 'Resource scopes require one registered Resource Server target.')
     }
-    return input.user ? requestedOidcScopes : []
+    if (!input.user?.id) return []
+    if (!application.consentRequired) {
+      await deps.applications.recordPolicyAuthorization({
+        applicationId: application.id,
+        userId: input.user.id,
+        resourceServerId: null,
+        scopes: requestedOidcScopes,
+      })
+    }
+    return requestedOidcScopes
   }
 
   const resource = await deps.authorization.findResourceByResourceUrl(input.resource)
@@ -221,14 +230,23 @@ export async function filterOAuthAccessTokenScopes(
   }
 
   const effective = new Set(await userEffectiveResourceScopes(deps, input.user.id, resource))
-  const consent = application.trusted
+  const consent = !application.consentRequired
     ? null
     : await deps.applications.findConsent(application.id, input.user.id, resource.id)
-  const consented = application.trusted ? new Set(requestedResourceScopes) : new Set(consent?.scopes ?? [])
-  return [
+  const consented = !application.consentRequired ? new Set(requestedResourceScopes) : new Set(consent?.scopes ?? [])
+  const authorizedScopes = [
     ...requestedOidcScopes,
     ...requestedResourceScopes.filter((scope) => effective.has(scope) && consented.has(scope)),
   ]
+  if (!application.consentRequired) {
+    await deps.applications.recordPolicyAuthorization({
+      applicationId: application.id,
+      userId: input.user.id,
+      resourceServerId: resource.id,
+      scopes: authorizedScopes,
+    })
+  }
+  return authorizedScopes
 }
 
 function oauthProviderError(error: string, description: string) {

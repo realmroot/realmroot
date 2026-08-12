@@ -333,7 +333,7 @@ describe('management routes 1', () => {
           host_id: 'host-1',
           scope: scopes.join(' '),
           cnf: { jkt: dpop.thumbprint },
-          realmroot_authority: { type: 'realmroot_authority', authority: 'organization', id: 'org_platform' },
+          realmroot_authority: { type: 'realmroot_authority', authority: 'organization', id: 'org-platform' },
         },
       })),
     })
@@ -430,7 +430,7 @@ describe('management routes 1', () => {
       headers: await headers('DELETE', '/api/users/user-1'),
     })
 
-    expect(created.status).toBe(201)
+    expect(created.status, await created.clone().text()).toBe(201)
     expect(updated.status).toBe(200)
     expect(removed.status).toBe(204)
     expect(users.createManagedUser).toHaveBeenCalled()

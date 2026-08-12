@@ -37,7 +37,7 @@ const resource: ApiResourceResponse = {
 const application = {
   id: 'app_orders',
   disabled: false,
-  trusted: false,
+  consentRequired: true,
   ownerOrganizationId: 'org_client',
   oidcScopes: ['openid'],
   resourceScopes: [{ resourceServerId: resource.id, scopes: ['orders:admin', 'orders:read'] }],
@@ -54,8 +54,10 @@ function createDeps(input?: {
         id: 'consent_1',
         resourceServerId: resource.id,
         scopes: ['orders:admin', 'orders:read'],
+        authorizationSource: 'user_consent',
         grantedAt: new Date(),
       }),
+      recordPolicyAuthorization: vi.fn(),
     },
     authorization: {
       findResourceByResourceUrl: vi.fn().mockResolvedValue(resource),

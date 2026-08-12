@@ -140,8 +140,7 @@ describe('admin console applications-detail-b', () => {
       ...application,
       description: null,
       homepageUrl: null,
-      firstParty: false,
-      trusted: false,
+      consentRequired: true,
     } as ApplicationResponse
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
@@ -161,21 +160,27 @@ describe('admin console applications-detail-b', () => {
       if (url === '/api/resource-servers') {
         return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
       }
+      if (url === '/api/organizations') {
+        return Promise.resolve(
+          jsonResponse({
+            items: [{ id: 'org-1', slug: 'realmroot', name: 'Realmroot', disabled: false }],
+            pagination,
+          }),
+        )
+      }
       return consoleSharedFetch(input, init)
     })
 
     renderWithQuery(<ApplicationDetailPage applicationId="app-1" organizationId="org-1" />)
-    expect(await screen.findByText('Any authenticated user')).toBeTruthy()
-    expect(screen.getByText('Third-party')).toBeTruthy()
-    expect(screen.getByText('Required')).toBeTruthy()
+    expect(await screen.findByText('Required')).toBeTruthy()
     fireEvent.mouseDown(screen.getByRole('tab', { name: 'Settings' }), { button: 0, ctrlKey: false })
-    expect(await screen.findByText('Any authenticated user')).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'User consent' })).toBeTruthy()
 
     cleanup()
     queryClient.clear()
     currentApplication = { ...currentApplication }
     renderWithQuery(<ApplicationDetailPage applicationId="app-1" />)
-    expect(await screen.findByText('Any authenticated user')).toBeTruthy()
+    expect(await screen.findByText('Required')).toBeTruthy()
     fireEvent.mouseDown(screen.getByRole('tab', { name: 'Settings' }), { button: 0, ctrlKey: false })
     expect(await screen.findByRole('heading', { name: 'Application details' })).toBeTruthy()
     const details = screen.getByRole('heading', { name: 'Application details' }).closest('section') as HTMLElement
@@ -185,7 +190,7 @@ describe('admin console applications-detail-b', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     const consent = screen.getByRole('heading', { name: 'User consent' }).closest('section') as HTMLElement
     fireEvent.click(within(consent).getByRole('button', { name: 'Edit' }))
-    expect(await screen.findByLabelText('Publisher relationship')).toHaveProperty('value', 'third-party')
+    expect(await screen.findByText('Require user consent')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
 
     cleanup()

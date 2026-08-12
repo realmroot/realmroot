@@ -1,0 +1,9 @@
+[
+  { "method": "GET", "path": "/applications", "operationId": "listApplications", "semanticHash": "3bbae81d7ba6f8275a96bd9763d6c5fa9261cf4efe8dd13e0f2f0e46a9e30ff6" },
+  { "method": "POST", "path": "/applications", "operationId": "createApplication", "semanticHash": "bb29d339bb30656387357eb9e4ec9c9f9c7d709361f966f629de04e33c3ded7a" },
+  { "method": "GET", "path": "/applications/{applicationId}", "operationId": "getApplication", "semanticHash": "24f9d5adb8db6d553c06e3efba410a46eddd3a3485318e165269abbd9b0ddc79" },
+  { "method": "PATCH", "path": "/applications/{applicationId}", "operationId": "updateApplication", "semanticHash": "c95ca8d57a19d4686ebc221997387a615c34638eaa82430afd05a2b110694c1c" },
+  { "method": "GET", "path": "/applications/{applicationId}/authorizations", "operationId": "listApplicationAuthorizations", "semanticHash": "8e5367f582b74c0301b99b6cb55b967d10962a97d1856143e6daf18b6a9e6f57" },
+  { "method": "GET", "path": "/applications/{applicationId}/authorizations/{authorizationId}", "operationId": "getApplicationAuthorization", "semanticHash": "a10b5cdccba539584cfcf16ce35702ea308f976524a0d82a115d46f90b56b592" },
+  { "method": "GET", "path": "/users/{userId}/application-authorizations", "operationId": "listUserApplicationAuthorizations", "semanticHash": "ea7f476a61f98ace287d9b3eaae9a02cf5bfa37438586356f4f3e82eced56a20" }
+]

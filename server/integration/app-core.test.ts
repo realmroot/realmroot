@@ -81,14 +81,12 @@ describe('onboarding bootstrap writes real D1 rows', () => {
       .first<{ role: string }>()
     expect(userRow?.role).toBe('admin')
     const platformOrganization = await env.DB.prepare(
-      "select id, metadata from organization where id = 'org_platform'",
+      "select id, metadata from organization where slug = 'realmroot'",
     ).first<{ id: string; metadata: string }>()
-    expect(platformOrganization).toMatchObject({
-      id: 'org_platform',
-    })
+    expect(platformOrganization?.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
     expect(JSON.parse(platformOrganization?.metadata ?? '{}')).toEqual({ realmroot: { platform: true } })
     await expect(
-      env.DB.prepare("select role from member where organization_id = 'org_platform'").first(),
+      env.DB.prepare('select role from member where organization_id = ?1').bind(platformOrganization?.id).first(),
     ).resolves.toEqual({ role: 'owner' })
 
     const status = await request('/api/onboarding/status')

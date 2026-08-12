@@ -122,7 +122,6 @@ export function ConsoleOnboardingPage() {
                       name: form.name,
                       slug: form.slug,
                       clientType: form.clientType,
-                      firstParty: true,
                       ownerOrganizationId,
                       ...(form.clientType === 'public_native' ? { deviceLoginEnabled: form.deviceLoginEnabled } : {}),
                       redirectUris: form.clientType === 'machine' ? [] : form.redirectUris.split('\n').filter(Boolean),

@@ -1,7 +1,16 @@
 import { applyD1Migrations, env, reset } from 'cloudflare:test'
 import { buildTokenClaims } from '@server/usecases/authorization'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { baseURL, createHarness, createUser, type Harness, resourceOpenApiFetch, signIn, signInAdmin } from './harness'
+import {
+  baseURL,
+  createHarness,
+  createUser,
+  type Harness,
+  platformOrganizationId,
+  resourceOpenApiFetch,
+  signIn,
+  signInAdmin,
+} from './harness'
 
 afterEach(async () => {
   await reset()
@@ -76,9 +85,8 @@ describe('OAuth token claim building over real D1', () => {
         name: 'Claims App',
         clientType: 'confidential_web',
         redirectUris: ['https://app.example.com/callback'],
-        ownerOrganizationId: 'org_platform',
-        firstParty: true,
-        trusted: true,
+        ownerOrganizationId: platformOrganizationId,
+        consentRequired: false,
       })
     ).json()) as { id: string; clientId: string; clientSecret: string }
 
@@ -220,7 +228,7 @@ describe('OAuth token claim building over real D1', () => {
     expect(tokenBody.scope).toBe('openid')
     expect(decodeJwtPayload(tokenBody.access_token)).toMatchObject({
       scope: 'openid',
-      authorization: { scopes: [] },
+      authorization: { scopes: ['openid'] },
     })
 
     const introspection = await harness.request('/api/auth/oauth2/introspect', {

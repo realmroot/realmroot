@@ -1,7 +1,8 @@
 import type { ConsentRequestResponse } from '@shared/api/applications'
-import { CircleAlert, LogOut, ShieldCheck, UserRound } from 'lucide-react'
+import { ChevronRight, CircleAlert, Globe2, ShieldCheck, UserRound } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { AuthLayout } from '@/components/layout/auth-layout'
+import { AuthLayout, authLegalLinks, BrandIdentity, brandingStyle } from '@/components/layout/auth-layout'
+import { SpaLink } from '@/components/spa-link'
 import { Button } from '@/components/ui/button'
 import { Status } from '@/components/ui/status'
 import { createConsent, getConsentRequest } from '@/lib/api'
@@ -9,6 +10,7 @@ import { completeOAuthConsent, signOut } from '@/lib/auth-client'
 import { tt } from '@/lib/i18n'
 import { deduplicateRequest } from '@/lib/request-deduplication'
 import { useConfigz } from './hooks'
+
 export function ConsentPage() {
   const { data: config } = useConfigz()
   const [consent, setConsent] = useState<ConsentRequestResponse | null>(null)
@@ -17,6 +19,7 @@ export function ConsentPage() {
   const [submitting, setSubmitting] = useState(false)
   const [switchingAccount, setSwitchingAccount] = useState(false)
   const search = window.location.search
+
   useEffect(() => {
     let active = true
     const params = new URLSearchParams(search)
@@ -44,6 +47,15 @@ export function ConsentPage() {
       active = false
     }
   }, [search])
+
+  useEffect(() => {
+    if (!config?.branding.faviconUrl) return
+    const link = document.querySelector<HTMLLinkElement>('link[rel="icon"]') ?? document.createElement('link')
+    link.rel = 'icon'
+    link.href = config.branding.faviconUrl
+    document.head.appendChild(link)
+  }, [config?.branding.faviconUrl])
+
   async function approve() {
     if (!consent) return
     setSubmitting(true)
@@ -66,6 +78,7 @@ export function ConsentPage() {
       setSubmitting(false)
     }
   }
+
   async function deny() {
     setSubmitting(true)
     setError(null)
@@ -78,6 +91,7 @@ export function ConsentPage() {
       setSubmitting(false)
     }
   }
+
   async function switchAccount() {
     setSwitchingAccount(true)
     setError(null)
@@ -89,97 +103,225 @@ export function ConsentPage() {
       setSwitchingAccount(false)
     }
   }
-  const messageState = error !== null || (!loading && !consent)
-  const signInHref = `/auth/sign-in${search}`
+
+  if (!consent) {
+    const signInHref = `/auth/sign-in${search}`
+    return (
+      <AuthLayout
+        backHref={!loading ? signInHref : undefined}
+        config={config}
+        icon={!loading ? <CircleAlert aria-hidden="true" size={28} /> : undefined}
+        layout="focused"
+        title={tt('Review application access')}
+        description={tt('Approve only the access you recognize and expect.')}
+        variant={!loading ? 'message' : 'form'}
+      >
+        {loading ? <Status>{tt('Loading consent request')}</Status> : null}
+        {error ? <Status tone="error">{error}</Status> : null}
+        {!loading && !error ? (
+          <Status tone="warning">
+            {tt('This consent request is no longer available. Start sign-in again from the application.')}
+          </Status>
+        ) : null}
+      </AuthLayout>
+    )
+  }
+
+  const disabled = submitting || switchingAccount
   return (
-    <AuthLayout
-      backHref={messageState ? signInHref : undefined}
-      config={config}
-      eyebrow="OAuth consent"
-      icon={messageState ? <CircleAlert aria-hidden="true" size={28} /> : undefined}
-      layout={messageState ? 'focused' : 'decision'}
-      title={
-        consent
-          ? tt('{{application}} wants to access your Realmroot account', { application: consent.application.name })
-          : tt('Review application access')
-      }
-      description={
-        consent ? consentApplicationDescription(consent) : tt('Approve only the access you recognize and expect.')
-      }
-      variant={messageState ? 'message' : 'form'}
+    <main
+      aria-label={tt('auth.hostedAuthentication')}
+      className="consentPage"
+      id="auth-content"
+      style={brandingStyle(config)}
+      tabIndex={-1}
     >
-      {loading ? <Status>{tt('Loading consent request')}</Status> : null}
-      {error ? <Status tone="error">{error}</Status> : null}
-      {!loading && !error && !consent ? (
-        <Status tone="warning">
-          {' '}
-          {tt('This consent request is no longer available. Start sign-in again from the application.')}{' '}
-        </Status>
-      ) : null}
-      {consent ? (
-        <div className="consentStack">
-          <div className="consentAccount">
-            {consent.user.image ? (
-              <img src={consent.user.image} alt="" width="40" height="40" />
-            ) : (
-              <UserRound size={20} />
-            )}
-            <div>
-              <span>{tt('Continue as')}</span>
-              <strong>{consent.user.displayName ?? consent.user.email ?? tt('Current account')}</strong>
-              {consent.user.displayName && consent.user.email && consent.user.email !== consent.user.displayName ? (
-                <small>{consent.user.email}</small>
-              ) : null}
-            </div>
-            <Button
-              className="consentSwitchButton"
-              disabled={submitting || switchingAccount}
-              onClick={switchAccount}
-              type="button"
-              variant="ghost"
-            >
-              <LogOut size={16} /> {tt('Switch account')}
-            </Button>
+      <a className="skipLink" href="#auth-content">
+        {tt('Skip to content')}
+      </a>
+      <BrandIdentity config={config} />
+
+      <div className="consentFrame">
+        <article aria-labelledby="consent-title" className="consentCard">
+          <div className="consentContext">
+            <header className="consentApplication">
+              <span className="consentApplicationMark">
+                <ConsentApplicationLogo consent={consent} />
+              </span>
+              <div className="consentApplicationIdentity">
+                <h1 id="consent-title">{consent.application.name}</h1>
+                <ApplicationHost consent={consent} />
+              </div>
+              <p className="consentRequestSummary">{consentRequestSummary(consent)}</p>
+            </header>
+
+            <section aria-label={tt('Account used for authorization')} className="consentAccount">
+              {consent.user.image ? (
+                <img src={consent.user.image} alt="" width="40" height="40" />
+              ) : (
+                <span className="consentAvatarFallback" aria-hidden="true">
+                  <UserRound size={20} />
+                </span>
+              )}
+              <div>
+                <span>{tt('Continue as')}</span>
+                <strong>{consent.user.displayName ?? consent.user.email ?? tt('Current account')}</strong>
+                {consent.user.displayName && consent.user.email && consent.user.email !== consent.user.displayName ? (
+                  <small>{consent.user.email}</small>
+                ) : null}
+              </div>
+              <Button
+                className="consentSwitchButton"
+                disabled={disabled}
+                onClick={switchAccount}
+                type="button"
+                variant="ghost"
+              >
+                {tt('Change')}
+              </Button>
+            </section>
           </div>
-          <section className="consentPermissions">
-            <h2>{tt('This will allow {{application}} to:', { application: consent.application.name })}</h2>
-            <ul className="scopeList" aria-label={tt('Requested permissions')}>
-              {consent.requestedScopes.map((scope) => (
-                <li className="scopeItem" key={scope}>
-                  <ShieldCheck aria-hidden="true" />
-                  <span>
-                    <strong>{scopeTitle(scope)}</strong>
-                    <small>{scopeDescription(scope)}</small>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </section>
-          <details className="consentScopes">
-            <summary>{tt('Requested scopes ({{count}})', { count: consent.requestedScopes.length })}</summary>
-            <div>
-              {consent.requestedScopes.map((scope) => (
-                <code key={scope}>{scope}</code>
-              ))}
+
+          <div className="consentDecision">
+            <div className="consentDecisionBody">
+              {error ? <Status tone="error">{error}</Status> : null}
+              <ConsentPermissions consent={consent} />
+              <p className="consentControlNote">
+                <ShieldCheck aria-hidden="true" />
+                <span>
+                  {tt("You can remove {{application}}'s access at any time from Account Center.", {
+                    application: consent.application.name,
+                  })}
+                </span>
+              </p>
             </div>
-          </details>
-          {consent.existingConsent ? (
-            <Status tone="info">
-              {tt('Previously approved on')} {formatDate(consent.existingConsent.grantedAt)}.
-            </Status>
-          ) : null}
-          <div className="buttonRow">
-            <Button disabled={submitting || switchingAccount} onClick={deny} type="button" variant="outline">
-              {tt('Cancel')}
-            </Button>
-            <Button disabled={submitting || switchingAccount} onClick={approve} type="button">
-              {tt('Allow')}
-            </Button>
+
+            <footer className="consentActions">
+              <Button disabled={disabled} onClick={deny} type="button" variant="ghost">
+                {tt('Cancel')}
+              </Button>
+              <Button disabled={disabled} onClick={approve} type="button">
+                {tt('Authorize')}
+              </Button>
+            </footer>
           </div>
-          <p className="consentControlNote">{tt('You can revoke this access at any time in Account Center.')}</p>
-        </div>
-      ) : null}
-    </AuthLayout>
+        </article>
+        <ConsentFooter links={authLegalLinks(config)} />
+      </div>
+    </main>
+  )
+}
+
+function ConsentApplicationLogo({ consent }: { consent: ConsentRequestResponse }) {
+  if (consent.application.iconUrl) {
+    return <img className="consentApplicationLogo" src={consent.application.iconUrl} alt="" width="48" height="48" />
+  }
+  return (
+    <span className="consentApplicationFallback" aria-hidden="true">
+      {consent.application.name.trim().charAt(0).toUpperCase()}
+    </span>
+  )
+}
+
+function ApplicationHost({ consent }: { consent: ConsentRequestResponse }) {
+  const host = applicationHost(consent)
+  if (!host) return null
+  return (
+    <span className="consentApplicationOrigin">
+      <Globe2 aria-hidden="true" />
+      <span>{host}</span>
+    </span>
+  )
+}
+
+function ConsentFooter({ links }: { links: Array<[string, string]> }) {
+  return (
+    <footer className="consentFooter">
+      <span>{tt('Protected by Realmroot')}</span>
+      {links.map(([label, href]) => (
+        <span className="consentFooterLink" key={label}>
+          <span aria-hidden="true">·</span>
+          {href.startsWith('/') && !href.startsWith('//') ? (
+            <SpaLink to={href}>{tt(label)}</SpaLink>
+          ) : (
+            <a href={href}>{tt(label)}</a>
+          )}
+        </span>
+      ))}
+    </footer>
+  )
+}
+
+function ConsentPermissions({ consent }: { consent: ConsentRequestResponse }) {
+  const requested = consent.requestedPermissions
+  const added = new Set(consent.addedScopes)
+  const previouslyApproved = new Set(consent.previouslyApprovedScopes)
+  const newPermissions = requested.filter((permission) => added.has(permission.value))
+  const existingPermissions = requested.filter((permission) => previouslyApproved.has(permission.value))
+
+  if (consent.consentReason === 'expanded') {
+    return (
+      <section className="consentPermissions" aria-labelledby="consent-permissions-title">
+        <PermissionHeading
+          count={tt('{{count}} added', { count: newPermissions.length })}
+          title={tt('New permissions')}
+        />
+        <PermissionTable permissions={newPermissions} />
+        <details className="consentExistingAccess">
+          <summary>
+            <ChevronRight aria-hidden="true" />
+            <span>{tt('Previously approved access')}</span>
+            <small>{tt('{{count}} permissions', { count: existingPermissions.length })}</small>
+          </summary>
+          <PermissionTable permissions={existingPermissions} />
+        </details>
+      </section>
+    )
+  }
+
+  if (consent.consentReason === 'reauthorization') {
+    return (
+      <section className="consentPermissions" aria-labelledby="consent-permissions-title">
+        <PermissionHeading
+          count={tt('{{count}} permissions', { count: requested.length })}
+          title={tt('Confirm existing access')}
+        />
+        <p className="consentPermissionsIntro">{tt('No new permissions are being requested.')}</p>
+        <PermissionTable permissions={requested} />
+      </section>
+    )
+  }
+
+  return (
+    <section className="consentPermissions" aria-labelledby="consent-permissions-title">
+      <PermissionHeading
+        count={tt('{{count}} total', { count: requested.length })}
+        title={tt('Permissions requested')}
+      />
+      <PermissionTable permissions={requested} />
+    </section>
+  )
+}
+
+function PermissionHeading({ count, title }: { count: string; title: string }) {
+  return (
+    <div className="consentPermissionsHeader">
+      <h2 id="consent-permissions-title">{title}</h2>
+      <span>{count}</span>
+    </div>
+  )
+}
+
+function PermissionTable({ permissions }: { permissions: ConsentRequestResponse['requestedPermissions'] }) {
+  return (
+    <ul className="consentPermissionTable" aria-label={tt('Requested permissions')}>
+      {permissions.map((permission) => (
+        <li className="consentPermissionRow" key={permission.value}>
+          <code>{permission.value}</code>
+          {permission.description ? <span>{tt(permission.description)}</span> : null}
+        </li>
+      ))}
+    </ul>
   )
 }
 
@@ -188,29 +330,12 @@ export function signInWithReturnTo() {
   return `/auth/sign-in?return_to=${encodeURIComponent(current)}`
 }
 
-function scopeDescription(scope: string) {
-  if (scope === 'openid') return tt('Confirm your identity with this provider.')
-  if (scope === 'profile') return tt('Share basic profile details such as name and avatar.')
-  if (scope === 'email') return tt('Share your email address and verification state.')
-  if (scope === 'offline_access') return tt('Allow refresh tokens for continued access.')
-  return tt('Allow this application to request this scope.')
+function consentRequestSummary(consent: ConsentRequestResponse) {
+  if (consent.consentReason === 'expanded') return tt('Wants additional access to your Realmroot account')
+  if (consent.consentReason === 'reauthorization') return tt('Wants to continue accessing your Realmroot account')
+  return tt('Wants access to your Realmroot account')
 }
 
-function scopeTitle(scope: string) {
-  if (scope === 'openid') return tt('Confirm your identity')
-  if (scope === 'profile') return tt('See your basic profile')
-  if (scope === 'email') return tt('See your verified email address')
-  if (scope === 'offline_access') return tt('Keep access when you are away')
-  return tt('Use {{scope}} permission', { scope })
-}
-
-function consentApplicationDescription(consent: ConsentRequestResponse) {
-  const publisher = consent.application.firstParty ? tt('First-party application') : tt('Third-party application')
-  if (!consent.application.homepageUrl) return publisher
-  return `${publisher} · ${new URL(consent.application.homepageUrl).host}`
-}
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: 'medium',
-  }).format(new Date(value))
+function applicationHost(consent: ConsentRequestResponse) {
+  return consent.application.homepageUrl ? new URL(consent.application.homepageUrl).host : undefined
 }

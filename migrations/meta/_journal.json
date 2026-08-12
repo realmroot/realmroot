@@ -323,6 +323,27 @@
       "when": 1786493573642,
       "tag": "20260812001253_agent_username",
       "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "6",
+      "when": 1786541387000,
+      "tag": "20260812132947_system_resource_uuidv7",
+      "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "6",
+      "when": 1786543418000,
+      "tag": "20260812140338_application_consent_required",
+      "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "6",
+      "when": 1786544442000,
+      "tag": "20260812142042_application_authorization_source",
+      "breakpoints": true
     }
   ]
 }

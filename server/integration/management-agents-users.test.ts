@@ -6,6 +6,7 @@ import {
   createHarness,
   createUser,
   type Harness,
+  platformOrganizationId,
   resourceOpenApiFetch,
   seedAgent,
   signIn,
@@ -304,7 +305,7 @@ describe('federated credential management over real D1', () => {
         slug: 'federation-client',
         clientType: 'machine',
         redirectUris: [],
-        ownerOrganizationId: 'org_platform',
+        ownerOrganizationId: platformOrganizationId,
       }),
     })
     const application = (await createApp.json()) as { id: string }
@@ -315,7 +316,7 @@ describe('federated credential management over real D1', () => {
         identifier: 'https://api.example.com',
         resourceUrl: 'https://api.example.com',
         accessMode: 'realmroot',
-        ownerOrganizationId: 'org_platform',
+        ownerOrganizationId: platformOrganizationId,
       }),
     })
     const resource = (await createResource.json()) as { id: string }

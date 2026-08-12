@@ -1,9 +1,42 @@
 import { platformOrganization } from '@server/domain/platform-organization'
+import { realmrootResourceServer } from '@server/domain/realmroot-resource-server'
 import type { Deps } from '@server/usecases/deps'
 import { createIdentifierGeneratorFake } from '@server/usecases/identifier-generator.fake'
 import type { ProviderConnectionRecord } from '@server/usecases/ports'
 import type { SecurityPolicy } from '@shared/api/security'
+import { realmrootScopeRegistry } from '@shared/scope-registry'
 import { vi } from 'vitest'
+
+const platformOrganizationId = 'org-platform'
+const realmrootResourceServerId = 'resource-realmroot'
+const realmrootResource = {
+  id: realmrootResourceServerId,
+  ...realmrootResourceServer,
+  resourceUrl: 'https://auth.example.com/api',
+  accessMode: 'realmroot' as const,
+  connectorId: null,
+  authorizationDetails: [],
+  enabled: true,
+  ownerOrganizationId: platformOrganizationId,
+  visibility: 'public' as const,
+  scopeRegistry: {
+    discovery: {
+      sourceUrl: 'https://auth.example.com/api/openapi.json',
+      etag: null,
+      documentHash: 'system-managed',
+      syncedAt: '2026-01-01T00:00:00.000Z',
+      lastError: null,
+    },
+    scopes: Object.keys(realmrootScopeRegistry).map((value) => ({
+      value,
+      description: null,
+      grantMode: 'assigned' as const,
+    })),
+  },
+  availableToAgents: true,
+  createdAt: '2026-01-01T00:00:00.000Z',
+  updatedAt: '2026-01-01T00:00:00.000Z',
+}
 
 export function testSecurityPolicy(): SecurityPolicy {
   return {
@@ -46,7 +79,7 @@ export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> =
   const policy = testSecurityPolicy()
   const platformOwnerMembership = {
     id: 'member-platform-owner',
-    organizationId: platformOrganization.id,
+    organizationId: platformOrganizationId,
     userId: 'admin-1',
     roles: ['owner'],
   }
@@ -128,6 +161,7 @@ export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> =
       findConsent: vi.fn().mockResolvedValue(null),
       revokeConsent: vi.fn().mockResolvedValue(true),
       createConsent: vi.fn(),
+      recordPolicyAuthorization: vi.fn(),
     },
     assets: {
       createAsset: vi.fn(),
@@ -139,9 +173,25 @@ export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> =
     },
     assetStorage: { put: vi.fn(), get: vi.fn().mockResolvedValue(null) },
     authorization: {
+      listOrganizations: vi.fn().mockResolvedValue({
+        items: [
+          {
+            id: platformOrganizationId,
+            slug: platformOrganization.slug,
+            name: platformOrganization.name,
+            displayName: null,
+            logo: null,
+            disabled: false,
+            disabledReason: null,
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+        pagination: { limit: 100, offset: 0, total: 1, hasMore: false, nextOffset: null },
+      }),
       listResources: vi.fn().mockResolvedValue({
-        items: [],
-        pagination: { limit: 20, offset: 0, total: 0, hasMore: false, nextOffset: null },
+        items: [realmrootResource],
+        pagination: { limit: 100, offset: 0, total: 1, hasMore: false, nextOffset: null },
       }),
       listEnabledResources: vi.fn().mockResolvedValue([]),
       findResources: vi.fn().mockResolvedValue([]),
@@ -157,12 +207,35 @@ export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> =
       findMemberByOrganizationUser: vi
         .fn()
         .mockImplementation(async (organizationId, userId) =>
-          organizationId === platformOrganization.id && userId === platformOwnerMembership.userId
+          organizationId === platformOrganizationId && userId === platformOwnerMembership.userId
             ? platformOwnerMembership
             : null,
         ),
-      findOrganization: vi.fn().mockResolvedValue(null),
-      findResource: vi.fn().mockResolvedValue(null),
+      findOrganization: vi.fn().mockImplementation(async (id) =>
+        id === platformOrganizationId
+          ? {
+              id: platformOrganizationId,
+              slug: platformOrganization.slug,
+              name: platformOrganization.name,
+              displayName: null,
+              logo: null,
+              disabled: false,
+              disabledReason: null,
+              createdAt: '2026-01-01T00:00:00.000Z',
+              updatedAt: '2026-01-01T00:00:00.000Z',
+            }
+          : null,
+      ),
+      findResource: vi
+        .fn()
+        .mockImplementation(async (id) => (id === realmrootResourceServerId ? realmrootResource : null)),
+      createResource: vi.fn().mockImplementation(async (input) => ({
+        ...input,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      })),
+      updateResource: vi.fn().mockResolvedValue(true),
+      replaceResourceDiscovery: vi.fn().mockResolvedValue(true),
       listActiveUserScopeEntitlements: vi.fn().mockResolvedValue([]),
       listActiveApplicationScopeEntitlements: vi.fn().mockResolvedValue([]),
       hasPendingInvitation: vi.fn().mockResolvedValue(false),

@@ -91,8 +91,7 @@ const consentResponse = {
     clientId: 'client-1',
     clientType: 'public_spa',
     public: true,
-    firstParty: false,
-    trusted: false,
+    consentRequired: true,
     disabled: false,
     disabledReason: null,
     redirectUris: ['https://client.example.com/callback'],
@@ -122,7 +121,15 @@ const consentResponse = {
       '/api/auth/oauth2/authorize?client_id=client-1&redirect_uri=https%3A%2F%2Fclient.example.com%2Fcallback&state=state-1',
     denyUrl: 'https://client.example.com/callback?error=access_denied&state=state-1',
   },
+  resourceServerId: null,
   requestedScopes: ['openid', 'profile'],
+  requestedPermissions: [
+    { value: 'openid', description: 'Confirm your identity with Realmroot.' },
+    { value: 'profile', description: 'Share your name, profile image, and basic account details.' },
+  ],
+  addedScopes: ['openid', 'profile'],
+  previouslyApprovedScopes: [],
+  consentReason: 'initial',
   existingConsent: null,
   state: 'state-1',
 }
@@ -151,24 +158,33 @@ describe('hosted auth pages 5', () => {
         return Promise.resolve(jsonResponse(consentResponse))
       }
       requests.push({ url, body: init?.body ? JSON.parse(String(init.body)) : null })
+      if (url.startsWith('/api/auth/oauth2/consent')) {
+        return Promise.resolve(jsonResponse({ redirect: true, url: 'https://client.example.com/callback?code=code-1' }))
+      }
       return Promise.resolve(jsonResponse({ consent: { id: 'consent-1', scopes: ['openid'], grantedAt: 'now' } }, 201))
     })
 
     render(<ConsentPage />)
 
-    expect(
-      await screen.findByRole('heading', { name: 'Client App wants to access your Realmroot account' }),
-    ).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'Client App' })).toBeTruthy()
     expect(screen.getByText('Continue as')).toBeTruthy()
     expect(screen.getByText('Jane Stone')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Switch account' })).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Allow' }))
+    expect(screen.getByRole('button', { name: 'Change' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Authorize' }))
 
     await waitFor(() => {
       expect(requests).toEqual([
         {
           url: '/api/account/application-authorizations',
-          body: { clientId: 'client-1', scopes: ['openid', 'profile'] },
+          body: { clientId: 'client-1', resourceServerId: null, scopes: ['openid', 'profile'] },
+        },
+        {
+          url: '/api/auth/oauth2/consent',
+          body: {
+            accept: true,
+            scope: 'openid profile',
+            oauth_query: 'client_id=client-1&redirect_uri=https%3A%2F%2Fclient.example.com%2Fcallback&state=state-1',
+          },
         },
       ])
     })
@@ -197,7 +213,7 @@ describe('hosted auth pages 5', () => {
 
     render(<ConsentPage />)
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Switch account' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Change' }))
 
     await waitFor(() => {
       expect(requests).toEqual([{ url: '/api/auth/sign-out', body: {} }])
@@ -247,6 +263,14 @@ describe('hosted auth pages 5', () => {
               image: 'https://client.example.com/jane.png',
             },
             requestedScopes: ['email', 'offline_access', 'custom:scope'],
+            requestedPermissions: [
+              { value: 'email', description: 'Share your email address and verification state.' },
+              { value: 'offline_access', description: 'Allow refresh tokens for continued access.' },
+              { value: 'custom:scope', description: 'Allow this application to request this scope.' },
+            ],
+            addedScopes: ['offline_access', 'custom:scope'],
+            previouslyApprovedScopes: ['email'],
+            consentReason: 'expanded',
             existingConsent: { id: 'consent-1', scopes: ['email'], grantedAt: '2026-01-02T00:00:00.000Z' },
           }),
         )
@@ -255,15 +279,15 @@ describe('hosted auth pages 5', () => {
     })
     render(<ConsentPage />)
 
-    expect(await screen.findByText('Third-party application')).toBeTruthy()
+    expect(await screen.findByText('New permissions')).toBeTruthy()
     expect(document.querySelector('.consentAccount img')?.getAttribute('width')).toBe('40')
     expect(document.querySelector('.consentAccount img')?.getAttribute('height')).toBe('40')
     expect(screen.getByText('Share your email address and verification state.')).toBeTruthy()
     expect(screen.getByText('Allow refresh tokens for continued access.')).toBeTruthy()
     expect(screen.getByText('Allow this application to request this scope.')).toBeTruthy()
-    expect(screen.getByText(/Previously approved on/)).toBeTruthy()
+    expect(screen.getByText('Previously approved access')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Allow' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Authorize' }))
 
     expect(await screen.findByText('Consent approval failed.')).toBeTruthy()
   })
