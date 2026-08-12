@@ -1712,6 +1712,11 @@ describe('external API resource authorization', () => {
     const stored = vi.mocked(deps.externalResources.createAccessRequestWithAudit).mock.calls[0]![0]
     vi.mocked(deps.externalResources.findAccessRequestByApprovalTokenHash).mockResolvedValue(stored)
     vi.mocked(deps.externalResources.findAccessRequest).mockResolvedValue(stored)
+    await expect(getAccountAccessRequestByToken(deps, 'approval-token', 'user-1')).resolves.toMatchObject({
+      authorizationDetails: [{ type: 'project_access', actions: ['read'] }],
+      authorizationDetail: null,
+      requiresAccountConnection: true,
+    })
     vi.mocked(deps.externalHttp.fetch).mockResolvedValue(
       Response.json(
         { request_uri: 'urn:ietf:params:oauth:request_uri:first-access', expires_in: 300 },
@@ -1769,6 +1774,24 @@ describe('external API resource authorization', () => {
       expect.anything(),
       undefined,
     )
+  })
+
+  it('keeps a generic Context requirement when an account is already connected', async () => {
+    const deps = authorizationCatalogDeps()
+    vi.mocked(deps.externalResources.listActiveEntitlementsByAgent).mockResolvedValue([])
+
+    await expect(
+      createAgentAccessRequest(
+        deps,
+        { resourceId: 'resource-1', scopes: ['projects:read'], reason: 'Read one project' },
+        principal(),
+        'https://auth.example.com',
+      ),
+    ).resolves.toMatchObject({
+      connectionId: 'connection-1',
+      authorizationDetails: [{ type: 'project_access', actions: ['read'] }],
+      status: 'pending',
+    })
   })
 
   it('discovers stored connections without contacting the Provider [spec: agent-identity/agent-resource-discovery]', async () => {
@@ -4297,6 +4320,59 @@ describe('external API resource authorization', () => {
     await expect(
       decideAgentAccessRequest(deps, request.id, { decision: 'approve', mode: 'once' }, 'user-1'),
     ).rejects.toThrow('Native API resources do not use account connections')
+  })
+
+  it('approves brokered first access against the connected account authority revision', async () => {
+    const deps = createTestDeps()
+    authorizationDeps(deps)
+    const authorizationDetails = [
+      { type: 'github_installation', installation_id: '152097080', account_login: 'realmroot' },
+    ]
+    const brokered = {
+      ...resource(),
+      accessMode: 'brokered' as const,
+      authorizationDetails: [{ type: 'github_installation' }],
+      scopeRegistry: {
+        ...resource().scopeRegistry!,
+        accountConnection: {
+          mode: 'brokered' as const,
+          authorizationEndpoint: 'https://adapter.example/github/account-connection-authorizations',
+          tokenEndpoint: 'https://adapter.example/github/account-connection-credentials',
+        },
+      },
+    }
+    const connection = {
+      ...connectionRecord(),
+      credentialCustody: 'resource_server' as const,
+      encryptedTokens: null,
+      brokerReference: 'broker-reference-1',
+      providerEventRevision: 7,
+      authorizationDetails,
+      authorityConstraints: [{ authorizationDetails, scopes: ['projects:read'] }],
+    }
+    const request = { ...requestRecord(), authorizationDetails }
+    vi.mocked(deps.authorization.findResource).mockResolvedValue(brokered)
+    vi.mocked(deps.externalResources.findAccessRequest).mockResolvedValue(request)
+    vi.mocked(deps.externalResources.findConnection).mockResolvedValue(connection)
+    vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
+    vi.mocked(deps.externalResources.approveAccessRequestWithEntitlements).mockImplementation(
+      async (created, _updated, _requestId, decision) => ({
+        entitlements: created,
+        request: { ...request, ...decision },
+      }),
+    )
+
+    await expect(
+      decideAgentAccessRequest(deps, request.id, { decision: 'approve', mode: 'once', authorizationDetails }, 'user-1'),
+    ).resolves.toMatchObject({ status: 'approved', authorizationDetails })
+    expect(deps.externalResources.approveAccessRequestWithEntitlements).toHaveBeenCalledWith(
+      expect.any(Array),
+      expect.any(Array),
+      request.id,
+      expect.objectContaining({ authorizationDetails }),
+      expect.anything(),
+      7,
+    )
   })
 
   it('supports native resource discovery and access request wrappers', async () => {
