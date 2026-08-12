@@ -20,6 +20,7 @@ import {
   getPublicAgentEnrollment,
   listAllAgentIdentities,
   listAllAgents,
+  listManagementAgentAuthorizedResourceServers,
   listManagementAgentInstallations,
   listManagementAgentPermissions,
   listOrganizationAgentIdentities,
@@ -133,9 +134,78 @@ describe('Agent login identity', () => {
     expect(identity.subject).toBe('agt_stable')
     expect(deps.agentIdentities.createIdentity).not.toHaveBeenCalled()
   })
+
+  it('claims an explicit profile once for a legacy identity', async () => {
+    const deps = createTestDeps()
+    const legacy = aggregate({ username: null, runtime: null })
+    const claimed = aggregate({ username: 'mira.chen', name: 'Mira Chen', runtime: 'codex' })
+    vi.mocked(deps.agentIdentities.findActiveByProtocolAgent).mockResolvedValue(legacy)
+    vi.mocked(deps.agentIdentities.claimIdentityProfile).mockResolvedValue(claimed)
+
+    await expect(
+      createAgentLoginIdentity(
+        deps,
+        { protocolAgentId: 'protocol-agent-1', username: 'mira.chen', nickname: 'Mira Chen', runtime: 'codex' },
+        'https://auth.example.com',
+        'user-1',
+      ),
+    ).resolves.toMatchObject({ username: 'mira.chen', name: 'Mira Chen', runtime: 'codex' })
+    expect(deps.agentIdentities.claimIdentityProfile).toHaveBeenCalledWith(
+      'identity-1',
+      expect.objectContaining({ username: 'mira.chen', name: 'Mira Chen', runtime: 'codex' }),
+    )
+  })
+
+  it('rejects unavailable, changed, and concurrently claimed usernames', async () => {
+    const duplicate = enrollmentDeps()
+    vi.mocked(duplicate.agentIdentities.findByUsername).mockResolvedValue(identity())
+    await expect(
+      createAgentLoginIdentity(duplicate, loginInput(), 'https://auth.example.com', 'user-1'),
+    ).rejects.toMatchObject({ status: 409 })
+
+    const immutable = createTestDeps()
+    vi.mocked(immutable.agentIdentities.findActiveByProtocolAgent).mockResolvedValue(aggregate())
+    await expect(
+      createAgentLoginIdentity(
+        immutable,
+        { ...loginInput(), username: 'mira.chen' },
+        'https://auth.example.com',
+        'user-1',
+      ),
+    ).rejects.toMatchObject({ status: 409 })
+
+    const raced = createTestDeps()
+    vi.mocked(raced.agentIdentities.findActiveByProtocolAgent).mockResolvedValue(
+      aggregate({ username: null, runtime: null }),
+    )
+    vi.mocked(raced.agentIdentities.claimIdentityProfile).mockResolvedValue(null)
+    await expect(
+      createAgentLoginIdentity(raced, loginInput(), 'https://auth.example.com', 'user-1'),
+    ).rejects.toMatchObject({ status: 409 })
+  })
 })
 
 describe('Agent identity lifecycle', () => {
+  it('lists Resource Servers authorized for a managed Agent', async () => {
+    const deps = identityDeps()
+    vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(aggregate())
+    Object.assign(deps.authorization, {
+      listAuthorizedResourceServers: vi.fn().mockResolvedValue({
+        items: [],
+        pagination: { limit: 20, offset: 0, total: 0, hasMore: false, nextOffset: null },
+      }),
+    })
+
+    await expect(
+      listManagementAgentAuthorizedResourceServers(deps, 'identity-1', { limit: 20, offset: 0 }),
+    ).resolves.toMatchObject({ pagination: { total: 0 } })
+    expect(deps.authorization.listAuthorizedResourceServers).toHaveBeenCalledWith(
+      { type: 'agent', id: 'identity-1' },
+      { limit: 20, offset: 0 },
+      expect.any(Date),
+    )
+  })
+
   it('lists personal, organization, and inventory identities', async () => {
     const deps = identityDeps()
     const personal = aggregate()
@@ -565,6 +635,52 @@ describe('Agent identity lifecycle', () => {
     await expect(getAgentEnrollmentIntent(deps, 'intent-1', 'user-1')).resolves.toMatchObject({ id: 'intent-1' })
     vi.mocked(deps.agentIdentities.findIntent).mockResolvedValue(null)
     await expect(getAgentEnrollmentIntent(deps, 'missing', 'user-1')).rejects.toMatchObject({ status: 404 })
+  })
+
+  it('rejects incompatible enrollment replays and missing legacy bindings', async () => {
+    const missingBinding = enrollmentDeps()
+    vi.mocked(missingBinding.agentIdentities.findIntentByIdempotencyKey).mockResolvedValue(
+      intent({ requestedUsername: null, requestedRuntime: null }),
+    )
+    await expect(
+      createAgentEnrollmentIntent(missingBinding, loginInput(), 'user-1', 'legacy-key'),
+    ).rejects.toMatchObject({ status: 409 })
+
+    const wrongActor = enrollmentDeps()
+    vi.mocked(wrongActor.agentIdentities.findIntentByIdempotencyKey).mockResolvedValue(
+      intent({ createdByUserId: 'another-user' }),
+    )
+    await expect(createAgentEnrollmentIntent(wrongActor, loginInput(), 'user-1', 'reused-key')).rejects.toMatchObject({
+      status: 403,
+    })
+
+    const changedProfile = enrollmentDeps()
+    vi.mocked(changedProfile.agentIdentities.findIntentByIdempotencyKey).mockResolvedValue(
+      intent({ requestedName: 'Another Name' }),
+    )
+    await expect(
+      createAgentEnrollmentIntent(changedProfile, loginInput(), 'user-1', 'reused-key'),
+    ).rejects.toMatchObject({ status: 409 })
+  })
+
+  it('replays a legacy enrollment after claiming its explicit identity profile', async () => {
+    const deps = enrollmentDeps()
+    vi.mocked(deps.agentIdentities.findIntentByIdempotencyKey).mockResolvedValue(
+      intent({ requestedName: null, requestedUsername: null, requestedRuntime: null }),
+    )
+    vi.mocked(deps.agentIdentities.findActiveByProtocolAgent).mockResolvedValue(
+      aggregate({ username: null, runtime: null }),
+    )
+    vi.mocked(deps.agentIdentities.claimIdentityProfile).mockResolvedValue(aggregate())
+
+    await expect(createAgentEnrollmentIntent(deps, loginInput(), 'user-1', 'legacy-key')).resolves.toMatchObject({
+      replayed: true,
+      intent: {
+        requestedUsername: 'build-agent',
+        requestedNickname: 'Build Agent',
+        requestedRuntime: 'codex',
+      },
+    })
   })
 
   it('uses the detected runtime as the nickname when enrollment omits one', async () => {

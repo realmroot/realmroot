@@ -34,6 +34,7 @@ import {
   listAccountAccessRequestAuthorizationDetailCatalog,
   listAccountAccessRequests,
   listAccountConnections,
+  listAccountProviderConnections,
   listAccountProviderConnectors,
   listAgentResourceServers as listAgentApiResources,
   listAgentResourceServerAuthorizationDetails as listAgentAuthorizationDetailCatalog,
@@ -594,6 +595,64 @@ describe('external API resource authorization', () => {
           },
         },
       ],
+    })
+  })
+
+  it('[spec: account-center/provider-connections] reports active Provider connection capabilities', async () => {
+    const deps = createTestDeps()
+    const connector = connectorRecord()
+    vi.mocked(deps.authorization.listEnabledResources).mockResolvedValue([
+      { ...resource(), connectorId: connector.id, availableToAgents: true },
+    ])
+    vi.mocked(deps.externalResources.listProviderConnectionsByUser).mockResolvedValue([
+      {
+        id: 'provider-connection-1',
+        connectorId: connector.id,
+        ownerUserId: 'user-1',
+        ownerOrganizationId: null,
+        authenticationAccountId: 'account-1',
+        externalSubject: 'provider-user-1',
+        displayName: 'Provider User',
+        status: 'active',
+        createdAt: now,
+        updatedAt: now,
+        connector,
+        resourceAuthorizationCount: 1,
+        resourceNames: ['Projects'],
+      },
+      {
+        id: 'provider-connection-2',
+        connectorId: connector.id,
+        ownerUserId: 'user-1',
+        ownerOrganizationId: null,
+        authenticationAccountId: null,
+        externalSubject: 'provider-user-2',
+        displayName: 'Unconfigured Provider User',
+        status: 'active',
+        createdAt: now,
+        updatedAt: now,
+        connector,
+        resourceAuthorizationCount: 0,
+        resourceNames: [],
+      },
+    ])
+
+    await expect(listAccountProviderConnections(deps, 'user-1', { limit: 20, offset: 0 })).resolves.toMatchObject({
+      items: [
+        {
+          capabilities: {
+            signIn: { active: true },
+            agentAccess: { active: true, authorizationCount: 1, resourceNames: ['Projects'] },
+          },
+        },
+        {
+          capabilities: {
+            signIn: { active: false },
+            agentAccess: { active: false, authorizationCount: 0, resourceNames: [] },
+          },
+        },
+      ],
+      pagination: { total: 2 },
     })
   })
 
@@ -4836,6 +4895,8 @@ describe('external API resource authorization', () => {
 
   it('resolves approval Resources through a paginated external catalog', async () => {
     const deps = authorizationCatalogDeps()
+    const catalogConnector = await deps.connectors.findById('connector-1')
+    vi.mocked(deps.connectors.findById).mockResolvedValue({ ...catalogConnector!, registrationMode: 'manual' })
     const requested = { type: 'project_access', project_id: 'project-2', actions: ['read'] }
     const pending = { ...requestRecord(), authorizationDetails: [requested] }
     vi.mocked(deps.externalResources.findAccessRequest).mockResolvedValue(pending)
@@ -4870,6 +4931,40 @@ describe('external API resource authorization', () => {
         pagination: { limit: 100, offset: 100, total: 101, hasMore: false, nextOffset: null },
       })
     })
+
+    await expect(
+      createAgentResourceConnectionRequest(
+        deps,
+        resource().id,
+        { scopes: ['projects:read'], authorizationDetails: [requested] },
+        principal(),
+        'https://auth.example.com',
+      ),
+    ).resolves.toMatchObject({ authorizationDetails: [requested] })
+
+    await expect(
+      createAgentResourceConnectionRequest(
+        deps,
+        resource().id,
+        {
+          scopes: ['projects:read'],
+          authorizationDetails: [{ ...requested, project_id: 'missing' }],
+        },
+        principal(),
+        'https://auth.example.com',
+      ),
+    ).rejects.toThrow('Authorization detail is not available through this Resource Server connection.')
+
+    vi.mocked(deps.externalResources.findConnectionByOwnerResource).mockResolvedValue(null)
+    await expect(
+      createAgentResourceConnectionRequest(
+        deps,
+        resource().id,
+        { scopes: ['projects:read'], authorizationDetails: [requested] },
+        principal(),
+        'https://auth.example.com',
+      ),
+    ).rejects.toThrow('Connect the Resource Server before selecting authorization details.')
 
     await expect(getAccountAccessRequestByToken(deps, 'approval-token', 'user-1')).resolves.toMatchObject({
       authorizationDetail: {
