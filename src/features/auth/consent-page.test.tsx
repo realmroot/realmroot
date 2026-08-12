@@ -105,6 +105,7 @@ afterEach(() => {
   cleanup()
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
+  document.querySelector('link[rel="icon"]')?.remove()
   window.history.pushState(null, '', '/')
 })
 
@@ -185,6 +186,73 @@ describe('ConsentPage error and fallback paths', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }))
 
     await waitFor(() => expect(assign).toHaveBeenCalledWith('https://client.example.com/callback?error=access_denied'))
+  })
+
+  it('surfaces a missing denial callback URL', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url.startsWith('/api/configz')) return Promise.resolve(jsonResponse(configz))
+      if (url.startsWith('/api/account/application-authorization-request')) {
+        return Promise.resolve(jsonResponse(consentResponse))
+      }
+      if (url.startsWith('/api/auth/oauth2/consent'))
+        return Promise.resolve(jsonResponse({ redirect: false, url: null }))
+      throw new Error(`Unexpected request: ${url}`)
+    })
+
+    render(<ConsentPage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }))
+
+    expect(await screen.findByText('The authorization server did not return a callback URL.')).toBeTruthy()
+    expect(assign).not.toHaveBeenCalled()
+  })
+
+  it('renders application imagery, branded legal links, and permissions without descriptions', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url.startsWith('/api/configz')) {
+        return Promise.resolve(
+          jsonResponse({
+            ...configz,
+            branding: { ...configz.branding, faviconUrl: 'https://realmroot.example/favicon.svg' },
+            links: {
+              ...configz.links,
+              privacyUri: 'https://realmroot.example/privacy',
+              termsUri: '/terms',
+            },
+          }),
+        )
+      }
+      return Promise.resolve(
+        jsonResponse({
+          ...consentResponse,
+          application: {
+            ...consentResponse.application,
+            homepageUrl: null,
+            iconUrl: 'https://client.example.com/icon.png',
+          },
+          user: {
+            email: 'jane@example.com',
+            displayName: 'jane@example.com',
+            image: 'https://client.example.com/jane.png',
+          },
+          requestedScopes: ['custom:read'],
+          requestedPermissions: [{ value: 'custom:read', description: null }],
+          addedScopes: ['custom:read'],
+        }),
+      )
+    })
+
+    render(<ConsentPage />)
+
+    expect(await screen.findByRole('heading', { name: 'Client App' })).toBeTruthy()
+    expect(document.querySelector<HTMLLinkElement>('link[rel="icon"]')?.href).toBe(
+      'https://realmroot.example/favicon.svg',
+    )
+    expect(screen.getByRole('link', { name: 'Privacy' }).getAttribute('href')).toBe('https://realmroot.example/privacy')
+    expect(screen.getByRole('link', { name: 'Terms' }).getAttribute('href')).toBe('/terms')
+    expect(screen.getByText('custom:read')).toBeTruthy()
+    expect(screen.queryByText('client.example.com')).toBeNull()
   })
 
   it('shows a load error when the consent request cannot be fetched', async () => {
