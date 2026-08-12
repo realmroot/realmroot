@@ -36,3 +36,9 @@ open, use the Approval URL printed by the command. Keep the command running
 until approval completes, then run `whoami` again.
 
 Identity is ready when `whoami` returns `issuer` and `subject`.
+
+For task access, `realmroot agent request` opens the approval page and waits by
+default. When the controller is away from this computer, use
+`realmroot agent request --no-wait ... --json` and give the returned
+`approvalUrl` to the controller; the command exits without opening a browser or
+polling.

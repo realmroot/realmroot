@@ -563,21 +563,21 @@ Feature: Agent identity and delegated API authorization
       Given an enabled external API resource has active authorization configuration
       And the Agent's home space has no account connection for that resource
       When the Agent discovers every target operation required by the current task
-      And requests a controller-managed account connection for their combined exact advertised scope set
-      Then Realmroot creates a hosted connection request without authorization details or an Agent grant
-      When the controller opens the connection approval page
-      Then Realmroot requires the controller to connect that resource account
-      And the new account authorization requests the connection request's exact scope set
+      And requests their combined exact advertised scope set
+      Then Realmroot creates one pending Agent access request and one hosted approval URL
+      When the controller opens the access approval page
+      Then Realmroot requires the controller to connect that resource account in the same approval flow
+      And the new account authorization requests the access request's exact scope set
       When OAuth returns after connecting the account
-      Then Realmroot returns to the connection approval with that account displayed
+      Then Realmroot returns to the same access approval with that account displayed
       When the authorization server instead returns an OAuth error
-      Then Realmroot consumes the failed attempt and returns to the connection approval with the provider error and a retry action
+      Then Realmroot consumes the failed attempt and returns to the same access approval with the provider error and a retry action
       Then Realmroot records a resource account connection owned by the Agent's home space
       And stores its refresh credential encrypted
       And never exposes the refresh credential through an API, audit event, or error
-      And does not create an Agent access request, grant, or token
-      When the Agent discovers one connected authorization context and separately requests exact access
-      And the controller approves the exact Agent scopes and grant lifetime
+      And does not create a grant or token before approval
+      When the controller selects one connected authorization context when the resource requires one
+      And approves the exact Agent scopes and grant lifetime
       Then Realmroot binds the account connection to the exact request and grant
       And the Agent can obtain a DPoP-bound target access token
 
@@ -594,7 +594,7 @@ Feature: Agent identity and delegated API authorization
       And replaces its encrypted credentials, scopes, display name, and expiry
       And treats the callback authorization details as authoritative so removed details invalidate uncovered Agent grants
       And restores the connection when it was previously revoked
-      And returns to the pending Agent approval so the controller can decide it separately
+      And returns to the pending Agent approval so the controller can finish the continuous flow
 
     @entrypoint:agent-protocol @journey:resource-account-connection-expansion
     Scenario: An Agent requests additional authority from an existing resource account

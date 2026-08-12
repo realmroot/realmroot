@@ -115,7 +115,7 @@ describe('admin console applications-detail-a', () => {
     }
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       if (String(input) === '/api/applications') {
-        return Promise.resolve(jsonResponse({ applications: [application, thirdPartyApplication], pagination }))
+        return Promise.resolve(jsonResponse({ items: [application, thirdPartyApplication], pagination }))
       }
       return consoleSharedFetch(input, init)
     })
@@ -155,7 +155,7 @@ describe('admin console applications-detail-a', () => {
       if (url === '/api/applications/app-1/authorizations?status=active&limit=50&offset=0' && method === 'GET') {
         return Promise.resolve(
           jsonResponse({
-            authorizations: active ? [authorization] : [],
+            items: active ? [authorization] : [],
             pagination: {
               limit: 50,
               offset: 0,
@@ -169,7 +169,7 @@ describe('admin console applications-detail-a', () => {
       if (url === '/api/applications/app-1/authorizations?status=active&limit=50&offset=50' && method === 'GET') {
         return Promise.resolve(
           jsonResponse({
-            authorizations: active
+            items: active
               ? [
                   {
                     ...authorization,
@@ -238,7 +238,7 @@ describe('admin console applications-detail-a', () => {
       }
       if (url === '/api/applications/app-1') return Promise.resolve(jsonResponse(currentApplication))
       if (url === '/api/applications/app-1/federated-credentials') {
-        return Promise.resolve(jsonResponse({ credentials: [] }))
+        return Promise.resolve(jsonResponse({ items: [] }))
       }
       if (url === '/api/resource-servers') {
         return Promise.resolve(jsonResponse({ items: [], pagination: { ...pagination, total: 0 } }))
@@ -425,7 +425,7 @@ describe('admin console applications-detail-a', () => {
       if (url.startsWith('/api/applications/app-1/client-secrets')) {
         return Promise.resolve(
           jsonResponse({
-            secrets: [
+            items: [
               {
                 id: 'secret-1',
                 version: 1,
@@ -442,7 +442,7 @@ describe('admin console applications-detail-a', () => {
       }
       if (url === '/api/applications/app-1') return Promise.resolve(jsonResponse(confidentialApplication))
       if (url === '/api/applications/app-1/federated-credentials') {
-        return Promise.resolve(jsonResponse({ credentials: [] }))
+        return Promise.resolve(jsonResponse({ items: [] }))
       }
       if (url === '/api/resource-servers') {
         return Promise.resolve(jsonResponse({ items: [], pagination: { ...pagination, total: 0 } }))

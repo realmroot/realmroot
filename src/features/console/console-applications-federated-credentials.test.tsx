@@ -121,7 +121,7 @@ describe('admin console application federated credentials', () => {
         })
       }
       if (url === '/api/applications/app-1/federated-credentials' && method === 'GET') {
-        return jsonResponse({ credentials })
+        return jsonResponse({ items: credentials })
       }
       if (url === '/api/applications/app-1/federated-credentials' && method === 'POST') {
         const body = JSON.parse(String(init?.body))
@@ -235,7 +235,7 @@ describe('admin console application federated credentials', () => {
       }
       if (url === '/api/applications/app-1/federated-credentials' && method === 'GET') {
         return jsonResponse({
-          credentials: [
+          items: [
             {
               id: 'cred-1',
               applicationId: 'app-1',

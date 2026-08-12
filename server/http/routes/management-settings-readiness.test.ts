@@ -416,7 +416,7 @@ describe('management routes 3', () => {
 
   it('exposes admin setup readiness through the management boundary', async () => {
     vi.spyOn(applications, 'listApplications').mockResolvedValue({
-      applications: [],
+      items: [],
       pagination: { limit: 1, offset: 0, total: 0, hasMore: false, nextOffset: null },
     } as unknown as ListApplicationsResponse)
     vi.spyOn(configz, 'getConfig').mockResolvedValue(readinessConfig())
@@ -456,7 +456,7 @@ describe('management routes 3', () => {
 
   it('reports admin setup complete when an OIDC application exists', async () => {
     vi.spyOn(applications, 'listApplications').mockResolvedValue({
-      applications: [applicationFixture()],
+      items: [applicationFixture()],
       pagination: { limit: 1, offset: 0, total: 1, hasMore: false, nextOffset: null },
     } as unknown as ListApplicationsResponse)
     vi.spyOn(configz, 'getConfig').mockResolvedValue(readinessConfig())
@@ -476,7 +476,7 @@ describe('management routes 3', () => {
 
   it('does not count social sign-in as ready without a configured provider or connector', async () => {
     vi.spyOn(applications, 'listApplications').mockResolvedValue({
-      applications: [applicationFixture()],
+      items: [applicationFixture()],
       pagination: { limit: 1, offset: 0, total: 1, hasMore: false, nextOffset: null },
     } as unknown as ListApplicationsResponse)
     vi.spyOn(configz, 'getConfig').mockResolvedValue(
@@ -502,7 +502,7 @@ describe('management routes 3', () => {
 
   it('does not count disabled social connectors as ready sign-in methods', async () => {
     vi.spyOn(applications, 'listApplications').mockResolvedValue({
-      applications: [applicationFixture()],
+      items: [applicationFixture()],
       pagination: { limit: 1, offset: 0, total: 1, hasMore: false, nextOffset: null },
     } as unknown as ListApplicationsResponse)
     vi.spyOn(configz, 'getConfig').mockResolvedValue(

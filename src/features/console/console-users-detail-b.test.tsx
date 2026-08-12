@@ -44,7 +44,7 @@ describe('admin console users-detail-b', () => {
       if (url === '/api/realm/sign-in-policy') return Promise.resolve(jsonResponse(signInSettings))
       if (url === '/api/realm/security-policy') return Promise.resolve(jsonResponse(securityPolicy))
       if (url === '/api/connectors') {
-        return Promise.resolve(jsonResponse({ connectors: [], pagination }))
+        return Promise.resolve(jsonResponse({ items: [], pagination }))
       }
       return consoleSharedFetch(input, init)
     })
@@ -115,7 +115,7 @@ describe('admin console users-detail-b', () => {
       const url = String(input)
       const method = init?.method ?? 'GET'
       if (url === '/api/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
-      if (url === '/api/connectors') return Promise.resolve(jsonResponse({ connectors: [], pagination }))
+      if (url === '/api/connectors') return Promise.resolve(jsonResponse({ items: [], pagination }))
       if (url === '/api/realm/sign-in-policy' && method === 'GET') {
         return Promise.resolve(
           jsonResponse({
@@ -284,7 +284,7 @@ describe('admin console users-detail-b', () => {
         return Promise.resolve(new Response(null, { status: 204 }))
       }
       if (url === '/api/connectors') {
-        return Promise.resolve(jsonResponse({ connectors: [connector], pagination }))
+        return Promise.resolve(jsonResponse({ items: [connector], pagination }))
       }
       return consoleSharedFetch(input, init)
     })

@@ -40,7 +40,7 @@ export function OrganizationsPage() {
       ])
     },
   })
-  const organizations = query.data?.organizations ?? []
+  const organizations = query.data?.items ?? []
   const visibleOrganizations = organizations.filter((organization) =>
     [organization.name, organization.slug, organization.displayName ?? ''].some((value) =>
       value.toLowerCase().includes(search.trim().toLowerCase()),

@@ -9,7 +9,6 @@ key. The Agent-facing model is intentionally small.
 | Agent | Durable non-human identity with a stable issuer and subject. |
 | Resource Server | Registered service, service URL, scope catalog, availability, and connection state. |
 | Authorization detail | RFC 9396 value selecting provider-owned context. |
-| Connection request | Request for the controller to link or expand the account used by a Resource Server. |
 | Access request | Request for exact scopes and optional authorization details on one Resource Server. |
 | Resource credential | Short-lived DPoP credential held by the local adapter. |
 
@@ -51,20 +50,26 @@ Realmroot management authority is separate, controller-managed authority. It
 does not grant access to a Resource Server and is not part of the Agent's
 connection or access-request workflow.
 
-## 3. Establish The Account Connection
+## 3. Request Access And Establish The Account Connection
 
 External Resource Servers use at most one connected account for the Agent's
-personal or organization home space. The Agent requests a connection by
-Resource Server and scopes; it never selects a connection ID.
+personal or organization home space. The Agent creates one access request by
+Resource Server and scopes; it never selects a connection ID or creates a
+second connection approval first.
 
-The controller may connect an account or expand the same account's scopes and
-provider authorization details. Realmroot performs OAuth, PKCE, PAR, RAR, refresh,
-and subject validation internally. Returning from OAuth completes the
-connection request but does not itself approve Agent access.
+When an account is absent or insufficient, the same hosted access approval asks
+the controller to connect or expand it. Realmroot performs OAuth, PKCE, PAR,
+RAR, refresh, and subject validation internally, then returns the controller to
+that original approval. The controller selects any required Context and decides
+the Agent scopes and lifetime there. The original access request is bound to
+the resulting connection when approved.
 
 Native Resource Servers report `not_required` and skip this step.
 
-## 4. Select Provider Authorization Details
+Standalone connection requests remain available for explicit account
+management, but are not part of first task access.
+
+## 4. Select Provider Authorization Details In The Approval
 
 `GET /api/resource-servers/{resourceServerId}/authorization-details` returns
 the RFC 9396 values the connected account makes visible. Each item exposes
@@ -76,7 +81,7 @@ flat display metadata and two independent authority states:
   Agent already has and may request.
 
 The item carries `authorizationDetail`, which is copied directly into a
-connection or access request. Realmroot does not generate a Resource ID or URL.
+  access request. Realmroot does not generate a Resource ID or URL.
 An unconstrained service returns an empty collection.
 
 ## 5. Request Exact Access
@@ -92,6 +97,12 @@ If existing authority matches exactly, the request completes immediately.
 Otherwise the controller chooses one-time, limited, or persistent approval on
 the hosted consent page. That lifetime controls future credential requests;
 every credential delivered to the Agent is still short-lived.
+
+`realmroot agent request` opens that page and waits by default. Use
+`realmroot agent request --no-wait ... --json` when the controller is on another
+device. It returns a pending receipt containing `approvalUrl` immediately,
+without opening a browser or polling, so the Agent can hand the link to the
+controller.
 
 Capability, connection, and access requests use the same generic interaction
 profile:

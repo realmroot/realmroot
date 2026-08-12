@@ -34,7 +34,7 @@ describe('Organization Role lifecycle', () => {
         return jsonResponse({ ...dynamicRole, ...body }, 201)
       }
       return jsonResponse({
-        roles: [
+        items: [
           dynamicRole,
           { ...dynamicRole, key: 'member', displayName: 'Member', description: null, predefined: true },
         ],
@@ -196,7 +196,7 @@ describe('Organization Role lifecycle', () => {
       .mockResolvedValueOnce(jsonResponse({ message: 'Roles unavailable.' }, 503))
       .mockResolvedValueOnce(
         jsonResponse({
-          roles: [],
+          items: [],
           pagination: { limit: 50, offset: 0, total: 0, hasMore: false, nextOffset: null },
         }),
       )

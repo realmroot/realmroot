@@ -117,7 +117,7 @@ describe('service.test 1', () => {
     })
 
     await expect(listApplications(deps, issuer, { limit: 50, offset: 0 })).resolves.toMatchObject({
-      applications: [{ id: created.id }],
+      items: [{ id: created.id }],
       pagination: {
         limit: 50,
         offset: 0,
@@ -290,7 +290,7 @@ describe('service.test 1', () => {
     expect(rotated.secret.version).toBe(2)
     const secrets = await listApplicationSecrets(deps, created.id, { limit: 1, offset: 0 })
     expect(secrets).toMatchObject({
-      secrets: [{ version: 2, status: 'active', revokedAt: null }],
+      items: [{ version: 2, status: 'active', revokedAt: null }],
       pagination: {
         limit: 1,
         offset: 0,
@@ -300,7 +300,7 @@ describe('service.test 1', () => {
     })
 
     await expect(listApplicationSecrets(deps, created.id, { limit: 1, offset: 1 })).resolves.toMatchObject({
-      secrets: [{ version: 1, status: 'revoked' }],
+      items: [{ version: 1, status: 'revoked' }],
       pagination: {
         limit: 1,
         offset: 1,

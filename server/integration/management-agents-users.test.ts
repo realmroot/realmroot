@@ -178,7 +178,7 @@ describe('user management over real D1', () => {
     const memberCookie = await signIn(harness, 'plain@example.com', 'plain-password-2026')
     const response = await harness.request('/api/users', { headers: { cookie: memberCookie } })
     expect(response.status).toBe(200)
-    await expect(response.json()).resolves.toMatchObject({ users: [], pagination: { total: 0 } })
+    await expect(response.json()).resolves.toMatchObject({ items: [], pagination: { total: 0 } })
   })
 
   it('runs admin user CRUD through the user repository (real SQL)', async () => {
@@ -201,7 +201,7 @@ describe('user management over real D1', () => {
     // listManagedUsers (repository search/pagination).
     const list = await harness.request('/api/users?search=managed', { headers: { cookie } })
     expect(list.status).toBe(200)
-    expect(((await list.json()) as { users: Array<{ id: string }> }).users.some((u) => u.id === userId)).toBe(true)
+    expect(((await list.json()) as { items: Array<{ id: string }> }).items.some((u) => u.id === userId)).toBe(true)
 
     const fetched = await harness.request(`/api/users/${userId}`, { headers: { cookie } })
     expect(fetched.status).toBe(200)
@@ -249,13 +249,13 @@ describe('user management over real D1', () => {
       headers: { cookie: adminCookie },
     })
     expect(sessions.status).toBe(200)
-    expect(((await sessions.json()) as { sessions: unknown[] }).sessions.length).toBeGreaterThanOrEqual(1)
+    expect(((await sessions.json()) as { items: unknown[] }).items.length).toBeGreaterThanOrEqual(1)
 
     const linked = await harness.request(`/api/users/${userId}/linked-accounts`, {
       headers: { cookie: adminCookie },
     })
     expect(linked.status).toBe(200)
-    expect(((await linked.json()) as { accounts: unknown[] }).accounts.length).toBeGreaterThanOrEqual(1)
+    expect(((await linked.json()) as { items: unknown[] }).items.length).toBeGreaterThanOrEqual(1)
 
     const passkeys = await harness.request(`/api/users/${userId}/passkeys`, {
       headers: { cookie: adminCookie },
@@ -347,7 +347,7 @@ describe('federated credential management over real D1', () => {
       headers: { cookie },
     })
     expect(list.status).toBe(200)
-    expect(((await list.json()) as { credentials: unknown[] }).credentials.length).toBe(1)
+    expect(((await list.json()) as { items: unknown[] }).items.length).toBe(1)
   })
 
   it('rejects an invalid federated credential payload with 400', async () => {

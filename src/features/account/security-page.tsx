@@ -110,7 +110,7 @@ function SecuritySections({
               {walletProvider?.enabled ? (
                 <div className="accountTabPanel">
                   <WalletSignInPanel
-                    accounts={(linkedAccountsQuery.data?.accounts ?? []).filter(
+                    accounts={(linkedAccountsQuery.data?.items ?? []).filter(
                       (account) => account.providerId === 'siwe',
                     )}
                     confirm={confirm}
@@ -144,7 +144,7 @@ function SecuritySections({
         <AccountTabContent surface value="sessions">
           <SecurityTabState error={sessionsQuery.error} loading={sessionsQuery.isLoading}>
             {accountCenter.sessionsViewEnabled ? (
-              <SessionsPanel confirm={confirm} mutate={mutate} sessions={sessionsQuery.data?.sessions ?? []} />
+              <SessionsPanel confirm={confirm} mutate={mutate} sessions={sessionsQuery.data?.items ?? []} />
             ) : null}
           </SecurityTabState>
         </AccountTabContent>

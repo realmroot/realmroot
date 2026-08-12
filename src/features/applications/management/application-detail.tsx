@@ -135,7 +135,7 @@ export function ApplicationDetailPage({
   if (organizationId && application.ownerOrganizationId !== organizationId) {
     return <ErrorState error={new Error(tt('Application does not belong to this Organization.'))} />
   }
-  const organizations = organizationsQuery.data?.organizations ?? []
+  const organizations = organizationsQuery.data?.items ?? []
   const machinePrincipalEnabled = application.allowedGrantTypes.some(
     (grantType) => grantType === 'client_credentials' || grantType === tokenExchangeGrantType,
   )
@@ -213,7 +213,7 @@ export function ApplicationDetailPage({
               onEditRedirects={() => setEditor('redirects')}
               onRotate={() => setRotateOpen(true)}
               pending={rotateMutation.isPending}
-              secrets={secretsQuery.data?.secrets ?? []}
+              secrets={secretsQuery.data?.items ?? []}
             />
             <ApplicationFederatedCredentialsPanel applicationId={applicationId} />
           </TabsContent>
@@ -327,7 +327,7 @@ function ApplicationOAuth({
   onEditRedirects: () => void
   onRotate: () => void
   pending: boolean
-  secrets: Awaited<ReturnType<typeof listApplicationClientSecrets>>['secrets']
+  secrets: Awaited<ReturnType<typeof listApplicationClientSecrets>>['items']
 }) {
   return (
     <div className="detailSections">
@@ -427,7 +427,7 @@ function ApplicationAuthorizations({
   const queryClient = useQueryClient()
   const [offset, setOffset] = useState(0)
   const [revokeTarget, setRevokeTarget] = useState<
-    Awaited<ReturnType<typeof listApplicationAuthorizations>>['authorizations'][number] | null
+    Awaited<ReturnType<typeof listApplicationAuthorizations>>['items'][number] | null
   >(null)
   const queryKey = [...consoleQueryKeys.applications, applicationId, 'authorizations', { limit: pageSize, offset }]
   const query = useQuery({
@@ -438,7 +438,7 @@ function ApplicationAuthorizations({
     mutationFn: (authorizationId: string) => revokeApplicationAuthorization(applicationId, authorizationId),
     onSuccess: async () => {
       setRevokeTarget(null)
-      if (query.data?.authorizations.length === 1 && offset > 0) {
+      if (query.data?.items.length === 1 && offset > 0) {
         setOffset(Math.max(0, offset - pageSize))
         return
       }
@@ -451,7 +451,7 @@ function ApplicationAuthorizations({
   if (query.isLoading) return <LoadingState label={tt('Loading authorizations')} />
   if (query.error) return <ErrorState error={query.error} onRetry={() => query.refetch()} />
 
-  const authorizations = query.data?.authorizations ?? []
+  const authorizations = query.data?.items ?? []
   const pagination = query.data?.pagination
   const resourceById = new Map(resources.map((resource) => [resource.id, resource]))
   return (

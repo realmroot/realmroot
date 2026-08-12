@@ -277,7 +277,7 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
       getPrincipal(c).user!.id,
       readQuery(c, paginationQuerySchema),
     )
-    return c.json({ accounts: page.items, pagination: paginationMetadata(page) })
+    return c.json({ items: page.items, pagination: paginationMetadata(page) })
   })
 
   app.post('/linked-accounts', async (c) => {
@@ -388,7 +388,7 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
     const page = await getDeps(c).users.listSessions(authContext.user!.id, readQuery(c, paginationQuerySchema))
     const currentSessionId = authContext.session?.session.id
     return c.json({
-      sessions: page.items.map((session) => ({ ...session, current: session.id === currentSessionId })),
+      items: page.items.map((session) => ({ ...session, current: session.id === currentSessionId })),
       pagination: paginationMetadata(page),
     })
   })
@@ -525,7 +525,7 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
   })
 
   app.get('/api-resources', async (c) => {
-    const resources = (await listConnectableExternalResources(getDeps(c))).resources
+    const resources = (await listConnectableExternalResources(getDeps(c))).items
     return c.json(
       connectableApiResourcesResponseSchema.parse({
         items: resources,

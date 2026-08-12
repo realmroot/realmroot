@@ -203,7 +203,7 @@ describe('security policy and per-user security over real D1', () => {
 
     const passkeys = await harness.request(`/api/users/${userId}/passkeys`, { headers: { cookie } })
     expect(passkeys.status).toBe(200)
-    expect(((await passkeys.json()) as { passkeys: unknown[] }).passkeys).toEqual([])
+    expect(((await passkeys.json()) as { items: unknown[] }).items).toEqual([])
 
     const sessions = await harness.request(`/api/users/${userId}/sessions`, { headers: { cookie } })
     expect(sessions.status).toBe(200)
@@ -235,6 +235,6 @@ describe('account security self-service over real D1', () => {
 
     const sessions = await harness.request('/api/account/security/sessions', { headers: { cookie } })
     expect(sessions.status).toBe(200)
-    expect(((await sessions.json()) as { sessions: unknown[] }).sessions.length).toBeGreaterThanOrEqual(1)
+    expect(((await sessions.json()) as { items: unknown[] }).items.length).toBeGreaterThanOrEqual(1)
   })
 })

@@ -21,7 +21,7 @@ describe('management users and account routes', () => {
     )
 
     expect(response.status).toBe(200)
-    await expect(response.json()).resolves.toMatchObject({ users: [] })
+    await expect(response.json()).resolves.toMatchObject({ items: [] })
     expect(auth.api.listUsers).not.toHaveBeenCalled()
   })
 
@@ -146,7 +146,7 @@ describe('management users and account routes', () => {
     const sessions = await app.request('/api/users/user-1/sessions?limit=4&offset=8', { headers })
 
     await expect(accounts.json()).resolves.toEqual({
-      accounts: [],
+      items: [],
       pagination: {
         limit: 2,
         offset: 4,
@@ -156,7 +156,7 @@ describe('management users and account routes', () => {
       },
     })
     await expect(sessions.json()).resolves.toEqual({
-      sessions: [],
+      items: [],
       pagination: {
         limit: 4,
         offset: 8,

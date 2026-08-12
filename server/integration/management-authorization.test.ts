@@ -90,8 +90,8 @@ describe('authorization management over real D1', () => {
     const cookie = await signInAdmin(harness)
     const listResponse = await harness.request('/api/organizations', { headers: { cookie } })
     expect(listResponse.status).toBe(200)
-    expect((await listResponse.json()) as { organizations: Array<{ id: string }> }).toMatchObject({
-      organizations: expect.arrayContaining([expect.objectContaining({ id: 'org_platform' })]),
+    expect((await listResponse.json()) as { items: Array<{ id: string }> }).toMatchObject({
+      items: expect.arrayContaining([expect.objectContaining({ id: 'org_platform' })]),
     })
     for (const request of [
       harness.request('/api/organizations/org_platform', { headers: { cookie } }),
@@ -401,6 +401,7 @@ describe('authorization management over real D1', () => {
           status: 'approved',
           approvedEntitlements: [{ scope: 'files:read', entitlementId: 'atomic-entitlement' }],
           connectionId: null,
+          authorizationDetails: [],
           decidedAt: now,
           updatedAt: now,
         },
@@ -1533,7 +1534,7 @@ describe('authorization management over real D1', () => {
         hostId: 'deleted-host',
       }),
     ).resolves.toMatchObject({
-      resources: [expect.objectContaining({ id: 'res_realmroot', identifier: 'realmroot' })],
+      items: [expect.objectContaining({ id: 'res_realmroot', identifier: 'realmroot' })],
     })
 
     const [[resourceRow], [connection], [intent], [request], [grant], [lease]] = await Promise.all([
@@ -1670,7 +1671,7 @@ describe('authorization management over real D1', () => {
     ).json()) as { id: string }
 
     const list = await harness.request('/api/organizations', { headers: { cookie } })
-    expect(((await list.json()) as { organizations: Array<{ id: string }> }).organizations).toContainEqual(
+    expect(((await list.json()) as { items: Array<{ id: string }> }).items).toContainEqual(
       expect.objectContaining({ id: organization.id }),
     )
 
@@ -1692,7 +1693,7 @@ describe('authorization management over real D1', () => {
     const members = await harness.request(`/api/organizations/${organization.id}/members`, {
       headers: { cookie },
     })
-    expect(((await members.json()) as { members: unknown[] }).members.length).toBe(2)
+    expect(((await members.json()) as { items: unknown[] }).items.length).toBe(2)
 
     const role = await postJson(harness, cookie, `/api/organizations/${organization.id}/roles`, {
       key: 'org-lead',
@@ -1718,7 +1719,7 @@ describe('authorization management over real D1', () => {
     const invitations = await harness.request(`/api/organizations/${organization.id}/invitations`, {
       headers: { cookie },
     })
-    expect(((await invitations.json()) as { invitations: unknown[] }).invitations.length).toBe(1)
+    expect(((await invitations.json()) as { items: unknown[] }).items.length).toBe(1)
 
     expect(
       (

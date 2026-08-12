@@ -108,8 +108,8 @@ export function ApiResourcesPage({ organizationId }: { organizationId?: string }
       return queryClient.invalidateQueries({ queryKey: consoleQueryKeys.apiResources })
     },
   })
-  const connectors = (connectorsQuery.data?.connectors ?? []).filter((connector) => connector.enabled)
-  const organizations = organizationsQuery.data?.organizations ?? []
+  const connectors = (connectorsQuery.data?.items ?? []).filter((connector) => connector.enabled)
+  const organizations = organizationsQuery.data?.items ?? []
   const resources = query.data?.items ?? []
   const visibleResources = resources.filter((resource) => {
     const matchesSearch = [resource.name, resource.identifier, resource.resourceUrl, resource.description ?? ''].some(
@@ -536,7 +536,7 @@ export function ApiResourceDetailPage({
   if (organizationId && resource.ownerOrganizationId !== organizationId) {
     return <ErrorState error={new Error(tt('Resource server does not belong to this Organization.'))} />
   }
-  const organizations = organizationsQuery.data?.organizations ?? []
+  const organizations = organizationsQuery.data?.items ?? []
   const mode = resource.accessMode
   return (
     <>
@@ -612,7 +612,7 @@ export function ApiResourceDetailPage({
           </TabsContent>
           <TabsContent className="mt-5" value="settings">
             <ResourceSettings
-              connectors={connectorsQuery.data?.connectors ?? []}
+              connectors={connectorsQuery.data?.items ?? []}
               mode={mode}
               onDelete={() => setDeleteOpen(true)}
               onEditAuthorization={() => setEditor('authorization')}
@@ -626,7 +626,7 @@ export function ApiResourceDetailPage({
         </Tabs>
       </div>
       <ResourceEditorSheet
-        connectors={connectorsQuery.data?.connectors ?? []}
+        connectors={connectorsQuery.data?.items ?? []}
         editor={editor}
         error={updateMutation.errorMessage}
         fixedOwnerOrganizationId={organizationId}

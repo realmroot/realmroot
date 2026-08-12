@@ -107,8 +107,8 @@ export function ConnectorsPage() {
       })
     },
   })
-  const connectors = query.data?.connectors ?? []
-  const templates = templatesQuery.data?.templates ?? []
+  const connectors = query.data?.items ?? []
+  const templates = templatesQuery.data?.items ?? []
   const providerRows = connectorProviderRows(templates, connectors, signInQuery.data, securityQuery.data?.policy)
   const visibleProviderRows = providerRows.filter((provider) => {
     const query = providerSearch.trim().toLowerCase()

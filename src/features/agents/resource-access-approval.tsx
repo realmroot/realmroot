@@ -311,7 +311,7 @@ export function ResourceAccessApproval() {
                   <Link2 data-icon="inline-start" />
                   Expand {request.resourceServer.name} account access
                 </Button>
-                <p>After OAuth, you will return here to approve the Agent’s exact scopes and lifetime separately.</p>
+                <p>After OAuth, you will return here to finish this Agent access approval.</p>
                 {catalogError ? <Status tone="error">{catalogError}</Status> : null}
               </>
             ) : null}
@@ -326,8 +326,8 @@ export function ResourceAccessApproval() {
               Connect {request.resourceServer.name} account
             </Button>
             <p>
-              The connection receives the resource’s current scope catalog. After OAuth, you will return here to approve
-              the Agent’s exact scopes and lifetime separately.
+              The connection receives the resource’s current scope catalog. After OAuth, you will return here to select
+              a Context when required and finish this Agent access approval.
             </p>
           </section>
         ) : null}

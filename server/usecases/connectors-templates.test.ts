@@ -16,7 +16,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 describe('service.test 1', () => {
   it('returns connector templates without secret values', () => {
-    expect(listConnectorTemplates().templates).toEqual(
+    expect(listConnectorTemplates().items).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           providerType: 'social',
@@ -27,7 +27,7 @@ describe('service.test 1', () => {
         }),
       ]),
     )
-    expect(listConnectorTemplates().templates).not.toEqual(
+    expect(listConnectorTemplates().items).not.toEqual(
       expect.arrayContaining([expect.objectContaining({ providerType: 'generic_oauth' })]),
     )
   })
@@ -222,7 +222,7 @@ describe('service.test 1', () => {
     const deps = { ids: createIdentifierGeneratorFake(), connectors: repository } as unknown as Deps
 
     await expect(listConnectors(deps, { limit: 25, offset: 0 })).resolves.toMatchObject({
-      connectors: [],
+      items: [],
       pagination: { limit: 25, offset: 0, total: 0, hasMore: false, nextOffset: null },
     })
     await expect(

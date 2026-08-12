@@ -144,16 +144,17 @@ export type AccountOrganizationAgentsResponse = {
 }
 
 export type LinkedAccountsResponse = {
-  accounts: Array<{
+  items: Array<{
     id: string
     accountId: string
     providerId: string
     createdAt: string
   }>
+  pagination: PaginationMetadata
 }
 
 export type AccountSessionsResponse = {
-  sessions: Array<{
+  items: Array<{
     id: string
     expiresAt: string
     createdAt: string

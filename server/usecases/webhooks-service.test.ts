@@ -58,7 +58,7 @@ describe('WebhookService', () => {
     })
     await expect(getWebhookEndpoint(deps, created.endpoint.id)).resolves.toMatchObject({ id: created.endpoint.id })
     expect(await listWebhookEndpoints(deps, { limit: 50, offset: 0, status: 'enabled' })).toMatchObject({
-      endpoints: [{ id: created.endpoint.id }],
+      items: [{ id: created.endpoint.id }],
       pagination: { total: 1, hasMore: false },
     })
 
@@ -66,7 +66,7 @@ describe('WebhookService', () => {
       enabled: false,
     })
     await expect(listWebhookEndpoints(deps, { limit: 50, offset: 0, status: 'enabled' })).resolves.toMatchObject({
-      endpoints: [],
+      items: [],
       pagination: { total: 0 },
     })
 
@@ -91,7 +91,7 @@ describe('WebhookService', () => {
 
     await expect(getWebhookRequest(deps, request.id)).resolves.toMatchObject({ id: 'whr_1', status: 'failed' })
     await expect(listWebhookRequests(deps, { limit: 50, offset: 0, status: 'failed' })).resolves.toMatchObject({
-      requests: [{ id: 'whr_1', status: 'failed' }],
+      items: [{ id: 'whr_1', status: 'failed' }],
       pagination: { total: 1, hasMore: false },
     })
     await expect(createWebhookDeliveryAttempt(deps, request.id, 'retry-1')).resolves.toMatchObject({
@@ -100,10 +100,10 @@ describe('WebhookService', () => {
     })
     await expect(getWebhookRequest(deps, request.id)).resolves.toMatchObject({ attemptCount: 2, status: 'delivered' })
     await expect(listWebhookDeliveryAttempts(deps, request.id, { limit: 50, offset: 0 })).resolves.toMatchObject({
-      attempts: [{ requestId: request.id, sequence: 2 }],
+      items: [{ requestId: request.id, sequence: 2 }],
       pagination: { total: 1 },
     })
-    const [attempt] = (await listWebhookDeliveryAttempts(deps, request.id, { limit: 50, offset: 0 })).attempts
+    const [attempt] = (await listWebhookDeliveryAttempts(deps, request.id, { limit: 50, offset: 0 })).items
     await expect(getWebhookDeliveryAttempt(deps, request.id, attempt!.id)).resolves.toEqual(attempt)
     await expect(createWebhookDeliveryAttempt(deps, request.id, 'retry-1')).resolves.toMatchObject({
       attempt: { requestId: request.id, sequence: 2, status: 'delivered' },

@@ -252,9 +252,9 @@ async function downloadAccountData(
     listAccountAgents(),
     options.includeApplications
       ? listAccountApplicationAuthorizations()
-      : Promise.resolve({ authorizations: [], pagination: null }),
-    options.includeLinkedAccounts ? listLinkedAccounts() : Promise.resolve({ accounts: [] }),
-    options.includeSessions ? listAccountSessions() : Promise.resolve({ sessions: [], pagination: null }),
+      : Promise.resolve({ items: [], pagination: null }),
+    options.includeLinkedAccounts ? listLinkedAccounts() : Promise.resolve({ items: [], pagination: null }),
+    options.includeSessions ? listAccountSessions() : Promise.resolve({ items: [], pagination: null }),
   ])
   const exportedAt = new Date().toISOString()
   const document = {
@@ -264,9 +264,9 @@ async function downloadAccountData(
     profile,
     organizations,
     agents: agents.items,
-    applications: applications.authorizations,
-    linkedAccounts: linkedAccounts.accounts,
-    sessions: sessions.sessions,
+    applications: applications.items,
+    linkedAccounts: linkedAccounts.items,
+    sessions: sessions.items,
   }
   const url = URL.createObjectURL(new Blob([JSON.stringify(document, null, 2)], { type: 'application/json' }))
   const link = window.document.createElement('a')
@@ -311,7 +311,7 @@ function ProfileSections({
   const [confirmPassword, setConfirmPassword] = useState('')
   const [passwordError, setPasswordError] = useState<string | null>(null)
   const linkedAccountsQuery = useLinkedAccounts(publicProfileOpen && accountCenter.connectedAccountsEnabled)
-  const projectableAccounts = (linkedAccountsQuery.data?.accounts ?? []).filter(
+  const projectableAccounts = (linkedAccountsQuery.data?.items ?? []).filter(
     (account) => account.providerId !== 'credential',
   )
   const availableAccounts = projectableAccounts.filter(

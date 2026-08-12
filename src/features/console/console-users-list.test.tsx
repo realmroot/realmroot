@@ -27,7 +27,7 @@ describe('admin console users-list', () => {
       const url = raw.startsWith('http') ? `${new URL(raw).pathname}${new URL(raw).search}` : raw
       if (url.startsWith('/api/users')) {
         requests.push(url)
-        return Promise.resolve(jsonResponse({ users: [user], pagination }))
+        return Promise.resolve(jsonResponse({ items: [user], pagination }))
       }
       return consoleSharedFetch(input, init)
     })
@@ -50,7 +50,7 @@ describe('admin console users-list', () => {
         return Promise.resolve(jsonResponse(user, 201))
       }
       if (url.startsWith('/api/users')) {
-        return Promise.resolve(jsonResponse({ users: [user], pagination }))
+        return Promise.resolve(jsonResponse({ items: [user], pagination }))
       }
       return consoleSharedFetch(input, init)
     })
@@ -92,7 +92,7 @@ describe('admin console users-list', () => {
         return Promise.resolve(jsonResponse({ ...user, role: 'admin' }))
       }
       if (url.startsWith('/api/users')) {
-        return Promise.resolve(jsonResponse({ users: [{ ...user, role: 'user' }], pagination }))
+        return Promise.resolve(jsonResponse({ items: [{ ...user, role: 'user' }], pagination }))
       }
       return consoleSharedFetch(input, init)
     })
@@ -115,7 +115,7 @@ describe('admin console users-list', () => {
         seen.push(url)
         return Promise.resolve(
           jsonResponse({
-            users: [user],
+            items: [user],
             pagination: {
               limit: 10,
               offset: url.includes('offset=10') ? 10 : 0,
@@ -147,7 +147,7 @@ describe('admin console users-list', () => {
         return Promise.resolve(jsonResponse(user, 201))
       }
       if (url.startsWith('/api/users')) {
-        return Promise.resolve(jsonResponse({ users: [user], pagination }))
+        return Promise.resolve(jsonResponse({ items: [user], pagination }))
       }
       return consoleSharedFetch(input, init)
     })
@@ -171,7 +171,7 @@ describe('admin console users-list', () => {
         return Promise.reject('network failed')
       }
       if (url.startsWith('/api/users')) {
-        return Promise.resolve(jsonResponse({ users: [user], pagination }))
+        return Promise.resolve(jsonResponse({ items: [user], pagination }))
       }
       return consoleSharedFetch(input, init)
     })
@@ -196,7 +196,7 @@ describe('admin console users-list', () => {
         return Promise.resolve(jsonResponse({ accepted: true }))
       }
       if (url.startsWith('/api/users')) {
-        return Promise.resolve(jsonResponse({ users: [user], pagination }))
+        return Promise.resolve(jsonResponse({ items: [user], pagination }))
       }
       return consoleSharedFetch(input, init)
     })
@@ -222,7 +222,7 @@ describe('admin console users-list', () => {
       if (url.startsWith('/api/users')) {
         return Promise.resolve(
           jsonResponse({
-            users: [{ ...user, email: null, emailVerified: true, role: null }],
+            items: [{ ...user, email: null, emailVerified: true, role: null }],
             pagination: {
               limit: 10,
               offset: url.includes('offset=10') ? 10 : 0,

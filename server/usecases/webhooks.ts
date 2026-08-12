@@ -21,7 +21,7 @@ const webhookResponseLimit = 8 * 1024
 export async function listWebhookEndpoints(deps: Deps, query: ListWebhookEndpointsQuery, organizationIds?: string[]) {
   const result = await deps.webhooks.listEndpoints(query, organizationIds)
   return {
-    endpoints: result.items.map(toEndpointResponse),
+    items: result.items.map(toEndpointResponse),
     pagination: paginationMetadata({ ...query, total: result.total }),
   }
 }
@@ -88,7 +88,7 @@ export async function rotateWebhookSecret(deps: Deps, id: string): Promise<Webho
 export async function listWebhookRequests(deps: Deps, query: ListWebhookRequestsQuery, organizationIds?: string[]) {
   const result = await deps.webhooks.listRequests(query, organizationIds)
   return {
-    requests: result.items.map(toRequestResponse),
+    items: result.items.map(toRequestResponse),
     pagination: paginationMetadata({ ...query, total: result.total }),
   }
 }
@@ -103,7 +103,7 @@ export async function listWebhookDeliveryAttempts(deps: Deps, requestId: string,
   await getWebhookRequest(deps, requestId)
   const result = await deps.webhooks.listAttempts(requestId, page)
   return {
-    attempts: result.items.map(toDeliveryAttemptResponse),
+    items: result.items.map(toDeliveryAttemptResponse),
     pagination: paginationMetadata(result),
   }
 }

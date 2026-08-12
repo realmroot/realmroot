@@ -101,10 +101,10 @@ describe('console API resources and roles', () => {
         return Promise.resolve(jsonResponse({ items: [apiResource], pagination }))
       }
       if (url.pathname === '/api/connectors') {
-        return Promise.resolve(jsonResponse({ connectors: [genericConnector], pagination }))
+        return Promise.resolve(jsonResponse({ items: [genericConnector], pagination }))
       }
       if (url.pathname === '/api/organizations') {
-        return Promise.resolve(jsonResponse({ organizations: [organization], pagination }))
+        return Promise.resolve(jsonResponse({ items: [organization], pagination }))
       }
       throw new Error(`Unexpected request: ${url.pathname}${url.search}`)
     })
@@ -137,10 +137,10 @@ describe('console API resources and roles', () => {
         return Promise.resolve(jsonResponse({ items: [apiResource, external], pagination }))
       }
       if (url === '/api/connectors') {
-        return Promise.resolve(jsonResponse({ connectors: [genericConnector], pagination }))
+        return Promise.resolve(jsonResponse({ items: [genericConnector], pagination }))
       }
       if (url === '/api/organizations') {
-        return Promise.resolve(jsonResponse({ organizations: [organization], pagination }))
+        return Promise.resolve(jsonResponse({ items: [organization], pagination }))
       }
       throw new Error(`Unexpected request: ${url}`)
     })
@@ -176,10 +176,10 @@ describe('console API resources and roles', () => {
         return jsonResponse({ items: [], pagination: emptyPagination })
       }
       if (request.url === '/api/connectors') {
-        return jsonResponse({ connectors: [genericConnector], pagination })
+        return jsonResponse({ items: [genericConnector], pagination })
       }
       if (request.url === '/api/organizations') {
-        return jsonResponse({ organizations: [organization], pagination })
+        return jsonResponse({ items: [organization], pagination })
       }
       throw new Error(`Unexpected request: ${request.method} ${request.url}`)
     })
@@ -258,10 +258,10 @@ describe('console API resources and roles', () => {
         return jsonResponse({ items: [apiResource, disabledResource], pagination })
       }
       if (request.url === '/api/connectors') {
-        return jsonResponse({ connectors: [genericConnector], pagination })
+        return jsonResponse({ items: [genericConnector], pagination })
       }
       if (request.url === '/api/organizations') {
-        return jsonResponse({ organizations: [organization, betaOrganization], pagination })
+        return jsonResponse({ items: [organization, betaOrganization], pagination })
       }
       throw new Error(`Unexpected request: ${request.method} ${request.url}`)
     })
@@ -310,10 +310,9 @@ describe('console API resources and roles', () => {
       const { url } = requestParts(input)
       if (url === '/api/resource-servers/resource-1') return Promise.resolve(jsonResponse(apiResource))
       if (url === '/api/resource-servers/resource-1/contract') return Promise.resolve(jsonResponse(contract))
-      if (url === '/api/connectors')
-        return Promise.resolve(jsonResponse({ connectors: [], pagination: emptyPagination }))
+      if (url === '/api/connectors') return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
       if (url === '/api/organizations') {
-        return Promise.resolve(jsonResponse({ organizations: [organization], pagination }))
+        return Promise.resolve(jsonResponse({ items: [organization], pagination }))
       }
       throw new Error(`Unexpected request: ${url}`)
     })
@@ -346,9 +345,9 @@ describe('console API resources and roles', () => {
         updates.push(await request.body)
         return jsonResponse(resourceWithScopes)
       }
-      if (request.url === '/api/connectors') return jsonResponse({ connectors: [], pagination: emptyPagination })
+      if (request.url === '/api/connectors') return jsonResponse({ items: [], pagination: emptyPagination })
       if (request.url === '/api/organizations') {
-        return jsonResponse({ organizations: [organization], pagination })
+        return jsonResponse({ items: [organization], pagination })
       }
       throw new Error(`Unexpected request: ${request.method} ${request.url}`)
     })
@@ -405,10 +404,10 @@ describe('console API resources and roles', () => {
         )
       }
       if (url === '/api/connectors') {
-        return Promise.resolve(jsonResponse({ connectors: [], pagination: emptyPagination }))
+        return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
       }
       if (url === '/api/organizations') {
-        return Promise.resolve(jsonResponse({ organizations: [organization], pagination }))
+        return Promise.resolve(jsonResponse({ items: [organization], pagination }))
       }
       throw new Error(`Unexpected request: ${url}`)
     })
@@ -454,10 +453,10 @@ describe('console API resources and roles', () => {
       }
       if (request.url === '/api/resource-servers/resource-1') return jsonResponse(selected)
       if (request.url === '/api/connectors') {
-        return jsonResponse({ connectors: [], pagination: emptyPagination })
+        return jsonResponse({ items: [], pagination: emptyPagination })
       }
       if (request.url === '/api/organizations') {
-        return jsonResponse({ organizations: [organization, betaOrganization], pagination })
+        return jsonResponse({ items: [organization, betaOrganization], pagination })
       }
       throw new Error(`Unexpected request: ${request.method} ${request.url}`)
     })
@@ -511,10 +510,10 @@ describe('console API resources and roles', () => {
         )
       }
       if (url === '/api/connectors') {
-        return Promise.resolve(jsonResponse({ connectors: [], pagination: emptyPagination }))
+        return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
       }
       if (url === '/api/organizations') {
-        return Promise.resolve(jsonResponse({ organizations: [organization], pagination }))
+        return Promise.resolve(jsonResponse({ items: [organization], pagination }))
       }
       throw new Error(`Unexpected request: ${url}`)
     })
@@ -547,12 +546,12 @@ describe('console API resources and roles', () => {
       if (request.url === '/api/resource-servers/resource-1') return jsonResponse(selected)
       if (request.url === '/api/connectors') {
         return jsonResponse({
-          connectors: [genericConnector, { ...genericConnector, id: 'connector-2', displayName: 'Projects OIDC 2' }],
+          items: [genericConnector, { ...genericConnector, id: 'connector-2', displayName: 'Projects OIDC 2' }],
           pagination,
         })
       }
       if (request.url === '/api/organizations') {
-        return jsonResponse({ organizations: [organization], pagination })
+        return jsonResponse({ items: [organization], pagination })
       }
       throw new Error(`Unexpected request: ${request.method} ${request.url}`)
     })
@@ -680,9 +679,9 @@ describe('console API resources and roles', () => {
       }
       if (request.url === '/api/resource-servers/resource-1') return Promise.resolve(jsonResponse(apiResource))
       if (request.url === '/api/connectors')
-        return Promise.resolve(jsonResponse({ connectors: [], pagination: emptyPagination }))
+        return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
       if (request.url === '/api/organizations') {
-        return Promise.resolve(jsonResponse({ organizations: [organization], pagination }))
+        return Promise.resolve(jsonResponse({ items: [organization], pagination }))
       }
       throw new Error(`Unexpected request: ${request.method} ${request.url}`)
     })
@@ -710,10 +709,10 @@ describe('console API resources and roles', () => {
       const { url } = requestParts(input)
       if (url === '/api/resource-servers/resource-1') return Promise.resolve(jsonResponse(apiResource))
       if (url === '/api/connectors') {
-        return Promise.resolve(jsonResponse({ connectors: [], pagination: emptyPagination }))
+        return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
       }
       if (url === '/api/organizations') {
-        return Promise.resolve(jsonResponse({ organizations: [organization], pagination }))
+        return Promise.resolve(jsonResponse({ items: [organization], pagination }))
       }
       throw new Error(`Unexpected request: ${url}`)
     })

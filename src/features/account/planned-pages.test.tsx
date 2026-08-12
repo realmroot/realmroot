@@ -457,7 +457,7 @@ describe('planned Account Center journeys', () => {
       }),
       http.get(`${base}/api/organizations/org-family/roles`, () =>
         json({
-          roles: ['owner', 'admin', 'developer', 'member'].map((key) => ({ key, displayName: key, predefined: true })),
+          items: ['owner', 'admin', 'developer', 'member'].map((key) => ({ key, displayName: key, predefined: true })),
           pagination: pagination(4),
         }),
       ),
@@ -560,7 +560,7 @@ describe('planned Account Center journeys', () => {
       ...organizationDetailHandlers('owner'),
       http.get(`${base}/api/organizations/org-family/roles`, () =>
         json({
-          roles: ['owner', 'admin', 'developer', 'member'].map((key) => ({ key, displayName: key, predefined: true })),
+          items: ['owner', 'admin', 'developer', 'member'].map((key) => ({ key, displayName: key, predefined: true })),
           pagination: pagination(4),
         }),
       ),

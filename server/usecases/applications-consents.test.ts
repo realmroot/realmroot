@@ -127,7 +127,7 @@ describe('service.test 3', () => {
     await expect(
       listApplicationAuthorizations(deps, { applicationId: created.id, limit: 50, offset: 0 }),
     ).resolves.toMatchObject({
-      authorizations: [
+      items: [
         {
           id: consent.id,
           user: { id: 'user-1', displayName: 'Test user', email: 'user@example.com' },
@@ -176,7 +176,7 @@ describe('service.test 3', () => {
     const deps = { ids: createIdentifierGeneratorFake(), applications } as unknown as Deps
 
     await expect(listApplicationAuthorizations(deps, { limit: 20, offset: 0 })).resolves.toMatchObject({
-      authorizations: [
+      items: [
         {
           status: 'expired',
           expiresAt: expiredAt.toISOString(),

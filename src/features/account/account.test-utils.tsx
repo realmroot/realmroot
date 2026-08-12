@@ -188,8 +188,18 @@ export function accountHandlers(store: AccountStore, config: ReturnType<typeof c
     }),
     http.get(`${base}/api/account/security`, () => HttpResponse.json({ security: store.security })),
     http.get(`${base}/api/account/security/passkeys`, () => HttpResponse.json({ passkeys: store.passkeys })),
-    http.get(`${base}/api/account/sessions`, () => HttpResponse.json({ sessions: store.sessions })),
-    http.get(`${base}/api/account/linked-accounts`, () => HttpResponse.json({ accounts: store.linkedAccounts })),
+    http.get(`${base}/api/account/sessions`, () =>
+      HttpResponse.json({
+        items: store.sessions,
+        pagination: { limit: 50, offset: 0, total: store.sessions.length, hasMore: false },
+      }),
+    ),
+    http.get(`${base}/api/account/linked-accounts`, () =>
+      HttpResponse.json({
+        items: store.linkedAccounts,
+        pagination: { limit: 50, offset: 0, total: store.linkedAccounts.length, hasMore: false },
+      }),
+    ),
     http.get(`${base}/api/account/provider-connectors`, () =>
       HttpResponse.json({
         items: [],
@@ -204,7 +214,7 @@ export function accountHandlers(store: AccountStore, config: ReturnType<typeof c
     ),
     http.get(`${base}/api/account/application-authorizations`, () =>
       HttpResponse.json({
-        authorizations: store.applications.map((authorization) => ({
+        items: store.applications.map((authorization) => ({
           ...authorization,
           applicationId: `app-${authorization.id}`,
           application: {

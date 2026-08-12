@@ -23,7 +23,7 @@ const credential = {
   updatedAt: '2026-01-01T00:00:00.000Z',
 }
 
-describe('management API federated credential contracts', () => {
+describe('management API federated credential contracts [spec: management-api/management-collection-envelope]', () => {
   it('requires create requests to include exactly usable key material', () => {
     expect(
       createManagementFederatedCredentialRequestSchema.parse({
@@ -75,9 +75,7 @@ describe('management API federated credential contracts', () => {
       publicKeys: [{ kty: 'EC', crv: 'P-256' }],
     })
 
-    expect(listManagementFederatedCredentialsResponseSchema.parse({ credentials: [credential] }).credentials).toEqual([
-      credential,
-    ])
+    expect(listManagementFederatedCredentialsResponseSchema.parse({ items: [credential] }).items).toEqual([credential])
     expect(createManagementFederatedCredentialResponseSchema.parse({ credential }).credential).toEqual(credential)
   })
 })

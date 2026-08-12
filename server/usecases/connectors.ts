@@ -41,13 +41,13 @@ export interface AuthConnectorConfig {
 export async function listConnectors(deps: Deps, page: { limit: number; offset: number }) {
   const result = await deps.connectors.list(page)
   return {
-    connectors: result.items.map(toResponse),
+    items: result.items.map(toResponse),
     pagination: paginationMetadata({ ...page, total: result.total }),
   }
 }
 
 export function listConnectorTemplates() {
-  return { templates: connectorTemplates }
+  return { items: connectorTemplates }
 }
 
 export async function getConnector(deps: Deps, id: string) {

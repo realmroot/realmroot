@@ -45,14 +45,14 @@ describe('console authorization dashboard', () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
       if (url === '/api/applications') {
-        return Promise.resolve(jsonResponse({ applications: [{ ...application, disabled: true }], pagination }))
+        return Promise.resolve(jsonResponse({ items: [{ ...application, disabled: true }], pagination }))
       }
-      if (/^\/api\/users(?:\?|$)/.test(url)) return Promise.resolve(jsonResponse({ users: [user], pagination }))
+      if (/^\/api\/users(?:\?|$)/.test(url)) return Promise.resolve(jsonResponse({ items: [user], pagination }))
       if (url === '/api/connectors') {
-        return Promise.resolve(jsonResponse({ connectors: [{ ...connector, enabled: false }], pagination }))
+        return Promise.resolve(jsonResponse({ items: [{ ...connector, enabled: false }], pagination }))
       }
       if (url === '/api/organizations') {
-        return Promise.resolve(jsonResponse({ organizations: [organization], pagination }))
+        return Promise.resolve(jsonResponse({ items: [organization], pagination }))
       }
       if (url === '/api/resource-servers') {
         return Promise.resolve(jsonResponse({ items: [apiResource], pagination }))
@@ -92,20 +92,20 @@ describe('console authorization dashboard', () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
       if (url === '/api/applications') {
-        return Promise.resolve(jsonResponse({ applications: [], pagination: emptyPagination }))
+        return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
       }
       if (/^\/api\/users(?:\?|$)/.test(url)) {
-        return Promise.resolve(jsonResponse({ users: [], pagination: emptyPagination }))
+        return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
       }
       if (url === '/api/connectors') {
-        return Promise.resolve(jsonResponse({ connectors: [], pagination: emptyPagination }))
+        return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
       }
       if (url === '/api/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
       if (url === '/api/organizations') {
-        return Promise.resolve(jsonResponse({ organizations: [], pagination: emptyPagination }))
+        return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
       }
       if (url === '/api/organizations/org-1/roles') {
-        return Promise.resolve(jsonResponse({ roles: [], pagination: emptyPagination }))
+        return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
       }
       if (url === '/api/resource-servers') {
         return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
@@ -166,7 +166,7 @@ describe('console authorization dashboard', () => {
         )
       }
       if (url === '/api/applications') {
-        return Promise.resolve(jsonResponse({ applications: [], pagination: emptyPagination }))
+        return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
       }
       return consoleSharedFetch(input, init)
     })

@@ -31,7 +31,7 @@ export async function listAccountAgents(
     deps.agents.listCapabilityGrantsForUser(userId),
   ])
   return {
-    agents: agents.items.map((agent) => ({
+    items: agents.items.map((agent) => ({
       id: agent.id,
       name: agent.name,
       hostId: agent.hostId,

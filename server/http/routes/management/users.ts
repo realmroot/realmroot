@@ -48,7 +48,7 @@ export function managementUserRoutes(authApi: ManagementAuthApi, _options: Manag
     const page = await users.listManagedUsers(query, userIds)
     return c.json(
       listManagementUsersResponseSchema.parse({
-        users: page.items,
+        items: page.items,
         pagination: paginationMetadata(page),
       }),
     )
@@ -154,13 +154,13 @@ export function managementUserRoutes(authApi: ManagementAuthApi, _options: Manag
   app.get('/:id/linked-accounts', async (c) => {
     await authorizePlatformOrganization(c, 'users:read')
     const page = await getDeps(c).users.listLinkedAccounts(c.req.param('id'), readQuery(c, paginationQuerySchema))
-    return c.json({ accounts: page.items, pagination: paginationMetadata(page) })
+    return c.json({ items: page.items, pagination: paginationMetadata(page) })
   })
 
   app.get('/:id/passkeys', async (c) => {
     await authorizePlatformOrganization(c, 'users:read')
     const page = await getDeps(c).security.listPasskeys(c.req.param('id'), readQuery(c, paginationQuerySchema))
-    return c.json({ passkeys: page.items, pagination: paginationMetadata(page) })
+    return c.json({ items: page.items, pagination: paginationMetadata(page) })
   })
 
   app.delete('/:id/passkeys/:passkeyId', async (c) => {
@@ -214,7 +214,7 @@ export function managementUserRoutes(authApi: ManagementAuthApi, _options: Manag
   app.get('/:id/sessions', async (c) => {
     await authorizePlatformOrganization(c, 'users:read')
     const page = await getDeps(c).users.listSessions(c.req.param('id'), readQuery(c, paginationQuerySchema))
-    return c.json({ sessions: page.items, pagination: paginationMetadata(page) })
+    return c.json({ items: page.items, pagination: paginationMetadata(page) })
   })
 
   app.delete('/:id/sessions', async (c) => {

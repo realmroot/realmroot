@@ -34,6 +34,14 @@ Feature: Unified Realmroot resource API
     And Restish can validate structured authorization detail request bodies without the root OpenAPI document
 
 
+  @entrypoint:restish @journey:management-collection-envelope
+  Scenario: Collection responses use one stable envelope
+    When an authorized caller lists any growing resource collection
+    Then the response exposes the resources through an items field
+    And pagination metadata is exposed through a pagination field
+    And no collection uses a resource-specific plural field as its envelope
+
+
   @entrypoint:restish @journey:management-realmroot-resource-server-origin
   Scenario: The built-in Realmroot Resource Server follows deployment configuration
     Given the deployment canonical origin or Realmroot scope catalog changed since the Resource Server was persisted

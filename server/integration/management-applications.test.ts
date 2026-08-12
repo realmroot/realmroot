@@ -65,7 +65,7 @@ describe('applications management over real D1', () => {
 
     const response = await harness.request('/api/applications', { headers: { cookie: memberCookie } })
     expect(response.status).toBe(200)
-    await expect(response.json()).resolves.toMatchObject({ applications: [], pagination: { total: 0 } })
+    await expect(response.json()).resolves.toMatchObject({ items: [], pagination: { total: 0 } })
   })
 
   it('rejects an invalid create payload with 400', async () => {
@@ -186,7 +186,7 @@ describe('applications management over real D1', () => {
       headers: { cookie },
     })
     expect(list.status).toBe(200)
-    expect(((await list.json()) as { redirectUris: string[] }).redirectUris).toEqual(['http://localhost/callback'])
+    expect(((await list.json()) as { items: string[] }).items).toEqual(['http://localhost/callback'])
 
     const replaced = await harness.request(`/api/applications/${created.id}/redirect-uris`, {
       method: 'PUT',
@@ -194,10 +194,7 @@ describe('applications management over real D1', () => {
       body: JSON.stringify({ redirectUris: ['http://localhost/a', 'http://localhost/b'] }),
     })
     expect(replaced.status).toBe(200)
-    expect(((await replaced.json()) as { redirectUris: string[] }).redirectUris).toEqual([
-      'http://localhost/a',
-      'http://localhost/b',
-    ])
+    expect(((await replaced.json()) as { items: string[] }).items).toEqual(['http://localhost/a', 'http://localhost/b'])
   })
 
   it('persists every OIDC claim selection through real SQL [spec: admin-console/admin-application-oidc-claims]', async () => {
@@ -230,8 +227,8 @@ describe('applications management over real D1', () => {
       headers: { cookie },
     })
     expect(before.status).toBe(200)
-    const beforeBody = (await before.json()) as { secrets: unknown[] }
-    const beforeCount = beforeBody.secrets.length
+    const beforeBody = (await before.json()) as { items: unknown[] }
+    const beforeCount = beforeBody.items.length
 
     const rotated = await harness.request(`/api/applications/${created.id}/client-secrets`, {
       method: 'POST',
@@ -243,7 +240,7 @@ describe('applications management over real D1', () => {
     const after = await harness.request(`/api/applications/${created.id}/client-secrets`, {
       headers: { cookie },
     })
-    expect(((await after.json()) as { secrets: unknown[] }).secrets.length).toBe(beforeCount + 1)
+    expect(((await after.json()) as { items: unknown[] }).items.length).toBe(beforeCount + 1)
   })
 
   it('grants, loads, lists, and revokes a user consent through real SQL [spec: management-api/management-restish-oauth-crud]', async () => {
@@ -281,15 +278,15 @@ describe('applications management over real D1', () => {
 
     const apps = await harness.request('/api/account/application-authorizations', { headers: { cookie } })
     expect(apps.status).toBe(200)
-    const appsBody = (await apps.json()) as { authorizations: Array<{ id: string }> }
-    expect(appsBody.authorizations.filter((item) => item.id === consentId)).toHaveLength(1)
+    const appsBody = (await apps.json()) as { items: Array<{ id: string }> }
+    expect(appsBody.items.filter((item) => item.id === consentId)).toHaveLength(1)
 
     const managed = await harness.request(`/api/applications/${created.id}/authorizations?status=active`, {
       headers: { cookie },
     })
     expect(managed.status, await managed.clone().text()).toBe(200)
     await expect(managed.json()).resolves.toMatchObject({
-      authorizations: [{ id: consentId, scopes: ['openid'], user: { email: 'admin@example.com' } }],
+      items: [{ id: consentId, scopes: ['openid'], user: { email: 'admin@example.com' } }],
       pagination: { total: 1 },
     })
     const revoked = await harness.request(`/api/account/application-authorizations/${consentId}`, {
@@ -332,7 +329,7 @@ describe('applications management over real D1', () => {
       { headers: { cookie } },
     )
     await expect(afterManagedRevocation.json()).resolves.toMatchObject({
-      authorizations: [],
+      items: [],
       pagination: { total: 0 },
     })
   })

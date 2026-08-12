@@ -134,7 +134,7 @@ describe('management routes 4', () => {
     expect(list.status).toBe(200)
     await expect(list.json()).resolves.toEqual(
       listManagementConnectorsResponseSchema.parse({
-        connectors: [connectorFixture()],
+        items: [connectorFixture()],
         pagination: {
           limit: 1,
           offset: 0,
@@ -146,7 +146,7 @@ describe('management routes 4', () => {
     )
     expect(templates.status).toBe(200)
     await expect(templates.json()).resolves.toMatchObject({
-      templates: [expect.objectContaining({ providerId: 'google', icon: 'google' })],
+      items: [expect.objectContaining({ providerId: 'google', icon: 'google' })],
     })
     expect(created.status).toBe(201)
     await expect(created.json()).resolves.toEqual(managementConnectorResponseSchema.parse(connectorFixture()))
@@ -304,7 +304,7 @@ describe('management routes 4', () => {
 
     expect(list.status).toBe(200)
     await expect(list.json()).resolves.toEqual({
-      endpoints: [webhookEndpointResponse()],
+      items: [webhookEndpointResponse()],
       pagination: { limit: 10, offset: 5, total: 1, hasMore: false, nextOffset: null },
     })
     expect(created.status).toBe(201)
@@ -320,12 +320,12 @@ describe('management routes 4', () => {
       signingSecret: 'whsec_rotated_secret',
     })
     await expect(requests.json()).resolves.toEqual({
-      requests: [webhookRequestResponse()],
+      items: [webhookRequestResponse()],
       pagination: { limit: 2, offset: 4, total: 1, hasMore: false, nextOffset: null },
     })
     await expect(requestDetail.json()).resolves.toEqual(webhookRequestResponse())
     await expect(attempts.json()).resolves.toEqual({
-      attempts: [webhookDeliveryAttemptResponse()],
+      items: [webhookDeliveryAttemptResponse()],
       pagination: { limit: 50, offset: 0, total: 1, hasMore: false, nextOffset: null },
     })
     await expect(attemptDetail.json()).resolves.toEqual(webhookDeliveryAttemptResponse())

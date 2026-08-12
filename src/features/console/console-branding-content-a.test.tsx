@@ -201,7 +201,7 @@ describe('admin console hosted experience', () => {
         return Promise.resolve(jsonResponse(url.endsWith('policy') ? securityPolicy : signInSettings))
       }
       if (url === '/api/connectors') {
-        return Promise.resolve(jsonResponse({ connectors: [], pagination: { ...pagination, total: 0 } }))
+        return Promise.resolve(jsonResponse({ items: [], pagination: { ...pagination, total: 0 } }))
       }
       return consoleSharedFetch(input, init)
     })
@@ -284,7 +284,7 @@ describe('admin console hosted experience', () => {
       const url = String(input)
       if (url === '/api/realm/sign-in-policy') return Promise.resolve(jsonResponse(oneTapSettings))
       if (url === '/api/connectors') {
-        return Promise.resolve(jsonResponse({ connectors: [], pagination: { ...pagination, total: 0 } }))
+        return Promise.resolve(jsonResponse({ items: [], pagination: { ...pagination, total: 0 } }))
       }
       return consoleSharedFetch(input, init)
     })

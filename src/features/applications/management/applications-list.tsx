@@ -55,7 +55,7 @@ export function ApplicationsPage({ organizationId }: { organizationId?: string }
     mutationFn: ({ id, disabled }: { id: string; disabled: boolean }) => updateApplication(id, { disabled }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: consoleQueryKeys.applications }),
   })
-  const applications = query.data?.applications ?? []
+  const applications = query.data?.items ?? []
   const visibleApplications = applications.filter((application) => {
     const matchesSearch =
       search.trim().length === 0 ||
@@ -68,7 +68,7 @@ export function ApplicationsPage({ organizationId }: { organizationId?: string }
       (!type || application.clientType === type)
     )
   })
-  const organizations = organizationsQuery.data?.organizations ?? []
+  const organizations = organizationsQuery.data?.items ?? []
   const owners = organizationOptions(organizations).sort((left, right) => left.label.localeCompare(right.label))
   return (
     <ResourcePage

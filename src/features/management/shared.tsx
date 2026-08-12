@@ -126,7 +126,7 @@ import { ConsoleActionBar, ConsoleDetailStack, ConsoleToolbar } from './primitiv
 type FormState = Record<string, string>
 const emptyForm: FormState = {}
 const emptyConnectorsResponse: ListManagementConnectorsResponse = {
-  connectors: [],
+  items: [],
   pagination: {
     limit: 50,
     offset: 0,

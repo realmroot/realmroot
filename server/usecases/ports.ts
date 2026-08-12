@@ -855,6 +855,7 @@ export interface ExternalResourceRepository {
       status: 'approved'
       approvedEntitlements: Array<{ scope: string; entitlementId: string }>
       connectionId: string | null
+      authorizationDetails: AuthorizationDetail[]
       decidedAt: Date
       updatedAt: Date
     },

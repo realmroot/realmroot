@@ -145,11 +145,11 @@ export const providerResourceAuthorizationSchema = z.object({
 })
 
 export const listResourceConnectionsResponseSchema = z.object({
-  connections: z.array(providerResourceAuthorizationSchema),
+  items: z.array(providerResourceAuthorizationSchema),
 })
 
 export const connectableExternalResourcesResponseSchema = z.object({
-  resources: z.array(
+  items: z.array(
     z.object({
       id: z.string(),
       identifier: z.string(),

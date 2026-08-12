@@ -25,7 +25,7 @@ describe('connector management over real D1', () => {
 
     const templates = await harness.request('/api/connectors/templates', { headers: { cookie } })
     expect(templates.status).toBe(200)
-    expect(((await templates.json()) as { templates: unknown[] }).templates.length).toBeGreaterThan(0)
+    expect(((await templates.json()) as { items: unknown[] }).items.length).toBeGreaterThan(0)
 
     const created = await harness.request('/api/connectors', {
       method: 'POST',
@@ -51,7 +51,7 @@ describe('connector management over real D1', () => {
     })
 
     const list = await harness.request('/api/connectors', { headers: { cookie } })
-    expect(((await list.json()) as { connectors: unknown[] }).connectors.length).toBe(1)
+    expect(((await list.json()) as { items: unknown[] }).items.length).toBe(1)
 
     const fetched = await harness.request(`/api/connectors/${connector.id}`, { headers: { cookie } })
     expect(fetched.status).toBe(200)
@@ -173,7 +173,7 @@ describe('webhook management over real D1', () => {
     const endpoint = ((await created.json()) as { endpoint: { id: string; secretPrefix: string } }).endpoint
 
     const list = await harness.request('/api/webhooks', { headers: { cookie } })
-    expect(((await list.json()) as { endpoints: unknown[] }).endpoints.length).toBe(1)
+    expect(((await list.json()) as { items: unknown[] }).items.length).toBe(1)
 
     const fetched = await harness.request(`/api/webhooks/${endpoint.id}`, { headers: { cookie } })
     expect(fetched.status).toBe(200)
@@ -238,9 +238,9 @@ describe('webhook management over real D1', () => {
     expect(list.status).toBe(200)
     const [request] = (
       (await list.json()) as {
-        requests: Array<{ id: string; status: string; attemptCount: number; requestBody: string }>
+        items: Array<{ id: string; status: string; attemptCount: number; requestBody: string }>
       }
-    ).requests
+    ).items
     expect(request).toMatchObject({ status: 'failed', attemptCount: 1 })
     const body = await outbound[0]!.clone().text()
     expect(request.requestBody).toBe(body)
@@ -255,7 +255,7 @@ describe('webhook management over real D1', () => {
     const filtered = await harness.request(`/api/webhooks/${endpoint.id}/deliveries?status=failed`, {
       headers: { cookie },
     })
-    expect(((await filtered.json()) as { requests: unknown[] }).requests.length).toBe(1)
+    expect(((await filtered.json()) as { items: unknown[] }).items.length).toBe(1)
 
     const fetched = await harness.request(`/api/webhooks/${endpoint.id}/deliveries/${request.id}`, {
       headers: { cookie },

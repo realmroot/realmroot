@@ -114,12 +114,12 @@ export const updateConnectorRequestSchema = z.object({
 })
 
 export const listConnectorsResponseSchema = z.object({
-  connectors: z.array(connectorResponseSchema),
+  items: z.array(connectorResponseSchema),
   pagination: paginationMetadataSchema,
 })
 
 export const listConnectorTemplatesResponseSchema = z.object({
-  templates: z.array(connectorTemplateSchema),
+  items: z.array(connectorTemplateSchema),
 })
 
 export const linkAccountRequestSchema = z.object({

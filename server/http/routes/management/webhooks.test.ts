@@ -11,7 +11,7 @@ afterEach(() => {
 describe('createManagementWebhookRoutes', () => {
   it('reads webhook endpoints from the deps webhook usecase', async () => {
     const result = {
-      endpoints: [
+      items: [
         {
           id: 'wh_1',
           url: 'https://app.example.com/webhooks/auth',

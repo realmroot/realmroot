@@ -28,7 +28,7 @@ describe('management routes 2', () => {
 
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toEqual({
-      users: [],
+      items: [],
       pagination: {
         limit: 10,
         offset: 20,
@@ -106,7 +106,7 @@ describe('management routes 2', () => {
     const managementResponse = await app.request('/api/users', { headers: adminHeaders() })
 
     await expect(managementResponse.json()).resolves.toEqual({
-      users: [{ id: 'user-1' }],
+      items: [{ id: 'user-1' }],
       pagination: {
         limit: 50,
         offset: 0,
@@ -186,7 +186,7 @@ describe('management routes 2', () => {
       security: { userId: 'user-1', mfa: { enabled: true } },
     })
     await expect(accounts.json()).resolves.toEqual({
-      accounts: [],
+      items: [],
       pagination: {
         limit: 2,
         offset: 4,
@@ -196,7 +196,7 @@ describe('management routes 2', () => {
       },
     })
     await expect(sessions.json()).resolves.toEqual({
-      sessions: [],
+      items: [],
       pagination: {
         limit: 4,
         offset: 8,
@@ -238,7 +238,7 @@ describe('management routes 2', () => {
     })
 
     await expect(passkeys.json()).resolves.toEqual({
-      passkeys: [
+      items: [
         {
           id: 'passkey-1',
           name: 'MacBook',

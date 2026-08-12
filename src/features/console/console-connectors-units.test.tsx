@@ -15,7 +15,7 @@ import {
 } from '@/features/console/extracted/connectors/social-fields'
 import { connector, connectorTemplates, securityPolicy, signInSettings } from './console.test-utils'
 
-const templates = connectorTemplates.templates as ConnectorTemplate[]
+const templates = connectorTemplates.items as ConnectorTemplate[]
 
 globalThis.ResizeObserver ??= class ResizeObserver {
   disconnect() {}
