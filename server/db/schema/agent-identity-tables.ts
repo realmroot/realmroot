@@ -10,7 +10,9 @@ export const agentIdentity = sqliteTable(
     id: text('id').primaryKey(),
     issuer: text('issuer').notNull(),
     subject: text('subject').notNull(),
+    username: text('username'),
     name: text('name').notNull(),
+    runtime: text('runtime'),
     ownerUserId: text('owner_user_id').references(() => user.id, { onDelete: 'restrict' }),
     ownerOrganizationId: text('owner_organization_id').references(() => organization.id, { onDelete: 'restrict' }),
     status: text('status', { enum: ['active', 'inactive'] })
@@ -22,6 +24,7 @@ export const agentIdentity = sqliteTable(
   },
   (table) => [
     uniqueIndex('agentIdentity_issuer_subject_unique').on(table.issuer, table.subject),
+    uniqueIndex('agentIdentity_username_unique').on(table.username).where(sql`${table.username} is not null`),
     index('agentIdentity_ownerUserId_idx').on(table.ownerUserId),
     index('agentIdentity_ownerOrganizationId_idx').on(table.ownerOrganizationId),
     index('agentIdentity_status_idx').on(table.status),
@@ -62,6 +65,8 @@ export const agentEnrollmentIntent = sqliteTable(
     id: text('id').primaryKey(),
     agentIdentityId: text('agent_identity_id').references(() => agentIdentity.id, { onDelete: 'restrict' }),
     requestedName: text('requested_name'),
+    requestedUsername: text('requested_username'),
+    requestedRuntime: text('requested_runtime'),
     ownerUserId: text('owner_user_id').references(() => user.id, { onDelete: 'restrict' }),
     ownerOrganizationId: text('owner_organization_id').references(() => organization.id, { onDelete: 'restrict' }),
     protocolAgentId: text('protocol_agent_id')
@@ -92,7 +97,7 @@ export const agentEnrollmentIntent = sqliteTable(
     ),
     check(
       'agentEnrollmentIntent_new_or_existing_identity_check',
-      sql`(${table.agentIdentityId} is not null) or (${table.requestedName} is not null)`,
+      sql`(${table.agentIdentityId} is not null) or ((${table.requestedName} is not null) and (${table.requestedUsername} is not null) and (${table.requestedRuntime} is not null))`,
     ),
   ],
 )

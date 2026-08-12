@@ -18,6 +18,7 @@ import {
   externalResourceAuthorizationSchema,
   permissionModeSchema,
 } from './external-resources'
+import { agentUsernameSchema } from './identifiers'
 import { paginationMetadataSchema, paginationQuerySchema } from './pagination'
 
 const nonEmptyString = z.string().trim().min(1)
@@ -31,7 +32,9 @@ export const agentSchema = z.object({
   id: z.string(),
   issuer: z.url(),
   subject: z.string(),
+  username: agentUsernameSchema.nullable(),
   name: z.string(),
+  runtime: z.string().nullable(),
   homeSpace: agentHomeSpaceSchema,
   status: agentIdentityStatusSchema,
   createdAt: z.iso.datetime(),
@@ -56,7 +59,9 @@ export const agentStatusSchema = z.object({
 export const createAgentSelfEnrollmentSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('new_identity'),
-    name: z.string().trim().min(1).max(100),
+    username: agentUsernameSchema,
+    nickname: z.string().trim().min(1).max(100).optional(),
+    runtime: z.string().trim().min(1).max(100),
     organizationId: nonEmptyString.optional(),
   }),
   z.object({
@@ -167,7 +172,9 @@ export const agentEnrollmentStatusSchema = z.enum(['pending', 'approved', 'denie
 export const agentEnrollmentSchema = z.object({
   id: z.string(),
   agentId: z.string().nullable(),
-  name: z.string(),
+  nickname: z.string(),
+  username: agentUsernameSchema.nullable(),
+  runtime: z.string().nullable(),
   kind: z.enum(['new_identity', 'additional_host']),
   homeSpace: agentHomeSpaceSchema,
   status: agentEnrollmentStatusSchema,
@@ -178,7 +185,9 @@ export const agentEnrollmentSchema = z.object({
 })
 
 export const createAgentEnrollmentSchema = z.object({
-  name: z.string().trim().min(1).max(100),
+  username: agentUsernameSchema,
+  nickname: z.string().trim().min(1).max(100).optional(),
+  runtime: z.string().trim().min(1).max(100),
   organizationId: nonEmptyString.optional(),
 })
 

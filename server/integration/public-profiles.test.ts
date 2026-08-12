@@ -135,6 +135,6 @@ describe('Public profiles over real D1', () => {
   it('validates the named view and conceals unknown profiles', async () => {
     expect((await harness.request('/api/public/users/missing')).status).toBe(404)
     expect((await harness.request('/api/public/users/missing?view=everything')).status).toBe(400)
-    expect((await harness.request('/api/public/agents/not-an-agent')).status).toBe(400)
+    expect((await harness.request('/api/public/agents/not-an-agent')).status).toBe(404)
   })
 })

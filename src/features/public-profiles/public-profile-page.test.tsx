@@ -270,7 +270,9 @@ const userProfile = {
   agents: [
     {
       subject: 'agt_stable',
+      username: 'build-agent.00000000000000000000000000000004',
       name: 'Build Agent',
+      runtime: 'codex',
       picture: 'https://identity.example.com/agent-picture-v1.svg',
       createdAt: '2026-02-01T00:00:00.000Z',
       updatedAt: '2026-08-07T12:00:00.000Z',
@@ -284,7 +286,9 @@ const agentProfile = {
   view: 'full',
   issuer: 'https://identity.example.com/api/auth',
   subject: 'agt_stable',
+  username: 'build-agent.00000000000000000000000000000004',
   name: 'Build Agent',
+  runtime: 'codex',
   picture: 'https://identity.example.com/agent-picture-v1.svg',
   createdAt: '2026-02-01T00:00:00.000Z',
   updatedAt: '2026-08-07T12:00:00.000Z',

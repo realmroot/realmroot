@@ -316,6 +316,13 @@
       "when": 1786401775728,
       "tag": "20260810224255_polite_tombstone",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "6",
+      "when": 1786493573642,
+      "tag": "20260812001253_agent_username",
+      "breakpoints": true
     }
   ]
 }

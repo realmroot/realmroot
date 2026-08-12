@@ -112,6 +112,7 @@ const agentInventory = {
       id: 'agent-1',
       issuer: 'https://auth.example.com',
       subject: 'agt_stable',
+      username: 'stable-build-agent.0000000000000000000000000000000b',
       name: 'Stable Build Agent',
       homeSpace: { type: 'organization', organizationId: 'org-1' },
       owner: { id: 'org-1', type: 'organization', displayName: 'Acme Engineering' },

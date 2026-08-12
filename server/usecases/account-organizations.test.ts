@@ -38,6 +38,7 @@ function organizationAgent(id: string): AgentIdentityAggregate {
       id,
       issuer: 'https://auth.example.com',
       subject: `agt_${id}`,
+      username: 'organization-agent.00000000000000000000000000000001',
       name: id,
       ownerUserId: null,
       ownerOrganizationId: 'org-1',

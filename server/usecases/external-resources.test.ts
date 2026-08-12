@@ -34,6 +34,7 @@ import {
   listAccountAccessRequestAuthorizationDetailCatalog,
   listAccountAccessRequests,
   listAccountConnections,
+  listAccountProviderConnections,
   listAccountProviderConnectors,
   listAgentResourceServers as listAgentApiResources,
   listAgentResourceServerAuthorizationDetails as listAgentAuthorizationDetailCatalog,
@@ -377,6 +378,92 @@ describe('external API resource authorization', () => {
     })
   })
 
+  it('[spec: agent-identity/brokered-resource-context-catalog] uses brokered Resource Server display data', async () => {
+    const deps = createTestDeps()
+    authorizationDeps(deps)
+    const detail = {
+      type: 'github_installation',
+      installation_id: '42',
+      account_login: 'realmroot',
+      target_type: 'Organization',
+      repository_selection: 'all',
+    }
+    const brokered = {
+      ...resource(),
+      accessMode: 'brokered' as const,
+      authorizationDetails: [{ type: 'github_installation' }],
+      scopeRegistry: {
+        ...resource().scopeRegistry!,
+        accountConnection: {
+          mode: 'brokered' as const,
+          authorizationEndpoint: 'https://adapter.example/github/account-connection-authorizations',
+          tokenEndpoint: 'https://adapter.example/github/account-connection-credentials',
+          authorizationDetailsEndpoint: 'https://adapter.example/github/account-connection-authorization-details',
+        },
+      },
+    }
+    const connection = {
+      ...connectionRecord(),
+      brokerReference: 'broker-reference-1',
+      authorizationDetails: [detail],
+      grantedScopes: ['issues:read', 'issues:write'],
+      encryptedTokens: null,
+    }
+    vi.mocked(deps.authorization.findResource).mockResolvedValue(brokered)
+    vi.mocked(deps.authorization.findOrganization).mockResolvedValue({
+      id: 'org-1',
+      slug: 'realmroot',
+      name: 'Realmroot',
+      displayName: 'Realmroot',
+      logo: null,
+      disabled: false,
+      disabledReason: null,
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+    })
+    vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
+    vi.mocked(deps.externalResources.findConnectionByOwnerResource).mockResolvedValue(connection)
+    vi.mocked(deps.externalResources.listActiveEntitlementsByAgent).mockResolvedValue([
+      { ...grantRecord(), scope: 'issues:read', authorizationDetails: [detail] },
+    ])
+    vi.mocked(deps.externalHttp.fetch).mockImplementation(async (request) => {
+      expect(request.url).toBe(
+        'https://adapter.example/github/account-connection-authorization-details?limit=100&offset=0',
+      )
+      expect(request.headers.get('authorization')).toBe('Bearer broker-reference-1')
+      return Response.json({
+        items: [
+          {
+            authorizationDetail: detail,
+            display: {
+              label: 'realmroot',
+              description: 'Organization GitHub App installation',
+              metadata: { accountType: 'Organization', repositories: 'All repositories' },
+            },
+          },
+        ],
+        pagination: { limit: 100, offset: 0, total: 1, hasMore: false, nextOffset: null },
+      })
+    })
+
+    await expect(
+      listAgentAuthorizationDetailCatalog(deps, brokered.id, principal(), { limit: 100, offset: 0 }),
+    ).resolves.toEqual({
+      items: [
+        {
+          authorizationDetail: detail,
+          name: 'realmroot',
+          description: 'Organization GitHub App installation',
+          metadata: { accountType: 'Organization', repositories: 'All repositories' },
+          accountAuthorizationStatus: 'authorized',
+          authorizedScopes: ['issues:read'],
+          requestableScopes: ['issues:write'],
+        },
+      ],
+      pagination: { limit: 100, offset: 0, total: 1, hasMore: false, nextOffset: null },
+    })
+  })
+
   it('[spec: account-center/provider-connections] starts a Provider connection without an Agent request', async () => {
     const deps = createTestDeps()
     const brokered = {
@@ -508,6 +595,64 @@ describe('external API resource authorization', () => {
           },
         },
       ],
+    })
+  })
+
+  it('[spec: account-center/provider-connections] reports active Provider connection capabilities', async () => {
+    const deps = createTestDeps()
+    const connector = connectorRecord()
+    vi.mocked(deps.authorization.listEnabledResources).mockResolvedValue([
+      { ...resource(), connectorId: connector.id, availableToAgents: true },
+    ])
+    vi.mocked(deps.externalResources.listProviderConnectionsByUser).mockResolvedValue([
+      {
+        id: 'provider-connection-1',
+        connectorId: connector.id,
+        ownerUserId: 'user-1',
+        ownerOrganizationId: null,
+        authenticationAccountId: 'account-1',
+        externalSubject: 'provider-user-1',
+        displayName: 'Provider User',
+        status: 'active',
+        createdAt: now,
+        updatedAt: now,
+        connector,
+        resourceAuthorizationCount: 1,
+        resourceNames: ['Projects'],
+      },
+      {
+        id: 'provider-connection-2',
+        connectorId: connector.id,
+        ownerUserId: 'user-1',
+        ownerOrganizationId: null,
+        authenticationAccountId: null,
+        externalSubject: 'provider-user-2',
+        displayName: 'Unconfigured Provider User',
+        status: 'active',
+        createdAt: now,
+        updatedAt: now,
+        connector,
+        resourceAuthorizationCount: 0,
+        resourceNames: [],
+      },
+    ])
+
+    await expect(listAccountProviderConnections(deps, 'user-1', { limit: 20, offset: 0 })).resolves.toMatchObject({
+      items: [
+        {
+          capabilities: {
+            signIn: { active: true },
+            agentAccess: { active: true, authorizationCount: 1, resourceNames: ['Projects'] },
+          },
+        },
+        {
+          capabilities: {
+            signIn: { active: false },
+            agentAccess: { active: false, authorizationCount: 0, resourceNames: [] },
+          },
+        },
+      ],
+      pagination: { total: 2 },
     })
   })
 
@@ -4750,6 +4895,8 @@ describe('external API resource authorization', () => {
 
   it('resolves approval Resources through a paginated external catalog', async () => {
     const deps = authorizationCatalogDeps()
+    const catalogConnector = await deps.connectors.findById('connector-1')
+    vi.mocked(deps.connectors.findById).mockResolvedValue({ ...catalogConnector!, registrationMode: 'manual' })
     const requested = { type: 'project_access', project_id: 'project-2', actions: ['read'] }
     const pending = { ...requestRecord(), authorizationDetails: [requested] }
     vi.mocked(deps.externalResources.findAccessRequest).mockResolvedValue(pending)
@@ -4784,6 +4931,40 @@ describe('external API resource authorization', () => {
         pagination: { limit: 100, offset: 100, total: 101, hasMore: false, nextOffset: null },
       })
     })
+
+    await expect(
+      createAgentResourceConnectionRequest(
+        deps,
+        resource().id,
+        { scopes: ['projects:read'], authorizationDetails: [requested] },
+        principal(),
+        'https://auth.example.com',
+      ),
+    ).resolves.toMatchObject({ authorizationDetails: [requested] })
+
+    await expect(
+      createAgentResourceConnectionRequest(
+        deps,
+        resource().id,
+        {
+          scopes: ['projects:read'],
+          authorizationDetails: [{ ...requested, project_id: 'missing' }],
+        },
+        principal(),
+        'https://auth.example.com',
+      ),
+    ).rejects.toThrow('Authorization detail is not available through this Resource Server connection.')
+
+    vi.mocked(deps.externalResources.findConnectionByOwnerResource).mockResolvedValue(null)
+    await expect(
+      createAgentResourceConnectionRequest(
+        deps,
+        resource().id,
+        { scopes: ['projects:read'], authorizationDetails: [requested] },
+        principal(),
+        'https://auth.example.com',
+      ),
+    ).rejects.toThrow('Connect the Resource Server before selecting authorization details.')
 
     await expect(getAccountAccessRequestByToken(deps, 'approval-token', 'user-1')).resolves.toMatchObject({
       authorizationDetail: {
@@ -6762,6 +6943,7 @@ function identityAggregate(): AgentIdentityAggregate {
       id: 'identity-1',
       issuer: 'https://auth.example.com/api/auth',
       subject: 'agt_stable',
+      username: 'project-agent.00000000000000000000000000000001',
       name: 'Project Agent',
       ownerUserId: null,
       ownerOrganizationId: 'org-1',

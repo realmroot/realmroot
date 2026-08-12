@@ -150,6 +150,7 @@ describe('Provider Connection Events over real D1', () => {
       id: 'event-agent-identity',
       issuer: 'http://localhost/api/auth',
       subject: 'event-agent',
+      username: 'event-agent.00000000000000000000000000000002',
       name: 'Event Agent',
       ownerUserId: admin!.id,
       status: 'active',

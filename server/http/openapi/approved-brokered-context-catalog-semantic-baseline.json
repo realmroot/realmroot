@@ -1,0 +1,32 @@
+[
+  {
+    "method": "GET",
+    "path": "/resource-servers",
+    "operationId": "listResourceServers",
+    "semanticHash": "d626ed426e9777f0dc231af26a060c91da6405ea27533204718b25fe15777760"
+  },
+  {
+    "method": "POST",
+    "path": "/resource-servers",
+    "operationId": "createResourceServer",
+    "semanticHash": "10d14d50179038b6b4a64861198f97a60d7c6013b7c667846406588fbd76afd9"
+  },
+  {
+    "method": "DELETE",
+    "path": "/resource-servers/{resourceServerId}",
+    "operationId": "deleteResourceServer",
+    "semanticHash": "04b3771aa16f71226a5a20b8c84bbc636610bfe9fbdfdc8046a4a0434ad63702"
+  },
+  {
+    "method": "GET",
+    "path": "/resource-servers/{resourceServerId}",
+    "operationId": "getResourceServer",
+    "semanticHash": "6d7cd1e8f915f5a23b5623e93464a044061fd547f4bda2b8cf961c3b9c1a56b5"
+  },
+  {
+    "method": "PATCH",
+    "path": "/resource-servers/{resourceServerId}",
+    "operationId": "updateResourceServer",
+    "semanticHash": "e678ca968fe272f8d6123735be3bbc6e53544b8c802749d6e678969faa00dc94"
+  }
+]

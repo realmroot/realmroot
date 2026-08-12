@@ -21,7 +21,7 @@ test.describe('new Agent stable identity enrollment', () => {
     try {
       expect(() => plugin.whoami()).toThrow('restish realmroot agent enroll')
 
-      const enrollment = plugin.enroll('E2E Build Agent')
+      const enrollment = plugin.enroll('mira.chen', 'Mira Chen')
       await page.goto(await enrollment.approvalUrl)
       await expect(page.getByRole('heading', { name: 'Approve Agent login' })).toBeVisible()
       await page.getByRole('button', { name: 'Approve login' }).click()
@@ -29,17 +29,23 @@ test.describe('new Agent stable identity enrollment', () => {
       await expect(page.getByText('You can safely close this page.')).toBeVisible()
 
       const completedEnrollment = await enrollment.result
-      expect(completedEnrollment).toMatchObject({ name: 'E2E Build Agent', status: 'approved' })
-      const replayedEnrollment = await plugin.enroll('E2E Build Agent').result
+      expect(completedEnrollment).toMatchObject({
+        username: 'mira.chen',
+        nickname: 'Mira Chen',
+        runtime: 'codex',
+        status: 'approved',
+      })
+      const replayedEnrollment = await plugin.enroll('mira.chen', 'Mira Chen').result
       expect(replayedEnrollment).toMatchObject({
         id: completedEnrollment.id,
-        name: 'E2E Build Agent',
+        username: 'mira.chen',
+        nickname: 'Mira Chen',
         status: 'approved',
       })
       const result = plugin.whoami()
       expect(result.agent).toMatchObject({
         issuer: `${baseURL}/api/auth`,
-        name: 'E2E Build Agent',
+        name: 'Mira Chen',
       })
       expect(result.agent.subject).toMatch(uuidV7Pattern)
       expect(plugin.whoami().agent).toMatchObject({
@@ -57,7 +63,7 @@ test.describe('new Agent stable identity enrollment', () => {
 
       await page.goto('/agents')
       await expect(page.getByRole('heading', { name: 'Agents' })).toBeVisible()
-      await expect(page.getByText('E2E Build Agent', { exact: true })).toBeVisible()
+      await expect(page.getByText('Mira Chen', { exact: true })).toBeVisible()
       await expect(page.getByText(new RegExp(result.agent.subject))).toBeVisible()
     } finally {
       plugin.dispose()
@@ -69,7 +75,7 @@ test.describe('new Agent stable identity enrollment', () => {
 
     const deniedEnrollmentPlugin = createRestishAgentPlugin(baseURL)
     try {
-      const enrollment = deniedEnrollmentPlugin.enroll('Denied Enrollment Agent')
+      const enrollment = deniedEnrollmentPlugin.enroll('noah.williams', 'Noah Williams')
       const enrollmentResult = enrollment.result.catch((error: unknown) => error)
       await page.goto(await enrollment.approvalUrl)
       await page.getByRole('button', { name: 'Deny' }).click()

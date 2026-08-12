@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { protectedResourceScopes } from '../authz'
+import { agentUsernameSchema } from './identifiers'
 import { type PaginationInput, paginationMetadataSchema } from './pagination'
 
 const dateValueSchema = z.union([z.string(), z.date()])
@@ -26,7 +27,9 @@ export const agentIdentitySchema = z.object({
   id: z.string(),
   issuer: z.url(),
   subject: z.string(),
+  username: agentUsernameSchema.nullable(),
   name: z.string(),
+  runtime: z.string().nullable(),
   homeSpace: agentHomeSpaceSchema,
   status: agentIdentityStatusSchema,
   createdAt: dateValueSchema,
@@ -39,7 +42,9 @@ export const listAgentIdentitiesResponseSchema = z.object({
 })
 
 export const createAgentEnrollmentIntentRequestSchema = z.object({
-  name: z.string().trim().min(1).max(100),
+  username: agentUsernameSchema,
+  nickname: z.string().trim().min(1).max(100).optional(),
+  runtime: z.string().trim().min(1).max(100),
   protocolAgentId: z.string().trim().min(1),
   organizationId: z.string().trim().min(1).optional(),
 })
@@ -49,18 +54,24 @@ export const createAdditionalAgentEnrollmentIntentRequestSchema = z.object({
 })
 
 export const createAgentProtocolEnrollmentIntentRequestSchema = z.object({
-  name: z.string().trim().min(1).max(100),
+  username: agentUsernameSchema,
+  nickname: z.string().trim().min(1).max(100).optional(),
+  runtime: z.string().trim().min(1).max(100),
   organizationId: z.string().trim().min(1).optional(),
 })
 
 export const createAgentLoginIdentityRequestSchema = z.object({
-  name: z.string().trim().min(1).max(100),
+  username: agentUsernameSchema,
+  nickname: z.string().trim().min(1).max(100).optional(),
+  runtime: z.string().trim().min(1).max(100),
 })
 
 export const agentEnrollmentIntentSchema = z.object({
   id: z.string(),
   agentIdentityId: z.string().nullable(),
-  requestedName: z.string().nullable(),
+  requestedNickname: z.string().nullable(),
+  requestedUsername: agentUsernameSchema.nullable(),
+  requestedRuntime: z.string().nullable(),
   homeSpace: agentHomeSpaceSchema,
   protocolAgentId: z.string(),
   status: agentEnrollmentIntentStatusSchema,

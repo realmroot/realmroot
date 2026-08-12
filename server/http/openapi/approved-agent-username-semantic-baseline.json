@@ -1,0 +1,44 @@
+[
+  {
+    "method": "GET",
+    "path": "/agent",
+    "operationId": "getAgentStatus",
+    "semanticHash": "59263f702022686ce234b36704031cbfe91700d8bd3399493bbf5d693ca770d0"
+  },
+  {
+    "method": "POST",
+    "path": "/agent/enrollments",
+    "operationId": "createAgentEnrollment",
+    "semanticHash": "c81ac995974306777912112b478dbe90b5726c7090a9404369c04db16f5a2dfe"
+  },
+  {
+    "method": "GET",
+    "path": "/agent/enrollments/{enrollmentId}",
+    "operationId": "getAgentEnrollment",
+    "semanticHash": "db294bc63adafb73a6aeb4fde1be7d446d3d8275df5caa41831f293ce732db8e"
+  },
+  {
+    "method": "GET",
+    "path": "/agents",
+    "operationId": "listAgents",
+    "semanticHash": "9a8eadac5e23397b5dbc1cb6c96f78b1b4241ad9c86ee0001300aa2cf2d43f55"
+  },
+  {
+    "method": "GET",
+    "path": "/agents/{agentId}",
+    "operationId": "getAgent",
+    "semanticHash": "7791b9966d3327dd31176c59ae0dff9a26574d67b8e5d6c89c6ac7301de2b408"
+  },
+  {
+    "method": "GET",
+    "path": "/public/agents/{subject}",
+    "operationId": "getPublicAgent",
+    "semanticHash": "5a11cf84e01bddfab2a0dff13a96347473cc660f33d4ae453741dde920ebbf9f"
+  },
+  {
+    "method": "GET",
+    "path": "/public/users/{username}",
+    "operationId": "getPublicUser",
+    "semanticHash": "f7eb626678422dcff951fcdb1622ce7f7e91354621640d3f60d742320589e953"
+  }
+]

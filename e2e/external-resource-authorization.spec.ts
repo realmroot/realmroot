@@ -28,7 +28,7 @@ test.describe('external API resource authorization', () => {
     const plugin = createRestishAgentPlugin(baseURL)
 
     try {
-      const enrollment = plugin.enroll('External Resource E2E Agent')
+      const enrollment = plugin.enroll('sophia.lee', 'Sophia Lee')
       await page.goto(await enrollment.approvalUrl)
       await page.getByRole('button', { name: 'Approve login' }).click()
       await expect(page.getByRole('heading', { name: 'Authorization successful' })).toBeVisible()
@@ -170,7 +170,7 @@ test.describe('external API resource authorization', () => {
     const plugin = createRestishAgentPlugin(baseURL)
 
     try {
-      const enrollment = plugin.enroll('Realmroot Resource E2E Agent')
+      const enrollment = plugin.enroll('ethan.martin', 'Ethan Martin')
       await page.goto(await enrollment.approvalUrl)
       await page.getByRole('button', { name: 'Approve login' }).click()
       await expect(page.getByRole('heading', { name: 'Authorization successful' })).toBeVisible()

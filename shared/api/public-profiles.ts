@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { agentUsernameSchema } from './identifiers'
 
 const publicImageUrlSchema = z.union([z.url(), z.string().regex(/^\/api\/assets\/[A-Za-z0-9_-]+$/)])
 
@@ -51,7 +52,9 @@ export const publicActivityDaySchema = z.object({
 
 export const publicAgentSummarySchema = z.object({
   subject: z.string(),
+  username: agentUsernameSchema.nullable(),
   name: z.string(),
+  runtime: z.string().nullable(),
   picture: publicImageUrlSchema,
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),

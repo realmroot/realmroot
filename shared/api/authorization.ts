@@ -103,6 +103,7 @@ export const brokeredAccountConnectionSchema = z
     authorizationEndpoint: z.url(),
     tokenEndpoint: z.url(),
     revocationEndpoint: z.url().nullable().optional(),
+    authorizationDetailsEndpoint: z.url().nullable().optional(),
   })
   .strict()
 export const resourceScopeRegistrySchema = z

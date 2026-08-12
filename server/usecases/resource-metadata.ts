@@ -15,6 +15,7 @@ export interface ProtectedResourceMetadata {
     authorizationEndpoint: string
     tokenEndpoint: string
     revocationEndpoint?: string | null
+    authorizationDetailsEndpoint?: string | null
   } | null
   etag: string | null
 }
@@ -99,11 +100,13 @@ function readAccountConnection(values: Record<string, unknown>) {
   const authorizationEndpoint = values.account_connection_authorization_endpoint
   const tokenEndpoint = values.account_connection_token_endpoint
   const revocationEndpoint = values.account_connection_revocation_endpoint
+  const authorizationDetailsEndpoint = values.account_connection_authorization_details_endpoint
   if (
     modes.length === 0 &&
     authorizationEndpoint === undefined &&
     tokenEndpoint === undefined &&
-    revocationEndpoint === undefined
+    revocationEndpoint === undefined &&
+    authorizationDetailsEndpoint === undefined
   ) {
     return null
   }
@@ -113,11 +116,15 @@ function readAccountConnection(values: Record<string, unknown>) {
   if (revocationEndpoint !== undefined && typeof revocationEndpoint !== 'string') {
     throw badRequest('Brokered account connection revocation endpoint is invalid.')
   }
+  if (authorizationDetailsEndpoint !== undefined && typeof authorizationDetailsEndpoint !== 'string') {
+    throw badRequest('Brokered account connection authorization details endpoint is invalid.')
+  }
   return brokeredAccountConnectionSchema.parse({
     mode: 'brokered',
     authorizationEndpoint: brokerEndpoint(authorizationEndpoint),
     tokenEndpoint: brokerEndpoint(tokenEndpoint),
     revocationEndpoint: revocationEndpoint ? brokerEndpoint(revocationEndpoint) : null,
+    authorizationDetailsEndpoint: authorizationDetailsEndpoint ? brokerEndpoint(authorizationDetailsEndpoint) : null,
   })
 }
 

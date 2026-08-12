@@ -1,5 +1,5 @@
 import { getPublicAgentProfile, getPublicUserProfile } from '@server/usecases/public-profiles'
-import { agentSubjectSchema } from '@shared/api/identifiers'
+import { agentPublicIdentifierSchema } from '@shared/api/identifiers'
 import {
   publicAgentResponseSchema,
   publicProfileQuerySchema,
@@ -24,10 +24,10 @@ export function createPublicProfileRoutes(resolveIssuer: (requestUrl: string) =>
   })
 
   app.get('/agents/:subject', async (c) => {
-    const subject = readParam(c, 'subject', agentSubjectSchema)
+    const identifier = readParam(c, 'subject', agentPublicIdentifierSchema)
     const { view } = readQuery(c, publicProfileQuerySchema)
     const profile = publicAgentResponseSchema.parse(
-      await getPublicAgentProfile(getDeps(c), resolveIssuer(c.req.url), subject, view),
+      await getPublicAgentProfile(getDeps(c), resolveIssuer(c.req.url), identifier, view),
     )
     return publicProfileResponse(c, profile)
   })

@@ -41,6 +41,12 @@ describe('OpenAPI semantic contract gate', () => {
     const m2mApplicationContract = JSON.parse(
       readFileSync(new URL('./approved-m2m-application-semantic-baseline.json', import.meta.url), 'utf8'),
     ) as typeof unchanged
+    const brokeredContextCatalogContract = JSON.parse(
+      readFileSync(new URL('./approved-brokered-context-catalog-semantic-baseline.json', import.meta.url), 'utf8'),
+    ) as typeof unchanged
+    const agentUsernameContract = JSON.parse(
+      readFileSync(new URL('./approved-agent-username-semantic-baseline.json', import.meta.url), 'utf8'),
+    ) as typeof unchanged
     const brokeredNativeChanges = new Set(brokeredNativeContract.map(({ method, path }) => `${method}:${path}`))
     const resourceDiscoveryChanges = new Set(resourceDiscoveryContract.map(({ method, path }) => `${method}:${path}`))
     const approvedChanges = new Set(
@@ -51,6 +57,7 @@ describe('OpenAPI semantic contract gate', () => {
         ...brokeredNativeContract,
         ...publicProfilesContract,
         ...providerConnectionEventsContract,
+        ...brokeredContextCatalogContract,
       ].map(({ method, path }) => `${method}:${path}`),
     )
     const approvedRemovals = new Set([
@@ -89,6 +96,7 @@ describe('OpenAPI semantic contract gate', () => {
       ...brokeredNativeContract,
       ...publicProfilesContract,
       ...providerConnectionEventsContract,
+      ...brokeredContextCatalogContract,
     ].sort((left, right) => `${left.path}:${left.method}`.localeCompare(`${right.path}:${right.method}`))
     const authenticationChanges = new Set(authenticationContract.map(({ method, path }) => `${method}:${path}`))
     const authenticationBaseline = [
@@ -103,14 +111,25 @@ describe('OpenAPI semantic contract gate', () => {
       path.includes('/access-grants') ||
       (method === 'GET' && (path === '/agents' || path === '/agents/{agentId}' || path === '/realm/audit-events'))
     const m2mApplicationChanges = new Set(m2mApplicationContract.map(({ method, path }) => `${method}:${path}`))
-    const baseline = [
+    const brokeredContextCatalogChanges = new Set(
+      brokeredContextCatalogContract.map(({ method, path }) => `${method}:${path}`),
+    )
+    const preAgentUsernameBaseline = [
       ...authenticationBaseline.filter(
         (operation) =>
-          !permissionSurface(operation) && !m2mApplicationChanges.has(`${operation.method}:${operation.path}`),
+          !permissionSurface(operation) &&
+          !m2mApplicationChanges.has(`${operation.method}:${operation.path}`) &&
+          !brokeredContextCatalogChanges.has(`${operation.method}:${operation.path}`),
       ),
-      ...permissionContract,
-      ...runtimeApiContract,
-      ...m2mApplicationContract,
+      ...permissionContract.filter(({ method, path }) => !brokeredContextCatalogChanges.has(`${method}:${path}`)),
+      ...runtimeApiContract.filter(({ method, path }) => !brokeredContextCatalogChanges.has(`${method}:${path}`)),
+      ...m2mApplicationContract.filter(({ method, path }) => !brokeredContextCatalogChanges.has(`${method}:${path}`)),
+      ...brokeredContextCatalogContract,
+    ].sort((left, right) => `${left.path}:${left.method}`.localeCompare(`${right.path}:${right.method}`))
+    const agentUsernameChanges = new Set(agentUsernameContract.map(({ method, path }) => `${method}:${path}`))
+    const baseline = [
+      ...preAgentUsernameBaseline.filter(({ method, path }) => !agentUsernameChanges.has(`${method}:${path}`)),
+      ...agentUsernameContract,
     ].sort((left, right) => `${left.path}:${left.method}`.localeCompare(`${right.path}:${right.method}`))
 
     expect(openApiSemanticSnapshot(unifiedOpenApi as unknown as Record<string, unknown>, () => true)).toEqual(baseline)
