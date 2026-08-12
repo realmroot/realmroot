@@ -21,7 +21,7 @@ test.describe('new Agent stable identity enrollment', () => {
     try {
       expect(() => plugin.whoami()).toThrow('restish realmroot agent enroll')
 
-      const enrollment = plugin.enroll('mira.chen', 'Mira Chen')
+      const enrollment = plugin.enroll('mira', 'Mira Chen')
       await page.goto(await enrollment.approvalUrl)
       await expect(page.getByRole('heading', { name: 'Approve Agent login' })).toBeVisible()
       await page.getByRole('button', { name: 'Approve login' }).click()
@@ -30,15 +30,15 @@ test.describe('new Agent stable identity enrollment', () => {
 
       const completedEnrollment = await enrollment.result
       expect(completedEnrollment).toMatchObject({
-        username: 'mira.chen',
+        username: 'mira',
         nickname: 'Mira Chen',
         runtime: 'codex',
         status: 'approved',
       })
-      const replayedEnrollment = await plugin.enroll('mira.chen', 'Mira Chen').result
+      const replayedEnrollment = await plugin.enroll('mira', 'Mira Chen').result
       expect(replayedEnrollment).toMatchObject({
         id: completedEnrollment.id,
-        username: 'mira.chen',
+        username: 'mira',
         nickname: 'Mira Chen',
         status: 'approved',
       })
@@ -75,7 +75,7 @@ test.describe('new Agent stable identity enrollment', () => {
 
     const deniedEnrollmentPlugin = createRestishAgentPlugin(baseURL)
     try {
-      const enrollment = deniedEnrollmentPlugin.enroll('noah.williams', 'Noah Williams')
+      const enrollment = deniedEnrollmentPlugin.enroll('noah', 'Noah Williams')
       const enrollmentResult = enrollment.result.catch((error: unknown) => error)
       await page.goto(await enrollment.approvalUrl)
       await page.getByRole('button', { name: 'Deny' }).click()
