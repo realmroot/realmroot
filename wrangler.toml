@@ -30,8 +30,8 @@ bucket_name = "realmroot-assets"
 
 [[d1_databases]]
 binding = "DB"
-database_name = "realmroot-db"
-database_id = "b038d1d4-9f08-4011-b0dc-70f125747b62"
+database_name = "realmroot"
+database_id = "b73b7c00-f774-4895-a4bc-db67af6d17f4"
 migrations_dir = "./migrations"
 
 [triggers]
