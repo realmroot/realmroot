@@ -110,7 +110,6 @@ describe('admin console applications-detail-a', () => {
       ...application,
       id: 'app-2',
       clientId: 'partner-client',
-      firstParty: false,
       name: 'Partner app',
     }
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
@@ -243,6 +242,14 @@ describe('admin console applications-detail-a', () => {
       if (url === '/api/resource-servers') {
         return Promise.resolve(jsonResponse({ items: [], pagination: { ...pagination, total: 0 } }))
       }
+      if (url === '/api/organizations') {
+        return Promise.resolve(
+          jsonResponse({
+            items: [{ id: 'org-1', slug: 'realmroot', name: 'Realmroot', disabled: false }],
+            pagination,
+          }),
+        )
+      }
       return consoleSharedFetch(input, init)
     })
 
@@ -250,9 +257,7 @@ describe('admin console applications-detail-a', () => {
 
     expect(await screen.findByRole('heading', { name: 'Customer portal' })).toBeTruthy()
     expect(screen.getByText('Public SPA · client-1')).toBeTruthy()
-    expect(screen.getByText('Any authenticated user')).toBeTruthy()
-    expect(screen.getByText('Platform-owned')).toBeTruthy()
-    expect(screen.getByText('Skipped for this trusted application')).toBeTruthy()
+    expect(screen.getByText('Not required')).toBeTruthy()
     expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
       'Overview',
       'OAuth',
@@ -358,14 +363,13 @@ describe('admin console applications-detail-a', () => {
 
     const consent = screen.getByRole('heading', { name: 'User consent' }).closest('section') as HTMLElement
     fireEvent.click(within(consent).getByRole('button', { name: 'Edit' }))
-    fireEvent.change(await screen.findByLabelText('Publisher relationship'), { target: { value: 'third-party' } })
-    fireEvent.click(screen.getByText('Require user consent'))
+    fireEvent.click(await screen.findByText('Require user consent'))
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
     await waitFor(() =>
       expect(requests).toContainEqual({
         url: '/api/applications/app-1',
         method: 'PATCH',
-        body: { firstParty: false, trusted: false },
+        body: { consentRequired: true },
       }),
     )
 

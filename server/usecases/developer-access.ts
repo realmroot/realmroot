@@ -1,7 +1,6 @@
-import { platformOrganization } from '@server/domain/platform-organization'
-import { realmrootResourceServer } from '@server/domain/realmroot-resource-server'
 import type { Deps } from '@server/usecases/deps'
 import { resolveOrganizationMembershipScopes } from '@server/usecases/organization-membership-scopes'
+import { findPlatformOrganization, findRealmrootResourceServer } from '@server/usecases/system-resources'
 import type { DeveloperConsoleAccessResponse } from '@shared/api/account'
 import type { OrganizationCreationPolicyResponse } from '@shared/api/management'
 
@@ -19,16 +18,17 @@ export async function resolveDeveloperAccess(
     deps.configz.getOrganizationCreationPolicy(),
     deps.configz.getDeveloperConsoleAccessPolicy(),
   ])
-  const memberships = await deps.authorization.listUserMemberships(user.id)
-  const platformMembership = memberships.find((membership) => membership.organizationId === platformOrganization.id)
+  const [memberships, platform, realmroot] = await Promise.all([
+    deps.authorization.listUserMemberships(user.id),
+    findPlatformOrganization(deps),
+    findRealmrootResourceServer(deps),
+  ])
+  const platformMembership = platform
+    ? memberships.find((membership) => membership.organizationId === platform.id)
+    : undefined
   const platformScopes = new Set(
-    platformMembership
-      ? await resolveOrganizationMembershipScopes(
-          deps,
-          platformOrganization.id,
-          platformMembership.roles,
-          realmrootResourceServer.id,
-        )
+    platformMembership && platform && realmroot
+      ? await resolveOrganizationMembershipScopes(deps, platform.id, platformMembership.roles, realmroot.id)
       : [],
   )
   const platformOperator = platformScopes.size > 0

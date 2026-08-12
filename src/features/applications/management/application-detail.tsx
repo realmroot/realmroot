@@ -11,7 +11,7 @@ import { Link, useNavigate } from '@tanstack/react-router'
 import { ArrowLeft, RotateCw, Trash2 } from 'lucide-react'
 import { type FormEvent, type ReactNode, useEffect, useId, useState } from 'react'
 import { DestructiveConfirmation } from '@/components/destructive-confirmation'
-import { Field, SelectInput, TextArea, TextInput } from '@/components/product-form'
+import { Field, TextArea, TextInput } from '@/components/product-form'
 import { TableEmptyRow } from '@/components/table-empty-row'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -297,15 +297,12 @@ function ApplicationOverview({
   return (
     <div className="detailFlatRows">
       <DetailRow label="Owner" value={ownerLabel(application.ownerOrganizationId, organizations)} />
-      <DetailRow label="Sign-in" value={tt('Any authenticated user')} />
-      <DetailRow
-        label="Publisher relationship"
-        value={application.firstParty ? tt('Platform-owned') : tt('Third-party')}
-      />
-      <DetailRow
-        label="Consent requirement"
-        value={application.trusted ? tt('Skipped for this trusted application') : tt('Required')}
-      />
+      {isPlatformApplication(application, organizations) ? (
+        <DetailRow
+          label="Consent requirement"
+          value={application.consentRequired ? tt('Required') : tt('Not required')}
+        />
+      ) : null}
       <DetailRow label="Created" value={formatDate(application.createdAt)} />
       <DetailRow label="Updated" value={formatDate(application.updatedAt)} />
     </div>
@@ -602,30 +599,27 @@ function ApplicationSettings({
             {tt('Edit')}
           </Button>
         }
-        description="Choose the Organization responsible for this client. Any authenticated user may sign in."
+        description="Choose the Organization responsible for this client."
         title="Ownership"
       >
         <DetailRow label="Owner" value={ownerLabel(application.ownerOrganizationId, organizations)} />
-        <DetailRow label="Who can sign in" value={tt('Any authenticated user')} />
       </DetailSection>
-      <DetailSection
-        action={
-          <Button onClick={onEditConsent} variant="outline">
-            {tt('Edit')}
-          </Button>
-        }
-        description="Control whether users review and approve the access this application requests."
-        title="User consent"
-      >
-        <DetailRow
-          label="Publisher relationship"
-          value={application.firstParty ? tt('Platform-owned') : tt('Third-party')}
-        />
-        <DetailRow
-          label="Consent requirement"
-          value={application.trusted ? tt('Skipped for this trusted application') : tt('Required')}
-        />
-      </DetailSection>
+      {isPlatformApplication(application, organizations) ? (
+        <DetailSection
+          action={
+            <Button onClick={onEditConsent} variant="outline">
+              {tt('Edit')}
+            </Button>
+          }
+          description="Control whether users review and approve the access this application requests."
+          title="User consent"
+        >
+          <DetailRow
+            label="Consent requirement"
+            value={application.consentRequired ? tt('Required') : tt('Not required')}
+          />
+        </DetailSection>
+      ) : null}
       <DetailSection description="Control whether this client can begin new authorization flows." title="Status">
         <DetailRow
           action={
@@ -768,7 +762,9 @@ function ApplicationEditor({
               organizations={organizations}
             />
           ) : null}
-          {editor === 'consent' ? <ConsentEditor application={application} onSave={onSave} /> : null}
+          {editor === 'consent' && isPlatformApplication(application, organizations) ? (
+            <ConsentEditor application={application} onSave={onSave} />
+          ) : null}
           {error ? (
             <p className="px-4 text-sm text-destructive" role="alert">
               {error}
@@ -921,8 +917,7 @@ function ConsentEditor({
   application: ApplicationResponse
   onSave: (input: Parameters<typeof updateApplication>[1]) => void
 }) {
-  const [relationship, setRelationship] = useState(application.firstParty ? 'first-party' : 'third-party')
-  const [requirement, setRequirement] = useState(application.trusted ? 'trusted' : 'required')
+  const [requirement, setRequirement] = useState(application.consentRequired ? 'required' : 'not-required')
   const consentId = useId()
   return (
     <form
@@ -930,15 +925,9 @@ function ConsentEditor({
       id="application-consent"
       onSubmit={(event) => {
         event.preventDefault()
-        onSave({ firstParty: relationship === 'first-party', trusted: requirement === 'trusted' })
+        onSave({ consentRequired: requirement === 'required' })
       }}
     >
-      <Field label={tt('Publisher relationship')}>
-        <SelectInput onChange={(event) => setRelationship(event.target.value)} value={relationship}>
-          <option value="first-party">{tt('Platform-owned')}</option>
-          <option value="third-party">{tt('Third-party')}</option>
-        </SelectInput>
-      </Field>
       <div className="grid gap-3">
         <strong className="text-sm">{tt('Consent requirement')}</strong>
         <RadioGroup onValueChange={setRequirement} value={requirement}>
@@ -951,12 +940,12 @@ function ConsentEditor({
               </small>
             </span>
           </label>
-          <label className="flex items-start gap-3 rounded-lg border p-3" htmlFor={`${consentId}-trusted`}>
-            <RadioGroupItem id={`${consentId}-trusted`} value="trusted" />
+          <label className="flex items-start gap-3 rounded-lg border p-3" htmlFor={`${consentId}-not-required`}>
+            <RadioGroupItem id={`${consentId}-not-required`} value="not-required" />
             <span>
-              <strong className="block text-sm">{tt('Skip consent for trusted use')}</strong>
+              <strong className="block text-sm">{tt('Do not require user consent')}</strong>
               <small className="text-muted-foreground">
-                {tt('Use only when the Realm operator accepts this application on every user’s behalf.')}
+                {tt('Users continue without a consent prompt. Application and scope policy still apply.')}
               </small>
             </span>
           </label>
@@ -1099,6 +1088,12 @@ function enabledClaims(claims: Record<string, boolean | undefined>) {
   )
 }
 
+function isPlatformApplication(application: ApplicationResponse, organizations: OrganizationResponse[]) {
+  return organizations.some(
+    (organization) => organization.id === application.ownerOrganizationId && organization.slug === 'realmroot',
+  )
+}
+
 function editorTitle(editor: Editor) {
   return (
     {
@@ -1120,7 +1115,7 @@ function editorDescription(editor: Editor) {
       authorization: 'Choose the Resource Server scopes this application may request.',
       claims: 'Choose the authorization claims emitted to each token destination.',
       ownership: 'Set the Organization responsible for this client.',
-      consent: 'Classify the publisher and decide when users must approve access.',
+      consent: 'Decide whether users approve access on first use and when requested scopes expand.',
     } as Record<Exclude<Editor, null>, string>
   )[editor ?? 'details']
 }

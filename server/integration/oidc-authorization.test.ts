@@ -1,6 +1,13 @@
 import { applyD1Migrations, env, reset } from 'cloudflare:test'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { baseURL, createHarness, type Harness, resourceOpenApiFetch, signInAdmin } from './harness'
+import {
+  baseURL,
+  createHarness,
+  type Harness,
+  platformOrganizationId,
+  resourceOpenApiFetch,
+  signInAdmin,
+} from './harness'
 
 afterEach(async () => {
   await reset()
@@ -73,7 +80,7 @@ describe('OIDC authorization over real D1', () => {
         identifier: 'oidc-resource',
         resourceUrl: resource,
         accessMode: 'realmroot',
-        ownerOrganizationId: 'org_platform',
+        ownerOrganizationId: platformOrganizationId,
       }),
     })
     expect(createResource.status, await createResource.clone().text()).toBe(201)
@@ -86,9 +93,8 @@ describe('OIDC authorization over real D1', () => {
         slug: 'resource-spa',
         clientType: 'public_spa',
         redirectUris: [redirectUri],
-        ownerOrganizationId: 'org_platform',
-        firstParty: true,
-        trusted: true,
+        ownerOrganizationId: platformOrganizationId,
+        consentRequired: false,
       }),
     })
     expect(createApp.status, await createApp.clone().text()).toBe(201)

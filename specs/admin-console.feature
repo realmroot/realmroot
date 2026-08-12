@@ -91,6 +91,7 @@ Feature: Admin Console
     Then settings, branding, redirect URIs, integration details, and secret rotation are available
     And Resource access is visible only when the Application can act as a machine principal
     And User authorizations remain separate from Application Permissions
+    And only Applications owned by the Realmroot Platform Organization can configure whether user consent is required
     And active user authorizations are read from the Application authorization subresource collection
     And revoking one removes the active authorization while preserving its audit history
     And rotating a client secret requires confirmation because the current secret stops working

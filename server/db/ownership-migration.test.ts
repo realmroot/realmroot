@@ -15,6 +15,9 @@ const entitlementMigrationName = '20260809163141_bouncy_madame_hydra.sql'
 const permissionGrantActorMigrationName = '20260810145702_permission_grant_actor.sql'
 const clientTypesMigrationName = '20260810153434_application_types.sql'
 const providerCredentialRefreshMigrationName = '20260810224255_polite_tombstone.sql'
+const systemResourceUuidMigrationName = '20260812132947_system_resource_uuidv7.sql'
+const applicationConsentRequiredMigrationName = '20260812140338_application_consent_required.sql'
+const applicationAuthorizationSourceMigrationName = '20260812142042_application_authorization_source.sql'
 
 describe('tenant ownership migration', () => {
   it('backfills authority constraints for existing brokered connections', () => {
@@ -75,6 +78,9 @@ describe('tenant ownership migration', () => {
             permissionGrantActorMigrationName,
             clientTypesMigrationName,
             providerCredentialRefreshMigrationName,
+            systemResourceUuidMigrationName,
+            applicationConsentRequiredMigrationName,
+            applicationAuthorizationSourceMigrationName,
           ].includes(name),
       )) {
         database.exec(readFileSync(new URL(`../../migrations/${name}`, import.meta.url), 'utf8'))

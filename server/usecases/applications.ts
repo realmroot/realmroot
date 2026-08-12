@@ -13,6 +13,7 @@ import {
 } from '@server/usecases/applications-utils'
 import type { Deps } from '@server/usecases/deps'
 import type { ApplicationAggregate, ApplicationAuthorizationRecord, ClientSecretRecord } from '@server/usecases/ports'
+import { requirePlatformOrganization } from '@server/usecases/system-resources'
 import {
   type ApplicationResponse,
   type CreateApplicationRequest,
@@ -48,6 +49,10 @@ export async function createApplication(
   const secretPrefix = clientSecret ? clientSecret.slice(0, 12) : null
   const ownerOrganizationId = input.ownerOrganizationId
   await requireActiveOrganization(deps, ownerOrganizationId)
+  const platformOrganization = await requirePlatformOrganization(deps)
+  if (input.consentRequired !== undefined && ownerOrganizationId !== platformOrganization.id) {
+    throw badRequest('User consent policy can be configured only for Applications owned by the platform Organization.')
+  }
   const resourceScopes = await validateApplicationResourceScopes(deps, ownerOrganizationId, input.resourceScopes ?? [])
 
   const application = await deps.applications.create({
@@ -61,8 +66,7 @@ export async function createApplication(
       clientId: deps.ids.generate(),
       clientType: input.clientType,
       public: settings.public,
-      firstParty: input.firstParty ?? false,
-      trusted: input.trusted ?? false,
+      consentRequired: ownerOrganizationId === platformOrganization.id ? (input.consentRequired ?? true) : true,
       disabled: false,
       disabledReason: null,
       ownerOrganizationId,
@@ -144,6 +148,11 @@ export async function updateApplication(
   const corsOrigins = input.corsOrigins !== undefined ? normalizeCorsOrigins(input.corsOrigins) : undefined
   if (input.ownerOrganizationId) await requireActiveOrganization(deps, input.ownerOrganizationId)
   const ownerOrganizationId = input.ownerOrganizationId ?? application.ownerOrganizationId
+  const platformOrganization = await requirePlatformOrganization(deps)
+  const platformOwned = ownerOrganizationId === platformOrganization.id
+  if (input.consentRequired !== undefined && !platformOwned) {
+    throw badRequest('User consent policy can be configured only for Applications owned by the platform Organization.')
+  }
   const resourceScopes = input.resourceScopes
     ? await validateApplicationResourceScopes(
         deps,
@@ -159,8 +168,7 @@ export async function updateApplication(
     description: input.description,
     homepageUrl: input.homepageUrl,
     iconUrl: input.iconUrl,
-    firstParty: input.firstParty,
-    trusted: input.trusted,
+    consentRequired: platformOwned ? input.consentRequired : application.consentRequired ? undefined : true,
     disabled: input.disabled,
     disabledReason: input.disabledReason,
     ownerOrganizationId: input.ownerOrganizationId,
@@ -261,6 +269,7 @@ function toApplicationAuthorization(authorization: ApplicationAuthorizationRecor
     },
     resourceServerId: authorization.resourceServerId,
     scopes: authorization.scopes,
+    authorizationSource: authorization.authorizationSource,
     grantedAt: authorization.grantedAt.toISOString(),
     expiresAt: authorization.expiresAt?.toISOString() ?? null,
     revokedAt: authorization.revokedAt?.toISOString() ?? null,
@@ -328,7 +337,17 @@ export async function loadConsentRequest(
       : []),
   ]
   const requestedScopes = normalizeRequestedScopes(input.scope, allowedScopes)
+  const resourceScopeDescriptions = new Map(
+    resource?.scopeRegistry?.scopes.map((scope) => [scope.value, scope.description] as const) ?? [],
+  )
+  const requestedPermissions = requestedScopes.map((scope) => ({
+    value: scope,
+    description: oidcScopeDescription(scope) ?? resourceScopeDescriptions.get(scope) ?? null,
+  }))
   const existingConsent = await deps.applications.findConsent(application.id, user.id, resource?.id ?? null)
+  const previouslyApproved = new Set(existingConsent?.scopes ?? [])
+  const addedScopes = requestedScopes.filter((scope) => !previouslyApproved.has(scope))
+  const previouslyApprovedScopes = requestedScopes.filter((scope) => previouslyApproved.has(scope))
 
   const { secretMetadata: _secretMetadata, ...applicationResponse } = toResponse(issuer, application, [])
   const approveParams = new URLSearchParams(input.authorizationParams)
@@ -350,6 +369,10 @@ export async function loadConsentRequest(
     },
     resourceServerId: resource?.id ?? null,
     requestedScopes,
+    requestedPermissions,
+    addedScopes,
+    previouslyApprovedScopes,
+    consentReason: !existingConsent ? 'initial' : addedScopes.length > 0 ? 'expanded' : 'reauthorization',
     existingConsent: existingConsent
       ? {
           id: existingConsent.id,
@@ -376,12 +399,14 @@ export async function createConsent(deps: Deps, input: CreateConsentRequest, use
       : []),
   ]
   const requestedScopes = normalizeRequestedScopes(input.scopes.join(' '), allowedScopes)
+  const existingConsent = await deps.applications.findConsent(application.id, userId, resource?.id ?? null)
+  const scopes = [...new Set([...(existingConsent?.scopes ?? []), ...requestedScopes])].sort()
   const consent = await deps.applications.createConsent({
     applicationId: application.id,
     clientId: application.clientId,
     userId,
     resourceServerId: resource?.id ?? null,
-    scopes: requestedScopes,
+    scopes,
   })
 
   return {
@@ -421,8 +446,7 @@ function toResponse(
     clientId: application.clientId,
     clientType: application.clientType,
     public: application.public,
-    firstParty: application.firstParty,
-    trusted: application.trusted,
+    consentRequired: application.consentRequired,
     disabled: application.disabled,
     disabledReason: application.disabledReason,
     ownerOrganizationId: application.ownerOrganizationId,
@@ -501,6 +525,14 @@ async function resolveRequestedResource(deps: Deps, resourceUrl: string | undefi
   const resource = await deps.authorization.findResourceByResourceUrl(resourceUrl)
   if (!resource) throw badRequest('Requested Resource Server is not active.')
   return requireResourceVisibleToUser(deps, resource.id, userId)
+}
+
+function oidcScopeDescription(scope: string) {
+  if (scope === 'openid') return 'Confirm your identity with Realmroot.'
+  if (scope === 'profile') return 'Share basic profile details such as your name and avatar.'
+  if (scope === 'email') return 'Share your email address and verification status.'
+  if (scope === 'offline_access') return 'Allow continued access when you are away.'
+  return null
 }
 
 async function requireResourceVisibleToUser(deps: Deps, resourceId: string, userId: string) {

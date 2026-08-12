@@ -7,8 +7,8 @@ import {
   canAuthorize,
 } from '@server/domain/authorization-context'
 import { forbidden, unauthorized } from '@server/domain/errors'
-import { platformOrganization } from '@server/domain/platform-organization'
 import { resolveOrganizationUserAuthorizationContext } from '@server/usecases/organization-membership-scopes'
+import { requirePlatformOrganization } from '@server/usecases/system-resources'
 import { type ProtectedResource, requiredResourceScope } from '@shared/authz'
 import type { RealmrootOrganizationScope } from '@shared/scope-registry'
 import type { Context, MiddlewareHandler } from 'hono'
@@ -74,7 +74,12 @@ export async function authorizedTenantInventory(
   requiredScope: RealmrootOrganizationScope,
 ): Promise<AuthorizationTenant[] | undefined> {
   const principal = getPrincipal(c)
-  if (canAuthorize(await resolvePlatformOrganizationContext(c), platformBoundary(), requiredScope)) return undefined
+  const platform = await requirePlatformOrganization(getDeps(c))
+  if (
+    canAuthorize(await resolvePlatformOrganizationContext(c, platform.id), platformBoundary(platform.id), requiredScope)
+  ) {
+    return undefined
+  }
   if (principal.user) {
     const memberships = await getDeps(c).authorization.listUserMemberships(principal.user.id)
     const userTenant = { type: 'user' as const, id: principal.user.id }
@@ -99,12 +104,13 @@ export async function authorizedTenantInventory(
 }
 
 export async function authorizePlatformOrganization(c: Context, requiredScope: RealmrootOrganizationScope) {
-  await authorizeOrganization(c, platformOrganization.id, requiredScope)
+  await authorizeOrganization(c, (await requirePlatformOrganization(getDeps(c))).id, requiredScope)
 }
 
 export async function hasPlatformOrganizationAccess(c: Context, requiredScope: RealmrootOrganizationScope) {
-  const target = platformBoundary()
-  return canAuthorize(await resolvePlatformOrganizationContext(c), target, requiredScope)
+  const platform = await requirePlatformOrganization(getDeps(c))
+  const target = platformBoundary(platform.id)
+  return canAuthorize(await resolvePlatformOrganizationContext(c, platform.id), target, requiredScope)
 }
 
 export async function authorizeUser(c: Context, userId: string, requiredScope: string) {
@@ -138,7 +144,8 @@ export async function resolveAuthorizationContext(
   const agent = principal.agent
   if (!agent) throw unauthorized()
   const authority = agent.authority
-  if (authority?.kind === 'organization' && authority.organizationId === platformOrganization.id) {
+  const platform = await requirePlatformOrganization(getDeps(c))
+  if (authority?.kind === 'organization' && authority.organizationId === platform.id) {
     return {
       subject: { type: 'agent', id: agent.identityId },
       tenant: targetTenant,
@@ -162,27 +169,31 @@ function organizationBoundary(organizationId: string): AuthorizationTenant {
   return { type: 'organization', id: organizationId }
 }
 
-function platformBoundary(): AuthorizationTenant {
-  return organizationBoundary(platformOrganization.id)
+function platformBoundary(platformOrganizationId: string): AuthorizationTenant {
+  return organizationBoundary(platformOrganizationId)
 }
 
-async function resolvePlatformOrganizationContext(c: Context): Promise<AuthorizationContext> {
+async function resolvePlatformOrganizationContext(
+  c: Context,
+  platformOrganizationId?: string,
+): Promise<AuthorizationContext> {
+  const platformId = platformOrganizationId ?? (await requirePlatformOrganization(getDeps(c))).id
   const principal = getPrincipal(c)
   if (principal.user) {
-    return resolveOrganizationUserAuthorizationContext(getDeps(c), platformOrganization.id, principal.user.id)
+    return resolveOrganizationUserAuthorizationContext(getDeps(c), platformId, principal.user.id)
   }
   const agent = principal.agent
-  if (agent?.authority?.kind === 'organization' && agent.authority.organizationId === platformOrganization.id) {
+  if (agent?.authority?.kind === 'organization' && agent.authority.organizationId === platformId) {
     return {
       subject: { type: 'agent', id: agent.identityId },
-      tenant: platformBoundary(),
+      tenant: platformBoundary(platformId),
       scopes: new Set(agent.scopes),
     }
   }
   if (!agent) throw unauthorized()
   return {
     subject: { type: 'agent', id: agent.identityId },
-    tenant: platformBoundary(),
+    tenant: platformBoundary(platformId),
     scopes: new Set(),
   }
 }

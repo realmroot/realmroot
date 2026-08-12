@@ -134,8 +134,7 @@ export function createDrizzleApplicationRepository(db: Database, ids: Identifier
               }),
             }
           : {}),
-        ...(patch.firstParty !== undefined ? { firstParty: patch.firstParty } : {}),
-        ...(patch.trusted !== undefined ? { trusted: patch.trusted } : {}),
+        ...(patch.consentRequired !== undefined ? { consentRequired: patch.consentRequired } : {}),
         ...(patch.disabled !== undefined ? { disabled: patch.disabled } : {}),
         ...(patch.disabledReason !== undefined ? { disabledReason: patch.disabledReason } : {}),
         updatedAt: now,
@@ -146,7 +145,7 @@ export function createDrizzleApplicationRepository(db: Database, ids: Identifier
         ...(patch.homepageUrl !== undefined ? { uri: patch.homepageUrl } : {}),
         ...(patch.iconUrl !== undefined ? { icon: patch.iconUrl } : {}),
         ...(patch.disabled !== undefined ? { disabled: patch.disabled } : {}),
-        ...(patch.trusted !== undefined ? { skipConsent: patch.trusted } : {}),
+        ...(patch.consentRequired !== undefined ? { skipConsent: true } : {}),
         ...(patch.redirectUris !== undefined ? { redirectUris: serializeList(patch.redirectUris) } : {}),
         ...(patch.postLogoutRedirectUris !== undefined
           ? { postLogoutRedirectUris: serializeList(patch.postLogoutRedirectUris), enableEndSession: true }
@@ -301,6 +300,7 @@ export function createDrizzleApplicationRepository(db: Database, ids: Identifier
           userDisplayName: user.name,
           userEmail: user.email,
           scopes: applicationConsent.scopes,
+          authorizationSource: applicationConsent.authorizationSource,
           resourceServerId: applicationConsent.resourceServerId,
           grantedAt: applicationConsent.grantedAt,
           expiresAt: applicationConsent.expiresAt,
@@ -336,6 +336,7 @@ export function createDrizzleApplicationRepository(db: Database, ids: Identifier
           userDisplayName: user.name,
           userEmail: user.email,
           scopes: applicationConsent.scopes,
+          authorizationSource: applicationConsent.authorizationSource,
           resourceServerId: applicationConsent.resourceServerId,
           grantedAt: applicationConsent.grantedAt,
           expiresAt: applicationConsent.expiresAt,
@@ -367,6 +368,7 @@ export function createDrizzleApplicationRepository(db: Database, ids: Identifier
             resourceServerId === null
               ? isNull(applicationConsent.resourceServerId)
               : eq(applicationConsent.resourceServerId, resourceServerId),
+            eq(applicationConsent.authorizationSource, 'user_consent'),
             isNull(applicationConsent.revokedAt),
           ),
         )
@@ -417,7 +419,12 @@ export function createDrizzleApplicationRepository(db: Database, ids: Identifier
       const applicationStatement = existingApplicationConsent[0]
         ? db
             .update(applicationConsent)
-            .set({ scopes: input.scopes, grantedAt: now, expiresAt: null })
+            .set({
+              scopes: input.scopes,
+              authorizationSource: 'user_consent',
+              grantedAt: now,
+              expiresAt: null,
+            })
             .where(eq(applicationConsent.id, id))
         : db.insert(applicationConsent).values({
             id,
@@ -425,6 +432,7 @@ export function createDrizzleApplicationRepository(db: Database, ids: Identifier
             userId: input.userId,
             resourceServerId: input.resourceServerId,
             scopes: input.scopes,
+            authorizationSource: 'user_consent',
             grantedAt: now,
           })
       const oauthStatement = existingOAuthConsent[0]
@@ -459,6 +467,63 @@ export function createDrizzleApplicationRepository(db: Database, ids: Identifier
         .limit(1)
       if (!consent) throw new Error('Persisted application consent was not found.')
       return toConsent(consent)
+    },
+
+    async recordPolicyAuthorization(input) {
+      const now = new Date()
+      const [existing] = await db
+        .select({
+          id: applicationConsent.id,
+          scopes: applicationConsent.scopes,
+          authorizationSource: applicationConsent.authorizationSource,
+        })
+        .from(applicationConsent)
+        .where(
+          and(
+            eq(applicationConsent.applicationId, input.applicationId),
+            eq(applicationConsent.userId, input.userId),
+            input.resourceServerId === null
+              ? isNull(applicationConsent.resourceServerId)
+              : eq(applicationConsent.resourceServerId, input.resourceServerId),
+            isNull(applicationConsent.revokedAt),
+          ),
+        )
+        .limit(1)
+
+      const scopes = [...new Set([...(existing?.scopes ?? []), ...input.scopes])].sort()
+      if (existing) {
+        await db
+          .update(applicationConsent)
+          .set({ scopes, grantedAt: now, expiresAt: null })
+          .where(eq(applicationConsent.id, existing.id))
+      } else {
+        await db.insert(applicationConsent).values({
+          id: ids.generate(),
+          applicationId: input.applicationId,
+          userId: input.userId,
+          resourceServerId: input.resourceServerId,
+          scopes,
+          authorizationSource: 'platform_policy',
+          grantedAt: now,
+        })
+      }
+
+      const [authorization] = await db
+        .select()
+        .from(applicationConsent)
+        .where(
+          and(
+            eq(applicationConsent.applicationId, input.applicationId),
+            eq(applicationConsent.userId, input.userId),
+            input.resourceServerId === null
+              ? isNull(applicationConsent.resourceServerId)
+              : eq(applicationConsent.resourceServerId, input.resourceServerId),
+            isNull(applicationConsent.revokedAt),
+          ),
+        )
+        .limit(1)
+      if (!authorization) throw new Error('Persisted application authorization was not found.')
+      return toConsent(authorization)
     },
   }
 }

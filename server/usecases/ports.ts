@@ -1192,8 +1192,7 @@ export interface ApplicationAggregate {
   clientId: string
   clientType: ApplicationResponse['clientType']
   public: boolean
-  firstParty: boolean
-  trusted: boolean
+  consentRequired: boolean
   disabled: boolean
   disabledReason: string | null
   ownerOrganizationId: string
@@ -1227,6 +1226,7 @@ export interface ConsentRecord {
   id: string
   resourceServerId: string | null
   scopes: string[]
+  authorizationSource: 'user_consent' | 'platform_policy'
   grantedAt: Date
 }
 
@@ -1240,6 +1240,7 @@ export interface ApplicationAuthorizationRecord {
   userEmail: string
   resourceServerId: string | null
   scopes: string[]
+  authorizationSource: 'user_consent' | 'platform_policy'
   grantedAt: Date
   expiresAt: Date | null
   revokedAt: Date | null
@@ -1287,6 +1288,12 @@ export interface ApplicationRepository {
   createConsent(input: {
     applicationId: string
     clientId: string
+    userId: string
+    resourceServerId: string | null
+    scopes: string[]
+  }): Promise<ConsentRecord>
+  recordPolicyAuthorization(input: {
+    applicationId: string
     userId: string
     resourceServerId: string | null
     scopes: string[]

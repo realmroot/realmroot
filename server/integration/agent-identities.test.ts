@@ -19,7 +19,16 @@ import {
 import { eq } from 'drizzle-orm'
 import { decodeProtectedHeader, exportJWK, generateKeyPair, importJWK, type JWK, jwtVerify, SignJWT } from 'jose'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { createHarness, createUser, type Harness, seedAgent, signIn, signInAdmin } from './harness'
+import {
+  createHarness,
+  createUser,
+  type Harness,
+  platformOrganizationId,
+  realmrootResourceServerId,
+  seedAgent,
+  signIn,
+  signInAdmin,
+} from './harness'
 
 afterEach(async () => {
   await reset()
@@ -41,7 +50,7 @@ describe('Agent identity enrollment over real D1', () => {
       displayName: 'Identity Owner',
       password: 'identity-owner-password-2026',
     })
-    const membership = await harness.request('/api/organizations/org_platform/members', {
+    const membership = await harness.request(`/api/organizations/${platformOrganizationId}/members`, {
       method: 'POST',
       headers: jsonHeaders(adminCookie),
       body: JSON.stringify({ userId, roles: ['owner'] }),
@@ -415,7 +424,7 @@ describe('Agent identity enrollment over real D1', () => {
     const intent = await createIntent(harness, userId, {
       name: 'Token Agent',
       protocolAgentId: seeded.agentId,
-      organizationId: 'org_platform',
+      organizationId: platformOrganizationId,
     })
     const approved = await approveIntent(harness, ownerCookie, intent.id)
     harness.deps.externalHttp.fetch = resourceOpenApiFetch('https://api.example.com', 'repo:read')
@@ -423,7 +432,7 @@ describe('Agent identity enrollment over real D1', () => {
       identifier: 'native-api',
       resourceUrl: 'https://api.example.com',
       accessMode: 'realmroot',
-      ownerOrganizationId: 'org_platform',
+      ownerOrganizationId: platformOrganizationId,
     })
     const automaticScope = await harness.request(`/api/resource-servers/${resource.id}`, {
       method: 'PATCH',
@@ -452,7 +461,7 @@ describe('Agent identity enrollment over real D1', () => {
         connection: { status: 'not_required', displayName: null, authorizedScopes: [] },
       }),
       expect.objectContaining({
-        id: 'res_realmroot',
+        id: realmrootResourceServerId,
         identifier: 'realmroot',
         resourceUrl: 'http://localhost/api',
         connection: expect.objectContaining({ status: 'not_required' }),
@@ -509,7 +518,7 @@ describe('Agent identity enrollment over real D1', () => {
       audience: 'https://api.example.com',
     })
     expect(verified.payload).toMatchObject({
-      sub: 'org_platform',
+      sub: platformOrganizationId,
       scope: 'repo:read',
       cnf: { jkt: expect.any(String) },
       act: {

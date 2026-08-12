@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 const audience = 'https://auth.example.com/api'
 const endpoint = 'https://auth.example.com/api/auth/oauth2/token'
+const realmrootResourceServerId = 'resource-realmroot'
 
 describe('Application OAuth token issuance', () => {
   it('issues a short-lived DPoP token from client credentials and effective Application Permissions', async () => {
@@ -137,10 +138,11 @@ async function fixture(
     resourceScopes:
       options.configureResource === false
         ? []
-        : [{ resourceServerId: realmrootResourceServer.id, scopes: configuredScopes }],
+        : [{ resourceServerId: realmrootResourceServerId, scopes: configuredScopes }],
   }
   const resource = {
     ...realmrootResourceServer,
+    id: realmrootResourceServerId,
     resourceUrl: audience,
     enabled: true,
     visibility: 'public',
@@ -158,7 +160,16 @@ async function fixture(
       }),
     },
     authorization: {
-      findResource: vi.fn().mockResolvedValue(options.resource === undefined ? resource : options.resource),
+      listResources: vi.fn().mockResolvedValue({
+        items: options.resource === null ? [] : [options.resource === undefined ? resource : options.resource],
+        pagination: {
+          limit: 100,
+          offset: 0,
+          total: options.resource === null ? 0 : 1,
+          hasMore: false,
+          nextOffset: null,
+        },
+      }),
       listActiveApplicationScopeEntitlements: vi
         .fn()
         .mockResolvedValue(effectiveScopes.map((scope) => ({ scope, endedAt: null, expiresAt: null }))),

@@ -9,13 +9,13 @@ import { createDrizzleApplicationRepository } from '@server/adapters/repos/appli
 import { createDrizzleAuthorizationRepository } from '@server/adapters/repos/authorization'
 import { createDrizzleConfigzRepository } from '@server/adapters/repos/configz'
 import { createExternalResourceRepository } from '@server/adapters/repos/external-resources'
-import { platformOrganization } from '@server/domain/platform-organization'
 import type { AuthConnectorConfig } from '@server/usecases/connectors'
 import type { Deps } from '@server/usecases/deps'
 import { mayCreateOrganization } from '@server/usecases/developer-access'
 import type { IdentifierGenerator } from '@server/usecases/identifier-generator'
 import { organizationUserHasScope } from '@server/usecases/organization-membership-scopes'
 import type { ApplicationRepository } from '@server/usecases/ports'
+import { findPlatformOrganization } from '@server/usecases/system-resources'
 import { APIError, betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
 import { deviceAuthorization, genericOAuth, jwt, oneTap, phoneNumber, siwe, twoFactor } from 'better-auth/plugins'
@@ -93,7 +93,7 @@ export function createAuth(
     externalHttp: options.externalHttp,
   } as unknown as Deps
 
-  return betterAuth({
+  const auth = betterAuth({
     appName: 'Realmroot',
     database: drizzleAdapter(db, { provider: 'sqlite', schema }),
     advanced: {
@@ -437,12 +437,14 @@ export function createAuth(
         usernameValidator: (value) => /^[a-zA-Z0-9_.-]+$/.test(value),
       }),
       organization({
-        allowUserToCreateOrganization: async (user) =>
-          mayCreateOrganization(
+        allowUserToCreateOrganization: async (user) => {
+          const platform = await findPlatformOrganization(deps)
+          return mayCreateOrganization(
             await configz.getOrganizationCreationPolicy(),
             { id: user.id, emailVerified: user.emailVerified },
-            await organizationUserHasScope(deps, platformOrganization.id, user.id, 'organizations:write'),
-          ),
+            platform ? await organizationUserHasScope(deps, platform.id, user.id, 'organizations:write') : false,
+          )
+        },
         teams: {
           enabled: false,
         },
@@ -470,8 +472,19 @@ export function createAuth(
         validAudiences: options.validAudiences,
         postLogin: {
           page: '/oauth/consent',
-          shouldRedirect: async () => false,
-          consentReferenceId: async ({ session }) => readString(session, 'activeOrganizationId'),
+          consentReferenceId: async () => undefined,
+          shouldRedirect: async ({ headers, user, scopes }) => {
+            const clientId = headers.get('x-realmroot-oauth-client-id')
+            if (!clientId) throw new Error('OAuth consent context is missing the client ID.')
+            const application = await applications.findByClientId(clientId)
+            if (!application) throw new Error('OAuth consent context does not reference an Application.')
+            if (!application.consentRequired) return false
+
+            const resourceUrl = headers.get('x-realmroot-oauth-resource')
+            const resource = resourceUrl ? await deps.authorization.findResourceByResourceUrl(resourceUrl) : null
+            const consent = await applications.findConsent(application.id, user.id, resource?.id ?? null)
+            return !consent || scopes.some((scope) => !consent.scopes.includes(scope))
+          },
         },
         filterAccessTokenScopes: (input) => filterOAuthAccessTokenScopes(deps, input),
         customAccessTokenClaims: (input) => buildOAuthAccessTokenClaims(deps, input),
@@ -491,6 +504,60 @@ export function createAuth(
       }),
     ],
   })
+  return {
+    ...auth,
+    handler: async (request: Request) => {
+      const response = await auth.handler(await withOAuthConsentContext(request))
+      return translateNonInteractiveConsentError(request, response)
+    },
+  }
+}
+
+async function withOAuthConsentContext(request: Request) {
+  const url = new URL(request.url)
+  const params = await oauthAuthorizationParams(request, url)
+  if (!params) return request
+
+  const headers = new Headers(request.headers)
+  const clientId = params.get('client_id')
+  const resource = params.get('resource')
+  if (clientId) headers.set('x-realmroot-oauth-client-id', clientId)
+  else headers.delete('x-realmroot-oauth-client-id')
+  if (resource) headers.set('x-realmroot-oauth-resource', resource)
+  else headers.delete('x-realmroot-oauth-resource')
+  return new Request(request, { headers })
+}
+
+async function oauthAuthorizationParams(request: Request, url: URL) {
+  if (request.method === 'GET' && url.pathname.endsWith('/oauth2/authorize')) return url.searchParams
+  if (request.method !== 'POST' || !url.pathname.endsWith('/oauth2/consent')) return null
+  if (!request.headers.get('content-type')?.toLowerCase().startsWith('application/json')) return null
+
+  let body: unknown
+  try {
+    body = await request.clone().json()
+  } catch {
+    return null
+  }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return null
+  const oauthQuery = (body as Record<string, unknown>).oauth_query
+  return typeof oauthQuery === 'string' ? new URLSearchParams(oauthQuery) : null
+}
+
+function translateNonInteractiveConsentError(request: Request, response: Response) {
+  const requestUrl = new URL(request.url)
+  if (!new Set((requestUrl.searchParams.get('prompt') ?? '').split(/\s+/)).has('none')) return response
+
+  const location = response.headers.get('location')
+  if (!location) return response
+  const redirect = new URL(location, request.url)
+  if (redirect.searchParams.get('error') !== 'interaction_required') return response
+
+  redirect.searchParams.set('error', 'consent_required')
+  redirect.searchParams.set('error_description', 'End-User consent is required')
+  const headers = new Headers(response.headers)
+  headers.set('location', redirect.toString())
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers })
 }
 
 function webhookRecord(record: Record<string, unknown>, fields: string[]) {

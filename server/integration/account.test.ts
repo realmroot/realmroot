@@ -19,6 +19,8 @@ import {
   createHarness,
   createUser,
   type Harness,
+  platformOrganizationId,
+  realmrootResourceServerId,
   resourceOpenApiFetch,
   seedAgent,
   signIn,
@@ -135,7 +137,7 @@ describe('account self-service over real D1', () => {
     })
     await harness.db.insert(agentAccessRequest).values({
       id: 'expired-access-request',
-      resourceId: 'res_realmroot',
+      resourceId: realmrootResourceServerId,
       agentIdentityId: 'expired-access-request-identity',
       bindingId: 'expired-access-request-binding',
       scopes: ['agents:read'],
@@ -418,7 +420,7 @@ describe('account self-service over real D1', () => {
       connectorId: 'connector-provider',
       authorizationDetails: [],
       enabled: true,
-      ownerOrganizationId: 'org_platform',
+      ownerOrganizationId: platformOrganizationId,
       visibility: 'public',
       availableToAgents: true,
       scopeRegistry: {
@@ -472,7 +474,7 @@ describe('account self-service over real D1', () => {
         connectorId: 'connector-provider',
         authorizationDetails: [],
         enabled: true,
-        ownerOrganizationId: 'org_platform',
+        ownerOrganizationId: platformOrganizationId,
         visibility: 'public',
         availableToAgents: true,
         scopeRegistry: {

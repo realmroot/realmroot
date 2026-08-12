@@ -37,6 +37,10 @@ function setup() {
   }
   const authorization = {
     findOrganization: vi.fn().mockResolvedValue({ id: 'org-1', disabled: false }),
+    listOrganizations: vi.fn().mockResolvedValue({
+      items: [{ id: 'org-platform', slug: 'realmroot' }],
+      pagination: { limit: 100, offset: 0, total: 1, hasMore: false, nextOffset: null },
+    }),
     findResources: vi.fn().mockResolvedValue([resource]),
     findResource: vi.fn().mockResolvedValue(resource),
     findResourceByResourceUrl: vi.fn().mockResolvedValue(resource),

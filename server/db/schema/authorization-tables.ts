@@ -105,8 +105,7 @@ export const application = sqliteTable(
       .$type<Array<{ resourceServerId: string; scopes: string[] }>>()
       .notNull()
       .default(sql`'[]'`),
-    firstParty: integer('first_party', { mode: 'boolean' }).default(false).notNull(),
-    trusted: integer('trusted', { mode: 'boolean' }).default(false).notNull(),
+    consentRequired: integer('consent_required', { mode: 'boolean' }).default(true).notNull(),
     disabled: integer('disabled', { mode: 'boolean' }).default(false).notNull(),
     disabledReason: text('disabled_reason'),
     accessTokenTtlSeconds: integer('access_token_ttl_seconds'),
@@ -227,6 +226,9 @@ export const applicationConsent = sqliteTable(
       .references(() => user.id, { onDelete: 'cascade' }),
     resourceServerId: text('resource_server_id').references(() => apiResource.id, { onDelete: 'cascade' }),
     scopes: text('scopes', { mode: 'json' }).$type<string[]>().notNull(),
+    authorizationSource: text('authorization_source', { enum: ['user_consent', 'platform_policy'] })
+      .notNull()
+      .default('user_consent'),
     grantedAt: integer('granted_at', { mode: 'timestamp_ms' })
       .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
       .notNull(),

@@ -3878,9 +3878,8 @@ describe('external API resource authorization', () => {
       id: 'resource-1',
       authorization: { issuer: 'https://projects.example.com' },
     })
-    await expect(listApiResources(deps, { limit: 10, offset: 0 }, 'https://auth.example.com')).resolves.toMatchObject({
-      items: [{ id: 'resource-1' }],
-    })
+    const resources = await listApiResources(deps, { limit: 10, offset: 0 }, 'https://auth.example.com')
+    expect(resources.items).toEqual(expect.arrayContaining([expect.objectContaining({ id: 'resource-1' })]))
     await expect(listResourceConnections(deps, 'user-1')).resolves.toMatchObject({
       items: [{ owner: { type: 'user' } }, { owner: { type: 'organization' }, credentialExpiresAt: null }],
     })
@@ -3928,7 +3927,9 @@ describe('external API resource authorization', () => {
       findMemberByOrganizationUser: vi.fn().mockResolvedValue({ roles: ['credential_manager'] }),
       listOrganizationRoleScopes: vi
         .fn()
-        .mockResolvedValue(new Map([['credential_manager', [{ resourceId: 'res_realmroot', scope: 'agents:write' }]]])),
+        .mockResolvedValue(
+          new Map([['credential_manager', [{ resourceId: 'resource-realmroot', scope: 'agents:write' }]]]),
+        ),
     })
     vi.mocked(deps.externalResources.createConnectionIntent).mockImplementation(async (record) => record)
 
@@ -4948,7 +4949,12 @@ describe('external API resource authorization', () => {
     ).rejects.toThrow('Native API resources do not accept authorization details.')
 
     const realmrootDeps = createTestDeps()
-    const builtIn = { ...native, id: 'res_realmroot', resourceUrl: 'https://auth.example.com/api' }
+    const builtIn = {
+      ...native,
+      id: 'resource-realmroot',
+      identifier: 'realmroot',
+      resourceUrl: 'https://auth.example.com/api',
+    }
     vi.mocked(realmrootDeps.authorization.findResource).mockResolvedValue(builtIn)
     vi.mocked(realmrootDeps.authorization.listUserMemberships).mockResolvedValue([])
     vi.mocked(realmrootDeps.users.getUser).mockResolvedValue({
@@ -4996,7 +5002,12 @@ describe('external API resource authorization', () => {
 
   it('rejects malformed Realmroot authority approval records', async () => {
     const deps = createTestDeps()
-    const builtIn = { ...nativeResource(), id: 'res_realmroot', resourceUrl: 'https://auth.example.com/api' }
+    const builtIn = {
+      ...nativeResource(),
+      id: 'resource-realmroot',
+      identifier: 'realmroot',
+      resourceUrl: 'https://auth.example.com/api',
+    }
     const pending = {
       ...requestRecord(),
       resourceId: builtIn.id,
@@ -5048,7 +5059,12 @@ describe('external API resource authorization', () => {
 
   it('filters unavailable Realmroot authorities and paginates singleton service Resources', async () => {
     const deps = createTestDeps()
-    const builtIn = { ...nativeResource(), id: 'res_realmroot', resourceUrl: 'https://auth.example.com/api' }
+    const builtIn = {
+      ...nativeResource(),
+      id: 'resource-realmroot',
+      identifier: 'realmroot',
+      resourceUrl: 'https://auth.example.com/api',
+    }
     vi.mocked(deps.authorization.findResource).mockResolvedValue(builtIn)
     vi.mocked(deps.authorization.findOrganization).mockResolvedValue({
       id: 'org-1',
@@ -6817,9 +6833,23 @@ describe('external API resource authorization', () => {
 })
 
 function authorizationDeps(deps: ReturnType<typeof createTestDeps>) {
+  const realmrootResource = {
+    ...resource(),
+    id: 'resource-realmroot',
+    identifier: 'realmroot',
+    name: 'Realmroot',
+    resourceUrl: 'https://auth.example.com/api',
+    accessMode: 'realmroot' as const,
+    connectorId: null,
+  }
   Object.assign(deps.authorization, {
-    findResource: vi.fn().mockResolvedValue(resource()),
-    listResources: vi.fn().mockResolvedValue({ items: [resource()], total: 1, limit: 100, offset: 0 }),
+    findResource: vi
+      .fn()
+      .mockImplementation(async (id: string) => (id === realmrootResource.id ? realmrootResource : resource())),
+    listResources: vi.fn().mockResolvedValue({
+      items: [realmrootResource, resource()],
+      pagination: { total: 2, limit: 100, offset: 0, hasMore: false, nextOffset: null },
+    }),
     listEnabledResources: vi.fn().mockResolvedValue([resource()]),
     listUserMemberships: vi.fn().mockResolvedValue([{ organizationId: 'org-1', roles: ['owner'] }]),
     listActiveUserScopeEntitlements: vi

@@ -103,10 +103,20 @@ const resource: ApiResourceResponse = {
   createdAt: timestamp,
   updatedAt: timestamp,
 }
+const platformOrganization = { ...organization, id: 'org-platform', slug: 'realmroot' }
+const realmrootResource = {
+  ...resource,
+  id: 'resource-realmroot',
+  identifier: 'realmroot',
+  name: 'Realmroot',
+  resourceUrl: 'https://auth.example.com/api',
+  ownerOrganizationId: platformOrganization.id,
+}
 describe('authorization CRUD and assignment policy', () => {
   it(`persists one immutable built-in Realmroot Resource Server and reconciles its deployment contract
       [spec: management-api/management-realmroot-resource-server-origin]`, async () => {
     const authorization = repository()
+    authorization.listResources.mockResolvedValueOnce({ items: [], pagination })
     authorization.listEnabledResources.mockResolvedValue([])
     authorization.createResource.mockImplementation(async (input) => ({
       ...input,
@@ -117,30 +127,31 @@ describe('authorization CRUD and assignment policy', () => {
 
     const created = await ensureRealmrootResourceServer(deps, 'https://auth.example.com')
     expect(created).toMatchObject({
-      id: 'res_realmroot',
+      id: expect.stringMatching(/^00000000-0000-7000-8000-/),
       identifier: 'realmroot',
       resourceUrl: 'https://auth.example.com/api',
       connectorId: null,
-      ownerOrganizationId: 'org_platform',
+      ownerOrganizationId: platformOrganization.id,
     })
 
+    authorization.listResources.mockResolvedValue({ items: [created], pagination })
     authorization.findResource.mockResolvedValue(created)
-    await expect(ensureRealmrootResourceServer(deps, 'https://auth.example.com')).resolves.toBe(created)
+    await expect(ensureRealmrootResourceServer(deps, 'https://auth.example.com')).resolves.toEqual(created)
     expect(authorization.updateResource).not.toHaveBeenCalled()
 
     const stale = { ...created, resourceUrl: 'https://previous.example.com/api' }
     const reconciled = { ...created, resourceUrl: 'https://auth.example.com/api' }
-    authorization.findResource.mockResolvedValueOnce(stale).mockResolvedValueOnce(reconciled)
-    await expect(ensureRealmrootResourceServer(deps, 'https://auth.example.com')).resolves.toBe(reconciled)
-    expect(authorization.updateResource).toHaveBeenCalledWith('res_realmroot', {
+    authorization.listResources.mockResolvedValueOnce({ items: [stale], pagination })
+    await expect(ensureRealmrootResourceServer(deps, 'https://auth.example.com')).resolves.toEqual(reconciled)
+    expect(authorization.updateResource).toHaveBeenCalledWith(created.id, {
       resourceUrl: 'https://auth.example.com/api',
     })
 
     const staleRegistry = { ...created, scopeRegistry: null }
-    authorization.findResource.mockResolvedValueOnce(staleRegistry).mockResolvedValueOnce(created)
-    await expect(ensureRealmrootResourceServer(deps, 'https://auth.example.com')).resolves.toBe(created)
+    authorization.listResources.mockResolvedValueOnce({ items: [staleRegistry], pagination })
+    await expect(ensureRealmrootResourceServer(deps, 'https://auth.example.com')).resolves.toEqual(created)
     expect(authorization.replaceResourceDiscovery).toHaveBeenCalledWith(
-      'res_realmroot',
+      created.id,
       expect.objectContaining({
         scopeRegistry: expect.objectContaining({
           discovery: expect.objectContaining({ documentHash: 'system-managed' }),
@@ -149,24 +160,26 @@ describe('authorization CRUD and assignment policy', () => {
       }),
     )
 
-    authorization.findResource.mockResolvedValueOnce(staleRegistry)
+    authorization.listResources.mockResolvedValueOnce({ items: [staleRegistry], pagination })
     authorization.replaceResourceDiscovery.mockResolvedValueOnce(false)
     await expect(ensureRealmrootResourceServer(deps, 'https://auth.example.com')).rejects.toThrow(
       'could not be reconciled',
     )
 
-    authorization.findResource.mockResolvedValueOnce(staleRegistry).mockResolvedValueOnce(null)
+    authorization.listResources.mockResolvedValueOnce({ items: [staleRegistry], pagination })
+    authorization.findResource.mockResolvedValueOnce(null)
     await expect(ensureRealmrootResourceServer(deps, 'https://auth.example.com')).rejects.toThrow(
       'could not be reconciled',
     )
 
-    authorization.findResource.mockResolvedValueOnce(stale)
+    authorization.listResources.mockResolvedValueOnce({ items: [stale], pagination })
     authorization.updateResource.mockResolvedValueOnce(false)
     await expect(ensureRealmrootResourceServer(deps, 'https://auth.example.com')).rejects.toThrow(
       'could not be reconciled',
     )
 
-    authorization.findResource.mockResolvedValueOnce(stale).mockResolvedValueOnce(stale)
+    authorization.listResources.mockResolvedValueOnce({ items: [stale], pagination })
+    authorization.findResource.mockResolvedValueOnce(stale)
     await expect(ensureRealmrootResourceServer(deps, 'https://auth.example.com')).rejects.toThrow(
       'could not be reconciled',
     )
@@ -175,11 +188,10 @@ describe('authorization CRUD and assignment policy', () => {
     await expect(deleteResource(deps, created.id, actor)).rejects.toThrow('system-managed')
 
     for (const invalid of [
-      { ...created, identifier: 'changed' },
       { ...created, ownerOrganizationId: 'org-other' },
       { ...created, connectorId: 'connector-1' },
     ]) {
-      authorization.findResource.mockResolvedValueOnce(invalid)
+      authorization.listResources.mockResolvedValueOnce({ items: [invalid], pagination })
       await expect(ensureRealmrootResourceServer(deps, 'https://auth.example.com')).rejects.toThrow(
         'does not match this deployment',
       )
@@ -266,7 +278,6 @@ describe('authorization CRUD and assignment policy', () => {
 
   it('protects the built-in platform Organization lifecycle through ordinary Organization operations', async () => {
     const authorization = repository()
-    const platformOrganization = { ...organization, id: 'org_platform', slug: 'platform' }
     authorization.findOrganization.mockResolvedValue(platformOrganization)
     const deps = { ids: createIdentifierGeneratorFake(), authorization } as unknown as Deps
 
@@ -375,7 +386,7 @@ describe('authorization CRUD and assignment policy', () => {
     const authorization = repository()
     authorization.findOrganization.mockResolvedValue(organization)
     authorization.findResource.mockImplementation(async (id) =>
-      id === 'res_realmroot'
+      id === realmrootResource.id
         ? { ...resource, id, identifier: 'realmroot', resourceUrl: 'https://auth.example.com/api' }
         : null,
     )
@@ -401,7 +412,7 @@ describe('authorization CRUD and assignment policy', () => {
           key: 'operator',
           displayName: 'Operator',
           description: null,
-          scopes: [{ resourceId: 'res_realmroot', scope: 'applications:read' }],
+          scopes: [{ resourceId: realmrootResource.id, scope: 'applications:read' }],
         },
         agentActor,
       ),
@@ -409,7 +420,7 @@ describe('authorization CRUD and assignment policy', () => {
     expect(authorization.createOrganizationRole).toHaveBeenCalledWith(
       organization.id,
       expect.objectContaining({ key: 'operator' }),
-      { scope: ['res_realmroot/applications%3Aread'] },
+      { scope: [`${realmrootResource.id}/applications%3Aread`] },
       expect.objectContaining({
         action: 'organization.role.created',
         controllerUserId: null,
@@ -434,7 +445,7 @@ describe('authorization CRUD and assignment policy', () => {
     authorization.findOrganization.mockResolvedValue(organization)
     authorization.listOrganizationRoles.mockResolvedValue([dynamicRole])
     authorization.listOrganizationRoleScopes.mockResolvedValue(
-      new Map([['operator', [{ resourceId: 'res_realmroot', scope: 'applications:read' }]]]),
+      new Map([['operator', [{ resourceId: realmrootResource.id, scope: 'applications:read' }]]]),
     )
     authorization.findOrganizationRole.mockResolvedValue(dynamicRole)
     authorization.updateOrganizationRole.mockResolvedValue(true)
@@ -447,7 +458,7 @@ describe('authorization CRUD and assignment policy', () => {
     })
     await expect(getRole(deps, organization.id, 'operator')).resolves.toMatchObject({
       key: 'operator',
-      scopes: [{ resourceId: 'res_realmroot', scope: 'applications:read' }],
+      scopes: [{ resourceId: realmrootResource.id, scope: 'applications:read' }],
     })
     await expect(
       updateRole(deps, organization.id, 'operator', { displayName: 'Tenant operator' }, actor),
@@ -485,7 +496,7 @@ describe('authorization CRUD and assignment policy', () => {
     const authorization = repository()
     authorization.findOrganization.mockResolvedValue(organization)
     authorization.findResource.mockImplementation(async (id) =>
-      id === 'res_realmroot'
+      id === realmrootResource.id
         ? {
             ...resource,
             id,
@@ -522,7 +533,7 @@ describe('authorization CRUD and assignment policy', () => {
         {
           key: 'invalid',
           displayName: 'Invalid',
-          scopes: [{ resourceId: 'res_realmroot', scope: 'unknown:scope' }],
+          scopes: [{ resourceId: realmrootResource.id, scope: 'unknown:scope' }],
         },
         actor,
       ),
@@ -536,7 +547,7 @@ describe('authorization CRUD and assignment policy', () => {
         scopes: [
           { resourceId: resource.id, scope: 'projects:read' },
           { resourceId: resource.id, scope: 'projects:read' },
-          { resourceId: 'res_realmroot', scope: 'applications:read' },
+          { resourceId: realmrootResource.id, scope: 'applications:read' },
         ],
       },
       actor,
@@ -545,7 +556,7 @@ describe('authorization CRUD and assignment policy', () => {
       organization.id,
       'operator',
       expect.anything(),
-      { scope: ['res_realmroot/applications%3Aread', 'resource-1/projects%3Aread'] },
+      { scope: ['resource-1/projects%3Aread', `${realmrootResource.id}/applications%3Aread`] },
       timestamp,
       expect.anything(),
     )
@@ -633,7 +644,7 @@ describe('authorization CRUD and assignment policy', () => {
       roles: ['member', 'custom-deployer'],
     })
     authorization.listOrganizationRoleScopes.mockResolvedValue(
-      new Map([['custom-deployer', [{ resourceId: 'res_realmroot', scope: 'applications:write' }]]]),
+      new Map([['custom-deployer', [{ resourceId: realmrootResource.id, scope: 'applications:write' }]]]),
     )
     const deps = { ids: createIdentifierGeneratorFake(), authorization } as unknown as Deps
 
@@ -747,7 +758,7 @@ describe('authorization CRUD and assignment policy', () => {
       resourceUrl: resource.resourceUrl,
       accessMode: 'external_oauth',
       connectorId: 'connector-1',
-      ownerOrganizationId: 'org_platform',
+      ownerOrganizationId: platformOrganization.id,
     })
     expect(authorization.createResource).toHaveBeenLastCalledWith(
       expect.objectContaining({ authorizationDetails: [], connectorId: 'connector-1' }),
@@ -767,7 +778,7 @@ describe('authorization CRUD and assignment policy', () => {
         resourceUrl: resource.resourceUrl,
         accessMode: 'brokered',
         connectorId: 'connector-1',
-        ownerOrganizationId: 'org_platform',
+        ownerOrganizationId: platformOrganization.id,
       }),
     ).rejects.toThrow('must advertise brokered account connection metadata')
     await expect(
@@ -775,7 +786,7 @@ describe('authorization CRUD and assignment policy', () => {
         identifier: 'external-without-connector',
         resourceUrl: resource.resourceUrl,
         accessMode: 'external_oauth',
-        ownerOrganizationId: 'org_platform',
+        ownerOrganizationId: platformOrganization.id,
       }),
     ).rejects.toThrow('External OAuth access requires a Provider Connector')
     await createResource(deps, {
@@ -783,7 +794,7 @@ describe('authorization CRUD and assignment policy', () => {
       resourceUrl: resource.resourceUrl,
       accessMode: 'realmroot',
       connectorId: 'connector-1',
-      ownerOrganizationId: 'org_platform',
+      ownerOrganizationId: platformOrganization.id,
     })
     expect(authorization.createResource).toHaveBeenLastCalledWith(
       expect.objectContaining({ accessMode: 'realmroot', connectorId: 'connector-1' }),
@@ -794,7 +805,7 @@ describe('authorization CRUD and assignment policy', () => {
         identifier: 'brokered-native-rar',
         resourceUrl: resource.resourceUrl,
         accessMode: 'brokered',
-        ownerOrganizationId: 'org_platform',
+        ownerOrganizationId: platformOrganization.id,
         authorizationDetails: [{ type: 'project_access', project_id: 'project-1' }],
       }),
     ).rejects.toThrow('must select a Provider Connector')
@@ -805,7 +816,7 @@ describe('authorization CRUD and assignment policy', () => {
         resourceUrl: resource.resourceUrl,
         accessMode: 'brokered',
         connectorId: 'connector-1',
-        ownerOrganizationId: 'org_platform',
+        ownerOrganizationId: platformOrganization.id,
       }),
     ).rejects.toThrow('Provider Connector must be enabled')
     connectors.findById.mockResolvedValue({ ...connector, enabled: false })
@@ -815,7 +826,7 @@ describe('authorization CRUD and assignment policy', () => {
         resourceUrl: resource.resourceUrl,
         accessMode: 'brokered',
         connectorId: 'connector-1',
-        ownerOrganizationId: 'org_platform',
+        ownerOrganizationId: platformOrganization.id,
       }),
     ).rejects.toThrow('Provider Connector must be enabled')
     connectors.findById.mockResolvedValue({ ...connector, providerType: 'social' })
@@ -824,7 +835,7 @@ describe('authorization CRUD and assignment policy', () => {
       resourceUrl: resource.resourceUrl,
       accessMode: 'brokered',
       connectorId: 'connector-1',
-      ownerOrganizationId: 'org_platform',
+      ownerOrganizationId: platformOrganization.id,
       authorizationDetails: [{ type: 'project_access', project_id: 'project-1' }],
     })
     expect(authorization.createResource).toHaveBeenLastCalledWith(
@@ -856,7 +867,7 @@ describe('authorization CRUD and assignment policy', () => {
         resourceUrl: resource.resourceUrl,
         accessMode: 'brokered',
         connectorId: 'connector-1',
-        ownerOrganizationId: 'org_platform',
+        ownerOrganizationId: platformOrganization.id,
       }),
     ).rejects.toThrow('already has an account connection authority')
     authorization.listEnabledResources.mockResolvedValue([])
@@ -867,7 +878,7 @@ describe('authorization CRUD and assignment policy', () => {
       resourceUrl: resource.resourceUrl,
       accessMode: 'external_oauth',
       connectorId: 'connector-1',
-      ownerOrganizationId: 'org_platform',
+      ownerOrganizationId: platformOrganization.id,
       authorizationDetails: [
         { type: 'payment_initiation', actions: ['initiate'], locations: ['https://merchant.example.com'] },
       ],
@@ -897,7 +908,7 @@ describe('authorization CRUD and assignment policy', () => {
       ...resource,
       accessMode: 'brokered',
       connectorId: 'connector-1',
-      ownerOrganizationId: 'org_platform',
+      ownerOrganizationId: platformOrganization.id,
       authorizationDetails: [{ type: 'project_access', project_id: 'project-1' }],
       scopeRegistry: {
         ...resource.scopeRegistry!,
@@ -916,7 +927,7 @@ describe('authorization CRUD and assignment policy', () => {
       ...resource,
       accessMode: 'external_oauth',
       connectorId: 'connector-1',
-      ownerOrganizationId: 'org_platform',
+      ownerOrganizationId: platformOrganization.id,
     })
     await expect(updateResource(deps, resource.id, { identifier: 'external-renamed' })).resolves.toMatchObject({
       connectorId: 'connector-1',
@@ -970,7 +981,7 @@ describe('authorization CRUD and assignment policy', () => {
       ...resource,
       accessMode: 'external_oauth',
       connectorId: 'connector-1',
-      ownerOrganizationId: 'org_platform',
+      ownerOrganizationId: platformOrganization.id,
     })
     connectors.findById.mockResolvedValue({ ...connector, enabled: false })
     await expect(updateResource(deps, resource.id, { enabled: true })).rejects.toMatchObject({ status: 400 })
@@ -979,7 +990,7 @@ describe('authorization CRUD and assignment policy', () => {
       ...resource,
       accessMode: 'external_oauth',
       connectorId: 'connector-1',
-      ownerOrganizationId: 'org_platform',
+      ownerOrganizationId: platformOrganization.id,
     })
     authorization.findResource.mockResolvedValue(null)
     await expect(getResource(deps, 'missing')).rejects.toMatchObject({ status: 404 })
@@ -1106,7 +1117,7 @@ describe('authorization CRUD and assignment policy', () => {
     authorization.listEnabledResources.mockResolvedValue([
       active,
       { ...active, id: 'resource-failing', resourceUrl: 'https://failing.example.com' },
-      { ...active, id: 'res_realmroot' },
+      { ...active, id: realmrootResource.id },
       { ...active, id: 'resource-deleted', deletedAt: new Date(timestamp) },
     ])
     const openApiFetch = resourceOpenApiFetch(resource.resourceUrl)
@@ -1244,11 +1255,16 @@ describe('authorization CRUD and assignment policy', () => {
     await expect(
       updateResource(deps, resource.id, { scopeGrantModes: [{ scope: 'projects:read', grantMode: 'automatic' }] }),
     ).rejects.toThrow('API resource was not found.')
-    const realmroot = { ...registered, id: 'res_realmroot', resourceUrl: 'https://auth.example.com/api' }
+    const realmroot = {
+      ...registered,
+      id: 'resource-realmroot',
+      identifier: realmrootResource.identifier,
+      resourceUrl: realmrootResource.resourceUrl,
+    }
     authorization.findResource.mockResolvedValueOnce(realmroot).mockResolvedValueOnce(realmroot)
-    await expect(refreshResourceScopeRegistry(deps, 'res_realmroot')).resolves.toBe(realmroot)
+    await expect(refreshResourceScopeRegistry(deps, realmrootResource.id)).resolves.toBe(realmroot)
     expect(authorization.replaceResourceDiscovery).toHaveBeenCalledWith(
-      'res_realmroot',
+      realmrootResource.id,
       expect.objectContaining({
         scopeRegistry: expect.objectContaining({
           discovery: expect.objectContaining({ documentHash: 'system-managed' }),
@@ -1258,7 +1274,7 @@ describe('authorization CRUD and assignment policy', () => {
     )
     authorization.findResource.mockResolvedValueOnce(realmroot).mockResolvedValueOnce(realmroot)
     authorization.replaceResourceDiscovery.mockResolvedValueOnce(false)
-    await expect(refreshResourceScopeRegistry(deps, 'res_realmroot')).rejects.toThrow(
+    await expect(refreshResourceScopeRegistry(deps, realmrootResource.id)).rejects.toThrow(
       'Resource Server is no longer active.',
     )
   })
@@ -1368,9 +1384,9 @@ describe('authorization CRUD and assignment policy', () => {
     })
     const realmrootResource = {
       ...resource,
-      id: 'res_realmroot',
+      id: 'resource-realmroot',
       identifier: 'realmroot',
-      ownerOrganizationId: 'org_platform',
+      ownerOrganizationId: platformOrganization.id,
       scopeRegistry: scopeRegistry(['projects:read']),
     }
     authorization.findResource.mockResolvedValueOnce(realmrootResource)
@@ -1426,9 +1442,9 @@ describe('authorization CRUD and assignment policy', () => {
 
     const realmrootResource = {
       ...scopedResource,
-      id: 'res_realmroot',
+      id: 'resource-realmroot',
       identifier: 'realmroot',
-      ownerOrganizationId: 'org_platform',
+      ownerOrganizationId: platformOrganization.id,
     }
     authorization.findResource.mockResolvedValueOnce(realmrootResource)
     deps.externalHttp.fetch = vi.fn(
@@ -1554,7 +1570,7 @@ describe('authorization CRUD and assignment policy', () => {
 function repository() {
   return {
     createOrganization: vi.fn(),
-    listOrganizations: vi.fn(),
+    listOrganizations: vi.fn().mockResolvedValue({ items: [platformOrganization], pagination }),
     findOrganization: vi.fn().mockResolvedValue(null),
     updateOrganization: vi.fn(),
     deleteOrganization: vi.fn(),
@@ -1574,7 +1590,7 @@ function repository() {
     findInvitation: vi.fn().mockResolvedValue(null),
     cancelInvitation: vi.fn(),
     createResource: vi.fn(),
-    listResources: vi.fn(),
+    listResources: vi.fn().mockResolvedValue({ items: [realmrootResource], pagination }),
     listEnabledResources: vi.fn(),
     findResource: vi.fn().mockResolvedValue(null),
     findResourceByResourceUrl: vi.fn().mockResolvedValue(null),

@@ -1,6 +1,6 @@
 import { applyD1Migrations, env, reset } from 'cloudflare:test'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { createHarness, type Harness } from './harness'
+import { bootstrapAdmin, createHarness, type Harness, platformOrganizationId } from './harness'
 
 afterEach(async () => {
   await reset()
@@ -12,15 +12,6 @@ const admin = {
   username: 'admin',
   name: 'Realmroot Admin',
   password: 'admin-password-2026',
-}
-
-async function bootstrapAdmin(harness: Harness) {
-  const response = await harness.request('/api/onboarding/admin-users', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(admin),
-  })
-  expect(response.status, await response.clone().text()).toBe(201)
 }
 
 async function signIn(harness: Harness): Promise<string> {
@@ -113,9 +104,8 @@ describe('resource access over real D1 and real Better Auth sessions', () => {
         slug: 'customer-portal',
         clientType: 'public_spa',
         redirectUris: ['http://localhost/callback'],
-        ownerOrganizationId: 'org_platform',
-        firstParty: true,
-        trusted: true,
+        ownerOrganizationId: platformOrganizationId,
+        consentRequired: false,
       }),
     })
     expect(create.status, await create.clone().text()).toBe(201)

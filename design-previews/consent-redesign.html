@@ -1,0 +1,696 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Realmroot Consent — Design Preview</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        color: #17201e;
+        background: #f5f7f6;
+        font-synthesis: none;
+      }
+
+      * { box-sizing: border-box; }
+      body { min-width: 320px; min-height: 100vh; margin: 0; }
+      button, summary { font: inherit; }
+      button { cursor: pointer; }
+
+      .page {
+        min-height: 100vh;
+        padding: 32px 20px 48px;
+        background:
+          radial-gradient(circle at 50% -10rem, rgb(8 125 116 / 11%), transparent 36rem),
+          #f5f7f6;
+      }
+
+      .brand {
+        display: flex;
+        width: min(100%, 660px);
+        align-items: center;
+        justify-content: center;
+        gap: 9px;
+        margin: 0 auto 22px;
+        color: #33413e;
+        font-size: 14px;
+        font-weight: 700;
+        letter-spacing: -.015em;
+      }
+
+      .brand-mark {
+        display: grid;
+        width: 27px;
+        height: 27px;
+        place-items: center;
+        border-radius: 8px;
+        background: #087d74;
+        box-shadow: inset 0 0 0 1px rgb(255 255 255 / 25%);
+        color: white;
+        font-size: 13px;
+      }
+
+      .preview-switcher {
+        display: flex;
+        width: fit-content;
+        gap: 3px;
+        margin: -8px auto 18px;
+        padding: 4px;
+        border: 1px solid #dce4e2;
+        border-radius: 12px;
+        background: rgb(255 255 255 / 78%);
+        box-shadow: 0 3px 12px rgb(24 58 53 / 5%);
+      }
+
+      .preview-switcher button {
+        min-height: 34px;
+        padding: 0 12px;
+        border: 0;
+        border-radius: 8px;
+        background: transparent;
+        color: #66736f;
+        font-size: 11px;
+        font-weight: 700;
+      }
+
+      .preview-switcher button[aria-pressed="true"] { background: #e8f3f1; color: #087d74; }
+      [data-state-copy], [data-state-view] { display: none; }
+      body[data-preview-state="initial"] [data-state-copy="initial"],
+      body[data-preview-state="expanded"] [data-state-copy="expanded"],
+      body[data-preview-state="reauthorization"] [data-state-copy="reauthorization"] { display: inline; }
+      body[data-preview-state="initial"] [data-state-view="initial"],
+      body[data-preview-state="expanded"] [data-state-view="expanded"],
+      body[data-preview-state="reauthorization"] [data-state-view="reauthorization"] { display: block; }
+
+      .card {
+        width: min(100%, 660px);
+        margin: 0 auto;
+        overflow: hidden;
+        border: 1px solid #dfe6e4;
+        border-radius: 24px;
+        background: rgb(255 255 255 / 98%);
+        box-shadow: 0 30px 80px rgb(24 58 53 / 10%), 0 2px 7px rgb(24 58 53 / 4%);
+      }
+
+      .card-body { padding: 38px 40px 28px; }
+
+      .application {
+        display: grid;
+        grid-template-columns: 54px minmax(0, 260px);
+        gap: 13px;
+        align-items: center;
+        justify-content: center;
+        text-align: left;
+      }
+
+      .app-logo {
+        display: grid;
+        width: 54px;
+        height: 54px;
+        place-items: center;
+        border: 1px solid #dce4e2;
+        border-radius: 16px;
+        background: #fff;
+        box-shadow: 0 7px 20px rgb(34 54 50 / 9%);
+      }
+
+      .app-logo svg { width: 41px; height: 41px; }
+
+      .application-identity { min-width: 0; }
+
+      .app-name {
+        max-width: 100%;
+        margin: 0;
+        overflow: hidden;
+        color: #26312f;
+        font-size: 15px;
+        font-weight: 750;
+        line-height: 1.35;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .app-meta {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 5px;
+        color: #78837f;
+        font-size: 12px;
+      }
+
+      .app-origin {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        color: #6f7c78;
+        font-weight: 550;
+      }
+
+      .app-origin svg { width: 14px; height: 14px; }
+
+      .consent-heading { margin: 21px auto 0; text-align: center; }
+      .consent-heading h1 {
+        margin: 0;
+        color: #1f2a27;
+        font-size: 23px;
+        line-height: 1.28;
+        letter-spacing: -.03em;
+      }
+      .consent-heading p { margin: 6px 0 0; color: #6d7976; font-size: 13px; line-height: 1.5; }
+
+      .account {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-top: 22px;
+        padding: 12px 13px;
+        border: 1px solid #dfe6e4;
+        border-radius: 15px;
+        background: #fafcfb;
+      }
+
+      .avatar {
+        flex: 0 0 auto;
+        width: 40px;
+        height: 40px;
+        overflow: hidden;
+        border: 1px solid #d6e2df;
+        border-radius: 50%;
+      }
+
+      .avatar svg { width: 100%; height: 100%; }
+      .account-copy { min-width: 0; flex: 1; }
+      .account-copy span { display: block; color: #7a8582; font-size: 11px; line-height: 1.3; }
+      .account-copy strong { display: block; overflow: hidden; margin-top: 2px; color: #26312f; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+      .account-copy small { color: #74807d; font-size: 12px; font-weight: 450; }
+
+      .change-account {
+        min-width: 72px;
+        min-height: 40px;
+        padding: 0 12px;
+        border: 0;
+        border-radius: 9px;
+        background: transparent;
+        color: #087d74;
+        font-size: 12px;
+        font-weight: 750;
+      }
+
+      .change-account:hover { background: #eaf5f3; }
+      button:focus-visible, summary:focus-visible { outline: 3px solid rgb(8 125 116 / 23%); outline-offset: 2px; }
+
+      .access {
+        margin-top: 22px;
+        padding-top: 22px;
+        border-top: 1px solid #e4eae8;
+      }
+
+      .access-head { margin-bottom: 17px; }
+      .access-head h2 { margin: 0; color: #26312f; font-size: 16px; line-height: 1.3; letter-spacing: -.015em; }
+      .access-head p { margin: 6px 0 0; color: #6d7976; font-size: 13px; line-height: 1.5; }
+
+      .new-access {
+        overflow: hidden;
+        border: 1px solid #dfe7e5;
+        border-radius: 15px;
+        background: #fff;
+      }
+
+      .all-access { border-color: #dfe7e5; background: #fff; }
+
+      .new-access .group-label { display: none; }
+
+      .group-label {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        padding: 11px 14px;
+        border-bottom: 1px solid #eee4d2;
+        background: #fff8ea;
+        color: #79551a;
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: .045em;
+        text-transform: uppercase;
+      }
+
+      .group-label svg { width: 15px; height: 15px; }
+      .permission-list {
+        max-height: 210px;
+        margin: 0;
+        padding: 0;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        scrollbar-width: thin;
+        list-style: none;
+      }
+
+      .permission {
+        display: grid;
+        grid-template-columns: minmax(145px, 178px) minmax(0, 1fr);
+        gap: 0;
+        align-items: stretch;
+        padding: 0;
+        border-top: 1px solid #e9eeec;
+      }
+
+      .permission:first-child { border-top: 0; }
+      .permission > div { display: contents; }
+      .permission p {
+        display: flex;
+        grid-column: 2;
+        grid-row: 1;
+        align-items: center;
+        min-width: 0;
+        margin: 0;
+        padding: 10px 14px;
+        color: #46524f;
+        font-size: 11px;
+        font-weight: 550;
+        line-height: 1.4;
+      }
+      .permission code {
+        display: flex;
+        grid-column: 1;
+        grid-row: 1;
+        align-items: center;
+        min-width: 0;
+        padding: 10px 14px;
+        border-right: 1px solid #e5ebe9;
+        background: #f7f9f8;
+        color: #087d74;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 10px;
+        font-weight: 650;
+        line-height: 1.35;
+        overflow-wrap: anywhere;
+      }
+
+      .existing-access { margin-top: 12px; border: 1px solid #e2e8e6; border-radius: 13px; background: #fafcfb; }
+      .existing-access summary {
+        display: flex;
+        min-height: 44px;
+        align-items: center;
+        gap: 10px;
+        padding: 0 14px;
+        color: #52615e;
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 700;
+        list-style: none;
+      }
+
+      .existing-access summary::-webkit-details-marker { display: none; }
+      .existing-access summary svg { width: 16px; height: 16px; transition: transform 160ms ease; }
+      .existing-access[open] summary svg { transform: rotate(90deg); }
+      .existing-access summary span { flex: 1; }
+      .existing-access summary small { color: #87918e; font-size: 11px; font-weight: 550; }
+      .existing-list {
+        display: grid;
+        max-height: 170px;
+        margin: 0 0 10px;
+        padding: 0;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        scrollbar-width: thin;
+        list-style: none;
+      }
+      .existing-list li {
+        display: grid;
+        grid-template-columns: minmax(145px, 178px) minmax(0, 1fr);
+        gap: 0;
+        align-items: stretch;
+        padding: 0;
+        border-top: 1px solid #e7ecea;
+      }
+      .existing-list span {
+        display: flex;
+        grid-column: 2;
+        grid-row: 1;
+        align-items: center;
+        padding: 9px 14px;
+        color: #53605d;
+        font-size: 10.5px;
+        line-height: 1.35;
+      }
+      .existing-list code {
+        display: flex;
+        grid-column: 1;
+        grid-row: 1;
+        align-items: center;
+        padding: 9px 14px;
+        border-right: 1px solid #e5ebe9;
+        background: #f5f8f7;
+        color: #087d74;
+        font-size: 10px;
+        font-weight: 650;
+        overflow-wrap: anywhere;
+      }
+
+      .permission-list,
+      .existing-list {
+        scrollbar-color: transparent transparent;
+        scrollbar-width: thin;
+      }
+
+      .permission-list:hover,
+      .existing-list:hover { scrollbar-color: #aebcb8 transparent; }
+
+      .permission-list::-webkit-scrollbar,
+      .existing-list::-webkit-scrollbar { width: 8px; }
+
+      .permission-list::-webkit-scrollbar-track,
+      .existing-list::-webkit-scrollbar-track { background: transparent; }
+
+      .permission-list::-webkit-scrollbar-thumb,
+      .existing-list::-webkit-scrollbar-thumb {
+        border: 2px solid transparent;
+        border-radius: 999px;
+        background: transparent;
+        background-clip: padding-box;
+      }
+
+      .permission-list:hover::-webkit-scrollbar-thumb,
+      .existing-list:hover::-webkit-scrollbar-thumb { background-color: #aebcb8; }
+
+      .revoke-note {
+        display: flex;
+        gap: 9px;
+        align-items: flex-start;
+        margin: 18px 2px 0;
+        color: #74807d;
+        font-size: 11px;
+        line-height: 1.5;
+      }
+
+      .revoke-note svg { flex: 0 0 auto; width: 15px; height: 15px; margin-top: 1px; }
+
+      .actions {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 10px;
+        padding: 18px 40px;
+        border-top: 1px solid #e2e9e7;
+        background: #fafcfb;
+      }
+
+      .button {
+        min-height: 44px;
+        padding: 0 21px;
+        border-radius: 11px;
+        font-size: 13px;
+        font-weight: 750;
+        transition: background 160ms ease, border-color 160ms ease, transform 160ms ease;
+      }
+
+      .button:active { transform: translateY(1px); }
+      .secondary { border: 1px solid transparent; background: transparent; color: #53615e; }
+      .secondary:hover { background: #eef3f1; }
+      .primary { min-width: 178px; border: 1px solid #087d74; background: #087d74; color: white; box-shadow: 0 6px 16px rgb(8 125 116 / 17%); }
+      .primary:hover { border-color: #066d65; background: #066d65; }
+
+      .footer-note { margin: 14px auto 0; color: #7c8784; font-size: 11px; text-align: center; }
+      .footer-note a { color: #536461; text-underline-offset: 3px; }
+
+      /* Desktop: preserve the original centered single-card composition. */
+      .context-panel { padding: 28px 40px 0; }
+      .context-panel .application {
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+        align-items: center;
+        padding: 4px 0 0;
+        text-align: center;
+      }
+      .context-panel .app-logo { width: 60px; height: 60px; margin-bottom: 12px; border-radius: 18px; }
+      .context-panel .app-logo svg { width: 46px; height: 46px; }
+      .context-panel .application-identity { width: min(100%, 430px); }
+      .context-panel .app-name {
+        display: -webkit-box;
+        margin: 0 auto;
+        overflow: hidden;
+        color: #1f2927;
+        font-size: 22px;
+        font-weight: 760;
+        line-height: 1.28;
+        letter-spacing: -.025em;
+        white-space: normal;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+      }
+      .context-panel .app-meta { justify-content: center; margin-top: 4px; }
+      .request-summary {
+        max-width: 430px;
+        margin: 13px 0 0;
+        color: #626f6b;
+        font-size: 14px;
+        line-height: 1.5;
+      }
+      .context-panel .account { margin-top: 20px; }
+
+      .decision-body { padding: 18px 40px 20px; }
+      .decision-panel .access { margin: 0; padding-top: 18px; }
+      .decision-panel .access-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 9px;
+      }
+      .permission-eyebrow { display: none; }
+      .decision-panel .access-head h2 { font-size: 16px; }
+      .permission-count {
+        padding: 4px 8px;
+        border-radius: 999px;
+        background: #eef6f4;
+        color: #087d74;
+        font-size: 11px;
+        font-weight: 750;
+      }
+      .access-intro { margin: -2px 0 10px; color: #6d7976; font-size: 11px; line-height: 1.45; }
+      .decision-panel .actions { padding: 18px 40px; }
+
+      @media (max-width: 560px) {
+        .page { padding: 0; background: white; }
+        .brand { justify-content: flex-start; padding: 18px 20px 0; margin-bottom: 14px; }
+        .card { border: 0; border-radius: 0; box-shadow: none; }
+        .card-body { padding: 20px 20px 24px; }
+        .application { grid-template-columns: 50px minmax(0, 240px); gap: 11px; }
+        .app-logo { width: 50px; height: 50px; border-radius: 15px; }
+        .app-logo svg { width: 38px; height: 38px; }
+        .app-meta { flex-wrap: wrap; }
+        .account { margin-top: 18px; }
+        .access { margin-top: 24px; padding-top: 23px; }
+        .actions { position: sticky; bottom: 0; display: grid; grid-template-columns: .75fr 1.4fr; padding: 13px 20px max(13px, env(safe-area-inset-bottom)); box-shadow: 0 -8px 24px rgb(29 58 54 / 7%); }
+        .button { width: 100%; padding-inline: 10px; }
+        .primary { min-width: 0; }
+        .footer-note { display: none; }
+      }
+
+      @media (max-width: 460px) {
+        .permission,
+        .existing-list li { grid-template-columns: minmax(0, 1fr); }
+        .permission p,
+        .permission code,
+        .existing-list span,
+        .existing-list code { grid-column: 1; }
+        .permission code,
+        .existing-list code {
+          grid-row: 1;
+          padding: 8px 12px;
+          border-right: 0;
+          border-bottom: 1px solid #e5ebe9;
+        }
+        .permission p,
+        .existing-list span { grid-row: 2; padding: 8px 12px; }
+      }
+
+      @media (max-width: 900px) and (max-height: 560px) {
+        .page { padding-top: 16px; }
+        .brand { margin-bottom: 12px; }
+        .context-panel { padding-top: 20px; }
+        .context-panel .app-logo { width: 48px; height: 48px; margin-bottom: 8px; }
+        .context-panel .app-name { font-size: 19px; }
+        .context-panel .account { margin-top: 14px; }
+        .decision-body { padding-top: 14px; }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .button, .existing-access summary svg { transition: none; }
+      }
+    </style>
+  </head>
+  <body data-preview-state="expanded">
+    <main class="page">
+      <div class="brand"><span class="brand-mark">R</span> Realmroot</div>
+
+      <nav class="preview-switcher" aria-label="Consent design state">
+        <button type="button" data-preview-target="initial" aria-pressed="false">First consent</button>
+        <button type="button" data-preview-target="expanded" aria-pressed="true">Added permissions</button>
+        <button type="button" data-preview-target="reauthorization" aria-pressed="false">Confirm again</button>
+      </nav>
+
+      <article class="card" aria-labelledby="consent-title">
+        <aside class="context-panel">
+          <header class="application" aria-label="Requesting application">
+            <span class="app-logo" aria-label="Acme Cloud logo">
+              <svg viewBox="0 0 48 48" role="img">
+                <defs><linearGradient id="app-gradient" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#7657e8"/><stop offset="1" stop-color="#4630ad"/></linearGradient></defs>
+                <rect x="3" y="3" width="42" height="42" rx="13" fill="url(#app-gradient)"/>
+                <path d="M14 28.5 23.5 12 34 30.5c1.1 2-.3 4.5-2.6 4.5H17c-3.4 0-5.1-4.1-3-6.5Z" fill="white" fill-opacity=".96"/>
+                <circle cx="24" cy="28" r="4.5" fill="#6045d3"/>
+              </svg>
+            </span>
+            <div class="application-identity">
+              <h1 class="app-name" id="consent-title">Acme Cloud</h1>
+              <div class="app-meta">
+                <span class="app-origin">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.5 3 14 0 18M12 3c-3 3.5-3 14 0 18"/></svg>
+                  app.acme.example
+                </span>
+              </div>
+            </div>
+            <p class="request-summary">
+              <span data-state-copy="initial">Wants access to your Realmroot account</span>
+              <span data-state-copy="expanded">Wants additional access to your Realmroot account</span>
+              <span data-state-copy="reauthorization">Wants to continue accessing your Realmroot account</span>
+            </p>
+          </header>
+
+          <section class="account" aria-label="Account used for authorization">
+            <span class="avatar" aria-label="Jordan Lee avatar">
+              <svg viewBox="0 0 64 64" role="img">
+                <defs><linearGradient id="avatar-bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#d8eee9"/><stop offset="1" stop-color="#94c9bf"/></linearGradient></defs>
+                <rect width="64" height="64" fill="url(#avatar-bg)"/>
+                <circle cx="32" cy="26" r="12" fill="#d69b77"/>
+                <path d="M19 24c.7-10 6.3-15 13.5-15 7.6 0 12.8 6 12.5 15-3.8-4.2-8.5-6.1-14.2-5.8-4 .2-8 2.2-11.8 5.8Z" fill="#263c38"/>
+                <path d="M10 64c1.6-15.2 9.5-23 22-23s20.4 7.8 22 23H10Z" fill="#315f57"/>
+                <path d="M26 39h12l-2 8h-8l-2-8Z" fill="#c88765"/>
+              </svg>
+            </span>
+            <div class="account-copy">
+              <span>Continue as</span>
+              <strong>Jordan Lee</strong>
+              <small>jordan@example.com</small>
+            </div>
+            <button class="change-account" type="button">Change</button>
+          </section>
+        </aside>
+
+        <div class="decision-panel">
+          <div class="decision-body">
+          <section class="access" data-state-view="initial" aria-labelledby="consent-title">
+            <div class="access-head">
+              <h2>Permissions requested</h2>
+              <span class="permission-count">6 total</span>
+            </div>
+            <div class="new-access all-access">
+              <ul class="permission-list">
+                <li class="permission"><p>Confirm your identity with Realmroot.</p><code>openid</code></li>
+                <li class="permission"><p>Share your name, profile image, and basic account details.</p><code>profile</code></li>
+                <li class="permission"><p>Share your email address and verification status.</p><code>email</code></li>
+                <li class="permission"><p>Continue access when you are away.</p><code>offline_access</code></li>
+                <li class="permission"><p>Create and update events in your connected calendar.</p><code>calendar.events:write</code></li>
+                <li class="permission"><p>Read your calendar preferences and timezone.</p><code>calendar.settings:read</code></li>
+              </ul>
+            </div>
+          </section>
+
+          <section class="access" data-state-view="expanded" aria-labelledby="consent-title">
+            <div class="access-head">
+              <p class="permission-eyebrow">What's changing</p>
+              <h2>New permissions</h2>
+              <span class="permission-count">2 added</span>
+            </div>
+
+            <div class="new-access">
+              <div class="group-label">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+                New access
+              </div>
+              <ul class="permission-list">
+                <li class="permission">
+                  <div>
+                    <p>Create and update events in your connected calendar.</p>
+                    <code>calendar.events:write</code>
+                  </div>
+                </li>
+                <li class="permission">
+                  <div>
+                    <p>Read your calendar preferences and timezone.</p>
+                    <code>calendar.settings:read</code>
+                  </div>
+                </li>
+              </ul>
+            </div>
+
+            <details class="existing-access">
+              <summary>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+                <span>Previously approved access</span>
+                <small>4 permissions</small>
+              </summary>
+              <ul class="existing-list">
+                <li><span>Confirm your identity with Realmroot.</span><code>openid</code></li>
+                <li><span>Share your name, profile image, and basic account details.</span><code>profile</code></li>
+                <li><span>Share your email address and verification status.</span><code>email</code></li>
+                <li><span>Continue access when you are away.</span><code>offline_access</code></li>
+              </ul>
+            </details>
+          </section>
+
+          <section class="access" data-state-view="reauthorization" aria-labelledby="consent-title">
+            <div class="access-head">
+              <h2>Confirm existing access</h2>
+              <span class="permission-count">6 permissions</span>
+            </div>
+            <p class="access-intro">No new permissions are being requested.</p>
+            <div class="new-access all-access">
+              <ul class="permission-list">
+                <li class="permission"><p>Confirm your identity with Realmroot.</p><code>openid</code></li>
+                <li class="permission"><p>Share your name, profile image, and basic account details.</p><code>profile</code></li>
+                <li class="permission"><p>Share your email address and verification status.</p><code>email</code></li>
+                <li class="permission"><p>Continue access when you are away.</p><code>offline_access</code></li>
+                <li class="permission"><p>Create and update events in your connected calendar.</p><code>calendar.events:write</code></li>
+                <li class="permission"><p>Read your calendar preferences and timezone.</p><code>calendar.settings:read</code></li>
+              </ul>
+            </div>
+          </section>
+
+          <p class="revoke-note">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3 4 7v5c0 5 3.4 8.5 8 10 4.6-1.5 8-5 8-10V7l-8-4Z"/><path d="m9 12 2 2 4-5"/></svg>
+            <span>You can remove Acme Cloud's access at any time from Account Center.</span>
+          </p>
+          </div>
+
+          <footer class="actions">
+            <button class="button secondary" type="button">Cancel</button>
+            <button class="button primary" type="button">Authorize</button>
+          </footer>
+        </div>
+      </article>
+
+      <p class="footer-note">Protected by Realmroot · <a href="#">Privacy</a> · <a href="#">Terms</a></p>
+    </main>
+    <script>
+      const validStates = new Set(['initial', 'expanded', 'reauthorization'])
+      const initialState = validStates.has(location.hash.slice(1)) ? location.hash.slice(1) : 'expanded'
+
+      function showState(state) {
+        document.body.dataset.previewState = state
+        document.querySelectorAll('[data-preview-target]').forEach((button) => {
+          button.setAttribute('aria-pressed', String(button.dataset.previewTarget === state))
+        })
+        history.replaceState(null, '', `#${state}`)
+      }
+
+      document.querySelectorAll('[data-preview-target]').forEach((button) => {
+        button.addEventListener('click', () => showState(button.dataset.previewTarget))
+      })
+
+      showState(initialState)
+    </script>
+  </body>
+</html>

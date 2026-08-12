@@ -18,7 +18,15 @@ import type { JsonValue } from '@shared/api/authorization-details'
 import { eq } from 'drizzle-orm'
 import { exportJWK, generateKeyPair, SignJWT } from 'jose'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { baseURL, createHarness, type Harness, seedAgent, signInAdmin } from './harness'
+import {
+  baseURL,
+  createHarness,
+  type Harness,
+  platformOrganizationId,
+  realmrootResourceServerId,
+  seedAgent,
+  signInAdmin,
+} from './harness'
 
 const resource = 'https://adapter.example.com/provider'
 let publisher: { clientId: string; clientSecret: string }
@@ -43,8 +51,8 @@ describe('Provider Connection Events over real D1', () => {
         name: 'Event Publisher',
         clientType: 'machine',
         redirectUris: [],
-        ownerOrganizationId: 'org_platform',
-        resourceScopes: [{ resourceServerId: 'res_realmroot', scopes: ['connection-events:write'] }],
+        ownerOrganizationId: platformOrganizationId,
+        resourceScopes: [{ resourceServerId: realmrootResourceServerId, scopes: ['connection-events:write'] }],
       }),
     })
     expect(applicationResponse.status, await applicationResponse.clone().text()).toBe(201)
@@ -56,7 +64,11 @@ describe('Provider Connection Events over real D1', () => {
     const permissionResponse = await harness.request(`/api/applications/${application.id}/permissions`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', cookie },
-      body: JSON.stringify({ resourceServerId: 'res_realmroot', scope: 'connection-events:write', mode: 'persistent' }),
+      body: JSON.stringify({
+        resourceServerId: realmrootResourceServerId,
+        scope: 'connection-events:write',
+        mode: 'persistent',
+      }),
     })
     expect(permissionResponse.status, await permissionResponse.clone().text()).toBe(201)
     publisher = { clientId: application.clientId, clientSecret: application.clientSecret }
@@ -80,7 +92,7 @@ describe('Provider Connection Events over real D1', () => {
       resourceUrl: resource,
       accessMode: 'brokered',
       connectorId: 'event-connector',
-      ownerOrganizationId: 'org_platform',
+      ownerOrganizationId: platformOrganizationId,
       authorizationDetails: [{ type: 'provider_installation' }],
       scopeRegistry: {
         discovery: {
@@ -307,7 +319,7 @@ describe('Provider Connection Events over real D1', () => {
       resourceUrl: 'https://adapter.example.com/new-provider',
       accessMode: 'external_oauth',
       connectorId: 'event-connector',
-      ownerOrganizationId: 'org_platform',
+      ownerOrganizationId: platformOrganizationId,
       scopeRegistry: null,
       createdAt: now,
       updatedAt: now,

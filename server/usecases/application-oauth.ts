@@ -1,10 +1,10 @@
 import { oauthError } from '@server/domain/errors'
-import { realmrootResourceServer } from '@server/domain/realmroot-resource-server'
 import type { Deps } from '@server/usecases/deps'
 import { validateDpopTokenProof } from '@server/usecases/dpop'
 import type { AgentAssertionSigner } from '@server/usecases/external-resources'
 import { authenticateApplicationClient } from '@server/usecases/oauth-client-authentication'
 import { applicationEffectiveResourceScopes } from '@server/usecases/resource-scope-entitlements'
+import { findRealmrootResourceServer } from '@server/usecases/system-resources'
 
 const accessTokenLifetimeSeconds = 5 * 60
 
@@ -26,7 +26,7 @@ export async function issueApplicationAccessToken(
   if (!application.allowedGrantTypes.includes('client_credentials')) {
     throw oauthError('unauthorized_client', 'Application is not allowed to use client credentials.')
   }
-  const resource = await deps.authorization.findResource(realmrootResourceServer.id)
+  const resource = await findRealmrootResourceServer(deps)
   if (!resource || resource.resourceUrl !== input.resource) {
     throw oauthError('invalid_target', 'Realmroot Resource Server is unavailable.')
   }

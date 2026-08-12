@@ -14,6 +14,7 @@ export function createOnboardingRepository(db: D1Database, ids: IdentifierGenera
       const userId = ids.generate()
       const accountId = ids.generate()
       const memberId = ids.generate()
+      const platformOrganizationId = ids.generate()
       const statements = [
         db
           .prepare(
@@ -38,11 +39,11 @@ where exists (select 1 from user where id = ?2 and role = 'admin')
             `
 insert into organization (id, slug, name, metadata)
 values (?1, ?2, ?3, ?4)
-on conflict(id) do nothing
+on conflict(slug) do nothing
 `.trim(),
           )
           .bind(
-            platformOrganization.id,
+            platformOrganizationId,
             platformOrganization.slug,
             platformOrganization.name,
             JSON.stringify(platformOrganization.metadata),
@@ -51,12 +52,14 @@ on conflict(id) do nothing
           .prepare(
             `
 insert into member (id, organization_id, user_id, role)
-select ?1, ?2, ?3, 'owner'
-where exists (select 1 from user where id = ?3 and role = 'admin')
-  and not exists (select 1 from member where organization_id = ?2 and user_id = ?3)
+select ?1, organization.id, ?2, 'owner'
+from organization
+where organization.slug = ?3
+  and exists (select 1 from user where id = ?2 and role = 'admin')
+  and not exists (select 1 from member where organization_id = organization.id and user_id = ?2)
 `.trim(),
           )
-          .bind(memberId, platformOrganization.id, userId),
+          .bind(memberId, userId, platformOrganization.slug),
       ]
 
       const [userInsert, accountInsert] = await db.batch(statements)

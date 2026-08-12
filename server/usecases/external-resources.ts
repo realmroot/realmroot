@@ -976,7 +976,7 @@ export async function discoverAgentResources(deps: Deps, principal: AgentResourc
 function discoverAgentResourceScopes(
   resource: NonNullable<Awaited<ReturnType<Deps['authorization']['findResource']>>>,
 ) {
-  if (isRealmrootResourceServer(resource.id)) {
+  if (isRealmrootResourceServer(resource)) {
     return realmrootOAuthScopes.map((value) => ({ value, description: null }))
   }
   return resource.scopeRegistry?.scopes.map(({ value, description }) => ({ value, description })) ?? null
@@ -986,7 +986,7 @@ function validateResourceRequestedScopes(
   resource: NonNullable<Awaited<ReturnType<Deps['authorization']['findResource']>>>,
   scopes: string[],
 ) {
-  if (isRealmrootResourceServer(resource.id)) {
+  if (isRealmrootResourceServer(resource)) {
     if (scopes.some((scope) => !realmrootOAuthScopes.includes(scope as (typeof realmrootOAuthScopes)[number]))) {
       throw badRequest('Requested scope is not declared by the Realmroot scope registry.')
     }
@@ -1039,7 +1039,7 @@ export async function listAgentResourceServerAuthorizationDetails(
   const identity = await requireActiveIdentityAndBinding(deps, principal)
   const resource = await requireEnabledResource(deps, resourceServerId)
   await requireAgentResourceVisibility(deps, resource, identity.identity)
-  if (isRealmrootResourceServer(resource.id)) {
+  if (isRealmrootResourceServer(resource)) {
     const items = await realmrootAuthorityDetailsCatalog(deps, identity, principal.identityId, resource)
     return {
       items: items.slice(pagination.offset, pagination.offset + pagination.limit),
@@ -1433,7 +1433,7 @@ async function resolveApprovalAuthorizationDetail(
 ) {
   const detail = request.authorizationDetails[0]
   if (!detail) return null
-  if (isRealmrootResourceServer(resourceServer.id)) {
+  if (isRealmrootResourceServer(resourceServer)) {
     const display = await realmrootAuthorityDisplay(deps, detail)
     return {
       name: display.label,
@@ -1525,7 +1525,7 @@ export async function decideAgentAccessRequest(
   const requestIdentity = await deps.agentIdentities.findIdentity(request.agentIdentityId)
   if (!requestIdentity) throw notFound('Active Agent identity was not found.')
   await requireAgentResourceVisibility(deps, resource, requestIdentity.identity)
-  const grantorScopes = isRealmrootResourceServer(resource.id)
+  const grantorScopes = isRealmrootResourceServer(resource)
     ? await realmrootAuthorityEffectiveScopes(deps, actorUserId, resource, authorizationDetails[0]!)
     : await userEffectiveResourceScopes(deps, actorUserId, resource)
   assertScopeSubset(request.scopes, grantorScopes, 'controller effective scope')
@@ -1965,7 +1965,7 @@ async function issueNativeAccessToken(
     entitlementExpiry && entitlementExpiry.getTime() < maximumExpiresAt.getTime() ? entitlementExpiry : maximumExpiresAt
   const subject = identity.identity.ownerUserId ?? identity.identity.ownerOrganizationId
   if (!subject) throw forbidden('Agent home-space controller is unavailable.')
-  const realmroot = isRealmrootResourceServer(resource.id)
+  const realmroot = isRealmrootResourceServer(resource)
   const realmrootAuthority = realmroot ? request.authorizationDetails[0] : undefined
   if (realmroot) assertRealmrootAuthoritySelection(request.authorizationDetails)
   const issuedScopes = realmroot ? [...new Set([...agentBootstrapScopes, ...request.scopes])].sort() : request.scopes
@@ -2666,7 +2666,7 @@ async function resolveRequestedAuthorizationDetails(
     throw invalidAuthorizationDetails('Authorization details contain duplicate entries.')
   }
   if (!requiresAccountConnection(resourceServer)) {
-    if (!isRealmrootResourceServer(resourceServer.id)) {
+    if (!isRealmrootResourceServer(resourceServer)) {
       throw invalidAuthorizationDetails('Native API resources do not accept authorization details.')
     }
     const available = await realmrootAuthorityDetails(deps, identity)
@@ -3220,7 +3220,7 @@ function assertAuthorizationDetailsSelection(
   authorizationDetails: AuthorizationDetail[],
 ) {
   if (!requiresAccountConnection(resource)) {
-    if (isRealmrootResourceServer(resource.id)) {
+    if (isRealmrootResourceServer(resource)) {
       assertRealmrootAuthoritySelection(authorizationDetails)
       return
     }
@@ -3252,7 +3252,7 @@ function assertAccessRequestAuthorizationDetails(
   authorizationDetails: AuthorizationDetail[],
 ) {
   if (!requiresAccountConnection(resource)) {
-    if (isRealmrootResourceServer(resource.id)) {
+    if (isRealmrootResourceServer(resource)) {
       assertRealmrootAuthoritySelection(authorizationDetails)
       return
     }

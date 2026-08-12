@@ -1,6 +1,6 @@
 import { applyD1Migrations, env, reset } from 'cloudflare:test'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { createHarness, type Harness, resourceOpenApiFetch, signInAdmin } from './harness'
+import { createHarness, type Harness, platformOrganizationId, resourceOpenApiFetch, signInAdmin } from './harness'
 
 afterEach(async () => {
   await reset()
@@ -76,7 +76,7 @@ describe('OAuth token exchange over real D1', () => {
         slug: 'exchange-client',
         clientType: 'machine',
         redirectUris: [],
-        ownerOrganizationId: 'org_platform',
+        ownerOrganizationId: platformOrganizationId,
       }),
     })
     expect(createApp.status, await createApp.clone().text()).toBe(201)
@@ -90,7 +90,7 @@ describe('OAuth token exchange over real D1', () => {
         identifier: audience,
         resourceUrl: audience,
         accessMode: 'realmroot',
-        ownerOrganizationId: 'org_platform',
+        ownerOrganizationId: platformOrganizationId,
       }),
     })
     expect(createResource.status, await createResource.clone().text()).toBe(201)
@@ -171,7 +171,7 @@ describe('OAuth token exchange over real D1', () => {
         slug: 'exchange-client-2',
         clientType: 'machine',
         redirectUris: [],
-        ownerOrganizationId: 'org_platform',
+        ownerOrganizationId: platformOrganizationId,
       }),
     })
     const application = (await createApp.json()) as { clientId: string; clientSecret: string }

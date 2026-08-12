@@ -28,6 +28,7 @@ Feature: Platform bootstrap and route access
     Given an existing D1 database contains Applications, Resource servers, Better Auth memberships, and legacy custom Role records
     When the operator applies the pending production migrations
     Then the migration preserves Applications, Resource servers, and Better Auth memberships
+    And the built-in platform Organization and Realmroot Resource Server use UUIDv7 identifiers with the canonical realmroot slug or identifier
     And the legacy custom Role definitions and assignments are deliberately removed without translation
     And existing Applications and Resource servers retain their real owning Organization
     And legacy Resource server scope registries are cleared before RFC 9728 metadata replaces them

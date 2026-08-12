@@ -25,8 +25,7 @@ export function toApplicationInsert(input: Omit<ApplicationAggregate, 'createdAt
     ownerOrganizationId: input.ownerOrganizationId,
     oidcScopes: input.oidcScopes,
     resourceScopes: input.resourceScopes,
-    firstParty: input.firstParty,
-    trusted: input.trusted,
+    consentRequired: input.consentRequired,
     disabled: input.disabled,
     disabledReason: input.disabledReason,
     metadata: writeApplicationMetadata(null, {
@@ -51,7 +50,7 @@ export function toOAuthClientInsert(
     clientId: input.clientId,
     clientSecret,
     disabled: input.disabled,
-    skipConsent: input.trusted,
+    skipConsent: true,
     enableEndSession: true,
     name: input.name,
     uri: input.homepageUrl,
@@ -85,8 +84,7 @@ export function toAggregate(app: ApplicationRow, client: OAuthClientRow): Applic
     clientId: client.clientId,
     clientType: toClientType(client.type),
     public: client.public ?? false,
-    firstParty: app.firstParty,
-    trusted: app.trusted,
+    consentRequired: app.consentRequired,
     disabled: app.disabled || !!client.disabled,
     disabledReason: app.disabledReason,
     ownerOrganizationId: app.ownerOrganizationId,
@@ -110,6 +108,7 @@ export function toConsent(row: typeof applicationConsent.$inferSelect): ConsentR
     id: row.id,
     resourceServerId: row.resourceServerId,
     scopes: row.scopes,
+    authorizationSource: row.authorizationSource,
     grantedAt: row.grantedAt,
   }
 }

@@ -18,12 +18,13 @@ describe('Developer Console access', () => {
       membership('org-selected', 'developer'),
       membership('org-unselected', 'owner'),
       membership('org-disabled', 'owner'),
-      membership('org_platform', 'owner'),
+      membership('org-platform', 'owner'),
       membership('org-missing', 'owner'),
       membership('org-selected', 'member'),
     ])
     vi.mocked(deps.authorization.findOrganization).mockImplementation(async (id) => {
       if (id === 'org-missing') return null
+      if (id === 'org-platform') return { ...organization(id, false), slug: 'realmroot' }
       return organization(id, id === 'org-disabled')
     })
 

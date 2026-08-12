@@ -154,7 +154,6 @@ export function CreateApplicationDialog({
               onSubmit(
                 parseForm(createApplicationRequestSchema, {
                   ...form,
-                  firstParty: true,
                   ownerOrganizationId,
                   ...(form.clientType === 'public_native' ? { deviceLoginEnabled } : {}),
                   redirectUris: form.clientType === 'machine' ? [] : form.redirectUris.split('\n').filter(Boolean),

@@ -1,10 +1,11 @@
 import { type AuthorizationContext, canAuthorize } from '@server/domain/authorization-context'
-import { realmrootResourceServer } from '@server/domain/realmroot-resource-server'
+import { isRealmrootResourceServer } from '@server/domain/realmroot-resource-server'
 import type { Deps } from '@server/usecases/deps'
 import type { ApiResourceResponse } from '@shared/api/authorization'
 import { predefinedOrganizationRoleScopes } from '@shared/organization-access'
 import { type RealmrootOrganizationScope, realmrootScopeRegistry } from '@shared/scope-registry'
 import { activeResourceVisibleToOrganization } from './resource-visibility'
+import { findRealmrootResourceServer } from './system-resources'
 
 export async function resolveOrganizationMembershipScopes(
   deps: Pick<Deps, 'authorization'>,
@@ -12,8 +13,19 @@ export async function resolveOrganizationMembershipScopes(
   roles: string[],
   resourceId: string,
 ) {
+  const resource = await deps.authorization.findResource(resourceId)
+  return resolveOrganizationMembershipScopesForResource(deps, organizationId, roles, resource)
+}
+
+async function resolveOrganizationMembershipScopesForResource(
+  deps: Pick<Deps, 'authorization'>,
+  organizationId: string,
+  roles: string[],
+  resource: ApiResourceResponse | null,
+) {
+  const realmroot = resource ? isRealmrootResourceServer(resource) : false
   const scopes = new Set<string>()
-  if (resourceId === realmrootResourceServer.id) {
+  if (realmroot) {
     for (const role of roles) {
       if (role in predefinedOrganizationRoleScopes) {
         for (const scope of predefinedOrganizationRoleScopes[role as keyof typeof predefinedOrganizationRoleScopes]) {
@@ -26,16 +38,15 @@ export async function resolveOrganizationMembershipScopes(
   const dynamicRoles = await deps.authorization.listOrganizationRoleScopes(organizationId)
   for (const role of roles) {
     for (const item of dynamicRoles.get(role) ?? []) {
-      if (item.resourceId === resourceId) scopes.add(item.scope)
+      if (item.resourceId === resource?.id) scopes.add(item.scope)
     }
   }
 
-  if (resourceId === realmrootResourceServer.id) {
+  if (realmroot) {
     return [...scopes].filter((scope) => scope in realmrootScopeRegistry).sort()
   }
   if (scopes.size === 0 && !roles.includes('owner')) return []
 
-  const resource = await deps.authorization.findResource(resourceId)
   if (resource?.ownerOrganizationId === organizationId && roles.includes('owner')) {
     for (const scope of resource.scopeRegistry?.scopes ?? []) {
       if (scope.grantMode === 'assigned') scopes.add(scope.value)
@@ -52,7 +63,7 @@ export function filterCurrentResourceScopes(
   const candidates = [...scopes]
   if (candidates.length === 0) return []
   if (!activeResourceVisibleToOrganization(resource, organizationId)) return []
-  if (resource.id === realmrootResourceServer.id) {
+  if (isRealmrootResourceServer(resource)) {
     return candidates.filter((scope) => scope in realmrootScopeRegistry).sort()
   }
   const assignedScopes = new Set(
@@ -81,12 +92,13 @@ export async function resolveOrganizationUserAuthorizationContext(
   userId: string,
 ): Promise<AuthorizationContext> {
   const member = await deps.authorization.findMemberByOrganizationUser(organizationId, userId)
+  const realmroot = await findRealmrootResourceServer(deps)
   return {
     subject: { type: 'user', id: userId },
     tenant: { type: 'organization', id: organizationId },
     scopes: new Set(
-      member
-        ? await resolveOrganizationMembershipScopes(deps, organizationId, member.roles, realmrootResourceServer.id)
+      member && realmroot
+        ? await resolveOrganizationMembershipScopesForResource(deps, organizationId, member.roles, realmroot)
         : [],
     ),
   }

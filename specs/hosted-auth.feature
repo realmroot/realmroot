@@ -136,7 +136,10 @@ Feature: Hosted authentication
     And its protected resource is Realm-wide
     When I approve consent without an active Organization context
     Then Realmroot redirects to the client callback with an authorization result
+    And the signed OAuth request context remains available while consent is completed
     And the access token retains the approved resource scopes
+    And first consent shows every requested scope while expanded consent emphasizes only newly requested scopes
+    And reauthorization distinguishes scopes already approved without inventing permission names or icons
     And an incomplete consent URL shows a recovery state without exposing validation internals
     And the hosted consent helpers remain private Account APIs outside the public OpenAPI contract
 

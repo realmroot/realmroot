@@ -160,6 +160,7 @@ Feature: Account Center
     And I granted an application access to my Realmroot identity
     When I open /applications
     Then the Account application-authorization collection shows only applications authorized to access my Realmroot identity
+    And it includes active access established by user consent or platform policy
     When I open /connections
     Then I see the external Provider account and its Resource authorization summary
 
