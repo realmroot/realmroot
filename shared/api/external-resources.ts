@@ -86,7 +86,7 @@ export const externalResourceAuthorizationSchema = z.object({
   authorizationDetailsCatalogScope: z.string().nullable(),
   registrationEndpoint: z.url().nullable(),
   revocationEndpoint: z.url(),
-  jwksUri: z.url(),
+  jwksUri: z.url().nullable(),
   userInfoEndpoint: z.url().nullable(),
   registrationMode: oidcClientRegistrationModeSchema,
   clientId: z.string(),

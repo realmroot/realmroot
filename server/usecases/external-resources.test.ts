@@ -4258,6 +4258,28 @@ describe('external API resource authorization', () => {
     })
   })
 
+  it('returns managed OAuth authorization without a provider JWKS endpoint', async () => {
+    const deps = createTestDeps()
+    authorizationDeps(deps)
+    vi.mocked(deps.authorization.findResource).mockResolvedValue({
+      ...resource(),
+      authorizationModel: 'realmroot',
+      providerConnection: { connectorId: 'connector-1', mode: 'managed' },
+    })
+    vi.mocked(deps.connectors.findById).mockResolvedValue(
+      connectorRecord({
+        providerType: 'social',
+        providerId: 'linear',
+        issuer: null,
+        jwksEndpoint: null,
+      }),
+    )
+
+    await expect(getApiResource(deps, 'resource-1', 'https://auth.example.com')).resolves.toMatchObject({
+      authorization: { jwksUri: null },
+    })
+  })
+
   it('creates and revokes account connections, including organization control [spec: agent-identity/connector-backed-connection-revocation]', async () => {
     const deps = createTestDeps()
     authorizationDeps(deps)

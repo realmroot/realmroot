@@ -485,7 +485,7 @@ export interface ExternalResourceAuthorizationRecord {
   authorizationDetailsCatalogScope: string | null
   registrationEndpoint: string | null
   revocationEndpoint: string
-  jwksUri: string
+  jwksUri: string | null
   userInfoEndpoint: string | null
   tokenEndpointAuthentication: 'basic' | 'post'
   revocationAuthentication: 'basic' | 'post' | 'none'

@@ -3105,7 +3105,7 @@ async function findExternalAuthorization(
         : null,
     registrationEndpoint: connector.registrationEndpoint,
     revocationEndpoint: driver.revocationEndpoint,
-    jwksUri: connector.jwksEndpoint ?? '',
+    jwksUri: connector.jwksEndpoint,
     userInfoEndpoint: driver.userInfoEndpoint,
     tokenEndpointAuthentication: driver.tokenEndpointAuthentication,
     revocationAuthentication: driver.revocationAuthentication,
