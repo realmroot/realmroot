@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { gunzipSync } from 'node:zlib'
@@ -26,13 +26,16 @@ describe('Workers Assets routing', () => {
     expect(runWorkerFirst?.[1]).not.toContain('"/admin/*"')
   })
 
-  it('serves a verifiable Realmroot Skill archive [spec: management-api/agent-skills-discovery]', async () => {
+  it('serves every verifiable Realmroot Skill archive [spec: management-api/agent-skills-discovery]', async () => {
     const directory = path.join(process.cwd(), 'public', '.well-known', 'agent-skills')
     const indexBytes = readFileSync(path.join(directory, 'index.json'))
-    const archiveBytes = readFileSync(path.join(directory, 'realmroot.tar.gz'))
+    const skillNames = ['integrate-realmroot-application', 'integrate-realmroot-resource-server', 'realmroot']
+    const archives = new Map(skillNames.map((name) => [name, readFileSync(path.join(directory, `${name}.tar.gz`))]))
     const assetsFetch = vi.fn(async (request: Request) => {
       const pathname = new URL(request.url).pathname
-      const artifact = pathname.endsWith('/index.json') ? indexBytes : archiveBytes
+      const name = path.basename(pathname, '.tar.gz')
+      const artifact = pathname.endsWith('/index.json') ? indexBytes : archives.get(name)
+      if (!artifact) return new Response(null, { status: 404 })
       const contentType = pathname.endsWith('/index.json') ? 'application/json' : 'application/gzip'
       return new Response(request.method === 'HEAD' ? null : artifact, { headers: { 'content-type': contentType } })
     })
@@ -50,24 +53,22 @@ describe('Workers Assets routing', () => {
       $schema: string
       skills: Array<{ name: string; type: string; url: string; digest: string }>
     }
-    expect(index).toEqual({
-      $schema: 'https://schemas.agentskills.io/discovery/0.2.0/schema.json',
-      skills: [
+    expect(index.$schema).toBe('https://schemas.agentskills.io/discovery/0.2.0/schema.json')
+    expect(index.skills).toEqual(
+      skillNames.map((name) =>
         expect.objectContaining({
-          name: 'realmroot',
+          name,
           type: 'archive',
-          url: '/.well-known/agent-skills/realmroot.tar.gz',
-          digest: `sha256:${createHash('sha256').update(archiveBytes).digest('hex')}`,
+          url: `/.well-known/agent-skills/${name}.tar.gz`,
+          digest: `sha256:${createHash('sha256').update(archives.get(name)!).digest('hex')}`,
         }),
-      ],
-    })
-    expect(listTarEntries(gunzipSync(archiveBytes))).toEqual([
-      'SKILL.md',
-      'references/management.md',
-      'references/setup.md',
-      'references/toolbox-commands.md',
-      'references/x402.md',
-    ])
+      ),
+    )
+    for (const name of skillNames) {
+      expect(listTarEntries(gunzipSync(archives.get(name)!))).toEqual(
+        listSkillFiles(path.join(process.cwd(), 'skills', name)),
+      )
+    }
 
     const head = await worker.fetch(
       new Request('https://id.realmroot.dev/.well-known/agent-skills/realmroot.tar.gz', { method: 'HEAD' }),
@@ -106,6 +107,15 @@ function listTarEntries(tar: Buffer) {
     offset += 512 + Math.ceil(size / 512) * 512
   }
   return entries
+}
+
+function listSkillFiles(directory: string, prefix = ''): string[] {
+  return readdirSync(directory, { withFileTypes: true })
+    .flatMap((entry) => {
+      const name = prefix ? `${prefix}/${entry.name}` : entry.name
+      return entry.isDirectory() ? listSkillFiles(path.join(directory, entry.name), name) : [name]
+    })
+    .sort()
 }
 
 describe('Cloudflare deployment configuration', () => {

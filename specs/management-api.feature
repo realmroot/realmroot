@@ -38,9 +38,9 @@ Feature: Unified Realmroot resource API
   Scenario: Realmroot publishes instructions for Agents using its Toolbox
     When an Agent client requests /.well-known/agent-skills/index.json
     Then Realmroot returns the Agent Skills Discovery version 0.2.0 index
-    And the index advertises the Realmroot Skill as an archive
-    And the archive contains the Skill instructions and their referenced guidance
-    And the advertised SHA-256 digest matches the archive bytes
+    And the index advertises every Realmroot-owned Skill as an archive
+    And each archive contains the Skill instructions and supporting files
+    And every advertised SHA-256 digest matches its archive bytes
 
 
   @entrypoint:restish @journey:management-collection-envelope

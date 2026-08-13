@@ -5,36 +5,26 @@ import { fileURLToPath } from 'node:url'
 import { gzipSync } from 'node:zlib'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
-const skillDirectory = path.join(root, 'skills', 'realmroot')
+const skillsDirectory = path.join(root, 'skills')
 const outputDirectory = path.join(root, 'public', '.well-known', 'agent-skills')
-const archivePath = path.join(outputDirectory, 'realmroot.tar.gz')
 const indexPath = path.join(outputDirectory, 'index.json')
 const check = process.argv.includes('--check')
 
-const files = listFiles(skillDirectory).filter((name) => name === 'SKILL.md' || name.startsWith('references/'))
-const skillMarkdown = readFileSync(path.join(skillDirectory, 'SKILL.md'), 'utf8')
-const metadata = parseFrontmatter(skillMarkdown)
-const archive = gzipSync(
-  createTar(files.map((name) => ({ name, bytes: readFileSync(path.join(skillDirectory, name)) }))),
-  {
-    level: 9,
-    mtime: 0,
-  },
-)
-const digest = createHash('sha256').update(archive).digest('hex')
+const artifacts = readdirSync(skillsDirectory, { withFileTypes: true })
+  .filter((entry) => entry.isDirectory() && existsSync(path.join(skillsDirectory, entry.name, 'SKILL.md')))
+  .map((entry) => buildSkillArtifact(entry.name))
+  .sort((left, right) => left.name.localeCompare(right.name))
 const index = Buffer.from(
   `${JSON.stringify(
     {
       $schema: 'https://schemas.agentskills.io/discovery/0.2.0/schema.json',
-      skills: [
-        {
-          name: metadata.name,
-          type: 'archive',
-          description: metadata.description,
-          url: '/.well-known/agent-skills/realmroot.tar.gz',
-          digest: `sha256:${digest}`,
-        },
-      ],
+      skills: artifacts.map(({ name, description, digest }) => ({
+        name,
+        type: 'archive',
+        description,
+        url: `/.well-known/agent-skills/${name}.tar.gz`,
+        digest: `sha256:${digest}`,
+      })),
     },
     null,
     2,
@@ -42,12 +32,32 @@ const index = Buffer.from(
 )
 
 if (check) {
-  assertCurrent(archivePath, archive)
+  for (const artifact of artifacts) assertCurrent(artifact.path, artifact.archive)
   assertCurrent(indexPath, index)
 } else {
   mkdirSync(outputDirectory, { recursive: true })
-  writeFileSync(archivePath, archive)
+  for (const artifact of artifacts) writeFileSync(artifact.path, artifact.archive)
   writeFileSync(indexPath, index)
+}
+
+function buildSkillArtifact(directoryName) {
+  const skillDirectory = path.join(skillsDirectory, directoryName)
+  const metadata = parseFrontmatter(readFileSync(path.join(skillDirectory, 'SKILL.md'), 'utf8'), directoryName)
+  if (metadata.name !== directoryName) {
+    throw new Error(`skills/${directoryName}/SKILL.md name must match its directory.`)
+  }
+  const archive = gzipSync(
+    createTar(
+      listFiles(skillDirectory).map((name) => ({ name, bytes: readFileSync(path.join(skillDirectory, name)) })),
+    ),
+    { level: 9, mtime: 0 },
+  )
+  return {
+    ...metadata,
+    archive,
+    digest: createHash('sha256').update(archive).digest('hex'),
+    path: path.join(outputDirectory, `${metadata.name}.tar.gz`),
+  }
 }
 
 function listFiles(directory, prefix = '') {
@@ -59,9 +69,9 @@ function listFiles(directory, prefix = '') {
     .sort()
 }
 
-function parseFrontmatter(markdown) {
+function parseFrontmatter(markdown, directoryName) {
   const frontmatter = markdown.match(/^---\n([\s\S]*?)\n---\n/)
-  if (!frontmatter) throw new Error('skills/realmroot/SKILL.md must start with YAML frontmatter.')
+  if (!frontmatter) throw new Error(`skills/${directoryName}/SKILL.md must start with YAML frontmatter.`)
   const name = frontmatter[1].match(/^name:\s*(.+)$/m)?.[1]?.trim()
   const description = frontmatter[1].match(/^description:\s*(.+)$/m)?.[1]?.trim()
   if (!name || !/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(name) || name.includes('--')) {

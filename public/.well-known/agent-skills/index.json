@@ -2,11 +2,25 @@
   "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
   "skills": [
     {
+      "name": "integrate-realmroot-application",
+      "type": "archive",
+      "description": "Integrate a browser, mobile, desktop, CLI, or server-side application with Realmroot as its OAuth 2.1 and OpenID Connect provider. Use when building or changing product sign-in, callback, session, refresh, logout, device authorization, PKCE, client-secret handling, or end-to-end authentication against a Realmroot deployment.",
+      "url": "/.well-known/agent-skills/integrate-realmroot-application.tar.gz",
+      "digest": "sha256:bfcd4cd1ae06cb1b7cd2cb386be832b7a1d6d3feb868cb55a75c492f7ab58572"
+    },
+    {
+      "name": "integrate-realmroot-resource-server",
+      "type": "archive",
+      "description": "Integrate and assess an existing protected API as a Realmroot Resource Server. Use when determining required, conditional, and recommended integration capabilities; implementing or validating RFC 9728 and OpenAPI discovery; selecting native, external, or brokered authorization; enforcing Realmroot token, audience, scope, actor, or DPoP requirements; registering the Resource Server; or proving end-to-end Agent access. This Skill does not design the business API or its resource model.",
+      "url": "/.well-known/agent-skills/integrate-realmroot-resource-server.tar.gz",
+      "digest": "sha256:98e52bf501e893b6c752cf494e0476c5b6c9417bc74a65422242e53f0bf50292"
+    },
+    {
       "name": "realmroot",
       "type": "archive",
       "description": "Use Realmroot as the stable Agent identity for private Resources, controller-approved access, Realmroot administration, Agent-attributed Git commits, and authenticated git, gh, or wrangler commands.",
       "url": "/.well-known/agent-skills/realmroot.tar.gz",
-      "digest": "sha256:6d07dd7afa611008e8300f11b77bcc4909114a7336bad31bab83522757299623"
+      "digest": "sha256:5ff51a5ef10e5b3b925e0bb8d8a15521fc9d16b8539014561c70a08488c1b6ee"
     }
   ]
 }
