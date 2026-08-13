@@ -1,6 +1,6 @@
 interface:
   display_name: "Realmroot"
-  short_description: "Operate private Resources as a stable Agent"
-  default_prompt: "Use $realmroot to discover the required private Resource and complete the requested operation with least-privilege access."
+  short_description: "Use private Resources and native tools as a stable Agent"
+  default_prompt: "Use $realmroot to perform this task as the stable Agent, including any required private Resource access or native Git, GitHub, and Cloudflare commands."
 policy:
   allow_implicit_invocation: true

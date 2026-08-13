@@ -1,6 +1,6 @@
 ---
 name: realmroot
-description: Use Realmroot as the Agent's identity to discover available services, request the permissions needed for a task, call service operations, or run supported native tools such as git, gh, and wrangler. Use whenever a task needs private data, an authenticated service, controller approval, or Realmroot administration.
+description: Use Realmroot as the stable Agent identity for private Resources, controller-approved access, Realmroot administration, Agent-attributed Git commits, and authenticated git, gh, or wrangler commands.
 ---
 
 # Use Realmroot
@@ -8,15 +8,12 @@ description: Use Realmroot as the Agent's identity to discover available service
 Use the `realmroot` command to complete the user's requested operation as the
 Agent. Do not borrow the user's login or ask for an API key.
 
-## 1. Confirm Identity
+Read [references/setup.md](references/setup.md) only when the CLI or Agent
+identity is not already established for the selected deployment.
 
-Read [references/setup.md](references/setup.md) and confirm the Agent identity.
-
-## 2. Discover And Use A Service
-
-Read [references/toolbox-commands.md](references/toolbox-commands.md). Discover
-the available Resource Servers, inspect the operation needed for the task,
-request its exact scopes, and execute it.
+Read [references/toolbox-commands.md](references/toolbox-commands.md) before a
+service operation or native command. Reuse known Resource, Context, operation,
+and approved authority; discover or request only what the task is missing.
 
 If the selected server is `platform`, also read
 [references/management.md](references/management.md).

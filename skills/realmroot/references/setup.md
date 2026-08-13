@@ -1,23 +1,20 @@
 # Start Using Realmroot
 
-## Confirm The CLI
+Use these checks only when starting in an unfamiliar environment, changing the
+Realmroot deployment, or diagnosing CLI or identity failure.
 
 ```bash
 realmroot --help
+realmroot agent whoami --json
 ```
 
-The command should list `agent`, `toolbox`, and `exec`. If `realmroot` is not
-installed, report that prerequisite instead of inventing another access path.
+If `realmroot` is unavailable, report that prerequisite instead of inventing
+another access path. Identity is ready when `whoami` returns `issuer` and
+`subject`.
 
 Realmroot uses its hosted service by default. When the user explicitly selects
 another Realmroot deployment, pass it with `--realmroot-origin` or set
 `REALMROOT_ORIGIN` for the task.
-
-## Confirm The Agent Identity
-
-```bash
-realmroot agent whoami --json
-```
 
 If the Agent is not enrolled, run:
 
@@ -34,8 +31,6 @@ the detected runtime when omitted.
 Enrollment opens an approval page for the controller. If the browser does not
 open, use the Approval URL printed by the command. Keep the command running
 until approval completes, then run `whoami` again.
-
-Identity is ready when `whoami` returns `issuer` and `subject`.
 
 For task access, `realmroot agent request` opens the approval page and waits by
 default. When the controller is away from this computer, use
