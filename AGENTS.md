@@ -108,6 +108,24 @@ Do not rely on CI for checks that can be run locally before commit.
 
 ## Architecture And Review
 
+The [Provider Adapter boundary](docs/architecture/provider-adapter-boundary.md)
+is a mandatory architecture constraint:
+
+- Realmroot supports only native and external authorization models.
+- A compatibility Adapter is a standard external authorization server and
+  protected Resource, never a third authorization model.
+- Provider OAuth, credentials, lifecycle state, scope translation, API routing,
+  and provider-specific authorization-detail semantics must not enter Realmroot
+  core code or storage.
+- One logical Connector represents one provider and may independently enable
+  authentication and resource authorization.
+- Adding a provider changes Adapter code and Realmroot configuration, not
+  Realmroot core code.
+
+Do not implement a change that breaks this boundary without first updating the
+normative architecture document through an explicit architecture and security
+review.
+
 For user-facing work, describe the review-environment acceptance path in the PR:
 how the reviewer reaches the environment, required setup or seed data, and the
 exact product journey to verify.

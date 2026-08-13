@@ -73,8 +73,13 @@ impersonate a controller.
 
 ## Connectors And API Resources
 
-Connectors authenticate people to Realmroot. API Resources describe protected
-business APIs and use one authorization mode:
+One logical Connector represents one provider and exposes independent
+authentication and resource-authorization facets. Authentication integrates
+the provider with Better Auth. The resource-authorization facet supplies the
+OAuth client configuration for External Resources. Enabling or disabling one
+facet does not implicitly change the other.
+
+API Resources describe protected business APIs and use one authorization mode:
 
 - `native`: the product uses Realmroot as its authorization server. The
   protected API trusts the Realmroot issuer and JWKS and needs no external
@@ -95,6 +100,12 @@ External account connections store encrypted refresh credentials but grant no
 Agent authority. `CREDENTIAL_ENCRYPTION_KEY` protects those credentials along
 with OAuth client secrets, PKCE verifiers, and active token leases using
 purpose-specific AES-GCM envelopes.
+
+When an external platform needs a compatibility Adapter, that Adapter is the
+external authorization server and protected Resource Server. Provider OAuth,
+credentials, permission translation, lifecycle state, and API forwarding stay
+inside the Adapter. Realmroot does not add an Adapter-specific authorization
+mode or broker protocol. See [Provider Adapter Boundary](provider-adapter-boundary.md).
 
 ## Direct API Access
 
@@ -130,6 +141,10 @@ scopes during RFC 8693 token exchange. The target authorization server issues
 the final DPoP-bound token with the connected user as `sub` and the Agent in
 `act`. Targets preserve the Agent's original issuer, subject, and `ai_agent`
 subject profile.
+
+An Adapter-issued final token follows the same external flow. Realmroot returns
+it unchanged; the Agent calls the Adapter Resource directly, and the Adapter
+uses its private provider credential to call the external provider API.
 
 ## Public Agent Profiles
 

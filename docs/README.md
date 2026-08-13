@@ -21,6 +21,8 @@ system, not as a second copy of executable contracts or product behaviour.
 - [Authorization boundaries](architecture/authorization-boundaries.md): scope
   ownership, role semantics and assignments, token issuance, and final
   resource-server enforcement.
+- [Provider Adapter boundary](architecture/provider-adapter-boundary.md): the
+  mandatory separation between Realmroot core and compatibility Adapters.
 - [Tenancy](architecture/tenancy.md): the deployment, user-pool, and isolation
   boundary.
 - [Tenant ownership and management surfaces](architecture/tenant-ownership-and-management-surfaces.md):

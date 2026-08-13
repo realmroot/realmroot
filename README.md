@@ -377,6 +377,8 @@ deployed by the workflow. See [Deployment upgrades](docs/deploy/upgrades.md),
   identity, Host bindings, authority, credentials, public profiles, and audit.
 - [Authorization boundaries](docs/architecture/authorization-boundaries.md):
   resource-owned scopes, role semantics, issuance policy, and enforcement.
+- [Provider Adapter boundary](docs/architecture/provider-adapter-boundary.md):
+  the mandatory separation between Realmroot core and compatibility Adapters.
 - [Resource server integration](docs/integrations/resource-servers.md): publish
   and validate native or external protected APIs.
 - [Resource API](docs/api/resource-api.md): Realmroot's administrative API and

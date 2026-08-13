@@ -21,7 +21,6 @@ Feature: Platform bootstrap and route access
     Then the canonical deployment uses the committed Wrangler configuration
     And the fork generates an ignored Wrangler configuration with its own Worker, D1, R2, Queue, and secrets
     And each deployment publishes the exact Worker artifact and Wrangler configuration produced by its build
-    And Connection Event publishers use registered Application credentials instead of deployment-specific backchannel secrets
 
   @entrypoint:product-ui @journey:existing-d1-upgrade
   Scenario: Existing deployments migrate to Better Auth Organization Roles

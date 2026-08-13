@@ -219,155 +219,19 @@ Agent -> Resource API: Authorization: DPoP ... + request DPoP proof
 Resource API: validate JWT, scopes, cnf.jkt, proof target, ath, and replay state
 ```
 
-## Brokered Native Account Connection
+## Compatibility Adapters
 
-Use this transitional mode when the API can validate Realmroot-issued native
-tokens but must keep a provider OAuth or installation credential behind its own
-boundary. It is a Realmroot extension, not an adopted RFC. The Resource Server
-remains native for token validation, but its API Resource MUST select the
-Provider Connector whose account identity it represents. The Connector is the
-stable provider key used to enforce one user-visible Connection; it does not
-turn this Resource Server into an external OAuth authorization server.
-Realmroot never stores the provider credential.
+A compatibility Adapter for a provider that cannot yet implement this profile
+MUST use External Authorization. The Adapter publishes the OAuth authorization
+server and protected Resource, retains provider credentials and lifecycle
+state, issues the final DPoP token, and calls the provider API behind its own
+boundary.
 
-Advertise the connection endpoints with the RFC 9728 metadata. The revocation
-endpoint is recommended during the 0.1 compatibility window:
-
-```json
-{
-  "resource": "https://adapter.example.com/github",
-  "scopes_supported": ["metadata:read", "issues:write"],
-  "account_connection_modes_supported": ["brokered"],
-  "account_connection_authorization_endpoint": "https://adapter.example.com/github/account-connection-authorizations",
-  "account_connection_token_endpoint": "https://adapter.example.com/github/account-connection-credentials",
-  "account_connection_revocation_endpoint": "https://adapter.example.com/github/account-connection-revocations"
-}
-```
-
-Realmroot calls the authorization endpoint with `request=SIGNED_JWT`. Validate
-the request against Realmroot's published JWKS and require exact issuer,
-Resource audience, expiry, and one-use `jti`. The signed claims bind:
-
-- the owner and canonical `connection_id`;
-- `expected_external_subject` during same-account reconnection;
-- Realmroot's callback URI and state;
-- an S256 PKCE challenge;
-- requested scopes and RFC 9396 authorization details.
-
-After the provider flow, redirect the browser to the signed callback URI with
-`code` and `state`. Realmroot exchanges the one-use code and `code_verifier` at
-the token endpoint. Return only connection metadata:
-
-```json
-{
-  "external_subject": "8208",
-  "display_name": "Jasper Van",
-  "broker_reference": "connection-opaque-id",
-  "scope": "metadata:read issues:write",
-  "authorization_details": [
-    { "type": "github_installation", "installation_id": "152097080" }
-  ]
-}
-```
-
-One owner has at most one Connection for a Provider Connector. Each connected
-Resource Server receives its own Resource Authorization beneath that
-Connection. A Connector may have exactly one brokered account-connection
-authority, so Account Center never has to choose among Adapter-specific entry
-points. The Resource Server resolves the context only from Realmroot-signed
-`connection_id` and `authorization_details` claims;
-callers cannot select a provider account or installation through the request
-URL. Reauthorization may update that Connection only for the same external
-subject. Realmroot stores no provider token and deactivating the Connection
-immediately prevents new target tokens.
-
-When `account_connection_revocation_endpoint` is advertised, Realmroot first
-posts a short-lived signed JWT as the form field `request`. Validate the same
-issuer, Resource audience, expiry, and one-use `jti` rules, then invalidate the
-bound `broker_reference`. Return a successful 2xx response only after the
-provider credential can no longer be used.
-
-### Connection Event backchannel
-
-Brokered Resource Servers translate provider lifecycle notifications into
-provider-neutral Connection Event resources:
-
-```http
-PUT /api/resource-servers/ars_example/connection-events/delivery-018f4f92
-Authorization: DPoP <application-access-token>
-DPoP: <request-proof>
-Content-Type: application/json
-
-{
-  "type": "authorityChanged",
-  "brokerReference": "connection-opaque-id",
-  "occurredAt": "2026-08-08T20:00:00.000Z",
-  "revision": 42,
-  "scopes": ["items:read", "items:write"],
-  "affectedScopes": ["items:read"],
-  "affectedAuthorizationDetails": [
-    { "type": "provider_resource", "resource_id": "resource-1" }
-  ],
-  "authorityConstraints": [
-    {
-      "authorizationDetails": [
-        { "type": "provider_resource", "resource_id": "resource-1" }
-      ],
-      "scopes": ["items:read"]
-    }
-  ]
-}
-```
-
-The five event types are `authorityChanged`, `resourcesChanged`, `suspended`,
-`restored`, and `revoked`. Their payloads are disjoint:
-`authorityChanged` requires complete connection-wide `scopes` and
-`authorityConstraints` plus `affectedScopes` and `affectedAuthorizationDetails`.
-`resourcesChanged` and `restored` require complete `scopes`,
-`authorizationDetails`, and `authorityConstraints` snapshots. `suspended` and
-`revoked` carry only the common event fields. The publisher is a confidential
-Application with the `client_credentials` grant, a configured
-`connection-events:write` scope on the Realmroot Resource Server, and the
-matching Application Permission. It requests a Realmroot API audience token
-and sends the RFC 9449 DPoP-bound credential. Realmroot authenticates the
-Application, checks its scope and Resource Server owner boundary, and scopes
-replay identity to `(resource, eventId)`. A
-successful first application or exact replay returns `204`; conflicting reuse
-returns `409`. `revision` is a required positive integer that the Resource
-Server increases for each provider connection. Realmroot orders events by the
-per-connection `revision` only: a higher revision applies even with an earlier
-`occurredAt`, while a lower revision is acknowledged without changing state
-even with a later `occurredAt`. A different event using the current revision
-conflicts because each event must increase the connection revision. The occurrence
-time is audit metadata for the applied revision. Never forward provider webhook event names or provider-specific
-top-level fields into this protocol. Provider-specific resource selectors may
-remain within RFC 9396 `authorizationDetails`.
-
-Connection Event receipts are durable audit and replay-safety records, not a
-transient request cache. Realmroot does not delete them automatically because a
-removed `(resource, eventId)` receipt would make an old delivery identity usable
-again. Operators should monitor receipt row count and D1 storage growth as part
-of capacity planning. Introduce retention or archival only with an explicit
-provider delivery-ID reuse guarantee and a window longer than every provider
-retry and audit requirement; never prune unapplied or recent receipts merely to
-recover space.
-
-For `authorityChanged`, `affectedAuthorizationDetails` and `affectedScopes` are
-required together. The details identify only the generic authority whose scopes
-changed, and `affectedScopes` is that authority's resulting scope set. The
-`scopes` remains the resulting connection-wide union and updates
-the Connection record; it is never used as the affected authority's scope set.
-Realmroot atomically revokes matching pending requests, grants, and leases only
-when their scopes exceed `affectedScopes`, so an adjacent authority retaining the
-same scope cannot keep an affected grant alive through the connection-wide union.
-Permission or resource additions preserve grants that remain subsets. Object
-members are compared recursively, arrays are treated as unordered sets, and
-scalars must match exactly. For
-`resourcesChanged` and `restored`, `scopes`, `authorizationDetails`, and
-`authorityConstraints` form the complete replacement connection context.
-Realmroot atomically expires or revokes requests, grants, and leases no longer
-covered by that snapshot. Every snapshot authorization detail must be covered
-by at least one constraint selector. Event bodies are limited to 64 KiB.
+Realmroot treats the Adapter exactly like any other external target. The
+Adapter may internally use OAuth user tokens, App installations, service
+principals, or another provider credential, but those details never create a
+third Realmroot authorization mode. See the normative
+[Provider Adapter Boundary](../architecture/provider-adapter-boundary.md).
 
 ## External Authorization
 
@@ -376,10 +240,13 @@ registry, authorization server, signing keys, and access-token lifecycle.
 Realmroot acts as a standards-based OAuth client; the final access token is
 issued and validated entirely by the target platform.
 
-First create a standard OIDC Connector for the target authorization server.
-Select dynamic registration when the target publishes `registration_endpoint`,
-or supply the pre-registered `clientId` and `clientSecret` for manual mode.
-Then register the API Resource and select that Connector:
+First create one Connector for the provider. Its authentication facet may use a
+Better Auth social provider or OIDC driver; its resource-authorization facet
+uses the target authorization server metadata and independent callback, state,
+and token storage. Enable either or both facets without creating a second
+provider identity. Select dynamic client registration when the target publishes
+`registration_endpoint`, or supply the pre-registered `clientId` and
+`clientSecret`. Then register the API Resource and select that Connector:
 
 ```json
 {
@@ -390,10 +257,9 @@ Then register the API Resource and select that Connector:
 }
 ```
 
-For a Resource Server that does not advertise the brokered account-connection
-extension, the presence of `connectorId` makes the resource externally
-authorized. Its authorization mode cannot change after creation, although it
-may switch to another compatible OIDC Connector.
+The presence of `connectorId` makes the resource externally authorized. Its
+authorization model cannot change after creation, although it may switch to
+another compatible Connector whose resource-authorization facet is enabled.
 
 ### Bind Protected Resource Metadata To The Authorization Server
 
