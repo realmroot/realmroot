@@ -52,6 +52,7 @@ function buildSkillArtifact(directoryName) {
     ),
     { level: 9, mtime: 0 },
   )
+  archive[9] = 255
   return {
     ...metadata,
     archive,

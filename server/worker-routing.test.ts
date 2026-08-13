@@ -65,6 +65,7 @@ describe('Workers Assets routing', () => {
       ),
     )
     for (const name of skillNames) {
+      expect(archives.get(name)![9]).toBe(255)
       expect(listTarEntries(gunzipSync(archives.get(name)!))).toEqual(
         listSkillFiles(path.join(process.cwd(), 'skills', name)),
       )
