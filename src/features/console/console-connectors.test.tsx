@@ -133,6 +133,50 @@ describe('admin console Identity providers', () => {
     )
   })
 
+  it('creates one OIDC connector for hosted login and managed resource authorization', async () => {
+    const requests: unknown[] = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      if (String(input) === '/api/connectors' && init?.method === 'POST') {
+        requests.push(JSON.parse(String(init.body)))
+        return Promise.resolve(jsonResponse(oidcConnector({ enabled: true }), 201))
+      }
+      return emptyConnectorFetch(input, init)
+    })
+
+    renderWithQuery(<ConnectorsPage />)
+    await openOidcTab()
+    fireEvent.click(await screen.findByRole('button', { name: 'Add OIDC connector' }))
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Dual-purpose provider' } })
+    fireEvent.change(screen.getByLabelText('Provider ID'), { target: { value: 'dual-provider' } })
+    fireEvent.click(screen.getByRole('switch', { name: 'Allow hosted login' }))
+    fireEvent.change(screen.getByLabelText('OIDC issuer'), { target: { value: 'https://login.example.com' } })
+    fireEvent.change(screen.getByLabelText('Client ID'), { target: { value: 'login-client' } })
+    fireEvent.change(screen.getByLabelText('Client Secret'), { target: { value: 'login-secret' } })
+    fireEvent.click(screen.getByRole('switch', { name: 'Allow resource authorization' }))
+    fireEvent.change(screen.getByLabelText('Authorization server issuer'), {
+      target: { value: 'https://api.example.com' },
+    })
+    fireEvent.change(screen.getByLabelText('Resource client ID'), { target: { value: 'resource-client' } })
+    fireEvent.change(screen.getByLabelText('Resource client secret'), { target: { value: 'resource-secret' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() =>
+      expect(requests).toEqual([
+        expect.objectContaining({
+          providerId: 'dual-provider',
+          authenticationEnabled: true,
+          resourceAuthorization: {
+            enabled: true,
+            registrationMode: 'manual',
+            issuer: 'https://api.example.com',
+            clientId: 'resource-client',
+            clientSecret: 'resource-secret',
+          },
+        }),
+      ]),
+    )
+  })
+
   it('updates and deletes an existing OIDC connector from its drawer', async () => {
     const selected = oidcConnector({ clientId: 'summary-client' })
     const detail = { ...selected, clientId: 'client-1' }

@@ -12,6 +12,8 @@ import {
   ConnectorDynamicFields,
   connectorCallbackUrl,
   GenericConnectorFields,
+  ResourceAuthorizationFields,
+  resourceAuthorizationCallbackUrl,
 } from '@/features/console/extracted/connectors/social-fields'
 import { connector, connectorTemplates, securityPolicy, signInSettings } from './console.test-utils'
 
@@ -226,6 +228,56 @@ describe('GenericConnectorFields', () => {
     render(<CallbackUrlField value="https://auth.example.com/callback" />)
     fireEvent.click(screen.getByRole('button', { name: 'Copy' }))
     expect(writeText).toHaveBeenCalledWith('https://auth.example.com/callback')
+  })
+
+  it('uses discovery-only fields for dynamic registration', () => {
+    const setForm = vi.fn()
+    render(
+      <GenericConnectorFields
+        form={{ issuer: 'https://issuer.example.com', registrationMode: 'dynamic' }}
+        isExisting
+        setForm={setForm}
+      />,
+    )
+    expect(screen.queryByLabelText('Client ID')).toBeNull()
+    expect(screen.queryByLabelText('Client Secret')).toBeNull()
+    expect(screen.getByLabelText('OIDC issuer')).toHaveProperty('readOnly', true)
+    fireEvent.change(screen.getByLabelText('Scopes'), { target: { value: 'openid profile' } })
+    expect(setForm).toHaveBeenCalled()
+  })
+})
+
+describe('ResourceAuthorizationFields', () => {
+  it('renders and updates manual resource OAuth client fields', () => {
+    const setForm = vi.fn()
+    render(<ResourceAuthorizationFields form={{}} isExisting={false} setForm={setForm} />)
+    expect(screen.getByLabelText('Resource client secret')).toHaveProperty('type', 'password')
+    expect(screen.getByLabelText('Resource client secret')).toHaveProperty('required', true)
+    expect(screen.getByLabelText('Callback URL')).toHaveProperty('value', resourceAuthorizationCallbackUrl())
+    fireEvent.change(screen.getByLabelText('Authorization server issuer'), {
+      target: { value: 'https://provider.example.com' },
+    })
+    fireEvent.change(screen.getByLabelText('Resource client registration'), { target: { value: 'dynamic' } })
+    fireEvent.change(screen.getByLabelText('Resource client ID'), { target: { value: 'resource-client' } })
+    expect(setForm).toHaveBeenCalledTimes(3)
+  })
+
+  it('hides client credentials for dynamic registration and preserves an existing secret', () => {
+    const setForm = vi.fn()
+    const { rerender } = render(
+      <ResourceAuthorizationFields
+        form={{ resourceRegistrationMode: 'dynamic' }}
+        isExisting={false}
+        setForm={setForm}
+      />,
+    )
+    expect(screen.queryByLabelText('Resource client ID')).toBeNull()
+    expect(screen.queryByLabelText('Resource client secret')).toBeNull()
+
+    rerender(<ResourceAuthorizationFields form={{ resourceRegistrationMode: 'manual' }} isExisting setForm={setForm} />)
+    expect(screen.queryByLabelText('Resource client registration')).toBeNull()
+    expect(screen.getByText('Leave blank to keep the current resource client secret.')).toBeTruthy()
+    expect(screen.getByLabelText('Resource client secret')).toHaveProperty('required', false)
   })
 })
 
