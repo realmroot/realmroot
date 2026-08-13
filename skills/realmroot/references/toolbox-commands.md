@@ -16,6 +16,12 @@ realmroot toolbox <resource-server> --scope <scope>
 
 Use only names, scopes, and Contexts published by discovery.
 
+When the selected Resource Server advertises Agent Skills, install the
+task-relevant Skills using the exact commands printed by Toolbox, then apply
+their instructions using the mechanism available in the current Agent runtime.
+If it advertises no relevant Skill, continue with operation discovery and help;
+missing Agent Skills are not an execution error.
+
 Inspect Contexts only when no default is selected, multiple Contexts could
 match, or the task requires an override:
 
