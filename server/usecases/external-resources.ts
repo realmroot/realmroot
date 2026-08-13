@@ -1259,7 +1259,7 @@ export async function listAccountAccessRequestAuthorizationDetailCatalog(
   if (!connection || connection.status !== 'active') {
     throw notFound('Active resource account connection was not found.')
   }
-  return brokeredAccountConnection(resource)
+  return resource.authorizationModel === 'realmroot'
     ? readResourceCatalog(deps, resource, connection, request.agentIdentityId, pagination)
     : readAuthorizationDetailCatalog(deps, resource, connection, request.agentIdentityId, pagination)
 }

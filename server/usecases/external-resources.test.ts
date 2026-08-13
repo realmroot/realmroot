@@ -3027,6 +3027,37 @@ describe('external API resource authorization', () => {
       ],
       pagination: { total: 1 },
     })
+
+    const linearDetail = { type: 'linear_workspace', workspace_id: 'workspace-1', workspace_name: 'Acme' }
+    const managed = authorizationCatalogDeps()
+    vi.mocked(managed.authorization.findResource).mockResolvedValue({
+      ...nativeResource(),
+      providerConnection: { connectorId: 'connector-1', mode: 'managed' },
+      authorizationDetails: [{ type: 'linear_workspace' }],
+    })
+    vi.mocked(managed.externalResources.findAccessRequestByApprovalTokenHash).mockResolvedValue({
+      ...requestRecord(),
+      authorizationDetails: [{ type: 'linear_workspace' }],
+    })
+    vi.mocked(managed.externalResources.findConnection).mockResolvedValue(
+      connectionWithCredential(connectionRecord(), { authorizationDetails: [linearDetail] }),
+    )
+    vi.mocked(managed.externalResources.listActiveEntitlementsByAgent).mockResolvedValue([])
+
+    await expect(
+      listAccountAccessRequestAuthorizationDetailCatalog(managed, 'request-1', 'approval-token', 'user-1', {
+        limit: 10,
+        offset: 0,
+      }),
+    ).resolves.toMatchObject({
+      items: [
+        {
+          authorizationDetail: linearDetail,
+          connectionStatus: 'authorized',
+          requestableScopes: expect.arrayContaining(['projects:read']),
+        },
+      ],
+    })
   })
 
   it('rejects authorization detail catalog requests without a usable resource context', async () => {
