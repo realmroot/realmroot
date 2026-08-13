@@ -44,6 +44,15 @@ describe('resource OAuth drivers', () => {
       externalSubject: 'subject-1',
       displayName: 'ambor',
     })
+    expect(driver!.parseProfile({ sub: 'subject-2', name: 'Ambor' })).toEqual({
+      externalSubject: 'subject-2',
+      displayName: 'Ambor',
+    })
+    expect(driver!.parseProfile({ sub: 'subject-3' })).toEqual({
+      externalSubject: 'subject-3',
+      displayName: 'subject-3',
+    })
+    expect(driver!.profileRequest('oidc-access-token').headers.get('authorization')).toBe('Bearer oidc-access-token')
   })
 
   it('uses client_secret_post when the OIDC metadata only advertises it', () => {
@@ -51,6 +60,33 @@ describe('resource OAuth drivers', () => {
       connector({ providerMetadata: { token_endpoint_auth_methods_supported: ['client_secret_post'] } }),
     )
     expect(driver).toMatchObject({ tokenEndpointAuthentication: 'post', revocationAuthentication: 'post' })
+  })
+
+  it('rejects unsupported and incomplete connectors', () => {
+    expect(resourceOAuthDriver(connector({ providerType: 'social', providerId: 'github' }))).toBeNull()
+
+    for (const endpoint of [
+      'authorizationEndpoint',
+      'tokenEndpoint',
+      'userInfoEndpoint',
+      'revocationEndpoint',
+    ] as const) {
+      expect(resourceOAuthDriver(connector({ [endpoint]: null }))).toBeNull()
+    }
+  })
+
+  it('rejects malformed provider identity responses', () => {
+    const oidc = resourceOAuthDriver(connector())!
+    const linear = resourceOAuthDriver(connector({ providerType: 'social', providerId: 'linear' }))!
+
+    expect(() => oidc.parseProfile({ sub: '' })).toThrow('OIDC userinfo response is missing sub')
+    expect(() => oidc.parseProfile({ sub: ['subject'] })).toThrow('OIDC userinfo response is missing sub')
+    expect(() => linear.parseProfile({ data: null })).toThrow(
+      'Linear workspace response is missing data.organization.id',
+    )
+    expect(() => linear.parseProfile({ data: { organization: { id: 'workspace-1' } } })).toThrow(
+      'Linear workspace response is missing data.organization.name',
+    )
   })
 })
 

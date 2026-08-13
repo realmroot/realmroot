@@ -314,6 +314,44 @@ describe('connector-backed native resource connector validation', () => {
     )
     await expect(validateConnectorBackedNativeResource(deps, 'connector-1', ['projects:read'])).resolves.toBeUndefined()
   })
+
+  it('accepts omitted client authentication metadata and configured authorization detail types', async () => {
+    const deps = createDeps({
+      connector: connector({
+        registeredScopes: null,
+        scopes: ['projects:read'],
+        providerMetadata: {
+          grant_types_supported: ['authorization_code', 'refresh_token'],
+          code_challenge_methods_supported: ['S256'],
+        },
+      }),
+    })
+
+    await expect(
+      validateConnectorBackedNativeResource(
+        deps,
+        'connector-1',
+        ['projects:read'],
+        [{ type: 'project_access', project_id: 'project-1' }],
+        ['project_access'],
+      ),
+    ).resolves.toBeUndefined()
+  })
+
+  it('rejects authorization details not declared by the Resource Server', async () => {
+    const deps = createDeps({
+      connector: connector({ providerMetadata: completeNativeMetadata }),
+    })
+
+    await expect(
+      validateConnectorBackedNativeResource(
+        deps,
+        'connector-1',
+        [],
+        [{ type: 'project_access', project_id: 'project-1' }],
+      ),
+    ).rejects.toThrow('does not support every configured authorization detail type')
+  })
 })
 
 function createDeps({

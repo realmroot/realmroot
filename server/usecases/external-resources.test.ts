@@ -301,6 +301,73 @@ describe('external API resource authorization', () => {
     expect(url.searchParams.has('resource')).toBe(false)
     expect(url.searchParams.has('authorization_details')).toBe(false)
     expect(url.searchParams.has('request_uri')).toBe(false)
+
+    vi.mocked(deps.authorization.findResource).mockResolvedValue({
+      ...nativeResource(),
+      providerConnection: { connectorId: 'connector-1', mode: 'managed' },
+      authorizationDetails: [{ type: 'linear_workspace' }],
+      resourceUrl: 'https://adapters.example.com/linear',
+    })
+    vi.mocked(deps.connectors.findById).mockResolvedValue(
+      connectorRecord({ providerType: 'social', providerId: 'linear' }),
+    )
+
+    const linear = await createResourceConnectionIntent(
+      deps,
+      'resource-1',
+      {
+        owner: { type: 'user' },
+        scopes: ['projects:read'],
+        authorizationDetails: [{ type: 'linear_workspace' }],
+      },
+      'user-1',
+      'https://auth.example.com',
+    )
+    const linearUrl = new URL(linear.authorizationUrl)
+    expect(linearUrl.origin).toBe('https://linear.app')
+    expect(linearUrl.searchParams.get('scope')).toBe('projects:read')
+    expect(linearUrl.searchParams.get('actor')).toBe('app')
+    expect(linearUrl.searchParams.has('authorization_details')).toBe(false)
+  })
+
+  it('fails managed OAuth completion when its driver disappears or identity lookup fails', async () => {
+    const deps = createTestDeps()
+    authorizationDeps(deps)
+    const intent: ResourceConnectionIntentRecord = {
+      id: 'intent-1',
+      stateHash: 'state-hash',
+      resourceId: 'resource-1',
+      ownerUserId: 'user-1',
+      ownerOrganizationId: null,
+      initiatedByUserId: 'user-1',
+      scopes: ['projects:read'],
+      authorizationDetails: [],
+      encryptedPkceVerifier: 'sealed:pkce-verifier',
+      authorizationMode: 'oauth',
+      clientGeneration: 1,
+      returnTo: 'account-center',
+      status: 'completed',
+      expiresAt: new Date(Date.now() + 300_000),
+      completedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    }
+    vi.mocked(deps.externalResources.consumeConnectionIntent).mockResolvedValue(intent)
+    vi.mocked(deps.connectors.findById).mockResolvedValueOnce(connectorRecord()).mockResolvedValueOnce(null)
+
+    await expect(
+      completeResourceConnectionIntent(deps, { state: 'state', code: 'code' }, 'https://auth.example.com'),
+    ).rejects.toThrow('no longer supports resource authorization')
+
+    vi.mocked(deps.connectors.findById).mockResolvedValue(connectorRecord())
+    vi.mocked(deps.externalHttp.fetch).mockImplementation(async (request) =>
+      request.url.endsWith('/token')
+        ? Response.json({ access_token: 'access', refresh_token: 'refresh' })
+        : new Response(null, { status: 503 }),
+    )
+    await expect(
+      completeResourceConnectionIntent(deps, { state: 'state', code: 'code' }, 'https://auth.example.com'),
+    ).rejects.toThrow('Provider connection identity request failed')
   })
 
   it('[spec: agent-identity/brokered-native-account-connection] connects one brokered native account without storing provider tokens', async () => {
@@ -1773,6 +1840,54 @@ describe('external API resource authorization', () => {
     ).resolves.toMatchObject({
       status: 'connected',
     })
+  })
+
+  it('evaluates managed credential liveness without hiding refresh boundary failures', async () => {
+    const fixture = () => {
+      const deps = createTestDeps()
+      authorizationDeps(deps)
+      const managed = {
+        ...nativeResource(),
+        providerConnection: { connectorId: 'connector-1', mode: 'managed' as const },
+        resourceUrl: 'https://adapters.example.com/cloudflare',
+      }
+      const connection = connectionWithCredential(connectionRecord(), {
+        encryptedTokens: 'sealed:{"accessToken":"expired","refreshToken":"refresh-token"}',
+        credentialExpiresAt: new Date(Date.now() - 60_000),
+      })
+      vi.mocked(deps.authorization.findResource).mockResolvedValue(managed)
+      vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
+      vi.mocked(deps.externalResources.findConnectionByOwnerResource).mockResolvedValue(connection)
+      vi.mocked(deps.externalResources.createAgentConnectionRequest).mockImplementation(async (record) => record)
+      vi.mocked(deps.externalResources.claimProviderCredentialRefresh).mockResolvedValue(true)
+      return deps
+    }
+    const request = (deps: ReturnType<typeof fixture>) =>
+      createAgentResourceConnectionRequest(
+        deps,
+        'resource-1',
+        { scopes: ['projects:read'] },
+        principal(),
+        'https://auth.example.com',
+      )
+
+    const invalidGrant = fixture()
+    vi.mocked(invalidGrant.externalHttp.fetch).mockResolvedValue(
+      Response.json({ error: 'invalid_grant' }, { status: 400 }),
+    )
+    await expect(request(invalidGrant)).resolves.toMatchObject({ status: 'pending' })
+
+    const unavailable = fixture()
+    vi.mocked(unavailable.externalHttp.fetch).mockRejectedValue(new Error('offline'))
+    await expect(request(unavailable)).resolves.toMatchObject({ status: 'pending' })
+
+    const malformed = fixture()
+    vi.mocked(malformed.secrets.open).mockResolvedValue('{}')
+    await expect(request(malformed)).rejects.toThrow('Stored resource connection is missing refreshToken')
+
+    const secretFailure = fixture()
+    vi.mocked(secretFailure.secrets.open).mockRejectedValue(new Error('secret storage unavailable'))
+    await expect(request(secretFailure)).rejects.toThrow('secret storage unavailable')
   })
 
   it(`creates one access approval before connection and continues OAuth through it
@@ -3575,6 +3690,46 @@ describe('external API resource authorization', () => {
     await expect(exchangeAgentConnectionCredential(deps, input)).resolves.toMatchObject({
       accessToken: 'workspace-2-access-token',
     })
+  })
+
+  it('requires an Authorization Detail when multiple managed credentials cover the same scopes', async () => {
+    const { deps, input } = connectorBackedExchangeFixture()
+    const connection = await deps.externalResources.findConnection('connection-1')
+    vi.mocked(deps.externalResources.findConnection).mockResolvedValue({
+      ...connection!,
+      credentials: [
+        connection!.credentials[0]!,
+        { ...connection!.credentials[0]!, id: 'credential-2', externalSubject: 'workspace-2' },
+      ],
+    })
+
+    await expect(exchangeAgentConnectionCredential(deps, input)).rejects.toThrow(
+      'Select an authorization context that identifies one provider credential.',
+    )
+  })
+
+  it('rejects a managed exchange when no credential covers the requested scopes', async () => {
+    const { deps, input } = connectorBackedExchangeFixture()
+    const connection = await deps.externalResources.findConnection('connection-1')
+    vi.mocked(deps.externalResources.findConnection).mockResolvedValue({
+      ...connection!,
+      credentials: connection!.credentials.map((credential) => ({
+        ...credential,
+        grantedScopes: ['projects:write'],
+      })),
+    })
+
+    await expect(exchangeAgentConnectionCredential(deps, input)).rejects.toThrow(
+      'No active provider credential covers the requested authority.',
+    )
+
+    vi.mocked(deps.externalResources.findConnection).mockResolvedValue({
+      ...connection!,
+      credentials: connection!.credentials.map((credential) => ({ ...credential, status: 'revoked' as const })),
+    })
+    await expect(exchangeAgentConnectionCredential(deps, input)).rejects.toThrow(
+      'No active provider credential covers the requested authority.',
+    )
   })
 
   it('exchanges a verified Agent access token through an authorized Application', async () => {

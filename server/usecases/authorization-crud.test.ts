@@ -786,6 +786,15 @@ describe('authorization CRUD and assignment policy', () => {
     ).rejects.toThrow('must advertise brokered account connection metadata')
     await expect(
       createResource(deps, {
+        identifier: 'federated-brokered',
+        resourceUrl: resource.resourceUrl,
+        authorizationModel: 'federated',
+        providerConnection: { connectorId: 'connector-1', mode: 'brokered' as const },
+        ownerOrganizationId: platformOrganization.id,
+      }),
+    ).rejects.toThrow('Brokered Provider Connections require Realmroot authorization')
+    await expect(
+      createResource(deps, {
         identifier: 'external-without-connector',
         resourceUrl: resource.resourceUrl,
         authorizationModel: 'federated',

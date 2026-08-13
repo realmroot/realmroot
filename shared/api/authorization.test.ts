@@ -1,4 +1,8 @@
-import { apiResourceVisibilitySchema, replaceMemberRolesRequestSchema } from '@shared/api/authorization'
+import {
+  apiResourceVisibilitySchema,
+  createApiResourceRequestSchema,
+  replaceMemberRolesRequestSchema,
+} from '@shared/api/authorization'
 import { describe, expect, it } from 'vitest'
 
 describe('authorization API schemas', () => {
@@ -12,5 +16,35 @@ describe('authorization API schemas', () => {
     expect(replaceMemberRolesRequestSchema.parse({ roles: ['developer', 'admin', 'developer'] })).toEqual({
       roles: ['admin', 'developer'],
     })
+  })
+
+  it('requires managed Provider Connections for federated authorization', () => {
+    const input = {
+      identifier: 'projects',
+      resourceUrl: 'https://api.example.com',
+      authorizationModel: 'federated' as const,
+      ownerOrganizationId: 'organization-1',
+    }
+
+    expect(createApiResourceRequestSchema.safeParse(input).success).toBe(false)
+    expect(
+      createApiResourceRequestSchema.safeParse({
+        ...input,
+        providerConnection: { connectorId: 'connector-1', mode: 'brokered' },
+      }).success,
+    ).toBe(false)
+    expect(
+      createApiResourceRequestSchema.safeParse({
+        ...input,
+        providerConnection: { connectorId: 'connector-1', mode: 'managed' },
+      }).success,
+    ).toBe(true)
+    expect(
+      createApiResourceRequestSchema.safeParse({
+        ...input,
+        authorizationModel: 'realmroot',
+        providerConnection: null,
+      }).success,
+    ).toBe(true)
   })
 })
