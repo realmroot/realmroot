@@ -27,7 +27,6 @@ export default {
     // reports the worker is up even when the database is unmigrated or down.
     const path = new URL(request.url).pathname
     if (path === '/api/health') return Response.json(healthStatus)
-    if (path.startsWith('/.well-known/agent-skills/')) return env.ASSETS.fetch(request)
     const config = validateEnv(env, request.url)
     const deps = createDeps(env, config)
     await reconcileRealmrootResourceServer(deps, config.baseURL)
