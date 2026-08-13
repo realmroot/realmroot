@@ -19,6 +19,7 @@ const systemResourceUuidMigrationName = '20260812132947_system_resource_uuidv7.s
 const applicationConsentRequiredMigrationName = '20260812140338_application_consent_required.sql'
 const applicationAuthorizationSourceMigrationName = '20260812142042_application_authorization_source.sql'
 const resourceAuthorizationConnectorsMigrationName = '20260813061753_resource_authorization_connectors.sql'
+const adaptersLinearPermissionsMigrationName = '20260813074009_adapters_linear_permissions.sql'
 
 describe('tenant ownership migration', () => {
   it('backfills authority constraints for existing brokered connections', () => {
@@ -83,6 +84,7 @@ describe('tenant ownership migration', () => {
             applicationConsentRequiredMigrationName,
             applicationAuthorizationSourceMigrationName,
             resourceAuthorizationConnectorsMigrationName,
+            adaptersLinearPermissionsMigrationName,
           ].includes(name),
       )) {
         database.exec(readFileSync(new URL(`../../migrations/${name}`, import.meta.url), 'utf8'))
@@ -121,6 +123,9 @@ describe('tenant ownership migration', () => {
           new URL(`../../migrations/${resourceAuthorizationConnectorsMigrationName}`, import.meta.url),
           'utf8',
         ),
+      )
+      database.exec(
+        readFileSync(new URL(`../../migrations/${adaptersLinearPermissionsMigrationName}`, import.meta.url), 'utf8'),
       )
 
       expect(columnNames(database, 'application')).not.toContain('owner_user_id')
