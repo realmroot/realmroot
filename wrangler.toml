@@ -19,7 +19,15 @@ WEBAUTHN_ORIGINS = "https://id.realmroot.dev"
 binding = "ASSETS"
 directory = "./dist/client"
 not_found_handling = "single-page-application"
-run_worker_first = ["/api/*", "/.well-known/*", "/oauth/account-connection/*"]
+run_worker_first = [
+  "/api/*",
+  "/.well-known/jwks.json",
+  "/.well-known/agent-configuration",
+  "/.well-known/openid-configuration/api/auth",
+  "/.well-known/oauth-authorization-server/api/auth",
+  "/.well-known/oauth-protected-resource/api",
+  "/oauth/account-connection/*",
+]
 
 [[send_email]]
 name = "EMAIL"

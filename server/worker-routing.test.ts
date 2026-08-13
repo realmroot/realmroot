@@ -4,52 +4,41 @@ import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'n
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { gunzipSync } from 'node:zlib'
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import packageJson from '../package.json?raw'
 import forkDeploymentScript from '../scripts/deploy-cloudflare-fork.mjs?raw'
 import wranglerConfig from '../wrangler.toml?raw'
-import worker from './worker'
 
 describe('Workers Assets routing', () => {
-  it('routes OAuth metadata well-known paths to the Worker', () => {
-    const runWorkerFirst = wranglerConfig.match(/run_worker_first\s*=\s*\[([^\]]+)\]/)
+  it('routes only dynamic well-known endpoints to the Worker', () => {
+    const routes = parseRunWorkerFirstRoutes(wranglerConfig)
 
-    expect(runWorkerFirst?.[1]).toContain('"/api/*"')
-    expect(runWorkerFirst?.[1]).toContain('"/.well-known/*"')
-    expect(runWorkerFirst?.[1]).toContain('"/oauth/account-connection/*"')
+    expect(routes).toEqual([
+      '/api/*',
+      '/.well-known/jwks.json',
+      '/.well-known/agent-configuration',
+      '/.well-known/openid-configuration/api/auth',
+      '/.well-known/oauth-authorization-server/api/auth',
+      '/.well-known/oauth-protected-resource/api',
+      '/oauth/account-connection/*',
+    ])
+    expect(routes).not.toContain('/.well-known/*')
+    expect(routes).not.toContain('/.well-known/agent-skills/*')
   })
 
   it('routes removed admin paths to the Worker 404', () => {
-    const runWorkerFirst = wranglerConfig.match(/run_worker_first\s*=\s*\[([^\]]+)\]/)
+    const routes = parseRunWorkerFirstRoutes(wranglerConfig)
 
-    expect(runWorkerFirst?.[1]).not.toContain('"/admin"')
-    expect(runWorkerFirst?.[1]).not.toContain('"/admin/*"')
+    expect(routes).not.toContain('/admin')
+    expect(routes).not.toContain('/admin/*')
   })
 
-  it('serves every verifiable Realmroot Skill archive [spec: management-api/agent-skills-discovery]', async () => {
+  it('publishes every verifiable Realmroot Skill archive [spec: management-api/agent-skills-discovery]', () => {
     const directory = path.join(process.cwd(), 'public', '.well-known', 'agent-skills')
     const indexBytes = readFileSync(path.join(directory, 'index.json'))
     const skillNames = ['integrate-realmroot-application', 'integrate-realmroot-resource-server', 'realmroot']
     const archives = new Map(skillNames.map((name) => [name, readFileSync(path.join(directory, `${name}.tar.gz`))]))
-    const assetsFetch = vi.fn(async (request: Request) => {
-      const pathname = new URL(request.url).pathname
-      const name = path.basename(pathname, '.tar.gz')
-      const artifact = pathname.endsWith('/index.json') ? indexBytes : archives.get(name)
-      if (!artifact) return new Response(null, { status: 404 })
-      const contentType = pathname.endsWith('/index.json') ? 'application/json' : 'application/gzip'
-      return new Response(request.method === 'HEAD' ? null : artifact, { headers: { 'content-type': contentType } })
-    })
-    const env = { ASSETS: { fetch: assetsFetch } } as unknown as Env
-    const executionContext = {} as ExecutionContext
-
-    const response = await worker.fetch(
-      new Request('https://id.realmroot.dev/.well-known/agent-skills/index.json'),
-      env,
-      executionContext,
-    )
-    expect(response.status).toBe(200)
-    expect(response.headers.get('content-type')).toContain('application/json')
-    const index = (await response.json()) as {
+    const index = JSON.parse(indexBytes.toString('utf8')) as {
       $schema: string
       skills: Array<{ name: string; type: string; url: string; digest: string }>
     }
@@ -71,16 +60,6 @@ describe('Workers Assets routing', () => {
       )
     }
 
-    const head = await worker.fetch(
-      new Request('https://id.realmroot.dev/.well-known/agent-skills/realmroot.tar.gz', { method: 'HEAD' }),
-      env,
-      executionContext,
-    )
-    expect(head.status).toBe(200)
-    expect(head.headers.get('content-type')).toContain('application/gzip')
-    expect((await head.arrayBuffer()).byteLength).toBe(0)
-    expect(assetsFetch).toHaveBeenCalledTimes(2)
-
     const check = spawnSync('node', ['scripts/build-agent-skills.mjs', '--check'], {
       cwd: process.cwd(),
       encoding: 'utf8',
@@ -88,6 +67,11 @@ describe('Workers Assets routing', () => {
     expect(check.status, check.stderr).toBe(0)
   })
 })
+
+function parseRunWorkerFirstRoutes(config: string) {
+  const match = config.match(/run_worker_first\s*=\s*\[([^\]]+)\]/s)
+  return [...(match?.[1].matchAll(/"([^"]+)"/g) ?? [])].map((route) => route[1])
+}
 
 function listTarEntries(tar: Buffer) {
   const entries = []
