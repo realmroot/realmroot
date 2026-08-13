@@ -1,12 +1,12 @@
 [
   { "method": "POST", "path": "/agent/access-requests", "operationId": "createAgentAuthorizationRequest", "semanticHash": "e17abb69020fd31f0a8e50ca6c5760a673ca8ababf97cde3d998367c1546309e" },
-  { "method": "GET", "path": "/connectors", "operationId": "listConnectors", "semanticHash": "7684e09df24401788cbd523d41ea13df6883f6f9bc75a9d8262d5ef9bae4f153" },
-  { "method": "POST", "path": "/connectors", "operationId": "createConnector", "semanticHash": "d24037b123e2d1f219b103ea6b607655b3f2265710fb65baa40b08a0c199b440" },
-  { "method": "GET", "path": "/connectors/{connectorId}", "operationId": "getConnector", "semanticHash": "092894f18e5f1e9e8b42b07fafc7a1fc8f5cb8b03802d7d18a93ab3ceed85372" },
-  { "method": "PATCH", "path": "/connectors/{connectorId}", "operationId": "updateConnector", "semanticHash": "ce3ab57a5e906cff2318361720421b6aa85c7dd5ed2e5c8336451e31652f6943" },
+  { "method": "GET", "path": "/connectors", "operationId": "listConnectors", "semanticHash": "1c13661ea755227cc8d6613a611c8028d540d104aab4bdf5ef0c43c2b5a314c8" },
+  { "method": "POST", "path": "/connectors", "operationId": "createConnector", "semanticHash": "712a5a248dbe910a1a08b23abddca92c4c66bf4e903b7ef2897a6c1488072f6b" },
+  { "method": "GET", "path": "/connectors/{connectorId}", "operationId": "getConnector", "semanticHash": "46d723f8dc7b88f8d85dae9067862750219fdcb52ca7b8c06acdf23896125971" },
+  { "method": "PATCH", "path": "/connectors/{connectorId}", "operationId": "updateConnector", "semanticHash": "6affc7e349faf8c30ee4d8256aacba241bb4d795c84b9d9a8b19c8bdb30c433e" },
   { "method": "GET", "path": "/connectors/templates", "operationId": "listConnectorTemplates", "semanticHash": "58c3689de4ba582a822e63a9df53d41e1d63ce4bcdb22ee956a17a6e6deed635" },
-  { "method": "GET", "path": "/resource-servers", "operationId": "listResourceServers", "semanticHash": "e4eb8ea6b2f2026f33d88e252baef709264510584f6bc51c106a6c4346157289" },
-  { "method": "POST", "path": "/resource-servers", "operationId": "createResourceServer", "semanticHash": "bd2c092b0c5a7d2e2ae56ab276bd56911cffd0fd88e8b5348705e1225d96e09b" },
-  { "method": "GET", "path": "/resource-servers/{resourceServerId}", "operationId": "getResourceServer", "semanticHash": "87ff6a2c9020b59319aaff2f3ac56217df3c6fe71e0132ea1fe4ad1bba6daed4" },
-  { "method": "PATCH", "path": "/resource-servers/{resourceServerId}", "operationId": "updateResourceServer", "semanticHash": "f9cf9b43df7bf8d558c4676436b8293621675d904cb8d37b432803b21690efa8" }
+  { "method": "GET", "path": "/resource-servers", "operationId": "listResourceServers", "semanticHash": "7910fc45079bbc8ccaa973d819c317f01310155d41c5528b598388abc833dbbe" },
+  { "method": "POST", "path": "/resource-servers", "operationId": "createResourceServer", "semanticHash": "72da8b8c5d08361a771e79ca086712ea18120218031dea776ef69566fbddc259" },
+  { "method": "GET", "path": "/resource-servers/{resourceServerId}", "operationId": "getResourceServer", "semanticHash": "ed39227a3f647d79c672d6f4f540227dbbb4ca5040563b081b5dc142bdf0d7f8" },
+  { "method": "PATCH", "path": "/resource-servers/{resourceServerId}", "operationId": "updateResourceServer", "semanticHash": "7d1bb8329338fd2afda14b6c375dc1046725daa5d2f2e4e645cb65b898140776" }
 ]

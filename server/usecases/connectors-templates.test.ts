@@ -162,7 +162,7 @@ describe('service.test 1', () => {
 
     await expect(updateConnector(deps, 'idp_github', { enabled: true })).rejects.toMatchObject({
       status: 400,
-      message: 'Enabled connector requires clientSecret.',
+      message: 'Enabled authentication requires clientSecret.',
     })
     expect(repository.update).not.toHaveBeenCalled()
   })
@@ -298,7 +298,7 @@ describe('service.test 1', () => {
 
     await expect(updateConnector(deps, 'idp_google', { clientSecret: null })).rejects.toMatchObject({
       status: 400,
-      message: 'Enabled connector requires clientSecret.',
+      message: 'Enabled authentication requires clientSecret.',
     })
     expect(repository.update).not.toHaveBeenCalled()
   })
@@ -444,6 +444,7 @@ function createRepository(
     create: vi.fn().mockResolvedValue(overrides.createResult ?? connector()),
     update: vi.fn().mockResolvedValue(overrides.updateResult ?? connector()),
     rotateClientGeneration: vi.fn().mockResolvedValue(overrides.updateResult ?? connector()),
+    rotateResourceClientGeneration: vi.fn().mockResolvedValue(overrides.updateResult ?? connector()),
     delete: vi.fn(),
   }
 }
@@ -478,6 +479,25 @@ function connector(overrides: Partial<ConnectorRow> = {}): ConnectorRow {
     scopes: null,
     attributeMapping: null,
     providerMetadata: null,
+    resourceAuthorizationEnabled: false,
+    resourceClientId: null,
+    resourceClientSecret: null,
+    resourceClientSecretContext: null,
+    resourceIssuer: null,
+    resourceAuthorizationEndpoint: null,
+    resourceTokenEndpoint: null,
+    resourceUserInfoEndpoint: null,
+    resourceJwksEndpoint: null,
+    resourceRegistrationEndpoint: null,
+    resourceRevocationEndpoint: null,
+    resourceRegistrationMode: null,
+    resourceRegistrationClientUri: null,
+    resourceRegistrationAccessToken: null,
+    resourceRegistrationAccessTokenContext: null,
+    resourceRegisteredScopes: null,
+    resourceClientGeneration: 1,
+    resourceRetiredClientGenerations: null,
+    resourceProviderMetadata: null,
     createdAt: now,
     updatedAt: now,
     ...overrides,

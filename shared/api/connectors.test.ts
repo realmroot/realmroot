@@ -66,12 +66,6 @@ describe('Connector API schemas', () => {
         clientSecret: 'secret',
         authorizationEndpoint: 'https://issuer.example.com/authorize',
       },
-      {
-        providerType: 'generic_oauth',
-        providerId: 'disabled-incomplete-oidc',
-        displayName: 'Disabled incomplete OIDC',
-        enabled: false,
-      },
     ]
     for (const input of invalid) expect(createConnectorRequestSchema.safeParse(input).success).toBe(false)
   })
@@ -100,6 +94,7 @@ describe('Connector API schemas', () => {
         registrationMode: 'manual',
         scopes: [],
         providerMetadata: {},
+        resourceAuthorization: null,
         createdAt: now,
         updatedAt: now,
       }),

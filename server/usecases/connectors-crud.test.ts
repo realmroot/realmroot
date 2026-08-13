@@ -228,11 +228,11 @@ describe('service.test 2', () => {
       ensureDynamicConnectorScopes(legacyManualDeps, legacyManual.id, ['projects:read'], 'https://auth.example.com'),
     ).resolves.toBe(1)
 
-    const incomplete = dynamicConnector({ clientSecret: null })
+    const incomplete = dynamicConnector({ resourceClientSecret: null })
     const incompleteDeps = { connectors: createRepository({ byId: incomplete }) } as unknown as Deps
     await expect(
       ensureDynamicConnectorScopes(incompleteDeps, incomplete.id, ['projects:read'], 'https://auth.example.com'),
-    ).rejects.toThrow('Dynamic OIDC connector is incomplete.')
+    ).rejects.toThrow('Dynamic resource authorization client is incomplete.')
   })
 
   it.each([
@@ -361,6 +361,7 @@ describe('service.test 2', () => {
           userinfo_endpoint: 'https://idp.example.com/userinfo',
           jwks_uri: 'https://idp.example.com/jwks',
           registration_endpoint: 'https://idp.example.com/register',
+          revocation_endpoint: 'https://idp.example.com/revoke',
           grant_types_supported: ['authorization_code'],
           authorization_details_types_supported: ['project_access'],
           authorization_details_catalog_endpoint: 'https://idp.example.com/authorization-details',
@@ -386,6 +387,7 @@ describe('service.test 2', () => {
         providerType: 'generic_oauth',
         providerId: 'projects',
         displayName: 'Projects',
+        authenticationEnabled: false,
         issuer: 'https://idp.example.com',
         registrationMode: 'dynamic',
       },
@@ -394,17 +396,14 @@ describe('service.test 2', () => {
 
     const registrationRequest = fetch.mock.calls[1]?.[0] as Request
     await expect(registrationRequest.json()).resolves.toMatchObject({
-      redirect_uris: [
-        'https://auth.example.com/api/auth/callback/projects',
-        'https://auth.example.com/oauth/account-connection/callback',
-      ],
+      redirect_uris: ['https://auth.example.com/oauth/account-connection/callback'],
       jwks_uri: 'https://auth.example.com/api/auth/jwks',
       authorization_details_types: ['project_access'],
       scope: 'authorization-details:read email offline_access openid profile',
     })
     expect(deps.connectors.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        providerMetadata: expect.objectContaining({ grant_types_supported: ['authorization_code'] }),
+        resourceProviderMetadata: expect.objectContaining({ grant_types_supported: ['authorization_code'] }),
       }),
     )
   })
@@ -467,6 +466,7 @@ describe('service.test 2', () => {
     ],
   ])('rejects OIDC connector creation with %s', async (_label, input, discovery, message) => {
     const deps = {
+      ids: createIdentifierGeneratorFake(),
       connectors: createRepository(),
       externalHttp: { fetch: vi.fn().mockResolvedValue(discovery) },
     } as unknown as Deps
@@ -476,9 +476,14 @@ describe('service.test 2', () => {
         providerType: 'generic_oauth',
         providerId: 'projects',
         displayName: 'Projects',
-        clientId: 'client-1',
-        clientSecret: 'secret-1',
-        ...input,
+        authenticationEnabled: false,
+        resourceAuthorization: {
+          enabled: true,
+          registrationMode: 'manual',
+          clientId: 'client-1',
+          clientSecret: 'secret-1',
+          issuer: input.issuer as string,
+        },
       }),
     ).rejects.toThrow(message)
   })
@@ -497,6 +502,7 @@ describe('service.test 2', () => {
         providerType: 'generic_oauth',
         providerId: 'projects',
         displayName: 'Projects',
+        authenticationEnabled: false,
         issuer: 'https://idp.example.com',
         registrationMode: 'manual',
         ...credentials,
@@ -587,6 +593,7 @@ describe('service.test 2', () => {
         providerType: 'generic_oauth',
         providerId: 'projects',
         displayName: 'Projects',
+        authenticationEnabled: false,
         issuer: 'https://idp.example.com',
         registrationMode: 'dynamic',
       },
@@ -595,10 +602,10 @@ describe('service.test 2', () => {
 
     expect(deps.connectors.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        revocationEndpoint: 'https://idp.example.com/revoke',
-        registrationClientUri: 'https://idp.example.com/register/registered-client',
-        registrationAccessToken: 'registration-token',
-        registeredScopes: ['email', 'offline_access', 'openid', 'profile', 'projects:read', 'projects:write'],
+        resourceRevocationEndpoint: 'https://idp.example.com/revoke',
+        resourceRegistrationClientUri: 'https://idp.example.com/register/registered-client',
+        resourceRegistrationAccessToken: 'registration-token',
+        resourceRegisteredScopes: ['email', 'offline_access', 'openid', 'profile', 'projects:read', 'projects:write'],
       }),
     )
     const registrationRequest = vi.mocked(deps.externalHttp.fetch).mock.calls[1]![0] as Request
@@ -614,7 +621,7 @@ describe('service.test 2', () => {
   })
 
   it('refreshes discovery metadata for an existing dynamic connector', async () => {
-    const current = connector({
+    const current = dynamicConnector({
       providerType: 'generic_oauth',
       providerId: 'projects',
       issuer: 'https://idp.example.com',
@@ -638,23 +645,23 @@ describe('service.test 2', () => {
     expect(repository.update).toHaveBeenCalledWith(
       current.id,
       expect.objectContaining({
-        authorizationEndpoint: 'https://idp.example.com/authorize',
-        tokenEndpoint: 'https://idp.example.com/token',
-        userInfoEndpoint: 'https://idp.example.com/userinfo',
-        jwksEndpoint: 'https://idp.example.com/jwks',
-        registrationEndpoint: 'https://idp.example.com/register',
-        revocationEndpoint: 'https://idp.example.com/revoke',
-        providerMetadata: discovery,
+        resourceAuthorizationEndpoint: 'https://idp.example.com/authorize',
+        resourceTokenEndpoint: 'https://idp.example.com/token',
+        resourceUserInfoEndpoint: 'https://idp.example.com/userinfo',
+        resourceJwksEndpoint: 'https://idp.example.com/jwks',
+        resourceRegistrationEndpoint: 'https://idp.example.com/register',
+        resourceRevocationEndpoint: 'https://idp.example.com/revoke',
+        resourceProviderMetadata: discovery,
       }),
     )
 
     vi.mocked(repository.findById).mockResolvedValueOnce(null)
     await expect(refreshDynamicConnectorMetadata(deps, 'missing')).rejects.toThrow('Connector not found.')
-    vi.mocked(repository.findById).mockResolvedValueOnce({ ...current, registrationMode: 'manual' })
+    vi.mocked(repository.findById).mockResolvedValueOnce({ ...current, resourceRegistrationMode: 'manual' })
     await expect(refreshDynamicConnectorMetadata(deps, current.id)).resolves.toBeUndefined()
-    vi.mocked(repository.findById).mockResolvedValueOnce({ ...current, issuer: null })
+    vi.mocked(repository.findById).mockResolvedValueOnce({ ...current, resourceIssuer: null })
     await expect(refreshDynamicConnectorMetadata(deps, current.id)).rejects.toThrow(
-      'Dynamic OIDC connector is incomplete.',
+      'Dynamic resource authorization client is incomplete.',
     )
     vi.mocked(repository.findById).mockResolvedValueOnce(current)
     vi.mocked(deps.externalHttp.fetch).mockResolvedValueOnce(
@@ -663,12 +670,12 @@ describe('service.test 2', () => {
     await refreshDynamicConnectorMetadata(deps, current.id)
     expect(repository.update).toHaveBeenLastCalledWith(
       current.id,
-      expect.objectContaining({ registrationEndpoint: null, revocationEndpoint: null }),
+      expect.objectContaining({ resourceRegistrationEndpoint: null, resourceRevocationEndpoint: null }),
     )
   })
 
   it('[spec: agent-identity/external-resource-dynamic-client-scope-upgrade] upgrades a dynamic client in place through RFC 7592', async () => {
-    const current = connector({
+    const current = dynamicConnector({
       providerType: 'generic_oauth',
       providerId: 'projects',
       displayName: 'Projects',
@@ -712,15 +719,15 @@ describe('service.test 2', () => {
     expect(repository.update).toHaveBeenCalledWith(
       current.id,
       expect.objectContaining({
-        clientSecret: 'rotated-secret',
-        registeredScopes: ['email', 'offline_access', 'openid', 'profile', 'projects:read'],
+        resourceClientSecret: 'rotated-secret',
+        resourceRegisteredScopes: ['email', 'offline_access', 'openid', 'profile', 'projects:read'],
       }),
     )
-    expect(repository.rotateClientGeneration).not.toHaveBeenCalled()
+    expect(repository.rotateResourceClientGeneration).not.toHaveBeenCalled()
   })
 
   it('verifies cached dynamic client scopes against RFC 7592 state', async () => {
-    const current = connector({
+    const current = dynamicConnector({
       providerType: 'generic_oauth',
       providerId: 'projects',
       displayName: 'Projects',
@@ -736,10 +743,7 @@ describe('service.test 2', () => {
       Response.json({
         client_id: 'client-id',
         client_name: 'Realmroot Projects',
-        redirect_uris: [
-          'https://auth.example.com/api/auth/callback/projects',
-          'https://auth.example.com/oauth/account-connection/callback',
-        ],
+        redirect_uris: ['https://auth.example.com/oauth/account-connection/callback'],
         grant_types: [
           'authorization_code',
           'refresh_token',
@@ -765,7 +769,7 @@ describe('service.test 2', () => {
   })
 
   it('repairs callback and JWKS metadata drift through RFC 7592', async () => {
-    const current = connector({
+    const current = dynamicConnector({
       providerType: 'generic_oauth',
       providerId: 'projects',
       displayName: 'Projects',
@@ -815,21 +819,18 @@ describe('service.test 2', () => {
     const updateRequest = fetch.mock.calls[2]![0] as Request
     expect(updateRequest.method).toBe('PUT')
     await expect(updateRequest.json()).resolves.toMatchObject({
-      redirect_uris: [
-        'https://auth.example.com/api/auth/callback/projects',
-        'https://auth.example.com/oauth/account-connection/callback',
-      ],
+      redirect_uris: ['https://auth.example.com/oauth/account-connection/callback'],
       jwks_uri: 'https://auth.example.com/api/auth/jwks',
     })
     expect(repository.update).toHaveBeenCalledOnce()
-    expect(repository.rotateClientGeneration).not.toHaveBeenCalled()
+    expect(repository.rotateResourceClientGeneration).not.toHaveBeenCalled()
   })
 
   it.each([
     { registrationClientUri: null },
     { registrationAccessToken: null },
   ])('trusts cached scopes when RFC 7592 management credentials are incomplete', async (overrides) => {
-    const current = connector({
+    const current = dynamicConnector({
       providerType: 'generic_oauth',
       issuer: 'https://idp.example.com',
       registrationEndpoint: 'https://idp.example.com/register',
@@ -850,7 +851,7 @@ describe('service.test 2', () => {
   })
 
   it('rejects an RFC 7592 response for a different client', async () => {
-    const current = connector({
+    const current = dynamicConnector({
       providerType: 'generic_oauth',
       issuer: 'https://idp.example.com',
       registrationEndpoint: 'https://idp.example.com/register',
@@ -869,7 +870,7 @@ describe('service.test 2', () => {
   })
 
   it('surfaces transient RFC 7592 reads without changing registration', async () => {
-    const current = connector({
+    const current = dynamicConnector({
       providerType: 'generic_oauth',
       issuer: 'https://idp.example.com',
       registrationEndpoint: 'https://idp.example.com/register',
@@ -886,11 +887,11 @@ describe('service.test 2', () => {
       ensureDynamicConnectorScopes(deps, current.id, ['projects:read'], 'https://auth.example.com'),
     ).rejects.toThrow('Dynamic OIDC client registration read failed.')
     expect(repository.update).not.toHaveBeenCalled()
-    expect(repository.rotateClientGeneration).not.toHaveBeenCalled()
+    expect(repository.rotateResourceClientGeneration).not.toHaveBeenCalled()
   })
 
   it('repairs a cached dynamic client when RFC 7592 omits its scope field', async () => {
-    const current = connector({
+    const current = dynamicConnector({
       providerType: 'generic_oauth',
       issuer: 'https://idp.example.com',
       registrationEndpoint: 'https://idp.example.com/register',
@@ -917,12 +918,14 @@ describe('service.test 2', () => {
     ).resolves.toBe(1)
     expect(repository.update).toHaveBeenCalledWith(
       current.id,
-      expect.objectContaining({ registeredScopes: ['email', 'offline_access', 'openid', 'profile', 'projects:read'] }),
+      expect.objectContaining({
+        resourceRegisteredScopes: ['email', 'offline_access', 'openid', 'profile', 'projects:read'],
+      }),
     )
   })
 
   it('repairs cached scopes after a terminal RFC 7592 read response', async () => {
-    const current = connector({
+    const current = dynamicConnector({
       providerType: 'generic_oauth',
       issuer: 'https://idp.example.com',
       registrationEndpoint: 'https://idp.example.com/register',
@@ -951,7 +954,7 @@ describe('service.test 2', () => {
   })
 
   it('repairs provider-side dynamic client scope drift in place', async () => {
-    const current = connector({
+    const current = dynamicConnector({
       providerType: 'generic_oauth',
       issuer: 'https://idp.example.com',
       registrationEndpoint: 'https://idp.example.com/register',
@@ -985,15 +988,15 @@ describe('service.test 2', () => {
     expect(repository.update).toHaveBeenCalledWith(
       current.id,
       expect.objectContaining({
-        clientSecret: 'rotated-secret',
-        registeredScopes: ['email', 'offline_access', 'openid', 'profile', 'projects:read'],
+        resourceClientSecret: 'rotated-secret',
+        resourceRegisteredScopes: ['email', 'offline_access', 'openid', 'profile', 'projects:read'],
       }),
     )
-    expect(repository.rotateClientGeneration).not.toHaveBeenCalled()
+    expect(repository.rotateResourceClientGeneration).not.toHaveBeenCalled()
   })
 
   it('falls back to a new generation only when registration management is terminally unavailable', async () => {
-    const current = connector({
+    const current = dynamicConnector({
       providerType: 'generic_oauth',
       providerId: 'projects',
       displayName: 'Projects',
@@ -1011,7 +1014,9 @@ describe('service.test 2', () => {
       clientGeneration: 1,
     })
     const repository = createRepository({ byId: current })
-    vi.mocked(repository.rotateClientGeneration).mockResolvedValue(connector({ clientGeneration: 2 }))
+    vi.mocked(repository.rotateResourceClientGeneration).mockResolvedValue(
+      dynamicConnector({ resourceClientGeneration: 2 }),
+    )
     const fetch = vi
       .fn()
       .mockResolvedValueOnce(
@@ -1036,19 +1041,19 @@ describe('service.test 2', () => {
     await expect(
       ensureDynamicConnectorScopes(deps, current.id, ['projects:read'], 'https://auth.example.com'),
     ).resolves.toBe(2)
-    expect(repository.rotateClientGeneration).toHaveBeenCalledWith(
+    expect(repository.rotateResourceClientGeneration).toHaveBeenCalledWith(
       current.id,
       1,
       expect.objectContaining({
-        clientId: 'client-id-2',
-        clientGeneration: 2,
-        retiredClientGenerations: [expect.objectContaining({ generation: 1, clientId: 'client-id' })],
+        resourceClientId: 'client-id-2',
+        resourceClientGeneration: 2,
+        resourceRetiredClientGenerations: [expect.objectContaining({ generation: 1, clientId: 'client-id' })],
       }),
     )
   })
 
   it('surfaces transient registration management failures without registering a replacement', async () => {
-    const current = connector({
+    const current = dynamicConnector({
       providerType: 'generic_oauth',
       providerId: 'projects',
       issuer: 'https://idp.example.com',
@@ -1074,11 +1079,11 @@ describe('service.test 2', () => {
       ensureDynamicConnectorScopes(deps, current.id, ['projects:read'], 'https://auth.example.com'),
     ).rejects.toThrow('Dynamic OIDC client registration update failed.')
     expect(fetch).toHaveBeenCalledTimes(2)
-    expect(repository.rotateClientGeneration).not.toHaveBeenCalled()
+    expect(repository.rotateResourceClientGeneration).not.toHaveBeenCalled()
   })
 
   it('reloads a concurrent generation winner instead of overwriting it', async () => {
-    const current = connector({
+    const current = dynamicConnector({
       providerType: 'generic_oauth',
       providerId: 'projects',
       issuer: 'https://idp.example.com',
@@ -1092,15 +1097,15 @@ describe('service.test 2', () => {
       registeredScopes: ['openid'],
       clientGeneration: 1,
     })
-    const winner = connector({
+    const winner = dynamicConnector({
       ...current,
-      clientId: 'winner-client',
-      registeredScopes: ['openid', 'projects:read'],
-      clientGeneration: 2,
+      resourceClientId: 'winner-client',
+      resourceRegisteredScopes: ['openid', 'projects:read'],
+      resourceClientGeneration: 2,
     })
     const repository = createRepository({ byId: current })
     vi.mocked(repository.findById).mockResolvedValueOnce(current).mockResolvedValueOnce(winner)
-    vi.mocked(repository.rotateClientGeneration).mockResolvedValue(null)
+    vi.mocked(repository.rotateResourceClientGeneration).mockResolvedValue(null)
     const fetch = vi
       .fn()
       .mockResolvedValueOnce(Response.json(discoveryMetadata({ scopes_supported: ['openid', 'projects:read'] })))
@@ -1120,7 +1125,7 @@ describe('service.test 2', () => {
     await expect(
       ensureDynamicConnectorScopes(deps, current.id, ['projects:read'], 'https://auth.example.com'),
     ).resolves.toBe(2)
-    expect(repository.rotateClientGeneration).toHaveBeenCalledWith(current.id, 1, expect.any(Object))
+    expect(repository.rotateResourceClientGeneration).toHaveBeenCalledWith(current.id, 1, expect.any(Object))
   })
 
   it('creates a manually registered OIDC connector from discovery metadata', async () => {
@@ -1178,7 +1183,7 @@ describe('service.test 2', () => {
   })
 
   it.each([
-    ['client ID', { clientId: null }, 'Enabled connector requires clientId.'],
+    ['client ID', { clientId: null }, 'Enabled authentication requires clientId.'],
     ['issuer', { issuer: null }, 'Enabled OIDC connector requires issuer discovery.'],
     [
       'authorization endpoint',
@@ -1218,6 +1223,7 @@ function discoveryMetadata(overrides: Record<string, unknown> = {}) {
     token_endpoint: 'https://idp.example.com/token',
     userinfo_endpoint: 'https://idp.example.com/userinfo',
     jwks_uri: 'https://idp.example.com/jwks',
+    revocation_endpoint: 'https://idp.example.com/revoke',
     ...overrides,
   }
 }
@@ -1241,6 +1247,9 @@ function createRepository(
     create: vi.fn().mockResolvedValue(overrides.createResult ?? connector()),
     update: vi.fn().mockResolvedValue(overrides.updateResult === undefined ? connector() : overrides.updateResult),
     rotateClientGeneration: vi
+      .fn()
+      .mockResolvedValue(overrides.updateResult === undefined ? connector() : overrides.updateResult),
+    rotateResourceClientGeneration: vi
       .fn()
       .mockResolvedValue(overrides.updateResult === undefined ? connector() : overrides.updateResult),
     delete: vi.fn(),
@@ -1277,6 +1286,25 @@ function connector(overrides: Partial<ConnectorRow> = {}): ConnectorRow {
     scopes: null,
     attributeMapping: null,
     providerMetadata: null,
+    resourceAuthorizationEnabled: false,
+    resourceClientId: null,
+    resourceClientSecret: null,
+    resourceClientSecretContext: null,
+    resourceIssuer: null,
+    resourceAuthorizationEndpoint: null,
+    resourceTokenEndpoint: null,
+    resourceUserInfoEndpoint: null,
+    resourceJwksEndpoint: null,
+    resourceRegistrationEndpoint: null,
+    resourceRevocationEndpoint: null,
+    resourceRegistrationMode: null,
+    resourceRegistrationClientUri: null,
+    resourceRegistrationAccessToken: null,
+    resourceRegistrationAccessTokenContext: null,
+    resourceRegisteredScopes: null,
+    resourceClientGeneration: 1,
+    resourceRetiredClientGenerations: null,
+    resourceProviderMetadata: null,
     createdAt: now,
     updatedAt: now,
     ...overrides,
@@ -1284,18 +1312,46 @@ function connector(overrides: Partial<ConnectorRow> = {}): ConnectorRow {
 }
 
 function dynamicConnector(overrides: Partial<ConnectorRow> = {}) {
+  const value = <K extends keyof ConnectorRow>(resourceKey: K, legacyKey: K, fallback: ConnectorRow[K]) => {
+    if (overrides[resourceKey] !== undefined) return overrides[resourceKey]
+    if (overrides[legacyKey] !== undefined) return overrides[legacyKey]
+    return fallback
+  }
+
   return connector({
     providerType: 'generic_oauth',
     providerId: 'projects',
     displayName: 'Projects',
-    issuer: 'https://idp.example.com',
-    authorizationEndpoint: 'https://idp.example.com/authorize',
-    tokenEndpoint: 'https://idp.example.com/token',
-    userInfoEndpoint: 'https://idp.example.com/userinfo',
-    jwksEndpoint: 'https://idp.example.com/jwks',
-    registrationEndpoint: 'https://idp.example.com/register',
-    registrationMode: 'dynamic',
-    registeredScopes: ['openid'],
     ...overrides,
+    authenticationEnabled: false,
+    resourceAuthorizationEnabled: true,
+    resourceIssuer: value('resourceIssuer', 'issuer', 'https://idp.example.com'),
+    resourceAuthorizationEndpoint: value(
+      'resourceAuthorizationEndpoint',
+      'authorizationEndpoint',
+      'https://idp.example.com/authorize',
+    ),
+    resourceTokenEndpoint: value('resourceTokenEndpoint', 'tokenEndpoint', 'https://idp.example.com/token'),
+    resourceUserInfoEndpoint: value('resourceUserInfoEndpoint', 'userInfoEndpoint', 'https://idp.example.com/userinfo'),
+    resourceJwksEndpoint: value('resourceJwksEndpoint', 'jwksEndpoint', 'https://idp.example.com/jwks'),
+    resourceRegistrationEndpoint: value(
+      'resourceRegistrationEndpoint',
+      'registrationEndpoint',
+      'https://idp.example.com/register',
+    ),
+    resourceRevocationEndpoint: value(
+      'resourceRevocationEndpoint',
+      'revocationEndpoint',
+      'https://idp.example.com/revoke',
+    ),
+    resourceRegistrationMode: value('resourceRegistrationMode', 'registrationMode', 'dynamic'),
+    resourceClientId: value('resourceClientId', 'clientId', 'client-id'),
+    resourceClientSecret: value('resourceClientSecret', 'clientSecret', 'GOOGLE_CLIENT_SECRET'),
+    resourceRegisteredScopes: value('resourceRegisteredScopes', 'registeredScopes', ['openid']),
+    resourceRegistrationClientUri: value('resourceRegistrationClientUri', 'registrationClientUri', null),
+    resourceRegistrationAccessToken: value('resourceRegistrationAccessToken', 'registrationAccessToken', null),
+    resourceClientGeneration: value('resourceClientGeneration', 'clientGeneration', 1),
+    resourceRetiredClientGenerations: value('resourceRetiredClientGenerations', 'retiredClientGenerations', null),
+    resourceProviderMetadata: value('resourceProviderMetadata', 'providerMetadata', null),
   })
 }

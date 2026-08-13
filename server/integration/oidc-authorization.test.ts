@@ -79,7 +79,7 @@ describe('OIDC authorization over real D1', () => {
       body: JSON.stringify({
         identifier: 'oidc-resource',
         resourceUrl: resource,
-        authorizationModel: 'realmroot',
+        authorizationModel: 'native',
         ownerOrganizationId: platformOrganizationId,
       }),
     })

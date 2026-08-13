@@ -218,12 +218,11 @@ Feature: Admin Console
     Then it appears in authorization inventory
     And it records an explicit owner Organization
     And its visibility is private by default and can be changed to public
-    And I explicitly select Realmroot or Federated authorization
-    And I independently select no Provider Connection, a Realmroot-managed connection, or a Resource Server-brokered connection
-    And Realmroot authorization accepts every Provider Connection choice
-    And Federated authorization requires a Realmroot-managed Provider Connection
-    And the Console reports the final token issuer implied by those choices
-    And the authorization model cannot change after creation while its compatible Provider Connector can be selected or replaced explicitly
+    And I explicitly select Native or External authorization
+    And Native authorization uses no Provider Connector and trusts Realmroot as the final token issuer
+    And External authorization requires one Connector whose resource-authorization facet matches the advertised issuer
+    And the Console reports Realmroot or the external issuer as the final token issuer
+    And the authorization model cannot change after creation while an External Resource Server's compatible Connector can be replaced explicitly
     And its protected resource URL is the OAuth resource identifier and access-token audience
     And its name and description are synchronized from the OpenAPI contract and cannot be edited manually
     And OAuth scopes advertised by the business resource server protected-resource metadata remain the scope authority
@@ -244,14 +243,13 @@ Feature: Admin Console
     And the Console offers no restoration
 
   @entrypoint:product-ui @journey:provider-connection-authority
-  Scenario: A Provider Connector can back one brokered account connection authority
-    Given a Resource Server advertises brokered account connection metadata
-    When I register it without a Provider Connector
-    Then Realmroot rejects the Resource Server
-    When I register it with an enabled Provider Connector
-    Then Realmroot accepts a Connector whose driver supports resource authorization without requiring an external OIDC authorization server
-    And refreshing discovery preserves the brokered account connection endpoints
-    And Realmroot rejects another account connection authority for the same Provider Connector
+  Scenario: One Provider Connector exposes independent authentication and resource-authorization facets
+    Given a Connector driver supports authentication and resource authorization
+    When I configure its Better Auth authentication client and its external authorization issuer
+    Then the Console keeps both capabilities under one Provider Connector
+    And the two facets use independent clients, callbacks, state, token storage, and lifecycle
+    And a Resource Server can reference only the external authorization facet
+    And disabling authentication does not disable its Resource Servers or existing resource connections
 
   @entrypoint:product-ui @journey:admin-authorization-inventory
   Scenario: Authorization inventory lists organizations, Organization Roles, and Resource servers

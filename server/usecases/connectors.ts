@@ -76,7 +76,26 @@ export async function createConnector(deps: Deps, input: CreateConnectorRequest,
   assertSupportedProvider(input.providerType, input.providerId)
   assertAuthenticationCapability(input.providerType, input.providerId, input.authenticationEnabled)
   await assertProviderAvailable(deps.connectors, input.providerId)
-  const oidc = input.providerType === 'generic_oauth' ? await prepareOidcConnector(deps, input, callbackOrigin) : null
+  const authenticationEnabled = input.authenticationEnabled ?? true
+  const resourceAuthorization =
+    input.resourceAuthorization ?? legacyResourceAuthorizationInput(input, authenticationEnabled)
+  assertResourceAuthorizationCapability(input.providerType, input.providerId, resourceAuthorization)
+  const oidc =
+    input.providerType === 'generic_oauth' && authenticationEnabled
+      ? await prepareOidcConnector(deps, input, callbackOrigin, 'authentication')
+      : null
+  const resourceOidc = resourceAuthorization
+    ? await prepareOidcConnector(
+        deps,
+        {
+          ...resourceAuthorization,
+          providerId: input.providerId,
+          displayName: input.displayName,
+        },
+        callbackOrigin,
+        'resourceAuthorization',
+      )
+    : null
   const now = new Date()
   const candidate = {
     id: deps.ids.generate(),
@@ -85,7 +104,7 @@ export async function createConnector(deps: Deps, input: CreateConnectorRequest,
     providerId: input.providerId,
     displayName: input.displayName,
     enabled: input.enabled ?? true,
-    authenticationEnabled: input.authenticationEnabled ?? input.providerType === 'social',
+    authenticationEnabled,
     clientId: oidc?.clientId ?? input.clientId ?? null,
     clientSecret: oidc?.clientSecret ?? input.clientSecret ?? null,
     clientSecretContext: null,
@@ -106,6 +125,25 @@ export async function createConnector(deps: Deps, input: CreateConnectorRequest,
     scopes: input.scopes ?? null,
     attributeMapping: null,
     providerMetadata: oidc?.metadata ?? input.providerMetadata ?? null,
+    resourceAuthorizationEnabled: resourceAuthorization?.enabled ?? false,
+    resourceClientId: resourceOidc?.clientId ?? null,
+    resourceClientSecret: resourceOidc?.clientSecret ?? null,
+    resourceClientSecretContext: null,
+    resourceIssuer: resourceOidc?.issuer ?? null,
+    resourceAuthorizationEndpoint: resourceOidc?.authorizationEndpoint ?? null,
+    resourceTokenEndpoint: resourceOidc?.tokenEndpoint ?? null,
+    resourceUserInfoEndpoint: resourceOidc?.userInfoEndpoint ?? null,
+    resourceJwksEndpoint: resourceOidc?.jwksEndpoint ?? null,
+    resourceRegistrationEndpoint: resourceOidc?.registrationEndpoint ?? null,
+    resourceRevocationEndpoint: resourceOidc?.revocationEndpoint ?? null,
+    resourceRegistrationMode: resourceAuthorization?.registrationMode ?? null,
+    resourceRegistrationClientUri: resourceOidc?.registrationClientUri ?? null,
+    resourceRegistrationAccessToken: resourceOidc?.registrationAccessToken ?? null,
+    resourceRegistrationAccessTokenContext: null,
+    resourceRegisteredScopes: resourceOidc?.registeredScopes ?? null,
+    resourceClientGeneration: 1,
+    resourceRetiredClientGenerations: null,
+    resourceProviderMetadata: resourceOidc?.metadata ?? null,
     createdAt: now,
     updatedAt: now,
   }
@@ -115,13 +153,57 @@ export async function createConnector(deps: Deps, input: CreateConnectorRequest,
   return toResponse(connector)
 }
 
-export async function updateConnector(deps: Deps, id: string, input: UpdateConnectorRequest) {
+export async function updateConnector(deps: Deps, id: string, input: UpdateConnectorRequest, callbackOrigin?: string) {
   const current = await deps.connectors.findById(id)
   if (!current) throw notFound('Connector not found.')
 
+  assertResourceAuthorizationCapability(
+    current.providerType as ConnectorProviderType,
+    current.providerId,
+    input.resourceAuthorization,
+  )
+  const resourceOidc = input.resourceAuthorization
+    ? await prepareOidcConnector(
+        deps,
+        {
+          ...input.resourceAuthorization,
+          clientId: input.resourceAuthorization.clientId ?? current.resourceClientId ?? undefined,
+          clientSecret: input.resourceAuthorization.clientSecret ?? current.resourceClientSecret ?? undefined,
+          providerId: current.providerId,
+          displayName: input.displayName ?? current.displayName,
+        },
+        callbackOrigin,
+        'resourceAuthorization',
+      )
+    : null
+  const resourcePatch =
+    input.resourceAuthorization === undefined
+      ? {}
+      : {
+          resourceAuthorizationEnabled: input.resourceAuthorization?.enabled ?? false,
+          resourceClientId: resourceOidc?.clientId ?? null,
+          resourceClientSecret: resourceOidc?.clientSecret ?? null,
+          resourceIssuer: resourceOidc?.issuer ?? null,
+          resourceAuthorizationEndpoint: resourceOidc?.authorizationEndpoint ?? null,
+          resourceTokenEndpoint: resourceOidc?.tokenEndpoint ?? null,
+          resourceUserInfoEndpoint: resourceOidc?.userInfoEndpoint ?? null,
+          resourceJwksEndpoint: resourceOidc?.jwksEndpoint ?? null,
+          resourceRegistrationEndpoint: resourceOidc?.registrationEndpoint ?? null,
+          resourceRevocationEndpoint: resourceOidc?.revocationEndpoint ?? null,
+          resourceRegistrationMode: input.resourceAuthorization?.registrationMode ?? null,
+          resourceRegistrationClientUri: resourceOidc?.registrationClientUri ?? null,
+          resourceRegistrationAccessToken: resourceOidc?.registrationAccessToken ?? null,
+          resourceRegisteredScopes: resourceOidc?.registeredScopes ?? null,
+          resourceClientGeneration: 1,
+          resourceRetiredClientGenerations: null,
+          resourceProviderMetadata: resourceOidc?.metadata ?? null,
+        }
+  const { resourceAuthorization: _, ...connectorInput } = input
+
   const candidate = {
     ...current,
-    ...input,
+    ...connectorInput,
+    ...resourcePatch,
     updatedAt: new Date(),
   }
   assertAuthenticationCapability(
@@ -132,7 +214,8 @@ export async function updateConnector(deps: Deps, id: string, input: UpdateConne
   assertComplete(candidate)
 
   const updated = await deps.connectors.update(id, {
-    ...input,
+    ...connectorInput,
+    ...resourcePatch,
     updatedAt: candidate.updatedAt,
   })
   if (!updated) throw notFound('Connector not found.')
@@ -230,13 +313,52 @@ function assertAuthenticationCapability(
   }
 }
 
+function assertResourceAuthorizationCapability(
+  providerType: ConnectorProviderType,
+  providerId: string,
+  input: CreateConnectorRequest['resourceAuthorization'] | UpdateConnectorRequest['resourceAuthorization'],
+) {
+  if (input?.enabled && !connectorCapabilities(providerType, providerId).resourceAuthorization) {
+    throw badRequest('Connector driver does not support resource authorization.')
+  }
+}
+
+function legacyResourceAuthorizationInput(input: CreateConnectorRequest, authenticationEnabled: boolean) {
+  if (input.providerType !== 'generic_oauth' || authenticationEnabled || !input.issuer) return null
+  return {
+    enabled: true,
+    registrationMode: input.registrationMode ?? 'manual',
+    clientId: input.clientId,
+    clientSecret: input.clientSecret,
+    issuer: input.issuer,
+  }
+}
+
 function assertComplete(connector: ConnectorRecord) {
   if (!connector.enabled) return
-  if (!connector.clientId) throw badRequest('Enabled connector requires clientId.')
-  if (!connector.clientSecret) throw badRequest('Enabled connector requires clientSecret.')
   assertSupportedProvider(connector.providerType as ConnectorProviderType, connector.providerId)
-  if (connector.providerType === 'social') assertSocialProviderComplete(connector)
-  if (connector.providerType === 'generic_oauth') assertGenericOAuthComplete(connector)
+  if (connector.authenticationEnabled) {
+    if (!connector.clientId) throw badRequest('Enabled authentication requires clientId.')
+    if (!connector.clientSecret) throw badRequest('Enabled authentication requires clientSecret.')
+    if (connector.providerType === 'social') assertSocialProviderComplete(connector)
+    if (connector.providerType === 'generic_oauth') assertGenericOAuthComplete(connector)
+  }
+  if (connector.resourceAuthorizationEnabled) assertResourceAuthorizationComplete(connector)
+}
+
+function assertResourceAuthorizationComplete(connector: ConnectorRecord) {
+  if (
+    !connector.resourceClientId ||
+    !connector.resourceClientSecret ||
+    !connector.resourceIssuer ||
+    !connector.resourceAuthorizationEndpoint ||
+    !connector.resourceTokenEndpoint ||
+    !connector.resourceUserInfoEndpoint ||
+    !connector.resourceJwksEndpoint ||
+    !connector.resourceRevocationEndpoint
+  ) {
+    throw badRequest('Enabled resource authorization requires a complete external OAuth client.')
+  }
 }
 
 async function assertProviderAvailable(repository: ConnectorRepository, providerId: string) {
@@ -349,12 +471,42 @@ function toResponse(row: ConnectorRecord): ConnectorResponse {
     registrationMode: row.registrationMode as 'manual' | 'dynamic' | null,
     scopes: row.scopes ?? [],
     providerMetadata: row.providerMetadata ?? {},
+    resourceAuthorization: row.resourceIssuer
+      ? {
+          enabled: row.resourceAuthorizationEnabled,
+          clientId: row.resourceClientId,
+          clientSecretConfigured: Boolean(row.resourceClientSecret),
+          issuer: row.resourceIssuer,
+          authorizationEndpoint: row.resourceAuthorizationEndpoint,
+          tokenEndpoint: row.resourceTokenEndpoint,
+          userInfoEndpoint: row.resourceUserInfoEndpoint,
+          jwksEndpoint: row.resourceJwksEndpoint,
+          registrationEndpoint: row.resourceRegistrationEndpoint,
+          revocationEndpoint: row.resourceRevocationEndpoint,
+          registrationMode: row.resourceRegistrationMode as 'manual' | 'dynamic' | null,
+          providerMetadata: row.resourceProviderMetadata ?? {},
+        }
+      : null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   }
 }
 
-async function prepareOidcConnector(deps: Deps, input: CreateConnectorRequest, callbackOrigin?: string) {
+type OidcConnectorInput = {
+  issuer?: string
+  registrationMode?: 'manual' | 'dynamic'
+  clientId?: string
+  clientSecret?: string
+  providerId: string
+  displayName: string
+}
+
+async function prepareOidcConnector(
+  deps: Deps,
+  input: OidcConnectorInput,
+  callbackOrigin: string | undefined,
+  purpose: 'authentication' | 'resourceAuthorization',
+) {
   if (!input.issuer) throw badRequest('OIDC connectors require an issuer.')
   const issuer = requireNetworkUrl(input.issuer, 'OIDC issuer').replace(/\/$/, '')
   const issuerUrl = new URL(issuer)
@@ -425,6 +577,7 @@ async function prepareOidcConnector(deps: Deps, input: CreateConnectorRequest, c
     input.displayName,
     authorizationDetailsTypes,
     registeredScopes,
+    purpose,
   )
   return {
     issuer,
@@ -465,12 +618,15 @@ async function registerOidcClient(
   displayName: string,
   authorizationDetailsTypes: string[],
   scopes: string[],
+  purpose: 'authentication' | 'resourceAuthorization',
 ) {
   const response = await deps.externalHttp.fetch(
     new Request(endpoint, {
       method: 'POST',
       headers: { accept: 'application/json', 'content-type': 'application/json' },
-      body: JSON.stringify(registrationRequest(origin, providerId, displayName, authorizationDetailsTypes, scopes)),
+      body: JSON.stringify(
+        registrationRequest(origin, providerId, displayName, authorizationDetailsTypes, scopes, purpose),
+      ),
     }),
   )
   if (!response.ok) throw badRequest('Dynamic OIDC client registration failed.')
@@ -486,35 +642,43 @@ export async function ensureDynamicConnectorScopes(
 ) {
   const connector = await deps.connectors.findById(connectorId)
   if (!connector) throw notFound('Connector not found.')
-  const generation = connector.clientGeneration ?? 1
-  if (connector.registrationMode !== 'dynamic') return generation
-  if (!connector.issuer || !connector.registrationEndpoint || !connector.clientId || !connector.clientSecret) {
-    throw badRequest('Dynamic OIDC connector is incomplete.')
+  const generation = connector.resourceClientGeneration
+  if (connector.resourceRegistrationMode !== 'dynamic') return generation
+  if (
+    !connector.resourceIssuer ||
+    !connector.resourceRegistrationEndpoint ||
+    !connector.resourceClientId ||
+    !connector.resourceClientSecret
+  ) {
+    throw badRequest('Dynamic resource authorization client is incomplete.')
   }
-  if (requiredScopes.every((scope) => connector.registeredScopes?.includes(scope))) {
-    if (!connector.registrationClientUri || !connector.registrationAccessToken) return generation
+  if (requiredScopes.every((scope) => connector.resourceRegisteredScopes?.includes(scope))) {
+    if (!connector.resourceRegistrationClientUri || !connector.resourceRegistrationAccessToken) return generation
     const cachedRegistrationRequest = registrationRequest(
       callbackOrigin.replace(/\/$/, ''),
       connector.providerId,
       connector.displayName,
       optionalStringArray(
-        connector.providerMetadata ?? {},
+        connector.resourceProviderMetadata ?? {},
         'authorization_details_types_supported',
         'OIDC discovery response',
       ),
-      connector.registeredScopes ?? requiredScopes,
+      connector.resourceRegisteredScopes ?? requiredScopes,
+      'resourceAuthorization',
     )
     const response = await deps.externalHttp.fetch(
-      new Request(requireNetworkUrl(connector.registrationClientUri, 'registration client URI'), {
+      new Request(requireNetworkUrl(connector.resourceRegistrationClientUri, 'registration client URI'), {
         headers: {
           accept: 'application/json',
-          authorization: `Bearer ${connector.registrationAccessToken}`,
+          authorization: `Bearer ${connector.resourceRegistrationAccessToken}`,
         },
       }),
     )
     if (response.ok) {
       const body = await readObject(response, 'Dynamic OIDC client registration response is invalid.')
-      if (requiredString(body, 'client_id', 'Dynamic OIDC client registration response') !== connector.clientId) {
+      if (
+        requiredString(body, 'client_id', 'Dynamic OIDC client registration response') !== connector.resourceClientId
+      ) {
         throw badRequest('Dynamic OIDC registration management changed the client identifier.')
       }
       const remoteScopes = typeof body.scope === 'string' ? scopeString(body.scope) : null
@@ -530,7 +694,7 @@ export async function ensureDynamicConnectorScopes(
     }
   }
 
-  const metadata = await fetchOidcMetadata(deps, connector.issuer)
+  const metadata = await fetchOidcMetadata(deps, connector.resourceIssuer)
   const { scope: authorizationDetailsCatalogScope } = authorizationDetailsCatalogMetadata(metadata)
   const desiredScopes = registrationScopes(metadata, authorizationDetailsCatalogScope)
   if (requiredScopes.some((scope) => !desiredScopes.includes(scope))) {
@@ -548,18 +712,19 @@ export async function ensureDynamicConnectorScopes(
     connector.displayName,
     authorizationDetailsTypes,
     desiredScopes,
+    'resourceAuthorization',
   )
 
-  if (connector.registrationClientUri && connector.registrationAccessToken) {
+  if (connector.resourceRegistrationClientUri && connector.resourceRegistrationAccessToken) {
     const response = await deps.externalHttp.fetch(
-      new Request(requireNetworkUrl(connector.registrationClientUri, 'registration client URI'), {
+      new Request(requireNetworkUrl(connector.resourceRegistrationClientUri, 'registration client URI'), {
         method: 'PUT',
         headers: {
           accept: 'application/json',
-          authorization: `Bearer ${connector.registrationAccessToken}`,
+          authorization: `Bearer ${connector.resourceRegistrationAccessToken}`,
           'content-type': 'application/json',
         },
-        body: JSON.stringify({ client_id: connector.clientId, ...requestBody }),
+        body: JSON.stringify({ client_id: connector.resourceClientId, ...requestBody }),
       }),
     )
     if (response.ok) {
@@ -567,20 +732,20 @@ export async function ensureDynamicConnectorScopes(
         await readObject(response, 'Dynamic OIDC client registration update response is invalid.'),
         desiredScopes,
         {
-          clientSecret: connector.clientSecret,
-          registrationClientUri: connector.registrationClientUri,
-          registrationAccessToken: connector.registrationAccessToken,
+          clientSecret: connector.resourceClientSecret,
+          registrationClientUri: connector.resourceRegistrationClientUri,
+          registrationAccessToken: connector.resourceRegistrationAccessToken,
         },
       )
-      if (updated.clientId !== connector.clientId) {
+      if (updated.clientId !== connector.resourceClientId) {
         throw badRequest('Dynamic OIDC registration management changed the client identifier.')
       }
       await deps.connectors.update(connector.id, {
-        clientSecret: updated.clientSecret,
-        registrationClientUri: updated.registrationClientUri,
-        registrationAccessToken: updated.registrationAccessToken,
-        registeredScopes: updated.registeredScopes,
-        providerMetadata: metadata,
+        resourceClientSecret: updated.clientSecret,
+        resourceRegistrationClientUri: updated.registrationClientUri,
+        resourceRegistrationAccessToken: updated.registrationAccessToken,
+        resourceRegisteredScopes: updated.registeredScopes,
+        resourceProviderMetadata: metadata,
         updatedAt: new Date(),
       })
       return generation
@@ -592,53 +757,54 @@ export async function ensureDynamicConnectorScopes(
 
   const replacement = await registerOidcClient(
     deps,
-    connector.registrationEndpoint,
+    connector.resourceRegistrationEndpoint,
     origin,
     connector.providerId,
     connector.displayName,
     authorizationDetailsTypes,
     desiredScopes,
+    'resourceAuthorization',
   )
   const retired = {
     generation,
-    clientId: connector.clientId,
+    clientId: connector.resourceClientId,
     encryptedClientSecret: await deps.secrets.seal(
-      connector.clientSecret,
-      retiredClientSecretContext(connector.id, generation),
+      connector.resourceClientSecret,
+      retiredResourceClientSecretContext(connector.id, generation),
     ),
-    clientSecretContext: retiredClientSecretContext(connector.id, generation),
-    registrationClientUri: connector.registrationClientUri ?? null,
-    encryptedRegistrationAccessToken: connector.registrationAccessToken
+    clientSecretContext: retiredResourceClientSecretContext(connector.id, generation),
+    registrationClientUri: connector.resourceRegistrationClientUri ?? null,
+    encryptedRegistrationAccessToken: connector.resourceRegistrationAccessToken
       ? await deps.secrets.seal(
-          connector.registrationAccessToken,
-          retiredRegistrationTokenContext(connector.id, generation),
+          connector.resourceRegistrationAccessToken,
+          retiredResourceRegistrationTokenContext(connector.id, generation),
         )
       : null,
-    registrationAccessTokenContext: connector.registrationAccessToken
-      ? retiredRegistrationTokenContext(connector.id, generation)
+    registrationAccessTokenContext: connector.resourceRegistrationAccessToken
+      ? retiredResourceRegistrationTokenContext(connector.id, generation)
       : null,
-    registeredScopes: connector.registeredScopes ?? oidcClientBaseScopes,
+    registeredScopes: connector.resourceRegisteredScopes ?? oidcClientBaseScopes,
   }
   const nextGeneration = generation + 1
-  const rotated = await deps.connectors.rotateClientGeneration(connector.id, generation, {
-    clientId: replacement.clientId,
-    clientSecret: replacement.clientSecret,
-    registrationClientUri: replacement.registrationClientUri,
-    registrationAccessToken: replacement.registrationAccessToken,
-    registeredScopes: replacement.registeredScopes,
-    clientGeneration: nextGeneration,
-    retiredClientGenerations: [...(connector.retiredClientGenerations ?? []), retired],
-    providerMetadata: metadata,
+  const rotated = await deps.connectors.rotateResourceClientGeneration(connector.id, generation, {
+    resourceClientId: replacement.clientId,
+    resourceClientSecret: replacement.clientSecret,
+    resourceRegistrationClientUri: replacement.registrationClientUri,
+    resourceRegistrationAccessToken: replacement.registrationAccessToken,
+    resourceRegisteredScopes: replacement.registeredScopes,
+    resourceClientGeneration: nextGeneration,
+    resourceRetiredClientGenerations: [...(connector.resourceRetiredClientGenerations ?? []), retired],
+    resourceProviderMetadata: metadata,
     updatedAt: new Date(),
   })
   if (!rotated) {
     const winner = await deps.connectors.findById(connector.id)
     if (
       winner &&
-      (winner.clientGeneration ?? 1) > generation &&
-      requiredScopes.every((scope) => winner.registeredScopes?.includes(scope))
+      winner.resourceClientGeneration > generation &&
+      requiredScopes.every((scope) => winner.resourceRegisteredScopes?.includes(scope))
     ) {
-      return winner.clientGeneration ?? 1
+      return winner.resourceClientGeneration
     }
     throw badRequest('Dynamic OIDC client registration changed concurrently; retry the authorization request.')
   }
@@ -648,10 +814,10 @@ export async function ensureDynamicConnectorScopes(
 export async function refreshDynamicConnectorMetadata(deps: Deps, connectorId: string) {
   const connector = await deps.connectors.findById(connectorId)
   if (!connector) throw notFound('Connector not found.')
-  if (connector.registrationMode !== 'dynamic') return
-  if (!connector.issuer) throw badRequest('Dynamic OIDC connector is incomplete.')
+  if (connector.resourceRegistrationMode !== 'dynamic') return
+  if (!connector.resourceIssuer) throw badRequest('Dynamic resource authorization client is incomplete.')
 
-  const metadata = await fetchOidcMetadata(deps, connector.issuer)
+  const metadata = await fetchOidcMetadata(deps, connector.resourceIssuer)
   const authorizationEndpoint = requiredMetadataUrl(metadata, 'authorization_endpoint')
   const tokenEndpoint = requiredMetadataUrl(metadata, 'token_endpoint')
   const userInfoEndpoint = requiredMetadataUrl(metadata, 'userinfo_endpoint')
@@ -666,13 +832,13 @@ export async function refreshDynamicConnectorMetadata(deps: Deps, connectorId: s
       : null
 
   await deps.connectors.update(connector.id, {
-    authorizationEndpoint,
-    tokenEndpoint,
-    userInfoEndpoint,
-    jwksEndpoint,
-    registrationEndpoint,
-    revocationEndpoint,
-    providerMetadata: metadata,
+    resourceAuthorizationEndpoint: authorizationEndpoint,
+    resourceTokenEndpoint: tokenEndpoint,
+    resourceUserInfoEndpoint: userInfoEndpoint,
+    resourceJwksEndpoint: jwksEndpoint,
+    resourceRegistrationEndpoint: registrationEndpoint,
+    resourceRevocationEndpoint: revocationEndpoint,
+    resourceProviderMetadata: metadata,
     updatedAt: new Date(),
   })
 }
@@ -709,24 +875,31 @@ function registrationRequest(
   displayName: string,
   authorizationDetailsTypes: string[],
   scopes: string[],
+  purpose: 'authentication' | 'resourceAuthorization',
 ) {
+  const resourceAuthorization = purpose === 'resourceAuthorization'
   return {
     client_name: `Realmroot ${displayName}`,
     redirect_uris: [
-      `${origin}/api/auth/callback/${encodeURIComponent(providerId)}`,
-      `${origin}/oauth/account-connection/callback`,
+      resourceAuthorization
+        ? `${origin}/oauth/account-connection/callback`
+        : `${origin}/api/auth/callback/${encodeURIComponent(providerId)}`,
     ],
-    grant_types: [
-      'authorization_code',
-      'refresh_token',
-      'urn:ietf:params:oauth:grant-type:jwt-bearer',
-      'urn:ietf:params:oauth:grant-type:token-exchange',
-    ],
+    grant_types: resourceAuthorization
+      ? [
+          'authorization_code',
+          'refresh_token',
+          'urn:ietf:params:oauth:grant-type:jwt-bearer',
+          'urn:ietf:params:oauth:grant-type:token-exchange',
+        ]
+      : ['authorization_code', 'refresh_token'],
     response_types: ['code'],
     token_endpoint_auth_method: 'client_secret_basic',
     scope: scopes.join(' '),
-    jwks_uri: `${origin}/api/auth/jwks`,
-    ...(authorizationDetailsTypes.length > 0 ? { authorization_details_types: authorizationDetailsTypes } : {}),
+    ...(resourceAuthorization ? { jwks_uri: `${origin}/api/auth/jwks` } : {}),
+    ...(resourceAuthorization && authorizationDetailsTypes.length > 0
+      ? { authorization_details_types: authorizationDetailsTypes }
+      : {}),
   }
 }
 
@@ -817,12 +990,12 @@ function scopeString(value: string) {
   return scopes.length > 0 ? [...new Set(scopes)].sort() : null
 }
 
-function retiredClientSecretContext(connectorId: string, generation: number) {
-  return `connector:${connectorId}:client-generation:${generation}:client-secret`
+function retiredResourceClientSecretContext(connectorId: string, generation: number) {
+  return `connector:${connectorId}:resource-client-generation:${generation}:client-secret`
 }
 
-function retiredRegistrationTokenContext(connectorId: string, generation: number) {
-  return `connector:${connectorId}:client-generation:${generation}:registration-token`
+function retiredResourceRegistrationTokenContext(connectorId: string, generation: number) {
+  return `connector:${connectorId}:resource-client-generation:${generation}:registration-token`
 }
 
 async function readObject(response: Response, message: string) {

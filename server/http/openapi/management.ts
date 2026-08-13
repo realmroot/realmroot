@@ -7,7 +7,6 @@ import {
   resourceConnectionRequestSchema,
   resourceServerAuthorizationDetailsResponseSchema,
 } from '@shared/api/agent-api'
-import { providerConnectionEventIdSchema, providerConnectionEventSchema } from '@shared/api/external-resources'
 import { agentPublicIdentifierSchema } from '@shared/api/identifiers'
 import { paginationQuerySchema } from '@shared/api/pagination'
 import {
@@ -196,35 +195,6 @@ const managementRoutes: ManagementRouteConfig[] = [
     response: resourceConnectionRequestSchema,
     status: 201,
     responseHeaders: { ...locationResponseHeader, ...interactiveResourceResponseHeaders },
-  },
-  {
-    method: 'put',
-    path: '/resource-servers/{resourceServerId}/connection-events/{eventId}',
-    operationId: 'replaceResourceServerConnectionEvent',
-    summary: 'Replace an idempotent Resource Server Connection Event',
-    security: [{ oauth2: ['connection-events:write'] }],
-    request: {
-      params: z.object({
-        resourceServerId: z.string(),
-        eventId: providerConnectionEventIdSchema.meta({
-          param: { name: 'eventId', in: 'path' },
-          example: 'delivery-018f4f92',
-        }),
-      }),
-      body: jsonBody(providerConnectionEventSchema),
-    },
-    status: 204,
-    noBody: true,
-    errors: {
-      400: 'The event representation or Resource Server is invalid.',
-      404: 'The referenced Connection was not found.',
-      409: 'The event identity or revision conflicts with the current Connection Event state.',
-      413: 'The event representation exceeds 64 KiB.',
-    },
-    additionalResponses: {
-      401: { description: 'The OAuth access token or DPoP proof is missing or invalid.' },
-      403: { description: 'The Application lacks the required scope or does not own the Resource Server.' },
-    },
   },
   {
     method: 'get',

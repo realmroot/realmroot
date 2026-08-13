@@ -1,5 +1,4 @@
 import type { AuthorizationDetail } from '@shared/api/authorization-details'
-import type { ProviderAuthorityConstraint } from '@shared/api/external-resources'
 import { sql } from 'drizzle-orm'
 import { check, index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import { agentIdentity, agentIdentityBinding } from './agent-identity-tables'
@@ -19,8 +18,6 @@ export const providerResourceAuthorization = sqliteTable(
       .references(() => apiResource.id, { onDelete: 'restrict' }),
     status: text('status').notNull().default('active'),
     revokedAt: integer('revoked_at', { mode: 'timestamp_ms' }),
-    providerEventOccurredAt: integer('provider_event_occurred_at', { mode: 'timestamp_ms' }),
-    providerEventRevision: integer('provider_event_revision'),
     createdAt: integer('created_at', { mode: 'timestamp_ms' })
       .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
       .notNull(),
@@ -48,16 +45,10 @@ export const providerCredential = sqliteTable(
       .references(() => providerResourceAuthorization.id, { onDelete: 'cascade' }),
     externalSubject: text('external_subject').notNull(),
     displayName: text('display_name').notNull(),
-    credentialCustody: text('credential_custody', { enum: ['realmroot', 'resource_server'] }).notNull(),
-    encryptedTokens: text('encrypted_tokens'),
-    brokerReference: text('broker_reference'),
+    encryptedTokens: text('encrypted_tokens').notNull(),
     grantedScopes: text('granted_scopes', { mode: 'json' }).$type<string[]>().notNull(),
     authorizationDetails: text('authorization_details', { mode: 'json' })
       .$type<AuthorizationDetail[]>()
-      .notNull()
-      .default(sql`'[]'`),
-    authorityConstraints: text('authority_constraints', { mode: 'json' })
-      .$type<ProviderAuthorityConstraint[]>()
       .notNull()
       .default(sql`'[]'`),
     clientGeneration: integer('client_generation').default(1).notNull(),
@@ -75,20 +66,8 @@ export const providerCredential = sqliteTable(
       .notNull(),
   },
   (table) => [
-    check(
-      'providerCredential_custody_check',
-      sql`(
-        (${table.credentialCustody} = 'realmroot' AND ${table.encryptedTokens} IS NOT NULL AND ${table.brokerReference} IS NULL)
-        OR
-        (${table.credentialCustody} = 'resource_server' AND ${table.encryptedTokens} IS NULL AND ${table.brokerReference} IS NOT NULL)
-      )`,
-    ),
-    uniqueIndex('providerCredential_authorization_subject_unique').on(
-      table.providerResourceAuthorizationId,
-      table.externalSubject,
-    ),
+    uniqueIndex('providerCredential_authorization_unique').on(table.providerResourceAuthorizationId),
     index('providerCredential_authorizationId_idx').on(table.providerResourceAuthorizationId),
-    index('providerCredential_brokerReference_idx').on(table.brokerReference),
     index('providerCredential_status_idx').on(table.status),
   ],
 )
@@ -112,9 +91,6 @@ export const resourceConnectionIntent = sqliteTable(
       .notNull()
       .default(sql`'[]'`),
     encryptedPkceVerifier: text('encrypted_pkce_verifier').notNull(),
-    authorizationMode: text('authorization_mode', { enum: ['oauth', 'brokered'] })
-      .notNull()
-      .default('oauth'),
     clientGeneration: integer('client_generation').default(1).notNull(),
     returnTo: text('return_to').notNull().default('account-center'),
     status: text('status').notNull().default('pending'),

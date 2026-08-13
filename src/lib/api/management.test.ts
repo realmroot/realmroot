@@ -144,7 +144,7 @@ describe('management API client', () => {
     await management.createApiResource({
       identifier: 'management-api',
       resourceUrl: 'https://auth.example.com/api',
-      authorizationModel: 'realmroot',
+      authorizationModel: 'native',
       ownerOrganizationId: 'org-1',
     })
     await management.updateApiResource('resource-1', { enabled: false })
@@ -317,7 +317,7 @@ describe('management API client', () => {
           json: {
             identifier: 'management-api',
             resourceUrl: 'https://auth.example.com/api',
-            authorizationModel: 'realmroot',
+            authorizationModel: 'native',
             ownerOrganizationId: 'org-1',
           },
         },

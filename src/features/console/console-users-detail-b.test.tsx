@@ -102,6 +102,7 @@ describe('admin console users-detail-b', () => {
             providerType: 'social',
             clientId: 'google-client',
             clientSecret: 'GOOGLE_SECRET',
+            resourceAuthorization: null,
             scopes: ['openid', 'email', 'profile'],
           },
         },

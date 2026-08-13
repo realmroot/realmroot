@@ -88,29 +88,13 @@ export const createInvitationRequestSchema = z.object({
 })
 
 export const apiResourceVisibilitySchema = z.enum(['private', 'public'])
-export const apiResourceAuthorizationModelSchema = z.enum(['realmroot', 'federated'])
-export const providerConnectionModeSchema = z.enum(['managed', 'brokered'])
-export const resourceProviderConnectionSchema = z
-  .object({
-    connectorId: nonEmptyString,
-    mode: providerConnectionModeSchema,
-  })
-  .strict()
+export const apiResourceAuthorizationModelSchema = z.enum(['native', 'external'])
 export const resourceScopeGrantModeSchema = z.enum(['automatic', 'assigned'])
 export const resourceScopeSchema = z
   .object({
     value: nonEmptyString,
     description: z.string().nullable(),
     grantMode: resourceScopeGrantModeSchema,
-  })
-  .strict()
-export const brokeredAccountConnectionSchema = z
-  .object({
-    mode: z.literal('brokered'),
-    authorizationEndpoint: z.url(),
-    tokenEndpoint: z.url(),
-    revocationEndpoint: z.url().nullable().optional(),
-    authorizationDetailsEndpoint: z.url().nullable().optional(),
   })
   .strict()
 export const resourceScopeRegistrySchema = z
@@ -131,7 +115,6 @@ export const resourceScopeRegistrySchema = z
       })
       .strict(),
     scopes: z.array(resourceScopeSchema),
-    accountConnection: brokeredAccountConnectionSchema.nullable().optional(),
   })
   .strict()
 
@@ -141,7 +124,7 @@ export const apiResourceResponseSchema = z.object({
   name: z.string(),
   resourceUrl: z.url(),
   authorizationModel: apiResourceAuthorizationModelSchema,
-  providerConnection: resourceProviderConnectionSchema.nullable(),
+  connectorId: z.string().nullable(),
   authorizationDetails: authorizationDetailsSchema,
   description: z.string().nullable(),
   enabled: z.boolean(),
@@ -158,7 +141,7 @@ export const createApiResourceRequestSchema = z
     identifier: nonEmptyString,
     resourceUrl: z.url(),
     authorizationModel: apiResourceAuthorizationModelSchema,
-    providerConnection: resourceProviderConnectionSchema.nullable().default(null),
+    connectorId: nonEmptyString.nullable().default(null),
     authorizationDetails: authorizationDetailsSchema.default([]),
     enabled: z.boolean().optional(),
     ownerOrganizationId: nonEmptyString,
@@ -172,7 +155,7 @@ export const updateApiResourceRequestSchema = z
   .object({
     identifier: nonEmptyString.optional(),
     resourceUrl: z.url().optional(),
-    providerConnection: resourceProviderConnectionSchema.nullable().optional(),
+    connectorId: nonEmptyString.nullable().optional(),
     authorizationDetails: authorizationDetailsSchema.optional(),
     enabled: z.boolean().optional(),
     ownerOrganizationId: nonEmptyString.optional(),
@@ -185,14 +168,21 @@ export const updateApiResourceRequestSchema = z
   .strict()
 
 function validateResourceAuthorizationModel(
-  input: { authorizationModel: 'realmroot' | 'federated'; providerConnection: { mode: 'managed' | 'brokered' } | null },
+  input: { authorizationModel: 'native' | 'external'; connectorId: string | null },
   ctx: z.RefinementCtx,
 ) {
-  if (input.authorizationModel === 'federated' && input.providerConnection?.mode !== 'managed') {
+  if (input.authorizationModel === 'external' && !input.connectorId) {
     ctx.addIssue({
       code: 'custom',
-      path: ['providerConnection'],
-      message: 'Federated authorization requires a Realmroot-managed Provider Connection.',
+      path: ['connectorId'],
+      message: 'External authorization requires a Provider Connector.',
+    })
+  }
+  if (input.authorizationModel === 'native' && input.connectorId) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['connectorId'],
+      message: 'Native authorization does not use a Provider Connector.',
     })
   }
 }
@@ -367,8 +357,6 @@ export type ListInvitationsResponse = z.infer<typeof listInvitationsResponseSche
 export type ApiResourceResponse = z.infer<typeof apiResourceResponseSchema>
 export type ApiResourceVisibility = z.infer<typeof apiResourceVisibilitySchema>
 export type ApiResourceAuthorizationModel = z.infer<typeof apiResourceAuthorizationModelSchema>
-export type ProviderConnectionMode = z.infer<typeof providerConnectionModeSchema>
-export type ResourceProviderConnection = z.infer<typeof resourceProviderConnectionSchema>
 export type ResourceScope = z.infer<typeof resourceScopeSchema>
 export type ResourceScopeRegistry = z.infer<typeof resourceScopeRegistrySchema>
 export type ListApiResourcesResponse = z.infer<typeof listApiResourcesResponseSchema>

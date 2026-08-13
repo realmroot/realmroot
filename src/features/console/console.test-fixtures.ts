@@ -137,6 +137,7 @@ export const connector = {
   registrationMode: null,
   scopes: ['openid', 'email'],
   providerMetadata: { prompt: 'select_account' },
+  resourceAuthorization: null,
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
 }
@@ -242,8 +243,8 @@ export const apiResource = {
   name: 'Management API',
   description: 'Management surface',
   resourceUrl: 'https://auth.example.com/api',
-  authorizationModel: 'realmroot' as const,
-  providerConnection: null,
+  authorizationModel: 'native' as const,
+  connectorId: null,
   authorizationDetails: [],
   enabled: true,
   ownerOrganizationId: 'org-1',

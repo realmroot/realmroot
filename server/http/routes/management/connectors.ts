@@ -60,6 +60,7 @@ export function createManagementConnectorRoutes(canonicalOrigin?: string) {
       getDeps(c),
       c.req.param('id'),
       await readJson(c, updateManagementConnectorRequestSchema),
+      canonicalOrigin,
     )
     return c.json(managementConnectorResponseSchema.parse(connector))
   })

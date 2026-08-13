@@ -13,8 +13,8 @@ const realmrootResource = {
   id: realmrootResourceServerId,
   ...realmrootResourceServer,
   resourceUrl: 'https://auth.example.com/api',
-  authorizationModel: 'realmroot' as const,
-  providerConnection: null,
+  authorizationModel: 'native' as const,
+  connectorId: null,
   authorizationDetails: [],
   enabled: true,
   ownerOrganizationId: platformOrganizationId,
@@ -270,7 +270,6 @@ export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> =
       delete: vi.fn(),
     },
     externalResources: {
-      applyProviderConnectionEvent: vi.fn().mockResolvedValue('applied'),
       connectAuthenticationAccount: vi.fn().mockResolvedValue(null),
       disconnectAuthenticationAccount: vi.fn(),
       upsertProviderConnection: vi.fn().mockImplementation(async (input) => {
@@ -291,9 +290,6 @@ export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> =
         grantedScopes: input.credentials.flatMap((credential: { grantedScopes: string[] }) => credential.grantedScopes),
         authorizationDetails: input.credentials.flatMap(
           (credential: { authorizationDetails: unknown[] }) => credential.authorizationDetails,
-        ),
-        authorityConstraints: input.credentials.flatMap(
-          (credential: { authorityConstraints: unknown[] }) => credential.authorityConstraints,
         ),
       })),
       findConnectionByOwnerResource: vi.fn().mockResolvedValue(null),

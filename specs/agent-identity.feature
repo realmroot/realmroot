@@ -167,15 +167,15 @@ Feature: Agent identity and delegated API authorization
       And an Organization owner may approve current assigned scopes of a Resource Server owned by that Organization
       And an access request copies the selected authorization detail directly without a generated Resource identifier or URL
 
-    @entrypoint:agent-protocol @journey:brokered-resource-context-catalog
-    Scenario: An Agent discovers display-safe Contexts from a brokered Resource Server
-      Given a brokered Resource Server advertises an authorization-detail catalog endpoint
-      And the Agent's controller has an active brokered account connection
+    @entrypoint:agent-protocol @journey:external-resource-authorization-detail-catalog
+    Scenario: An Agent discovers display-safe authorization details from an external Resource Server
+      Given an external Resource Server's authorization server advertises an authorization-detail catalog endpoint
+      And the Agent's controller has an active external Resource authorization
       When the Agent lists that Resource Server's authorization details
-      Then Realmroot authenticates the catalog read with the Resource Server's opaque connection reference
+      Then Realmroot authenticates the catalog read with a refreshed external subject token
       And each connected detail uses the Resource Server supplied display name, description, and safe attributes
       And Realmroot reports the Agent's authorized and requestable scopes for that exact detail
-      But the connection reference is never returned to the Agent
+      But the external provider credential is never returned to the Agent
 
     @entrypoint:agent-protocol @journey:agent-private-resource-server-visibility
     Scenario: A private Resource Server stays inside its owner Organization boundary
@@ -201,29 +201,6 @@ Feature: Agent identity and delegated API authorization
       And OpenAPI may add descriptions and maps operations only to advertised scopes
       And advertised scopes remain valid even when no public operation references them
       And Realmroot stores only discovered scope metadata and local grant modes, never either source document
-
-    @entrypoint:product-ui @journey:connector-backed-native-resource-registration
-    Scenario: An administrator connects a native Resource Server to a provider OAuth account
-      Given a generic OAuth Connector has discovered authorization, token, UserInfo, signing-key, and revocation endpoints
-      And its OAuth client supports authorization code, refresh token, confidential client authentication, and S256 PKCE
-      When an administrator creates a native Resource Server and selects that Connector
-      Then Realmroot keeps native access-token validation while requiring a provider account connection
-      And every Resource Server scope is allowed by the Connector OAuth client
-      And Realmroot rejects rich authorization, pushed authorization, target resource indicators, JWT bearer grants, and target token exchange for that connection
-      And the Connector remains reusable by other compatible Resource Servers without binding the Resource Server to an Application
-
-    @entrypoint:agent-protocol @journey:connector-backed-native-agent-connection
-    Scenario: An Agent obtains exact provider authority through a native Resource Server
-      Given an enabled native Resource Server uses a generic OAuth Connector
-      When an Agent requests exact Resource Server scopes that are not yet connected
-      Then Realmroot asks the controller to authorize only those scopes plus OpenID and offline access
-      And the authorization request uses authorization code with S256 PKCE without a target resource, authorization details, or pushed authorization
-      When the controller completes provider consent
-      Then Realmroot validates the callback and UserInfo and stores encrypted provider credentials in the Agent home space connection
-      And Realmroot never exposes the provider access token or refresh token to the Agent
-      When the controller approves Agent access
-      Then the Realmroot DPoP token binds the Agent, approved scopes, active Permission snapshots, and internal account connection
-      And a connection from another home space or Resource Server cannot satisfy the request
 
     @entrypoint:product-ui @journey:api-resource-contract-validation
     Scenario: API resources require a discoverable OpenAPI contract
@@ -299,25 +276,6 @@ Feature: Agent identity and delegated API authorization
 
   Rule: Workload token exchange preserves authorization boundaries
 
-    @entrypoint:agent-protocol @journey:application-provider-token-exchange
-    Scenario: A confidential Application exchanges an Agent token for a connected provider token
-      Given an active connector-backed native account connection and an approved Agent DPoP token exist
-      And a confidential Application is allowed to use token exchange for that Resource Server
-      When the Application exchanges the Agent access token at the standard token endpoint
-      Then Realmroot verifies the Agent token, active Token Lease, access request, binding, Agent, Permissions, connection, and Resource Server
-      And requested scopes are bounded by the Agent token, Application resource scopes, Application Permissions, and connected provider grant
-      And Realmroot returns the current provider Bearer token with its remaining lifetime and actual scopes without a refresh token
-      But a revoked or mismatched authority returns a standard OAuth token-exchange error
-
-    @entrypoint:agent-protocol @journey:provider-token-refresh-concurrency
-    Scenario: Provider token refresh is serialized across Realmroot instances
-      Given a connector-backed account connection has an expired access token and a rotating refresh token
-      When two Applications exchange valid Agent tokens concurrently
-      Then exactly one caller claims and rotates the refresh token
-      And the other caller receives a retryable temporarily-unavailable response
-      And a crashed refresh claim expires so a later caller can continue
-      But an upstream invalid grant revokes the local connection and prevents later exchange
-
     @entrypoint:product-ui @journey:connector-backed-connection-revocation
     Scenario: Revoking a connector-backed account connection revokes provider authority first
       Given an active connector-backed account connection has provider access and refresh tokens
@@ -345,50 +303,27 @@ Feature: Agent identity and delegated API authorization
   Rule: External API resources use target-issued authorization
 
     @entrypoint:product-ui @journey:linear-managed-workspace-connections
-    Scenario: Linear authentication and workspace authorization remain independent
-      Given the Linear Connector supports authentication and resource authorization
-      When a user signs in with Linear and authorizes two Linear workspaces for resource access
-      Then sign-in creates only its authentication account
-      And each workspace creates a separate managed Provider Connection identified by its Linear organization
-      And the two workspace connections keep independent access and refresh tokens
-      And an Agent must select a workspace connection when more than one is available
-      And the single available workspace connection may be selected automatically
-      And the Linear Resource Server receives a Realmroot-issued DPoP token and exchanges it for the selected provider token
+    Scenario: One Linear Connector independently supports sign-in and external resource authorization
+      Given the Linear Connector uses Better Auth for authentication and the Linear Adapter as its external authorization issuer
+      When a user signs in with Linear and authorizes Linear resource access
+      Then sign-in creates only its Better Auth account link
+      And resource authorization creates one external connection to the Linear Adapter
+      And the Linear Adapter keeps provider credentials outside Realmroot
+      And available workspaces are selected through authorization details instead of additional Realmroot connections
+      And Realmroot exchanges the connected subject and Agent actor at the Linear Adapter
+      And the Linear Adapter issues the final DPoP token used for its Resource Server
 
-    @entrypoint:product-ui @journey:brokered-native-account-connection
-    Scenario: A brokered Resource Server connects one provider account
-      Given a Resource Server uses brokered provider access and advertises account connection endpoints
-      And one controller owns at most one account connection for that Resource Server
-      When the controller connects the provider account
-      Then Realmroot signs a short-lived connection request for the Resource Server
-      And the Resource Server completes provider authorization without exposing provider credentials to Realmroot
-      And Realmroot stores one resource-server-custodied connection with every granted provider context
+    @entrypoint:product-ui @journey:adapter-external-resource-authorization
+    Scenario: An Adapter presents a non-standard provider as a standard External Resource Server
+      Given the provider cannot issue the Agent token required by Realmroot
+      And its Adapter publishes a standard authorization server and protected Resource Server
+      When the controller connects the provider through the Connector's resource-authorization facet
+      Then the Adapter completes provider authorization without exposing provider credentials to Realmroot
+      And Realmroot stores one standard external connection issued by the Adapter
       When an Agent receives access through that connection
-      Then the Realmroot-issued DPoP token binds the Agent to the connection and approved authorization details
-      And the Resource Server selects provider credentials only from that signed connection boundary
-      And reconnecting updates the existing connection instead of creating another connection
-
-    @entrypoint:agent-protocol @journey:provider-connection-events
-    Scenario: A provider reports account connection lifecycle changes
-      Given a brokered Resource Server holds a provider account connection for an Agent grant
-      When the Resource Server Application replaces its Connection Event child resource with a client-credentials access token, unique event identity, and positive monotonic revision
-      Then the Resource Server path identifies the event authority without repeating its resource URL in the event representation
-      And Realmroot authenticates the Application, authorizes it for the Resource Server, and applies the authority, resource, suspension, restoration, or revocation change
-      And Realmroot updates connection-wide scopes separately from the resulting scopes of any selected authority
-      And Realmroot persists provider-neutral authorization-detail-to-scope constraints for every current authority
-      And an authority change identifies the affected authority and its resulting scopes together
-      And Realmroot constrains or revokes Agent grants that exceed the Connection's current authority
-      And an authority-specific change revokes only grants matched to its generic authorization detail
-      But authority or resource expansion preserves grants already within the resulting authority
-      And nested objects and unordered arrays in authorization details use structural subset semantics
-      And replaying the same event has no additional effect
-      But reusing its event identity for a different representation is rejected
-      And events are ordered only by revision so a higher revision applies despite an earlier occurrence time
-      But a lower revision is acknowledged without changing Realmroot state despite a later occurrence time
-      And a different event using the current revision is rejected as a conflict
-      And an authority reduction racing approval cannot recreate a grant from an older Connection revision
-      And later discovery, approval, and credential issuance enforce the persisted scopes of the selected authority
-      And unauthenticated or unauthorized Connection Events cannot change Realmroot state
+      Then Realmroot sends the connected subject, Agent actor, scopes, and authorization details through standard token exchange
+      And the Adapter issues a DPoP token bound to the Agent and selected provider authority
+      And reconnecting updates the external connection instead of creating another Realmroot connection
 
     @entrypoint:product-ui @journey:external-api-resource-registration
     Scenario: An administrator creates an external API resource with an OIDC connector
@@ -436,13 +371,13 @@ Feature: Agent identity and delegated API authorization
 
     @entrypoint:product-ui @journey:external-resource-rich-authorization-connection
     Scenario: A controller connects one external subject to multiple target contexts
-      Given an authorization server advertises RFC 9396 authorization detail types and an RFC 9126 pushed authorization request endpoint
+      Given an authorization server advertises RFC 9396 authorization detail types
       And an external API resource configures opaque connection authorization detail templates using supported types
       When Realmroot dynamically registers its reusable OIDC connector
       Then the registration declares the authorization detail types that the connector can use
       When the controller authorizes the resource account
-      Then Realmroot pushes the complete authorization request including the configured authorization details
-      And sends only the returned one-time request URI through the browser
+      Then Realmroot sends the complete authorization request including the configured authorization details
+      And uses RFC 9126 pushed authorization requests when the authorization server advertises that optional endpoint
       When the target consent enriches one template into multiple granted contexts
       Then Realmroot requires and stores every returned authorization detail under the single account connection
       And refresh-token rotation preserves the granted authorization details
@@ -450,7 +385,7 @@ Feature: Agent identity and delegated API authorization
 
     @entrypoint:agent-protocol @journey:external-resource-rar-without-catalog
     Scenario: Rich authorization does not require an enumerable resource catalog
-      Given an authorization server supports RFC 9396 authorization details and RFC 9126 pushed authorization requests
+      Given an authorization server supports RFC 9396 authorization details
       And it does not advertise Realmroot's optional authorization detail catalog extension
       When an administrator registers an external API resource with supported authorization detail templates
       Then Realmroot accepts the resource without inventing a catalog requirement

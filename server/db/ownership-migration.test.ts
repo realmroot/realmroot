@@ -20,6 +20,10 @@ const applicationConsentRequiredMigrationName = '20260812140338_application_cons
 const applicationAuthorizationSourceMigrationName = '20260812142042_application_authorization_source.sql'
 const resourceAuthorizationConnectorsMigrationName = '20260813061753_resource_authorization_connectors.sql'
 const adaptersLinearPermissionsMigrationName = '20260813074009_adapters_linear_permissions.sql'
+const authorizationModelMigrationName = '20260813153528_natural_zaran.sql'
+const providerCredentialMigrationName = '20260813153617_big_captain_britain.sql'
+const externalAuthorizationCleanupMigrationName = '20260813164303_past_metal_master.sql'
+const authorityConstraintCleanupMigrationName = '20260813165958_sparkling_jimmy_woo.sql'
 
 describe('tenant ownership migration', () => {
   it('backfills authority constraints for existing brokered connections', () => {
@@ -85,6 +89,10 @@ describe('tenant ownership migration', () => {
             applicationAuthorizationSourceMigrationName,
             resourceAuthorizationConnectorsMigrationName,
             adaptersLinearPermissionsMigrationName,
+            authorizationModelMigrationName,
+            providerCredentialMigrationName,
+            externalAuthorizationCleanupMigrationName,
+            authorityConstraintCleanupMigrationName,
           ].includes(name),
       )) {
         database.exec(readFileSync(new URL(`../../migrations/${name}`, import.meta.url), 'utf8'))
@@ -127,12 +135,25 @@ describe('tenant ownership migration', () => {
       database.exec(
         readFileSync(new URL(`../../migrations/${adaptersLinearPermissionsMigrationName}`, import.meta.url), 'utf8'),
       )
+      database.exec(
+        readFileSync(new URL(`../../migrations/${authorizationModelMigrationName}`, import.meta.url), 'utf8'),
+      )
+      database.exec(
+        readFileSync(new URL(`../../migrations/${providerCredentialMigrationName}`, import.meta.url), 'utf8'),
+      )
+      database.exec(
+        readFileSync(new URL(`../../migrations/${externalAuthorizationCleanupMigrationName}`, import.meta.url), 'utf8'),
+      )
+      database.exec(
+        readFileSync(new URL(`../../migrations/${authorityConstraintCleanupMigrationName}`, import.meta.url), 'utf8'),
+      )
 
       expect(columnNames(database, 'application')).not.toContain('owner_user_id')
       expect(columnNames(database, 'application')).not.toContain('audience_mode')
       expect(columnNames(database, 'application')).toEqual(expect.arrayContaining(['oidc_scopes', 'resource_scopes']))
       expect(columnNames(database, 'application_consent')).not.toContain('organization_id')
       expect(columnNames(database, 'application_consent')).not.toContain('permissions')
+      expect(columnNames(database, 'provider_credential')).not.toContain('authority_constraints')
       expect(database.prepare("select id from application_consent where id = 'consent-1'").get()).toEqual({
         id: 'consent-1',
       })

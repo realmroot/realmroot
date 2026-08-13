@@ -261,13 +261,10 @@ export function createDrizzleAuthorizationRepository(db: Database, ids: Identifi
 
     async createResource(input) {
       const now = new Date()
-      const { providerConnection, ...resourceInput } = input
       const rows = await db
         .insert(apiResource)
         .values({
-          ...resourceInput,
-          connectorId: providerConnection?.connectorId ?? null,
-          providerConnectionMode: providerConnection?.mode ?? null,
+          ...input,
           createdAt: now,
           updatedAt: now,
         })
@@ -344,18 +341,12 @@ export function createDrizzleAuthorizationRepository(db: Database, ids: Identifi
     },
 
     async updateResource(id, patch) {
-      const { scopeGrantModes: _, providerConnection, ...storedPatch } = patch
+      const { scopeGrantModes: _, ...storedPatch } = patch
       const now = new Date()
       const update = db
         .update(apiResource)
         .set({
           ...withoutUndefined(storedPatch),
-          ...(providerConnection !== undefined
-            ? {
-                connectorId: providerConnection?.connectorId ?? null,
-                providerConnectionMode: providerConnection?.mode ?? null,
-              }
-            : {}),
           updatedAt: now,
         })
         .where(and(eq(apiResource.id, id), isNull(apiResource.deletedAt)))

@@ -24,6 +24,33 @@ const connectorEndpointMetadataSchema = z.object({
   jwksEndpoint: z.string().nullable(),
 })
 
+const connectorResourceAuthorizationResponseSchema = z
+  .object({
+    enabled: z.boolean(),
+    clientId: z.string().nullable(),
+    clientSecretConfigured: z.boolean(),
+    issuer: z.string().nullable(),
+    authorizationEndpoint: z.string().nullable(),
+    tokenEndpoint: z.string().nullable(),
+    userInfoEndpoint: z.string().nullable(),
+    jwksEndpoint: z.string().nullable(),
+    registrationEndpoint: z.string().nullable(),
+    revocationEndpoint: z.string().nullable(),
+    registrationMode: oidcClientRegistrationModeSchema.nullable(),
+    providerMetadata: connectorProviderMetadataSchema,
+  })
+  .strict()
+
+const connectorResourceAuthorizationInputSchema = z
+  .object({
+    enabled: z.boolean().default(true),
+    registrationMode: oidcClientRegistrationModeSchema.default('manual'),
+    clientId: nonEmptyString.optional(),
+    clientSecret: nonEmptyString.optional(),
+    issuer: z.url(),
+  })
+  .strict()
+
 export const connectorTemplateSchema = z.object({
   providerType: connectorProviderTypeSchema,
   providerId: z.string(),
@@ -57,6 +84,7 @@ export const connectorResponseSchema = z.object({
   registrationMode: oidcClientRegistrationModeSchema.nullable(),
   scopes: z.array(z.string()),
   providerMetadata: connectorProviderMetadataSchema,
+  resourceAuthorization: connectorResourceAuthorizationResponseSchema.nullable().default(null),
   createdAt: z.string(),
   updatedAt: z.string(),
 })
@@ -97,6 +125,7 @@ export const createConnectorRequestSchema = z
     jwksEndpoint: optionalUrl,
     scopes: scopesSchema.optional(),
     providerMetadata: connectorProviderMetadataSchema.optional(),
+    resourceAuthorization: connectorResourceAuthorizationInputSchema.nullable().optional(),
   })
   .superRefine((input, ctx) => {
     validateConnectorFields(input, ctx)
@@ -116,6 +145,7 @@ export const updateConnectorRequestSchema = z.object({
   clientSecret: nonEmptyString.nullable().optional(),
   scopes: scopesSchema.optional(),
   providerMetadata: connectorProviderMetadataSchema.optional(),
+  resourceAuthorization: connectorResourceAuthorizationInputSchema.nullable().optional(),
 })
 
 export const listConnectorsResponseSchema = z.object({
@@ -142,8 +172,10 @@ export const unlinkAccountQuerySchema = z.object({
 type ConnectorBoundaryInput = z.infer<typeof createConnectorRequestSchema>
 
 function validateConnectorFields(input: ConnectorBoundaryInput, ctx: z.RefinementCtx) {
+  const authenticationEnabled = input.authenticationEnabled ?? true
   const dynamicOidc = input.providerType === 'generic_oauth' && input.registrationMode === 'dynamic'
-  if (input.providerType === 'generic_oauth' && !input.issuer) {
+  const authenticationActive = input.enabled !== false && authenticationEnabled
+  if (input.providerType === 'generic_oauth' && authenticationActive && !input.issuer) {
     ctx.addIssue({
       code: 'custom',
       path: ['issuer'],
@@ -161,16 +193,28 @@ function validateConnectorFields(input: ConnectorBoundaryInput, ctx: z.Refinemen
       message: 'OIDC endpoints are discovered from the issuer and cannot be supplied explicitly.',
     })
   }
-  if (input.enabled === false && input.providerType === 'social') return
-  if (!dynamicOidc && !input.clientId) {
+  if (authenticationActive && !dynamicOidc && !input.clientId) {
     ctx.addIssue({ code: 'custom', path: ['clientId'], message: 'clientId is required.' })
   }
-  if (!dynamicOidc && !input.clientSecret) {
+  if (authenticationActive && !dynamicOidc && !input.clientSecret) {
     ctx.addIssue({
       code: 'custom',
       path: ['clientSecret'],
       message: 'clientSecret is required.',
     })
+  }
+  const resource = input.resourceAuthorization
+  if (resource?.enabled && resource.registrationMode !== 'dynamic') {
+    if (!resource.clientId) {
+      ctx.addIssue({ code: 'custom', path: ['resourceAuthorization', 'clientId'], message: 'clientId is required.' })
+    }
+    if (!resource.clientSecret) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['resourceAuthorization', 'clientSecret'],
+        message: 'clientSecret is required.',
+      })
+    }
   }
 }
 

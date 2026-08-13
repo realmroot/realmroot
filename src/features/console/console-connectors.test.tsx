@@ -75,11 +75,11 @@ describe('admin console Identity providers', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add OIDC connector' }))
     fireEvent.change(await screen.findByLabelText('Name'), { target: { value: 'Projects OIDC' } })
     fireEvent.change(screen.getByLabelText('Provider ID'), { target: { value: 'projects' } })
+    fireEvent.click(screen.getByRole('switch', { name: 'Allow hosted login' }))
     fireEvent.change(screen.getByLabelText('OIDC issuer'), { target: { value: 'https://idp.example.com' } })
     fireEvent.change(screen.getByLabelText('Client ID'), { target: { value: 'client-1' } })
     fireEvent.change(screen.getByLabelText('Client Secret'), { target: { value: 'secret-1' } })
     fireEvent.change(screen.getByLabelText('Scopes'), { target: { value: 'openid profile' } })
-    fireEvent.click(screen.getByRole('switch', { name: 'Allow hosted login' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Save' }))
 
     await waitFor(() =>
@@ -116,6 +116,7 @@ describe('admin console Identity providers', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Add OIDC connector' }))
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Dynamic OIDC' } })
     fireEvent.change(screen.getByLabelText('Provider ID'), { target: { value: 'dynamic-oidc' } })
+    fireEvent.click(screen.getByRole('switch', { name: 'Allow hosted login' }))
     fireEvent.change(screen.getByLabelText('Client registration'), { target: { value: 'dynamic' } })
     fireEvent.change(screen.getByLabelText('OIDC issuer'), { target: { value: 'https://dynamic.example.com' } })
     expect(screen.queryByLabelText('Client ID')).toBeNull()
@@ -158,9 +159,9 @@ describe('admin console Identity providers', () => {
     expect(await screen.findByRole('heading', { name: 'Projects OIDC' })).toBeTruthy()
     await waitFor(() => expect(screen.getByLabelText('Client ID')).toHaveProperty('value', 'client-1'))
     expect(screen.getByLabelText('OIDC issuer')).toHaveProperty('readOnly', true)
+    fireEvent.change(screen.getByLabelText('Client ID'), { target: { value: 'client-2' } })
     fireEvent.click(screen.getByRole('switch', { name: 'Enabled' }))
     fireEvent.click(screen.getByRole('switch', { name: 'Allow hosted login' }))
-    fireEvent.change(screen.getByLabelText('Client ID'), { target: { value: 'client-2' } })
     fireEvent.click(await screen.findByRole('button', { name: 'Save' }))
     await waitFor(() => expect(requests.some((request) => request.method === 'PATCH')).toBe(true))
     expect(requests.find((request) => request.method === 'PATCH')?.body).toMatchObject({

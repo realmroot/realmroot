@@ -431,7 +431,7 @@ describe('Agent identity enrollment over real D1', () => {
     const resource = await createResource(harness.deps, {
       identifier: 'native-api',
       resourceUrl: 'https://api.example.com',
-      authorizationModel: 'realmroot',
+      authorizationModel: 'native',
       ownerOrganizationId: platformOrganizationId,
     })
     const automaticScope = await harness.request(`/api/resource-servers/${resource.id}`, {

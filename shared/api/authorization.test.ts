@@ -18,11 +18,11 @@ describe('authorization API schemas', () => {
     })
   })
 
-  it('requires managed Provider Connections for federated authorization', () => {
+  it('requires one Connector for external authorization and forbids it for native authorization', () => {
     const input = {
       identifier: 'projects',
       resourceUrl: 'https://api.example.com',
-      authorizationModel: 'federated' as const,
+      authorizationModel: 'external' as const,
       ownerOrganizationId: 'organization-1',
     }
 
@@ -30,20 +30,14 @@ describe('authorization API schemas', () => {
     expect(
       createApiResourceRequestSchema.safeParse({
         ...input,
-        providerConnection: { connectorId: 'connector-1', mode: 'brokered' },
-      }).success,
-    ).toBe(false)
-    expect(
-      createApiResourceRequestSchema.safeParse({
-        ...input,
-        providerConnection: { connectorId: 'connector-1', mode: 'managed' },
+        connectorId: 'connector-1',
       }).success,
     ).toBe(true)
     expect(
       createApiResourceRequestSchema.safeParse({
         ...input,
-        authorizationModel: 'realmroot',
-        providerConnection: null,
+        authorizationModel: 'native',
+        connectorId: null,
       }).success,
     ).toBe(true)
   })

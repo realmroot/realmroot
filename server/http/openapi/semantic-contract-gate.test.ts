@@ -26,9 +26,6 @@ describe('OpenAPI semantic contract gate', () => {
     const brokeredNativeContract = JSON.parse(
       readFileSync(new URL('./approved-brokered-native-semantic-baseline.json', import.meta.url), 'utf8'),
     ) as typeof unchanged
-    const providerConnectionEventsContract = JSON.parse(
-      readFileSync(new URL('./approved-provider-connection-events-semantic-baseline.json', import.meta.url), 'utf8'),
-    ) as typeof unchanged
     const authenticationContract = JSON.parse(
       readFileSync(new URL('./approved-authentication-semantic-baseline.json', import.meta.url), 'utf8'),
     ) as typeof unchanged
@@ -65,7 +62,6 @@ describe('OpenAPI semantic contract gate', () => {
         ...resourceDiscoveryContract,
         ...brokeredNativeContract,
         ...publicProfilesContract,
-        ...providerConnectionEventsContract,
         ...brokeredContextCatalogContract,
       ].map(({ method, path }) => `${method}:${path}`),
     )
@@ -88,6 +84,7 @@ describe('OpenAPI semantic contract gate', () => {
       'POST:/agents/{agentId}/scope-entitlements/{grantId}/credentials',
       'GET:/resource-servers/{resourceServerId}/resources',
       'GET:/resource-servers/{resourceServerId}/resources/{resourceId}',
+      'PUT:/resource-servers/{resourceServerId}/connection-events/{eventId}',
     ])
     const priorBaseline = [
       ...unchanged.filter(
@@ -104,7 +101,6 @@ describe('OpenAPI semantic contract gate', () => {
       ...resourceDiscoveryContract.filter(({ method, path }) => !brokeredNativeChanges.has(`${method}:${path}`)),
       ...brokeredNativeContract,
       ...publicProfilesContract,
-      ...providerConnectionEventsContract,
       ...brokeredContextCatalogContract,
     ].sort((left, right) => `${left.path}:${left.method}`.localeCompare(`${right.path}:${right.method}`))
     const authenticationChanges = new Set(authenticationContract.map(({ method, path }) => `${method}:${path}`))
@@ -159,7 +155,8 @@ describe('OpenAPI semantic contract gate', () => {
     )
     const baseline = [
       ...preResourceAuthorizationModelBaseline.filter(
-        ({ method, path }) => !resourceAuthorizationModelChanges.has(`${method}:${path}`),
+        ({ method, path }) =>
+          !resourceAuthorizationModelChanges.has(`${method}:${path}`) && !approvedRemovals.has(`${method}:${path}`),
       ),
       ...resourceAuthorizationModelContract,
     ].sort((left, right) => `${left.path}:${left.method}`.localeCompare(`${right.path}:${right.method}`))

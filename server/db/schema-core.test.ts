@@ -265,7 +265,6 @@ describe('schema.test 1', () => {
   })
 
   it('separates signing, credential custody, scope Entitlements, OAuth state, and audit storage', () => {
-    expect(indexNames(apiResource)).toContain('apiResource_providerConnectionAuthority_unique')
     expect(indexNames(providerResourceAuthorization)).toEqual(
       expect.arrayContaining([
         'providerResourceAuthorization_connection_resource_unique',

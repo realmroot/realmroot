@@ -31,7 +31,6 @@ import type {
 } from '@shared/api/authorization'
 import type { AuthorizationDetail } from '@shared/api/authorization-details'
 import type { ConfigzConfigResponse } from '@shared/api/configz'
-import type { ProviderAuthorityConstraint } from '@shared/api/external-resources'
 import type {
   DeveloperConsoleAccessPolicyResponse,
   EmailServiceSettings,
@@ -358,6 +357,25 @@ export interface ConnectorRecord {
   scopes: string[] | null
   attributeMapping: Record<string, string> | null
   providerMetadata: Record<string, unknown> | null
+  resourceAuthorizationEnabled: boolean
+  resourceClientId: string | null
+  resourceClientSecret: string | null
+  resourceClientSecretContext: string | null
+  resourceIssuer: string | null
+  resourceAuthorizationEndpoint: string | null
+  resourceTokenEndpoint: string | null
+  resourceUserInfoEndpoint: string | null
+  resourceJwksEndpoint: string | null
+  resourceRegistrationEndpoint: string | null
+  resourceRevocationEndpoint: string | null
+  resourceRegistrationMode: string | null
+  resourceRegistrationClientUri: string | null
+  resourceRegistrationAccessToken: string | null
+  resourceRegistrationAccessTokenContext: string | null
+  resourceRegisteredScopes: string[] | null
+  resourceClientGeneration: number
+  resourceRetiredClientGenerations: RetiredOAuthClientGeneration[] | null
+  resourceProviderMetadata: Record<string, unknown> | null
   createdAt: Date
   updatedAt: Date
 }
@@ -390,6 +408,25 @@ export interface ConnectorRecordInput {
   scopes?: string[] | null
   attributeMapping?: Record<string, string> | null
   providerMetadata?: Record<string, unknown> | null
+  resourceAuthorizationEnabled?: boolean
+  resourceClientId?: string | null
+  resourceClientSecret?: string | null
+  resourceClientSecretContext?: string | null
+  resourceIssuer?: string | null
+  resourceAuthorizationEndpoint?: string | null
+  resourceTokenEndpoint?: string | null
+  resourceUserInfoEndpoint?: string | null
+  resourceJwksEndpoint?: string | null
+  resourceRegistrationEndpoint?: string | null
+  resourceRevocationEndpoint?: string | null
+  resourceRegistrationMode?: string | null
+  resourceRegistrationClientUri?: string | null
+  resourceRegistrationAccessToken?: string | null
+  resourceRegistrationAccessTokenContext?: string | null
+  resourceRegisteredScopes?: string[] | null
+  resourceClientGeneration?: number
+  resourceRetiredClientGenerations?: RetiredOAuthClientGeneration[] | null
+  resourceProviderMetadata?: Record<string, unknown> | null
   createdAt?: Date
   updatedAt?: Date
 }
@@ -414,6 +451,11 @@ export interface ConnectorRepository {
   create(input: ConnectorRecordInput): Promise<ConnectorRecord>
   update(id: string, input: Partial<ConnectorRecordInput>): Promise<ConnectorRecord | null>
   rotateClientGeneration(
+    id: string,
+    expectedGeneration: number,
+    input: Partial<ConnectorRecordInput>,
+  ): Promise<ConnectorRecord | null>
+  rotateResourceClientGeneration(
     id: string,
     expectedGeneration: number,
     input: Partial<ConnectorRecordInput>,
@@ -523,6 +565,7 @@ export interface ProviderConnectorSummary {
   displayName: string
   enabled: boolean
   authenticationEnabled: boolean
+  resourceAuthorizationEnabled: boolean
 }
 
 export interface ProviderConnectionProjection extends ProviderConnectionRecord {
@@ -542,11 +585,8 @@ export interface ProviderResourceAuthorizationRecord {
   credentials: ProviderCredentialRecord[]
   grantedScopes: string[]
   authorizationDetails: AuthorizationDetail[]
-  authorityConstraints: ProviderAuthorityConstraint[]
   status: string
   revokedAt: Date | null
-  providerEventOccurredAt?: Date | null
-  providerEventRevision?: number | null
   createdAt: Date
   updatedAt: Date
 }
@@ -556,12 +596,9 @@ export interface ProviderCredentialRecord {
   providerResourceAuthorizationId: string
   externalSubject: string
   displayName: string
-  credentialCustody: 'realmroot' | 'resource_server'
-  encryptedTokens: string | null
-  brokerReference: string | null
+  encryptedTokens: string
   grantedScopes: string[]
   authorizationDetails: AuthorizationDetail[]
-  authorityConstraints: ProviderAuthorityConstraint[]
   clientGeneration: number
   credentialVersion: number
   refreshClaimId: string | null
@@ -583,7 +620,6 @@ export interface ResourceConnectionIntentRecord {
   scopes: string[]
   authorizationDetails: AuthorizationDetail[]
   encryptedPkceVerifier: string
-  authorizationMode?: 'oauth' | 'brokered'
   clientGeneration?: number
   returnTo: string
   status: string
@@ -696,49 +732,7 @@ export interface ExternalTokenLeaseRecord {
   createdAt: Date
 }
 
-type ProviderConnectionEventRepositoryInput = {
-  id: string
-  fingerprint: string
-  resource: string
-  brokerReference: string
-  occurredAt: Date
-  revision: number
-  receivedAt: Date
-} & (
-  | {
-      type: 'authorityChanged'
-      scopes: string[]
-      affectedScopes: string[]
-      affectedAuthorizationDetails: AuthorizationDetail[]
-      authorityConstraints: ProviderAuthorityConstraint[]
-    }
-  | {
-      type: 'resourcesChanged'
-      scopes: string[]
-      authorizationDetails: AuthorizationDetail[]
-      authorityConstraints: ProviderAuthorityConstraint[]
-      affectedScopes?: never
-      affectedAuthorizationDetails?: never
-    }
-  | {
-      type: 'restored'
-      scopes: string[]
-      authorizationDetails: AuthorizationDetail[]
-      authorityConstraints: ProviderAuthorityConstraint[]
-      affectedScopes?: never
-      affectedAuthorizationDetails?: never
-    }
-  | {
-      type: 'suspended' | 'revoked'
-      affectedScopes?: never
-      affectedAuthorizationDetails?: never
-    }
-)
-
 export interface ExternalResourceRepository {
-  applyProviderConnectionEvent(
-    input: ProviderConnectionEventRepositoryInput,
-  ): Promise<'applied' | 'duplicate' | 'conflict' | 'not_found'>
   connectAuthenticationAccount(input: {
     authenticationAccountId: string
     providerId: string
@@ -769,7 +763,6 @@ export interface ExternalResourceRepository {
       | 'displayName'
       | 'grantedScopes'
       | 'authorizationDetails'
-      | 'authorityConstraints'
     >,
   ): Promise<ProviderResourceAuthorizationRecord | null>
   findConnectionByOwnerResource(input: {
@@ -787,12 +780,9 @@ export interface ExternalResourceRepository {
       id: string
       externalSubject: string
       displayName: string
-      credentialCustody: 'realmroot' | 'resource_server'
-      encryptedTokens: string | null
-      brokerReference: string | null
+      encryptedTokens: string
       grantedScopes: string[]
       authorizationDetails: AuthorizationDetail[]
-      authorityConstraints: ProviderAuthorityConstraint[]
       clientGeneration: number
       credentialVersion: number
       refreshClaimId: null
@@ -887,7 +877,6 @@ export interface ExternalResourceRepository {
       updatedAt: Date
     },
     audit: AgentAuditEventRecord,
-    expectedConnectionRevision?: number | null,
   ): Promise<
     | { entitlements: ResourceScopeEntitlementRecord[]; request: AgentAccessRequestRecord }
     | 'resource_unavailable'

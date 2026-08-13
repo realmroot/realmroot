@@ -11,26 +11,24 @@ describe('Agent resource schemas', () => {
     const input = {
       identifier: 'projects',
       resourceUrl: 'https://projects.example.com',
-      authorizationModel: 'federated' as const,
-      providerConnection: { connectorId: 'connector-1', mode: 'managed' as const },
+      authorizationModel: 'external' as const,
+      connectorId: 'connector-1',
       ownerOrganizationId: 'org-1',
     }
 
     expect(createApiResourceSchema.safeParse(input).success).toBe(true)
     expect(createApiResourceSchema.safeParse({ ...input, authorizationModel: undefined }).success).toBe(false)
-    expect(
-      createApiResourceSchema.safeParse({ ...input, providerConnection: { connectorId: '', mode: 'managed' } }).success,
-    ).toBe(false)
-    expect(updateApiResourceSchema.safeParse({ authorizationModel: 'realmroot' }).success).toBe(false)
-    expect(updateApiResourceSchema.safeParse({ providerConnection: null }).success).toBe(true)
+    expect(createApiResourceSchema.safeParse({ ...input, connectorId: '' }).success).toBe(false)
+    expect(updateApiResourceSchema.safeParse({ authorizationModel: 'native' }).success).toBe(false)
+    expect(updateApiResourceSchema.safeParse({ connectorId: null }).success).toBe(true)
   })
 
   it('preserves opaque JSON authorization details and rejects malformed values', () => {
     const input = {
       identifier: 'projects',
       resourceUrl: 'https://projects.example.com',
-      authorizationModel: 'federated' as const,
-      providerConnection: { connectorId: 'connector-1', mode: 'managed' as const },
+      authorizationModel: 'external' as const,
+      connectorId: 'connector-1',
       ownerOrganizationId: 'org-1',
       authorizationDetails: [
         {

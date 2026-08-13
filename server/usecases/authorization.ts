@@ -10,10 +10,7 @@ import { type AuthorizationTokenClaimInput, toTokenClaims } from '@server/usecas
 import { refreshDynamicConnectorMetadata } from '@server/usecases/connectors'
 import type { Deps } from '@server/usecases/deps'
 import { resolveOrganizationMembershipScopes } from '@server/usecases/organization-membership-scopes'
-import {
-  validateConnectorBackedNativeResource,
-  validateExternalResourceConnector,
-} from '@server/usecases/resource-connectors'
+import { validateExternalResourceConnector } from '@server/usecases/resource-connectors'
 import { readProtectedResourceMetadata, synchronizeResourceDiscovery } from '@server/usecases/resource-metadata'
 import {
   projectResourceOperations,
@@ -205,23 +202,22 @@ export async function cancelInvitation(deps: Deps, organizationId: string, id: s
 export async function createResource(deps: Deps, input: CreateApiResourceRequest) {
   const enabled = input.enabled ?? true
   const ownerOrganizationId = input.ownerOrganizationId
-  const providerConnection = input.providerConnection ?? null
-  const providerConnected = providerConnection !== null
-  if (providerConnected && ownerOrganizationId !== (await requirePlatformOrganization(deps)).id) {
-    throw badRequest('Provider-connected Resource Servers must be owned by the built-in platform Organization.')
+  const connectorId = input.connectorId ?? null
+  if (input.authorizationModel === 'external' && ownerOrganizationId !== (await requirePlatformOrganization(deps)).id) {
+    throw badRequest('External Resource Servers must be owned by the built-in platform Organization.')
   }
   await requireActiveOrganization(deps, ownerOrganizationId)
   validateResourceUrl(input.resourceUrl)
   const authorizationDetails = input.authorizationDetails ?? []
   const protectedMetadata =
-    enabled || providerConnection || authorizationDetails.length > 0
+    enabled || connectorId || authorizationDetails.length > 0
       ? await readProtectedResourceMetadata(deps, input.resourceUrl)
       : null
   await validateResourceProviderBoundary(
     deps,
     input.resourceUrl,
     input.authorizationModel,
-    providerConnection,
+    connectorId,
     authorizationDetails,
     protectedMetadata,
   )
@@ -236,7 +232,7 @@ export async function createResource(deps: Deps, input: CreateApiResourceRequest
     name: contract.name,
     resourceUrl: input.resourceUrl,
     authorizationModel: input.authorizationModel,
-    providerConnection,
+    connectorId,
     authorizationDetails,
     description: contract.description,
     enabled,
@@ -256,8 +252,8 @@ export async function ensureRealmrootResourceServer(deps: Deps, apiOrigin: strin
     ...realmrootResourceServer,
     ownerOrganizationId: platform.id,
     resourceUrl: realmrootResourceUrl(apiOrigin),
-    authorizationModel: 'realmroot',
-    providerConnection: null,
+    authorizationModel: 'native',
+    connectorId: null,
     authorizationDetails: [],
     enabled: true,
     visibility: 'public',
@@ -306,8 +302,8 @@ function assertRealmrootResourceServerIdentity(resource: ApiResourceResponse, pl
   if (
     resource.identifier !== realmrootResourceServer.identifier ||
     resource.ownerOrganizationId !== platformOrganizationId ||
-    resource.authorizationModel !== 'realmroot' ||
-    resource.providerConnection !== null
+    resource.authorizationModel !== 'native' ||
+    resource.connectorId !== null
   ) {
     throw new Error('The persisted Realmroot Resource Server does not match this deployment.')
   }
@@ -366,18 +362,15 @@ export async function refreshResourceScopeRegistry(deps: Deps, id: string) {
   }
   try {
     const metadata = await readProtectedResourceMetadata(deps, resource.resourceUrl)
-    if (resource.providerConnection) {
-      if (resource.authorizationModel === 'federated') {
-        await refreshDynamicConnectorMetadata(deps, resource.providerConnection.connectorId)
-      }
+    if (resource.connectorId) {
+      await refreshDynamicConnectorMetadata(deps, resource.connectorId)
       await validateResourceProviderBoundary(
         deps,
         resource.resourceUrl,
         resource.authorizationModel,
-        resource.providerConnection,
+        resource.connectorId,
         resource.authorizationDetails,
         metadata,
-        resource.id,
       )
     }
     const discovery = await synchronizeResourceDiscovery(deps, resource.resourceUrl, resource.scopeRegistry, metadata)
@@ -424,19 +417,19 @@ export async function updateResource(deps: Deps, id: string, input: UpdateApiRes
   if (isRealmrootResourceServer(resource)) throw badRequest('The Realmroot Resource Server is system-managed.')
   if (input.resourceUrl !== undefined) validateResourceUrl(input.resourceUrl)
   if (input.ownerOrganizationId) await requireActiveOrganization(deps, input.ownerOrganizationId)
-  const providerConnection =
-    input.providerConnection === undefined ? resource.providerConnection : input.providerConnection
+  const connectorId = input.connectorId === undefined ? resource.connectorId : input.connectorId
   const ownerOrganizationId = input.ownerOrganizationId ?? resource.ownerOrganizationId
-  if (providerConnection !== null && ownerOrganizationId !== (await requirePlatformOrganization(deps)).id) {
-    throw badRequest('Provider-connected Resource Servers must be owned by the built-in platform Organization.')
+  if (
+    resource.authorizationModel === 'external' &&
+    ownerOrganizationId !== (await requirePlatformOrganization(deps)).id
+  ) {
+    throw badRequest('External Resource Servers must be owned by the built-in platform Organization.')
   }
   const resourceUrl = input.resourceUrl ?? resource.resourceUrl
   const authorizationDetails = input.authorizationDetails ?? resource.authorizationDetails
   const enabled = input.enabled ?? resource.enabled
   const boundaryChanged =
-    input.resourceUrl !== undefined ||
-    input.authorizationDetails !== undefined ||
-    input.providerConnection !== undefined
+    input.resourceUrl !== undefined || input.authorizationDetails !== undefined || input.connectorId !== undefined
   const shouldReadBoundary = boundaryChanged || input.enabled === true
   const protectedMetadata = shouldReadBoundary ? await readProtectedResourceMetadata(deps, resourceUrl) : null
   if (shouldReadBoundary) {
@@ -444,14 +437,13 @@ export async function updateResource(deps: Deps, id: string, input: UpdateApiRes
       deps,
       resourceUrl,
       resource.authorizationModel,
-      providerConnection,
+      connectorId,
       authorizationDetails,
       protectedMetadata,
-      resource.id,
     )
   }
   const shouldSynchronize =
-    enabled && (input.enabled === true || input.resourceUrl !== undefined || input.providerConnection !== undefined)
+    enabled && (input.enabled === true || input.resourceUrl !== undefined || input.connectorId !== undefined)
   const synchronized = shouldSynchronize
     ? await synchronizeResourceDiscovery(
         deps,
@@ -464,8 +456,8 @@ export async function updateResource(deps: Deps, id: string, input: UpdateApiRes
     ? updateScopeGrantModes(synchronized?.scopeRegistry ?? resource.scopeRegistry, input.scopeGrantModes)
     : (synchronized?.scopeRegistry ?? null)
   const resourcePatch = synchronized
-    ? { ...input, providerConnection, name: synchronized.name, description: synchronized.description }
-    : { ...input, ...(input.providerConnection !== undefined ? { providerConnection } : {}) }
+    ? { ...input, connectorId, name: synchronized.name, description: synchronized.description }
+    : { ...input, ...(input.connectorId !== undefined ? { connectorId } : {}) }
   if (!(await deps.authorization.updateResource(id, resourcePatch))) {
     throw notFound('API resource was not found.')
   }
@@ -486,63 +478,16 @@ async function validateResourceProviderBoundary(
   deps: Deps,
   resourceUrl: string,
   authorizationModel: ApiResourceResponse['authorizationModel'],
-  providerConnection: ApiResourceResponse['providerConnection'],
+  connectorId: ApiResourceResponse['connectorId'],
   authorizationDetails: NonNullable<CreateApiResourceRequest['authorizationDetails']>,
   protectedMetadata: Awaited<ReturnType<typeof readProtectedResourceMetadata>> | null,
-  currentResourceId?: string,
 ) {
-  const brokered = protectedMetadata?.accountConnection?.mode === 'brokered'
-  if (providerConnection?.mode === 'brokered') {
-    if (authorizationModel !== 'realmroot') {
-      throw badRequest('Brokered Provider Connections require Realmroot authorization.')
-    }
-    const connectorId = providerConnection.connectorId
-    if (!connectorId) {
-      throw badRequest('A brokered account connection Resource Server must select a Provider Connector.')
-    }
-    if (!brokered) {
-      throw badRequest('A brokered Resource Server must advertise brokered account connection metadata.')
-    }
-    const connector = await deps.connectors.findById(connectorId)
-    if (!connector?.enabled) throw badRequest('Provider Connector must be enabled for brokered account connection.')
-    const existingAuthority = (await deps.authorization.listEnabledResources()).find(
-      (resource) =>
-        resource.id !== currentResourceId &&
-        resource.providerConnection?.mode === 'brokered' &&
-        resource.providerConnection.connectorId === connectorId &&
-        resource.scopeRegistry?.accountConnection?.mode === 'brokered',
-    )
-    if (existingAuthority) throw conflict('Provider Connector already has an account connection authority.')
+  if (authorizationModel === 'external') {
+    if (!connectorId) throw badRequest('External authorization requires a Provider Connector.')
+    await validateExternalResourceConnector(deps, resourceUrl, connectorId, authorizationDetails, protectedMetadata!)
     return
   }
-  if (brokered) {
-    throw badRequest('Brokered account connection metadata requires brokered provider access.')
-  }
-  if (authorizationModel === 'federated') {
-    if (providerConnection?.mode !== 'managed') {
-      throw badRequest('Federated authorization requires a Realmroot-managed Provider Connection.')
-    }
-    await validateExternalResourceConnector(
-      deps,
-      resourceUrl,
-      providerConnection.connectorId,
-      authorizationDetails,
-      protectedMetadata!,
-    )
-    return
-  }
-  if (authorizationDetails.length > 0 && !providerConnection) {
-    throw badRequest('Authorization details require external OAuth or brokered provider access.')
-  }
-  if (providerConnection) {
-    await validateConnectorBackedNativeResource(
-      deps,
-      providerConnection.connectorId,
-      protectedMetadata?.scopesSupported ?? [],
-      authorizationDetails,
-      protectedMetadata?.authorizationDetailsTypesSupported ?? [],
-    )
-  }
+  if (connectorId) throw badRequest('Native authorization does not use a Provider Connector.')
 }
 
 async function requireActiveOrganization(deps: Deps, organizationId: string) {

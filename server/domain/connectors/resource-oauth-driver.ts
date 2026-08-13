@@ -1,13 +1,12 @@
 import type { AuthorizationDetail } from '@shared/api/authorization-details'
 
 export interface ResourceOAuthConnector {
-  providerType: string
-  providerId: string
-  authorizationEndpoint: string | null
-  tokenEndpoint: string | null
-  userInfoEndpoint: string | null
-  revocationEndpoint: string | null
-  providerMetadata: Record<string, unknown> | null
+  resourceAuthorizationEnabled: boolean
+  resourceAuthorizationEndpoint: string | null
+  resourceTokenEndpoint: string | null
+  resourceUserInfoEndpoint: string | null
+  resourceRevocationEndpoint: string | null
+  resourceProviderMetadata: Record<string, unknown> | null
 }
 
 export interface ResourceOAuthProfile {
@@ -33,25 +32,23 @@ export interface ResourceOAuthDriver {
 }
 
 export function resourceOAuthDriver(connector: ResourceOAuthConnector): ResourceOAuthDriver | null {
-  if (connector.providerType === 'generic_oauth') return genericOidcDriver(connector)
-  if (connector.providerType === 'social' && connector.providerId === 'linear') return linearDriver()
-  return null
+  return connector.resourceAuthorizationEnabled ? genericOidcDriver(connector) : null
 }
 
 function genericOidcDriver(connector: ResourceOAuthConnector): ResourceOAuthDriver | null {
   if (
-    !connector.authorizationEndpoint ||
-    !connector.tokenEndpoint ||
-    !connector.userInfoEndpoint ||
-    !connector.revocationEndpoint
+    !connector.resourceAuthorizationEndpoint ||
+    !connector.resourceTokenEndpoint ||
+    !connector.resourceUserInfoEndpoint ||
+    !connector.resourceRevocationEndpoint
   ) {
     return null
   }
   return {
-    authorizationEndpoint: connector.authorizationEndpoint,
-    tokenEndpoint: connector.tokenEndpoint,
-    userInfoEndpoint: connector.userInfoEndpoint,
-    revocationEndpoint: connector.revocationEndpoint,
+    authorizationEndpoint: connector.resourceAuthorizationEndpoint,
+    tokenEndpoint: connector.resourceTokenEndpoint,
+    userInfoEndpoint: connector.resourceUserInfoEndpoint,
+    revocationEndpoint: connector.resourceRevocationEndpoint,
     tokenEndpointAuthentication: genericTokenEndpointAuthentication(connector),
     revocationAuthentication: genericTokenEndpointAuthentication(connector),
     authorizationDetailsMode: 'provider',
@@ -60,7 +57,7 @@ function genericOidcDriver(connector: ResourceOAuthConnector): ResourceOAuthDriv
     authorizationParameters: { prompt: 'consent' },
     scopeSeparator: ' ',
     profileRequest: (accessToken) =>
-      new Request(connector.userInfoEndpoint!, { headers: { authorization: `Bearer ${accessToken}` } }),
+      new Request(connector.resourceUserInfoEndpoint!, { headers: { authorization: `Bearer ${accessToken}` } }),
     parseProfile(profile) {
       const externalSubject = requiredNestedString(profile, ['sub'], 'OIDC userinfo response')
       return {
@@ -74,48 +71,8 @@ function genericOidcDriver(connector: ResourceOAuthConnector): ResourceOAuthDriv
   }
 }
 
-function linearDriver(): ResourceOAuthDriver {
-  const graphqlEndpoint = 'https://api.linear.app/graphql'
-  return {
-    authorizationEndpoint: 'https://linear.app/oauth/authorize',
-    tokenEndpoint: 'https://api.linear.app/oauth/token',
-    userInfoEndpoint: graphqlEndpoint,
-    revocationEndpoint: 'https://api.linear.app/oauth/revoke',
-    tokenEndpointAuthentication: 'post',
-    revocationAuthentication: 'none',
-    authorizationDetailsMode: 'connection',
-    revokeAccessToken: false,
-    normalizeScopes: (scopes) => [...new Set(scopes)].sort(),
-    authorizationParameters: { actor: 'app', prompt: 'consent' },
-    scopeSeparator: ',',
-    profileRequest: (accessToken) =>
-      new Request(graphqlEndpoint, {
-        method: 'POST',
-        headers: { authorization: `Bearer ${accessToken}`, 'content-type': 'application/json' },
-        body: JSON.stringify({
-          query: 'query RealmrootProviderConnection { viewer { id name } organization { id name } }',
-        }),
-      }),
-    parseProfile(profile) {
-      return {
-        externalSubject: requiredNestedString(profile, ['data', 'organization', 'id'], 'Linear workspace response'),
-        displayName: requiredNestedString(profile, ['data', 'organization', 'name'], 'Linear workspace response'),
-      }
-    },
-    authorizationDetails(profile) {
-      return [
-        {
-          type: 'linear_workspace',
-          workspace_id: profile.externalSubject,
-          workspace_name: profile.displayName,
-        },
-      ]
-    },
-  }
-}
-
 function genericTokenEndpointAuthentication(connector: ResourceOAuthConnector): 'basic' | 'post' {
-  const methods = connector.providerMetadata?.token_endpoint_auth_methods_supported
+  const methods = connector.resourceProviderMetadata?.token_endpoint_auth_methods_supported
   return Array.isArray(methods) && methods.includes('client_secret_post') && !methods.includes('client_secret_basic')
     ? 'post'
     : 'basic'

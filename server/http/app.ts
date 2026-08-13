@@ -45,7 +45,6 @@ import { createConfigzRoutes } from './routes/configz'
 import { createProtectedResourceRoutes } from './routes/management'
 import { oauthConsentRoute } from './routes/oauth/consent'
 import { onboardingRoutes } from './routes/onboarding'
-import { createProviderConnectionEventRoutes } from './routes/provider-connection-events'
 import { createPublicProfileRoutes } from './routes/public-profiles'
 import { createResourceConnectionRoutes } from './routes/resource-connections'
 import { trustedRequestUrl } from './trusted-request-origin'
@@ -208,11 +207,6 @@ function mountApiRoutes(app: Hono, auth: AuthHandler, config: AppConfig) {
     .get('/api/health', (c) => c.json(healthStatus))
     .route('/api/configz', createConfigzRoutes(config.securityPolicy))
     .route('/api/assets', createAssetRoutes())
-    .use(
-      '/api/resource-servers/:resourceServerId/connection-events/:eventId',
-      authn(auth, { allowApplication: true, required: true, oauth: realmrootOAuth(config) }),
-    )
-    .route('/api/resource-servers', createProviderConnectionEventRoutes())
     .use('/api/*', unifiedOpenApiDiscoveryHeader())
     .route(
       '/api/public',

@@ -43,9 +43,7 @@ import type {
   CreateAgentAccessRequest,
   CreateResourceConnectionIntentRequest,
   DecideAgentAccessRequest,
-  ProviderAuthorityConstraint,
 } from '@shared/api/external-resources'
-import { providerAuthorityConstraintsSchema } from '@shared/api/external-resources'
 import { type PaginationInput, paginationMetadata } from '@shared/api/pagination'
 import { agentBootstrapScopes, realmrootOAuthScopes } from '@shared/authz'
 import { realmrootManagementScopes } from '@shared/scope-registry'
@@ -116,7 +114,7 @@ export async function createResourceConnectionIntent(
   input: CreateResourceConnectionIntentRequest,
   actorUserId: string,
   callbackOrigin: string,
-  signer?: AgentAssertionSigner,
+  _signer?: AgentAssertionSigner,
 ) {
   const candidate = await deps.authorization.findResource(resourceId)
   if (!candidate) throw notFound('External API resource was not found.')
@@ -124,86 +122,12 @@ export async function createResourceConnectionIntent(
   const resource = await requireEnabledResource(deps, resourceId)
   if (!requiresAccountConnection(resource))
     throw badRequest('Realmroot-issued access does not use account connections.')
-  const providerConnection = resource.providerConnection
-  if (!providerConnection) throw new Error('Provider-connected access requires a Provider Connector.')
-  const broker = brokeredAccountConnection(resource)
+  if (!resource.connectorId) throw new Error('External authorization requires a Provider Connector.')
   await requireConnectionOwnerControl(deps, input.owner, actorUserId)
   const scopes = input.scopes
   validateRequestedScopes(resource.scopeRegistry, scopes)
-  if (broker) {
-    if (!signer) throw new Error('Brokered account connections require Realmroot signing.')
-    const id = deps.ids.generate()
-    const state = randomToken()
-    const verifier = randomToken()
-    const now = new Date()
-    const expiresAt = new Date(now.getTime() + 10 * 60 * 1000)
-    const callbackUri = resourceConnectionCallbackUrl(callbackOrigin)
-    const authorizationDetails = input.authorizationDetails ?? resource.authorizationDetails
-    const existing = await deps.externalResources.findProviderConnectionByOwnerConnector({
-      connectorId: providerConnection.connectorId,
-      ownerUserId: input.owner.type === 'user' ? actorUserId : null,
-      ownerOrganizationId: input.owner.type === 'organization' ? input.owner.organizationId : null,
-    })
-    const connectionId = existing?.id ?? id
-    const request = await signer.sign(
-      {
-        iss: signer.issuer,
-        sub: input.owner.type === 'user' ? actorUserId : input.owner.organizationId,
-        aud: resource.resourceUrl,
-        jti: id,
-        iat: Math.floor(now.getTime() / 1000),
-        exp: Math.floor(expiresAt.getTime() / 1000),
-        state,
-        connection_id: connectionId,
-        expected_external_subject: existing?.status === 'active' ? existing.externalSubject : null,
-        owner_type: input.owner.type,
-        callback_uri: callbackUri,
-        code_challenge: await sha256(verifier),
-        code_challenge_method: 'S256',
-        scope: scopes.join(' '),
-        authorization_details: authorizationDetails,
-      },
-      'JWT',
-    )
-    const authorizationUrl = new URL(broker.authorizationEndpoint)
-    authorizationUrl.searchParams.set('request', request)
-    const created = await deps.externalResources.createConnectionIntent({
-      id,
-      stateHash: await sha256(state),
-      resourceId,
-      ownerUserId: input.owner.type === 'user' ? actorUserId : null,
-      ownerOrganizationId: input.owner.type === 'organization' ? input.owner.organizationId : null,
-      initiatedByUserId: actorUserId,
-      scopes,
-      authorizationDetails,
-      encryptedPkceVerifier: await deps.secrets.seal(verifier, connectionIntentContext(id)),
-      authorizationMode: 'brokered',
-      clientGeneration: 1,
-      returnTo: input.returnTo ?? 'account-center',
-      status: 'pending',
-      expiresAt,
-      completedAt: null,
-      createdAt: now,
-      updatedAt: now,
-    })
-    if (!created) throw notFound('Enabled native API resource was not found.')
-    return {
-      id,
-      resourceId,
-      owner:
-        input.owner.type === 'organization'
-          ? { type: 'organization' as const, organizationId: input.owner.organizationId }
-          : { type: 'user' as const, userId: actorUserId },
-      authorizationUrl: authorizationUrl.toString(),
-      authorizationDetails,
-      expiresAt: expiresAt.toISOString(),
-      createdAt: now.toISOString(),
-      updatedAt: now.toISOString(),
-    }
-  }
-  const connectorBackedNative = resource.authorizationModel === 'realmroot' && providerConnection.mode === 'managed'
   const currentAuthorization = await requireActiveConnectorAuthorization(deps, resourceId)
-  const connector = await deps.connectors.findById(providerConnection.connectorId)
+  const connector = await deps.connectors.findById(resource.connectorId)
   const driver = connector ? resourceOAuthDriver(connector) : null
   if (!connector || !driver) throw badRequest('Provider Connector does not support resource authorization.')
   const requestedScopes = driver.normalizeScopes([
@@ -212,10 +136,12 @@ export async function createResourceConnectionIntent(
       ? [currentAuthorization.authorizationDetailsCatalogScope]
       : []),
   ])
-  const clientGeneration =
-    connector.providerType === 'generic_oauth'
-      ? await ensureDynamicConnectorScopes(deps, providerConnection.connectorId, requestedScopes, callbackOrigin)
-      : (connector.clientGeneration ?? 1)
+  const clientGeneration = await ensureDynamicConnectorScopes(
+    deps,
+    resource.connectorId,
+    requestedScopes,
+    callbackOrigin,
+  )
   const authorization = await requireActiveConnectorAuthorization(deps, resourceId, clientGeneration)
   const authorizationDetails = input.authorizationDetails ?? resource.authorizationDetails
   assertAuthorizationDetailsSupported(authorizationDetails, authorization, driver)
@@ -233,14 +159,14 @@ export async function createResourceConnectionIntent(
     state,
     code_challenge: await generateCodeChallenge(verifier),
     code_challenge_method: 'S256',
-    ...(connectorBackedNative ? {} : { resource: resource.resourceUrl }),
+    resource: resource.resourceUrl,
     ...(driver.authorizationDetailsMode === 'provider' && authorizationDetails.length > 0
       ? { authorization_details: JSON.stringify(authorizationDetails) }
       : {}),
   }
   const expiresAt = new Date(now.getTime() + 10 * 60 * 1000)
   let authorizationUrl: string
-  if (!connectorBackedNative && authorizationDetails.length > 0) {
+  if (authorizationDetails.length > 0 && authorization.pushedAuthorizationRequestEndpoint) {
     const pushed = await postPushedAuthorizationRequest(
       deps,
       authorization.pushedAuthorizationRequestEndpoint!,
@@ -269,7 +195,6 @@ export async function createResourceConnectionIntent(
     scopes: requestedScopes,
     authorizationDetails,
     encryptedPkceVerifier: await deps.secrets.seal(verifier, connectionIntentContext(id)),
-    authorizationMode: 'oauth',
     clientGeneration,
     returnTo: input.returnTo ?? 'account-center',
     status: 'pending',
@@ -302,9 +227,6 @@ export async function completeResourceConnectionIntent(
   const now = new Date()
   const intent = await deps.externalResources.consumeConnectionIntent(await sha256(input.state), now)
   if (!intent) throw badRequest('Resource connection state is invalid, expired, or already used.')
-  if (intent.authorizationMode === 'brokered') {
-    return completeBrokeredResourceConnectionIntent(deps, intent, input.code)
-  }
   const authorization = await requireActiveConnectorAuthorization(deps, intent.resourceId, intent.clientGeneration ?? 1)
   const connector = await deps.connectors.findById(authorization.connectorId)
   const driver = connector ? resourceOAuthDriver(connector) : null
@@ -358,15 +280,12 @@ export async function completeResourceConnectionIntent(
     id: credentialId,
     externalSubject,
     displayName,
-    credentialCustody: 'realmroot' as const,
     encryptedTokens: await deps.secrets.seal(
       JSON.stringify({ accessToken, refreshToken, scope: grantedScopes.join(' ') }),
       providerCredentialTokensContext(credentialId, connectionId),
     ),
-    brokerReference: null,
     grantedScopes,
     authorizationDetails,
-    authorityConstraints: [],
     clientGeneration: intent.clientGeneration ?? 1,
     credentialVersion: (existingCredential?.credentialVersion ?? 0) + 1,
     refreshClaimId: null,
@@ -386,8 +305,6 @@ export async function completeResourceConnectionIntent(
         credentials: [{ ...credentialInput, providerResourceAuthorizationId: connectionId }],
         status: 'active',
         revokedAt: null,
-        providerEventOccurredAt: null,
-        providerEventRevision: null,
         createdAt: now,
         updatedAt: now,
       })
@@ -407,105 +324,6 @@ export async function completeResourceConnectionIntent(
   }
 }
 
-async function completeBrokeredResourceConnectionIntent(
-  deps: Deps,
-  intent: import('@server/usecases/ports').ResourceConnectionIntentRecord,
-  code: string,
-) {
-  const resource = await requireEnabledResource(deps, intent.resourceId)
-  const broker = brokeredAccountConnection(resource)
-  if (!broker) throw badRequest('Resource Server no longer supports brokered account connections.')
-  const verifier = await deps.secrets.open(intent.encryptedPkceVerifier, connectionIntentContext(intent.id))
-  let response: Response
-  try {
-    response = await deps.externalHttp.fetch(
-      new Request(broker.tokenEndpoint, {
-        method: 'POST',
-        headers: { accept: 'application/json', 'content-type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ code, code_verifier: verifier, connection_id: intent.id }),
-      }),
-    )
-  } catch {
-    throw badGateway('Brokered account connection service is unavailable.')
-  }
-  if (!response.ok) throw unauthorized('Resource Server rejected the brokered account connection code.')
-  const result = await readObject(response, 'Brokered account connection response is invalid.')
-  const externalSubject = requiredString(result, 'external_subject', 'Brokered account connection response')
-  const displayName = requiredString(result, 'display_name', 'Brokered account connection response')
-  const brokerReference = requiredString(result, 'broker_reference', 'Brokered account connection response')
-  const grantedScopes = scopeString(result.scope) ?? intent.scopes
-  assertScopeSubset(intent.scopes, grantedScopes, 'brokered account connection')
-  const authorizationDetails = authorizationDetailsSchema.parse(result.authorization_details ?? [])
-  const authorityConstraints =
-    result.authority_constraints === undefined
-      ? authorizationDetails.map((authorizationDetail) => ({
-          authorizationDetails: [authorizationDetail],
-          scopes: grantedScopes,
-        }))
-      : providerAuthorityConstraintsSchema.parse(result.authority_constraints)
-  if (resource.authorizationDetails.length > 0) {
-    assertConcreteAuthorizationDetails(resource.authorizationDetails, authorizationDetails, 'Brokered connection')
-  } else if (authorizationDetails.length > 0) {
-    throw invalidAuthorizationDetails('Brokered connection returned unsupported authorization details.')
-  }
-  validateAuthorityConstraints(authorityConstraints, authorizationDetails, grantedScopes)
-  const now = new Date()
-  const provider = await ensureProviderConnection(deps, resource, intent, externalSubject, displayName, now)
-  const existing = await deps.externalResources.findConnectionByOwnerResource({
-    resourceId: intent.resourceId,
-    ownerUserId: intent.ownerUserId,
-    ownerOrganizationId: intent.ownerOrganizationId,
-  })
-  const connectionId = existing?.id ?? intent.id
-  const existingCredential = existing?.credentials.find((credential) => credential.externalSubject === externalSubject)
-  const credentialId = existingCredential?.id ?? deps.ids.generate()
-  const credentialInput = {
-    id: credentialId,
-    externalSubject,
-    displayName,
-    credentialCustody: 'resource_server' as const,
-    encryptedTokens: null,
-    brokerReference,
-    grantedScopes,
-    authorizationDetails,
-    authorityConstraints,
-    clientGeneration: 1,
-    credentialVersion: (existingCredential?.credentialVersion ?? 0) + 1,
-    refreshClaimId: null,
-    refreshClaimExpiresAt: null,
-    status: 'active' as const,
-    credentialExpiresAt: null,
-    revokedAt: null,
-    createdAt: existingCredential?.createdAt ?? now,
-    updatedAt: now,
-  }
-  const connection = existing
-    ? await deps.externalResources.upsertProviderCredential(existing.id, credentialInput)
-    : await deps.externalResources.createResourceAuthorization({
-        id: connectionId,
-        providerConnectionId: provider.id,
-        resourceId: intent.resourceId,
-        credentials: [{ ...credentialInput, providerResourceAuthorizationId: connectionId }],
-        status: 'active',
-        revokedAt: null,
-        providerEventOccurredAt: null,
-        providerEventRevision: null,
-        createdAt: now,
-        updatedAt: now,
-      })
-  if (!connection) throw badRequest('Resource Server was deleted while completing the connection.')
-  if (existing) {
-    await revokeUncoveredEntitlements(
-      deps,
-      connection,
-      intent.authorizationDetails.length > 0,
-      intent.initiatedByUserId,
-      now,
-    )
-  }
-  return { ...toResourceConnection(connection), returnTo: intent.returnTo }
-}
-
 async function ensureProviderConnection(
   deps: Deps,
   resource: ApiResourceResponse,
@@ -514,23 +332,28 @@ async function ensureProviderConnection(
   displayName: string,
   now: Date,
 ) {
-  const providerConnection = resource.providerConnection
-  if (!providerConnection) throw badRequest('API resource no longer has a Provider Connector.')
+  const connectorId = resource.connectorId
+  if (!connectorId) throw badRequest('API resource no longer has a Provider Connector.')
+  const connector = await deps.connectors.findById(connectorId)
+  if (!connector) throw badRequest('API resource no longer has a Provider Connector.')
+  const claimedIdentity = await deps.externalResources.findActiveUserProviderConnectionByProviderSubject({
+    providerId: connector.providerId,
+    externalSubject,
+  })
+  if (claimedIdentity && claimedIdentity.ownerUserId !== intent.ownerUserId) {
+    throw conflict('This Provider account is already connected to another Realmroot account.')
+  }
   const existing = await deps.externalResources.findProviderConnectionByOwnerConnector({
-    connectorId: providerConnection.connectorId,
+    connectorId,
     ownerUserId: intent.ownerUserId,
     ownerOrganizationId: intent.ownerOrganizationId,
   })
-  if (
-    providerConnection.mode === 'brokered' &&
-    existing?.status === 'active' &&
-    existing.externalSubject !== externalSubject
-  ) {
+  if (existing?.status === 'active' && existing.externalSubject !== externalSubject) {
     throw conflict('Disconnect the current Provider account before connecting another account.')
   }
   return deps.externalResources.upsertProviderConnection({
     id: existing?.id ?? deps.ids.generate(),
-    connectorId: providerConnection.connectorId,
+    connectorId,
     ownerUserId: intent.ownerUserId,
     ownerOrganizationId: intent.ownerOrganizationId,
     authenticationAccountId: existing?.authenticationAccountId ?? null,
@@ -703,15 +526,6 @@ export async function listConnectableExternalResources(deps: Deps) {
   const resources = (await deps.authorization.listEnabledResources()).filter(requiresAccountConnection)
   const connectable = []
   for (const resource of resources) {
-    if (brokeredAccountConnection(resource)) {
-      connectable.push({
-        id: resource.id,
-        identifier: resource.identifier,
-        name: resource.name,
-        resourceUrl: resource.resourceUrl,
-      })
-      continue
-    }
     const authorization = await findExternalAuthorization(deps, resource.id)
     if (authorization?.status !== 'active') continue
     connectable.push({
@@ -775,9 +589,10 @@ function providerConnectorProjection(
     connector.providerId,
   )
   const providerResources = resources.filter(
-    (resource) => resource.providerConnection?.connectorId === connector.id && resource.availableToAgents,
+    (resource) =>
+      resource.connectorId === connector.id && resource.authorizationModel === 'external' && resource.availableToAgents,
   )
-  const providerAuthorizationAvailable = providerResources.some((resource) => brokeredAccountConnection(resource))
+  const providerAuthorizationAvailable = connector.resourceAuthorizationEnabled && providerResources.length > 0
   return {
     id: connector.id,
     slug: connector.slug,
@@ -808,7 +623,7 @@ export async function createProviderConnectionIntent(
   const connector = await deps.connectors.findById(connectorId)
   if (!connector?.enabled) throw notFound('Enabled Provider Connector was not found.')
   const resources = (await deps.authorization.listEnabledResources()).filter(
-    (resource) => resource.providerConnection?.connectorId === connectorId && brokeredAccountConnection(resource),
+    (resource) => resource.connectorId === connectorId && resource.authorizationModel === 'external',
   )
   if (resources.length === 0) throw badRequest('Provider Connector does not support direct account connection.')
   if (resources.length > 1) {
@@ -838,7 +653,7 @@ export async function disconnectProviderConnection(
   deps: Deps,
   connectionId: string,
   actorUserId: string,
-  signer?: AgentAssertionSigner,
+  _signer?: AgentAssertionSigner,
 ) {
   const connection = await deps.externalResources.findProviderConnection(connectionId)
   if (!connection || connection.ownerUserId !== actorUserId) throw notFound('Provider Connection was not found.')
@@ -849,57 +664,9 @@ export async function disconnectProviderConnection(
   const authorizations = (await deps.externalResources.listConnectionsByUser(actorUserId)).filter(
     (authorization) => authorization.providerConnectionId === connectionId && authorization.status === 'active',
   )
-  for (const authorization of authorizations) {
-    await revokeBrokeredProviderAuthorization(deps, authorization, connection, actorUserId, signer)
-  }
   for (const authorization of authorizations) await revokeResourceConnection(deps, authorization.id, actorUserId)
   if (!(await deps.externalResources.revokeProviderConnection(connectionId, actorUserId, new Date()))) {
     throw badRequest('Provider Connection is already disconnected.')
-  }
-}
-
-async function revokeBrokeredProviderAuthorization(
-  deps: Deps,
-  authorization: ProviderResourceAuthorizationRecord,
-  connection: import('@server/usecases/ports').ProviderConnectionRecord,
-  actorUserId: string,
-  signer?: AgentAssertionSigner,
-) {
-  const resource = await deps.authorization.findResource(authorization.resourceId)
-  const endpoint = resource && brokeredAccountConnection(resource)?.revocationEndpoint
-  if (!resource || !endpoint) return
-  if (!signer) throw new Error('Brokered account connection revocation requires Realmroot signing.')
-  for (const credential of activeProviderCredentials(authorization).filter(
-    (candidate) => candidate.credentialCustody === 'resource_server' && candidate.brokerReference,
-  )) {
-    const now = new Date()
-    const request = await signer.sign(
-      {
-        iss: signer.issuer,
-        sub: actorUserId,
-        aud: resource.resourceUrl,
-        jti: createProtocolId('resconnrev'),
-        iat: Math.floor(now.getTime() / 1000),
-        exp: Math.floor(now.getTime() / 1000) + 60,
-        connection_id: connection.id,
-        resource_authorization_id: authorization.id,
-        broker_reference: credential.brokerReference,
-      },
-      'JWT',
-    )
-    let response: Response
-    try {
-      response = await deps.externalHttp.fetch(
-        new Request(endpoint, {
-          method: 'POST',
-          headers: { accept: 'application/json', 'content-type': 'application/x-www-form-urlencoded' },
-          body: new URLSearchParams({ request }),
-        }),
-      )
-    } catch {
-      throw badGateway('Brokered account connection revocation service is unavailable.')
-    }
-    if (!response.ok) throw badGateway('Resource Server rejected brokered account connection revocation.')
   }
 }
 
@@ -917,9 +684,7 @@ async function revokeRealmrootCustodiedProviderAuthorization(
   deps: Deps,
   connection: ProviderResourceAuthorizationRecord,
 ) {
-  const credentials = activeProviderCredentials(connection).filter(
-    (candidate) => candidate.credentialCustody === 'realmroot' && candidate.encryptedTokens,
-  )
+  const credentials = activeProviderCredentials(connection)
   if (credentials.length === 0) return
   const resource = await deps.authorization.findResource(connection.resourceId)
   if (!resource) throw notFound('Resource Server was not found.')
@@ -928,7 +693,7 @@ async function revokeRealmrootCustodiedProviderAuthorization(
     if (!authorization) throw badGateway('Provider authorization configuration is unavailable.')
     const payload = JSON.parse(
       await deps.secrets.open(
-        credential.encryptedTokens!,
+        credential.encryptedTokens,
         providerCredentialTokensContext(credential.id, credential.providerResourceAuthorizationId),
       ),
     ) as Record<string, unknown>
@@ -980,7 +745,7 @@ export async function discoverAgentResources(deps: Deps, principal: AgentResourc
         !resource?.enabled ||
         !resource.availableToAgents ||
         !activeResourceVisibleToAgent(resource, visibleOrganizationIds) ||
-        (resource.authorizationModel === 'federated' && authorization?.status !== 'active')
+        (resource.authorizationModel === 'external' && authorization?.status !== 'active')
       ) {
         return null
       }
@@ -1127,8 +892,8 @@ export async function createAgentConnectionRequest(
   const identity = await requireActiveIdentityAndBinding(deps, principal)
   const resource = await requireEnabledResource(deps, resourceServerId)
   if (!requiresAccountConnection(resource)) throw badRequest('Native Resource Servers do not use account connections.')
-  if (resource.authorizationModel === 'federated') {
-    await refreshDynamicConnectorMetadata(deps, resource.providerConnection!.connectorId)
+  if (resource.authorizationModel === 'external') {
+    await refreshDynamicConnectorMetadata(deps, resource.connectorId!)
   }
   validateResourceRequestedScopes(resource, input.scopes)
   await requireAgentResourceVisibility(deps, resource, identity.identity)
@@ -1259,7 +1024,7 @@ export async function listAccountAccessRequestAuthorizationDetailCatalog(
   if (!connection || connection.status !== 'active') {
     throw notFound('Active resource account connection was not found.')
   }
-  return resource.authorizationModel === 'realmroot'
+  return resource.authorizationModel === 'native'
     ? readResourceCatalog(deps, resource, connection, request.agentIdentityId, pagination)
     : readAuthorizationDetailCatalog(deps, resource, connection, request.agentIdentityId, pagination)
 }
@@ -1285,9 +1050,6 @@ export async function createAgentAccessRequest(
     connection?.status === 'active' ? connection : null,
     input.authorizationDetails ?? [],
   )
-  if (connection?.status === 'active' && brokeredAccountConnection(resource) && input.authorizationDetails?.length) {
-    assertAuthorityConstraintScopes(input.scopes, connection, authorizationDetails)
-  }
   await requireAgentResourceVisibility(deps, resource, identity.identity)
   const scopes = [...new Set(input.scopes)].sort()
   const now = new Date()
@@ -1613,9 +1375,6 @@ export async function decideAgentAccessRequest(
     assertScopeSubset(request.scopes, connection.grantedScopes, 'connected account')
     assertAuthorizationDetailsSelection(resource, connection, authorizationDetails)
     assertAuthorizationDetailsSubset(authorizationDetails, connection.authorizationDetails, 'connected account')
-    if (brokeredAccountConnection(resource)) {
-      assertAuthorityConstraintScopes(request.scopes, connection, authorizationDetails)
-    }
   } else if (connectionId) {
     throw badRequest('Native API resources do not use account connections.')
   } else {
@@ -1706,7 +1465,6 @@ export async function decideAgentAccessRequest(
       updatedAt: now,
     },
     audit,
-    brokeredAccountConnection(resource) ? (connection?.providerEventRevision ?? null) : undefined,
   )
   if (approved === 'resource_unavailable') {
     throw badRequest('The API resource was deleted before access could be approved.')
@@ -1773,7 +1531,7 @@ export async function issueTargetAccessToken(
   if (!activeResourceVisibleToAgent(resource, await activeIdentityOrganizationIds(deps, identity.identity))) {
     throw forbidden('Resource Server is not visible to this Agent.')
   }
-  if (resource.authorizationModel !== 'federated') {
+  if (resource.authorizationModel !== 'external') {
     const connection = request.connectionId ? await deps.externalResources.findConnection(request.connectionId) : null
     assertAuthorizationDetailsSelection(resource, connection, request.authorizationDetails)
     return issueNativeAccessToken(
@@ -1792,9 +1550,9 @@ export async function issueTargetAccessToken(
   }
   const providerCredential = requireProviderCredential(connection, request.scopes, request.authorizationDetails)
   const connectionClientGeneration = providerCredential.clientGeneration
-  const connectorId = resource.providerConnection!.connectorId
+  const connectorId = resource.connectorId!
   const connector = await deps.connectors.findById(connectorId)
-  if ((connector?.clientGeneration ?? 1) === connectionClientGeneration) {
+  if ((connector?.resourceClientGeneration ?? 1) === connectionClientGeneration) {
     const activeClientGeneration = await ensureDynamicConnectorScopes(
       deps,
       connectorId,
@@ -1969,52 +1727,8 @@ async function issueNativeAccessToken(
   signer: AgentAssertionSigner,
 ) {
   const { entitlements, request, resource, identity } = context
-  const brokered = brokeredAccountConnection(resource)
-  const connectorBackedNative =
-    resource.authorizationModel === 'realmroot' && resource.providerConnection?.mode === 'managed'
-  if (request.connectionId !== null && !brokered && !connectorBackedNative) {
+  if (request.connectionId !== null) {
     throw forbidden('Native API resource grants cannot use account connections.')
-  }
-  const connection =
-    brokered || connectorBackedNative
-      ? request.connectionId
-        ? await deps.externalResources.findConnection(request.connectionId)
-        : null
-      : null
-  const providerCredential = connection
-    ? requireProviderCredential(connection, request.scopes, request.authorizationDetails)
-    : null
-  if (
-    brokered &&
-    (!connection ||
-      connection.status !== 'active' ||
-      connection.resourceId !== resource.id ||
-      providerCredential?.credentialCustody !== 'resource_server' ||
-      !providerCredential.brokerReference)
-  ) {
-    throw forbidden('Active brokered account connection is required.')
-  }
-  if (
-    connectorBackedNative &&
-    (!connection ||
-      connection.status !== 'active' ||
-      connection.resourceId !== resource.id ||
-      providerCredential?.credentialCustody !== 'realmroot' ||
-      !providerCredential.encryptedTokens)
-  ) {
-    throw forbidden('Active provider account connection is required.')
-  }
-  if (brokered) {
-    assertScopeSubset(request.scopes, connection!.grantedScopes, 'connected account')
-    assertAuthorizationDetailsSubset(
-      request.authorizationDetails,
-      connection!.authorizationDetails,
-      'connected account',
-    )
-    assertAuthorityConstraintScopes(request.scopes, connection!, request.authorizationDetails)
-  }
-  if (connectorBackedNative) {
-    assertScopeSubset(request.scopes, connection!.grantedScopes, 'connected account')
   }
   if (signer.issuer !== principal.issuer) {
     throw forbidden('Agent identity does not belong to the active OAuth issuer.')
@@ -2031,7 +1745,7 @@ async function issueNativeAccessToken(
   const realmrootAuthority = realmroot ? request.authorizationDetails[0] : undefined
   if (realmroot) assertRealmrootAuthoritySelection(request.authorizationDetails)
   const issuedScopes = realmroot ? [...new Set([...agentBootstrapScopes, ...request.scopes])].sort() : request.scopes
-  const issuedAuthorizationDetails = realmroot || connection ? request.authorizationDetails : []
+  const issuedAuthorizationDetails = request.authorizationDetails
   const accessToken = await signer.sign(
     {
       iss: signer.issuer,
@@ -2048,12 +1762,7 @@ async function issueNativeAccessToken(
             ? [identity.identity.ownerOrganizationId]
             : [],
       client_id: principal.protocolAgentId,
-      ...(connection
-        ? {
-            connection_id: brokered ? providerCredential!.brokerReference : connection.id,
-            authorization_details: request.authorizationDetails,
-          }
-        : {}),
+      ...(request.authorizationDetails.length > 0 ? { authorization_details: request.authorizationDetails } : {}),
       ...(realmroot
         ? { host_id: principal.hostId, sub_profile: 'ai_agent', realmroot_authority: realmrootAuthority }
         : {}),
@@ -2088,7 +1797,7 @@ async function issueNativeAccessToken(
     result: 'allowed',
     principal,
     resourceId: resource.id,
-    connection,
+    connection: null,
     request,
     accessRequestId: request.id,
     scopes: request.scopes,
@@ -2111,120 +1820,6 @@ async function issueNativeAccessToken(
     authorizationDetails: issuedAuthorizationDetails,
     resourceUrl: resource.resourceUrl,
     dpopNonce: null,
-  }
-}
-
-export async function exchangeAgentConnectionCredential(
-  deps: Deps,
-  input: {
-    subjectToken: string
-    claims: Record<string, unknown>
-    audience: string
-    scopes: string[]
-  },
-) {
-  const now = new Date()
-  const lease = await deps.externalResources.findActiveTokenLeaseByTokenHash(await sha256(input.subjectToken), now)
-  if (!lease) throw oauthError('invalid_grant', 'Agent access token lease is not active.')
-  const storedToken = await deps.secrets.open(lease.encryptedAccessToken, tokenLeaseContext(lease.id))
-  if (storedToken !== input.subjectToken) throw oauthError('invalid_grant', 'Agent access token lease is invalid.')
-
-  const request = await deps.externalResources.findAccessRequest(lease.requestId)
-  if (
-    !request ||
-    (request.status !== 'approved' && request.status !== 'consumed') ||
-    request.bindingId !== lease.bindingId ||
-    !request.connectionId ||
-    !exactScopes(request.scopes, lease.scopes)
-  ) {
-    throw oauthError('invalid_grant', 'Agent access request is no longer valid.')
-  }
-  const [identity, connection, resource, entitlements] = await Promise.all([
-    deps.agentIdentities.findIdentity(request.agentIdentityId),
-    deps.externalResources.findConnection(request.connectionId),
-    deps.authorization.findResource(request.resourceId),
-    deps.externalResources.findEntitlements(lease.entitlementIds),
-  ])
-  const binding = identity?.bindings.find(
-    (candidate) => candidate.id === request.bindingId && candidate.status === 'active',
-  )
-  if (!identity || identity.identity.status !== 'active' || !binding) {
-    throw oauthError('invalid_grant', 'Agent identity or host binding is no longer active.')
-  }
-  if (
-    !resource?.enabled ||
-    resource.authorizationModel !== 'realmroot' ||
-    !resource.providerConnection?.connectorId ||
-    resource.resourceUrl !== input.audience
-  ) {
-    throw oauthError('invalid_target', 'Agent token audience is not a connector-backed native Resource Server.')
-  }
-  if (
-    !connection ||
-    connection.status !== 'active' ||
-    connection.id !== request.connectionId ||
-    connection.resourceId !== resource.id
-  ) {
-    throw oauthError('invalid_grant', 'Provider account connection is no longer active.')
-  }
-  const providerCredential = requireProviderCredential(connection, input.scopes, request.authorizationDetails)
-  if (providerCredential.credentialCustody !== 'realmroot' || !providerCredential.encryptedTokens) {
-    throw oauthError('invalid_grant', 'Provider account connection is no longer active.')
-  }
-  if (
-    connection.ownerUserId !== identity.identity.ownerUserId ||
-    connection.ownerOrganizationId !== identity.identity.ownerOrganizationId
-  ) {
-    throw oauthError('invalid_grant', 'Provider account connection is outside the Agent home space.')
-  }
-  if (
-    entitlements.length !== lease.entitlementIds.length ||
-    entitlements.some(
-      (entitlement) =>
-        entitlement.agentIdentityId !== identity.identity.id ||
-        entitlement.resourceServerId !== resource.id ||
-        entitlement.connectionId !== connection.id ||
-        entitlement.endedAt !== null ||
-        (entitlement.expiresAt !== null && entitlement.expiresAt.getTime() <= now.getTime()) ||
-        !lease.scopes.includes(entitlement.scope),
-    )
-  ) {
-    throw oauthError('invalid_grant', 'Agent Permissions are no longer active.')
-  }
-
-  const act = recordValue(input.claims.act)
-  const confirmation = recordValue(input.claims.cnf)
-  const subject = identity.identity.ownerUserId ?? identity.identity.ownerOrganizationId
-  const tokenScopes = scopeString(input.claims.scope) ?? []
-  if (
-    input.claims.aud !== resource.resourceUrl ||
-    input.claims.sub !== subject ||
-    input.claims.client_id !== binding.protocolAgentId ||
-    input.claims.connection_id !== connection.id ||
-    act?.iss !== identity.identity.issuer ||
-    act?.sub !== identity.identity.subject ||
-    act?.sub_profile !== 'ai_agent' ||
-    confirmation?.jkt !== lease.confirmationJkt ||
-    !exactScopes(tokenScopes, lease.scopes)
-  ) {
-    throw oauthError('invalid_grant', 'Agent access token claims do not match its active authority.')
-  }
-  assertOAuthScopeSubset(input.scopes, tokenScopes, 'Agent access token')
-  assertOAuthScopeSubset(input.scopes, connection.grantedScopes, 'connected provider account')
-
-  const authorization = await requireActiveConnectorAuthorization(
-    deps,
-    resource.id,
-    providerCredential.clientGeneration,
-  )
-  const credential = await refreshConnectionToken(deps, providerCredential, authorization)
-  if (!credential.expiresAt) {
-    throw oauthError('temporarily_unavailable', 'Provider access token does not expose a usable expiry.', 503)
-  }
-  return {
-    accessToken: credential.accessToken,
-    expiresIn: Math.max(1, Math.floor((credential.expiresAt.getTime() - Date.now()) / 1000)),
-    scopes: credential.scopes,
   }
 }
 
@@ -2385,7 +1980,7 @@ async function readAuthorizationDetailCatalog(
       connectionStatus: connectionAuthorized ? ('authorized' as const) : ('authorization_required' as const),
       authorizedScopes: connectionAuthorized ? [...authorizedScopes].sort() : [],
       requestableScopes: connectionAuthorized
-        ? authorityConstraintScopes(connection, [item.authorizationDetail])
+        ? connection.grantedScopes
             .filter(
               (scope) =>
                 scope !== 'openid' &&
@@ -2472,57 +2067,6 @@ async function readResourceCatalog(
   if (authorization?.authorizationDetailsCatalogEndpoint && authorization.authorizationDetailsCatalogScope) {
     return readAuthorizationDetailCatalog(deps, resource, connection, agentIdentityId, pagination)
   }
-  const brokered = brokeredAccountConnection(resource)
-  if (brokered?.authorizationDetailsEndpoint) {
-    const credential = requireProviderCredential(connection, [], [])
-    if (!credential.brokerReference) throw badRequest('Brokered account connection has no usable reference.')
-    const catalog = await requestAuthorizationDetailCatalog(
-      deps,
-      brokered.authorizationDetailsEndpoint,
-      credential.brokerReference,
-      resource,
-      pagination,
-    )
-    const connectedDetails = new Set(connection.authorizationDetails.map(canonicalJson))
-    if (
-      catalog.pagination.total !== connection.authorizationDetails.length ||
-      catalog.items.some((item) => !connectedDetails.has(canonicalJson(item.authorizationDetail)))
-    ) {
-      throw badGateway('Authorization detail catalog does not match the active brokered connection.', {
-        url: brokered.authorizationDetailsEndpoint,
-      })
-    }
-    const entitlements = (
-      await deps.externalResources.listActiveEntitlementsByAgent(agentIdentityId, new Date())
-    ).filter(
-      (entitlement) => entitlement.resourceServerId === resource.id && entitlement.connectionId === connection.id,
-    )
-    return {
-      items: catalog.items.map((item) => {
-        const authorizedScopes = [
-          ...new Set(
-            entitlements
-              .filter((entitlement) =>
-                entitlement.authorizationDetails.some((detail) =>
-                  exactAuthorizationDetails([detail], [item.authorizationDetail]),
-                ),
-              )
-              .map((entitlement) => entitlement.scope),
-          ),
-        ].sort()
-        return {
-          ...item,
-          connectionStatus: 'authorized' as const,
-          authorizedScopes,
-          requestableScopes: authorityConstraintScopes(connection, [item.authorizationDetail])
-            .filter((scope) => scope !== 'openid' && scope !== 'offline_access' && !authorizedScopes.includes(scope))
-            .sort(),
-        }
-      }),
-      pagination: catalog.pagination,
-      connection: { status: 'connected' as const },
-    }
-  }
   const details = connection.authorizationDetails.slice(pagination.offset, pagination.offset + pagination.limit)
   const entitlements = (await deps.externalResources.listActiveEntitlementsByAgent(agentIdentityId, new Date())).filter(
     (entitlement) => entitlement.resourceServerId === resource.id && entitlement.connectionId === connection.id,
@@ -2545,7 +2089,7 @@ async function readResourceCatalog(
         display: authorizationDetailDisplay(authorizationDetail),
         connectionStatus: 'authorized' as const,
         authorizedScopes,
-        requestableScopes: authorityConstraintScopes(connection, [authorizationDetail])
+        requestableScopes: connection.grantedScopes
           .filter((scope) => scope !== 'openid' && scope !== 'offline_access' && !authorizedScopes.includes(scope))
           .sort(),
       }
@@ -2809,9 +2353,7 @@ function connectionCoversRequest(
 ) {
   return Boolean(
     connection?.status === 'active' &&
-      request.scopes.every((scope) =>
-        authorityConstraintScopes(connection, request.authorizationDetails).includes(scope),
-      ) &&
+      request.scopes.every((scope) => connection.grantedScopes.includes(scope)) &&
       isAuthorizationDetailsSubset(request.authorizationDetails, connection.authorizationDetails),
   )
 }
@@ -2855,8 +2397,6 @@ async function isConnectionUsable(
   scopes: string[],
   authorizationDetails: AuthorizationDetail[],
 ): Promise<boolean> {
-  const resource = await deps.authorization.findResource(resourceId)
-  if (resource && brokeredAccountConnection(resource)) return true
   try {
     const credential = requireProviderCredential(connection, scopes, authorizationDetails)
     const authorization = await requireActiveConnectorAuthorization(deps, resourceId, credential.clientGeneration)
@@ -2883,8 +2423,8 @@ async function refreshConnectionToken(
   credential: ProviderCredentialRecord,
   authorization: ExternalResourceAuthorizationRecord,
 ) {
-  if (credential.credentialCustody === 'resource_server' || !credential.encryptedTokens) {
-    throw new Error('Realmroot-custodied resource credentials are required for OAuth refresh.')
+  if (!credential.encryptedTokens) {
+    throw new Error('This legacy account connection must be authorized again.')
   }
   const payload = JSON.parse(
     await deps.secrets.open(
@@ -3033,13 +2573,13 @@ async function requestHostId(deps: Deps, request: AgentAccessRequestRecord) {
 
 async function requireExternalResource(deps: Deps, resourceId: string) {
   const resource = await deps.authorization.findResource(resourceId)
-  if (resource?.authorizationModel !== 'federated') throw notFound('Federated Resource Server was not found.')
+  if (resource?.authorizationModel !== 'external') throw notFound('External Resource Server was not found.')
   return resource
 }
 
 async function requireActiveExternalAuthorization(deps: Deps, resourceId: string, clientGeneration?: number) {
   const resource = await deps.authorization.findResource(resourceId)
-  if (resource?.authorizationModel !== 'federated') {
+  if (resource?.authorizationModel !== 'external') {
     throw notFound('Active external API resource authorization was not found.')
   }
   return requireActiveConnectorAuthorization(deps, resourceId, clientGeneration)
@@ -3059,65 +2599,67 @@ async function findExternalAuthorization(
   clientGeneration?: number,
 ): Promise<ResolvedExternalAuthorization | null> {
   const resource = await deps.authorization.findResource(resourceId)
-  const providerConnection = resource?.providerConnection
-  if (!providerConnection || providerConnection.mode === 'brokered') return null
-  const connector = await deps.connectors.findById(providerConnection.connectorId)
+  if (!resource?.connectorId || resource.authorizationModel !== 'external') return null
+  const connector = await deps.connectors.findById(resource.connectorId)
   const driver = connector ? resourceOAuthDriver(connector) : null
   if (
     !connector ||
     !driver ||
-    !connector.clientId ||
-    !connector.clientSecret ||
-    (resource.authorizationModel === 'federated' &&
-      (!connector.issuer || !connector.jwksEndpoint || connector.providerType !== 'generic_oauth'))
+    !connector.resourceAuthorizationEnabled ||
+    !connector.resourceClientId ||
+    !connector.resourceClientSecret ||
+    !connector.resourceIssuer ||
+    !connector.resourceJwksEndpoint
   ) {
     return null
   }
-  const currentGeneration = connector.clientGeneration ?? 1
+  const currentGeneration = connector.resourceClientGeneration
   const requestedGeneration = clientGeneration ?? currentGeneration
-  const retired = connector.retiredClientGenerations?.find((candidate) => candidate.generation === requestedGeneration)
+  const retired = connector.resourceRetiredClientGenerations?.find(
+    (candidate) => candidate.generation === requestedGeneration,
+  )
   if (requestedGeneration !== currentGeneration && !retired) return null
-  const clientId = retired?.clientId ?? connector.clientId
+  const clientId = retired?.clientId ?? connector.resourceClientId
   const clientSecret = retired
     ? await deps.secrets.open(retired.encryptedClientSecret, retired.clientSecretContext)
-    : connector.clientSecret
+    : connector.resourceClientSecret
   return {
     resourceId,
     connectorId: connector.id,
     resourceUrl: resource.resourceUrl,
-    issuer: connector.issuer ?? 'https://linear.app',
+    issuer: connector.resourceIssuer,
     authorizationEndpoint: driver.authorizationEndpoint,
     tokenEndpoint: driver.tokenEndpoint,
     pushedAuthorizationRequestEndpoint:
-      typeof connector.providerMetadata?.pushed_authorization_request_endpoint === 'string'
-        ? connector.providerMetadata.pushed_authorization_request_endpoint
+      typeof connector.resourceProviderMetadata?.pushed_authorization_request_endpoint === 'string'
+        ? connector.resourceProviderMetadata.pushed_authorization_request_endpoint
         : null,
     authorizationDetailsTypesSupported: metadataStringArray(
-      connector.providerMetadata?.authorization_details_types_supported,
+      connector.resourceProviderMetadata?.authorization_details_types_supported,
     ),
     authorizationDetailsCatalogEndpoint:
-      typeof connector.providerMetadata?.authorization_details_catalog_endpoint === 'string'
-        ? connector.providerMetadata.authorization_details_catalog_endpoint
+      typeof connector.resourceProviderMetadata?.authorization_details_catalog_endpoint === 'string'
+        ? connector.resourceProviderMetadata.authorization_details_catalog_endpoint
         : null,
     authorizationDetailsCatalogScope:
-      typeof connector.providerMetadata?.authorization_details_catalog_scope === 'string'
-        ? connector.providerMetadata.authorization_details_catalog_scope
+      typeof connector.resourceProviderMetadata?.authorization_details_catalog_scope === 'string'
+        ? connector.resourceProviderMetadata.authorization_details_catalog_scope
         : null,
-    registrationEndpoint: connector.registrationEndpoint,
+    registrationEndpoint: connector.resourceRegistrationEndpoint,
     revocationEndpoint: driver.revocationEndpoint,
-    jwksUri: connector.jwksEndpoint,
+    jwksUri: connector.resourceJwksEndpoint,
     userInfoEndpoint: driver.userInfoEndpoint,
     tokenEndpointAuthentication: driver.tokenEndpointAuthentication,
     revocationAuthentication: driver.revocationAuthentication,
     authorizationDetailsMode: driver.authorizationDetailsMode,
     revokeAccessToken: driver.revokeAccessToken,
-    registrationMode: connector.registrationMode ?? 'manual',
+    registrationMode: connector.resourceRegistrationMode ?? 'manual',
     clientId,
     clientGeneration: requestedGeneration,
     encryptedClientSecret: clientSecret,
     encryptedRegistrationAccessToken: null,
-    metadata: connector.providerMetadata ?? {},
-    status: connector.enabled ? 'active' : 'invalid',
+    metadata: connector.resourceProviderMetadata ?? {},
+    status: connector.enabled && connector.resourceAuthorizationEnabled ? 'active' : 'invalid',
     createdAt: connector.createdAt,
     updatedAt: connector.updatedAt,
   }
@@ -3127,15 +2669,8 @@ function authorizationClientSecret(authorization: ResolvedExternalAuthorization)
   return authorization.encryptedClientSecret
 }
 
-function brokeredAccountConnection(resource: NonNullable<Awaited<ReturnType<Deps['authorization']['findResource']>>>) {
-  return resource.providerConnection?.mode === 'brokered' &&
-    resource.scopeRegistry?.accountConnection?.mode === 'brokered'
-    ? resource.scopeRegistry.accountConnection
-    : null
-}
-
 function requiresAccountConnection(resource: NonNullable<Awaited<ReturnType<Deps['authorization']['findResource']>>>) {
-  return resource.providerConnection !== null
+  return resource.authorizationModel === 'external'
 }
 
 async function externalOAuthAuthorization(
@@ -3143,7 +2678,7 @@ async function externalOAuthAuthorization(
   resource: NonNullable<Awaited<ReturnType<Deps['authorization']['findResource']>>>,
   clientGeneration?: number,
 ) {
-  if (resource.authorizationModel !== 'federated') return null
+  if (resource.authorizationModel !== 'external') return null
   return requireActiveExternalAuthorization(deps, resource.id, clientGeneration)
 }
 
@@ -3152,7 +2687,7 @@ async function connectorOAuthAuthorization(
   resource: NonNullable<Awaited<ReturnType<Deps['authorization']['findResource']>>>,
   clientGeneration?: number,
 ) {
-  if (!resource.providerConnection?.connectorId || resource.providerConnection?.mode === 'brokered') return null
+  if (!resource.connectorId || resource.authorizationModel !== 'external') return null
   return requireActiveConnectorAuthorization(deps, resource.id, clientGeneration)
 }
 
@@ -3331,9 +2866,6 @@ function assertAuthorizationDetailsSupported(
 ) {
   if (authorizationDetails.length === 0) return
   if (driver.authorizationDetailsMode === 'connection') return
-  if (!authorization.pushedAuthorizationRequestEndpoint) {
-    throw invalidAuthorizationDetails('RAR-enabled resources require a pushed authorization request endpoint.')
-  }
   if (authorizationDetails.some((detail) => !authorization.authorizationDetailsTypesSupported.includes(detail.type))) {
     throw invalidAuthorizationDetails(
       'The authorization server does not support every configured authorization detail type.',
@@ -3466,77 +2998,6 @@ function isAuthorizationDetailsSubset(requested: AuthorizationDetail[], allowed:
     remaining.splice(index, 1)
   }
   return true
-}
-
-function authorizationSelectorCovers(requested: AuthorizationDetail, selector: AuthorizationDetail): boolean {
-  return jsonSelectorCovers(requested, selector)
-}
-
-function jsonSelectorCovers(requested: unknown, selector: unknown): boolean {
-  if (requested === null || selector === null) return requested === selector
-  if (Array.isArray(requested)) {
-    return (
-      Array.isArray(selector) &&
-      requested.every((item) => selector.some((candidate) => jsonSelectorCovers(item, candidate)))
-    )
-  }
-  if (typeof requested === 'object') {
-    if (typeof selector !== 'object' || Array.isArray(selector)) return false
-    return Object.entries(requested as Record<string, unknown>).every(([key, value]) =>
-      jsonSelectorCovers(value, (selector as Record<string, unknown>)[key]),
-    )
-  }
-  return requested === selector
-}
-
-function validateAuthorityConstraints(
-  constraints: ProviderAuthorityConstraint[],
-  authorizationDetails: AuthorizationDetail[],
-  grantedScopes: string[],
-) {
-  if (
-    constraints.some(
-      (constraint) =>
-        !isAuthorizationDetailsSubset(constraint.authorizationDetails, authorizationDetails) ||
-        constraint.scopes.some((scope) => !grantedScopes.includes(scope)),
-    ) ||
-    authorizationDetails.some(
-      (detail) =>
-        !constraints.some((constraint) =>
-          constraint.authorizationDetails.some((selector) => authorizationSelectorCovers(detail, selector)),
-        ),
-    )
-  ) {
-    throw invalidAuthorizationDetails('Brokered connection authority constraints do not cover its granted authority.')
-  }
-}
-
-function authorityConstraintScopes(
-  connection: ProviderResourceAuthorizationRecord,
-  authorizationDetails: AuthorizationDetail[],
-) {
-  if (authorizationDetails.length === 0) return connection.grantedScopes
-  const constraints = connection.authorityConstraints ?? []
-  if (constraints.length === 0) return connection.grantedScopes
-  const scopesByDetail = authorizationDetails.map((detail) => [
-    ...new Set(
-      constraints
-        .filter((constraint) =>
-          constraint.authorizationDetails.some((selector) => authorizationSelectorCovers(detail, selector)),
-        )
-        .flatMap((constraint) => constraint.scopes),
-    ),
-  ])
-  if (scopesByDetail.some((scopes) => scopes.length === 0)) return []
-  return connection.grantedScopes.filter((scope) => scopesByDetail.every((scopes) => scopes.includes(scope)))
-}
-
-function assertAuthorityConstraintScopes(
-  requested: string[],
-  connection: ProviderResourceAuthorizationRecord,
-  authorizationDetails: AuthorizationDetail[],
-) {
-  assertScopeSubset(requested, authorityConstraintScopes(connection, authorizationDetails), 'selected authority')
 }
 
 function exactAuthorizationDetails(left: AuthorizationDetail[], right: AuthorizationDetail[]) {
@@ -3814,10 +3275,6 @@ function optionalString(value: Record<string, unknown>, field: string) {
   return typeof value[field] === 'string' && value[field].length > 0 ? value[field] : null
 }
 
-function recordValue(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null
-}
-
 function requiredPositiveInteger(value: Record<string, unknown>, field: string, label: string) {
   const result = value[field]
   if (typeof result !== 'number' || !Number.isInteger(result) || result <= 0) {
@@ -3839,11 +3296,6 @@ function tokenExpiry(token: Record<string, unknown>, now: Date) {
 function assertScopeSubset(requested: string[], allowed: string[], boundary: string) {
   const missing = requested.filter((scope) => !allowed.includes(scope))
   if (missing.length > 0) throw badRequest(`Requested scopes exceed the ${boundary} boundary: ${missing.join(', ')}.`)
-}
-
-function assertOAuthScopeSubset(requested: string[], allowed: string[], boundary: string) {
-  const missing = requested.filter((scope) => !allowed.includes(scope))
-  if (missing.length > 0) throw oauthError('invalid_scope', `Requested scopes exceed the ${boundary} boundary.`)
 }
 
 function exactScopes(left: string[], right: string[]) {
@@ -3931,7 +3383,6 @@ function toResourceConnection(record: ProviderResourceAuthorizationRecord) {
     displayName: record.displayName,
     grantedScopes: record.grantedScopes,
     authorizationDetails: record.authorizationDetails,
-    authorityConstraints: record.authorityConstraints ?? [],
     status: record.status as 'active' | 'suspended' | 'revoked',
     credentialExpiresAt: providerCredentialExpiry(record)?.toISOString() ?? null,
     createdAt: record.createdAt.toISOString(),

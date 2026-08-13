@@ -10,69 +10,6 @@ const scopeListSchema = z
 
 export const externalAuthorizationStatusSchema = z.enum(['pending', 'active', 'invalid'])
 
-export const providerConnectionEventTypeSchema = z.enum([
-  'authorityChanged',
-  'resourcesChanged',
-  'suspended',
-  'restored',
-  'revoked',
-])
-
-const providerConnectionEventScopeListSchema = z
-  .array(nonEmptyString)
-  .transform((values) => [...new Set(values)].sort())
-
-export const providerAuthorityConstraintSchema = z
-  .object({
-    authorizationDetails: authorizationDetailsSchema.min(1),
-    scopes: providerConnectionEventScopeListSchema,
-  })
-  .strict()
-
-export const providerAuthorityConstraintsSchema = z.array(providerAuthorityConstraintSchema)
-
-const providerConnectionEventCommonShape = {
-  brokerReference: nonEmptyString,
-  occurredAt: z.iso
-    .datetime({ offset: true })
-    .describe('Provider occurrence time retained as audit metadata; it does not determine mutation order.'),
-  revision: z.number().int().positive().describe('Monotonic per-connection revision used as the sole mutation order.'),
-}
-
-export const providerConnectionEventSchema = z.discriminatedUnion('type', [
-  z
-    .object({
-      ...providerConnectionEventCommonShape,
-      type: z.literal('authorityChanged'),
-      scopes: providerConnectionEventScopeListSchema,
-      affectedScopes: providerConnectionEventScopeListSchema,
-      affectedAuthorizationDetails: authorizationDetailsSchema.min(1),
-      authorityConstraints: providerAuthorityConstraintsSchema,
-    })
-    .strict(),
-  z
-    .object({
-      ...providerConnectionEventCommonShape,
-      type: z.literal('resourcesChanged'),
-      scopes: providerConnectionEventScopeListSchema,
-      authorizationDetails: authorizationDetailsSchema,
-      authorityConstraints: providerAuthorityConstraintsSchema,
-    })
-    .strict(),
-  z
-    .object({
-      ...providerConnectionEventCommonShape,
-      type: z.literal('restored'),
-      scopes: providerConnectionEventScopeListSchema,
-      authorizationDetails: authorizationDetailsSchema,
-      authorityConstraints: providerAuthorityConstraintsSchema,
-    })
-    .strict(),
-  z.object({ ...providerConnectionEventCommonShape, type: z.enum(['suspended', 'revoked']) }).strict(),
-])
-
-export const providerConnectionEventIdSchema = nonEmptyString.max(200)
-
 export const externalResourceAuthorizationSchema = z.object({
   resourceId: z.string(),
   connectorId: z.string(),
@@ -137,7 +74,6 @@ export const providerResourceAuthorizationSchema = z.object({
   displayName: z.string(),
   grantedScopes: z.array(z.string()),
   authorizationDetails: authorizationDetailsSchema,
-  authorityConstraints: providerAuthorityConstraintsSchema,
   status: z.enum(['active', 'suspended', 'revoked']),
   credentialExpiresAt: z.iso.datetime().nullable(),
   createdAt: z.iso.datetime(),
@@ -206,8 +142,6 @@ export const decideAgentAccessRequestByTokenSchema = decideAgentAccessRequestSch
   })
 
 export type ExternalResourceAuthorizationRecord = z.infer<typeof externalResourceAuthorizationSchema>
-export type ProviderConnectionEvent = z.infer<typeof providerConnectionEventSchema>
-export type ProviderAuthorityConstraint = z.infer<typeof providerAuthorityConstraintSchema>
 export type CreateResourceConnectionIntentRequest = z.infer<typeof createResourceConnectionIntentRequestSchema>
 export type CreateAgentAccessRequest = z.input<typeof createAgentAccessRequestSchema>
 export type DecideAgentAccessRequest = z.input<typeof decideAgentAccessRequestSchema>
