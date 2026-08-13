@@ -6,7 +6,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite dev",
-    "build": "vite build",
+    "build": "pnpm run build:skills && vite build",
+    "build:skills": "node scripts/build-agent-skills.mjs",
+    "check:skills": "node scripts/build-agent-skills.mjs --check",
     "deploy": "pnpm run db:migrate:remote && pnpm run build && wrangler deploy --config dist/realmroot/wrangler.json",
     "deploy:check": "node scripts/check-cloudflare-config.mjs",
     "deploy:fork": "node scripts/deploy-cloudflare-fork.mjs",

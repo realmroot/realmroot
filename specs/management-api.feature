@@ -34,6 +34,15 @@ Feature: Unified Realmroot resource API
     And Restish can validate structured authorization detail request bodies without the root OpenAPI document
 
 
+  @entrypoint:agent-protocol @journey:agent-skills-discovery
+  Scenario: Realmroot publishes instructions for Agents using its Toolbox
+    When an Agent client requests /.well-known/agent-skills/index.json
+    Then Realmroot returns the Agent Skills Discovery version 0.2.0 index
+    And the index advertises the Realmroot Skill as an archive
+    And the archive contains the Skill instructions and their referenced guidance
+    And the advertised SHA-256 digest matches the archive bytes
+
+
   @entrypoint:restish @journey:management-collection-envelope
   Scenario: Collection responses use one stable envelope
     When an authorized caller lists any growing resource collection

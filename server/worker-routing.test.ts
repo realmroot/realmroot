@@ -1,11 +1,14 @@
 import { spawnSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { gunzipSync } from 'node:zlib'
+import { describe, expect, it, vi } from 'vitest'
 import packageJson from '../package.json?raw'
 import forkDeploymentScript from '../scripts/deploy-cloudflare-fork.mjs?raw'
 import wranglerConfig from '../wrangler.toml?raw'
+import worker from './worker'
 
 describe('Workers Assets routing', () => {
   it('routes OAuth metadata well-known paths to the Worker', () => {
@@ -22,7 +25,88 @@ describe('Workers Assets routing', () => {
     expect(runWorkerFirst?.[1]).not.toContain('"/admin"')
     expect(runWorkerFirst?.[1]).not.toContain('"/admin/*"')
   })
+
+  it('serves a verifiable Realmroot Skill archive [spec: management-api/agent-skills-discovery]', async () => {
+    const directory = path.join(process.cwd(), 'public', '.well-known', 'agent-skills')
+    const indexBytes = readFileSync(path.join(directory, 'index.json'))
+    const archiveBytes = readFileSync(path.join(directory, 'realmroot.tar.gz'))
+    const assetsFetch = vi.fn(async (request: Request) => {
+      const pathname = new URL(request.url).pathname
+      const artifact = pathname.endsWith('/index.json') ? indexBytes : archiveBytes
+      const contentType = pathname.endsWith('/index.json') ? 'application/json' : 'application/gzip'
+      return new Response(request.method === 'HEAD' ? null : artifact, { headers: { 'content-type': contentType } })
+    })
+    const env = { ASSETS: { fetch: assetsFetch } } as unknown as Env
+    const executionContext = {} as ExecutionContext
+
+    const response = await worker.fetch(
+      new Request('https://id.realmroot.dev/.well-known/agent-skills/index.json'),
+      env,
+      executionContext,
+    )
+    expect(response.status).toBe(200)
+    expect(response.headers.get('content-type')).toContain('application/json')
+    const index = (await response.json()) as {
+      $schema: string
+      skills: Array<{ name: string; type: string; url: string; digest: string }>
+    }
+    expect(index).toEqual({
+      $schema: 'https://schemas.agentskills.io/discovery/0.2.0/schema.json',
+      skills: [
+        expect.objectContaining({
+          name: 'realmroot',
+          type: 'archive',
+          url: '/.well-known/agent-skills/realmroot.tar.gz',
+          digest: `sha256:${createHash('sha256').update(archiveBytes).digest('hex')}`,
+        }),
+      ],
+    })
+    expect(listTarEntries(gunzipSync(archiveBytes))).toEqual([
+      'SKILL.md',
+      'references/management.md',
+      'references/setup.md',
+      'references/toolbox-commands.md',
+      'references/x402.md',
+    ])
+
+    const head = await worker.fetch(
+      new Request('https://id.realmroot.dev/.well-known/agent-skills/realmroot.tar.gz', { method: 'HEAD' }),
+      env,
+      executionContext,
+    )
+    expect(head.status).toBe(200)
+    expect(head.headers.get('content-type')).toContain('application/gzip')
+    expect((await head.arrayBuffer()).byteLength).toBe(0)
+    expect(assetsFetch).toHaveBeenCalledTimes(2)
+
+    const check = spawnSync('node', ['scripts/build-agent-skills.mjs', '--check'], {
+      cwd: process.cwd(),
+      encoding: 'utf8',
+    })
+    expect(check.status, check.stderr).toBe(0)
+  })
 })
+
+function listTarEntries(tar: Buffer) {
+  const entries = []
+  for (let offset = 0; offset < tar.length; ) {
+    const name = tar
+      .subarray(offset, offset + 100)
+      .toString('utf8')
+      .replace(/\0.*$/, '')
+    if (!name) break
+    entries.push(name)
+    const size = Number.parseInt(
+      tar
+        .subarray(offset + 124, offset + 136)
+        .toString('ascii')
+        .replace(/\0.*$/, ''),
+      8,
+    )
+    offset += 512 + Math.ceil(size / 512) * 512
+  }
+  return entries
+}
 
 describe('Cloudflare deployment configuration', () => {
   it('deploys the exact Worker artifact produced by Vite [spec: platform-onboarding/cloudflare-deployment-isolation]', () => {

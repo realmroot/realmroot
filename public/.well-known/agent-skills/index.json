@@ -1,0 +1,12 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "skills": [
+    {
+      "name": "realmroot",
+      "type": "archive",
+      "description": "Use Realmroot as the stable Agent identity for private Resources, controller-approved access, Realmroot administration, Agent-attributed Git commits, and authenticated git, gh, or wrangler commands.",
+      "url": "/.well-known/agent-skills/realmroot.tar.gz",
+      "digest": "sha256:6d07dd7afa611008e8300f11b77bcc4909114a7336bad31bab83522757299623"
+    }
+  ]
+}
