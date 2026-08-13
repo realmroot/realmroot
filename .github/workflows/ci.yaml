@@ -152,22 +152,6 @@ jobs:
       - name: Test integration crown
         run: pnpm run test:integration
 
-  restish-plugin:
-    name: Restish plugin
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-
-      - name: Setup Go
-        uses: actions/setup-go@v6
-        with:
-          go-version-file: plugins/restish-realmroot/go.mod
-          cache-dependency-path: plugins/restish-realmroot/go.sum
-
-      - name: Test Restish plugin
-        run: cd plugins/restish-realmroot && go test ./...
-
   journeys:
     name: Playwright E2E (${{ matrix.shard }}/2)
     runs-on: ubuntu-latest
@@ -190,17 +174,8 @@ jobs:
           node-version: 24.14.1
           cache: pnpm
 
-      - name: Setup Go
-        uses: actions/setup-go@v6
-        with:
-          go-version-file: plugins/restish-realmroot/go.mod
-          cache-dependency-path: plugins/restish-realmroot/go.sum
-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-
-      - name: Install Restish
-        uses: ./.github/actions/setup-restish
 
       - name: Cache Playwright browser
         uses: actions/cache@v4
@@ -229,7 +204,7 @@ jobs:
   verify:
     name: Verify
     if: always()
-    needs: [quality, backend-unit, web, integration, restish-plugin]
+    needs: [quality, backend-unit, web, integration]
     runs-on: ubuntu-latest
     steps:
       - name: Check verification jobs

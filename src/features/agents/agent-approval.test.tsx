@@ -73,7 +73,7 @@ describe('AgentApproveRoute', () => {
     expect(await screen.findByText('Invalid user code')).toBeTruthy()
   })
 
-  it('denies a pending request and replaces the approval controls [spec: agent-identity/agent-capability-denial]', async () => {
+  it('denies a pending request and replaces the approval controls [spec: agent-identity/agent-capability-denial] [spec: agent-identity/agent-enrollment-denial]', async () => {
     window.history.pushState(null, '', '/agent/approve?agent_id=agent-1&code=ABCD-1234&capability=applications:read')
 
     render(<AgentApproval />)

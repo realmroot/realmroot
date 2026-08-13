@@ -174,7 +174,7 @@ describe('requireAccountProfile', () => {
     }
   })
 
-  it('keeps fragment-bearing approval targets in browser storage', async () => {
+  it('keeps fragment-bearing approval targets through sign-in without exposing the token [spec: agent-identity/agent-resource-approval-sign-in]', async () => {
     server.use(http.get(`${base}/api/account/profile`, () => new HttpResponse(null, { status: 401 })))
     const approval = '/agent/resource-access/approve#token=secret'
 
