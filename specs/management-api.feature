@@ -41,6 +41,7 @@ Feature: Unified Realmroot resource API
     And the index advertises every Realmroot-owned Skill as an archive
     And each archive contains the Skill instructions and supporting files
     And every advertised SHA-256 digest matches its archive bytes
+    And the Realmroot Skill directs Agents to install task-relevant Skills advertised by a selected Resource Server
 
 
   @entrypoint:restish @journey:management-collection-envelope

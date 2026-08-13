@@ -243,6 +243,8 @@ describe('management routes 1', () => {
     expect(setup).toContain('realmroot agent enroll --username mira --nickname "Mira Chen" --json')
     expect(commands).toContain('realmroot agent request')
     expect(commands).toContain('realmroot toolbox <resource-server> context use <name>')
+    expect(commands).toMatch(/install the\s+task-relevant Skills using the exact commands printed by Toolbox/)
+    expect(commands).toContain('continue with operation discovery and help')
     expect(commands).not.toContain('--authorization-detail')
     expect(commands).not.toContain('restish')
     expect(management).not.toContain('/access/consents')
