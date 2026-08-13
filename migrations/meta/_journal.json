@@ -407,6 +407,13 @@
       "when": 1786646970429,
       "tag": "20260813184930_align_resource_provider_identity",
       "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "6",
+      "when": 1786653996055,
+      "tag": "20260813204636_remove_account_connection_scope_registry",
+      "breakpoints": true
     }
   ]
 }
