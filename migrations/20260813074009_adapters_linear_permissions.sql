@@ -36,7 +36,7 @@ WITH requested(id, scope) AS (VALUES
 )
 INSERT INTO `resource_scope_entitlement` (
   `id`, `application_id`, `resource_server_id`, `authorization_details`,
-  `authorization_context_hash`, `scope`, `mode`, `created_at`, `updated_at`
+  `authorization_context_hash`, `scope`, `mode`, `granted_by_user_id`, `created_at`, `updated_at`
 )
 SELECT
   requested.id,
@@ -46,6 +46,13 @@ SELECT
   '4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945',
   requested.scope,
   'persistent',
+  (
+    SELECT member.`user_id`
+    FROM `member`
+    WHERE member.`organization_id` = app.`owner_organization_id`
+    ORDER BY CASE WHEN member.`role` = 'owner' THEN 0 ELSE 1 END, member.`created_at`, member.`id`
+    LIMIT 1
+  ),
   cast(unixepoch('subsecond') * 1000 as integer),
   cast(unixepoch('subsecond') * 1000 as integer)
 FROM requested
