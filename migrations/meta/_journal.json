@@ -386,6 +386,27 @@
       "when": 1786640398214,
       "tag": "20260813165958_sparkling_jimmy_woo",
       "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "6",
+      "when": 1786646464508,
+      "tag": "20260813184104_linear_workspace_connection",
+      "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "6",
+      "when": 1786646758951,
+      "tag": "20260813184558_revoke_legacy_linear_authorization",
+      "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "6",
+      "when": 1786646970429,
+      "tag": "20260813184930_align_resource_provider_identity",
+      "breakpoints": true
     }
   ]
 }

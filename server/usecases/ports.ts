@@ -821,6 +821,7 @@ export interface ExternalResourceRepository {
   releaseProviderCredentialRefresh(id: string, expectedVersion: number, claimId: string, now: Date): Promise<boolean>
   revokeProviderCredential(id: string, now: Date): Promise<boolean>
   revokeConnection(id: string, now: Date): Promise<boolean>
+  revokeResourceAuthorizationsByConnector(connectorId: string, now: Date): Promise<number>
   createConnectionIntent(input: ResourceConnectionIntentRecord): Promise<ResourceConnectionIntentRecord | null>
   consumeConnectionIntent(stateHash: string, now: Date): Promise<ResourceConnectionIntentRecord | null>
   createAgentConnectionRequest(input: AgentConnectionRequestRecord): Promise<AgentConnectionRequestRecord | null>

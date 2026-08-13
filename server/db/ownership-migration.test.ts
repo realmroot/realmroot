@@ -24,6 +24,9 @@ const authorizationModelMigrationName = '20260813153528_natural_zaran.sql'
 const providerCredentialMigrationName = '20260813153617_big_captain_britain.sql'
 const externalAuthorizationCleanupMigrationName = '20260813164303_past_metal_master.sql'
 const authorityConstraintCleanupMigrationName = '20260813165958_sparkling_jimmy_woo.sql'
+const linearWorkspaceConnectionMigrationName = '20260813184104_linear_workspace_connection.sql'
+const linearAuthorizationCleanupMigrationName = '20260813184558_revoke_legacy_linear_authorization.sql'
+const providerIdentityAlignmentMigrationName = '20260813184930_align_resource_provider_identity.sql'
 
 describe('tenant ownership migration', () => {
   it('backfills authority constraints for existing brokered connections', () => {
@@ -93,6 +96,9 @@ describe('tenant ownership migration', () => {
             providerCredentialMigrationName,
             externalAuthorizationCleanupMigrationName,
             authorityConstraintCleanupMigrationName,
+            linearWorkspaceConnectionMigrationName,
+            linearAuthorizationCleanupMigrationName,
+            providerIdentityAlignmentMigrationName,
           ].includes(name),
       )) {
         database.exec(readFileSync(new URL(`../../migrations/${name}`, import.meta.url), 'utf8'))
@@ -146,6 +152,15 @@ describe('tenant ownership migration', () => {
       )
       database.exec(
         readFileSync(new URL(`../../migrations/${authorityConstraintCleanupMigrationName}`, import.meta.url), 'utf8'),
+      )
+      database.exec(
+        readFileSync(new URL(`../../migrations/${linearWorkspaceConnectionMigrationName}`, import.meta.url), 'utf8'),
+      )
+      database.exec(
+        readFileSync(new URL(`../../migrations/${linearAuthorizationCleanupMigrationName}`, import.meta.url), 'utf8'),
+      )
+      database.exec(
+        readFileSync(new URL(`../../migrations/${providerIdentityAlignmentMigrationName}`, import.meta.url), 'utf8'),
       )
 
       expect(columnNames(database, 'application')).not.toContain('owner_user_id')

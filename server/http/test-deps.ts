@@ -304,6 +304,7 @@ export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> =
       releaseProviderCredentialRefresh: vi.fn().mockResolvedValue(true),
       revokeProviderCredential: vi.fn().mockResolvedValue(false),
       revokeConnection: vi.fn().mockResolvedValue(false),
+      revokeResourceAuthorizationsByConnector: vi.fn().mockResolvedValue(0),
       createConnectionIntent: vi.fn().mockImplementation(async (input) => input),
       consumeConnectionIntent: vi.fn().mockResolvedValue(null),
       createAgentConnectionRequest: vi.fn().mockImplementation(async (input) => input),

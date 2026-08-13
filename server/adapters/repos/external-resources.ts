@@ -38,9 +38,8 @@ export function createExternalResourceRepository(db: Database, ids: IdentifierGe
       .update(providerConnection)
       .set({
         authenticationAccountId: input.authenticationAccountId,
-        ...(input.authenticationAccountId
-          ? { externalSubject: input.externalSubject, displayName: input.displayName }
-          : {}),
+        externalSubject: input.externalSubject,
+        displayName: input.displayName,
         status: input.status,
         updatedAt: input.updatedAt,
       })
@@ -437,6 +436,41 @@ export function createExternalResourceRepository(db: Database, ids: IdentifierGe
           .where(eq(providerCredential.providerResourceAuthorizationId, id)),
       ])
       return true
+    },
+
+    async revokeResourceAuthorizationsByConnector(connectorId, now) {
+      const authorizations = await db
+        .select({ id: providerResourceAuthorization.id })
+        .from(providerResourceAuthorization)
+        .innerJoin(apiResource, eq(apiResource.id, providerResourceAuthorization.resourceId))
+        .where(and(eq(apiResource.connectorId, connectorId), eq(providerResourceAuthorization.status, 'active')))
+      if (authorizations.length === 0) return 0
+      const authorizationIds = authorizations.map(({ id }) => id)
+      await db.batch([
+        db
+          .update(agentAccessRequest)
+          .set({ connectionId: null, updatedAt: now })
+          .where(inArray(agentAccessRequest.connectionId, authorizationIds)),
+        db
+          .update(resourceScopeEntitlement)
+          .set({ connectionId: null, updatedAt: now })
+          .where(inArray(resourceScopeEntitlement.connectionId, authorizationIds)),
+        db
+          .update(providerCredential)
+          .set({
+            status: 'revoked',
+            revokedAt: now,
+            refreshClaimId: null,
+            refreshClaimExpiresAt: null,
+            updatedAt: now,
+          })
+          .where(inArray(providerCredential.providerResourceAuthorizationId, authorizationIds)),
+        db
+          .update(providerResourceAuthorization)
+          .set({ status: 'revoked', revokedAt: now, updatedAt: now })
+          .where(inArray(providerResourceAuthorization.id, authorizationIds)),
+      ])
+      return authorizationIds.length
     },
 
     async createConnectionIntent(input) {

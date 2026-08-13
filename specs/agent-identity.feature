@@ -389,6 +389,7 @@ Feature: Agent identity and delegated API authorization
       And it does not advertise Realmroot's optional authorization detail catalog extension
       When an administrator registers an external API resource with supported authorization detail templates
       Then Realmroot accepts the resource without inventing a catalog requirement
+      And Agent approval can select the concrete authorization details already returned by that account connection
       And Agents can request exact details already exposed by their connected account
 
     @entrypoint:agent-protocol @journey:external-resource-contextual-delegation

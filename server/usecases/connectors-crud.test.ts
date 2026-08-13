@@ -1167,6 +1167,62 @@ describe('service.test 2', () => {
     await expect(updateConnector(disappeared, 'idp_1', { enabled: false })).rejects.toThrow('Connector not found.')
   })
 
+  it('revokes existing resource authorizations when replacing a Connector resource boundary [spec: connectors-and-methods/connector-capabilities]', async () => {
+    const current = connector({ providerId: 'github', displayName: 'GitHub' })
+    const updated = connector({
+      ...current,
+      resourceAuthorizationEnabled: true,
+      resourceClientId: 'registered-client',
+      resourceClientSecret: 'registered-secret',
+      resourceIssuer: 'https://adapter.example.com/oauth/github',
+      resourceAuthorizationEndpoint: 'https://adapter.example.com/oauth/github/authorize',
+      resourceTokenEndpoint: 'https://adapter.example.com/oauth/github/token',
+      resourceUserInfoEndpoint: 'https://adapter.example.com/oauth/github/userinfo',
+      resourceJwksEndpoint: 'https://adapter.example.com/oauth/github/jwks',
+      resourceRegistrationEndpoint: 'https://adapter.example.com/oauth/github/register',
+      resourceRevocationEndpoint: 'https://adapter.example.com/oauth/github/revoke',
+      resourceRegistrationMode: 'dynamic',
+    })
+    const revokeResourceAuthorizationsByConnector = vi.fn().mockResolvedValue(2)
+    const deps = {
+      connectors: createRepository({ byId: current, updateResult: updated }),
+      externalResources: { revokeResourceAuthorizationsByConnector },
+      externalHttp: {
+        fetch: vi
+          .fn()
+          .mockResolvedValueOnce(
+            Response.json(
+              discoveryMetadata({
+                issuer: 'https://adapter.example.com/oauth/github',
+                authorization_endpoint: 'https://adapter.example.com/oauth/github/authorize',
+                token_endpoint: 'https://adapter.example.com/oauth/github/token',
+                userinfo_endpoint: 'https://adapter.example.com/oauth/github/userinfo',
+                jwks_uri: 'https://adapter.example.com/oauth/github/jwks',
+                registration_endpoint: 'https://adapter.example.com/oauth/github/register',
+                revocation_endpoint: 'https://adapter.example.com/oauth/github/revoke',
+              }),
+            ),
+          )
+          .mockResolvedValueOnce(Response.json({ client_id: 'registered-client', client_secret: 'registered-secret' })),
+      },
+    } as unknown as Deps
+
+    await updateConnector(
+      deps,
+      current.id,
+      {
+        resourceAuthorization: {
+          enabled: true,
+          registrationMode: 'dynamic',
+          issuer: 'https://adapter.example.com/oauth/github',
+        },
+      },
+      'https://id.realmroot.dev',
+    )
+
+    expect(revokeResourceAuthorizationsByConnector).toHaveBeenCalledWith(current.id, expect.any(Date))
+  })
+
   it('keeps referenced connectors from being deleted', async () => {
     const deps = {
       connectors: createRepository({

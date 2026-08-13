@@ -219,6 +219,9 @@ export async function updateConnector(deps: Deps, id: string, input: UpdateConne
     updatedAt: candidate.updatedAt,
   })
   if (!updated) throw notFound('Connector not found.')
+  if (input.resourceAuthorization !== undefined) {
+    await deps.externalResources.revokeResourceAuthorizationsByConnector(id, candidate.updatedAt)
+  }
   assertComplete(updated)
   return toResponse(updated)
 }

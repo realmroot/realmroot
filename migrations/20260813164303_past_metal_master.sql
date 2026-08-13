@@ -1,4 +1,18 @@
 DROP TABLE `provider_connection_event_receipt`;--> statement-breakpoint
+UPDATE `agent_access_request`
+SET `connection_id` = NULL
+WHERE `connection_id` IN (
+	SELECT `provider_resource_authorization_id`
+	FROM `provider_credential`
+	WHERE `encrypted_tokens` IS NULL
+);--> statement-breakpoint
+UPDATE `resource_scope_entitlement`
+SET `connection_id` = NULL
+WHERE `connection_id` IN (
+	SELECT `provider_resource_authorization_id`
+	FROM `provider_credential`
+	WHERE `encrypted_tokens` IS NULL
+);--> statement-breakpoint
 DELETE FROM `provider_resource_authorization`
 WHERE `id` IN (
 	SELECT `provider_resource_authorization_id`

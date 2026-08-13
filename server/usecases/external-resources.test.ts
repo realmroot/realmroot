@@ -848,6 +848,7 @@ describe('external API resource authorization', () => {
     }
     const existing = {
       ...connectionRecord(),
+      credentials: [{ ...connectionRecord().credentials[0]!, externalSubject: 'legacy-provider-subject' }],
       status: 'revoked',
       revokedAt: now,
     }
@@ -906,6 +907,14 @@ describe('external API resource authorization', () => {
       providerConnectionId: existing.providerConnectionId,
       resourceId: 'resource-1',
     })
+    expect(deps.externalResources.upsertProviderConnection).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: existing.providerConnectionId,
+        externalSubject: 'target-user-1',
+        displayName: 'Renamed Project Owner',
+        status: 'active',
+      }),
+    )
     expect(deps.externalResources.upsertProviderCredential).toHaveBeenCalledWith(
       'connection-1',
       expect.objectContaining({
@@ -946,7 +955,7 @@ describe('external API resource authorization', () => {
       ownerOrganizationId: 'org-1',
       initiatedByUserId: 'user-1',
       scopes: ['offline_access', 'openid', 'projects:read'],
-      authorizationDetails: template,
+      authorizationDetails: retained,
       encryptedPkceVerifier: 'sealed:pkce-verifier',
       returnTo: 'account-center',
       status: 'completed',
@@ -4460,17 +4469,23 @@ describe('external API resource authorization', () => {
     })
   })
 
-  it('rejects missing and inconsistent external authorization catalogs', async () => {
+  it('uses connected authorization details when the optional external catalog is absent', async () => {
     const request = requestRecord()
     const missingCatalog = authorizationCatalogDeps({ providerMetadata: metadata() })
     vi.mocked(missingCatalog.externalResources.findAccessRequestByApprovalTokenHash).mockResolvedValue(request)
-    vi.mocked(missingCatalog.externalResources.findConnection).mockResolvedValue(connectionRecord())
+    const connectedDetail = { type: 'project_access', project_id: 'project-1' }
+    vi.mocked(missingCatalog.externalResources.findConnection).mockResolvedValue(
+      connectionWithCredential(connectionRecord(), { authorizationDetails: [connectedDetail] }),
+    )
     await expect(
       listAccountAccessRequestAuthorizationDetailCatalog(missingCatalog, request.id, 'approval-token', 'user-1', {
         limit: 100,
         offset: 0,
       }),
-    ).rejects.toThrow('does not advertise an authorization detail catalog')
+    ).resolves.toMatchObject({
+      items: [{ authorizationDetail: connectedDetail, connectionStatus: 'authorized' }],
+      pagination: { total: 1 },
+    })
 
     const mismatched = authorizationCatalogDeps({
       fetchResponse: Response.json({
@@ -5230,7 +5245,7 @@ describe('external API resource authorization', () => {
     )
     await expect(
       issueTargetAccessToken(deps, 'request-1', 'proof', 'https://auth.example.com/token', principal(), signer),
-    ).rejects.toThrow('Active external API resource grant is required.')
+    ).rejects.toThrow('Active external authorization server is required.')
 
     vi.mocked(deps.externalResources.findConnection).mockResolvedValue(null)
     await expect(

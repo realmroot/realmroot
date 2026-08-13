@@ -64,6 +64,7 @@ Feature: Connectors and hosted method availability
     And a dual-purpose Connector keeps its Better Auth provider and external authorization issuer under one Connector identity
     And the two facets use separate OAuth clients, callbacks, state, token storage, and business semantics
     And disabling authentication does not disable Resource Servers that reference that Connector
+    And replacing its external authorization configuration revokes existing resource authorizations so they must be approved again
 
   @entrypoint:product-ui @journey:connector-secret-upgrade
   Scenario: Existing connector credentials survive encrypted-custody upgrades

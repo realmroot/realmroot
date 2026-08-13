@@ -264,16 +264,20 @@ export async function completeResourceConnectionIntent(
       intent.authorizationDetails.map((detail) => detail.type),
       'OAuth token response',
     )
-  assertConcreteAuthorizationDetails(intent.authorizationDetails, authorizationDetails, 'Provider connection')
-  const expiresAt = tokenExpiry(token, now)
   const resource = await requireEnabledResource(deps, intent.resourceId)
+  assertProviderConnectionAuthorizationDetails(
+    resource.authorizationDetails,
+    intent.authorizationDetails,
+    authorizationDetails,
+  )
+  const expiresAt = tokenExpiry(token, now)
   const provider = await ensureProviderConnection(deps, resource, intent, externalSubject, displayName, now)
   const existing = await deps.externalResources.findConnectionByProviderResource({
     providerConnectionId: provider.id,
     resourceId: intent.resourceId,
   })
   const connectionId = existing?.id ?? intent.id
-  const existingCredential = existing?.credentials.find((credential) => credential.externalSubject === externalSubject)
+  const existingCredential = existing?.credentials[0]
   const credentialId = existingCredential?.id ?? deps.ids.generate()
   const grantedScopes = scopeString(token.scope) ?? intent.scopes
   const credentialInput = {
@@ -1024,9 +1028,7 @@ export async function listAccountAccessRequestAuthorizationDetailCatalog(
   if (!connection || connection.status !== 'active') {
     throw notFound('Active resource account connection was not found.')
   }
-  return resource.authorizationModel === 'native'
-    ? readResourceCatalog(deps, resource, connection, request.agentIdentityId, pagination)
-    : readAuthorizationDetailCatalog(deps, resource, connection, request.agentIdentityId, pagination)
+  return readResourceCatalog(deps, resource, connection, request.agentIdentityId, pagination)
 }
 
 export async function createAgentAccessRequest(
@@ -1565,7 +1567,7 @@ export async function issueTargetAccessToken(
   }
   const authorization = await findExternalAuthorization(deps, request.resourceId, connectionClientGeneration)
   if (authorization?.status !== 'active') {
-    throw forbidden('Active external API resource grant is required.')
+    throw forbidden('Active external authorization server is required.')
   }
   assertScopeSubset(request.scopes, connection.grantedScopes, 'connected account')
   assertAuthorizationDetailsSelection(resource, connection, request.authorizationDetails)
@@ -3036,6 +3038,28 @@ function assertConcreteAuthorizationDetails(
     )
   ) {
     throw invalidAuthorizationDetails(`${label} authorization details must identify concrete resource contexts.`)
+  }
+}
+
+function assertProviderConnectionAuthorizationDetails(
+  configuredTemplates: AuthorizationDetail[],
+  requested: AuthorizationDetail[],
+  granted: AuthorizationDetail[],
+) {
+  if (requested.length === 0 && granted.length === 0) return
+  if (
+    granted.length === 0 ||
+    hasDuplicateAuthorizationDetails(granted) ||
+    granted.some(
+      (detail) =>
+        !requested.some((requirement) => authorizationDetailMatchesTemplate(detail, requirement)) ||
+        configuredTemplates.some((template) => canonicalJson(template) === canonicalJson(detail)),
+    ) ||
+    requested.some((requirement) => !granted.some((detail) => authorizationDetailMatchesTemplate(detail, requirement)))
+  ) {
+    throw invalidAuthorizationDetails(
+      'Provider connection authorization details must identify the requested concrete resource contexts.',
+    )
   }
 }
 
