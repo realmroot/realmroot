@@ -454,8 +454,11 @@ describe('service.test 2', () => {
         providerId: 'projects',
         displayName: 'Projects',
         authenticationEnabled: false,
-        issuer: 'https://idp.example.com',
-        registrationMode: 'dynamic',
+        resourceAuthorization: {
+          enabled: true,
+          issuer: 'https://idp.example.com',
+          registrationMode: 'dynamic',
+        },
       },
       'https://auth.example.com',
     )
@@ -498,6 +501,33 @@ describe('service.test 2', () => {
       'https://idp.example.com/.well-known/openid-configuration/oauth',
       'https://idp.example.com/.well-known/oauth-authorization-server/oauth',
     ])
+  })
+
+  it('does not infer resource authorization from disabled authentication fields [spec: connectors-and-methods/connector-capabilities]', async () => {
+    const deps = {
+      ids: createIdentifierGeneratorFake(),
+      connectors: createRepository(),
+      externalHttp: { fetch: vi.fn() },
+    } as unknown as Deps
+
+    await createConnector(deps, {
+      providerType: 'generic_oauth',
+      providerId: 'projects',
+      displayName: 'Projects',
+      authenticationEnabled: false,
+      issuer: 'https://idp.example.com',
+      clientId: 'authentication-client',
+      clientSecret: 'authentication-secret',
+    })
+
+    expect(deps.externalHttp.fetch).not.toHaveBeenCalled()
+    expect(deps.connectors.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        authenticationEnabled: false,
+        resourceAuthorizationEnabled: false,
+        resourceIssuer: null,
+      }),
+    )
   })
 
   it.each([
@@ -569,9 +599,12 @@ describe('service.test 2', () => {
         providerId: 'projects',
         displayName: 'Projects',
         authenticationEnabled: false,
-        issuer: 'https://idp.example.com',
-        registrationMode: 'manual',
-        ...credentials,
+        resourceAuthorization: {
+          enabled: true,
+          issuer: 'https://idp.example.com',
+          registrationMode: 'manual',
+          ...credentials,
+        },
       }),
     ).rejects.toThrow('Manual OIDC registration requires client credentials.')
   })
@@ -660,8 +693,11 @@ describe('service.test 2', () => {
         providerId: 'projects',
         displayName: 'Projects',
         authenticationEnabled: false,
-        issuer: 'https://idp.example.com',
-        registrationMode: 'dynamic',
+        resourceAuthorization: {
+          enabled: true,
+          issuer: 'https://idp.example.com',
+          registrationMode: 'dynamic',
+        },
       },
       'https://auth.example.com/',
     )

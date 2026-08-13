@@ -61,6 +61,7 @@ Feature: Connectors and hosted method availability
     When I configure a Connector
     Then the Console only offers authentication when its driver supports authentication
     And only a Connector with a configured external authorization facet may be bound to an External Resource Server
+    And resource authorization must be configured explicitly and is never inferred from authentication fields
     And a dual-purpose Connector keeps its Better Auth provider and external authorization issuer under one Connector identity
     And the two facets use separate OAuth clients, callbacks, state, token storage, and business semantics
     And disabling authentication does not disable Resource Servers that reference that Connector

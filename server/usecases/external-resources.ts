@@ -2411,9 +2411,6 @@ async function refreshConnectionToken(
   credential: ProviderCredentialRecord,
   authorization: ExternalResourceAuthorizationRecord,
 ) {
-  if (!credential.encryptedTokens) {
-    throw new Error('This legacy account connection must be authorized again.')
-  }
   const payload = JSON.parse(
     await deps.secrets.open(
       credential.encryptedTokens,

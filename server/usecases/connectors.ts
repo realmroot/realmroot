@@ -76,8 +76,7 @@ export async function createConnector(deps: Deps, input: CreateConnectorRequest,
   assertSupportedProvider(input.providerType, input.providerId)
   await assertProviderAvailable(deps.connectors, input.providerId)
   const authenticationEnabled = input.authenticationEnabled ?? true
-  const resourceAuthorization =
-    input.resourceAuthorization ?? legacyResourceAuthorizationInput(input, authenticationEnabled)
+  const resourceAuthorization = input.resourceAuthorization
   assertResourceAuthorizationCapability(input.providerType, input.providerId, resourceAuthorization)
   const oidc =
     input.providerType === 'generic_oauth' && authenticationEnabled
@@ -307,17 +306,6 @@ function assertResourceAuthorizationCapability(
 ) {
   if (input?.enabled && !connectorCapabilities(providerType, providerId).resourceAuthorization) {
     throw badRequest('Connector driver does not support resource authorization.')
-  }
-}
-
-function legacyResourceAuthorizationInput(input: CreateConnectorRequest, authenticationEnabled: boolean) {
-  if (input.providerType !== 'generic_oauth' || authenticationEnabled || !input.issuer) return null
-  return {
-    enabled: true,
-    registrationMode: input.registrationMode ?? 'manual',
-    clientId: input.clientId,
-    clientSecret: input.clientSecret,
-    issuer: input.issuer,
   }
 }
 
