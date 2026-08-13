@@ -107,6 +107,11 @@ generic structural, type, subset, and replay checks. The Adapter owns their
 field semantics and enforces them before both token issuance and operation
 execution.
 
+Adapter-defined authorization-detail types use stable HTTPS URIs under the
+Adapter's domain. Their catalog keeps human labels separate from the opaque
+authorization detail, so clients can display a provider name while grants and
+tokens continue to use stable provider identifiers.
+
 ## Transparent proxy constraint
 
 Transparent proxying is allowed and preferred. It means the Adapter preserves

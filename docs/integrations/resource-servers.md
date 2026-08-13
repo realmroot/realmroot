@@ -394,6 +394,13 @@ templates through an RFC 9126 pushed authorization request when connecting the
 controller's provider account and stores the concrete details returned by the
 target token endpoint.
 
+RFC 9396 permits any non-empty string as `type`, and Realmroot preserves
+provider-native values without imposing another naming protocol. Types defined
+by Realmroot or a Realmroot Adapter use a stable absolute HTTPS URI controlled
+by the component that defines and enforces the type. An Adapter-defined type
+uses the Adapter's domain, not the upstream provider's domain; the provider's
+domain is used only when that provider publishes and owns the type definition.
+
 An Agent access request may contain one or more concrete authorization details.
 Realmroot preserves the complete array through approval, grant storage, token
 exchange, refresh, revocation, and audit projection. Realmroot does not impose a
@@ -443,6 +450,11 @@ Bearer access token, and requires the advertised catalog scope. It returns:
 ```
 
 `authorizationDetail` is opaque JSON except for its required non-empty `type`.
+`display` is presentation metadata only: `label` is human-readable and need not
+be stable or unique, while identifiers required for authorization remain in
+`authorizationDetail`. A Resource Server that exposes user-selectable details
+whose JSON has no suitable human name should publish this catalog rather than
+rely on Realmroot's generic display fallback.
 Display fields never grant authority. Realmroot validates every returned detail
 against the API Resource templates and decorates the page with connected-account
 and active-Agent-grant state. A resource using RFC 9396 does not have to
