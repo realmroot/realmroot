@@ -351,6 +351,13 @@
       "when": 1786601873751,
       "tag": "20260813061753_resource_authorization_connectors",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "6",
+      "when": 1786606809806,
+      "tag": "20260813074009_adapters_linear_permissions",
+      "breakpoints": true
     }
   ]
 }
