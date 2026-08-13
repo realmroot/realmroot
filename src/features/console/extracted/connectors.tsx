@@ -312,7 +312,7 @@ export function ConnectorsPage() {
                       </TableCell>
                       <TableCell>{connector.issuer}</TableCell>
                       <TableCell>{connector.clientId}</TableCell>
-                      <TableCell>{connector.loginEnabled ? tt('Enabled') : tt('Disabled')}</TableCell>
+                      <TableCell>{connector.authenticationEnabled ? tt('Enabled') : tt('Disabled')}</TableCell>
                       <TableCell>
                         <StatusBadge active={connector.enabled} activeLabel="Ready" inactiveLabel="Disabled" />
                       </TableCell>
@@ -456,7 +456,7 @@ function ConnectorProviderDrawer({
     }
     setForm({
       enabled: provider.providerType === 'generic_oauth' ? 'true' : 'false',
-      loginEnabled: provider.providerType === 'generic_oauth' ? 'false' : 'true',
+      authenticationEnabled: provider.providerType === 'generic_oauth' ? 'false' : 'true',
       registrationMode: 'manual',
       slug: '',
       displayName: '',
@@ -519,7 +519,7 @@ function ConnectorProviderDrawer({
                     parseForm(updateManagementConnectorRequestSchema, {
                       ...connectorUpdateForm(form),
                       enabled: form.enabled === 'true',
-                      loginEnabled: form.loginEnabled === 'true',
+                      authenticationEnabled: form.authenticationEnabled === 'true',
                       registrationMode: form.registrationMode,
                       scopes,
                       providerMetadata,
@@ -532,7 +532,7 @@ function ConnectorProviderDrawer({
                     ...form,
                     slug: provider.providerType === 'generic_oauth' ? form.slug : provider.providerId,
                     enabled: form.enabled === 'true',
-                    loginEnabled: form.loginEnabled === 'true',
+                    authenticationEnabled: form.authenticationEnabled === 'true',
                     providerType: provider.providerType,
                     providerId: provider.providerType === 'generic_oauth' ? form.slug : provider.providerId,
                     displayName: provider.providerType === 'generic_oauth' ? form.displayName : provider.displayName,
@@ -606,9 +606,9 @@ function ConnectorProviderDrawer({
                       </div>
                       <Switch
                         aria-label={tt('Allow hosted login')}
-                        checked={form.loginEnabled === 'true'}
-                        name="loginEnabled"
-                        onCheckedChange={(enabled) => setValue(setForm, 'loginEnabled', String(enabled))}
+                        checked={form.authenticationEnabled === 'true'}
+                        name="authenticationEnabled"
+                        onCheckedChange={(enabled) => setValue(setForm, 'authenticationEnabled', String(enabled))}
                         type="button"
                       />
                     </div>

@@ -167,8 +167,8 @@ async function exchangeAgentAccessToken(
   const resource = await deps.authorization.findResourceByResourceUrl(input.audience)
   if (
     !resource?.enabled ||
-    resource.accessMode !== 'realmroot' ||
-    !resource.connectorId ||
+    resource.authorizationModel !== 'realmroot' ||
+    resource.providerConnection?.mode !== 'managed' ||
     resource.ownerOrganizationId !== application.ownerOrganizationId
   ) {
     throw oauthError('invalid_target', 'Requested audience is not delegated to this Application tenant.')

@@ -97,7 +97,7 @@ describe('admin console users-detail-b', () => {
             slug: 'google',
             displayName: 'Google',
             enabled: true,
-            loginEnabled: true,
+            authenticationEnabled: true,
             providerId: 'google',
             providerType: 'social',
             clientId: 'google-client',

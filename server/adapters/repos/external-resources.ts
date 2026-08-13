@@ -21,6 +21,7 @@ import {
   lt,
   lte,
   ne,
+  notExists,
   or,
   type SQL,
   sql,
@@ -37,6 +38,7 @@ import {
   identityProviderConnector,
   providerConnection,
   providerConnectionEventReceipt,
+  providerCredential,
   providerResourceAuthorization,
   resourceConnectionIntent,
   resourceScopeEntitlement,
@@ -54,8 +56,9 @@ export function createExternalResourceRepository(db: Database, ids: IdentifierGe
       .update(providerConnection)
       .set({
         authenticationAccountId: input.authenticationAccountId,
-        externalSubject: input.externalSubject,
-        displayName: input.displayName,
+        ...(input.authenticationAccountId
+          ? { externalSubject: input.externalSubject, displayName: input.displayName }
+          : {}),
         status: input.status,
         updatedAt: input.updatedAt,
       })
@@ -63,6 +66,16 @@ export function createExternalResourceRepository(db: Database, ids: IdentifierGe
       .returning()
     if (!updated) throw new Error('Provider Connection uniqueness invariant was violated.')
     return updated
+  }
+
+  async function findResourceAuthorization(id: string) {
+    const [row] = await db
+      .select({ authorization: providerResourceAuthorization, connection: providerConnection })
+      .from(providerResourceAuthorization)
+      .innerJoin(providerConnection, eq(providerConnection.id, providerResourceAuthorization.providerConnectionId))
+      .where(eq(providerResourceAuthorization.id, id))
+      .limit(1)
+    return row ? toProviderResourceAuthorization(db, row.authorization, row.connection) : null
   }
 
   return {
@@ -85,14 +98,22 @@ export function createExternalResourceRepository(db: Database, ids: IdentifierGe
       }
 
       const targets = await db
-        .select({ authorization: providerResourceAuthorization, connection: providerConnection })
+        .select({
+          authorization: providerResourceAuthorization,
+          connection: providerConnection,
+          credential: providerCredential,
+        })
         .from(providerResourceAuthorization)
         .innerJoin(providerConnection, eq(providerConnection.id, providerResourceAuthorization.providerConnectionId))
+        .innerJoin(
+          providerCredential,
+          eq(providerCredential.providerResourceAuthorizationId, providerResourceAuthorization.id),
+        )
         .innerJoin(apiResource, eq(apiResource.id, providerResourceAuthorization.resourceId))
         .where(
           and(
             eq(apiResource.resourceUrl, input.resource),
-            eq(providerResourceAuthorization.brokerReference, input.brokerReference),
+            eq(providerCredential.brokerReference, input.brokerReference),
           ),
         )
         .limit(2)
@@ -262,15 +283,23 @@ export function createExternalResourceRepository(db: Database, ids: IdentifierGe
           )
           .returning({ id: providerConnectionEventReceipt.id }),
         db
-          .update(providerResourceAuthorization)
+          .update(providerCredential)
           .set({
-            status: connectionAuthorizationStatus(target.authorization.status, input.type),
+            status: connectionAuthorizationStatus(target.credential.status, input.type),
             ...(input.type === 'authorityChanged' || input.type === 'resourcesChanged' || input.type === 'restored'
               ? { grantedScopes: input.scopes, authorityConstraints: input.authorityConstraints }
               : {}),
             ...(input.type === 'resourcesChanged' || input.type === 'restored'
               ? { authorizationDetails: input.authorizationDetails }
               : {}),
+            revokedAt: input.type === 'revoked' ? input.receivedAt : input.type === 'restored' ? null : undefined,
+            updatedAt: input.receivedAt,
+          })
+          .where(and(eq(providerCredential.id, target.credential.id), currentEvent)),
+        db
+          .update(providerResourceAuthorization)
+          .set({
+            status: connectionAuthorizationStatus(target.authorization.status, input.type),
             revokedAt: input.type === 'revoked' ? input.receivedAt : input.type === 'restored' ? null : undefined,
             providerEventOccurredAt: input.occurredAt,
             providerEventRevision: input.revision,
@@ -281,7 +310,7 @@ export function createExternalResourceRepository(db: Database, ids: IdentifierGe
       const results = await db.batch(statements as [(typeof statements)[number], ...Array<(typeof statements)[number]>])
       const inserted = results[0]
       if (Array.isArray(inserted) && inserted.length > 0) {
-        const acknowledged = results.at(-2)
+        const acknowledged = results.at(-3)
         return Array.isArray(acknowledged) && acknowledged.length > 0 ? 'applied' : 'conflict'
       }
       const [racedReceipt] = await db
@@ -350,22 +379,6 @@ export function createExternalResourceRepository(db: Database, ids: IdentifierGe
       return row ?? null
     },
 
-    async findActiveUserProviderConnectionBySubject(input) {
-      const [row] = await db
-        .select()
-        .from(providerConnection)
-        .where(
-          and(
-            eq(providerConnection.connectorId, input.connectorId),
-            eq(providerConnection.externalSubject, input.externalSubject),
-            eq(providerConnection.status, 'active'),
-            isNotNull(providerConnection.ownerUserId),
-          ),
-        )
-        .limit(1)
-      return row ?? null
-    },
-
     async findActiveUserProviderConnectionByProviderSubject(input) {
       const [row] = await db
         .select({ connection: providerConnection })
@@ -423,7 +436,7 @@ export function createExternalResourceRepository(db: Database, ids: IdentifierGe
             providerId: connector.providerId,
             displayName: connector.displayName,
             enabled: connector.enabled,
-            loginEnabled: connector.loginEnabled,
+            authenticationEnabled: connector.authenticationEnabled,
           },
           resourceAuthorizationCount: resources.length,
           resourceNames: resources.map(({ resourceName }) => resourceName),
@@ -450,54 +463,29 @@ export function createExternalResourceRepository(db: Database, ids: IdentifierGe
       return true
     },
 
-    async createConnection(input) {
-      const [row] = await db
-        .insert(providerResourceAuthorization)
-        .select(
-          db
-            .select({
-              id: sql<string>`${input.id}`.as('id'),
-              providerConnectionId: sql<string>`${input.providerConnectionId}`.as('provider_connection_id'),
-              resourceId: apiResource.id,
-              credentialCustody: sql<'realmroot' | 'resource_server'>`${input.credentialCustody ?? 'realmroot'}`.as(
-                'credential_custody',
-              ),
-              encryptedTokens: sql<string | null>`${input.encryptedTokens}`.as('encrypted_tokens'),
-              brokerReference: sql<string | null>`${input.brokerReference ?? null}`.as('broker_reference'),
-              grantedScopes: sql<string[]>`${JSON.stringify(input.grantedScopes)}`.as('granted_scopes'),
-              authorizationDetails: sql<
-                typeof input.authorizationDetails
-              >`${JSON.stringify(input.authorizationDetails)}`.as('authorization_details'),
-              authorityConstraints: sql<
-                NonNullable<typeof input.authorityConstraints>
-              >`${JSON.stringify(input.authorityConstraints ?? [])}`.as('authority_constraints'),
-              clientGeneration: sql<number>`${input.clientGeneration ?? 1}`.as('client_generation'),
-              credentialVersion: sql<number>`${input.credentialVersion ?? 1}`.as('credential_version'),
-              refreshClaimId: sql<string | null>`${input.refreshClaimId ?? null}`.as('refresh_claim_id'),
-              refreshClaimExpiresAt: sql<Date | null>`${input.refreshClaimExpiresAt?.getTime() ?? null}`.as(
-                'refresh_claim_expires_at',
-              ),
-              status: sql<string>`${input.status}`.as('status'),
-              credentialExpiresAt: sql<Date | null>`${input.credentialExpiresAt?.getTime() ?? null}`.as(
-                'credential_expires_at',
-              ),
-              revokedAt: sql<Date | null>`${input.revokedAt?.getTime() ?? null}`.as('revoked_at'),
-              providerEventOccurredAt: sql<Date | null>`${input.providerEventOccurredAt?.getTime() ?? null}`.as(
-                'provider_event_occurred_at',
-              ),
-              providerEventRevision: sql<number | null>`${input.providerEventRevision ?? null}`.as(
-                'provider_event_revision',
-              ),
-              createdAt: sql<Date>`${input.createdAt.getTime()}`.as('created_at'),
-              updatedAt: sql<Date>`${input.updatedAt.getTime()}`.as('updated_at'),
-            })
-            .from(apiResource)
-            .where(activeResource(input.resourceId)),
-        )
-        .returning()
-      if (!row) return null
-      const connection = await findProviderConnection(db, row.providerConnectionId)
-      return toProviderResourceAuthorization(row, connection)
+    async createResourceAuthorization(input) {
+      const authorizationInsert = db.insert(providerResourceAuthorization).select(
+        db
+          .select({
+            id: sql<string>`${input.id}`.as('id'),
+            providerConnectionId: sql<string>`${input.providerConnectionId}`.as('provider_connection_id'),
+            resourceId: apiResource.id,
+            status: sql<string>`${input.status}`.as('status'),
+            revokedAt: sql<Date | null>`${input.revokedAt?.getTime() ?? null}`.as('revoked_at'),
+            providerEventOccurredAt: sql<Date | null>`${input.providerEventOccurredAt?.getTime() ?? null}`.as(
+              'provider_event_occurred_at',
+            ),
+            providerEventRevision: sql<number | null>`${input.providerEventRevision ?? null}`.as(
+              'provider_event_revision',
+            ),
+            createdAt: sql<Date>`${input.createdAt.getTime()}`.as('created_at'),
+            updatedAt: sql<Date>`${input.updatedAt.getTime()}`.as('updated_at'),
+          })
+          .from(apiResource)
+          .where(activeResource(input.resourceId)),
+      )
+      await db.batch([authorizationInsert, db.insert(providerCredential).values(input.credentials)])
+      return findResourceAuthorization(input.id)
     },
 
     async findConnectionByOwnerResource(input) {
@@ -510,24 +498,86 @@ export function createExternalResourceRepository(db: Database, ids: IdentifierGe
         .innerJoin(providerConnection, eq(providerConnection.id, providerResourceAuthorization.providerConnectionId))
         .where(and(eq(providerResourceAuthorization.resourceId, input.resourceId), ownerCondition))
         .limit(1)
-      return row ? toProviderResourceAuthorization(row.authorization, row.connection) : null
+      return row ? toProviderResourceAuthorization(db, row.authorization, row.connection) : null
     },
 
-    async replaceConnectionAuthorization(id, resourceId, input) {
+    async findConnectionByProviderResource(input) {
       const [row] = await db
-        .update(providerResourceAuthorization)
-        .set(input)
+        .select({ authorization: providerResourceAuthorization, connection: providerConnection })
+        .from(providerResourceAuthorization)
+        .innerJoin(providerConnection, eq(providerConnection.id, providerResourceAuthorization.providerConnectionId))
         .where(
           and(
-            eq(providerResourceAuthorization.id, id),
-            eq(providerResourceAuthorization.resourceId, resourceId),
-            exists(db.select({ id: apiResource.id }).from(apiResource).where(activeResource(resourceId))),
+            eq(providerResourceAuthorization.providerConnectionId, input.providerConnectionId),
+            eq(providerResourceAuthorization.resourceId, input.resourceId),
           ),
         )
-        .returning()
-      if (!row) return null
-      const connection = await findProviderConnection(db, row.providerConnectionId)
-      return toProviderResourceAuthorization(row, connection)
+        .limit(1)
+      return row ? toProviderResourceAuthorization(db, row.authorization, row.connection) : null
+    },
+
+    async upsertProviderCredential(providerResourceAuthorizationId, input) {
+      const [authorization] = await db
+        .select({
+          id: providerResourceAuthorization.id,
+          brokerReference: providerCredential.brokerReference,
+        })
+        .from(providerResourceAuthorization)
+        .innerJoin(apiResource, eq(apiResource.id, providerResourceAuthorization.resourceId))
+        .leftJoin(
+          providerCredential,
+          and(
+            eq(providerCredential.providerResourceAuthorizationId, providerResourceAuthorization.id),
+            eq(providerCredential.externalSubject, input.externalSubject),
+          ),
+        )
+        .where(
+          and(
+            eq(providerResourceAuthorization.id, providerResourceAuthorizationId),
+            eq(apiResource.enabled, true),
+            isNull(apiResource.deletedAt),
+          ),
+        )
+        .limit(1)
+      if (!authorization) return null
+      const brokerAuthorityChanged =
+        authorization.brokerReference !== null && authorization.brokerReference !== input.brokerReference
+      await db.batch([
+        db
+          .update(providerResourceAuthorization)
+          .set({
+            status: 'active',
+            revokedAt: null,
+            providerEventOccurredAt: brokerAuthorityChanged ? null : undefined,
+            providerEventRevision: brokerAuthorityChanged ? null : undefined,
+            updatedAt: input.updatedAt,
+          })
+          .where(eq(providerResourceAuthorization.id, providerResourceAuthorizationId)),
+        db
+          .insert(providerCredential)
+          .values({ ...input, providerResourceAuthorizationId })
+          .onConflictDoUpdate({
+            target: [providerCredential.providerResourceAuthorizationId, providerCredential.externalSubject],
+            set: {
+              displayName: input.displayName,
+              credentialCustody: input.credentialCustody,
+              encryptedTokens: input.encryptedTokens,
+              brokerReference: input.brokerReference,
+              grantedScopes: input.grantedScopes,
+              authorizationDetails: input.authorizationDetails,
+              authorityConstraints: input.authorityConstraints,
+              clientGeneration: input.clientGeneration,
+              credentialVersion: input.credentialVersion,
+              refreshClaimId: null,
+              refreshClaimExpiresAt: null,
+              status: 'active',
+              credentialExpiresAt: input.credentialExpiresAt,
+              revokedAt: null,
+              updatedAt: input.updatedAt,
+            },
+          }),
+      ])
+      return findResourceAuthorization(providerResourceAuthorizationId)
     },
 
     async listConnectionsByUser(userId) {
@@ -537,7 +587,7 @@ export function createExternalResourceRepository(db: Database, ids: IdentifierGe
         .innerJoin(providerConnection, eq(providerConnection.id, providerResourceAuthorization.providerConnectionId))
         .where(eq(providerConnection.ownerUserId, userId))
         .orderBy(providerResourceAuthorization.createdAt)
-      return rows.map((row) => toProviderResourceAuthorization(row.authorization, row.connection))
+      return Promise.all(rows.map((row) => toProviderResourceAuthorization(db, row.authorization, row.connection)))
     },
 
     async listConnectionsByOrganizations(organizationIds) {
@@ -548,53 +598,45 @@ export function createExternalResourceRepository(db: Database, ids: IdentifierGe
         .innerJoin(providerConnection, eq(providerConnection.id, providerResourceAuthorization.providerConnectionId))
         .where(inArray(providerConnection.ownerOrganizationId, organizationIds))
         .orderBy(providerResourceAuthorization.createdAt)
-      return rows.map((row) => toProviderResourceAuthorization(row.authorization, row.connection))
+      return Promise.all(rows.map((row) => toProviderResourceAuthorization(db, row.authorization, row.connection)))
     },
 
     async findConnection(id) {
-      const [row] = await db
-        .select({ authorization: providerResourceAuthorization, connection: providerConnection })
-        .from(providerResourceAuthorization)
-        .innerJoin(providerConnection, eq(providerConnection.id, providerResourceAuthorization.providerConnectionId))
-        .where(eq(providerResourceAuthorization.id, id))
-        .limit(1)
-      return row ? toProviderResourceAuthorization(row.authorization, row.connection) : null
+      return findResourceAuthorization(id)
     },
 
-    async updateConnectionTokens(id, input) {
+    async updateProviderCredentialTokens(id, input) {
       const [row] = await db
-        .update(providerResourceAuthorization)
+        .update(providerCredential)
         .set(input)
-        .where(and(eq(providerResourceAuthorization.id, id), eq(providerResourceAuthorization.status, 'active')))
+        .where(and(eq(providerCredential.id, id), eq(providerCredential.status, 'active')))
         .returning()
-      if (!row) return null
-      const connection = await findProviderConnection(db, row.providerConnectionId)
-      return toProviderResourceAuthorization(row, connection)
+      return row ?? null
     },
 
-    async claimConnectionRefresh(input) {
+    async claimProviderCredentialRefresh(input) {
       const [row] = await db
-        .update(providerResourceAuthorization)
+        .update(providerCredential)
         .set({ refreshClaimId: input.claimId, refreshClaimExpiresAt: input.claimExpiresAt, updatedAt: input.now })
         .where(
           and(
-            eq(providerResourceAuthorization.id, input.id),
-            eq(providerResourceAuthorization.status, 'active'),
-            eq(providerResourceAuthorization.credentialVersion, input.expectedVersion),
+            eq(providerCredential.id, input.id),
+            eq(providerCredential.status, 'active'),
+            eq(providerCredential.credentialVersion, input.expectedVersion),
             or(
-              isNull(providerResourceAuthorization.refreshClaimId),
-              isNull(providerResourceAuthorization.refreshClaimExpiresAt),
-              lte(providerResourceAuthorization.refreshClaimExpiresAt, input.now),
+              isNull(providerCredential.refreshClaimId),
+              isNull(providerCredential.refreshClaimExpiresAt),
+              lte(providerCredential.refreshClaimExpiresAt, input.now),
             ),
           ),
         )
-        .returning({ id: providerResourceAuthorization.id })
+        .returning({ id: providerCredential.id })
       return Boolean(row)
     },
 
-    async completeConnectionRefresh(id, input) {
+    async completeProviderCredentialRefresh(id, input) {
       const [row] = await db
-        .update(providerResourceAuthorization)
+        .update(providerCredential)
         .set({
           encryptedTokens: input.encryptedTokens,
           credentialExpiresAt: input.credentialExpiresAt,
@@ -605,41 +647,85 @@ export function createExternalResourceRepository(db: Database, ids: IdentifierGe
         })
         .where(
           and(
-            eq(providerResourceAuthorization.id, id),
-            eq(providerResourceAuthorization.status, 'active'),
-            eq(providerResourceAuthorization.credentialVersion, input.expectedVersion),
-            eq(providerResourceAuthorization.refreshClaimId, input.claimId),
+            eq(providerCredential.id, id),
+            eq(providerCredential.status, 'active'),
+            eq(providerCredential.credentialVersion, input.expectedVersion),
+            eq(providerCredential.refreshClaimId, input.claimId),
           ),
         )
         .returning()
-      if (!row) return null
-      const connection = await findProviderConnection(db, row.providerConnectionId)
-      return toProviderResourceAuthorization(row, connection)
+      return row ?? null
     },
 
-    async releaseConnectionRefresh(id, expectedVersion, claimId, now) {
+    async releaseProviderCredentialRefresh(id, expectedVersion, claimId, now) {
       const [row] = await db
-        .update(providerResourceAuthorization)
+        .update(providerCredential)
         .set({ refreshClaimId: null, refreshClaimExpiresAt: null, updatedAt: now })
         .where(
           and(
-            eq(providerResourceAuthorization.id, id),
-            eq(providerResourceAuthorization.status, 'active'),
-            eq(providerResourceAuthorization.credentialVersion, expectedVersion),
-            eq(providerResourceAuthorization.refreshClaimId, claimId),
+            eq(providerCredential.id, id),
+            eq(providerCredential.status, 'active'),
+            eq(providerCredential.credentialVersion, expectedVersion),
+            eq(providerCredential.refreshClaimId, claimId),
           ),
         )
-        .returning({ id: providerResourceAuthorization.id })
+        .returning({ id: providerCredential.id })
       return Boolean(row)
+    },
+
+    async revokeProviderCredential(id, now) {
+      const [credential] = await db
+        .update(providerCredential)
+        .set({
+          status: 'revoked',
+          revokedAt: now,
+          refreshClaimId: null,
+          refreshClaimExpiresAt: null,
+          updatedAt: now,
+        })
+        .where(and(eq(providerCredential.id, id), eq(providerCredential.status, 'active')))
+        .returning({ providerResourceAuthorizationId: providerCredential.providerResourceAuthorizationId })
+      if (!credential) return false
+      await db
+        .update(providerResourceAuthorization)
+        .set({ status: 'revoked', revokedAt: now, updatedAt: now })
+        .where(
+          and(
+            eq(providerResourceAuthorization.id, credential.providerResourceAuthorizationId),
+            notExists(
+              db
+                .select({ id: providerCredential.id })
+                .from(providerCredential)
+                .where(
+                  and(
+                    eq(providerCredential.providerResourceAuthorizationId, credential.providerResourceAuthorizationId),
+                    eq(providerCredential.status, 'active'),
+                  ),
+                ),
+            ),
+          ),
+        )
+      return true
     },
 
     async revokeConnection(id, now) {
       const [row] = await db
-        .update(providerResourceAuthorization)
-        .set({ status: 'revoked', revokedAt: now, updatedAt: now })
+        .select({ id: providerResourceAuthorization.id })
+        .from(providerResourceAuthorization)
         .where(and(eq(providerResourceAuthorization.id, id), eq(providerResourceAuthorization.status, 'active')))
-        .returning({ id: providerResourceAuthorization.id })
-      return Boolean(row)
+        .limit(1)
+      if (!row) return false
+      await db.batch([
+        db
+          .update(providerResourceAuthorization)
+          .set({ status: 'revoked', revokedAt: now, updatedAt: now })
+          .where(eq(providerResourceAuthorization.id, id)),
+        db
+          .update(providerCredential)
+          .set({ status: 'revoked', revokedAt: now, updatedAt: now })
+          .where(eq(providerCredential.providerResourceAuthorizationId, id)),
+      ])
+      return true
     },
 
     async createConnectionIntent(input) {
@@ -1396,23 +1482,38 @@ export function createExternalResourceRepository(db: Database, ids: IdentifierGe
   }
 }
 
-async function findProviderConnection(db: Database, id: string) {
-  const [connection] = await db.select().from(providerConnection).where(eq(providerConnection.id, id)).limit(1)
-  if (!connection) throw new Error('Provider Resource Authorization has no Provider Connection.')
-  return connection
-}
-
-function toProviderResourceAuthorization(
+async function toProviderResourceAuthorization(
+  db: Database,
   authorization: typeof providerResourceAuthorization.$inferSelect,
   connection: ProviderConnectionRecord,
-): ProviderResourceAuthorizationRecord {
+): Promise<ProviderResourceAuthorizationRecord> {
+  const credentials = await db
+    .select()
+    .from(providerCredential)
+    .where(eq(providerCredential.providerResourceAuthorizationId, authorization.id))
+    .orderBy(providerCredential.createdAt)
+  const activeCredentials = credentials.filter((credential) => credential.status === 'active')
   return {
     ...authorization,
     ownerUserId: connection.ownerUserId,
     ownerOrganizationId: connection.ownerOrganizationId,
     externalSubject: connection.externalSubject,
     displayName: connection.displayName,
+    credentials,
+    grantedScopes: [...new Set(activeCredentials.flatMap((credential) => credential.grantedScopes))].sort(),
+    authorizationDetails: uniqueJsonValues(activeCredentials.flatMap((credential) => credential.authorizationDetails)),
+    authorityConstraints: uniqueJsonValues(activeCredentials.flatMap((credential) => credential.authorityConstraints)),
   }
+}
+
+function uniqueJsonValues<T>(values: T[]) {
+  const seen = new Set<string>()
+  return values.filter((value) => {
+    const key = JSON.stringify(value)
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
 }
 
 function authorityOwnerCondition(scope?: AgentAuthorityInventoryScope) {

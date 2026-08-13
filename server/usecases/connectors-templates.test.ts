@@ -15,6 +15,21 @@ import type { ConnectorRepository } from '@server/usecases/ports'
 import { describe, expect, it, vi } from 'vitest'
 
 describe('service.test 1', () => {
+  it('[spec: connectors-and-methods/connector-capabilities] exposes independent driver capabilities', () => {
+    expect(listConnectorTemplates().items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          providerId: 'linear',
+          capabilities: { authentication: true, resourceAuthorization: true },
+        }),
+        expect.objectContaining({
+          providerId: 'google',
+          capabilities: { authentication: true, resourceAuthorization: false },
+        }),
+      ]),
+    )
+  })
+
   it('returns connector templates without secret values', () => {
     expect(listConnectorTemplates().items).toEqual(
       expect.arrayContaining([
@@ -442,7 +457,7 @@ function connector(overrides: Partial<ConnectorRow> = {}): ConnectorRow {
     providerId: 'google',
     displayName: 'Google',
     enabled: true,
-    loginEnabled: true,
+    authenticationEnabled: true,
     clientId: 'client-id',
     clientSecret: 'GOOGLE_CLIENT_SECRET',
     clientSecretContext: null,

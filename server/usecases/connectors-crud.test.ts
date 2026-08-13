@@ -200,8 +200,8 @@ describe('service.test 2', () => {
     const config = await loadAuthConnectorConfig(
       createRepository({
         enabled: [
-          connector({ ...oidc, providerId: 'login-oidc', loginEnabled: true }),
-          connector({ ...oidc, providerId: 'resource-only-oidc', loginEnabled: false }),
+          connector({ ...oidc, providerId: 'login-oidc', authenticationEnabled: true }),
+          connector({ ...oidc, providerId: 'resource-only-oidc', authenticationEnabled: false }),
         ],
       }),
     )
@@ -1256,7 +1256,7 @@ function connector(overrides: Partial<ConnectorRow> = {}): ConnectorRow {
     providerId: 'google',
     displayName: 'Google',
     enabled: true,
-    loginEnabled: true,
+    authenticationEnabled: true,
     clientId: 'client-id',
     clientSecret: 'GOOGLE_CLIENT_SECRET',
     clientSecretContext: null,

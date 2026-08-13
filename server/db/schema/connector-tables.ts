@@ -10,7 +10,7 @@ export const identityProviderConnector = sqliteTable(
     providerId: text('provider_id').notNull(),
     displayName: text('display_name').notNull(),
     enabled: integer('enabled', { mode: 'boolean' }).default(true).notNull(),
-    loginEnabled: integer('login_enabled', { mode: 'boolean' }).default(true).notNull(),
+    authenticationEnabled: integer('authentication_enabled', { mode: 'boolean' }).default(true).notNull(),
     clientId: text('client_id'),
     clientSecret: text('client_secret'),
     clientSecretContext: text('client_secret_context'),
@@ -54,6 +54,6 @@ export const identityProviderConnector = sqliteTable(
     index('identityProviderConnector_providerType_idx').on(table.providerType),
     uniqueIndex('identityProviderConnector_providerId_unique').on(table.providerId),
     index('identityProviderConnector_enabled_idx').on(table.enabled),
-    index('identityProviderConnector_loginEnabled_idx').on(table.loginEnabled),
+    index('identityProviderConnector_authenticationEnabled_idx').on(table.authenticationEnabled),
   ],
 )

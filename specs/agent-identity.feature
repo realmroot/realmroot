@@ -344,6 +344,17 @@ Feature: Agent identity and delegated API authorization
 
   Rule: External API resources use target-issued authorization
 
+    @entrypoint:product-ui @journey:linear-managed-workspace-connections
+    Scenario: Linear authentication and workspace authorization remain independent
+      Given the Linear Connector supports authentication and resource authorization
+      When a user signs in with Linear and authorizes two Linear workspaces for resource access
+      Then sign-in creates only its authentication account
+      And each workspace creates a separate managed Provider Connection identified by its Linear organization
+      And the two workspace connections keep independent access and refresh tokens
+      And an Agent must select a workspace connection when more than one is available
+      And the single available workspace connection may be selected automatically
+      And the Linear Resource Server receives a Realmroot-issued DPoP token and exchanges it for the selected provider token
+
     @entrypoint:product-ui @journey:brokered-native-account-connection
     Scenario: A brokered Resource Server connects one provider account
       Given a Resource Server uses brokered provider access and advertises account connection endpoints

@@ -17,9 +17,38 @@ export const providerResourceAuthorization = sqliteTable(
     resourceId: text('resource_id')
       .notNull()
       .references(() => apiResource.id, { onDelete: 'restrict' }),
-    credentialCustody: text('credential_custody', { enum: ['realmroot', 'resource_server'] })
+    status: text('status').notNull().default('active'),
+    revokedAt: integer('revoked_at', { mode: 'timestamp_ms' }),
+    providerEventOccurredAt: integer('provider_event_occurred_at', { mode: 'timestamp_ms' }),
+    providerEventRevision: integer('provider_event_revision'),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' })
+      .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+      .notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
+      .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex('providerResourceAuthorization_connection_resource_unique').on(
+      table.providerConnectionId,
+      table.resourceId,
+    ),
+    index('providerResourceAuthorization_providerConnectionId_idx').on(table.providerConnectionId),
+    index('providerResourceAuthorization_resourceId_idx').on(table.resourceId),
+    index('providerResourceAuthorization_status_idx').on(table.status),
+  ],
+)
+
+export const providerCredential = sqliteTable(
+  'provider_credential',
+  {
+    id: text('id').primaryKey(),
+    providerResourceAuthorizationId: text('provider_resource_authorization_id')
       .notNull()
-      .default('realmroot'),
+      .references(() => providerResourceAuthorization.id, { onDelete: 'cascade' }),
+    externalSubject: text('external_subject').notNull(),
+    displayName: text('display_name').notNull(),
+    credentialCustody: text('credential_custody', { enum: ['realmroot', 'resource_server'] }).notNull(),
     encryptedTokens: text('encrypted_tokens'),
     brokerReference: text('broker_reference'),
     grantedScopes: text('granted_scopes', { mode: 'json' }).$type<string[]>().notNull(),
@@ -38,8 +67,6 @@ export const providerResourceAuthorization = sqliteTable(
     status: text('status').notNull().default('active'),
     credentialExpiresAt: integer('credential_expires_at', { mode: 'timestamp_ms' }),
     revokedAt: integer('revoked_at', { mode: 'timestamp_ms' }),
-    providerEventOccurredAt: integer('provider_event_occurred_at', { mode: 'timestamp_ms' }),
-    providerEventRevision: integer('provider_event_revision'),
     createdAt: integer('created_at', { mode: 'timestamp_ms' })
       .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
       .notNull(),
@@ -49,20 +76,20 @@ export const providerResourceAuthorization = sqliteTable(
   },
   (table) => [
     check(
-      'providerResourceAuthorization_credential_custody_check',
+      'providerCredential_custody_check',
       sql`(
         (${table.credentialCustody} = 'realmroot' AND ${table.encryptedTokens} IS NOT NULL AND ${table.brokerReference} IS NULL)
         OR
         (${table.credentialCustody} = 'resource_server' AND ${table.encryptedTokens} IS NULL AND ${table.brokerReference} IS NOT NULL)
       )`,
     ),
-    uniqueIndex('providerResourceAuthorization_connection_resource_unique').on(
-      table.providerConnectionId,
-      table.resourceId,
+    uniqueIndex('providerCredential_authorization_subject_unique').on(
+      table.providerResourceAuthorizationId,
+      table.externalSubject,
     ),
-    index('providerResourceAuthorization_providerConnectionId_idx').on(table.providerConnectionId),
-    index('providerResourceAuthorization_resourceId_idx').on(table.resourceId),
-    index('providerResourceAuthorization_status_idx').on(table.status),
+    index('providerCredential_authorizationId_idx').on(table.providerResourceAuthorizationId),
+    index('providerCredential_brokerReference_idx').on(table.brokerReference),
+    index('providerCredential_status_idx').on(table.status),
   ],
 )
 

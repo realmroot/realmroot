@@ -337,7 +337,7 @@ export interface ConnectorRecord {
   providerId: string
   displayName: string
   enabled: boolean
-  loginEnabled: boolean
+  authenticationEnabled: boolean
   clientId: string | null
   clientSecret: string | null
   clientSecretContext: string | null
@@ -369,7 +369,7 @@ export interface ConnectorRecordInput {
   providerId: string
   displayName: string
   enabled?: boolean
-  loginEnabled?: boolean
+  authenticationEnabled?: boolean
   clientId?: string | null
   clientSecret?: string | null
   clientSecretContext?: string | null
@@ -487,6 +487,10 @@ export interface ExternalResourceAuthorizationRecord {
   revocationEndpoint: string
   jwksUri: string
   userInfoEndpoint: string | null
+  tokenEndpointAuthentication: 'basic' | 'post'
+  revocationAuthentication: 'basic' | 'post' | 'none'
+  authorizationDetailsMode: 'provider' | 'connection'
+  revokeAccessToken: boolean
   registrationMode: string
   clientId: string
   clientGeneration?: number
@@ -518,7 +522,7 @@ export interface ProviderConnectorSummary {
   providerId: string
   displayName: string
   enabled: boolean
-  loginEnabled: boolean
+  authenticationEnabled: boolean
 }
 
 export interface ProviderConnectionProjection extends ProviderConnectionRecord {
@@ -535,21 +539,36 @@ export interface ProviderResourceAuthorizationRecord {
   ownerOrganizationId: string | null
   externalSubject: string
   displayName: string
-  credentialCustody?: 'realmroot' | 'resource_server'
-  encryptedTokens: string | null
-  brokerReference?: string | null
+  credentials: ProviderCredentialRecord[]
   grantedScopes: string[]
   authorizationDetails: AuthorizationDetail[]
-  authorityConstraints?: ProviderAuthorityConstraint[]
-  clientGeneration?: number
-  credentialVersion?: number
-  refreshClaimId?: string | null
-  refreshClaimExpiresAt?: Date | null
+  authorityConstraints: ProviderAuthorityConstraint[]
   status: string
-  credentialExpiresAt: Date | null
   revokedAt: Date | null
   providerEventOccurredAt?: Date | null
   providerEventRevision?: number | null
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface ProviderCredentialRecord {
+  id: string
+  providerResourceAuthorizationId: string
+  externalSubject: string
+  displayName: string
+  credentialCustody: 'realmroot' | 'resource_server'
+  encryptedTokens: string | null
+  brokerReference: string | null
+  grantedScopes: string[]
+  authorizationDetails: AuthorizationDetail[]
+  authorityConstraints: ProviderAuthorityConstraint[]
+  clientGeneration: number
+  credentialVersion: number
+  refreshClaimId: string | null
+  refreshClaimExpiresAt: Date | null
+  status: string
+  credentialExpiresAt: Date | null
+  revokedAt: Date | null
   createdAt: Date
   updatedAt: Date
 }
@@ -734,10 +753,6 @@ export interface ExternalResourceRepository {
     ownerUserId: string | null
     ownerOrganizationId: string | null
   }): Promise<ProviderConnectionRecord | null>
-  findActiveUserProviderConnectionBySubject(input: {
-    connectorId: string
-    externalSubject: string
-  }): Promise<ProviderConnectionRecord | null>
   findActiveUserProviderConnectionByProviderSubject(input: {
     providerId: string
     externalSubject: string
@@ -745,10 +760,16 @@ export interface ExternalResourceRepository {
   findProviderConnection(id: string): Promise<ProviderConnectionRecord | null>
   listProviderConnectionsByUser(userId: string): Promise<ProviderConnectionProjection[]>
   revokeProviderConnection(id: string, ownerUserId: string, now: Date): Promise<boolean>
-  createConnection(
+  createResourceAuthorization(
     input: Omit<
       ProviderResourceAuthorizationRecord,
-      'ownerUserId' | 'ownerOrganizationId' | 'externalSubject' | 'displayName'
+      | 'ownerUserId'
+      | 'ownerOrganizationId'
+      | 'externalSubject'
+      | 'displayName'
+      | 'grantedScopes'
+      | 'authorizationDetails'
+      | 'authorityConstraints'
     >,
   ): Promise<ProviderResourceAuthorizationRecord | null>
   findConnectionByOwnerResource(input: {
@@ -756,43 +777,48 @@ export interface ExternalResourceRepository {
     ownerUserId: string | null
     ownerOrganizationId: string | null
   }): Promise<ProviderResourceAuthorizationRecord | null>
-  replaceConnectionAuthorization(
-    id: string,
-    resourceId: string,
+  findConnectionByProviderResource(input: {
+    providerConnectionId: string
+    resourceId: string
+  }): Promise<ProviderResourceAuthorizationRecord | null>
+  upsertProviderCredential(
+    providerResourceAuthorizationId: string,
     input: {
-      credentialCustody?: 'realmroot' | 'resource_server'
+      id: string
+      externalSubject: string
+      displayName: string
+      credentialCustody: 'realmroot' | 'resource_server'
       encryptedTokens: string | null
-      brokerReference?: string | null
+      brokerReference: string | null
       grantedScopes: string[]
       authorizationDetails: AuthorizationDetail[]
       authorityConstraints: ProviderAuthorityConstraint[]
-      clientGeneration?: number
-      credentialVersion?: number
-      refreshClaimId?: null
-      refreshClaimExpiresAt?: null
-      providerEventOccurredAt?: Date | null
-      providerEventRevision?: number | null
+      clientGeneration: number
+      credentialVersion: number
+      refreshClaimId: null
+      refreshClaimExpiresAt: null
       status: 'active'
       credentialExpiresAt: Date | null
       revokedAt: null
+      createdAt: Date
       updatedAt: Date
     },
   ): Promise<ProviderResourceAuthorizationRecord | null>
   listConnectionsByUser(userId: string): Promise<ProviderResourceAuthorizationRecord[]>
   listConnectionsByOrganizations(organizationIds: string[]): Promise<ProviderResourceAuthorizationRecord[]>
   findConnection(id: string): Promise<ProviderResourceAuthorizationRecord | null>
-  updateConnectionTokens(
+  updateProviderCredentialTokens(
     id: string,
     input: { encryptedTokens: string; credentialExpiresAt: Date | null; updatedAt: Date },
-  ): Promise<ProviderResourceAuthorizationRecord | null>
-  claimConnectionRefresh(input: {
+  ): Promise<ProviderCredentialRecord | null>
+  claimProviderCredentialRefresh(input: {
     id: string
     expectedVersion: number
     claimId: string
     now: Date
     claimExpiresAt: Date
   }): Promise<boolean>
-  completeConnectionRefresh(
+  completeProviderCredentialRefresh(
     id: string,
     input: {
       expectedVersion: number
@@ -801,8 +827,9 @@ export interface ExternalResourceRepository {
       credentialExpiresAt: Date | null
       updatedAt: Date
     },
-  ): Promise<ProviderResourceAuthorizationRecord | null>
-  releaseConnectionRefresh(id: string, expectedVersion: number, claimId: string, now: Date): Promise<boolean>
+  ): Promise<ProviderCredentialRecord | null>
+  releaseProviderCredentialRefresh(id: string, expectedVersion: number, claimId: string, now: Date): Promise<boolean>
+  revokeProviderCredential(id: string, now: Date): Promise<boolean>
   revokeConnection(id: string, now: Date): Promise<boolean>
   createConnectionIntent(input: ResourceConnectionIntentRecord): Promise<ResourceConnectionIntentRecord | null>
   consumeConnectionIntent(stateHash: string, now: Date): Promise<ResourceConnectionIntentRecord | null>

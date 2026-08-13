@@ -53,6 +53,9 @@ describe('OpenAPI semantic contract gate', () => {
     const applicationConsentContract = JSON.parse(
       readFileSync(new URL('./approved-application-consent-semantic-baseline.json', import.meta.url), 'utf8'),
     ) as typeof unchanged
+    const resourceAuthorizationModelContract = JSON.parse(
+      readFileSync(new URL('./approved-resource-authorization-model-semantic-baseline.json', import.meta.url), 'utf8'),
+    ) as typeof unchanged
     const brokeredNativeChanges = new Set(brokeredNativeContract.map(({ method, path }) => `${method}:${path}`))
     const resourceDiscoveryChanges = new Set(resourceDiscoveryContract.map(({ method, path }) => `${method}:${path}`))
     const approvedChanges = new Set(
@@ -145,11 +148,20 @@ describe('OpenAPI semantic contract gate', () => {
       ...collectionEnvelopeContract,
     ].sort((left, right) => `${left.path}:${left.method}`.localeCompare(`${right.path}:${right.method}`))
     const applicationConsentChanges = new Set(applicationConsentContract.map(({ method, path }) => `${method}:${path}`))
-    const baseline = [
+    const preResourceAuthorizationModelBaseline = [
       ...preApplicationConsentBaseline.filter(
         ({ method, path }) => !applicationConsentChanges.has(`${method}:${path}`),
       ),
       ...applicationConsentContract,
+    ].sort((left, right) => `${left.path}:${left.method}`.localeCompare(`${right.path}:${right.method}`))
+    const resourceAuthorizationModelChanges = new Set(
+      resourceAuthorizationModelContract.map(({ method, path }) => `${method}:${path}`),
+    )
+    const baseline = [
+      ...preResourceAuthorizationModelBaseline.filter(
+        ({ method, path }) => !resourceAuthorizationModelChanges.has(`${method}:${path}`),
+      ),
+      ...resourceAuthorizationModelContract,
     ].sort((left, right) => `${left.path}:${left.method}`.localeCompare(`${right.path}:${right.method}`))
 
     expect(openApiSemanticSnapshot(unifiedOpenApi as unknown as Record<string, unknown>, () => true)).toEqual(baseline)

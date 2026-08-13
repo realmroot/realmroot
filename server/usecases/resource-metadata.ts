@@ -10,6 +10,7 @@ export interface ProtectedResourceMetadata {
   resource: string
   authorizationServers: string[]
   scopesSupported: string[]
+  authorizationDetailsTypesSupported: string[]
   accountConnection: {
     mode: 'brokered'
     authorizationEndpoint: string
@@ -55,6 +56,7 @@ export async function readProtectedResourceMetadata(
     resource: resourceUrl,
     authorizationServers: stringArray(values.authorization_servers),
     scopesSupported,
+    authorizationDetailsTypesSupported: stringArray(values.authorization_details_types_supported),
     accountConnection: readAccountConnection(values),
     etag: response.headers.get('etag'),
   }

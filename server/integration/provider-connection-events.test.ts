@@ -8,6 +8,7 @@ import {
   identityProviderConnector,
   providerConnection,
   providerConnectionEventReceipt,
+  providerCredential,
   providerResourceAuthorization,
   resourceScopeEntitlement,
   user,
@@ -82,7 +83,7 @@ describe('Provider Connection Events over real D1', () => {
       providerType: 'generic_oauth',
       providerId: 'event-provider',
       displayName: 'Event Provider',
-      createdAt: now,
+      createdAt: new Date('2026-08-08T20:00:00.000Z'),
       updatedAt: now,
     })
     await harness.db.insert(apiResource).values({
@@ -90,8 +91,9 @@ describe('Provider Connection Events over real D1', () => {
       identifier: 'event-resource',
       name: 'Event Resource',
       resourceUrl: resource,
-      accessMode: 'brokered',
+      authorizationModel: 'realmroot',
       connectorId: 'event-connector',
+      providerConnectionMode: 'brokered',
       ownerOrganizationId: platformOrganizationId,
       authorizationDetails: [{ type: 'provider_installation' }],
       scopeRegistry: {
@@ -113,7 +115,7 @@ describe('Provider Connection Events over real D1', () => {
           tokenEndpoint: 'https://adapter.example.com/provider/account-connection-credentials',
         },
       },
-      createdAt: now,
+      createdAt: new Date('2026-08-08T20:00:00.000Z'),
       updatedAt: now,
     })
     await harness.db.insert(providerConnection).values({
@@ -122,13 +124,22 @@ describe('Provider Connection Events over real D1', () => {
       ownerUserId: admin!.id,
       externalSubject: 'provider-user-1',
       displayName: 'Provider User',
-      createdAt: now,
+      createdAt: new Date('2026-08-08T20:00:00.000Z'),
       updatedAt: now,
     })
     await harness.db.insert(providerResourceAuthorization).values({
       id: 'event-connection',
       providerConnectionId: 'event-provider-connection',
       resourceId: 'event-resource',
+      status: 'active',
+      createdAt: new Date('2026-08-08T20:00:00.000Z'),
+      updatedAt: now,
+    })
+    await harness.db.insert(providerCredential).values({
+      id: 'event-credential',
+      providerResourceAuthorizationId: 'event-connection',
+      externalSubject: 'provider-user-1',
+      displayName: 'Provider User',
       credentialCustody: 'resource_server',
       encryptedTokens: null,
       brokerReference: 'installation-1',
@@ -317,8 +328,9 @@ describe('Provider Connection Events over real D1', () => {
       identifier: 'new-event-resource',
       name: 'New Event Resource',
       resourceUrl: 'https://adapter.example.com/new-provider',
-      accessMode: 'external_oauth',
+      authorizationModel: 'federated',
       connectorId: 'event-connector',
+      providerConnectionMode: 'managed',
       ownerOrganizationId: platformOrganizationId,
       scopeRegistry: null,
       createdAt: now,
@@ -326,18 +338,34 @@ describe('Provider Connection Events over real D1', () => {
     })
 
     await expect(
-      harness.deps.externalResources.createConnection({
+      harness.deps.externalResources.createResourceAuthorization({
         id: 'new-event-connection',
         providerConnectionId: 'event-provider-connection',
         resourceId: 'new-event-resource',
-        credentialCustody: 'realmroot',
-        encryptedTokens: 'encrypted-event-tokens',
-        brokerReference: null,
-        grantedScopes: ['contents:read'],
-        authorizationDetails: [],
-        clientGeneration: 1,
+        credentials: [
+          {
+            id: 'new-event-credential',
+            providerResourceAuthorizationId: 'new-event-connection',
+            externalSubject: 'provider-user-1',
+            displayName: 'Provider User',
+            credentialCustody: 'realmroot',
+            encryptedTokens: 'encrypted-event-tokens',
+            brokerReference: null,
+            grantedScopes: ['contents:read'],
+            authorizationDetails: [],
+            authorityConstraints: [],
+            clientGeneration: 1,
+            credentialVersion: 1,
+            refreshClaimId: null,
+            refreshClaimExpiresAt: null,
+            status: 'active',
+            credentialExpiresAt: null,
+            revokedAt: null,
+            createdAt: now,
+            updatedAt: now,
+          },
+        ],
         status: 'active',
-        credentialExpiresAt: null,
         revokedAt: null,
         providerEventOccurredAt: null,
         providerEventRevision: null,
@@ -358,7 +386,10 @@ describe('Provider Connection Events over real D1', () => {
       .set({ providerEventOccurredAt: previousEventAt, providerEventRevision: 7 })
       .where(eq(providerResourceAuthorization.id, 'event-connection'))
 
-    await harness.deps.externalResources.replaceConnectionAuthorization('event-connection', 'event-resource', {
+    await harness.deps.externalResources.upsertProviderCredential('event-connection', {
+      id: 'event-credential',
+      externalSubject: 'provider-user-1',
+      displayName: 'Provider User',
       credentialCustody: 'resource_server',
       encryptedTokens: null,
       brokerReference: 'installation-2',
@@ -368,11 +399,14 @@ describe('Provider Connection Events over real D1', () => {
         [{ type: 'provider_installation', resource_id: 'repository-1' }],
         ['contents:read'],
       ),
-      providerEventOccurredAt: null,
-      providerEventRevision: null,
+      clientGeneration: 1,
+      credentialVersion: 2,
+      refreshClaimId: null,
+      refreshClaimExpiresAt: null,
       status: 'active',
       credentialExpiresAt: null,
       revokedAt: null,
+      createdAt: new Date('2026-08-08T20:00:00.000Z'),
       updatedAt: new Date('2026-08-08T20:02:00.000Z'),
     })
 
@@ -380,11 +414,7 @@ describe('Provider Connection Events over real D1', () => {
       .select()
       .from(providerResourceAuthorization)
       .where(eq(providerResourceAuthorization.id, 'event-connection'))
-    expect(connection).toMatchObject({
-      brokerReference: 'installation-2',
-      providerEventOccurredAt: null,
-      providerEventRevision: null,
-    })
+    expect(connection).toMatchObject({ providerEventOccurredAt: null, providerEventRevision: null })
 
     expect(
       (
@@ -418,13 +448,12 @@ describe('Provider Connection Events over real D1', () => {
       .select()
       .from(providerResourceAuthorization)
       .where(eq(providerResourceAuthorization.id, 'event-connection'))
-    expect(connection).toMatchObject({
-      brokerReference: 'installation-2',
-      providerEventRevision: 1,
-      status: 'active',
-    })
+    expect(connection).toMatchObject({ providerEventRevision: 1, status: 'active' })
 
-    await harness.deps.externalResources.replaceConnectionAuthorization('event-connection', 'event-resource', {
+    await harness.deps.externalResources.upsertProviderCredential('event-connection', {
+      id: 'event-credential',
+      externalSubject: 'provider-user-1',
+      displayName: 'Provider User',
       credentialCustody: 'resource_server',
       encryptedTokens: null,
       brokerReference: 'installation-2',
@@ -434,19 +463,26 @@ describe('Provider Connection Events over real D1', () => {
         [{ type: 'provider_installation', resource_id: 'repository-1' }],
         ['contents:read'],
       ),
+      clientGeneration: 1,
+      credentialVersion: 3,
+      refreshClaimId: null,
+      refreshClaimExpiresAt: null,
       status: 'active',
       credentialExpiresAt: null,
       revokedAt: null,
+      createdAt: new Date('2026-08-08T20:00:00.000Z'),
       updatedAt: new Date('2026-08-08T20:05:00.000Z'),
     })
     ;[connection] = await harness.db
       .select()
       .from(providerResourceAuthorization)
       .where(eq(providerResourceAuthorization.id, 'event-connection'))
-    expect(connection).toMatchObject({
-      brokerReference: 'installation-2',
-      providerEventRevision: 1,
-    })
+    const [credentialAfterSameBroker] = await harness.db
+      .select()
+      .from(providerCredential)
+      .where(eq(providerCredential.id, 'event-credential'))
+    expect(connection).toMatchObject({ providerEventRevision: 1 })
+    expect(credentialAfterSameBroker.brokerReference).toBe('installation-2')
     expect(
       (
         await putEvent(harness, 'delivery-same-broker-equal-revision', {
@@ -520,10 +556,12 @@ describe('Provider Connection Events over real D1', () => {
       .where(eq(providerResourceAuthorization.id, 'event-connection'))
     expect(affectedGrant.endReason).toBe('revoked')
     expect(adjacentGrant.endedAt).toBeNull()
-    expect(connection).toMatchObject({
-      grantedScopes: ['contents:read', 'issues:write'],
-      providerEventRevision: 1,
-    })
+    const [credential] = await harness.db
+      .select()
+      .from(providerCredential)
+      .where(eq(providerCredential.id, 'event-credential'))
+    expect(connection).toMatchObject({ providerEventRevision: 1 })
+    expect(credential.grantedScopes).toEqual(['contents:read', 'issues:write'])
 
     const requestCreatedAt = new Date('2026-08-08T20:02:00.000Z')
     await harness.db.insert(agentAccessRequest).values({
@@ -663,7 +701,13 @@ describe('Provider Connection Events over real D1', () => {
       .from(providerResourceAuthorization)
       .where(eq(providerResourceAuthorization.id, 'event-connection'))
     expect(connection.providerEventRevision).toBe(1)
-    expect(connection.grantedScopes).toEqual(distinctStatuses[0] === 204 ? first.scopes : second.scopes)
+    const [credentialAfterDistinctRace] = await harness.db
+      .select()
+      .from(providerCredential)
+      .where(eq(providerCredential.id, 'event-credential'))
+    expect(credentialAfterDistinctRace.grantedScopes).toEqual(
+      distinctStatuses[0] === 204 ? first.scopes : second.scopes,
+    )
     expect(connection.providerEventOccurredAt).toEqual(
       new Date(distinctStatuses[0] === 204 ? first.occurredAt : second.occurredAt),
     )
@@ -708,7 +752,13 @@ describe('Provider Connection Events over real D1', () => {
       .from(providerResourceAuthorization)
       .where(eq(providerResourceAuthorization.id, 'event-connection'))
     expect(connection.providerEventRevision).toBe(2)
-    expect(connection.grantedScopes).toEqual(sharedStatuses[0] === 204 ? exact.scopes : conflicting.scopes)
+    const [credentialAfterSharedRace] = await harness.db
+      .select()
+      .from(providerCredential)
+      .where(eq(providerCredential.id, 'event-credential'))
+    expect(credentialAfterSharedRace.grantedScopes).toEqual(
+      sharedStatuses[0] === 204 ? exact.scopes : conflicting.scopes,
+    )
     expect(
       (await harness.db.select().from(providerConnectionEventReceipt)).filter(
         (receipt) => receipt.id === 'delivery-race-shared',
@@ -757,7 +807,12 @@ describe('Provider Connection Events over real D1', () => {
       .select()
       .from(externalTokenLease)
       .where(eq(externalTokenLease.id, 'event-token-lease'))
-    expect(connection).toMatchObject({ status: 'active', grantedScopes: ['contents:read'], providerEventRevision: 2 })
+    const [credential] = await harness.db
+      .select()
+      .from(providerCredential)
+      .where(eq(providerCredential.id, 'event-credential'))
+    expect(connection).toMatchObject({ status: 'active', providerEventRevision: 2 })
+    expect(credential.grantedScopes).toEqual(['contents:read'])
     expect(grant.endReason).toBe('revoked')
     expect(lease.revokedAt).not.toBeNull()
   })
@@ -861,8 +916,12 @@ describe('Provider Connection Events over real D1', () => {
       .select()
       .from(resourceScopeEntitlement)
       .where(eq(resourceScopeEntitlement.id, 'event-grant'))
-    expect(connection).toMatchObject({
-      status: 'active',
+    const [credential] = await harness.db
+      .select()
+      .from(providerCredential)
+      .where(eq(providerCredential.id, 'event-credential'))
+    expect(connection).toMatchObject({ status: 'active' })
+    expect(credential).toMatchObject({
       grantedScopes: ['contents:read'],
       authorizationDetails: [
         { type: 'provider_installation', resource_id: 'repository-1' },
@@ -1006,8 +1065,15 @@ describe('Provider Connection Events over real D1', () => {
           occurredAt: '2026-08-08T20:03:00.000Z',
           revision: 5,
           scopes: ['contents:read'],
-          authorizationDetails: connection.authorizationDetails,
-          authorityConstraints: constraintsFor(connection.authorizationDetails, ['contents:read']),
+          authorizationDetails: (
+            await harness.db.select().from(providerCredential).where(eq(providerCredential.id, 'event-credential'))
+          )[0]!.authorizationDetails,
+          authorityConstraints: constraintsFor(
+            (
+              await harness.db.select().from(providerCredential).where(eq(providerCredential.id, 'event-credential'))
+            )[0]!.authorizationDetails,
+            ['contents:read'],
+          ),
         })
       ).status,
     ).toBe(204)
@@ -1116,8 +1182,12 @@ describe('Provider Connection Events over real D1', () => {
     expect(connection).toMatchObject({
       providerEventOccurredAt: new Date(reduced.occurredAt),
       providerEventRevision: 2,
-      authorizationDetails: reduced.authorizationDetails,
     })
+    const [credential] = await harness.db
+      .select()
+      .from(providerCredential)
+      .where(eq(providerCredential.id, 'event-credential'))
+    expect(credential.authorizationDetails).toEqual(reduced.authorizationDetails)
   })
 })
 

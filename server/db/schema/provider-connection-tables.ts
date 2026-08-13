@@ -39,9 +39,6 @@ export const providerConnection = sqliteTable(
       .on(table.connectorId, table.ownerOrganizationId)
       .where(sql`${table.ownerOrganizationId} IS NOT NULL`),
     uniqueIndex('providerConnection_authenticationAccountId_unique').on(table.authenticationAccountId),
-    uniqueIndex('providerConnection_active_user_subject_unique')
-      .on(table.connectorId, table.externalSubject)
-      .where(sql`${table.ownerUserId} IS NOT NULL AND ${table.status} = 'active'`),
     index('providerConnection_connectorId_idx').on(table.connectorId),
     index('providerConnection_ownerUserId_idx').on(table.ownerUserId),
     index('providerConnection_ownerOrganizationId_idx').on(table.ownerOrganizationId),

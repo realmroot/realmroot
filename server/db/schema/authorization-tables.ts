@@ -173,9 +173,10 @@ export const apiResource = sqliteTable(
     identifier: text('identifier').notNull().unique(),
     name: text('name').notNull(),
     resourceUrl: text('resource_url').notNull(),
-    accessMode: text('access_mode', { enum: ['realmroot', 'external_oauth', 'brokered'] })
+    authorizationModel: text('authorization_model', { enum: ['realmroot', 'federated'] })
       .notNull()
       .default('realmroot'),
+    providerConnectionMode: text('provider_connection_mode', { enum: ['managed', 'brokered'] }),
     connectorId: text('connector_id').references(() => identityProviderConnector.id, {
       onDelete: 'restrict',
     }),
@@ -206,7 +207,7 @@ export const apiResource = sqliteTable(
     uniqueIndex('apiResource_resourceUrl_unique').on(table.resourceUrl),
     uniqueIndex('apiResource_providerConnectionAuthority_unique')
       .on(table.connectorId)
-      .where(sql`${table.deletedAt} is null and ${table.accessMode} = 'brokered'`),
+      .where(sql`${table.deletedAt} is null and ${table.providerConnectionMode} = 'brokered'`),
     index('apiResource_enabled_idx').on(table.enabled),
     index('apiResource_connectorId_idx').on(table.connectorId),
     index('apiResource_ownerOrganizationId_idx').on(table.ownerOrganizationId),

@@ -1,4 +1,8 @@
-import { connectorTemplates, isSupportedProvider } from '@server/domain/connectors/provider-templates'
+import {
+  connectorCapabilities,
+  connectorTemplates,
+  isSupportedProvider,
+} from '@server/domain/connectors/provider-templates'
 import { badRequest, notFound, resourceInUse } from '@server/domain/errors'
 import type { Deps } from '@server/usecases/deps'
 import type { ConnectorRecord, ConnectorRepository } from '@server/usecases/ports'
@@ -70,6 +74,7 @@ export async function connectorReadiness(deps: Deps, id: string): Promise<Connec
 
 export async function createConnector(deps: Deps, input: CreateConnectorRequest, callbackOrigin?: string) {
   assertSupportedProvider(input.providerType, input.providerId)
+  assertAuthenticationCapability(input.providerType, input.providerId, input.authenticationEnabled)
   await assertProviderAvailable(deps.connectors, input.providerId)
   const oidc = input.providerType === 'generic_oauth' ? await prepareOidcConnector(deps, input, callbackOrigin) : null
   const now = new Date()
@@ -80,7 +85,7 @@ export async function createConnector(deps: Deps, input: CreateConnectorRequest,
     providerId: input.providerId,
     displayName: input.displayName,
     enabled: input.enabled ?? true,
-    loginEnabled: input.loginEnabled ?? input.providerType === 'social',
+    authenticationEnabled: input.authenticationEnabled ?? input.providerType === 'social',
     clientId: oidc?.clientId ?? input.clientId ?? null,
     clientSecret: oidc?.clientSecret ?? input.clientSecret ?? null,
     clientSecretContext: null,
@@ -119,6 +124,11 @@ export async function updateConnector(deps: Deps, id: string, input: UpdateConne
     ...input,
     updatedAt: new Date(),
   }
+  assertAuthenticationCapability(
+    current.providerType as ConnectorProviderType,
+    current.providerId,
+    candidate.authenticationEnabled,
+  )
   assertComplete(candidate)
 
   const updated = await deps.connectors.update(id, {
@@ -149,7 +159,7 @@ export async function loadAuthConnectorConfig(repository: ConnectorRepository): 
   const trustedProviders: string[] = []
 
   for (const connector of connectors) {
-    if (!connector.loginEnabled) continue
+    if (!connector.authenticationEnabled) continue
     const clientId = connector.clientId
     const clientSecret = connector.clientSecret
     if (!canLoadAuthConnector(connector) || !clientId || !clientSecret) continue
@@ -207,6 +217,16 @@ function signupEnabledMetadata(metadata: Record<string, unknown> | null) {
 function assertSupportedProvider(providerType: ConnectorProviderType, providerId: string) {
   if (!isSupportedProvider(providerType, providerId)) {
     throw badRequest('Unsupported social provider.')
+  }
+}
+
+function assertAuthenticationCapability(
+  providerType: ConnectorProviderType,
+  providerId: string,
+  enabled: boolean | undefined,
+) {
+  if (enabled && !connectorCapabilities(providerType, providerId).authentication) {
+    throw badRequest('Connector driver does not support authentication.')
   }
 }
 
@@ -315,7 +335,8 @@ function toResponse(row: ConnectorRecord): ConnectorResponse {
     providerId: row.providerId,
     displayName: row.displayName,
     enabled: row.enabled,
-    loginEnabled: row.loginEnabled,
+    authenticationEnabled: row.authenticationEnabled,
+    capabilities: connectorCapabilities(row.providerType as ConnectorProviderType, row.providerId),
     clientId: row.clientId,
     clientSecretConfigured: Boolean(row.clientSecret),
     issuer: row.issuer,

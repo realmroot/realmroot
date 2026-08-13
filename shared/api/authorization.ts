@@ -88,7 +88,14 @@ export const createInvitationRequestSchema = z.object({
 })
 
 export const apiResourceVisibilitySchema = z.enum(['private', 'public'])
-export const apiResourceAccessModeSchema = z.enum(['realmroot', 'external_oauth', 'brokered'])
+export const apiResourceAuthorizationModelSchema = z.enum(['realmroot', 'federated'])
+export const providerConnectionModeSchema = z.enum(['managed', 'brokered'])
+export const resourceProviderConnectionSchema = z
+  .object({
+    connectorId: nonEmptyString,
+    mode: providerConnectionModeSchema,
+  })
+  .strict()
 export const resourceScopeGrantModeSchema = z.enum(['automatic', 'assigned'])
 export const resourceScopeSchema = z
   .object({
@@ -133,8 +140,8 @@ export const apiResourceResponseSchema = z.object({
   identifier: z.string(),
   name: z.string(),
   resourceUrl: z.url(),
-  accessMode: apiResourceAccessModeSchema,
-  connectorId: z.string().nullable(),
+  authorizationModel: apiResourceAuthorizationModelSchema,
+  providerConnection: resourceProviderConnectionSchema.nullable(),
   authorizationDetails: authorizationDetailsSchema,
   description: z.string().nullable(),
   enabled: z.boolean(),
@@ -150,8 +157,8 @@ export const createApiResourceRequestSchema = z
   .object({
     identifier: nonEmptyString,
     resourceUrl: z.url(),
-    accessMode: apiResourceAccessModeSchema,
-    connectorId: nonEmptyString.optional(),
+    authorizationModel: apiResourceAuthorizationModelSchema,
+    providerConnection: resourceProviderConnectionSchema.nullable().default(null),
     authorizationDetails: authorizationDetailsSchema.default([]),
     enabled: z.boolean().optional(),
     ownerOrganizationId: nonEmptyString,
@@ -159,12 +166,13 @@ export const createApiResourceRequestSchema = z
     availableToAgents: z.boolean().optional(),
   })
   .strict()
+  .superRefine(validateResourceAuthorizationModel)
 
 export const updateApiResourceRequestSchema = z
   .object({
     identifier: nonEmptyString.optional(),
     resourceUrl: z.url().optional(),
-    connectorId: nonEmptyString.nullable().optional(),
+    providerConnection: resourceProviderConnectionSchema.nullable().optional(),
     authorizationDetails: authorizationDetailsSchema.optional(),
     enabled: z.boolean().optional(),
     ownerOrganizationId: nonEmptyString.optional(),
@@ -175,6 +183,19 @@ export const updateApiResourceRequestSchema = z
     availableToAgents: z.boolean().optional(),
   })
   .strict()
+
+function validateResourceAuthorizationModel(
+  input: { authorizationModel: 'realmroot' | 'federated'; providerConnection: { mode: 'managed' | 'brokered' } | null },
+  ctx: z.RefinementCtx,
+) {
+  if (input.authorizationModel === 'federated' && input.providerConnection?.mode !== 'managed') {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['providerConnection'],
+      message: 'Federated authorization requires a Realmroot-managed Provider Connection.',
+    })
+  }
+}
 
 export const roleScopeSchema = z.object({
   resourceId: nonEmptyString,
@@ -345,7 +366,9 @@ export type ListMembersResponse = z.infer<typeof listMembersResponseSchema>
 export type ListInvitationsResponse = z.infer<typeof listInvitationsResponseSchema>
 export type ApiResourceResponse = z.infer<typeof apiResourceResponseSchema>
 export type ApiResourceVisibility = z.infer<typeof apiResourceVisibilitySchema>
-export type ApiResourceAccessMode = z.infer<typeof apiResourceAccessModeSchema>
+export type ApiResourceAuthorizationModel = z.infer<typeof apiResourceAuthorizationModelSchema>
+export type ProviderConnectionMode = z.infer<typeof providerConnectionModeSchema>
+export type ResourceProviderConnection = z.infer<typeof resourceProviderConnectionSchema>
 export type ResourceScope = z.infer<typeof resourceScopeSchema>
 export type ResourceScopeRegistry = z.infer<typeof resourceScopeRegistrySchema>
 export type ListApiResourcesResponse = z.infer<typeof listApiResourcesResponseSchema>

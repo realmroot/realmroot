@@ -18,6 +18,7 @@ const providerCredentialRefreshMigrationName = '20260810224255_polite_tombstone.
 const systemResourceUuidMigrationName = '20260812132947_system_resource_uuidv7.sql'
 const applicationConsentRequiredMigrationName = '20260812140338_application_consent_required.sql'
 const applicationAuthorizationSourceMigrationName = '20260812142042_application_authorization_source.sql'
+const resourceAuthorizationConnectorsMigrationName = '20260813061753_resource_authorization_connectors.sql'
 
 describe('tenant ownership migration', () => {
   it('backfills authority constraints for existing brokered connections', () => {
@@ -81,6 +82,7 @@ describe('tenant ownership migration', () => {
             systemResourceUuidMigrationName,
             applicationConsentRequiredMigrationName,
             applicationAuthorizationSourceMigrationName,
+            resourceAuthorizationConnectorsMigrationName,
           ].includes(name),
       )) {
         database.exec(readFileSync(new URL(`../../migrations/${name}`, import.meta.url), 'utf8'))
@@ -109,6 +111,16 @@ describe('tenant ownership migration', () => {
       )
       database.exec(
         readFileSync(new URL(`../../migrations/${providerConnectionEventMigrationName}`, import.meta.url), 'utf8'),
+      )
+      database.exec(readFileSync(new URL(`../../migrations/${entitlementMigrationName}`, import.meta.url), 'utf8'))
+      database.exec(
+        readFileSync(new URL(`../../migrations/${providerCredentialRefreshMigrationName}`, import.meta.url), 'utf8'),
+      )
+      database.exec(
+        readFileSync(
+          new URL(`../../migrations/${resourceAuthorizationConnectorsMigrationName}`, import.meta.url),
+          'utf8',
+        ),
       )
 
       expect(columnNames(database, 'application')).not.toContain('owner_user_id')

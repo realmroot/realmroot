@@ -218,14 +218,12 @@ Feature: Admin Console
     Then it appears in authorization inventory
     And it records an explicit owner Organization
     And its visibility is private by default and can be changed to public
-    And I explicitly select Realmroot, external OAuth, or brokered provider access
-    And Realmroot access optionally selects an enabled generic OAuth Connector for provider account credentials
-    And Realmroot access without a Connector remains an ordinary native Resource Server
-    And Realmroot access with a Connector is displayed as Realmroot Token plus Provider Connection
-    And external OAuth access requires a standard OIDC Connector
-    And brokered provider access requires its Provider Connector without changing Realmroot token validation
-    And the Connector association no longer determines the Resource Server access mode
-    And its access mode cannot change after creation while its compatible Provider Connector can be selected or replaced explicitly
+    And I explicitly select Realmroot or Federated authorization
+    And I independently select no Provider Connection, a Realmroot-managed connection, or a Resource Server-brokered connection
+    And Realmroot authorization accepts every Provider Connection choice
+    And Federated authorization requires a Realmroot-managed Provider Connection
+    And the Console reports the final token issuer implied by those choices
+    And the authorization model cannot change after creation while its compatible Provider Connector can be selected or replaced explicitly
     And its protected resource URL is the OAuth resource identifier and access-token audience
     And its name and description are synchronized from the OpenAPI contract and cannot be edited manually
     And OAuth scopes advertised by the business resource server protected-resource metadata remain the scope authority
@@ -246,12 +244,12 @@ Feature: Admin Console
     And the Console offers no restoration
 
   @entrypoint:product-ui @journey:provider-connection-authority
-  Scenario: A Provider Connector has one generic account connection authority
+  Scenario: A Provider Connector can back one brokered account connection authority
     Given a Resource Server advertises brokered account connection metadata
     When I register it without a Provider Connector
     Then Realmroot rejects the Resource Server
     When I register it with an enabled Provider Connector
-    Then Realmroot accepts any Connector provider type without requiring an external OIDC authorization server
+    Then Realmroot accepts a Connector whose driver supports resource authorization without requiring an external OIDC authorization server
     And refreshing discovery preserves the brokered account connection endpoints
     And Realmroot rejects another account connection authority for the same Provider Connector
 

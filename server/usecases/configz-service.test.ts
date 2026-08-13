@@ -645,7 +645,7 @@ function enabledConnector(providerId: string): ConnectorRecord {
     providerId,
     displayName: providerId,
     enabled: true,
-    loginEnabled: true,
+    authenticationEnabled: true,
     clientId: 'client-id',
     clientSecret: 'client-secret',
     clientSecretContext: null,

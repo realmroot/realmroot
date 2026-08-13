@@ -91,8 +91,8 @@ const resource: ApiResourceResponse = {
   identifier: 'projects',
   name: 'Projects',
   resourceUrl: 'https://api.example.com',
-  accessMode: 'realmroot',
-  connectorId: null,
+  authorizationModel: 'realmroot',
+  providerConnection: null,
   authorizationDetails: [],
   description: null,
   enabled: true,
@@ -130,7 +130,7 @@ describe('authorization CRUD and assignment policy', () => {
       id: expect.stringMatching(/^00000000-0000-7000-8000-/),
       identifier: 'realmroot',
       resourceUrl: 'https://auth.example.com/api',
-      connectorId: null,
+      providerConnection: null,
       ownerOrganizationId: platformOrganization.id,
     })
 
@@ -189,7 +189,7 @@ describe('authorization CRUD and assignment policy', () => {
 
     for (const invalid of [
       { ...created, ownerOrganizationId: 'org-other' },
-      { ...created, connectorId: 'connector-1' },
+      { ...created, providerConnection: { connectorId: 'connector-1', mode: 'managed' as const } },
     ]) {
       authorization.listResources.mockResolvedValueOnce({ items: [invalid], pagination })
       await expect(ensureRealmrootResourceServer(deps, 'https://auth.example.com')).rejects.toThrow(
@@ -733,8 +733,8 @@ describe('authorization CRUD and assignment policy', () => {
       createResource(deps, {
         identifier: 'organization-owned-external',
         resourceUrl: resource.resourceUrl,
-        accessMode: 'external_oauth',
-        connectorId: 'connector-1',
+        authorizationModel: 'federated',
+        providerConnection: { connectorId: 'connector-1', mode: 'managed' as const },
         ownerOrganizationId: organization.id,
       }),
     ).rejects.toThrow('must be owned by the built-in platform Organization')
@@ -742,12 +742,12 @@ describe('authorization CRUD and assignment policy', () => {
     await createResource(deps, {
       identifier: 'native',
       resourceUrl: resource.resourceUrl,
-      accessMode: 'realmroot',
+      authorizationModel: 'realmroot',
       ownerOrganizationId: organization.id,
     })
     expect(authorization.createResource).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        connectorId: null,
+        providerConnection: null,
         name: 'Projects API',
         description: 'Manage projects',
         enabled: true,
@@ -756,18 +756,21 @@ describe('authorization CRUD and assignment policy', () => {
     await createResource(deps, {
       identifier: 'external-without-rar',
       resourceUrl: resource.resourceUrl,
-      accessMode: 'external_oauth',
-      connectorId: 'connector-1',
+      authorizationModel: 'federated',
+      providerConnection: { connectorId: 'connector-1', mode: 'managed' as const },
       ownerOrganizationId: platformOrganization.id,
     })
     expect(authorization.createResource).toHaveBeenLastCalledWith(
-      expect.objectContaining({ authorizationDetails: [], connectorId: 'connector-1' }),
+      expect.objectContaining({
+        authorizationDetails: [],
+        providerConnection: { connectorId: 'connector-1', mode: 'managed' },
+      }),
     )
     await expect(
       createResource(deps, {
         identifier: 'invalid-native-rar',
         resourceUrl: resource.resourceUrl,
-        accessMode: 'realmroot',
+        authorizationModel: 'realmroot',
         ownerOrganizationId: organization.id,
         authorizationDetails: [{ type: 'project_access', project_id: 'project-1' }],
       }),
@@ -776,8 +779,8 @@ describe('authorization CRUD and assignment policy', () => {
       createResource(deps, {
         identifier: 'brokered-without-metadata',
         resourceUrl: resource.resourceUrl,
-        accessMode: 'brokered',
-        connectorId: 'connector-1',
+        authorizationModel: 'realmroot',
+        providerConnection: { connectorId: 'connector-1', mode: 'brokered' as const },
         ownerOrganizationId: platformOrganization.id,
       }),
     ).rejects.toThrow('must advertise brokered account connection metadata')
@@ -785,37 +788,40 @@ describe('authorization CRUD and assignment policy', () => {
       createResource(deps, {
         identifier: 'external-without-connector',
         resourceUrl: resource.resourceUrl,
-        accessMode: 'external_oauth',
+        authorizationModel: 'federated',
         ownerOrganizationId: platformOrganization.id,
       }),
-    ).rejects.toThrow('External OAuth access requires a Provider Connector')
+    ).rejects.toThrow('Federated authorization requires a Realmroot-managed Provider Connection')
     await createResource(deps, {
       identifier: 'realmroot-with-connector',
       resourceUrl: resource.resourceUrl,
-      accessMode: 'realmroot',
-      connectorId: 'connector-1',
+      authorizationModel: 'realmroot',
+      providerConnection: { connectorId: 'connector-1', mode: 'managed' as const },
       ownerOrganizationId: platformOrganization.id,
     })
     expect(authorization.createResource).toHaveBeenLastCalledWith(
-      expect.objectContaining({ accessMode: 'realmroot', connectorId: 'connector-1' }),
+      expect.objectContaining({
+        authorizationModel: 'realmroot',
+        providerConnection: { connectorId: 'connector-1', mode: 'managed' },
+      }),
     )
     brokeredNative = true
     await expect(
       createResource(deps, {
         identifier: 'brokered-native-rar',
         resourceUrl: resource.resourceUrl,
-        accessMode: 'brokered',
+        authorizationModel: 'realmroot',
         ownerOrganizationId: platformOrganization.id,
         authorizationDetails: [{ type: 'project_access', project_id: 'project-1' }],
       }),
-    ).rejects.toThrow('must select a Provider Connector')
+    ).rejects.toThrow('requires brokered provider access')
     connectors.findById.mockResolvedValue(null)
     await expect(
       createResource(deps, {
         identifier: 'brokered-missing-connector',
         resourceUrl: resource.resourceUrl,
-        accessMode: 'brokered',
-        connectorId: 'connector-1',
+        authorizationModel: 'realmroot',
+        providerConnection: { connectorId: 'connector-1', mode: 'brokered' as const },
         ownerOrganizationId: platformOrganization.id,
       }),
     ).rejects.toThrow('Provider Connector must be enabled')
@@ -824,8 +830,8 @@ describe('authorization CRUD and assignment policy', () => {
       createResource(deps, {
         identifier: 'brokered-disabled-connector',
         resourceUrl: resource.resourceUrl,
-        accessMode: 'brokered',
-        connectorId: 'connector-1',
+        authorizationModel: 'realmroot',
+        providerConnection: { connectorId: 'connector-1', mode: 'brokered' as const },
         ownerOrganizationId: platformOrganization.id,
       }),
     ).rejects.toThrow('Provider Connector must be enabled')
@@ -833,14 +839,14 @@ describe('authorization CRUD and assignment policy', () => {
     await createResource(deps, {
       identifier: 'brokered-native-rar',
       resourceUrl: resource.resourceUrl,
-      accessMode: 'brokered',
-      connectorId: 'connector-1',
+      authorizationModel: 'realmroot',
+      providerConnection: { connectorId: 'connector-1', mode: 'brokered' as const },
       ownerOrganizationId: platformOrganization.id,
       authorizationDetails: [{ type: 'project_access', project_id: 'project-1' }],
     })
     expect(authorization.createResource).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        connectorId: 'connector-1',
+        providerConnection: { connectorId: 'connector-1', mode: 'brokered' },
         authorizationDetails: [{ type: 'project_access', project_id: 'project-1' }],
         scopeRegistry: expect.objectContaining({ accountConnection: expect.objectContaining({ mode: 'brokered' }) }),
       }),
@@ -848,8 +854,8 @@ describe('authorization CRUD and assignment policy', () => {
     authorization.listEnabledResources.mockResolvedValue([
       {
         ...resource,
-        accessMode: 'brokered',
-        connectorId: 'connector-1',
+        authorizationModel: 'realmroot',
+        providerConnection: { connectorId: 'connector-1', mode: 'brokered' as const },
         scopeRegistry: {
           ...resource.scopeRegistry!,
           accountConnection: {
@@ -865,8 +871,8 @@ describe('authorization CRUD and assignment policy', () => {
       createResource(deps, {
         identifier: 'second-brokered-authority',
         resourceUrl: resource.resourceUrl,
-        accessMode: 'brokered',
-        connectorId: 'connector-1',
+        authorizationModel: 'realmroot',
+        providerConnection: { connectorId: 'connector-1', mode: 'brokered' as const },
         ownerOrganizationId: platformOrganization.id,
       }),
     ).rejects.toThrow('already has an account connection authority')
@@ -876,8 +882,8 @@ describe('authorization CRUD and assignment policy', () => {
     await createResource(deps, {
       identifier: 'external',
       resourceUrl: resource.resourceUrl,
-      accessMode: 'external_oauth',
-      connectorId: 'connector-1',
+      authorizationModel: 'federated',
+      providerConnection: { connectorId: 'connector-1', mode: 'managed' as const },
       ownerOrganizationId: platformOrganization.id,
       authorizationDetails: [
         { type: 'payment_initiation', actions: ['initiate'], locations: ['https://merchant.example.com'] },
@@ -886,7 +892,7 @@ describe('authorization CRUD and assignment policy', () => {
     })
     expect(authorization.createResource).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        connectorId: 'connector-1',
+        providerConnection: { connectorId: 'connector-1', mode: 'managed' },
         authorizationDetails: [
           { type: 'payment_initiation', actions: ['initiate'], locations: ['https://merchant.example.com'] },
         ],
@@ -906,8 +912,8 @@ describe('authorization CRUD and assignment policy', () => {
     ).rejects.toThrow('Authorization details require external OAuth or brokered provider access.')
     authorization.findResource.mockResolvedValue({
       ...resource,
-      accessMode: 'brokered',
-      connectorId: 'connector-1',
+      authorizationModel: 'realmroot',
+      providerConnection: { connectorId: 'connector-1', mode: 'brokered' as const },
       ownerOrganizationId: platformOrganization.id,
       authorizationDetails: [{ type: 'project_access', project_id: 'project-1' }],
       scopeRegistry: {
@@ -925,12 +931,12 @@ describe('authorization CRUD and assignment policy', () => {
     })
     authorization.findResource.mockResolvedValue({
       ...resource,
-      accessMode: 'external_oauth',
-      connectorId: 'connector-1',
+      authorizationModel: 'federated',
+      providerConnection: { connectorId: 'connector-1', mode: 'managed' as const },
       ownerOrganizationId: platformOrganization.id,
     })
     await expect(updateResource(deps, resource.id, { identifier: 'external-renamed' })).resolves.toMatchObject({
-      connectorId: 'connector-1',
+      providerConnection: { connectorId: 'connector-1', mode: 'managed' },
     })
     await expect(updateResource(deps, resource.id, { ownerOrganizationId: organization.id })).rejects.toThrow(
       'must be owned by the built-in platform Organization',
@@ -979,8 +985,8 @@ describe('authorization CRUD and assignment policy', () => {
 
     authorization.findResource.mockResolvedValue({
       ...resource,
-      accessMode: 'external_oauth',
-      connectorId: 'connector-1',
+      authorizationModel: 'federated',
+      providerConnection: { connectorId: 'connector-1', mode: 'managed' as const },
       ownerOrganizationId: platformOrganization.id,
     })
     connectors.findById.mockResolvedValue({ ...connector, enabled: false })
@@ -988,8 +994,8 @@ describe('authorization CRUD and assignment policy', () => {
     connectors.findById.mockResolvedValue(connector)
     await expect(updateResource(deps, resource.id, { enabled: true })).resolves.toEqual({
       ...resource,
-      accessMode: 'external_oauth',
-      connectorId: 'connector-1',
+      authorizationModel: 'federated',
+      providerConnection: { connectorId: 'connector-1', mode: 'managed' as const },
       ownerOrganizationId: platformOrganization.id,
     })
     authorization.findResource.mockResolvedValue(null)
@@ -1001,8 +1007,8 @@ describe('authorization CRUD and assignment policy', () => {
     const existingRegistry = scopeRegistry(['projects:read'])
     authorization.findResource.mockResolvedValue({
       ...resource,
-      accessMode: 'external_oauth',
-      connectorId: 'connector-1',
+      authorizationModel: 'federated',
+      providerConnection: { connectorId: 'connector-1', mode: 'managed' as const },
       scopeRegistry: existingRegistry,
     })
     const deps = {
@@ -1063,8 +1069,8 @@ describe('authorization CRUD and assignment policy', () => {
     const existingRegistry = scopeRegistry(['projects:read'])
     const brokeredResource = {
       ...resource,
-      accessMode: 'brokered' as const,
-      connectorId: 'connector-1',
+      authorizationModel: 'realmroot' as const,
+      providerConnection: { connectorId: 'connector-1', mode: 'brokered' as const },
       scopeRegistry: existingRegistry,
     }
     authorization.findResource.mockResolvedValue(brokeredResource)
@@ -1156,8 +1162,8 @@ describe('authorization CRUD and assignment policy', () => {
     const authorization = repository()
     const externalResource = {
       ...resource,
-      accessMode: 'external_oauth' as const,
-      connectorId: 'connector-1',
+      authorizationModel: 'federated' as const,
+      providerConnection: { connectorId: 'connector-1', mode: 'managed' as const },
       authorizationDetails: [{ type: 'workspace' }],
     }
     authorization.findResource.mockResolvedValue(externalResource)
@@ -1399,7 +1405,7 @@ describe('authorization CRUD and assignment policy', () => {
       createResource(deps, {
         identifier: 'disabled-owner',
         resourceUrl: resource.resourceUrl,
-        accessMode: 'realmroot',
+        authorizationModel: 'realmroot',
         ownerOrganizationId: organization.id,
         enabled: false,
       }),
@@ -1411,7 +1417,7 @@ describe('authorization CRUD and assignment policy', () => {
       createResource(deps, {
         identifier: 'organization-api',
         resourceUrl: resource.resourceUrl,
-        accessMode: 'realmroot',
+        authorizationModel: 'realmroot',
         ownerOrganizationId: organization.id,
         visibility: 'public',
         enabled: false,
@@ -1516,7 +1522,7 @@ describe('authorization CRUD and assignment policy', () => {
     const input = {
       identifier: 'projects',
       resourceUrl: resource.resourceUrl,
-      accessMode: 'realmroot' as const,
+      authorizationModel: 'realmroot' as const,
       ownerOrganizationId: organization.id,
     }
 

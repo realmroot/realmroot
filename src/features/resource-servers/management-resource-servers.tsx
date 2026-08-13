@@ -1,6 +1,6 @@
 import type { ApiResource } from '@shared/api/agent-api'
 import {
-  type ApiResourceAccessMode,
+  type ApiResourceAuthorizationModel,
   type ApiResourceContractResponse,
   type ApiResourceVisibility,
   createApiResourceRequestSchema,
@@ -51,30 +51,26 @@ import { tt } from '@/lib/i18n'
 
 type ResourceEditor = 'details' | 'visibility' | 'authorization' | null
 
-const accessModePresentation: Record<ApiResourceAccessMode, { label: string; description: string }> = {
+const authorizationModelPresentation: Record<ApiResourceAuthorizationModel, { label: string; description: string }> = {
   realmroot: {
-    label: 'Native',
-    description: 'The Resource Server accepts access issued directly by Realmroot.',
+    label: 'Realmroot',
+    description: 'Agents call this Resource Server with a token issued by Realmroot.',
   },
-  external_oauth: {
-    label: 'OAuth',
-    description: 'The Resource Server delegates authorization to an external OAuth provider.',
-  },
-  brokered: {
-    label: 'Adapter',
-    description: 'Realmroot uses a provider adapter to connect accounts and authorize access.',
+  federated: {
+    label: 'Federated',
+    description: 'Agents call the external Resource Server with its authorization server’s token.',
   },
 }
 
-function AccessModeValue({ badge = false, mode }: { badge?: boolean; mode: ApiResourceAccessMode }) {
-  const presentation = accessModePresentation[mode]
+function AuthorizationModelValue({ badge = false, model }: { badge?: boolean; model: ApiResourceAuthorizationModel }) {
+  const presentation = authorizationModelPresentation[model]
   return (
     <span className="inline-flex items-center gap-1.5">
       {badge ? <Badge variant="outline">{tt(presentation.label)}</Badge> : tt(presentation.label)}
       <Tooltip>
         <TooltipTrigger asChild>
           <button
-            aria-label={tt('{{mode}} access model help', { mode: presentation.label })}
+            aria-label={tt('{{mode}} authorization model help', { mode: presentation.label })}
             className="text-muted-foreground transition-colors hover:text-foreground"
             type="button"
           >
@@ -118,7 +114,7 @@ export function ApiResourcesPage({ organizationId }: { organizationId?: string }
     const resourceStatus = resource.enabled ? 'enabled' : 'disabled'
     return (
       matchesSearch &&
-      (!authorization || resource.accessMode === authorization) &&
+      (!authorization || resource.authorizationModel === authorization) &&
       (!status || resourceStatus === status) &&
       (!owner || resource.ownerOrganizationId === owner)
     )
@@ -171,9 +167,8 @@ export function ApiResourcesPage({ organizationId }: { organizationId?: string }
             value={authorization}
           >
             <option value="">{tt('Any authorization')}</option>
-            <option value="realmroot">{tt(accessModePresentation.realmroot.label)}</option>
-            <option value="external_oauth">{tt(accessModePresentation.external_oauth.label)}</option>
-            <option value="brokered">{tt(accessModePresentation.brokered.label)}</option>
+            <option value="realmroot">{tt(authorizationModelPresentation.realmroot.label)}</option>
+            <option value="federated">{tt(authorizationModelPresentation.federated.label)}</option>
           </SelectInput>
           <SelectInput
             aria-label={tt('Filter status')}
@@ -240,7 +235,7 @@ export function ApiResourcesPage({ organizationId }: { organizationId?: string }
                   </span>
                 </TableCell>
                 <TableCell>
-                  <AccessModeValue badge mode={resource.accessMode} />
+                  <AuthorizationModelValue badge model={resource.authorizationModel} />
                 </TableCell>
                 <TableCell className="truncate font-mono text-xs" title={resource.resourceUrl}>
                   {resource.resourceUrl}
@@ -302,7 +297,7 @@ function ApiResourceCreateDialog({
   organizations,
   pending,
 }: {
-  connectors: Array<{ id: string; displayName: string; issuer: string | null; providerType: string }>
+  connectors: ConnectorResponse[]
   defaultOwnerOrganizationId?: string
   fixedOwnerOrganizationId?: string
   error: string | null
@@ -315,7 +310,8 @@ function ApiResourceCreateDialog({
   const [form, setForm] = useState<FormState>(emptyForm)
   const [ownerOrganizationId, setOwnerOrganizationId] = useState('')
   const [visibility, setVisibility] = useState<ApiResourceVisibility>('private')
-  const [accessMode, setAccessMode] = useState<ApiResourceAccessMode>('realmroot')
+  const [authorizationModel, setAuthorizationModel] = useState<ApiResourceAuthorizationModel>('realmroot')
+  const [providerConnectionMode, setProviderConnectionMode] = useState<'none' | 'managed' | 'brokered'>('none')
   const [availableToAgents, setAvailableToAgents] = useState(true)
   const [authorizationDetails, setAuthorizationDetails] = useState('[]')
   const [validationError, setValidationError] = useState<string | null>(null)
@@ -333,12 +329,17 @@ function ApiResourceCreateDialog({
           event.preventDefault()
           try {
             setValidationError(null)
+            const { connectorId, ...resourceForm } = form
             onSubmit(
               parseForm(createApiResourceRequestSchema, {
-                ...form,
-                accessMode,
-                connectorId: form.connectorId || undefined,
-                authorizationDetails: accessMode === 'realmroot' ? [] : parseAuthorizationDetails(authorizationDetails),
+                ...resourceForm,
+                authorizationModel,
+                providerConnection:
+                  providerConnectionMode === 'none' ? null : { connectorId, mode: providerConnectionMode },
+                authorizationDetails:
+                  authorizationModel === 'federated' || providerConnectionMode === 'brokered'
+                    ? parseAuthorizationDetails(authorizationDetails)
+                    : [],
                 ownerOrganizationId,
                 visibility,
                 availableToAgents,
@@ -373,46 +374,57 @@ function ApiResourceCreateDialog({
             value={ownerOrganizationId}
           />
         )}
-        <Field label={tt('Access model')} tooltip={tt(accessModePresentation[accessMode].description)}>
+        <Field label={tt('Authorization')} tooltip={tt(authorizationModelPresentation[authorizationModel].description)}>
           <SelectInput
-            name="accessMode"
+            name="authorizationModel"
             onChange={(event) => {
-              setAccessMode(event.target.value as ApiResourceAccessMode)
+              const model = event.target.value as ApiResourceAuthorizationModel
+              setAuthorizationModel(model)
+              if (model === 'federated') setProviderConnectionMode('managed')
+            }}
+            value={authorizationModel}
+          >
+            <option value="realmroot">{tt(authorizationModelPresentation.realmroot.label)}</option>
+            <option value="federated">{tt(authorizationModelPresentation.federated.label)}</option>
+          </SelectInput>
+        </Field>
+        <Field label={tt('Provider connection')}>
+          <SelectInput
+            name="providerConnectionMode"
+            onChange={(event) => {
+              setProviderConnectionMode(event.target.value as 'none' | 'managed' | 'brokered')
               setValue(setForm, 'connectorId', '')
             }}
-            value={accessMode}
+            value={providerConnectionMode}
           >
-            <option value="realmroot">{tt(accessModePresentation.realmroot.label)}</option>
-            <option value="external_oauth">{tt(accessModePresentation.external_oauth.label)}</option>
-            <option value="brokered">{tt(accessModePresentation.brokered.label)}</option>
+            {authorizationModel === 'realmroot' ? <option value="none">{tt('None')}</option> : null}
+            <option value="managed">{tt('Managed by Realmroot')}</option>
+            {authorizationModel === 'realmroot' ? (
+              <option value="brokered">{tt('Brokered by Resource Server')}</option>
+            ) : null}
           </SelectInput>
         </Field>
-        <Field
-          help={
-            accessMode === 'realmroot'
-              ? tt('Optional. Uses Realmroot Token plus Provider Connection for delegated provider credentials.')
-              : undefined
-          }
-          label={tt('Provider connector')}
-        >
-          <SelectInput
-            name="connectorId"
-            onChange={(event) => setValue(setForm, 'connectorId', event.target.value)}
-            required={accessMode !== 'realmroot'}
-            value={form.connectorId ?? ''}
-          >
-            <option value="">{tt(accessMode === 'realmroot' ? 'No provider connection' : 'Select a connector')}</option>
-            {connectors
-              .filter((connector) => accessMode === 'brokered' || connector.providerType === 'generic_oauth')
-              .map((connector) => (
-                <option key={connector.id} value={connector.id}>
-                  {connector.displayName}
-                  {connector.issuer ? ` — ${connector.issuer}` : ''}
-                </option>
-              ))}
-          </SelectInput>
-        </Field>
-        {accessMode !== 'realmroot' ? (
+        {providerConnectionMode !== 'none' ? (
+          <Field label={tt('Provider connector')}>
+            <SelectInput
+              name="connectorId"
+              onChange={(event) => setValue(setForm, 'connectorId', event.target.value)}
+              required
+              value={form.connectorId ?? ''}
+            >
+              <option value="">{tt('Select a connector')}</option>
+              {connectors
+                .filter((connector) => connector.capabilities.resourceAuthorization)
+                .map((connector) => (
+                  <option key={connector.id} value={connector.id}>
+                    {connector.displayName}
+                    {connector.issuer ? ` — ${connector.issuer}` : ''}
+                  </option>
+                ))}
+            </SelectInput>
+          </Field>
+        ) : null}
+        {authorizationModel === 'federated' || providerConnectionMode === 'brokered' ? (
           <Field
             help={tt(
               'Opaque RFC 9396 templates sent to the authorization server. Each array entry must contain a non-empty type.',
@@ -537,7 +549,7 @@ export function ApiResourceDetailPage({
     return <ErrorState error={new Error(tt('Resource server does not belong to this Organization.'))} />
   }
   const organizations = organizationsQuery.data?.items ?? []
-  const mode = resource.accessMode
+  const model = resource.authorizationModel
   return (
     <>
       <div className="consoleDetailStack">
@@ -566,7 +578,7 @@ export function ApiResourceDetailPage({
             </div>
             <p>{resource.description ?? tt('Protected API registered in this Realm.')}</p>
             <span className="consoleDetailMeta">
-              <AccessModeValue mode={mode} /> · {resource.id}
+              <AuthorizationModelValue model={model} /> · {resource.id}
             </span>
           </div>
         </header>
@@ -590,7 +602,7 @@ export function ApiResourceDetailPage({
             <TabsTrigger value="settings">{tt('Settings')}</TabsTrigger>
           </TabsList>
           <TabsContent className="mt-5" value="overview">
-            <ResourceOverview mode={mode} organizations={organizations} resource={resource} />
+            <ResourceOverview model={model} organizations={organizations} resource={resource} />
           </TabsContent>
           <TabsContent className="mt-5" value="scopes">
             <ScopeRegistry
@@ -613,7 +625,7 @@ export function ApiResourceDetailPage({
           <TabsContent className="mt-5" value="settings">
             <ResourceSettings
               connectors={connectorsQuery.data?.items ?? []}
-              mode={mode}
+              model={model}
               onDelete={() => setDeleteOpen(true)}
               onEditAuthorization={() => setEditor('authorization')}
               onEditDetails={() => setEditor('details')}
@@ -653,29 +665,37 @@ export function ApiResourceDetailPage({
 }
 
 function ResourceOverview({
-  mode,
+  model,
   organizations,
   resource,
 }: {
-  mode: ApiResourceAccessMode
+  model: ApiResourceAuthorizationModel
   organizations: OrganizationResponse[]
   resource: ApiResource
 }) {
   return (
     <div className="detailFlatRows">
       <DetailRow label="Owner" value={ownerLabel(resource.ownerOrganizationId, organizations)} />
-      <DetailRow label="Access model" value={<AccessModeValue mode={mode} />} />
+      <DetailRow label="Authorization" value={<AuthorizationModelValue model={model} />} />
+      <DetailRow
+        label="Provider connection"
+        value={
+          resource.providerConnection?.mode === 'managed'
+            ? tt('Managed by Realmroot')
+            : resource.providerConnection?.mode === 'brokered'
+              ? tt('Brokered by Resource Server')
+              : tt('None')
+        }
+      />
+      <DetailRow
+        label="Final token issuer"
+        value={model === 'realmroot' ? tt('Realmroot') : (resource.authorization?.issuer ?? tt('External issuer'))}
+      />
       <DetailRow label="Visibility" value={resourceVisibilityLabel(resource.visibility)} />
       <DetailRow label="Available to Agents" value={resource.availableToAgents ? tt('Yes') : tt('No')} />
       <DetailRow label="Protected resource URL" value={<code>{resource.resourceUrl}</code>} />
       <DetailRow label="Identifier" value={<code>{resource.identifier}</code>} />
-      {resource.connectorId ? (
-        <DetailRow
-          label="Credential path"
-          value={mode === 'realmroot' ? tt('Realmroot Token plus Provider Connection') : tt('Provider connection')}
-        />
-      ) : null}
-      {mode === 'external_oauth' ? (
+      {model === 'federated' ? (
         <>
           <DetailRow label="Issuer" value={<code>{resource.authorization?.issuer ?? tt('Not configured')}</code>} />
           <DetailRow
@@ -858,7 +878,7 @@ function ScopeRequirements({ scopeSets }: { scopeSets: string[][] }) {
 
 function ResourceSettings({
   connectors,
-  mode,
+  model,
   onDelete,
   onEditAuthorization,
   onEditDetails,
@@ -868,7 +888,7 @@ function ResourceSettings({
   resource,
 }: {
   connectors: ConnectorResponse[]
-  mode: ApiResourceAccessMode
+  model: ApiResourceAuthorizationModel
   onDelete: () => void
   onEditAuthorization: () => void
   onEditDetails: () => void
@@ -877,7 +897,7 @@ function ResourceSettings({
   organizations: OrganizationResponse[]
   resource: ApiResource
 }) {
-  const connectorId = resource.authorization?.connectorId ?? resource.connectorId
+  const connectorId = resource.authorization?.connectorId ?? resource.providerConnection?.connectorId
   const connector = connectors.find((candidate) => candidate.id === connectorId)
   return (
     <div className="detailSections">
@@ -895,7 +915,7 @@ function ResourceSettings({
         <DetailRow label="Protected resource URL" value={<code>{resource.resourceUrl}</code>} />
         <DetailRow label="Description" value={resource.description ?? tt('Not configured')} />
       </DetailSection>
-      {mode !== 'realmroot' || resource.connectorId ? (
+      {resource.providerConnection ? (
         <DetailSection
           action={
             <Button onClick={onEditAuthorization} variant="outline">
@@ -903,9 +923,9 @@ function ResourceSettings({
             </Button>
           }
           description={
-            mode === 'realmroot'
-              ? 'Realmroot Token plus Provider Connection for delegated provider credentials.'
-              : 'Provider association and authorization detail templates for this immutable access model.'
+            resource.providerConnection.mode === 'managed'
+              ? 'Realmroot manages the Provider Connection credentials.'
+              : 'The Resource Server brokers the Provider Connection credentials.'
           }
           title="Provider access"
         >
@@ -922,10 +942,8 @@ function ResourceSettings({
               )
             }
           />
-          {mode === 'external_oauth' ? (
-            <DetailRow label="Issuer" value={resource.authorization?.issuer ?? '—'} />
-          ) : null}
-          {mode !== 'realmroot' ? (
+          {model === 'federated' ? <DetailRow label="Issuer" value={resource.authorization?.issuer ?? '—'} /> : null}
+          {model === 'federated' || resource.providerConnection.mode === 'brokered' ? (
             <DetailRow
               label="Authorization detail templates"
               value={
@@ -939,7 +957,7 @@ function ResourceSettings({
               }
             />
           ) : null}
-          {mode === 'external_oauth' ? (
+          {model === 'federated' ? (
             <DetailRow label="Connection status" value={resource.authorization?.status ?? tt('Pending validation')} />
           ) : null}
         </DetailSection>
@@ -1020,12 +1038,12 @@ function ResourceEditorSheet({
   const [authorizationDetails, setAuthorizationDetails] = useState(
     JSON.stringify(resource.authorizationDetails, null, 2),
   )
-  const [connectorId, setConnectorId] = useState(resource.connectorId ?? '')
+  const [connectorId, setConnectorId] = useState(resource.providerConnection?.connectorId ?? '')
   const [validationError, setValidationError] = useState<string | null>(null)
   useEffect(() => {
     setValidationError(null)
     setAuthorizationDetails(JSON.stringify(resource.authorizationDetails, null, 2))
-    setConnectorId(resource.connectorId ?? '')
+    setConnectorId(resource.providerConnection?.connectorId ?? '')
     if (editor !== 'visibility') return
     setOwnerOrganizationId(resource.ownerOrganizationId)
     setVisibility(resource.visibility)
@@ -1095,8 +1113,10 @@ function ResourceEditorSheet({
               try {
                 setValidationError(null)
                 onSave({
-                  connectorId: connectorId || null,
-                  ...(resource.accessMode === 'realmroot'
+                  providerConnection: resource.providerConnection
+                    ? { ...resource.providerConnection, connectorId }
+                    : null,
+                  ...(resource.authorizationModel === 'realmroot' && resource.providerConnection?.mode !== 'brokered'
                     ? { authorizationDetails: [] }
                     : { authorizationDetails: parseAuthorizationDetails(authorizationDetails) }),
                 })
@@ -1107,25 +1127,21 @@ function ResourceEditorSheet({
           >
             <Field
               help={
-                resource.accessMode === 'realmroot'
-                  ? tt('Optional. Uses Realmroot Token plus Provider Connection for delegated provider credentials.')
-                  : undefined
+                resource.providerConnection?.mode === 'managed'
+                  ? tt('Realmroot manages credentials for this connection.')
+                  : tt('The Resource Server brokers credentials for this connection.')
               }
               label={tt('Provider connector')}
             >
               <SelectInput
                 aria-label={tt('Provider connector')}
                 onChange={(event) => setConnectorId(event.target.value)}
-                required={resource.accessMode !== 'realmroot'}
+                required
                 value={connectorId}
               >
-                <option value="">
-                  {tt(resource.accessMode === 'realmroot' ? 'No provider connection' : 'Select a connector')}
-                </option>
+                <option value="">{tt('Select a connector')}</option>
                 {connectors
-                  .filter(
-                    (connector) => resource.accessMode === 'brokered' || connector.providerType === 'generic_oauth',
-                  )
+                  .filter((connector) => connector.capabilities.resourceAuthorization)
                   .map((connector) => (
                     <option key={connector.id} value={connector.id}>
                       {connector.displayName}
@@ -1134,7 +1150,7 @@ function ResourceEditorSheet({
                   ))}
               </SelectInput>
             </Field>
-            {resource.accessMode !== 'realmroot' ? (
+            {resource.authorizationModel === 'federated' || resource.providerConnection?.mode === 'brokered' ? (
               <Field
                 help={tt(
                   'Opaque RFC 9396 templates sent to the authorization server. Each array entry must contain a non-empty type.',

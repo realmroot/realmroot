@@ -36,7 +36,7 @@ function oidcConnector(overrides: Record<string, unknown> = {}) {
     providerId: 'projects',
     displayName: 'Projects OIDC',
     enabled: false,
-    loginEnabled: true,
+    authenticationEnabled: true,
     clientSecretConfigured: false,
     issuer: 'https://idp.example.com',
     registrationMode: 'manual' as const,
@@ -94,7 +94,7 @@ describe('admin console Identity providers', () => {
           clientId: 'client-1',
           clientSecret: 'secret-1',
           enabled: true,
-          loginEnabled: true,
+          authenticationEnabled: true,
           scopes: ['openid', 'profile'],
         }),
       ]),
@@ -140,7 +140,7 @@ describe('admin console Identity providers', () => {
       const url = String(input)
       if (url === '/api/connectors/connector-oidc' && init?.method === 'PATCH') {
         requests.push({ method: init.method, body: JSON.parse(String(init.body)) })
-        return Promise.resolve(jsonResponse({ ...selected, enabled: true, loginEnabled: false }))
+        return Promise.resolve(jsonResponse({ ...selected, enabled: true, authenticationEnabled: false }))
       }
       if (url === '/api/connectors/connector-oidc' && init?.method === 'DELETE') {
         requests.push({ method: init.method })
@@ -165,7 +165,7 @@ describe('admin console Identity providers', () => {
     await waitFor(() => expect(requests.some((request) => request.method === 'PATCH')).toBe(true))
     expect(requests.find((request) => request.method === 'PATCH')?.body).toMatchObject({
       enabled: true,
-      loginEnabled: false,
+      authenticationEnabled: false,
       clientId: 'client-2',
     })
 

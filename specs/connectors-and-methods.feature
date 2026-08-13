@@ -50,10 +50,19 @@ Feature: Connectors and hosted method availability
 
   @entrypoint:product-ui @journey:oidc-login
   Scenario: A standard OIDC connector can provide hosted login
-    Given an enabled OIDC connector has login enabled
+    Given an enabled OIDC connector has authentication enabled
     When I open hosted sign-in
     Then the OIDC connector is offered as a sign-in method
     And disabling login removes it without deleting the connector
+
+  @entrypoint:product-ui @journey:connector-capabilities
+  Scenario: Connector drivers expose independent authentication and resource authorization capabilities
+    Given Connector drivers may support authentication, resource authorization, or both
+    When I configure a Connector
+    Then the Console only offers authentication when its driver supports authentication
+    And only Connectors whose driver supports resource authorization may be bound to a Resource Server
+    And a dual-purpose Connector uses separate callbacks, state, token storage, and business semantics for each purpose
+    And disabling authentication does not disable Resource Servers that reference that Connector
 
   @entrypoint:product-ui @journey:connector-secret-upgrade
   Scenario: Existing connector credentials survive encrypted-custody upgrades

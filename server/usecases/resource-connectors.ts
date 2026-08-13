@@ -1,3 +1,5 @@
+import { connectorCapabilities } from '@server/domain/connectors/provider-templates'
+import { resourceOAuthDriver } from '@server/domain/connectors/resource-oauth-driver'
 import { badRequest, notFound } from '@server/domain/errors'
 import type { Deps } from '@server/usecases/deps'
 import { type ProtectedResourceMetadata, readProtectedResourceMetadata } from '@server/usecases/resource-metadata'
@@ -87,23 +89,31 @@ export async function validateExternalResourceConnector(
   return protectedMetadata
 }
 
-export async function validateConnectorBackedNativeResource(deps: Deps, connectorId: string, resourceScopes: string[]) {
+export async function validateConnectorBackedNativeResource(
+  deps: Deps,
+  connectorId: string,
+  resourceScopes: string[],
+  authorizationDetails: AuthorizationDetail[] = [],
+  supportedAuthorizationDetailTypes: string[] = [],
+) {
   const connector = await deps.connectors.findById(connectorId)
-  if (!connector || connector.providerType !== 'generic_oauth') {
-    throw notFound('OIDC connector was not found.')
-  }
-  if (!connector.enabled || !connector.clientId || !connector.clientSecret || !connector.issuer) {
-    throw badRequest('OIDC connector must be enabled and have complete client credentials.')
+  if (!connector) {
+    throw notFound('Provider Connector was not found.')
   }
   if (
-    !connector.authorizationEndpoint ||
-    !connector.tokenEndpoint ||
-    !connector.userInfoEndpoint ||
-    !connector.jwksEndpoint ||
-    !connector.revocationEndpoint
+    !connectorCapabilities(connector.providerType as 'social' | 'generic_oauth', connector.providerId)
+      .resourceAuthorization
   ) {
-    throw badRequest('OIDC connector is missing endpoints required for provider account connections.')
+    throw badRequest('Connector driver does not support resource authorization.')
   }
+  if (!connector.enabled || !connector.clientId || !connector.clientSecret || !resourceOAuthDriver(connector)) {
+    throw badRequest('Provider Connector must be enabled and have complete resource authorization credentials.')
+  }
+  if (authorizationDetails.some((detail) => !supportedAuthorizationDetailTypes.includes(detail.type))) {
+    throw badRequest('Resource Server does not support every configured authorization detail type.')
+  }
+
+  if (connector.providerType !== 'generic_oauth') return
 
   const grants = stringArray(connector.providerMetadata?.grant_types_supported)
   if (!grants.includes('authorization_code') || !grants.includes('refresh_token')) {
@@ -114,8 +124,12 @@ export async function validateConnectorBackedNativeResource(deps: Deps, connecto
     throw badRequest('OIDC connector must support S256 PKCE.')
   }
   const authenticationMethods = stringArray(connector.providerMetadata?.token_endpoint_auth_methods_supported)
-  if (authenticationMethods.length > 0 && !authenticationMethods.includes('client_secret_basic')) {
-    throw badRequest('OIDC connector must support client_secret_basic token endpoint authentication.')
+  if (
+    authenticationMethods.length > 0 &&
+    !authenticationMethods.includes('client_secret_basic') &&
+    !authenticationMethods.includes('client_secret_post')
+  ) {
+    throw badRequest('OIDC connector must support client_secret_basic or client_secret_post authentication.')
   }
 
   const allowedScopes = new Set(connector.registeredScopes ?? connector.scopes ?? [])

@@ -12,6 +12,9 @@ const optionalUrl = z.url().optional()
 const scopesSchema = z.array(nonEmptyString)
 
 export const connectorProviderMetadataSchema = z.record(z.string(), z.unknown())
+export const connectorCapabilitiesSchema = z
+  .object({ authentication: z.boolean(), resourceAuthorization: z.boolean() })
+  .strict()
 
 const connectorEndpointMetadataSchema = z.object({
   issuer: z.string().nullable(),
@@ -26,6 +29,7 @@ export const connectorTemplateSchema = z.object({
   providerId: z.string(),
   displayName: z.string(),
   icon: z.string(),
+  capabilities: connectorCapabilitiesSchema,
   requiredFields: z.array(z.string()),
   optionalFields: z.array(z.string()),
   defaultScopes: z.array(z.string()),
@@ -39,7 +43,8 @@ export const connectorResponseSchema = z.object({
   providerId: z.string(),
   displayName: z.string(),
   enabled: z.boolean(),
-  loginEnabled: z.boolean(),
+  capabilities: connectorCapabilitiesSchema,
+  authenticationEnabled: z.boolean(),
   clientId: z.string().nullable(),
   clientSecretConfigured: z.boolean(),
   issuer: z.string().nullable(),
@@ -81,7 +86,7 @@ export const createConnectorRequestSchema = z
     providerId: nonEmptyString,
     displayName: nonEmptyString,
     enabled: z.boolean().optional(),
-    loginEnabled: z.boolean().optional(),
+    authenticationEnabled: z.boolean().optional(),
     registrationMode: oidcClientRegistrationModeSchema.optional(),
     clientId: nonEmptyString.optional(),
     clientSecret: nonEmptyString.optional(),
@@ -106,7 +111,7 @@ export const updateConnectorRequestSchema = z.object({
     .optional(),
   displayName: nonEmptyString.optional(),
   enabled: z.boolean().optional(),
-  loginEnabled: z.boolean().optional(),
+  authenticationEnabled: z.boolean().optional(),
   clientId: nonEmptyString.nullable().optional(),
   clientSecret: nonEmptyString.nullable().optional(),
   scopes: scopesSchema.optional(),

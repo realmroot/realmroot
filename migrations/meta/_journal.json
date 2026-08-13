@@ -344,6 +344,13 @@
       "when": 1786544442000,
       "tag": "20260812142042_application_authorization_source",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "6",
+      "when": 1786601873751,
+      "tag": "20260813061753_resource_authorization_connectors",
+      "breakpoints": true
     }
   ]
 }

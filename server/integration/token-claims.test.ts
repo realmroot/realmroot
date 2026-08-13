@@ -98,7 +98,7 @@ describe('OAuth token claim building over real D1', () => {
       await postJson(harness, cookie, '/api/resource-servers', {
         identifier: 'contacts-api',
         resourceUrl: audience,
-        accessMode: 'realmroot',
+        authorizationModel: 'realmroot',
         ownerOrganizationId: organization.id,
       })
     ).json()) as { id: string }
@@ -270,7 +270,7 @@ describe('OAuth token claim building over real D1', () => {
     await postJson(harness, cookie, '/api/resource-servers', {
       identifier: 'foreign-contacts-api',
       resourceUrl: audience,
-      accessMode: 'realmroot',
+      authorizationModel: 'realmroot',
       ownerOrganizationId: foreignOrganization.id,
       visibility: 'private',
     })
@@ -278,7 +278,7 @@ describe('OAuth token claim building over real D1', () => {
       await postJson(harness, cookie, '/api/resource-servers', {
         identifier: 'owner-contacts-api',
         resourceUrl: ownerAudience,
-        accessMode: 'realmroot',
+        authorizationModel: 'realmroot',
         ownerOrganizationId: ownerOrganization.id,
         visibility: 'private',
       })

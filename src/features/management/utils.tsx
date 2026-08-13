@@ -69,7 +69,7 @@ export function connectorToForm(connector: ConnectorResponse | null): FormState 
     slug: connector.slug,
     displayName: connector.displayName,
     enabled: String(connector.enabled),
-    loginEnabled: String(connector.loginEnabled),
+    authenticationEnabled: String(connector.authenticationEnabled),
     registrationMode: connector.registrationMode ?? 'manual',
     clientId: connector.clientId ?? '',
     clientSecret: '',

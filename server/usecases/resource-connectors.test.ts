@@ -12,6 +12,26 @@ const jwtBearerGrant = 'urn:ietf:params:oauth:grant-type:jwt-bearer'
 const tokenExchangeGrant = 'urn:ietf:params:oauth:grant-type:token-exchange'
 
 describe('external resource connector validation', () => {
+  it('[spec: agent-identity/linear-managed-workspace-connections] accepts Linear as a managed resource OAuth driver', async () => {
+    const deps = createDeps({
+      connector: connector({
+        providerType: 'social',
+        providerId: 'linear',
+        issuer: null,
+        authorizationEndpoint: null,
+        tokenEndpoint: null,
+        userInfoEndpoint: null,
+        jwksEndpoint: null,
+        revocationEndpoint: null,
+        scopes: ['read', 'issues:create'],
+      }),
+    })
+
+    await expect(
+      validateConnectorBackedNativeResource(deps, 'connector-1', ['read', 'issues:create']),
+    ).resolves.toBeUndefined()
+  })
+
   it('accepts a complete OIDC connector and preserves the resource path in metadata discovery', async () => {
     const deps = createDeps()
 
@@ -241,10 +261,10 @@ describe('connector-backed native resource connector validation', () => {
   }
 
   it.each([
-    ['missing connector', null, 'OIDC connector was not found'],
-    ['wrong connector type', connector({ providerType: 'social' }), 'OIDC connector was not found'],
+    ['missing connector', null, 'Provider Connector was not found'],
+    ['unsupported driver', connector({ providerType: 'social' }), 'does not support resource authorization'],
     ['disabled connector', connector({ enabled: false }), 'must be enabled'],
-    ['missing endpoint', connector({ revocationEndpoint: null }), 'is missing endpoints'],
+    ['missing endpoint', connector({ revocationEndpoint: null }), 'complete resource authorization credentials'],
     [
       'missing refresh grant',
       connector({
@@ -270,10 +290,10 @@ describe('connector-backed native resource connector validation', () => {
       connector({
         providerMetadata: {
           ...completeNativeMetadata,
-          token_endpoint_auth_methods_supported: ['client_secret_post'],
+          token_endpoint_auth_methods_supported: ['private_key_jwt'],
         },
       }),
-      'must support client_secret_basic',
+      'must support client_secret_basic or client_secret_post',
     ],
   ])('rejects %s', async (_label, connectorValue, message) => {
     const deps = createDeps({ connector: connectorValue })
@@ -356,7 +376,7 @@ function connector(overrides: Partial<ConnectorRow> = {}): ConnectorRow {
     providerId: 'projects',
     displayName: 'Projects',
     enabled: true,
-    loginEnabled: false,
+    authenticationEnabled: false,
     clientId: 'client-1',
     clientSecret: 'secret-1',
     clientSecretContext: null,

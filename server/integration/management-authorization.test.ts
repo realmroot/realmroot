@@ -13,6 +13,7 @@ import {
   member,
   organizationRole,
   providerConnection,
+  providerCredential,
   providerResourceAuthorization,
   resourceConnectionIntent,
   resourceScopeEntitlement,
@@ -158,7 +159,7 @@ describe('authorization management over real D1', () => {
     const auditResource = await createResource(harness.deps, {
       identifier: 'personal-audit-resource',
       resourceUrl: 'https://personal-audit.example.com/api',
-      accessMode: 'realmroot',
+      authorizationModel: 'realmroot',
       ownerOrganizationId: platformOrganizationId,
     })
     await harness.db.insert(agentAuditEvent).values({
@@ -303,7 +304,7 @@ describe('authorization management over real D1', () => {
     const resource = await createResource(harness.deps, {
       identifier: 'atomic-agent-api',
       resourceUrl: 'https://atomic-agent.example.com/api',
-      accessMode: 'realmroot',
+      authorizationModel: 'realmroot',
       ownerOrganizationId: platformOrganizationId,
     })
     await harness.db.insert(agentHost).values({
@@ -684,7 +685,7 @@ describe('authorization management over real D1', () => {
       await postJson(harness, cookie, '/api/resource-servers', {
         identifier: 'grant-api',
         resourceUrl: 'https://grant.example.com/api',
-        accessMode: 'realmroot',
+        authorizationModel: 'realmroot',
         ownerOrganizationId: platformOrganizationId,
         visibility: 'public',
       })
@@ -872,7 +873,7 @@ describe('authorization management over real D1', () => {
       providerId: 'rar-projects',
       displayName: 'RAR Projects',
       enabled: true,
-      loginEnabled: false,
+      authenticationEnabled: false,
       clientId: 'rar-projects-client',
       clientSecret: 'rar-projects-secret',
       clientSecretContext: null,
@@ -922,8 +923,8 @@ describe('authorization management over real D1', () => {
     const created = await postJson(harness, cookie, '/api/resource-servers', {
       identifier: 'rar-projects-api',
       resourceUrl: 'https://projects.example.com/api',
-      accessMode: 'external_oauth',
-      connectorId: connector.id,
+      authorizationModel: 'federated',
+      providerConnection: { connectorId: connector.id, mode: 'managed' as const },
       ownerOrganizationId: platformOrganizationId,
       authorizationDetails,
     })
@@ -958,7 +959,7 @@ describe('authorization management over real D1', () => {
     const input = {
       identifier: 'projects-api',
       resourceUrl: 'https://projects.example.com/api',
-      accessMode: 'realmroot' as const,
+      authorizationModel: 'realmroot' as const,
       ownerOrganizationId: platformOrganizationId,
     }
 
@@ -987,7 +988,7 @@ describe('authorization management over real D1', () => {
       providerId: 'projects',
       displayName: 'Projects OIDC',
       enabled: true,
-      loginEnabled: false,
+      authenticationEnabled: false,
       clientId: 'projects-client',
       clientSecret: 'projects-secret',
       clientSecretContext: null,
@@ -1032,8 +1033,8 @@ describe('authorization management over real D1', () => {
     const resource = await createResource(harness.deps, {
       identifier: 'projects-api',
       resourceUrl: 'https://projects.example.com/api',
-      accessMode: 'external_oauth',
-      connectorId: connector.id,
+      authorizationModel: 'federated',
+      providerConnection: { connectorId: connector.id, mode: 'managed' as const },
       ownerOrganizationId: platformOrganizationId,
     })
 
@@ -1056,7 +1057,7 @@ describe('authorization management over real D1', () => {
       await postJson(harness, cookie, '/api/resource-servers', {
         identifier: 'https://api.example.com',
         resourceUrl: 'https://api.example.com',
-        accessMode: 'realmroot',
+        authorizationModel: 'realmroot',
         ownerOrganizationId: platformOrganizationId,
       })
     ).json()) as { id: string }
@@ -1121,7 +1122,7 @@ describe('authorization management over real D1', () => {
       await postJson(harness, cookie, '/api/resource-servers', {
         identifier: 'history-api',
         resourceUrl: 'https://history.example.com/api',
-        accessMode: 'realmroot',
+        authorizationModel: 'realmroot',
         ownerOrganizationId: platformOrganizationId,
       })
     ).json()) as { id: string }
@@ -1129,7 +1130,7 @@ describe('authorization management over real D1', () => {
       await postJson(harness, cookie, '/api/resource-servers', {
         identifier: 'retained-history-api',
         resourceUrl: 'https://retained-history.example.com/api',
-        accessMode: 'realmroot',
+        authorizationModel: 'realmroot',
         ownerOrganizationId: platformOrganizationId,
       })
     ).json()) as { id: string }
@@ -1182,7 +1183,17 @@ describe('authorization management over real D1', () => {
       id: 'connection-history',
       providerConnectionId: 'provider-connection-history',
       resourceId: resource.id,
+      createdAt: now,
+      updatedAt: now,
+    })
+    await harness.db.insert(providerCredential).values({
+      id: 'credential-history',
+      providerResourceAuthorizationId: 'connection-history',
+      externalSubject: 'admin@example.com',
+      displayName: 'Admin connection',
+      credentialCustody: 'realmroot',
       encryptedTokens: 'encrypted-tokens',
+      brokerReference: null,
       grantedScopes: ['files:read'],
       createdAt: now,
       updatedAt: now,
@@ -1298,7 +1309,7 @@ describe('authorization management over real D1', () => {
       providerId: 'conditional',
       displayName: 'Conditional OIDC',
       enabled: true,
-      loginEnabled: false,
+      authenticationEnabled: false,
       clientId: 'conditional-client',
       clientSecret: 'conditional-secret',
       clientSecretContext: null,
@@ -1339,8 +1350,8 @@ describe('authorization management over real D1', () => {
     const resource = await createResource(harness.deps, {
       identifier: 'conditional-external',
       resourceUrl: 'https://conditional.example.com/api',
-      accessMode: 'external_oauth',
-      connectorId: connector.id,
+      authorizationModel: 'federated',
+      providerConnection: { connectorId: connector.id, mode: 'managed' as const },
       ownerOrganizationId: platformOrganizationId,
     })
 
@@ -1364,7 +1375,7 @@ describe('authorization management over real D1', () => {
       await postJson(harness, cookie, '/api/resource-servers', {
         identifier: 'deleted-api',
         resourceUrl: 'https://deleted.example.com/api',
-        accessMode: 'realmroot',
+        authorizationModel: 'realmroot',
         ownerOrganizationId: platformOrganizationId,
       })
     ).json()) as { id: string }
@@ -1432,7 +1443,18 @@ describe('authorization management over real D1', () => {
       id: 'deleted-connection',
       providerConnectionId: 'provider-connection-deleted',
       resourceId: resource.id,
+      status: 'active',
+      createdAt: now,
+      updatedAt: now,
+    })
+    await harness.db.insert(providerCredential).values({
+      id: 'deleted-credential',
+      providerResourceAuthorizationId: 'deleted-connection',
+      externalSubject: 'admin@example.com',
+      displayName: 'Deleted connection',
+      credentialCustody: 'realmroot',
       encryptedTokens: 'encrypted-tokens',
+      brokerReference: null,
       grantedScopes: ['files:read'],
       status: 'active',
       createdAt: now,

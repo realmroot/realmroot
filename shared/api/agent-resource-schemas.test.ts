@@ -7,28 +7,30 @@ import {
 import { describe, expect, it } from 'vitest'
 
 describe('Agent resource schemas', () => {
-  it('requires an explicit Resource Server access mode', () => {
+  it('requires an explicit Resource Server authorization model', () => {
     const input = {
       identifier: 'projects',
       resourceUrl: 'https://projects.example.com',
-      accessMode: 'external_oauth' as const,
-      connectorId: 'connector-1',
+      authorizationModel: 'federated' as const,
+      providerConnection: { connectorId: 'connector-1', mode: 'managed' as const },
       ownerOrganizationId: 'org-1',
     }
 
     expect(createApiResourceSchema.safeParse(input).success).toBe(true)
-    expect(createApiResourceSchema.safeParse({ ...input, accessMode: undefined }).success).toBe(false)
-    expect(createApiResourceSchema.safeParse({ ...input, connectorId: '' }).success).toBe(false)
-    expect(updateApiResourceSchema.safeParse({ accessMode: 'realmroot' }).success).toBe(false)
-    expect(updateApiResourceSchema.safeParse({ connectorId: null }).success).toBe(true)
+    expect(createApiResourceSchema.safeParse({ ...input, authorizationModel: undefined }).success).toBe(false)
+    expect(
+      createApiResourceSchema.safeParse({ ...input, providerConnection: { connectorId: '', mode: 'managed' } }).success,
+    ).toBe(false)
+    expect(updateApiResourceSchema.safeParse({ authorizationModel: 'realmroot' }).success).toBe(false)
+    expect(updateApiResourceSchema.safeParse({ providerConnection: null }).success).toBe(true)
   })
 
   it('preserves opaque JSON authorization details and rejects malformed values', () => {
     const input = {
       identifier: 'projects',
       resourceUrl: 'https://projects.example.com',
-      accessMode: 'external_oauth' as const,
-      connectorId: 'connector-1',
+      authorizationModel: 'federated' as const,
+      providerConnection: { connectorId: 'connector-1', mode: 'managed' as const },
       ownerOrganizationId: 'org-1',
       authorizationDetails: [
         {
