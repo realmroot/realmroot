@@ -25,7 +25,9 @@ export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     // Liveness probe answers from the process alone — before any D1 read — so it
     // reports the worker is up even when the database is unmigrated or down.
-    if (new URL(request.url).pathname === '/api/health') return Response.json(healthStatus)
+    const path = new URL(request.url).pathname
+    if (path === '/api/health') return Response.json(healthStatus)
+    if (path.startsWith('/.well-known/agent-skills/')) return env.ASSETS.fetch(request)
     const config = validateEnv(env, request.url)
     const deps = createDeps(env, config)
     await reconcileRealmrootResourceServer(deps, config.baseURL)

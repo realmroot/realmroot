@@ -22,6 +22,7 @@ These requirements apply to native and external Resource Servers.
 | `RESOURCE-METADATA` | REQUIRED | Publish RFC 9728 metadata for the exact URL with matching `resource` and non-empty `scopes_supported`. External mode also publishes exactly one `authorization_servers` issuer. |
 | `API-SERVICE-DESC` | REQUIRED | Return a successful unauthenticated response from the exact resource URL with an RFC 8631 `service-desc` link. |
 | `API-OPENAPI` | REQUIRED | Serve a live OpenAPI 3.x document from that link. Declare OAuth/OIDC scopes for operations exposed to Agents, and keep every declared scope within RFC 9728 `scopes_supported`. |
+| `AGENT-SKILLS-DISCOVERY` | RECOMMENDED | Publish an Agent Skills Discovery v0.2.0 index at `/.well-known/agent-skills/index.json` on the Resource Server origin, with a skill that teaches Agents how to use the service through Realmroot Toolbox. |
 | `ACTOR-CHAIN` | REQUIRED | Preserve the controlling subject and stable Agent as distinct identities in the issued authority and audit boundary. |
 | `ACTOR-PROFILE` | REQUIRED | Classify the verified Agent actor with `sub_profile: ai_agent` without treating classification as identity or permission. |
 | `ACTOR-NATIVE` | REQUIRED | Represent the stable Agent as a distinct non-human actor in authorization and audit records; a shared application actor or content footer is insufficient. |
