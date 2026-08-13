@@ -5,8 +5,8 @@
   { "method": "GET", "path": "/connectors/{connectorId}", "operationId": "getConnector", "semanticHash": "092894f18e5f1e9e8b42b07fafc7a1fc8f5cb8b03802d7d18a93ab3ceed85372" },
   { "method": "PATCH", "path": "/connectors/{connectorId}", "operationId": "updateConnector", "semanticHash": "ce3ab57a5e906cff2318361720421b6aa85c7dd5ed2e5c8336451e31652f6943" },
   { "method": "GET", "path": "/connectors/templates", "operationId": "listConnectorTemplates", "semanticHash": "58c3689de4ba582a822e63a9df53d41e1d63ce4bcdb22ee956a17a6e6deed635" },
-  { "method": "GET", "path": "/resource-servers", "operationId": "listResourceServers", "semanticHash": "86110e0365c02b979b644f8474765a9d0f8bbb7dcc40eb5f671724156ff4729a" },
-  { "method": "POST", "path": "/resource-servers", "operationId": "createResourceServer", "semanticHash": "b69dd9ee346fd96171019358f72501542415f9527b1e1095362f2c1c58e22407" },
-  { "method": "GET", "path": "/resource-servers/{resourceServerId}", "operationId": "getResourceServer", "semanticHash": "ff854588857151f18c947ce672161b97a202d93f83206a5d839d9fa7d64b462c" },
-  { "method": "PATCH", "path": "/resource-servers/{resourceServerId}", "operationId": "updateResourceServer", "semanticHash": "4b2df007f84bbda70d6db785de72b66d10eaa8ec2301483883e01b9b4151319f" }
+  { "method": "GET", "path": "/resource-servers", "operationId": "listResourceServers", "semanticHash": "e4eb8ea6b2f2026f33d88e252baef709264510584f6bc51c106a6c4346157289" },
+  { "method": "POST", "path": "/resource-servers", "operationId": "createResourceServer", "semanticHash": "bd2c092b0c5a7d2e2ae56ab276bd56911cffd0fd88e8b5348705e1225d96e09b" },
+  { "method": "GET", "path": "/resource-servers/{resourceServerId}", "operationId": "getResourceServer", "semanticHash": "87ff6a2c9020b59319aaff2f3ac56217df3c6fe71e0132ea1fe4ad1bba6daed4" },
+  { "method": "PATCH", "path": "/resource-servers/{resourceServerId}", "operationId": "updateResourceServer", "semanticHash": "f9cf9b43df7bf8d558c4676436b8293621675d904cb8d37b432803b21690efa8" }
 ]
