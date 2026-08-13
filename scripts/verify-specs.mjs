@@ -13,9 +13,9 @@ import { fileURLToPath } from 'node:url'
 //      hermetic Playwright crown; it does not change the tracing requirement.
 const repoRoot = fileURLToPath(new URL('..', import.meta.url))
 const specsDir = join(repoRoot, 'specs')
-// Tests are co-located beside source (server/, src/, shared/, plugins/) and the
+// Tests are co-located beside source (server/, src/, shared/) and the
 // Playwright crown lives in e2e/; breadcrumbs can appear in any of them.
-const breadcrumbDirs = ['e2e', 'plugins', 'server', 'src', 'shared'].map((dir) => join(repoRoot, dir))
+const breadcrumbDirs = ['e2e', 'server', 'src', 'shared'].map((dir) => join(repoRoot, dir))
 
 const supportedEntrypoints = new Set(['agent-protocol', 'product-ui', 'restish'])
 const scenarios = readScenarios(specsDir)

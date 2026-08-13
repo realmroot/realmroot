@@ -7,8 +7,6 @@
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
-    "plugin:build": "cd plugins/restish-realmroot && go build -o restish-realmroot .",
-    "plugin:test": "cd plugins/restish-realmroot && go test ./...",
     "deploy": "pnpm run db:migrate:remote && pnpm run build && wrangler deploy --config dist/realmroot/wrangler.json",
     "deploy:check": "node scripts/check-cloudflare-config.mjs",
     "deploy:fork": "node scripts/deploy-cloudflare-fork.mjs",
@@ -22,7 +20,7 @@
     "db:migrate:prod": "pnpm run db:migrate:remote",
     "routes:generate": "tsr generate",
     "typecheck": "pnpm run routes:generate && tsc --noEmit -p config/tsconfig.server.json && tsc --noEmit -p config/tsconfig.web.json && tsc --noEmit -p config/tsconfig.vitest.json && tsc --noEmit -p config/tsconfig.integration.json && tsc --noEmit -p config/tsconfig.e2e.json",
-    "test": "vitest run && pnpm run plugin:test",
+    "test": "vitest run",
     "test:unit": "vitest run --project unit",
     "test:web": "vitest run --project web",
     "test:backend": "vitest run --project unit --project integration",
