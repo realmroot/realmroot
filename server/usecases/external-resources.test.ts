@@ -3053,6 +3053,7 @@ describe('external API resource authorization', () => {
       items: [
         {
           authorizationDetail: linearDetail,
+          display: { label: 'Acme', metadata: { workspace_name: 'Acme' } },
           connectionStatus: 'authorized',
           requestableScopes: expect.arrayContaining(['projects:read']),
         },
@@ -6038,19 +6039,28 @@ describe('external API resource authorization', () => {
     const connectorNative = {
       ...native,
       providerConnection: { connectorId: 'connector-1', mode: 'managed' as const },
+      authorizationDetails: [{ type: 'linear_workspace' }],
     }
+    const connectorAuthorizationDetails = [
+      { type: 'linear_workspace', workspace_id: 'workspace-1', workspace_name: 'Realmroot' },
+    ]
     const connectorRequest = {
       ...requestRecord(),
       status: 'approved' as const,
+      authorizationDetails: connectorAuthorizationDetails,
       approvedEntitlements: [{ scope: 'projects:read', entitlementId: 'ent_1' }],
     }
     const connectorConnection = connectionWithCredential(connectionRecord(), {
       credentialCustody: 'realmroot',
       encryptedTokens: 'sealed:provider-credentials',
+      authorizationDetails: connectorAuthorizationDetails,
     })
     vi.mocked(deps.authorization.findResource).mockResolvedValue(connectorNative)
     vi.mocked(deps.externalResources.findAccessRequest).mockResolvedValue(connectorRequest)
-    vi.mocked(deps.externalResources.findEntitlement).mockResolvedValue(grantRecord())
+    vi.mocked(deps.externalResources.findEntitlement).mockResolvedValue({
+      ...grantRecord(),
+      authorizationDetails: connectorAuthorizationDetails,
+    })
     vi.mocked(deps.externalResources.findConnection).mockResolvedValue(connectorConnection)
     await expect(
       issueTargetAccessToken(
@@ -6061,7 +6071,10 @@ describe('external API resource authorization', () => {
         principal(),
         { issuer: principal().issuer, sign },
       ),
-    ).resolves.toMatchObject({ accessToken: 'native-access-token' })
+    ).resolves.toMatchObject({
+      accessToken: 'native-access-token',
+      authorizationDetails: connectorAuthorizationDetails,
+    })
     expect(sign).toHaveBeenLastCalledWith(expect.objectContaining({ connection_id: connectorConnection.id }), 'at+jwt')
 
     for (const invalidConnection of [

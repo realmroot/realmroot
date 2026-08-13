@@ -2031,6 +2031,7 @@ async function issueNativeAccessToken(
   const realmrootAuthority = realmroot ? request.authorizationDetails[0] : undefined
   if (realmroot) assertRealmrootAuthoritySelection(request.authorizationDetails)
   const issuedScopes = realmroot ? [...new Set([...agentBootstrapScopes, ...request.scopes])].sort() : request.scopes
+  const issuedAuthorizationDetails = realmroot || connection ? request.authorizationDetails : []
   const accessToken = await signer.sign(
     {
       iss: signer.issuer,
@@ -2077,7 +2078,7 @@ async function issueNativeAccessToken(
     tokenHash: await sha256(accessToken),
     confirmationJkt,
     scopes: request.scopes,
-    authorizationDetails: realmroot || brokered ? request.authorizationDetails : [],
+    authorizationDetails: issuedAuthorizationDetails,
     expiresAt,
     revokedAt: null,
     createdAt: now,
@@ -2091,7 +2092,7 @@ async function issueNativeAccessToken(
     request,
     accessRequestId: request.id,
     scopes: request.scopes,
-    authorizationDetails: realmroot || brokered ? request.authorizationDetails : [],
+    authorizationDetails: issuedAuthorizationDetails,
     reasonCode: null,
   })
   const lease = await deps.externalResources.issueTokenLeaseWithAudit(
@@ -2107,7 +2108,7 @@ async function issueNativeAccessToken(
     expiresIn: Math.max(1, Math.floor((expiresAt.getTime() - now.getTime()) / 1000)),
     expiresAt: expiresAt.toISOString(),
     scopes: request.scopes,
-    authorizationDetails: realmroot || brokered ? request.authorizationDetails : [],
+    authorizationDetails: issuedAuthorizationDetails,
     resourceUrl: resource.resourceUrl,
     dpopNonce: null,
   }
@@ -2790,9 +2791,14 @@ async function serviceResourceFallbackAuthorization(
 }
 
 function authorizationDetailDisplay(detail: AuthorizationDetail) {
-  const identifier = Object.entries(detail).find(
+  const entries = Object.entries(detail).filter(
     ([key, value]) => key !== 'type' && (typeof value === 'string' || typeof value === 'number'),
   )
+  const identifier =
+    entries.find(([key]) => key === 'name') ??
+    entries.find(([key]) => key.endsWith('_name')) ??
+    entries.find(([key]) => key === 'label' || key.endsWith('_label')) ??
+    entries[0]
   const label = identifier ? String(identifier[1]) : detail.type
   return { label, description: null, metadata: identifier ? { [identifier[0]]: label } : {} }
 }
