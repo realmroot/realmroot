@@ -27,6 +27,8 @@ const authorityConstraintCleanupMigrationName = '20260813165958_sparkling_jimmy_
 const linearWorkspaceConnectionMigrationName = '20260813184104_linear_workspace_connection.sql'
 const linearAuthorizationCleanupMigrationName = '20260813184558_revoke_legacy_linear_authorization.sql'
 const providerIdentityAlignmentMigrationName = '20260813184930_align_resource_provider_identity.sql'
+const scopeRegistryCleanupMigrationName = '20260813204636_remove_account_connection_scope_registry.sql'
+const staleEntitlementCleanupMigrationName = '20260813211853_cleanup_stale_agent_entitlements.sql'
 
 describe('tenant ownership migration', () => {
   it('backfills authority constraints for existing brokered connections', () => {
@@ -99,6 +101,8 @@ describe('tenant ownership migration', () => {
             linearWorkspaceConnectionMigrationName,
             linearAuthorizationCleanupMigrationName,
             providerIdentityAlignmentMigrationName,
+            scopeRegistryCleanupMigrationName,
+            staleEntitlementCleanupMigrationName,
           ].includes(name),
       )) {
         database.exec(readFileSync(new URL(`../../migrations/${name}`, import.meta.url), 'utf8'))
@@ -161,6 +165,12 @@ describe('tenant ownership migration', () => {
       )
       database.exec(
         readFileSync(new URL(`../../migrations/${providerIdentityAlignmentMigrationName}`, import.meta.url), 'utf8'),
+      )
+      database.exec(
+        readFileSync(new URL(`../../migrations/${scopeRegistryCleanupMigrationName}`, import.meta.url), 'utf8'),
+      )
+      database.exec(
+        readFileSync(new URL(`../../migrations/${staleEntitlementCleanupMigrationName}`, import.meta.url), 'utf8'),
       )
 
       expect(columnNames(database, 'application')).not.toContain('owner_user_id')
