@@ -15,6 +15,72 @@ import type { ConnectorRepository } from '@server/usecases/ports'
 import { describe, expect, it, vi } from 'vitest'
 
 describe('service.test 2', () => {
+  it('rejects resource authorization for a Connector driver without that capability', async () => {
+    const deps = { connectors: createRepository() } as unknown as Deps
+
+    await expect(
+      createConnector(deps, {
+        providerType: 'social',
+        providerId: 'google',
+        displayName: 'Google',
+        enabled: false,
+        resourceAuthorization: {
+          enabled: true,
+          registrationMode: 'manual',
+          clientId: 'client',
+          clientSecret: 'secret',
+          issuer: 'https://resource.example.com',
+        },
+      }),
+    ).rejects.toThrow('Connector driver does not support resource authorization.')
+  })
+
+  it.each([
+    'resourceClientId',
+    'resourceClientSecret',
+    'resourceIssuer',
+    'resourceAuthorizationEndpoint',
+    'resourceTokenEndpoint',
+    'resourceUserInfoEndpoint',
+    'resourceJwksEndpoint',
+    'resourceRevocationEndpoint',
+  ] as const)('rejects an enabled resource authorization missing %s', async (field) => {
+    const current = dynamicConnector({ [field]: null })
+    const deps = { connectors: createRepository({ byId: current }) } as unknown as Deps
+
+    await expect(updateConnector(deps, current.id, { displayName: 'Updated' })).rejects.toThrow(
+      'Enabled resource authorization requires a complete external OAuth client.',
+    )
+  })
+
+  it('clears every resource OAuth field when resource authorization is disabled', async () => {
+    const current = dynamicConnector()
+    const connectors = createRepository({ byId: current, updateResult: connector() })
+    const revokeResourceAuthorizationsByConnector = vi.fn().mockResolvedValue(1)
+    const deps = {
+      connectors,
+      externalResources: { revokeResourceAuthorizationsByConnector },
+    } as unknown as Deps
+
+    await updateConnector(deps, current.id, { resourceAuthorization: null })
+
+    expect(connectors.update).toHaveBeenCalledWith(
+      current.id,
+      expect.objectContaining({
+        resourceAuthorizationEnabled: false,
+        resourceClientId: null,
+        resourceClientSecret: null,
+        resourceIssuer: null,
+        resourceAuthorizationEndpoint: null,
+        resourceTokenEndpoint: null,
+        resourceUserInfoEndpoint: null,
+        resourceJwksEndpoint: null,
+        resourceRevocationEndpoint: null,
+      }),
+    )
+    expect(revokeResourceAuthorizationsByConnector).toHaveBeenCalledWith(current.id, expect.any(Date))
+  })
+
   it('reports OIDC discovery readiness', async () => {
     const deps = {
       connectors: createRepository({

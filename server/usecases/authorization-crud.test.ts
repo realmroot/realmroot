@@ -818,6 +818,8 @@ describe('authorization CRUD and assignment policy', () => {
       expect.any(Date),
       expect.objectContaining({ action: 'api_resource.deleted', agentIdentityId: 'identity-1' }),
     )
+    authorization.deleteResource.mockResolvedValueOnce(false)
+    await expect(deleteResource(deps, resource.id, actor)).rejects.toMatchObject({ status: 404 })
 
     authorization.updateResource.mockResolvedValueOnce(false)
     await expect(updateResource(deps, resource.id, { enabled: true })).rejects.toMatchObject({ status: 404 })
@@ -1204,6 +1206,16 @@ describe('authorization CRUD and assignment policy', () => {
     await expect(getResourceContract(deps, realmrootResource.id)).resolves.toMatchObject({
       resourceId: realmrootResource.id,
       operations: [expect.objectContaining({ requiredScopeSets: [['projects:read']] })],
+    })
+    authorization.findResource.mockResolvedValueOnce({
+      ...realmrootResource,
+      scopeRegistry: {
+        ...realmrootResource.scopeRegistry!,
+        discovery: { ...realmrootResource.scopeRegistry!.discovery, sourceUrl: undefined as never },
+      },
+    })
+    await expect(getResourceContract(deps, realmrootResource.id)).resolves.toMatchObject({
+      resourceId: realmrootResource.id,
     })
     await expect(
       createResource(deps, {

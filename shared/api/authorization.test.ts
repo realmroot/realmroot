@@ -40,5 +40,12 @@ describe('authorization API schemas', () => {
         connectorId: null,
       }).success,
     ).toBe(true)
+    expect(
+      createApiResourceRequestSchema.safeParse({
+        ...input,
+        authorizationModel: 'native',
+        connectorId: 'connector-1',
+      }).success,
+    ).toBe(false)
   })
 })

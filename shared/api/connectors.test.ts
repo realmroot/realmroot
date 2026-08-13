@@ -70,6 +70,34 @@ describe('Connector API schemas', () => {
     for (const input of invalid) expect(createConnectorRequestSchema.safeParse(input).success).toBe(false)
   })
 
+  it('requires credentials for manually registered resource authorization', () => {
+    const base = {
+      providerType: 'generic_oauth' as const,
+      providerId: 'resource-oauth',
+      displayName: 'Resource OAuth',
+      enabled: false,
+      resourceAuthorization: {
+        enabled: true,
+        registrationMode: 'manual' as const,
+        issuer: 'https://resource.example.com',
+      },
+    }
+
+    expect(createConnectorRequestSchema.safeParse(base).success).toBe(false)
+    expect(
+      createConnectorRequestSchema.safeParse({
+        ...base,
+        resourceAuthorization: { ...base.resourceAuthorization, clientId: 'client' },
+      }).success,
+    ).toBe(false)
+    expect(
+      createConnectorRequestSchema.safeParse({
+        ...base,
+        resourceAuthorization: { ...base.resourceAuthorization, clientId: 'client', clientSecret: 'secret' },
+      }).success,
+    ).toBe(true)
+  })
+
   it('parses response, update, linking, and unlinking contracts', () => {
     const now = new Date().toISOString()
     expect(

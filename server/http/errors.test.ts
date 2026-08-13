@@ -5,6 +5,7 @@ import {
   forbidden,
   notFound,
   oauthError,
+  payloadTooLarge,
   resourceInUse,
   unauthorized,
 } from '@server/domain/errors'
@@ -29,6 +30,11 @@ describe('API error boundary helpers', () => {
       code: 'bad_gateway',
       message: 'Unavailable.',
       details: { stage: 'resource' },
+    })
+    expect(payloadTooLarge('Too large.')).toMatchObject({
+      status: 413,
+      code: 'payload_too_large',
+      message: 'Too large.',
     })
 
     const response = handleApiError(new ApiError(400, 'bad_request', 'Invalid request.'), context())

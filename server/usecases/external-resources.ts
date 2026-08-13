@@ -2286,20 +2286,6 @@ async function resolveRequestedAuthorizationDetails(
   if (hasDuplicateAuthorizationDetails(authorizationDetails)) {
     throw invalidAuthorizationDetails('Authorization details contain duplicate entries.')
   }
-  if (!requiresAccountConnection(resourceServer)) {
-    if (!isRealmrootResourceServer(resourceServer)) {
-      throw invalidAuthorizationDetails('Native API resources do not accept authorization details.')
-    }
-    const available = await realmrootAuthorityDetails(deps, identity)
-    if (
-      !authorizationDetails.every((detail) =>
-        available.some((candidate) => exactAuthorizationDetails([candidate], [detail])),
-      )
-    ) {
-      throw invalidAuthorizationDetails('Authorization detail is not available to this Agent.')
-    }
-    return authorizationDetails
-  }
   if (!connection)
     throw invalidAuthorizationDetails('Connect the Resource Server before selecting authorization details.')
   if (await serviceResourceFallbackAuthorization(deps, resourceServer, connection)) {
@@ -3046,21 +3032,29 @@ function assertProviderConnectionAuthorizationDetails(
   requested: AuthorizationDetail[],
   granted: AuthorizationDetail[],
 ) {
-  if (requested.length === 0 && granted.length === 0) return
-  if (
-    granted.length === 0 ||
-    hasDuplicateAuthorizationDetails(granted) ||
-    granted.some(
-      (detail) =>
-        !requested.some((requirement) => authorizationDetailMatchesTemplate(detail, requirement)) ||
-        configuredTemplates.some((template) => canonicalJson(template) === canonicalJson(detail)),
-    ) ||
-    requested.some((requirement) => !granted.some((detail) => authorizationDetailMatchesTemplate(detail, requirement)))
-  ) {
-    throw invalidAuthorizationDetails(
-      'Provider connection authorization details must identify the requested concrete resource contexts.',
-    )
+  if (requested.length === 0) return
+  if (granted.length === 0 || hasDuplicateAuthorizationDetails(granted)) {
+    throw invalidProviderConnectionAuthorizationDetails()
   }
+  for (const detail of granted) {
+    if (configuredTemplates.some((template) => canonicalJson(template) === canonicalJson(detail))) {
+      throw invalidProviderConnectionAuthorizationDetails()
+    }
+    if (!requested.some((requirement) => authorizationDetailMatchesTemplate(detail, requirement))) {
+      throw invalidProviderConnectionAuthorizationDetails()
+    }
+  }
+  for (const requirement of requested) {
+    if (!granted.some((detail) => authorizationDetailMatchesTemplate(detail, requirement))) {
+      throw invalidProviderConnectionAuthorizationDetails()
+    }
+  }
+}
+
+function invalidProviderConnectionAuthorizationDetails() {
+  return invalidAuthorizationDetails(
+    'Provider connection authorization details must identify the requested concrete resource contexts.',
+  )
 }
 
 function hasDuplicateAuthorizationDetails(authorizationDetails: AuthorizationDetail[]) {

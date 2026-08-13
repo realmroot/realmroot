@@ -74,7 +74,6 @@ export async function connectorReadiness(deps: Deps, id: string): Promise<Connec
 
 export async function createConnector(deps: Deps, input: CreateConnectorRequest, callbackOrigin?: string) {
   assertSupportedProvider(input.providerType, input.providerId)
-  assertAuthenticationCapability(input.providerType, input.providerId, input.authenticationEnabled)
   await assertProviderAvailable(deps.connectors, input.providerId)
   const authenticationEnabled = input.authenticationEnabled ?? true
   const resourceAuthorization =
@@ -206,11 +205,6 @@ export async function updateConnector(deps: Deps, id: string, input: UpdateConne
     ...resourcePatch,
     updatedAt: new Date(),
   }
-  assertAuthenticationCapability(
-    current.providerType as ConnectorProviderType,
-    current.providerId,
-    candidate.authenticationEnabled,
-  )
   assertComplete(candidate)
 
   const updated = await deps.connectors.update(id, {
@@ -303,16 +297,6 @@ function signupEnabledMetadata(metadata: Record<string, unknown> | null) {
 function assertSupportedProvider(providerType: ConnectorProviderType, providerId: string) {
   if (!isSupportedProvider(providerType, providerId)) {
     throw badRequest('Unsupported social provider.')
-  }
-}
-
-function assertAuthenticationCapability(
-  providerType: ConnectorProviderType,
-  providerId: string,
-  enabled: boolean | undefined,
-) {
-  if (enabled && !connectorCapabilities(providerType, providerId).authentication) {
-    throw badRequest('Connector driver does not support authentication.')
   }
 }
 

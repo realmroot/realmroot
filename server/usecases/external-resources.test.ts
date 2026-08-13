@@ -1,3 +1,4 @@
+import { ApiError, OAuthError } from '@server/domain/errors'
 import { createTestDeps } from '@server/http/test-deps'
 import {
   completeResourceConnectionIntent,
@@ -89,6 +90,32 @@ describe('external API resource authorization', () => {
         'https://auth.example.com',
       ),
     ).rejects.toThrow('Enabled external API resource was not found.')
+  })
+
+  it('rejects account connection intents for invalid authorization boundaries', async () => {
+    const deps = createTestDeps()
+    authorizationDeps(deps)
+    const input = { owner: { type: 'user' as const }, scopes: ['projects:read'] }
+
+    vi.mocked(deps.authorization.findResource).mockResolvedValue({
+      ...resource(),
+      authorizationModel: 'native',
+      connectorId: null,
+    })
+    await expect(
+      createResourceConnectionIntent(deps, 'resource-1', input, 'user-1', 'https://auth.example.com'),
+    ).rejects.toThrow('Realmroot-issued access does not use account connections.')
+
+    vi.mocked(deps.authorization.findResource).mockResolvedValue({ ...resource(), connectorId: null })
+    await expect(
+      createResourceConnectionIntent(deps, 'resource-1', input, 'user-1', 'https://auth.example.com'),
+    ).rejects.toThrow('External authorization requires a Provider Connector.')
+
+    vi.mocked(deps.authorization.findResource).mockResolvedValue(resource())
+    vi.mocked(deps.connectors.findById).mockResolvedValue(connectorRecord({ resourceAuthorizationEnabled: false }))
+    await expect(
+      createResourceConnectionIntent(deps, 'resource-1', input, 'user-1', 'https://auth.example.com'),
+    ).rejects.toThrow('Active external API resource authorization was not found.')
   })
 
   it('validates a reusable OIDC connector when creating an external resource [spec: agent-identity/external-api-resource-registration]', async () => {
@@ -713,6 +740,30 @@ describe('external API resource authorization', () => {
     await expect(
       completeResourceConnectionIntent(deps, { state: 'malformed-state', code: 'code' }, 'https://auth.example.com'),
     ).rejects.toMatchObject({ error: 'invalid_authorization_details' })
+
+    tokenAuthorizationDetails = []
+    await expect(
+      completeResourceConnectionIntent(deps, { state: 'empty-state', code: 'code' }, 'https://auth.example.com'),
+    ).rejects.toMatchObject({ error: 'invalid_authorization_details' })
+
+    tokenAuthorizationDetails = [granted[0], granted[0]]
+    await expect(
+      completeResourceConnectionIntent(deps, { state: 'duplicate-state', code: 'code' }, 'https://auth.example.com'),
+    ).rejects.toMatchObject({ error: 'invalid_authorization_details' })
+
+    tokenAuthorizationDetails = templates
+    await expect(
+      completeResourceConnectionIntent(deps, { state: 'template-state', code: 'code' }, 'https://auth.example.com'),
+    ).rejects.toMatchObject({ error: 'invalid_authorization_details' })
+
+    intent = {
+      ...intent!,
+      authorizationDetails: [...templates, { type: 'organization_access', actions: ['read'] }],
+    }
+    tokenAuthorizationDetails = [granted[0]]
+    await expect(
+      completeResourceConnectionIntent(deps, { state: 'partial-state', code: 'code' }, 'https://auth.example.com'),
+    ).rejects.toMatchObject({ error: 'invalid_authorization_details' })
   })
 
   it('[spec: agent-identity/external-resource-rar-without-catalog] sends RAR directly when PAR is not advertised', async () => {
@@ -1303,6 +1354,97 @@ describe('external API resource authorization', () => {
     })
     expect(deps.externalHttp.fetch).not.toHaveBeenCalled()
     expect(deps.externalResources.revokeConnection).not.toHaveBeenCalled()
+  })
+
+  it('classifies connection revalidation failures without hiding unexpected errors', async () => {
+    const cases: Array<{
+      name: string
+      error: Error
+      connected?: boolean
+      revoked?: boolean
+    }> = [
+      { name: 'expired provider grant', error: new OAuthError(400, 'invalid_grant', 'expired'), connected: false },
+      {
+        name: 'temporarily unavailable provider',
+        error: new OAuthError(503, 'temporarily_unavailable', 'retry later'),
+        connected: false,
+      },
+      {
+        name: 'provider gateway failure',
+        error: new ApiError(502, 'bad_gateway', 'provider failed'),
+        connected: false,
+      },
+      {
+        name: 'unauthorized provider credential',
+        error: new ApiError(401, 'unauthorized', 'credential rejected'),
+        connected: false,
+        revoked: true,
+      },
+      { name: 'provider policy failure', error: new ApiError(403, 'forbidden', 'policy rejected') },
+      { name: 'unexpected OAuth failure', error: new OAuthError(400, 'invalid_request', 'bad request') },
+      { name: 'unexpected internal failure', error: new Error('unexpected failure') },
+    ]
+
+    for (const testCase of cases) {
+      const deps = createTestDeps()
+      authorizationDeps(deps)
+      vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
+      vi.mocked(deps.externalResources.findAgentConnectionRequest).mockResolvedValue(requestRecord())
+      vi.mocked(deps.externalResources.findConnectionByOwnerResource).mockResolvedValue(connectionRecord())
+      vi.mocked(deps.connectors.findById).mockRejectedValue(testCase.error)
+
+      const activation = getAgentResourceConnectionActivation(
+        deps,
+        requestRecord().id,
+        principal(),
+        'https://auth.example.com',
+      )
+      if (testCase.connected === false) {
+        await expect(activation, testCase.name).resolves.toMatchObject({ status: 'pending' })
+        expect(deps.externalResources.revokeConnection, testCase.name).toHaveBeenCalledTimes(testCase.revoked ? 1 : 0)
+      } else {
+        await expect(activation, testCase.name).rejects.toThrow(testCase.error.message)
+      }
+    }
+  })
+
+  it('rejects ambiguous or insufficient provider credentials during connection revalidation', async () => {
+    for (const connection of [
+      { ...connectionRecord(), credentials: [] },
+      { ...connectionRecord(), credentials: [connectionRecord().credentials[0]!, connectionRecord().credentials[0]!] },
+    ]) {
+      const deps = createTestDeps()
+      authorizationDeps(deps)
+      vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
+      vi.mocked(deps.externalResources.findAgentConnectionRequest).mockResolvedValue(requestRecord())
+      vi.mocked(deps.externalResources.findConnectionByOwnerResource).mockResolvedValue(connection)
+
+      await expect(
+        getAgentResourceConnectionActivation(deps, requestRecord().id, principal(), 'https://auth.example.com'),
+      ).rejects.toThrow()
+    }
+  })
+
+  it('handles terminal and concurrent provider credential refresh failures during revalidation', async () => {
+    for (const response of [
+      Response.json({ error: 'invalid_grant' }, { status: 400 }),
+      Response.json({ access_token: 'refreshed-access', refresh_token: 'refreshed-token', expires_in: 300 }),
+    ]) {
+      const deps = createTestDeps()
+      authorizationDeps(deps)
+      vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
+      vi.mocked(deps.externalResources.findAgentConnectionRequest).mockResolvedValue(requestRecord())
+      vi.mocked(deps.externalResources.findConnectionByOwnerResource).mockResolvedValue(
+        connectionWithCredential(connectionRecord(), { credentialExpiresAt: new Date(0) }),
+      )
+      vi.mocked(deps.externalResources.claimProviderCredentialRefresh).mockResolvedValue(true)
+      vi.mocked(deps.externalResources.completeProviderCredentialRefresh).mockResolvedValue(null)
+      vi.mocked(deps.externalHttp.fetch).mockResolvedValue(response)
+
+      await expect(
+        getAgentResourceConnectionActivation(deps, requestRecord().id, principal(), 'https://auth.example.com'),
+      ).resolves.toMatchObject({ status: 'pending' })
+    }
   })
 
   it('[spec: agent-identity/resource-account-connection-expansion] preserves active account authority while connection expansion awaits OAuth', async () => {
@@ -4187,6 +4329,34 @@ describe('external API resource authorization', () => {
     await expect(
       listAgentAuthorizationDetailCatalog(deps, native.id, principal(), { limit: 10, offset: 1 }),
     ).resolves.toMatchObject({ items: [], pagination: { total: 0 } })
+  })
+
+  it('derives compact display labels for provider-owned authorization details', async () => {
+    const deps = createTestDeps()
+    authorizationDeps(deps)
+    vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
+    vi.mocked(deps.externalResources.findConnectionByOwnerResource).mockResolvedValue({
+      ...connectionRecord(),
+      authorizationDetails: [
+        { type: 'project_access', name: 'Named project' },
+        { type: 'project_access', project_name: 'Provider project' },
+        { type: 'project_access', project_label: 'Labelled project' },
+        { type: 'project_access', identifier: 42 },
+        { type: 'project_access', attributes: { internal: true } },
+      ],
+    })
+
+    await expect(
+      listAgentAuthorizationDetailCatalog(deps, resource().id, principal(), { limit: 10, offset: 0 }),
+    ).resolves.toMatchObject({
+      items: [
+        { name: 'Named project', metadata: { name: 'Named project' } },
+        { name: 'Provider project', metadata: { project_name: 'Provider project' } },
+        { name: 'Labelled project', metadata: { project_label: 'Labelled project' } },
+        { name: '42', metadata: { identifier: '42' } },
+        { name: 'project_access', metadata: {} },
+      ],
+    })
   })
 
   it('resolves approval Resources through a paginated external catalog', async () => {
