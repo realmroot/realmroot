@@ -43,7 +43,8 @@ import { type PaginationInput, paginationMetadata } from '@shared/api/pagination
 import { agentBootstrapScopes, realmrootOAuthScopes } from '@shared/authz'
 import { realmrootManagementScopes } from '@shared/scope-registry'
 import { authorizationCodeRequest, generateCodeChallenge, refreshAccessTokenRequest } from 'better-auth/oauth2'
-import { ensureDynamicConnectorScopes } from './connectors'
+import { refreshResourceScopeRegistry } from './authorization'
+import { ensureDynamicConnectorScopes, refreshDynamicConnectorMetadata } from './connectors'
 import { validateDpopTokenProof } from './dpop'
 import { organizationUserHasScope, resolveOrganizationMembershipScopes } from './organization-membership-scopes'
 import { validateRequestedScopes } from './resource-openapi'
@@ -924,7 +925,7 @@ export async function createAgentAccessRequest(
   approvalOrigin: string,
 ) {
   const identity = await requireActiveIdentityAndBinding(deps, principal)
-  const resource = await requireEnabledResource(deps, input.resourceId)
+  let resource = await requireEnabledResource(deps, input.resourceId)
   const connection = requiresAccountConnection(resource)
     ? await deps.externalResources.findConnectionByOwnerResource({
         resourceId: resource.id,
@@ -932,7 +933,7 @@ export async function createAgentAccessRequest(
         ownerOrganizationId: identity.identity.ownerOrganizationId,
       })
     : null
-  validateResourceRequestedScopes(resource, input.scopes)
+  if (!requiresAccountConnection(resource)) validateResourceRequestedScopes(resource, input.scopes)
   const authorizationDetails = accessRequestAuthorizationDetails(resource, input.authorizationDetails ?? [])
   const concreteAuthorizationDetails = authorizationDetails.filter(
     (detail) => !resource.authorizationDetails.some((template) => canonicalJson(template) === canonicalJson(detail)),
@@ -962,6 +963,25 @@ export async function createAgentAccessRequest(
           : null) ?? connection.grantedScopes)
       : []
     : null
+  const requiresAccountExpansion =
+    reusableAccountScopes !== null && scopes.some((scope) => !reusableAccountScopes.includes(scope))
+  if (requiresAccountExpansion) {
+    if (resource.connectorId) {
+      await refreshDynamicConnectorMetadata(deps, resource.connectorId)
+      const connector = await deps.connectors.findById(resource.connectorId)
+      const advertisedScopes = metadataStringArray(connector?.resourceProviderMetadata?.scopes_supported)
+      if (advertisedScopes.length > 0 && scopes.some((scope) => !advertisedScopes.includes(scope))) {
+        throw badRequest('Requested scope is not currently supported by the Resource Server.')
+      }
+    }
+    const registeredScopes = new Set(resource.scopeRegistry?.scopes.map((scope) => scope.value) ?? [])
+    if (scopes.some((scope) => !registeredScopes.has(scope))) {
+      resource = await refreshResourceScopeRegistry(deps, resource.id)
+      validateResourceRequestedScopes(resource, scopes)
+    }
+  } else {
+    validateResourceRequestedScopes(resource, scopes)
+  }
   const reusableEntitlements = (
     await deps.externalResources.listActiveEntitlementsByAgent(principal.identityId, now)
   ).filter(

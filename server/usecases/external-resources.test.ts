@@ -4978,35 +4978,30 @@ describe('external API resource authorization', () => {
 
   it('[spec: agent-identity/agent-resource-access-ensure] does not reuse an Entitlement outside the current account context', async () => {
     const detail = { type: 'project_access', identifier: 'project-1', actions: ['read'] }
-    const deps = authorizationCatalogDeps({
-      fetchResponse: Response.json({
-        items: [
-          {
-            authorizationDetail: detail,
-            grantedScopes: ['projects:read'],
-            display: { label: 'Project One' },
-          },
-        ],
-        pagination: { limit: 100, offset: 0, total: 1, hasMore: false, nextOffset: null },
-      }),
-    })
+    const deps = authorizationCatalogDeps()
     const connection = {
       ...connectionRecord(),
       grantedScopes: [...connectionRecord().grantedScopes, 'authorization-details:read'],
       authorizationDetails: [detail],
     }
-    vi.mocked(deps.externalHttp.fetch).mockImplementation(async () =>
-      Response.json({
-        items: [
-          {
-            authorizationDetail: detail,
-            grantedScopes: ['projects:read'],
-            display: { label: 'Project One' },
-          },
-        ],
-        pagination: { limit: 100, offset: 0, total: 1, hasMore: false, nextOffset: null },
-      }),
-    )
+    const providerFetch = vi.mocked(deps.externalHttp.fetch).getMockImplementation()!
+    vi.mocked(deps.externalHttp.fetch).mockImplementation(async (request) => {
+      if (request.url === 'https://projects.example.com/.well-known/openid-configuration') {
+        return Response.json(metadata())
+      }
+      return request.url.startsWith('https://projects.example.com/authorization-details?')
+        ? Response.json({
+            items: [
+              {
+                authorizationDetail: detail,
+                grantedScopes: ['projects:read'],
+                display: { label: 'Project One' },
+              },
+            ],
+            pagination: { limit: 100, offset: 0, total: 1, hasMore: false, nextOffset: null },
+          })
+        : providerFetch(request)
+    })
     vi.mocked(deps.externalResources.findConnectionByOwnerResource).mockResolvedValue(connection)
     vi.mocked(deps.externalResources.listActiveEntitlementsByAgent).mockResolvedValue([
       { ...grantRecord(), scope: 'projects:write', authorizationDetails: [detail] },
