@@ -33,7 +33,7 @@ import { createDb } from './db/client'
  * Build every adapter once from the environment. Request-free: callable from the
  * fetch handler, scheduled handlers, or queue consumers.
  */
-export function createDeps(env: Env, config: RuntimeConfig): Deps {
+export function createDeps(env: Env, config: RuntimeConfig, correlationId?: string): Deps {
   const db = createDb(env.DB)
   const ids = createUuidV7IdentifierGenerator()
   const secrets = createSecretCipher(config.credentialEncryptionKey)
@@ -51,7 +51,12 @@ export function createDeps(env: Env, config: RuntimeConfig): Deps {
     configz,
     connectors: createConnectorRepository(db, secrets),
     externalResources: createExternalResourceRepository(db, ids),
-    externalHttp: { fetch: (request) => (env.EXTERNAL_HTTP ? env.EXTERNAL_HTTP.fetch(request) : fetch(request)) },
+    externalHttp: {
+      fetch: (request) => {
+        const outbound = withCorrelationId(request, correlationId)
+        return env.EXTERNAL_HTTP ? env.EXTERNAL_HTTP.fetch(outbound) : fetch(outbound)
+      },
+    },
     onboarding: createOnboardingRepository(env.DB, ids),
     security: createSecurityRepository(db, config.securityPolicy),
     secrets,
@@ -68,4 +73,11 @@ export function createDeps(env: Env, config: RuntimeConfig): Deps {
     ),
     jwks: createJwksGateway(),
   }
+}
+
+function withCorrelationId(request: Request, correlationId?: string): Request {
+  if (!correlationId) return request
+  const headers = new Headers(request.headers)
+  headers.set('x-correlation-id', correlationId)
+  return new Request(request, { headers })
 }

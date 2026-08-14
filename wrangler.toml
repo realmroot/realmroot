@@ -47,3 +47,11 @@ crons = ["0 3 * * *"]
 
 [observability]
 enabled = true
+
+[observability.logs]
+head_sampling_rate = 1
+invocation_logs = false
+
+[observability.traces]
+enabled = true
+head_sampling_rate = 1

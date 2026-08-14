@@ -2510,11 +2510,11 @@ describe('external API resource authorization', () => {
       'JWT',
     )
     expect(sign.mock.calls[0]![0]).not.toHaveProperty('act')
-    expect(tokenRequests.map((form) => form.get('grant_type'))).toEqual([
-      'refresh_token',
-      'urn:ietf:params:oauth:grant-type:jwt-bearer',
-      'urn:ietf:params:oauth:grant-type:token-exchange',
-    ])
+    const grantTypes = tokenRequests.map((form) => form.get('grant_type'))
+    expect(grantTypes.slice(0, 2)).toEqual(
+      expect.arrayContaining(['refresh_token', 'urn:ietf:params:oauth:grant-type:jwt-bearer']),
+    )
+    expect(grantTypes[2]).toBe('urn:ietf:params:oauth:grant-type:token-exchange')
     expect(lease).toEqual({
       accessToken: 'target-dpop-access',
       tokenType: 'DPoP',

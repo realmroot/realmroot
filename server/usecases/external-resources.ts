@@ -1532,7 +1532,6 @@ export async function issueTargetAccessToken(
   assertAuthorizationDetailsSelection(resource, connection, request.authorizationDetails)
   assertAuthorizationDetailsSubset(request.authorizationDetails, connection.authorizationDetails, 'connected account')
   const confirmationJkt = await validateDpopTokenProof(deps, dpopProof, authorization.tokenEndpoint)
-  const subjectToken = (await refreshConnectionToken(deps, providerCredential, authorization)).accessToken
   const nowSeconds = Math.floor(Date.now() / 1000)
   const agentAssertion = await signer.sign(
     {
@@ -1546,16 +1545,20 @@ export async function issueTargetAccessToken(
     'JWT',
   )
   const clientSecret = authorizationClientSecret(authorization)
-  const actorGrant = await postForm(
-    deps,
-    authorization.tokenEndpoint,
-    {
-      grant_type: jwtBearerGrantType,
-      assertion: agentAssertion,
-    },
-    authorization.clientId,
-    clientSecret,
-  )
+  const [subject, actorGrant] = await Promise.all([
+    refreshConnectionToken(deps, providerCredential, authorization),
+    postForm(
+      deps,
+      authorization.tokenEndpoint,
+      {
+        grant_type: jwtBearerGrantType,
+        assertion: agentAssertion,
+      },
+      authorization.clientId,
+      clientSecret,
+    ),
+  ])
+  const subjectToken = subject.accessToken
   const actorToken = requiredString(actorGrant, 'access_token', 'RFC 7523 JWT bearer grant response')
   const tokenResponse = await postFormResponse(
     deps,
