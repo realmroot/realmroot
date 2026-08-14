@@ -121,7 +121,7 @@ describe('Agent resource access approval', () => {
     expect(screen.queryByText('connection-1')).toBeNull()
     expect(screen.getByText('ZPan Demo')).toBeTruthy()
     expect(screen.queryByRole('radio', { name: 'ZPan Demo' })).toBeNull()
-    expect(screen.getAllByText('projects:read')).toHaveLength(2)
+    expect(screen.getAllByText('projects:read')).toHaveLength(1)
     expect(screen.getByText('Read project status')).toBeTruthy()
     expect(screen.queryByRole('region', { name: 'Requested authorization details' })).toBeNull()
     expect(screen.queryByText('{"actions":["read"],"project_id":"project-1","type":"project"}')).toBeNull()
@@ -172,7 +172,7 @@ describe('Agent resource access approval', () => {
     render(<ResourceAccessApproval />)
 
     expect(await screen.findByText('The requested workspace resource is not configured')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Connect ZPan account' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Connect account' })).toBeTruthy()
   })
 
   it('requires one explicit concrete selection for a generic authorization detail', async () => {
@@ -377,9 +377,10 @@ describe('Agent resource access approval', () => {
     })
     render(<ResourceAccessApproval />)
 
-    expect(await screen.findByText('Connect your ZPan account before deciding this Agent request.')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Authorize' }).hasAttribute('disabled')).toBe(true)
-    fireEvent.click(screen.getByRole('button', { name: 'Connect ZPan account' }))
+    expect(await screen.findByRole('heading', { name: 'Connect your ZPan account' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Authorize' })).toBeNull()
+    expect(screen.queryByRole('region', { name: 'Grant lifetime' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Connect account' }))
     await waitFor(() =>
       expect(api.createAccountConnection).toHaveBeenCalledWith({
         context: 'access-request',
@@ -435,11 +436,12 @@ describe('Agent resource access approval', () => {
 
     render(<ResourceAccessApproval />)
 
-    expect(
-      await screen.findByText('This account needs expanded authorization before it can cover every requested scope.'),
-    ).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Authorize' }).hasAttribute('disabled')).toBe(true)
-    fireEvent.click(screen.getByRole('button', { name: 'Expand ZPan account access' }))
+    expect(await screen.findByRole('heading', { name: 'Update ZPan permissions to continue' })).toBeTruthy()
+    expect(screen.getByText('ZPan Demo')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Authorize' })).toBeNull()
+    expect(screen.queryByRole('region', { name: 'Grant lifetime' })).toBeNull()
+    expect(screen.getAllByRole('button')).toHaveLength(1)
+    fireEvent.click(screen.getByRole('button', { name: 'Update permissions' }))
     await waitFor(() =>
       expect(api.createAccountConnection).toHaveBeenCalledWith({
         context: 'access-request',
@@ -474,10 +476,10 @@ describe('Agent resource access approval', () => {
     render(<ResourceAccessApproval />)
     await screen.findByText('agent-1')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Connect ZPan account' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Connect account' }))
     expect(await screen.findByText('Account authorization expired')).toBeTruthy()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Connect ZPan account' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Connect account' }))
     expect(await screen.findByText('Unable to start account authorization.')).toBeTruthy()
   })
 

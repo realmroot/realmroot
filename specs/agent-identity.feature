@@ -447,8 +447,8 @@ Feature: Agent identity and delegated API authorization
       Given the controller's home space already has an account connection for an external API resource
       And a pending Agent access request requires scopes that connection does not yet cover
       When the controller opens the approval page
-      Then Realmroot displays the connected account as requiring expanded authorization
-      And prevents approval until the account covers every requested scope
+      Then Realmroot presents account permission update as the only available action
+      And hides Agent approval controls until the account covers every requested scope
       When the controller reauthorizes that account for the union of its existing scopes and the pending Agent request's exact scope set
       And OAuth returns the same external subject with replacement credentials and scopes
       Then Realmroot preserves the account connection identity

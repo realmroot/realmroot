@@ -4,7 +4,7 @@ import type {
   AuthorizationDetailCatalogEntry,
   DecideAccessRequest,
 } from '@shared/api/agent-api'
-import { CheckCircle2, CircleAlert, Link2, XCircle } from 'lucide-react'
+import { CheckCircle2, CircleAlert, XCircle } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { AuthLayout } from '@/components/layout/auth-layout'
 import { Field, SelectInput, TextInput } from '@/components/product-form'
@@ -186,6 +186,8 @@ export function ResourceAccessApproval() {
     catalogError === null &&
     authorizationDetailResolution.accountAuthorized
   const expiryIsValid = mode !== 'until' || isFutureExpiry(expiresAt)
+  const accountAuthorizationStep =
+    request && requiresAccountConnection ? (connectionCoversRequest ? null : connection ? 'update' : 'connect') : null
 
   if (decision) {
     const approved = decision === 'approved'
@@ -227,10 +229,16 @@ export function ResourceAccessApproval() {
   return (
     <AuthLayout
       config={config}
-      description="Confirm the Agent, target resource, exact permissions, account, and lifetime before granting access."
+      description={
+        accountAuthorizationStep === 'update'
+          ? `Update the connected ${request!.resourceServer.name} account before reviewing this Agent request.`
+          : accountAuthorizationStep === 'connect'
+            ? `Connect a ${request!.resourceServer.name} account before reviewing this Agent request.`
+            : 'Confirm the Agent, target resource, exact permissions, account, and lifetime before granting access.'
+      }
       eyebrow="API authorization"
       layout="decision"
-      title="Approve Agent resource access"
+      title="Agent resource access"
     >
       <div className="decisionStack">
         {request ? (
@@ -259,159 +267,186 @@ export function ResourceAccessApproval() {
             </ul>
           </section>
         ) : null}
-        {request && authorizationDetailResolution.requirements.some((requirement) => requirement.kind !== 'fixed') ? (
-          <section className="decisionPermissions" aria-label="Requested authorization details">
-            <h2>Authorization details</h2>
-            <div className="grid gap-4">
-              {authorizationDetailResolution.requirements.map((requirement) =>
-                requirement.kind === 'fixed' ? null : (
-                  <Field
-                    help={
-                      requirement.options.length === 0
-                        ? 'No matching concrete context is available from this resource.'
-                        : undefined
-                    }
-                    key={requirement.index}
-                    label={`Authorization detail ${requirement.index + 1}`}
-                  >
-                    <SelectInput
-                      aria-label={`Authorization detail ${requirement.index + 1}`}
-                      onChange={(event) =>
-                        setAuthorizationDetailSelections((current) => ({
-                          ...current,
-                          [requirement.index]: event.target.value,
-                        }))
-                      }
-                      value={authorizationDetailSelections[requirement.index] ?? ''}
-                    >
-                      <option value="">Select an authorization detail</option>
-                      {requirement.options.map((option) => (
-                        <option
-                          disabled={option.connectionStatus !== 'authorized'}
-                          key={canonicalJson(option.authorizationDetail)}
-                          value={canonicalJson(option.authorizationDetail)}
+        {request && accountAuthorizationStep ? (
+          <AccountAuthorizationStep
+            connection={connection}
+            error={error ?? catalogError}
+            onContinue={() => void connectAccount()}
+            resourceName={request.resourceServer.name}
+            step={accountAuthorizationStep}
+            submitting={submitting}
+          />
+        ) : (
+          <>
+            {request &&
+            authorizationDetailResolution.requirements.some((requirement) => requirement.kind !== 'fixed') ? (
+              <section className="decisionPermissions" aria-label="Requested authorization details">
+                <h2>Authorization details</h2>
+                <div className="grid gap-4">
+                  {authorizationDetailResolution.requirements.map((requirement) =>
+                    requirement.kind === 'fixed' ? null : (
+                      <Field
+                        help={
+                          requirement.options.length === 0
+                            ? 'No matching concrete context is available from this resource.'
+                            : undefined
+                        }
+                        key={requirement.index}
+                        label={`Authorization detail ${requirement.index + 1}`}
+                      >
+                        <SelectInput
+                          aria-label={`Authorization detail ${requirement.index + 1}`}
+                          onChange={(event) =>
+                            setAuthorizationDetailSelections((current) => ({
+                              ...current,
+                              [requirement.index]: event.target.value,
+                            }))
+                          }
+                          value={authorizationDetailSelections[requirement.index] ?? ''}
                         >
-                          {option.display.label}
-                          {option.connectionStatus !== 'authorized' ? ' — reconnect account to authorize' : ''}
-                        </option>
-                      ))}
-                    </SelectInput>
-                  </Field>
-                ),
-              )}
-            </div>
-          </section>
-        ) : null}
-        {request && requiresAccountConnection && connection ? (
-          <section className="decisionSection">
-            <h2>{request.resourceServer.name} account</h2>
-            <div>
-              <p className="font-medium">{connection.displayName}</p>
-              <p className="text-xs text-muted-foreground">
-                <code>{connection.scopes.join(' ')}</code>
-              </p>
-            </div>
-            {!connectionCoversRequest ? (
-              <>
-                <p>This account needs expanded authorization before it can cover every requested scope.</p>
-                <Button disabled={submitting} onClick={() => void connectAccount()} type="button" variant="outline">
-                  <Link2 data-icon="inline-start" />
-                  Expand {request.resourceServer.name} account access
-                </Button>
-                <p>After OAuth, you will return here to finish this Agent access approval.</p>
-                {catalogError ? <Status tone="error">{catalogError}</Status> : null}
-              </>
+                          <option value="">Select an authorization detail</option>
+                          {requirement.options.map((option) => (
+                            <option
+                              disabled={option.connectionStatus !== 'authorized'}
+                              key={canonicalJson(option.authorizationDetail)}
+                              value={canonicalJson(option.authorizationDetail)}
+                            >
+                              {option.display.label}
+                            </option>
+                          ))}
+                        </SelectInput>
+                      </Field>
+                    ),
+                  )}
+                </div>
+              </section>
             ) : null}
-          </section>
-        ) : null}
-        {request && requiresAccountConnection && !connection ? (
-          <section className="decisionSection">
-            <h2>{request.resourceServer.name} account</h2>
-            <p>Connect your {request.resourceServer.name} account before deciding this Agent request.</p>
-            <Button disabled={submitting} onClick={() => void connectAccount()} type="button" variant="outline">
-              <Link2 data-icon="inline-start" />
-              Connect {request.resourceServer.name} account
-            </Button>
-            <p>
-              The connection receives the resource’s current scope catalog. After OAuth, you will return here to select
-              a Context when required and finish this Agent access approval.
-            </p>
-          </section>
-        ) : null}
-        <section className="decisionSection" aria-label="Grant lifetime">
-          <h2>Grant lifetime</h2>
-          <RadioGroup
-            disabled={!request || submitting}
-            onValueChange={(value) => setMode(value as ApprovalMode)}
-            value={mode}
-          >
-            {(['once', 'until', 'persistent'] as const).map((value) => (
-              <label className="decisionRadio" htmlFor={`grant-lifetime-${value}`} key={value}>
-                <RadioGroupItem
-                  aria-label={
-                    value === 'once'
-                      ? 'One target token'
-                      : value === 'until'
-                        ? 'Until a date and time'
-                        : 'Persistent until revoked'
-                  }
-                  id={`grant-lifetime-${value}`}
-                  value={value}
-                />
-                <span>
-                  <strong>
-                    {value === 'once'
-                      ? 'One target token'
-                      : value === 'until'
-                        ? 'Until a date and time'
-                        : 'Persistent until revoked'}
-                  </strong>
-                  <small>
-                    {value === 'once'
-                      ? 'Issue one target token for this approved operation.'
-                      : value === 'until'
-                        ? 'Permit access until the exact date and time below.'
-                        : 'Keep access active until you explicitly revoke it.'}
-                  </small>
-                </span>
-              </label>
-            ))}
-          </RadioGroup>
-          {mode === 'until' ? (
-            <Field label="Expiry date and time">
-              <TextInput
-                aria-label="Grant expiry"
-                aria-invalid={expiresAt.length > 0 && !expiryIsValid}
-                min={toLocalDateTimeValue()}
-                onChange={(event) => setExpiresAt(event.target.value)}
-                required
-                type="datetime-local"
-                value={expiresAt}
-              />
-            </Field>
-          ) : null}
-        </section>
+            {request && requiresAccountConnection && connection ? (
+              <section className="decisionSection">
+                <h2>{request.resourceServer.name} account</h2>
+                <p className="font-medium">{connection.displayName}</p>
+              </section>
+            ) : null}
+            <section className="decisionSection" aria-label="Grant lifetime">
+              <h2>Grant lifetime</h2>
+              <RadioGroup
+                disabled={!request || submitting}
+                onValueChange={(value) => setMode(value as ApprovalMode)}
+                value={mode}
+              >
+                {(['once', 'until', 'persistent'] as const).map((value) => (
+                  <label className="decisionRadio" htmlFor={`grant-lifetime-${value}`} key={value}>
+                    <RadioGroupItem
+                      aria-label={
+                        value === 'once'
+                          ? 'One target token'
+                          : value === 'until'
+                            ? 'Until a date and time'
+                            : 'Persistent until revoked'
+                      }
+                      id={`grant-lifetime-${value}`}
+                      value={value}
+                    />
+                    <span>
+                      <strong>
+                        {value === 'once'
+                          ? 'One target token'
+                          : value === 'until'
+                            ? 'Until a date and time'
+                            : 'Persistent until revoked'}
+                      </strong>
+                      <small>
+                        {value === 'once'
+                          ? 'Issue one target token for this approved operation.'
+                          : value === 'until'
+                            ? 'Permit access until the exact date and time below.'
+                            : 'Keep access active until you explicitly revoke it.'}
+                      </small>
+                    </span>
+                  </label>
+                ))}
+              </RadioGroup>
+              {mode === 'until' ? (
+                <Field label="Expiry date and time">
+                  <TextInput
+                    aria-label="Grant expiry"
+                    aria-invalid={expiresAt.length > 0 && !expiryIsValid}
+                    min={toLocalDateTimeValue()}
+                    onChange={(event) => setExpiresAt(event.target.value)}
+                    required
+                    type="datetime-local"
+                    value={expiresAt}
+                  />
+                </Field>
+              ) : null}
+            </section>
+          </>
+        )}
         {!request && !error ? <Status>Loading resource access request…</Status> : null}
-        {error ? <Status tone="error">{error}</Status> : null}
-        <div className="decisionActions">
-          <Button disabled={!request || submitting} onClick={() => void submit('deny')} variant="outline">
-            Cancel
-          </Button>
-          <Button
-            disabled={
-              !request ||
-              submitting ||
-              approvedAuthorizationDetails === null ||
-              (requiresAccountConnection && !connectionCoversRequest) ||
-              !expiryIsValid
-            }
-            onClick={() => void submit('approve')}
-          >
-            {submitting ? 'Authorizing…' : 'Authorize'}
-          </Button>
-        </div>
+        {error && !accountAuthorizationStep ? <Status tone="error">{error}</Status> : null}
+        {!accountAuthorizationStep ? (
+          <div className="decisionActions">
+            <Button disabled={!request || submitting} onClick={() => void submit('deny')} variant="outline">
+              Cancel
+            </Button>
+            <Button
+              disabled={!request || submitting || approvedAuthorizationDetails === null || !expiryIsValid}
+              onClick={() => void submit('approve')}
+            >
+              {submitting ? 'Authorizing…' : 'Authorize'}
+            </Button>
+          </div>
+        ) : null}
       </div>
     </AuthLayout>
+  )
+}
+
+function AccountAuthorizationStep({
+  connection,
+  error,
+  onContinue,
+  resourceName,
+  step,
+  submitting,
+}: {
+  connection: AccountConnection | null
+  error: string | null
+  onContinue: () => void
+  resourceName: string
+  step: 'connect' | 'update'
+  submitting: boolean
+}) {
+  const updating = step === 'update'
+  return (
+    <section className="decisionPrerequisite" aria-labelledby="account-authorization-title">
+      <div className="decisionPrerequisiteCopy">
+        <p className="decisionPrerequisiteEyebrow">
+          {updating ? 'Additional permission required' : 'Account required'}
+        </p>
+        <h2 id="account-authorization-title">
+          {updating ? `Update ${resourceName} permissions to continue` : `Connect your ${resourceName} account`}
+        </h2>
+        <p>
+          {updating
+            ? `${resourceName} must approve the additional permissions before you can review and authorize this Agent request.`
+            : `Realmroot needs a connected ${resourceName} account before you can review and authorize this Agent request.`}
+        </p>
+      </div>
+      {connection ? (
+        <div className="decisionAccountSummary">
+          <span>Connected account</span>
+          <strong>{connection.displayName}</strong>
+        </div>
+      ) : null}
+      {error ? <Status tone="error">{error}</Status> : null}
+      <Button disabled={submitting} onClick={onContinue} type="button">
+        {submitting ? 'Opening provider…' : updating ? 'Update permissions' : 'Connect account'}
+      </Button>
+      <p className="decisionPrerequisiteHint">
+        You’ll return here automatically after {resourceName} confirms the change.
+      </p>
+    </section>
   )
 }
 
