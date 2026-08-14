@@ -853,6 +853,24 @@ describe('external API resource authorization', () => {
       completeResourceConnectionIntent(deps, { state: 'template-state', code: 'code' }, 'https://auth.example.com'),
     ).rejects.toMatchObject({ error: 'invalid_authorization_details' })
 
+    tokenAuthorizationDetails = [{ type: 'project_access', identifier: 'project-1', actions: ['write'] }]
+    await expect(
+      completeResourceConnectionIntent(deps, { state: 'wrong-action-state', code: 'code' }, 'https://auth.example.com'),
+    ).rejects.toMatchObject({ error: 'invalid_authorization_details' })
+
+    tokenAuthorizationDetails = granted
+    vi.mocked(deps.connectors.findById).mockResolvedValue(
+      connectorRecord({
+        resourceProviderMetadata: {
+          ...metadata(),
+          token_endpoint_auth_methods_supported: ['client_secret_post'],
+        },
+      }),
+    )
+    await expect(
+      completeResourceConnectionIntent(deps, { state: 'post-auth-state', code: 'code' }, 'https://auth.example.com'),
+    ).resolves.toMatchObject({ authorizationDetails: granted })
+
     intent = {
       ...intent!,
       authorizationDetails: [...templates, { type: 'organization_access', actions: ['read'] }],
@@ -1770,6 +1788,26 @@ describe('external API resource authorization', () => {
           mode: 'persistent',
           authorizationDetails: [{ type: 'project_access', identifier: 'project-2', actions: ['read'] }],
         },
+        'user-1',
+      ),
+    ).rejects.toMatchObject({ error: 'invalid_authorization_details' })
+    await expect(
+      decideAgentAccessRequest(
+        deps,
+        request.id,
+        {
+          decision: 'approve',
+          mode: 'persistent',
+          authorizationDetails: [{ type: 'project_access', actions: ['read'] }],
+        },
+        'user-1',
+      ),
+    ).rejects.toMatchObject({ error: 'invalid_authorization_details' })
+    await expect(
+      decideAgentAccessRequest(
+        deps,
+        request.id,
+        { decision: 'approve', mode: 'persistent', authorizationDetails: [selected[0]!, selected[0]!] },
         'user-1',
       ),
     ).rejects.toMatchObject({ error: 'invalid_authorization_details' })
@@ -2817,6 +2855,7 @@ describe('external API resource authorization', () => {
     let expectedAuthorizationDetails = authorizationDetails
     let issuedAuthorizationDetails: unknown = authorizationDetails
     let refreshedAuthorizationDetails: unknown
+    let refreshInvalidGrant = false
     vi.mocked(deps.externalHttp.fetch).mockImplementation(async (outbound) => {
       if (outbound.url === rarResource.resourceUrl || outbound.url === 'https://projects.example.com/openapi.json') {
         return openApiFetch(outbound)
@@ -2840,6 +2879,9 @@ describe('external API resource authorization', () => {
       const form = new URLSearchParams(await outbound.text())
       if (form.get('grant_type') === 'refresh_token') {
         expect(JSON.parse(form.get('authorization_details')!)).toEqual(expectedAuthorizationDetails)
+        if (refreshInvalidGrant) {
+          return Response.json({ error: 'invalid_grant' }, { status: 400 })
+        }
         return Response.json({
           access_token: 'refreshed-subject-token',
           refresh_token: 'rotated-refresh-token',
@@ -2880,6 +2922,10 @@ describe('external API resource authorization', () => {
     expect(deps.externalResources.createTokenLease).toHaveBeenCalledWith(
       expect.objectContaining({ authorizationDetails }),
     )
+
+    refreshInvalidGrant = true
+    await expect(issue()).rejects.toThrow('Provider refresh token is no longer valid')
+    refreshInvalidGrant = false
 
     refreshedAuthorizationDetails = [{ type: 'project_access', identifier: 'project-2', actions: ['read'] }]
     await expect(issue()).rejects.toThrow('changed authorization details during refresh')
