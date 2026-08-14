@@ -4976,6 +4976,58 @@ describe('external API resource authorization', () => {
     })
   })
 
+  it('[spec: agent-identity/agent-resource-access-ensure] does not reuse an Entitlement outside the current account context', async () => {
+    const detail = { type: 'project_access', identifier: 'project-1', actions: ['read'] }
+    const deps = authorizationCatalogDeps({
+      fetchResponse: Response.json({
+        items: [
+          {
+            authorizationDetail: detail,
+            grantedScopes: ['projects:read'],
+            display: { label: 'Project One' },
+          },
+        ],
+        pagination: { limit: 100, offset: 0, total: 1, hasMore: false, nextOffset: null },
+      }),
+    })
+    const connection = {
+      ...connectionRecord(),
+      grantedScopes: [...connectionRecord().grantedScopes, 'authorization-details:read'],
+      authorizationDetails: [detail],
+    }
+    vi.mocked(deps.externalHttp.fetch).mockImplementation(async () =>
+      Response.json({
+        items: [
+          {
+            authorizationDetail: detail,
+            grantedScopes: ['projects:read'],
+            display: { label: 'Project One' },
+          },
+        ],
+        pagination: { limit: 100, offset: 0, total: 1, hasMore: false, nextOffset: null },
+      }),
+    )
+    vi.mocked(deps.externalResources.findConnectionByOwnerResource).mockResolvedValue(connection)
+    vi.mocked(deps.externalResources.listActiveEntitlementsByAgent).mockResolvedValue([
+      { ...grantRecord(), scope: 'projects:write', authorizationDetails: [detail] },
+    ])
+    vi.mocked(deps.externalResources.listPendingAccessRequestsByAgent).mockResolvedValue([])
+    vi.mocked(deps.externalResources.createAccessRequest).mockImplementation(async (record) => record)
+
+    await expect(
+      createAgentAccessRequest(
+        deps,
+        {
+          resourceId: 'resource-1',
+          scopes: ['projects:write'],
+          authorizationDetails: [detail],
+        },
+        principal(),
+        'https://auth.example.com',
+      ),
+    ).resolves.toMatchObject({ status: 'pending', approvedEntitlements: [] })
+  })
+
   it('enforces controller ownership and request state boundaries', async () => {
     const deps = createTestDeps()
     authorizationDeps(deps)

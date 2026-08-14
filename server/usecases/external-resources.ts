@@ -949,12 +949,26 @@ export async function createAgentAccessRequest(
   await requireAgentResourceVisibility(deps, resource, identity.identity)
   const scopes = [...new Set(input.scopes)].sort()
   const now = new Date()
+  const reusableAccountScopes = requiresAccountConnection(resource)
+    ? connection?.status === 'active'
+      ? ((concreteAuthorizationDetails.length > 0
+          ? await accountScopesForAuthorizationDetails(
+              deps,
+              resource,
+              connection,
+              principal.identityId,
+              authorizationDetails,
+            )
+          : null) ?? connection.grantedScopes)
+      : []
+    : null
   const reusableEntitlements = (
     await deps.externalResources.listActiveEntitlementsByAgent(principal.identityId, now)
   ).filter(
     (entitlement) =>
       entitlement.connectionId === (connection?.id ?? null) &&
       entitlement.resourceServerId === resource.id &&
+      (reusableAccountScopes === null || reusableAccountScopes.includes(entitlement.scope)) &&
       exactAuthorizationDetails(entitlement.authorizationDetails, authorizationDetails),
   )
   const approvedEntitlements = scopes.flatMap((scope) => {
