@@ -29,6 +29,8 @@ const linearAuthorizationCleanupMigrationName = '20260813184558_revoke_legacy_li
 const providerIdentityAlignmentMigrationName = '20260813184930_align_resource_provider_identity.sql'
 const scopeRegistryCleanupMigrationName = '20260813204636_remove_account_connection_scope_registry.sql'
 const staleEntitlementCleanupMigrationName = '20260813211853_cleanup_stale_agent_entitlements.sql'
+const unboundExternalEntitlementCleanupMigrationName = '20260814193000_retire_unbound_external_entitlements.sql'
+const githubContextEntitlementRestoreMigrationName = '20260814195000_restore_github_context_entitlements.sql'
 
 describe('tenant ownership migration', () => {
   it('backfills authority constraints for existing brokered connections', () => {
@@ -103,6 +105,8 @@ describe('tenant ownership migration', () => {
             providerIdentityAlignmentMigrationName,
             scopeRegistryCleanupMigrationName,
             staleEntitlementCleanupMigrationName,
+            unboundExternalEntitlementCleanupMigrationName,
+            githubContextEntitlementRestoreMigrationName,
           ].includes(name),
       )) {
         database.exec(readFileSync(new URL(`../../migrations/${name}`, import.meta.url), 'utf8'))
@@ -171,6 +175,18 @@ describe('tenant ownership migration', () => {
       )
       database.exec(
         readFileSync(new URL(`../../migrations/${staleEntitlementCleanupMigrationName}`, import.meta.url), 'utf8'),
+      )
+      database.exec(
+        readFileSync(
+          new URL(`../../migrations/${unboundExternalEntitlementCleanupMigrationName}`, import.meta.url),
+          'utf8',
+        ),
+      )
+      database.exec(
+        readFileSync(
+          new URL(`../../migrations/${githubContextEntitlementRestoreMigrationName}`, import.meta.url),
+          'utf8',
+        ),
       )
 
       expect(columnNames(database, 'application')).not.toContain('owner_user_id')

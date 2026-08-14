@@ -853,6 +853,24 @@ describe('external API resource authorization', () => {
       completeResourceConnectionIntent(deps, { state: 'template-state', code: 'code' }, 'https://auth.example.com'),
     ).rejects.toMatchObject({ error: 'invalid_authorization_details' })
 
+    tokenAuthorizationDetails = [{ type: 'project_access', identifier: 'project-1', actions: ['write'] }]
+    await expect(
+      completeResourceConnectionIntent(deps, { state: 'wrong-action-state', code: 'code' }, 'https://auth.example.com'),
+    ).rejects.toMatchObject({ error: 'invalid_authorization_details' })
+
+    tokenAuthorizationDetails = granted
+    vi.mocked(deps.connectors.findById).mockResolvedValue(
+      connectorRecord({
+        resourceProviderMetadata: {
+          ...metadata(),
+          token_endpoint_auth_methods_supported: ['client_secret_post'],
+        },
+      }),
+    )
+    await expect(
+      completeResourceConnectionIntent(deps, { state: 'post-auth-state', code: 'code' }, 'https://auth.example.com'),
+    ).resolves.toMatchObject({ authorizationDetails: granted })
+
     intent = {
       ...intent!,
       authorizationDetails: [...templates, { type: 'organization_access', actions: ['read'] }],
@@ -1084,7 +1102,8 @@ describe('external API resource authorization', () => {
     authorizationDeps(deps)
     const template = [{ type: 'project_access', actions: ['read'] }]
     const retained = [{ type: 'project_access', identifier: 'project-1', actions: ['read'] }]
-    const removed = [{ type: 'project_access', identifier: 'project-2', actions: ['read'] }]
+    const returnedExtra = [{ type: 'project_access', identifier: 'project-2', actions: ['read'] }]
+    const removed = [{ type: 'project_access', identifier: 'project-3', actions: ['read'] }]
     vi.mocked(deps.authorization.findResource).mockResolvedValue({ ...resource(), authorizationDetails: template })
     vi.mocked(deps.connectors.findById).mockResolvedValue(
       connectorRecord({
@@ -1116,9 +1135,10 @@ describe('external API resource authorization', () => {
       ...connectionRecord(),
       ownerUserId: null,
       ownerOrganizationId: 'org-1',
-      authorizationDetails: [...retained, ...removed],
+      authorizationDetails: [...retained, ...returnedExtra, ...removed],
     }
     const staleGrant = { ...grantRecord(), authorizationDetails: removed }
+    const returnedExtraGrant = { ...grantRecord(), id: 'returned-extra-grant', authorizationDetails: returnedExtra }
     const staleScopeGrant = { ...grantRecord(), id: 'stale-scope-grant', scopes: ['projects:write'] }
     const missingContextGrant = { ...grantRecord(), id: 'missing-context-grant', authorizationDetails: [] }
     const retainedGrant = { ...grantRecord(), id: 'retained-grant', authorizationDetails: retained }
@@ -1132,6 +1152,7 @@ describe('external API resource authorization', () => {
     )
     vi.mocked(deps.externalResources.listActiveEntitlementsByConnection).mockResolvedValue([
       retainedGrant,
+      returnedExtraGrant,
       staleGrant,
       staleScopeGrant,
       missingContextGrant,
@@ -1145,7 +1166,7 @@ describe('external API resource authorization', () => {
           refresh_token: 'replacement-refresh',
           token_type: 'Bearer',
           scope: 'openid offline_access projects:read',
-          authorization_details: retained,
+          authorization_details: [...retained, ...returnedExtra],
         })
       }
       if (request.url.endsWith('/userinfo')) return Response.json({ sub: 'target-user-1' })
@@ -1169,13 +1190,22 @@ describe('external API resource authorization', () => {
       'revoked',
       expect.any(Date),
     )
+    expect(deps.externalResources.endEntitlement).not.toHaveBeenCalledWith(
+      returnedExtraGrant.id,
+      'revoked',
+      expect.any(Date),
+    )
+    expect(deps.externalResources.upsertProviderCredential).toHaveBeenCalledWith(
+      existing.id,
+      expect.objectContaining({ authorizationDetails: [...retained, ...returnedExtra] }),
+    )
     expect(deps.agentAudit.append).toHaveBeenCalledWith(
       expect.objectContaining({
         action: 'api_resource.access_revoked',
         ownerUserId: null,
         ownerOrganizationId: 'org-1',
         reasonCode: 'connection_authorization_changed',
-        metadata: { authorizationDetails: [{ type: 'project_access', identifier: 'project-2' }] },
+        metadata: { authorizationDetails: [{ type: 'project_access', identifier: 'project-3' }] },
       }),
     )
   })
@@ -1290,6 +1320,7 @@ describe('external API resource authorization', () => {
     const selectedAuthorizationDetails = [{ type: 'project_access', identifier: 'project-1', actions: ['read'] }]
     const connected = {
       ...connectionRecord(),
+      grantedScopes: [...connectionRecord().grantedScopes, 'authorization-details:read'],
       authorizationDetails: selectedAuthorizationDetails,
     }
     vi.mocked(deps.externalResources.findConnectionByOwnerResource).mockResolvedValue(connected)
@@ -1299,6 +1330,18 @@ describe('external API resource authorization', () => {
       ...stored,
       ...decision,
     }))
+    vi.mocked(deps.externalHttp.fetch).mockResolvedValue(
+      Response.json({
+        items: [
+          {
+            authorizationDetail: selectedAuthorizationDetails[0],
+            grantedScopes: ['projects:read'],
+            display: { label: 'Project One' },
+          },
+        ],
+        pagination: { limit: 100, offset: 0, total: 1, hasMore: false, nextOffset: null },
+      }),
+    )
 
     await expect(
       decideAgentAccessRequest(
@@ -1371,7 +1414,10 @@ describe('external API resource authorization', () => {
     const existingConnection = {
       ...connectionRecord(),
       grantedScopes: ['openid', 'offline_access', 'workspaces:discover', 'projects:read'],
-      authorizationDetails: [{ type: 'project_access', identifier: 'project-1', actions: ['read'] }],
+      authorizationDetails: [
+        { type: 'project_access', identifier: 'project-1', actions: ['read'] },
+        { type: 'project_access', identifier: 'project-2', actions: ['read'] },
+      ],
     }
     vi.mocked(deps.connectors.findById).mockResolvedValue(
       connectorRecord({
@@ -1749,6 +1795,26 @@ describe('external API resource authorization', () => {
       decideAgentAccessRequest(
         deps,
         request.id,
+        {
+          decision: 'approve',
+          mode: 'persistent',
+          authorizationDetails: [{ type: 'project_access', actions: ['read'] }],
+        },
+        'user-1',
+      ),
+    ).rejects.toMatchObject({ error: 'invalid_authorization_details' })
+    await expect(
+      decideAgentAccessRequest(
+        deps,
+        request.id,
+        { decision: 'approve', mode: 'persistent', authorizationDetails: [selected[0]!, selected[0]!] },
+        'user-1',
+      ),
+    ).rejects.toMatchObject({ error: 'invalid_authorization_details' })
+    await expect(
+      decideAgentAccessRequest(
+        deps,
+        request.id,
         { decision: 'approve', mode: 'persistent', authorizationDetails: [] },
         'user-1',
       ),
@@ -2101,7 +2167,11 @@ describe('external API resource authorization', () => {
       expect(fetchRequest.headers.get('authorization')).toBe('Bearer subject')
       return Response.json({
         items: [
-          { authorizationDetail: connectedDetail, display: { label: 'Project One' } },
+          {
+            authorizationDetail: connectedDetail,
+            display: { label: 'Project One' },
+            grantedScopes: ['projects:read', 'projects:create'],
+          },
           {
             authorizationDetail: availableDetail,
             display: { label: 'Project Two', metadata: { region: 'ca-central-1' } },
@@ -2121,7 +2191,7 @@ describe('external API resource authorization', () => {
           description: null,
           metadata: {},
           accountAuthorizationStatus: 'authorized',
-          authorizedScopes: ['projects:read', 'projects:write'],
+          authorizedScopes: ['projects:read'],
           requestableScopes: ['projects:create'],
         },
         {
@@ -2753,10 +2823,15 @@ describe('external API resource authorization', () => {
       authorizationDetails,
     }
     const grant = { ...grantRecord(), authorizationDetails }
-    const connection = connectionWithCredential(connectionRecord(), {
-      authorizationDetails,
-      credentialExpiresAt: new Date(Date.now() - 1_000),
-    })
+    const credentialScopes = ['openid', 'offline_access', 'authorization-details:read']
+    const connection = connectionWithCredential(
+      { ...connectionRecord(), grantedScopes: credentialScopes, authorizationDetails },
+      {
+        grantedScopes: credentialScopes,
+        authorizationDetails,
+        credentialExpiresAt: new Date(Date.now() - 1_000),
+      },
+    )
     vi.mocked(deps.authorization.findResource).mockResolvedValue(rarResource)
     vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
     vi.mocked(deps.externalResources.findAccessRequest).mockResolvedValue(request)
@@ -2770,6 +2845,8 @@ describe('external API resource authorization', () => {
         providerMetadata: {
           ...metadata(),
           authorization_details_types_supported: ['project_access'],
+          authorization_details_catalog_endpoint: 'https://projects.example.com/authorization-details',
+          authorization_details_catalog_scope: 'authorization-details:read',
           pushed_authorization_request_endpoint: 'https://projects.example.com/par',
         },
       }),
@@ -2778,13 +2855,33 @@ describe('external API resource authorization', () => {
     let expectedAuthorizationDetails = authorizationDetails
     let issuedAuthorizationDetails: unknown = authorizationDetails
     let refreshedAuthorizationDetails: unknown
+    let refreshInvalidGrant = false
     vi.mocked(deps.externalHttp.fetch).mockImplementation(async (outbound) => {
       if (outbound.url === rarResource.resourceUrl || outbound.url === 'https://projects.example.com/openapi.json') {
         return openApiFetch(outbound)
       }
+      if (outbound.url.startsWith('https://projects.example.com/authorization-details?')) {
+        return Response.json({
+          items: expectedAuthorizationDetails.map((authorizationDetail, index) => ({
+            authorizationDetail,
+            grantedScopes: ['projects:read'],
+            display: { label: `Project ${index + 1}` },
+          })),
+          pagination: {
+            limit: 100,
+            offset: 0,
+            total: expectedAuthorizationDetails.length,
+            hasMore: false,
+            nextOffset: null,
+          },
+        })
+      }
       const form = new URLSearchParams(await outbound.text())
       if (form.get('grant_type') === 'refresh_token') {
         expect(JSON.parse(form.get('authorization_details')!)).toEqual(expectedAuthorizationDetails)
+        if (refreshInvalidGrant) {
+          return Response.json({ error: 'invalid_grant' }, { status: 400 })
+        }
         return Response.json({
           access_token: 'refreshed-subject-token',
           refresh_token: 'rotated-refresh-token',
@@ -2825,6 +2922,10 @@ describe('external API resource authorization', () => {
     expect(deps.externalResources.createTokenLease).toHaveBeenCalledWith(
       expect.objectContaining({ authorizationDetails }),
     )
+
+    refreshInvalidGrant = true
+    await expect(issue()).rejects.toThrow('Provider refresh token is no longer valid')
+    refreshInvalidGrant = false
 
     refreshedAuthorizationDetails = [{ type: 'project_access', identifier: 'project-2', actions: ['read'] }]
     await expect(issue()).rejects.toThrow('changed authorization details during refresh')
@@ -3283,10 +3384,7 @@ describe('external API resource authorization', () => {
             'teams:read',
           ].sort(),
         )
-        expect(JSON.parse(form.get('authorization_details')!)).toEqual([
-          existingDetail,
-          request.authorizationDetails[0],
-        ])
+        expect(JSON.parse(form.get('authorization_details')!)).toEqual(request.authorizationDetails)
         return Response.json({ request_uri: 'urn:example:par:expanded', expires_in: 300 }, { status: 201 })
       }
       return openApiFetch(fetchRequest)
@@ -3311,7 +3409,7 @@ describe('external API resource authorization', () => {
     ).resolves.toMatchObject({
       apiResourceId: 'resource-1',
       scopes: ['objects:create', 'quota:purchase', 'shares:create', 'teams:read'],
-      authorizationDetails: [existingDetail, request.authorizationDetails[0]],
+      authorizationDetails: request.authorizationDetails,
       status: 'pending_authorization',
     })
     expect(deps.externalResources.createConnectionIntent).toHaveBeenCalledWith(
@@ -3325,10 +3423,195 @@ describe('external API resource authorization', () => {
           'teams:read',
           'workspaces:discover',
         ],
-        authorizationDetails: [existingDetail, request.authorizationDetails[0]],
+        authorizationDetails: request.authorizationDetails,
         returnTo: 'access-approval',
       }),
     )
+  })
+
+  it('[spec: agent-identity/resource-account-reauthorization] evaluates account scopes for the selected authorization detail', async () => {
+    const detail = { type: 'project_access', identifier: 'project-1', actions: ['read'] }
+    const deps = authorizationCatalogDeps({
+      fetchResponse: Response.json({
+        items: [
+          {
+            authorizationDetail: detail,
+            grantedScopes: ['projects:read'],
+            display: { label: 'Project One' },
+          },
+        ],
+        pagination: { limit: 100, offset: 0, total: 1, hasMore: false, nextOffset: null },
+      }),
+    })
+    const request = {
+      ...requestRecord(),
+      scopes: ['projects:write'],
+      authorizationDetails: [detail],
+    }
+    vi.mocked(deps.externalResources.findAccessRequestByApprovalTokenHash).mockResolvedValue(request)
+    const connection = {
+      ...connectionRecord(),
+      grantedScopes: [...connectionRecord().grantedScopes, 'authorization-details:read', 'projects:write'],
+    }
+    vi.mocked(deps.externalResources.findConnection).mockResolvedValue(connection)
+    vi.mocked(deps.externalResources.listConnectionsByOrganizations).mockResolvedValue([connection])
+
+    await expect(
+      listAccessRequestConnections(deps, 'approval-token', 'user-1', { limit: 20, offset: 0 }),
+    ).resolves.toMatchObject({
+      items: [{ id: 'connection-1', scopes: ['projects:read'] }],
+    })
+  })
+
+  it('[spec: agent-identity/resource-account-reauthorization] intersects contextual scopes across catalog pages', async () => {
+    const firstDetail = { type: 'project_access', identifier: 'project-1', actions: ['read'] }
+    const secondDetail = { type: 'project_access', identifier: 'project-2', actions: ['read'] }
+    const deps = authorizationCatalogDeps()
+    vi.mocked(deps.externalHttp.fetch)
+      .mockResolvedValueOnce(
+        Response.json({
+          items: [
+            {
+              authorizationDetail: firstDetail,
+              grantedScopes: ['projects:read', 'projects:write'],
+              display: { label: 'Project One' },
+            },
+            {
+              authorizationDetail: { type: 'project_access', identifier: 'project-other', actions: ['read'] },
+              grantedScopes: ['projects:read'],
+              display: { label: 'Other Project' },
+            },
+          ],
+          pagination: { limit: 100, offset: 0, total: 3, hasMore: true, nextOffset: 2 },
+        }),
+      )
+      .mockResolvedValueOnce(
+        Response.json({
+          items: [
+            {
+              authorizationDetail: secondDetail,
+              grantedScopes: ['projects:read'],
+              display: { label: 'Project Two' },
+            },
+          ],
+          pagination: { limit: 100, offset: 2, total: 3, hasMore: false, nextOffset: null },
+        }),
+      )
+    const request = {
+      ...requestRecord(),
+      authorizationDetails: [firstDetail, secondDetail],
+    }
+    vi.mocked(deps.externalResources.findAccessRequestByApprovalTokenHash).mockResolvedValue(request)
+    const connection = {
+      ...connectionRecord(),
+      grantedScopes: [...connectionRecord().grantedScopes, 'authorization-details:read', 'projects:write'],
+    }
+    vi.mocked(deps.externalResources.findConnection).mockResolvedValue(connection)
+    vi.mocked(deps.externalResources.listConnectionsByOrganizations).mockResolvedValue([connection])
+
+    await expect(
+      listAccessRequestConnections(deps, 'approval-token', 'user-1', { limit: 20, offset: 0 }),
+    ).resolves.toMatchObject({
+      items: [{ id: 'connection-1', scopes: ['projects:read'] }],
+    })
+  })
+
+  it('[spec: agent-identity/resource-account-reauthorization] preserves account scopes when a catalog cannot report contextual scopes', async () => {
+    const detail = { type: 'project_access', identifier: 'project-1', actions: ['read'] }
+    const deps = authorizationCatalogDeps({
+      fetchResponse: Response.json({
+        items: [{ authorizationDetail: detail, display: { label: 'Project One' } }],
+        pagination: { limit: 100, offset: 0, total: 1, hasMore: false, nextOffset: null },
+      }),
+    })
+    const request = { ...requestRecord(), authorizationDetails: [detail] }
+    vi.mocked(deps.externalResources.findAccessRequestByApprovalTokenHash).mockResolvedValue(request)
+    const connection = {
+      ...connectionRecord(),
+      grantedScopes: [...connectionRecord().grantedScopes, 'authorization-details:read'],
+    }
+    vi.mocked(deps.externalResources.findConnection).mockResolvedValue(connection)
+    vi.mocked(deps.externalResources.listConnectionsByOrganizations).mockResolvedValue([connection])
+
+    await expect(
+      listAccessRequestConnections(deps, 'approval-token', 'user-1', { limit: 20, offset: 0 }),
+    ).resolves.toMatchObject({
+      items: [{ id: 'connection-1', scopes: ['projects:read', 'authorization-details:read'] }],
+    })
+  })
+
+  it('[spec: agent-identity/resource-account-reauthorization] reports no contextual scopes when the selected detail is absent', async () => {
+    const requestedDetail = { type: 'project_access', identifier: 'project-1', actions: ['read'] }
+    const deps = authorizationCatalogDeps({
+      fetchResponse: Response.json({
+        items: [
+          {
+            authorizationDetail: { type: 'project_access', identifier: 'project-other', actions: ['read'] },
+            grantedScopes: ['projects:read'],
+            display: { label: 'Other Project' },
+          },
+        ],
+        pagination: { limit: 100, offset: 0, total: 1, hasMore: false, nextOffset: null },
+      }),
+    })
+    const request = { ...requestRecord(), authorizationDetails: [requestedDetail] }
+    vi.mocked(deps.externalResources.findAccessRequestByApprovalTokenHash).mockResolvedValue(request)
+    const connection = {
+      ...connectionRecord(),
+      grantedScopes: [...connectionRecord().grantedScopes, 'authorization-details:read'],
+    }
+    vi.mocked(deps.externalResources.findConnection).mockResolvedValue(connection)
+    vi.mocked(deps.externalResources.listConnectionsByOrganizations).mockResolvedValue([connection])
+
+    await expect(
+      listAccessRequestConnections(deps, 'approval-token', 'user-1', { limit: 20, offset: 0 }),
+    ).resolves.toMatchObject({
+      items: [{ id: 'connection-1', scopes: [] }],
+    })
+  })
+
+  it('[spec: agent-identity/agent-resource-approval] approves scopes granted by the selected account context', async () => {
+    const detail = { type: 'project_access', identifier: 'project-1', actions: ['read'] }
+    const deps = authorizationCatalogDeps({
+      fetchResponse: Response.json({
+        items: [
+          {
+            authorizationDetail: detail,
+            grantedScopes: ['projects:write'],
+            display: { label: 'Project One' },
+          },
+        ],
+        pagination: { limit: 100, offset: 0, total: 1, hasMore: false, nextOffset: null },
+      }),
+    })
+    const request = {
+      ...requestRecord(),
+      scopes: ['projects:write'],
+      authorizationDetails: [detail],
+    }
+    const connection = {
+      ...connectionRecord(),
+      grantedScopes: [...connectionRecord().grantedScopes, 'authorization-details:read'],
+      authorizationDetails: [detail],
+    }
+    vi.mocked(deps.externalResources.findAccessRequest).mockResolvedValue(request)
+    vi.mocked(deps.externalResources.findConnection).mockResolvedValue(connection)
+    vi.mocked(deps.externalResources.listConnectionsByOrganizations).mockResolvedValue([connection])
+    vi.mocked(deps.externalResources.approveAccessRequestWithEntitlements).mockImplementation(
+      async (records, _updates, id, decision) => ({
+        entitlements: records,
+        request: { ...request, id, ...decision },
+      }),
+    )
+
+    await expect(
+      decideAgentAccessRequest(
+        deps,
+        request.id,
+        { decision: 'approve', mode: 'persistent', authorizationDetails: [detail] },
+        'user-1',
+      ),
+    ).resolves.toMatchObject({ status: 'approved', scopes: ['projects:write'] })
   })
 
   it('enforces first-access connection context boundaries', async () => {
@@ -4751,6 +5034,53 @@ describe('external API resource authorization', () => {
     })
   })
 
+  it('[spec: agent-identity/agent-resource-access-ensure] does not reuse an Entitlement outside the current account context', async () => {
+    const detail = { type: 'project_access', identifier: 'project-1', actions: ['read'] }
+    const deps = authorizationCatalogDeps()
+    const connection = {
+      ...connectionRecord(),
+      grantedScopes: [...connectionRecord().grantedScopes, 'authorization-details:read'],
+      authorizationDetails: [detail],
+    }
+    const providerFetch = vi.mocked(deps.externalHttp.fetch).getMockImplementation()!
+    vi.mocked(deps.externalHttp.fetch).mockImplementation(async (request) => {
+      if (request.url === 'https://projects.example.com/.well-known/openid-configuration') {
+        return Response.json(metadata())
+      }
+      return request.url.startsWith('https://projects.example.com/authorization-details?')
+        ? Response.json({
+            items: [
+              {
+                authorizationDetail: detail,
+                grantedScopes: ['projects:read'],
+                display: { label: 'Project One' },
+              },
+            ],
+            pagination: { limit: 100, offset: 0, total: 1, hasMore: false, nextOffset: null },
+          })
+        : providerFetch(request)
+    })
+    vi.mocked(deps.externalResources.findConnectionByOwnerResource).mockResolvedValue(connection)
+    vi.mocked(deps.externalResources.listActiveEntitlementsByAgent).mockResolvedValue([
+      { ...grantRecord(), scope: 'projects:write', authorizationDetails: [detail] },
+    ])
+    vi.mocked(deps.externalResources.listPendingAccessRequestsByAgent).mockResolvedValue([])
+    vi.mocked(deps.externalResources.createAccessRequest).mockImplementation(async (record) => record)
+
+    await expect(
+      createAgentAccessRequest(
+        deps,
+        {
+          resourceId: 'resource-1',
+          scopes: ['projects:write'],
+          authorizationDetails: [detail],
+        },
+        principal(),
+        'https://auth.example.com',
+      ),
+    ).resolves.toMatchObject({ status: 'pending', approvedEntitlements: [] })
+  })
+
   it('enforces controller ownership and request state boundaries', async () => {
     const deps = createTestDeps()
     authorizationDeps(deps)
@@ -4881,6 +5211,7 @@ describe('external API resource authorization', () => {
     vi.mocked(deps.externalResources.listConnectionsByOrganizations).mockResolvedValue([
       {
         ...connectionRecord(),
+        grantedScopes: [...connectionRecord().grantedScopes, 'projects:removed'],
         ownerUserId: null,
         ownerOrganizationId: 'org-1',
         externalSubject: 'abc',
@@ -5073,7 +5404,7 @@ describe('external API resource authorization', () => {
     })
     await expect(
       issueTargetAccessToken(deps, 'request-1', 'proof', 'https://auth.example.com/token', principal(), signer),
-    ).rejects.toThrow('Every approved scope requires an active Entitlement.')
+    ).rejects.toThrow('Approved Entitlement boundaries must remain unchanged.')
 
     vi.mocked(deps.externalResources.findEntitlement).mockResolvedValue(grantRecord())
     vi.mocked(deps.externalResources.findAccessRequest).mockResolvedValue(null)
@@ -5096,7 +5427,7 @@ describe('external API resource authorization', () => {
     })
     await expect(
       issueTargetAccessToken(deps, 'grant-1', 'proof', 'https://auth.example.com/token', principal(), signer),
-    ).rejects.toThrow('Every approved scope requires an active Entitlement.')
+    ).rejects.toThrow('Every approved Entitlement must still exist.')
     vi.mocked(deps.externalResources.findAccessRequest).mockResolvedValue({
       ...requestRecord(),
       status: 'denied',
@@ -5116,7 +5447,7 @@ describe('external API resource authorization', () => {
     })
     await expect(
       issueTargetAccessToken(deps, 'request-1', 'proof', 'https://auth.example.com/token', principal(), signer),
-    ).rejects.toThrow('Every approved scope requires an active Entitlement.')
+    ).rejects.toThrow('Every approved Entitlement must still be active.')
 
     vi.mocked(deps.externalResources.findEntitlement).mockResolvedValue(grantRecord())
     vi.mocked(deps.externalResources.findAccessRequest).mockResolvedValue({
@@ -5127,7 +5458,7 @@ describe('external API resource authorization', () => {
     })
     await expect(
       issueTargetAccessToken(deps, 'request-1', 'proof', 'https://auth.example.com/token', principal(), signer),
-    ).rejects.toThrow('Every approved scope requires an active Entitlement.')
+    ).rejects.toThrow('Approved Entitlement boundaries must remain unchanged.')
 
     vi.mocked(deps.externalResources.findAccessRequest).mockResolvedValue({
       ...requestRecord(),

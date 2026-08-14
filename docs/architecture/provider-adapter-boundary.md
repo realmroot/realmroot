@@ -112,6 +112,13 @@ Adapter's domain. Their catalog keeps human labels separate from the opaque
 authorization detail, so clients can display a provider name while grants and
 tokens continue to use stable provider identifiers.
 
+When independently selectable authorities can grant different scopes, the
+catalog item may publish `grantedScopes` for that exact authorization detail.
+Realmroot uses this generic coverage signal only to decide whether the selected
+authority requires external reauthorization. The external authorization server
+still owns the scope meaning and MUST enforce the same detail-specific coverage
+when issuing the final token.
+
 ## Transparent proxy constraint
 
 Transparent proxying is allowed and preferred. It means the Adapter preserves

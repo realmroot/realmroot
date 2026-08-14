@@ -399,6 +399,7 @@ Feature: Agent identity and delegated API authorization
       When the Agent discovers that catalog through Realmroot
       Then Realmroot forwards pagination and returns each available detail with safe display metadata and connection authorization
       And each detail reports only its Agent-authorized and requestable scope sets
+      And provider-reported scope reductions immediately remove stale account and Agent authority from that detail
       And Realmroot does not expose account connection identifiers, grant identifiers, grants, or tokens
       When the Agent requests an exact scope subset and one or more concrete connected authorization details
       Then Realmroot preserves that exact authorization boundary through hosted approval
@@ -445,7 +446,7 @@ Feature: Agent identity and delegated API authorization
     @entrypoint:product-ui @journey:resource-account-reauthorization
     Scenario: A controller reauthorizes a connected external resource account
       Given the controller's home space already has an account connection for an external API resource
-      And a pending Agent access request requires scopes that connection does not yet cover
+      And a pending Agent access request requires scopes that its selected authorization detail does not yet cover
       When the controller opens the approval page
       Then Realmroot presents account permission update as the only available action
       And hides Agent approval controls until the account covers every requested scope
@@ -460,12 +461,15 @@ Feature: Agent identity and delegated API authorization
     @entrypoint:agent-protocol @journey:resource-account-connection-expansion
     Scenario: An Agent requests additional authority from an existing resource account
       Given the Agent's home space has an active resource account connection with covered persistent grants
-      When the Agent requests a controller-managed connection for an additional scope
+      When the Agent requests an additional scope for one selected authorization detail
       Then Realmroot leaves the account connection revision, authorization details, and grants unchanged while approval is pending or interrupted
       When the controller starts account reauthorization
       Then Realmroot requests the union of the account's still-advertised resource scopes and the Agent's additional scope
+      And sends only the selected authorization detail to the external authorization server
       And Realmroot adds provider protocol scopes only after validating that resource scope union
-      And only a successful OAuth callback may replace the account authorization and invalidate grants it no longer covers
+      And the external authorization server returns the connection's complete current authorization-detail snapshot
+      And Realmroot accepts the selected authorization detail as a subset of that snapshot
+      And only a successful OAuth callback may replace the account authorization and invalidate grants the complete snapshot no longer covers
 
     @entrypoint:agent-protocol @journey:agent-resource-discovery
     Scenario: An Agent discovers resource connection and scope status before requesting exact authority
@@ -474,7 +478,7 @@ Feature: Agent identity and delegated API authorization
       Then Realmroot returns enabled resources even when an external resource has no connected account
       And a temporarily unreachable external authorization server does not fail the Resource Server collection or revoke its account connection
       And returns each resource server with its protected URL, available scopes, and one connected, not-connected, or not-required account status
-      And a connected account reports only its safe display label and connection-authorized scopes
+      And a connected account reports only its safe display label and still-advertised connection-authorized scopes
       And Realmroot does not expose Connector, account connection, grant, or token identifiers
       When Restish connects directly to a candidate resource and reads the target OpenAPI operation
       And the Agent requests an account and its exact scope set without an applicable grant

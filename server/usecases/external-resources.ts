@@ -43,7 +43,8 @@ import { type PaginationInput, paginationMetadata } from '@shared/api/pagination
 import { agentBootstrapScopes, realmrootOAuthScopes } from '@shared/authz'
 import { realmrootManagementScopes } from '@shared/scope-registry'
 import { authorizationCodeRequest, generateCodeChallenge, refreshAccessTokenRequest } from 'better-auth/oauth2'
-import { ensureDynamicConnectorScopes } from './connectors'
+import { refreshResourceScopeRegistry } from './authorization'
+import { ensureDynamicConnectorScopes, refreshDynamicConnectorMetadata } from './connectors'
 import { validateDpopTokenProof } from './dpop'
 import { organizationUserHasScope, resolveOrganizationMembershipScopes } from './organization-membership-scopes'
 import { validateRequestedScopes } from './resource-openapi'
@@ -411,13 +412,7 @@ export async function createAccountConnection(
       {
         owner,
         scopes: connectionScopes,
-        authorizationDetails:
-          request.authorizationDetails.length > 0
-            ? mergeAuthorizationDetails(
-                (controlledConnection ?? ownerConnection)?.authorizationDetails ?? [],
-                request.authorizationDetails,
-              )
-            : undefined,
+        authorizationDetails: request.authorizationDetails.length > 0 ? request.authorizationDetails : undefined,
         returnTo: 'access-approval',
       },
       actorUserId,
@@ -475,11 +470,54 @@ export async function listAccessRequestConnections(
       ? await deps.externalResources.listConnectionsByOrganizations([identity.identity.ownerOrganizationId])
       : await deps.externalResources.listConnectionsByUser(identity.identity.ownerUserId!)
   ).filter((connection) => connection.resourceId === request.resourceId && connection.status === 'active')
-  const connections = resourceConnections.map(toAccountConnection)
+  const connections = await Promise.all(
+    resourceConnections.map(async (connection) => {
+      const accountConnection = toAccountConnection(connection)
+      if (request.authorizationDetails.length === 0) return accountConnection
+      const contextualScopes = await accountScopesForAuthorizationDetails(
+        deps,
+        resource,
+        connection,
+        request.agentIdentityId,
+        request.authorizationDetails,
+      )
+      return contextualScopes === null ? accountConnection : { ...accountConnection, scopes: contextualScopes }
+    }),
+  )
   return {
     items: connections.slice(pagination.offset, pagination.offset + pagination.limit),
     pagination: paginationMetadata({ ...pagination, total: connections.length }),
   }
+}
+
+async function accountScopesForAuthorizationDetails(
+  deps: Deps,
+  resource: NonNullable<Awaited<ReturnType<Deps['authorization']['findResource']>>>,
+  connection: ProviderResourceAuthorizationRecord,
+  agentIdentityId: string,
+  authorizationDetails: AuthorizationDetail[],
+) {
+  const requested = new Set(authorizationDetails.map(canonicalJson))
+  const grantedByDetail = new Map<string, string[] | undefined>()
+  for (let offset = 0; ; ) {
+    const catalog = await readResourceCatalog(deps, resource, connection, agentIdentityId, { limit: 100, offset })
+    for (const item of catalog.items) {
+      const key = canonicalJson(item.authorizationDetail)
+      if (requested.has(key)) grantedByDetail.set(key, item.grantedScopes)
+    }
+    if (
+      grantedByDetail.size === requested.size ||
+      !catalog.pagination.hasMore ||
+      catalog.pagination.nextOffset === null
+    )
+      break
+    offset = catalog.pagination.nextOffset
+  }
+  if (grantedByDetail.size !== requested.size) return []
+  const contextual = [...grantedByDetail.values()]
+  if (contextual.some((scopes) => scopes === undefined)) return null
+  const [first = [], ...rest] = contextual as string[][]
+  return first.filter((scope) => rest.every((scopes) => scopes.includes(scope))).sort()
 }
 
 export async function getAccountConnection(
@@ -745,7 +783,8 @@ export async function discoverAgentResources(deps: Deps, principal: AgentResourc
                   (scope) =>
                     scope !== 'openid' &&
                     scope !== 'offline_access' &&
-                    scope !== authorization?.authorizationDetailsCatalogScope,
+                    scope !== authorization?.authorizationDetailsCatalogScope &&
+                    resource.scopeRegistry?.scopes.some((declared) => declared.value === scope),
                 ),
               }
             : { status: 'not_connected' as const, displayName: null, authorizedScopes: [] },
@@ -886,7 +925,7 @@ export async function createAgentAccessRequest(
   approvalOrigin: string,
 ) {
   const identity = await requireActiveIdentityAndBinding(deps, principal)
-  const resource = await requireEnabledResource(deps, input.resourceId)
+  let resource = await requireEnabledResource(deps, input.resourceId)
   const connection = requiresAccountConnection(resource)
     ? await deps.externalResources.findConnectionByOwnerResource({
         resourceId: resource.id,
@@ -894,7 +933,7 @@ export async function createAgentAccessRequest(
         ownerOrganizationId: identity.identity.ownerOrganizationId,
       })
     : null
-  validateResourceRequestedScopes(resource, input.scopes)
+  if (!requiresAccountConnection(resource)) validateResourceRequestedScopes(resource, input.scopes)
   const authorizationDetails = accessRequestAuthorizationDetails(resource, input.authorizationDetails ?? [])
   const concreteAuthorizationDetails = authorizationDetails.filter(
     (detail) => !resource.authorizationDetails.some((template) => canonicalJson(template) === canonicalJson(detail)),
@@ -911,12 +950,45 @@ export async function createAgentAccessRequest(
   await requireAgentResourceVisibility(deps, resource, identity.identity)
   const scopes = [...new Set(input.scopes)].sort()
   const now = new Date()
+  const reusableAccountScopes = requiresAccountConnection(resource)
+    ? connection?.status === 'active'
+      ? ((concreteAuthorizationDetails.length > 0
+          ? await accountScopesForAuthorizationDetails(
+              deps,
+              resource,
+              connection,
+              principal.identityId,
+              authorizationDetails,
+            )
+          : null) ?? connection.grantedScopes)
+      : []
+    : null
+  const requiresAccountExpansion =
+    reusableAccountScopes !== null && scopes.some((scope) => !reusableAccountScopes.includes(scope))
+  if (requiresAccountExpansion) {
+    if (resource.connectorId) {
+      await refreshDynamicConnectorMetadata(deps, resource.connectorId)
+      const connector = await deps.connectors.findById(resource.connectorId)
+      const advertisedScopes = metadataStringArray(connector?.resourceProviderMetadata?.scopes_supported)
+      if (advertisedScopes.length > 0 && scopes.some((scope) => !advertisedScopes.includes(scope))) {
+        throw badRequest('Requested scope is not currently supported by the Resource Server.')
+      }
+    }
+    const registeredScopes = new Set(resource.scopeRegistry?.scopes.map((scope) => scope.value) ?? [])
+    if (scopes.some((scope) => !registeredScopes.has(scope))) {
+      resource = await refreshResourceScopeRegistry(deps, resource.id)
+      validateResourceRequestedScopes(resource, scopes)
+    }
+  } else {
+    validateResourceRequestedScopes(resource, scopes)
+  }
   const reusableEntitlements = (
     await deps.externalResources.listActiveEntitlementsByAgent(principal.identityId, now)
   ).filter(
     (entitlement) =>
       entitlement.connectionId === (connection?.id ?? null) &&
       entitlement.resourceServerId === resource.id &&
+      (reusableAccountScopes === null || reusableAccountScopes.includes(entitlement.scope)) &&
       exactAuthorizationDetails(entitlement.authorizationDetails, authorizationDetails),
   )
   const approvedEntitlements = scopes.flatMap((scope) => {
@@ -927,16 +999,18 @@ export async function createAgentAccessRequest(
   const binding = identity.bindings.find(
     (candidate) => candidate.hostId === principal.hostId && candidate.protocolAgentId === principal.protocolAgentId,
   )!
-  const pending = (await deps.externalResources.listPendingAccessRequestsByAgent(principal.identityId, now)).find(
-    (request) =>
-      request.resourceId === resource.id &&
-      request.connectionId === (connection?.id ?? null) &&
-      exactScopes(request.scopes, scopes) &&
-      exactAuthorizationDetails(request.authorizationDetails, authorizationDetails),
-  )
-  if (pending) {
-    const token = await deps.secrets.open(pending.encryptedApprovalToken, accessRequestTokenContext(pending.id))
-    return toAgentAccessRequest(pending, principal.hostId, approvalUrl(approvalOrigin, token))
+  if (!alreadyAuthorized) {
+    const pending = (await deps.externalResources.listPendingAccessRequestsByAgent(principal.identityId, now)).find(
+      (request) =>
+        request.resourceId === resource.id &&
+        request.connectionId === (connection?.id ?? null) &&
+        exactScopes(request.scopes, scopes) &&
+        exactAuthorizationDetails(request.authorizationDetails, authorizationDetails),
+    )
+    if (pending) {
+      const token = await deps.secrets.open(pending.encryptedApprovalToken, accessRequestTokenContext(pending.id))
+      return toAgentAccessRequest(pending, principal.hostId, approvalUrl(approvalOrigin, token))
+    }
   }
   const expiresAt = new Date(now.getTime() + 10 * 60 * 1000)
   const rawApprovalToken = randomToken()
@@ -1230,9 +1304,19 @@ export async function decideAgentAccessRequest(
       requestIdentity.identity.ownerUserId,
       requestIdentity.identity.ownerOrganizationId,
     )
-    assertScopeSubset(request.scopes, connection.grantedScopes, 'connected account')
     assertAuthorizationDetailsSelection(resource, connection, authorizationDetails)
     assertAuthorizationDetailsSubset(authorizationDetails, connection.authorizationDetails, 'connected account')
+    const contextualScopes =
+      authorizationDetails.length > 0
+        ? await accountScopesForAuthorizationDetails(
+            deps,
+            resource,
+            connection,
+            request.agentIdentityId,
+            authorizationDetails,
+          )
+        : null
+    assertScopeSubset(request.scopes, contextualScopes ?? connection.grantedScopes, 'connected account')
   } else if (connectionId) {
     throw badRequest('Native API resources do not use account connections.')
   } else {
@@ -1364,24 +1448,30 @@ export async function issueTargetAccessToken(
   const entitlementIds = request.approvedEntitlements.map((snapshot) => snapshot.entitlementId)
   const entitlements = await deps.externalResources.findEntitlements(entitlementIds)
   const now = new Date()
-  if (
-    entitlements.length !== request.scopes.length ||
-    request.approvedEntitlements.length !== request.scopes.length ||
-    request.approvedEntitlements.some(({ scope, entitlementId }) => {
-      const entitlement = entitlements.find((candidate) => candidate.id === entitlementId)
-      return (
-        !entitlement ||
-        entitlement.scope !== scope ||
-        entitlement.agentIdentityId !== principal.identityId ||
-        entitlement.resourceServerId !== request.resourceId ||
-        entitlement.connectionId !== request.connectionId ||
-        entitlement.endedAt !== null ||
-        (entitlement.expiresAt !== null && entitlement.expiresAt.getTime() <= now.getTime()) ||
-        !exactAuthorizationDetails(entitlement.authorizationDetails, request.authorizationDetails)
-      )
-    })
-  ) {
-    throw forbidden('Every approved scope requires an active Entitlement.')
+  if (request.approvedEntitlements.length !== request.scopes.length) {
+    throw forbidden('Every approved scope requires an Entitlement snapshot.')
+  }
+  if (entitlements.length !== entitlementIds.length) {
+    throw forbidden('Every approved Entitlement must still exist.')
+  }
+  for (const { scope, entitlementId } of request.approvedEntitlements) {
+    const entitlement = entitlements.find((candidate) => candidate.id === entitlementId)
+    if (!entitlement) throw forbidden('Every approved Entitlement must still exist.')
+    if (
+      entitlement.endedAt !== null ||
+      (entitlement.expiresAt !== null && entitlement.expiresAt.getTime() <= now.getTime())
+    ) {
+      throw forbidden('Every approved Entitlement must still be active.')
+    }
+    if (
+      entitlement.scope !== scope ||
+      entitlement.agentIdentityId !== principal.identityId ||
+      entitlement.resourceServerId !== request.resourceId ||
+      entitlement.connectionId !== request.connectionId ||
+      !exactAuthorizationDetails(entitlement.authorizationDetails, request.authorizationDetails)
+    ) {
+      throw forbidden('Approved Entitlement boundaries must remain unchanged.')
+    }
   }
   const resource = await deps.authorization.findResource(request.resourceId)
   if (!resource?.enabled) throw forbidden('Enabled Resource Server is required.')
@@ -1406,7 +1496,20 @@ export async function issueTargetAccessToken(
   if (!connection || connection.status !== 'active') {
     throw forbidden('Active external API resource grant is required.')
   }
-  const providerCredential = requireProviderCredential(connection, request.scopes, request.authorizationDetails)
+  const contextualScopes =
+    request.authorizationDetails.length > 0
+      ? await accountScopesForAuthorizationDetails(
+          deps,
+          resource,
+          connection,
+          request.agentIdentityId,
+          request.authorizationDetails,
+        )
+      : null
+  const providerCredential =
+    contextualScopes === null
+      ? requireProviderCredential(connection, request.scopes, request.authorizationDetails)
+      : requireProviderCredential(connection, [], [])
   const connectionClientGeneration = providerCredential.clientGeneration
   const connectorId = resource.connectorId!
   const connector = await deps.connectors.findById(connectorId)
@@ -1425,7 +1528,7 @@ export async function issueTargetAccessToken(
   if (authorization?.status !== 'active') {
     throw forbidden('Active external authorization server is required.')
   }
-  assertScopeSubset(request.scopes, connection.grantedScopes, 'connected account')
+  assertScopeSubset(request.scopes, contextualScopes ?? connection.grantedScopes, 'connected account')
   assertAuthorizationDetailsSelection(resource, connection, request.authorizationDetails)
   assertAuthorizationDetailsSubset(request.authorizationDetails, connection.authorizationDetails, 'connected account')
   const confirmationJkt = await validateDpopTokenProof(deps, dpopProof, authorization.tokenEndpoint)
@@ -1536,7 +1639,7 @@ export async function issueTargetAccessToken(
     now,
     audit,
   )
-  if (!lease) throw forbidden('Every approved scope requires an active Entitlement.')
+  if (!lease) throw forbidden('Approved Entitlements changed before token issuance.')
   return {
     accessToken,
     tokenType: 'DPoP' as const,
@@ -1668,7 +1771,7 @@ async function issueNativeAccessToken(
     now,
     audit,
   )
-  if (!lease) throw forbidden('Every approved scope requires an active Entitlement.')
+  if (!lease) throw forbidden('Approved Entitlements changed before token issuance.')
   return {
     accessToken,
     tokenType: 'DPoP' as const,
@@ -1824,6 +1927,7 @@ async function readAuthorizationDetailCatalog(
     const connectionAuthorized = connection.authorizationDetails.some((detail) =>
       exactAuthorizationDetails([detail], [item.authorizationDetail]),
     )
+    const grantedScopes = new Set(item.grantedScopes ?? connection.grantedScopes)
     const authorizedScopes = new Set(
       entitlements
         .filter((entitlement) =>
@@ -1831,14 +1935,15 @@ async function readAuthorizationDetailCatalog(
             exactAuthorizationDetails([detail], [item.authorizationDetail]),
           ),
         )
-        .map((entitlement) => entitlement.scope),
+        .map((entitlement) => entitlement.scope)
+        .filter((scope) => grantedScopes.has(scope)),
     )
     return {
       ...item,
       connectionStatus: connectionAuthorized ? ('authorized' as const) : ('authorization_required' as const),
       authorizedScopes: connectionAuthorized ? [...authorizedScopes].sort() : [],
       requestableScopes: connectionAuthorized
-        ? connection.grantedScopes
+        ? [...grantedScopes]
             .filter(
               (scope) =>
                 scope !== 'openid' &&
@@ -1881,7 +1986,12 @@ async function requestAuthorizationDetailCatalog(
     throw badGateway('Authorization detail catalog request failed.', { url: endpoint, status: response.status })
   }
   const parsed = authorizationDetailCatalogSchema.safeParse(await response.json().catch(() => null))
-  if (!parsed.success) throw badGateway('Authorization detail catalog response is invalid.', { url: endpoint })
+  if (!parsed.success) {
+    throw badGateway('Authorization detail catalog response is invalid.', {
+      url: endpoint,
+      issues: parsed.error.issues.map((issue) => ({ path: issue.path.join('.'), message: issue.message })),
+    })
+  }
   if (parsed.data.pagination.limit !== pagination.limit || parsed.data.pagination.offset !== pagination.offset) {
     throw badGateway('Authorization detail catalog returned mismatched pagination metadata.', { url: endpoint })
   }
@@ -1944,6 +2054,7 @@ async function readResourceCatalog(
       ].sort()
       return {
         authorizationDetail,
+        grantedScopes: undefined,
         display: authorizationDetailDisplay(authorizationDetail),
         connectionStatus: 'authorized' as const,
         authorizedScopes,
@@ -2231,12 +2342,6 @@ function providerCredentialExpiry(connection: ProviderResourceAuthorizationRecor
     .map((credential) => credential.credentialExpiresAt)
     .filter((expiresAt): expiresAt is Date => expiresAt !== null)
   return expiries.length > 0 ? new Date(Math.min(...expiries.map((expiresAt) => expiresAt.getTime()))) : null
-}
-
-function mergeAuthorizationDetails(current: AuthorizationDetail[], requested: AuthorizationDetail[]) {
-  const entries = new Map(current.map((detail) => [canonicalJson(detail), detail]))
-  for (const detail of requested) entries.set(canonicalJson(detail), detail)
-  return [...entries.values()]
 }
 
 async function refreshConnectionToken(
@@ -2838,7 +2943,7 @@ function assertProviderConnectionAuthorizationDetails(
     if (configuredTemplates.some((template) => canonicalJson(template) === canonicalJson(detail))) {
       throw invalidProviderConnectionAuthorizationDetails()
     }
-    if (!requested.some((requirement) => authorizationDetailMatchesTemplate(detail, requirement))) {
+    if (!configuredTemplates.some((template) => authorizationDetailMatchesTemplate(detail, template))) {
       throw invalidProviderConnectionAuthorizationDetails()
     }
   }

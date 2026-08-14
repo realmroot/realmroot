@@ -16,6 +16,7 @@ export const authorizationDetailsSchema = z.array(authorizationDetailSchema)
 export const authorizationDetailCatalogItemSchema = z
   .object({
     authorizationDetail: authorizationDetailSchema,
+    grantedScopes: z.array(nonEmptyString).optional(),
     display: z
       .object({
         label: nonEmptyString,
