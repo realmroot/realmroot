@@ -1,4 +1,3 @@
-import type { ManagementReadinessItem } from '@shared/api/management'
 import type { WebhookEndpoint, WebhookRequest } from '@shared/api/webhooks'
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -43,7 +42,6 @@ import {
   ObjectHeader,
   ResourcePage,
   RoutedSettingsTabs,
-  SetupChecklist,
 } from '@/features/management/resource-components'
 import {
   webhookEndpoint as webhookEndpointFixture,
@@ -470,30 +468,6 @@ describe('helpers-resource', () => {
     )
     await userEvent.click(screen.getByRole('tab', { name: 'B' }))
     expect(onChange).toHaveBeenCalledWith('b')
-  })
-
-  it('renders the setup checklist with complete and incomplete items', () => {
-    const items: ManagementReadinessItem[] = [
-      {
-        id: 'oidc_application',
-        label: 'Done',
-        description: 'done desc',
-        status: 'complete',
-        href: '/a',
-        action: 'Open',
-      },
-      {
-        id: 'email_delivery',
-        label: 'Todo',
-        description: 'todo desc',
-        status: 'action_needed',
-        href: '/b',
-        action: 'Fix',
-      },
-    ]
-    render(<SetupChecklist title="Setup" items={items} />)
-    expect(screen.getByText('Done')).toBeTruthy()
-    expect(screen.getByText('Todo')).toBeTruthy()
   })
 
   it('selects routed settings tabs and ignores modifier clicks', () => {

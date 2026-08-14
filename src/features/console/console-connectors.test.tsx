@@ -36,7 +36,7 @@ function oidcConnector(overrides: Record<string, unknown> = {}) {
     providerId: 'projects',
     displayName: 'Projects OIDC',
     enabled: false,
-    loginEnabled: true,
+    authenticationEnabled: true,
     clientSecretConfigured: false,
     issuer: 'https://idp.example.com',
     registrationMode: 'manual' as const,
@@ -75,11 +75,11 @@ describe('admin console Identity providers', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add OIDC connector' }))
     fireEvent.change(await screen.findByLabelText('Name'), { target: { value: 'Projects OIDC' } })
     fireEvent.change(screen.getByLabelText('Provider ID'), { target: { value: 'projects' } })
+    fireEvent.click(screen.getByRole('switch', { name: 'Allow hosted login' }))
     fireEvent.change(screen.getByLabelText('OIDC issuer'), { target: { value: 'https://idp.example.com' } })
     fireEvent.change(screen.getByLabelText('Client ID'), { target: { value: 'client-1' } })
     fireEvent.change(screen.getByLabelText('Client Secret'), { target: { value: 'secret-1' } })
     fireEvent.change(screen.getByLabelText('Scopes'), { target: { value: 'openid profile' } })
-    fireEvent.click(screen.getByRole('switch', { name: 'Allow hosted login' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Save' }))
 
     await waitFor(() =>
@@ -94,7 +94,7 @@ describe('admin console Identity providers', () => {
           clientId: 'client-1',
           clientSecret: 'secret-1',
           enabled: true,
-          loginEnabled: true,
+          authenticationEnabled: true,
           scopes: ['openid', 'profile'],
         }),
       ]),
@@ -116,6 +116,7 @@ describe('admin console Identity providers', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Add OIDC connector' }))
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Dynamic OIDC' } })
     fireEvent.change(screen.getByLabelText('Provider ID'), { target: { value: 'dynamic-oidc' } })
+    fireEvent.click(screen.getByRole('switch', { name: 'Allow hosted login' }))
     fireEvent.change(screen.getByLabelText('Client registration'), { target: { value: 'dynamic' } })
     fireEvent.change(screen.getByLabelText('OIDC issuer'), { target: { value: 'https://dynamic.example.com' } })
     expect(screen.queryByLabelText('Client ID')).toBeNull()
@@ -132,6 +133,50 @@ describe('admin console Identity providers', () => {
     )
   })
 
+  it('creates one OIDC connector for hosted login and managed resource authorization', async () => {
+    const requests: unknown[] = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      if (String(input) === '/api/connectors' && init?.method === 'POST') {
+        requests.push(JSON.parse(String(init.body)))
+        return Promise.resolve(jsonResponse(oidcConnector({ enabled: true }), 201))
+      }
+      return emptyConnectorFetch(input, init)
+    })
+
+    renderWithQuery(<ConnectorsPage />)
+    await openOidcTab()
+    fireEvent.click(await screen.findByRole('button', { name: 'Add OIDC connector' }))
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Dual-purpose provider' } })
+    fireEvent.change(screen.getByLabelText('Provider ID'), { target: { value: 'dual-provider' } })
+    fireEvent.click(screen.getByRole('switch', { name: 'Allow hosted login' }))
+    fireEvent.change(screen.getByLabelText('OIDC issuer'), { target: { value: 'https://login.example.com' } })
+    fireEvent.change(screen.getByLabelText('Client ID'), { target: { value: 'login-client' } })
+    fireEvent.change(screen.getByLabelText('Client Secret'), { target: { value: 'login-secret' } })
+    fireEvent.click(screen.getByRole('switch', { name: 'Allow resource authorization' }))
+    fireEvent.change(screen.getByLabelText('Authorization server issuer'), {
+      target: { value: 'https://api.example.com' },
+    })
+    fireEvent.change(screen.getByLabelText('Resource client ID'), { target: { value: 'resource-client' } })
+    fireEvent.change(screen.getByLabelText('Resource client secret'), { target: { value: 'resource-secret' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() =>
+      expect(requests).toEqual([
+        expect.objectContaining({
+          providerId: 'dual-provider',
+          authenticationEnabled: true,
+          resourceAuthorization: {
+            enabled: true,
+            registrationMode: 'manual',
+            issuer: 'https://api.example.com',
+            clientId: 'resource-client',
+            clientSecret: 'resource-secret',
+          },
+        }),
+      ]),
+    )
+  })
+
   it('updates and deletes an existing OIDC connector from its drawer', async () => {
     const selected = oidcConnector({ clientId: 'summary-client' })
     const detail = { ...selected, clientId: 'client-1' }
@@ -140,7 +185,7 @@ describe('admin console Identity providers', () => {
       const url = String(input)
       if (url === '/api/connectors/connector-oidc' && init?.method === 'PATCH') {
         requests.push({ method: init.method, body: JSON.parse(String(init.body)) })
-        return Promise.resolve(jsonResponse({ ...selected, enabled: true, loginEnabled: false }))
+        return Promise.resolve(jsonResponse({ ...selected, enabled: true, authenticationEnabled: false }))
       }
       if (url === '/api/connectors/connector-oidc' && init?.method === 'DELETE') {
         requests.push({ method: init.method })
@@ -158,14 +203,14 @@ describe('admin console Identity providers', () => {
     expect(await screen.findByRole('heading', { name: 'Projects OIDC' })).toBeTruthy()
     await waitFor(() => expect(screen.getByLabelText('Client ID')).toHaveProperty('value', 'client-1'))
     expect(screen.getByLabelText('OIDC issuer')).toHaveProperty('readOnly', true)
+    fireEvent.change(screen.getByLabelText('Client ID'), { target: { value: 'client-2' } })
     fireEvent.click(screen.getByRole('switch', { name: 'Enabled' }))
     fireEvent.click(screen.getByRole('switch', { name: 'Allow hosted login' }))
-    fireEvent.change(screen.getByLabelText('Client ID'), { target: { value: 'client-2' } })
     fireEvent.click(await screen.findByRole('button', { name: 'Save' }))
     await waitFor(() => expect(requests.some((request) => request.method === 'PATCH')).toBe(true))
     expect(requests.find((request) => request.method === 'PATCH')?.body).toMatchObject({
       enabled: true,
-      loginEnabled: false,
+      authenticationEnabled: false,
       clientId: 'client-2',
     })
 

@@ -15,6 +15,21 @@ import type { ConnectorRepository } from '@server/usecases/ports'
 import { describe, expect, it, vi } from 'vitest'
 
 describe('service.test 1', () => {
+  it('[spec: connectors-and-methods/connector-capabilities] exposes independent driver capabilities', () => {
+    expect(listConnectorTemplates().items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          providerId: 'linear',
+          capabilities: { authentication: true, resourceAuthorization: true },
+        }),
+        expect.objectContaining({
+          providerId: 'google',
+          capabilities: { authentication: true, resourceAuthorization: false },
+        }),
+      ]),
+    )
+  })
+
   it('returns connector templates without secret values', () => {
     expect(listConnectorTemplates().items).toEqual(
       expect.arrayContaining([
@@ -147,7 +162,7 @@ describe('service.test 1', () => {
 
     await expect(updateConnector(deps, 'idp_github', { enabled: true })).rejects.toMatchObject({
       status: 400,
-      message: 'Enabled connector requires clientSecret.',
+      message: 'Enabled authentication requires clientSecret.',
     })
     expect(repository.update).not.toHaveBeenCalled()
   })
@@ -283,7 +298,7 @@ describe('service.test 1', () => {
 
     await expect(updateConnector(deps, 'idp_google', { clientSecret: null })).rejects.toMatchObject({
       status: 400,
-      message: 'Enabled connector requires clientSecret.',
+      message: 'Enabled authentication requires clientSecret.',
     })
     expect(repository.update).not.toHaveBeenCalled()
   })
@@ -429,6 +444,7 @@ function createRepository(
     create: vi.fn().mockResolvedValue(overrides.createResult ?? connector()),
     update: vi.fn().mockResolvedValue(overrides.updateResult ?? connector()),
     rotateClientGeneration: vi.fn().mockResolvedValue(overrides.updateResult ?? connector()),
+    rotateResourceClientGeneration: vi.fn().mockResolvedValue(overrides.updateResult ?? connector()),
     delete: vi.fn(),
   }
 }
@@ -442,7 +458,7 @@ function connector(overrides: Partial<ConnectorRow> = {}): ConnectorRow {
     providerId: 'google',
     displayName: 'Google',
     enabled: true,
-    loginEnabled: true,
+    authenticationEnabled: true,
     clientId: 'client-id',
     clientSecret: 'GOOGLE_CLIENT_SECRET',
     clientSecretContext: null,
@@ -463,6 +479,25 @@ function connector(overrides: Partial<ConnectorRow> = {}): ConnectorRow {
     scopes: null,
     attributeMapping: null,
     providerMetadata: null,
+    resourceAuthorizationEnabled: false,
+    resourceClientId: null,
+    resourceClientSecret: null,
+    resourceClientSecretContext: null,
+    resourceIssuer: null,
+    resourceAuthorizationEndpoint: null,
+    resourceTokenEndpoint: null,
+    resourceUserInfoEndpoint: null,
+    resourceJwksEndpoint: null,
+    resourceRegistrationEndpoint: null,
+    resourceRevocationEndpoint: null,
+    resourceRegistrationMode: null,
+    resourceRegistrationClientUri: null,
+    resourceRegistrationAccessToken: null,
+    resourceRegistrationAccessTokenContext: null,
+    resourceRegisteredScopes: null,
+    resourceClientGeneration: 1,
+    resourceRetiredClientGenerations: null,
+    resourceProviderMetadata: null,
     createdAt: now,
     updatedAt: now,
     ...overrides,

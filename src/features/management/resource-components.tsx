@@ -1,18 +1,14 @@
-import { SpaLink } from '@/components/spa-link'
 import { ErrorState, LoadingState } from './dialogs'
 import {
-  AlertCircle,
   Badge,
   Card,
   CardContent,
   CardHeader,
-  CheckCircle2,
   ConsoleToolbar,
   cn,
   createElement,
   type DetailTab,
   EmptyState,
-  type ManagementReadinessItem,
   PageHeader,
   type ReactNode,
   Tabs,
@@ -220,39 +216,6 @@ export function apiResourceDetailTabs(): DetailTab[] {
     { value: 'endpoints', label: 'Endpoints' },
     { value: 'settings', label: 'Settings' },
   ]
-}
-export function SetupChecklist({ items, title }: { items: ManagementReadinessItem[]; title: string }) {
-  return (
-    <section className="grid gap-3">
-      <h2 className="text-sm font-semibold">{title}</h2>
-      <div className="grid gap-3">
-        {items.map((item) => {
-          const complete = item.status === 'complete'
-          return (
-            <div
-              className="flex flex-wrap items-start justify-between gap-3 rounded-md border border-border p-3"
-              key={item.id}
-            >
-              <div className="flex min-w-0 flex-1 items-start gap-3">
-                {complete ? (
-                  <CheckCircle2 aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-primary" />
-                ) : (
-                  <AlertCircle aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-amber-600" />
-                )}
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold">{item.label}</p>
-                  <p className="text-sm leading-6 text-muted-foreground">{item.description}</p>
-                </div>
-              </div>
-              <SpaLink className="uiButton uiButton-ghost" to={item.href}>
-                {item.action}
-              </SpaLink>
-            </div>
-          )
-        })}
-      </div>
-    </section>
-  )
 }
 export function lines(value: string) {
   return value

@@ -344,6 +344,90 @@
       "when": 1786544442000,
       "tag": "20260812142042_application_authorization_source",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "6",
+      "when": 1786601873751,
+      "tag": "20260813061753_resource_authorization_connectors",
+      "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "6",
+      "when": 1786606809806,
+      "tag": "20260813074009_adapters_linear_permissions",
+      "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "6",
+      "when": 1786635328575,
+      "tag": "20260813153528_natural_zaran",
+      "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "6",
+      "when": 1786635377661,
+      "tag": "20260813153617_big_captain_britain",
+      "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "6",
+      "when": 1786639383358,
+      "tag": "20260813164303_past_metal_master",
+      "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "6",
+      "when": 1786640398214,
+      "tag": "20260813165958_sparkling_jimmy_woo",
+      "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "6",
+      "when": 1786646464508,
+      "tag": "20260813184104_linear_workspace_connection",
+      "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "6",
+      "when": 1786646758951,
+      "tag": "20260813184558_revoke_legacy_linear_authorization",
+      "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "6",
+      "when": 1786646970429,
+      "tag": "20260813184930_align_resource_provider_identity",
+      "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "6",
+      "when": 1786653996055,
+      "tag": "20260813204636_remove_account_connection_scope_registry",
+      "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "6",
+      "when": 1786655933894,
+      "tag": "20260813211853_cleanup_stale_agent_entitlements",
+      "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "6",
+      "when": 1786663981007,
+      "tag": "20260813233301_drop_agent_connection_requests",
+      "breakpoints": true
     }
   ]
 }

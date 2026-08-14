@@ -1,4 +1,8 @@
-import { apiResourceVisibilitySchema, replaceMemberRolesRequestSchema } from '@shared/api/authorization'
+import {
+  apiResourceVisibilitySchema,
+  createApiResourceRequestSchema,
+  replaceMemberRolesRequestSchema,
+} from '@shared/api/authorization'
 import { describe, expect, it } from 'vitest'
 
 describe('authorization API schemas', () => {
@@ -12,5 +16,36 @@ describe('authorization API schemas', () => {
     expect(replaceMemberRolesRequestSchema.parse({ roles: ['developer', 'admin', 'developer'] })).toEqual({
       roles: ['admin', 'developer'],
     })
+  })
+
+  it('requires one Connector for external authorization and forbids it for native authorization', () => {
+    const input = {
+      identifier: 'projects',
+      resourceUrl: 'https://api.example.com',
+      authorizationModel: 'external' as const,
+      ownerOrganizationId: 'organization-1',
+    }
+
+    expect(createApiResourceRequestSchema.safeParse(input).success).toBe(false)
+    expect(
+      createApiResourceRequestSchema.safeParse({
+        ...input,
+        connectorId: 'connector-1',
+      }).success,
+    ).toBe(true)
+    expect(
+      createApiResourceRequestSchema.safeParse({
+        ...input,
+        authorizationModel: 'native',
+        connectorId: null,
+      }).success,
+    ).toBe(true)
+    expect(
+      createApiResourceRequestSchema.safeParse({
+        ...input,
+        authorizationModel: 'native',
+        connectorId: 'connector-1',
+      }).success,
+    ).toBe(false)
   })
 })

@@ -261,8 +261,15 @@ export function createDrizzleAuthorizationRepository(db: Database, ids: Identifi
 
     async createResource(input) {
       const now = new Date()
-      await db.insert(apiResource).values({ ...input, createdAt: now, updatedAt: now })
-      return { ...input, createdAt: now.toISOString(), updatedAt: now.toISOString() }
+      const rows = await db
+        .insert(apiResource)
+        .values({
+          ...input,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning()
+      return toResource(rows[0]!)
     },
 
     async listResources(pagination, ownerOrganizationIds) {
@@ -338,7 +345,10 @@ export function createDrizzleAuthorizationRepository(db: Database, ids: Identifi
       const now = new Date()
       const update = db
         .update(apiResource)
-        .set({ ...withoutUndefined(storedPatch), updatedAt: now })
+        .set({
+          ...withoutUndefined(storedPatch),
+          updatedAt: now,
+        })
         .where(and(eq(apiResource.id, id), isNull(apiResource.deletedAt)))
         .returning({ id: apiResource.id })
       if (patch.visibility !== 'private') return (await update).length > 0

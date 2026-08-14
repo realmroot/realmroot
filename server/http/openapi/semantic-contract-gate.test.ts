@@ -26,9 +26,6 @@ describe('OpenAPI semantic contract gate', () => {
     const brokeredNativeContract = JSON.parse(
       readFileSync(new URL('./approved-brokered-native-semantic-baseline.json', import.meta.url), 'utf8'),
     ) as typeof unchanged
-    const providerConnectionEventsContract = JSON.parse(
-      readFileSync(new URL('./approved-provider-connection-events-semantic-baseline.json', import.meta.url), 'utf8'),
-    ) as typeof unchanged
     const authenticationContract = JSON.parse(
       readFileSync(new URL('./approved-authentication-semantic-baseline.json', import.meta.url), 'utf8'),
     ) as typeof unchanged
@@ -53,6 +50,9 @@ describe('OpenAPI semantic contract gate', () => {
     const applicationConsentContract = JSON.parse(
       readFileSync(new URL('./approved-application-consent-semantic-baseline.json', import.meta.url), 'utf8'),
     ) as typeof unchanged
+    const resourceAuthorizationModelContract = JSON.parse(
+      readFileSync(new URL('./approved-resource-authorization-model-semantic-baseline.json', import.meta.url), 'utf8'),
+    ) as typeof unchanged
     const brokeredNativeChanges = new Set(brokeredNativeContract.map(({ method, path }) => `${method}:${path}`))
     const resourceDiscoveryChanges = new Set(resourceDiscoveryContract.map(({ method, path }) => `${method}:${path}`))
     const approvedChanges = new Set(
@@ -62,7 +62,6 @@ describe('OpenAPI semantic contract gate', () => {
         ...resourceDiscoveryContract,
         ...brokeredNativeContract,
         ...publicProfilesContract,
-        ...providerConnectionEventsContract,
         ...brokeredContextCatalogContract,
       ].map(({ method, path }) => `${method}:${path}`),
     )
@@ -82,9 +81,12 @@ describe('OpenAPI semantic contract gate', () => {
       'GET:/access/requests/{requestId}/decision',
       'PUT:/access/requests/{requestId}/decision',
       'GET:/agent/status',
+      'POST:/resource-servers/{resourceServerId}/connection-requests',
+      'GET:/resource-servers/{resourceServerId}/connection-requests/{requestId}',
       'POST:/agents/{agentId}/scope-entitlements/{grantId}/credentials',
       'GET:/resource-servers/{resourceServerId}/resources',
       'GET:/resource-servers/{resourceServerId}/resources/{resourceId}',
+      'PUT:/resource-servers/{resourceServerId}/connection-events/{eventId}',
     ])
     const priorBaseline = [
       ...unchanged.filter(
@@ -101,7 +103,6 @@ describe('OpenAPI semantic contract gate', () => {
       ...resourceDiscoveryContract.filter(({ method, path }) => !brokeredNativeChanges.has(`${method}:${path}`)),
       ...brokeredNativeContract,
       ...publicProfilesContract,
-      ...providerConnectionEventsContract,
       ...brokeredContextCatalogContract,
     ].sort((left, right) => `${left.path}:${left.method}`.localeCompare(`${right.path}:${right.method}`))
     const authenticationChanges = new Set(authenticationContract.map(({ method, path }) => `${method}:${path}`))
@@ -145,11 +146,21 @@ describe('OpenAPI semantic contract gate', () => {
       ...collectionEnvelopeContract,
     ].sort((left, right) => `${left.path}:${left.method}`.localeCompare(`${right.path}:${right.method}`))
     const applicationConsentChanges = new Set(applicationConsentContract.map(({ method, path }) => `${method}:${path}`))
-    const baseline = [
+    const preResourceAuthorizationModelBaseline = [
       ...preApplicationConsentBaseline.filter(
         ({ method, path }) => !applicationConsentChanges.has(`${method}:${path}`),
       ),
       ...applicationConsentContract,
+    ].sort((left, right) => `${left.path}:${left.method}`.localeCompare(`${right.path}:${right.method}`))
+    const resourceAuthorizationModelChanges = new Set(
+      resourceAuthorizationModelContract.map(({ method, path }) => `${method}:${path}`),
+    )
+    const baseline = [
+      ...preResourceAuthorizationModelBaseline.filter(
+        ({ method, path }) =>
+          !resourceAuthorizationModelChanges.has(`${method}:${path}`) && !approvedRemovals.has(`${method}:${path}`),
+      ),
+      ...resourceAuthorizationModelContract,
     ].sort((left, right) => `${left.path}:${left.method}`.localeCompare(`${right.path}:${right.method}`))
 
     expect(openApiSemanticSnapshot(unifiedOpenApi as unknown as Record<string, unknown>, () => true)).toEqual(baseline)

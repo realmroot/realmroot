@@ -221,7 +221,7 @@ describe('account self-service over real D1', () => {
       body: JSON.stringify({
         identifier: 'household-api',
         resourceUrl: 'https://household.example.com/api',
-        accessMode: 'realmroot',
+        authorizationModel: 'native',
         enabled: false,
         ownerOrganizationId: organizationId,
       }),
@@ -407,7 +407,17 @@ describe('account self-service over real D1', () => {
       providerId: 'provider',
       displayName: 'Provider',
       enabled: true,
-      loginEnabled: false,
+      authenticationEnabled: false,
+      resourceAuthorizationEnabled: true,
+      resourceClientId: 'realmroot-client',
+      resourceClientSecret: 'realmroot-secret',
+      resourceIssuer: 'https://adapter.example.com/oauth/provider',
+      resourceAuthorizationEndpoint: 'https://adapter.example.com/oauth/provider/authorize',
+      resourceTokenEndpoint: 'https://adapter.example.com/oauth/provider/token',
+      resourceUserInfoEndpoint: 'https://adapter.example.com/oauth/provider/userinfo',
+      resourceJwksEndpoint: 'https://adapter.example.com/oauth/provider/jwks',
+      resourceRevocationEndpoint: 'https://adapter.example.com/oauth/provider/revoke',
+      resourceRegistrationMode: 'manual',
       createdAt: now,
       updatedAt: now,
     })
@@ -416,7 +426,7 @@ describe('account self-service over real D1', () => {
       identifier: 'provider-api',
       name: 'Provider API',
       resourceUrl: 'https://adapter.example.com/provider',
-      accessMode: 'brokered',
+      authorizationModel: 'external',
       connectorId: 'connector-provider',
       authorizationDetails: [],
       enabled: true,
@@ -432,11 +442,6 @@ describe('account self-service over real D1', () => {
           lastError: null,
         },
         scopes: [{ value: 'provider:read', description: null, grantMode: 'assigned' }],
-        accountConnection: {
-          mode: 'brokered',
-          authorizationEndpoint: 'https://adapter.example.com/provider/account-connection-authorizations',
-          tokenEndpoint: 'https://adapter.example.com/provider/account-connection-credentials',
-        },
       },
       createdAt: now,
       updatedAt: now,
@@ -452,7 +457,7 @@ describe('account self-service over real D1', () => {
     expect(response.headers.get('location')).toBeNull()
     const body = (await response.json()) as { id: string; connectorId: string; authorizationUrl: string }
     expect(body.connectorId).toBe('connector-provider')
-    expect(new URL(body.authorizationUrl).searchParams.get('request')).toBeTruthy()
+    expect(new URL(body.authorizationUrl).searchParams.get('client_id')).toBe('realmroot-client')
     const [persisted] = await harness.db
       .select()
       .from(resourceConnectionIntent)
@@ -460,42 +465,8 @@ describe('account self-service over real D1', () => {
     expect(persisted).toMatchObject({
       resourceId: 'resource-provider',
       ownerUserId: userId,
-      authorizationMode: 'brokered',
       status: 'pending',
     })
-
-    await expect(
-      harness.db.insert(apiResource).values({
-        id: 'resource-provider-duplicate',
-        identifier: 'provider-api-duplicate',
-        name: 'Duplicate Provider API',
-        resourceUrl: 'https://adapter.example.com/provider-duplicate',
-        accessMode: 'brokered',
-        connectorId: 'connector-provider',
-        authorizationDetails: [],
-        enabled: true,
-        ownerOrganizationId: platformOrganizationId,
-        visibility: 'public',
-        availableToAgents: true,
-        scopeRegistry: {
-          discovery: {
-            sourceUrl: 'https://adapter.example.com/.well-known/oauth-protected-resource/provider-duplicate',
-            etag: null,
-            documentHash: 'duplicate-contract',
-            syncedAt: now.toISOString(),
-            lastError: null,
-          },
-          scopes: [{ value: 'provider:read', description: null, grantMode: 'assigned' }],
-          accountConnection: {
-            mode: 'brokered',
-            authorizationEndpoint: 'https://adapter.example.com/provider-duplicate/authorizations',
-            tokenEndpoint: 'https://adapter.example.com/provider-duplicate/credentials',
-          },
-        },
-        createdAt: now,
-        updatedAt: now,
-      }),
-    ).rejects.toThrow()
   })
 
   it('links and unlinks a SIWE wallet address through real SQL', async () => {

@@ -33,8 +33,8 @@ describe('auth device authorization endpoints', () => {
     await expect(success.json()).resolves.toMatchObject({
       device_code: 'device-code-1',
       user_code: 'USERCODE',
-      verification_uri: 'https://auth.example.com/device',
-      verification_uri_complete: 'https://auth.example.com/device?user_code=USERCODE',
+      verification_uri: 'https://auth.example.com/auth/device',
+      verification_uri_complete: 'https://auth.example.com/auth/device?user_code=USERCODE',
       expires_in: 1800,
       interval: 5,
     })
@@ -252,7 +252,7 @@ function createDeviceAuth(options: { clients?: Record<string, ApplicationAggrega
     },
     plugins: [
       deviceAuthorization({
-        verificationUri: '/device',
+        verificationUri: '/auth/device',
         expiresIn: options.expiresIn ?? '30m',
         interval: '5s',
         deviceCodeLength: 12,
@@ -295,7 +295,7 @@ function createDeviceOAuthAuth(options: { expiresIn?: '1s' | '30m' } = {}) {
         },
       }),
       deviceAuthorization({
-        verificationUri: '/device',
+        verificationUri: '/auth/device',
         expiresIn: options.expiresIn ?? '30m',
         deviceCodeLength: 12,
         userCodeLength: 8,

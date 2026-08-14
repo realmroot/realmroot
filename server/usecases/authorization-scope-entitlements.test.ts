@@ -143,6 +143,19 @@ describe('direct scope Entitlements', () => {
     )
   })
 
+  it('rejects Permission creation without a mutation actor', async () => {
+    const { deps } = setup()
+
+    await expect(
+      subject.createUserPermission(
+        deps,
+        'user-1',
+        { resourceServerId: resource.id, scope: 'read', mode: 'persistent' },
+        { controllerUserId: null, agent: null },
+      ),
+    ).rejects.toThrow('requires an authenticated mutation actor')
+  })
+
   it('rejects automatic scopes and invalid lifetime combinations', async () => {
     const { deps, authorization } = setup()
     await expect(

@@ -123,7 +123,8 @@ export const connector = {
   slug: 'google',
   displayName: 'Google',
   enabled: true,
-  loginEnabled: true,
+  capabilities: { authentication: true, resourceAuthorization: false },
+  authenticationEnabled: true,
   clientId: 'google-client',
   clientSecretConfigured: true,
   issuer: 'https://accounts.google.com',
@@ -136,6 +137,7 @@ export const connector = {
   registrationMode: null,
   scopes: ['openid', 'email'],
   providerMetadata: { prompt: 'select_account' },
+  resourceAuthorization: null,
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
 }
@@ -147,6 +149,7 @@ export const connectorTemplates = {
       providerId: 'google',
       displayName: 'Google',
       icon: 'google',
+      capabilities: { authentication: true, resourceAuthorization: false },
       requiredFields: ['clientId', 'clientSecret'],
       optionalFields: ['scopes'],
       defaultScopes: ['openid', 'email', 'profile'],
@@ -163,6 +166,7 @@ export const connectorTemplates = {
       providerId: 'cognito',
       displayName: 'Amazon Cognito',
       icon: 'cognito',
+      capabilities: { authentication: true, resourceAuthorization: false },
       requiredFields: [
         'clientId',
         'clientSecret',
@@ -185,6 +189,7 @@ export const connectorTemplates = {
       providerId: 'github',
       displayName: 'GitHub',
       icon: 'github',
+      capabilities: { authentication: true, resourceAuthorization: true },
       requiredFields: ['clientId', 'clientSecret'],
       optionalFields: ['scopes'],
       defaultScopes: ['read:user', 'user:email'],
@@ -238,7 +243,7 @@ export const apiResource = {
   name: 'Management API',
   description: 'Management surface',
   resourceUrl: 'https://auth.example.com/api',
-  accessMode: 'realmroot' as const,
+  authorizationModel: 'native' as const,
   connectorId: null,
   authorizationDetails: [],
   enabled: true,
@@ -264,6 +269,5 @@ export const apiResource = {
   links: {
     self: 'https://auth.example.com/api/resource-servers/resource-1',
     authorizationDetails: 'https://auth.example.com/api/resource-servers/resource-1/authorization-details',
-    connectionRequests: null,
   },
 }

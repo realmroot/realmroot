@@ -24,13 +24,7 @@ export function createResourceConnectionRoutes(canonicalOrigin?: string) {
 
     const connection = await completeResourceConnectionIntent(getDeps(c), callback, origin)
     if (connection.returnTo === 'access-approval') {
-      return c.redirect(`${origin}/agent/resource-access/approve`)
-    }
-    if (connection.returnTo === 'connection-approval') {
-      const redirect = new URL('/agent/resource-connection/approve', origin)
-      redirect.searchParams.set('resource_connection', 'connected')
-      redirect.searchParams.set('account_connection_id', connection.id)
-      return c.redirect(redirect.toString())
+      return c.redirect(`${origin}/agent/access`)
     }
     return c.redirect(`${origin}/connections?resource_connection=connected`)
   })
@@ -39,7 +33,6 @@ export function createResourceConnectionRoutes(canonicalOrigin?: string) {
 }
 
 function connectionApprovalPath(returnTo: string) {
-  if (returnTo === 'access-approval') return '/agent/resource-access/approve'
-  if (returnTo === 'connection-approval') return '/agent/resource-connection/approve'
+  if (returnTo === 'access-approval') return '/agent/access'
   return '/connections'
 }

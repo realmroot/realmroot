@@ -97,7 +97,7 @@ export function consoleSharedFetch(input: RequestInfo | URL, init?: RequestInit)
   if (url === '/api/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
   if (url === '/api/realm/configuration-status') {
     return Promise.resolve(
-      jsonResponse({ admin: { setupRequired: false, setupHref: '/console/onboarding', missing: [] } }),
+      jsonResponse({ admin: { setupRequired: false, setupHref: '/console/applications', missing: [] } }),
     )
   }
   if (url === '/api/agents') {
@@ -167,7 +167,7 @@ export function consoleRouteFetch(input: RequestInfo | URL) {
   if (url === '/api/realm/account-management-policy') return Promise.resolve(jsonResponse(accountCenterSettings))
   if (url === '/api/realm/configuration-status') {
     return Promise.resolve(
-      jsonResponse({ admin: { setupRequired: false, setupHref: '/console/onboarding', missing: [] } }),
+      jsonResponse({ admin: { setupRequired: false, setupHref: '/console/applications', missing: [] } }),
     )
   }
   if (url === '/api/applications') {

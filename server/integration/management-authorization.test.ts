@@ -13,6 +13,7 @@ import {
   member,
   organizationRole,
   providerConnection,
+  providerCredential,
   providerResourceAuthorization,
   resourceConnectionIntent,
   resourceScopeEntitlement,
@@ -158,7 +159,7 @@ describe('authorization management over real D1', () => {
     const auditResource = await createResource(harness.deps, {
       identifier: 'personal-audit-resource',
       resourceUrl: 'https://personal-audit.example.com/api',
-      accessMode: 'realmroot',
+      authorizationModel: 'native',
       ownerOrganizationId: platformOrganizationId,
     })
     await harness.db.insert(agentAuditEvent).values({
@@ -303,7 +304,7 @@ describe('authorization management over real D1', () => {
     const resource = await createResource(harness.deps, {
       identifier: 'atomic-agent-api',
       resourceUrl: 'https://atomic-agent.example.com/api',
-      accessMode: 'realmroot',
+      authorizationModel: 'native',
       ownerOrganizationId: platformOrganizationId,
     })
     await harness.db.insert(agentHost).values({
@@ -684,7 +685,7 @@ describe('authorization management over real D1', () => {
       await postJson(harness, cookie, '/api/resource-servers', {
         identifier: 'grant-api',
         resourceUrl: 'https://grant.example.com/api',
-        accessMode: 'realmroot',
+        authorizationModel: 'native',
         ownerOrganizationId: platformOrganizationId,
         visibility: 'public',
       })
@@ -872,7 +873,7 @@ describe('authorization management over real D1', () => {
       providerId: 'rar-projects',
       displayName: 'RAR Projects',
       enabled: true,
-      loginEnabled: false,
+      authenticationEnabled: false,
       clientId: 'rar-projects-client',
       clientSecret: 'rar-projects-secret',
       clientSecretContext: null,
@@ -889,6 +890,29 @@ describe('authorization management over real D1', () => {
       scopes: ['openid', 'offline_access', 'projects:read'],
       attributeMapping: null,
       providerMetadata: {
+        grant_types_supported: [
+          'authorization_code',
+          'refresh_token',
+          'urn:ietf:params:oauth:grant-type:jwt-bearer',
+          'urn:ietf:params:oauth:grant-type:token-exchange',
+        ],
+        dpop_signing_alg_values_supported: ['ES256'],
+        authorization_details_types_supported: ['project_access'],
+        authorization_details_catalog_endpoint: 'https://projects.example.com/authorization-details',
+        authorization_details_catalog_scope: 'authorization-details:read',
+        authorization_details_catalog_version: 1,
+        pushed_authorization_request_endpoint: 'https://projects.example.com/par',
+      },
+      resourceAuthorizationEnabled: true,
+      resourceClientId: 'rar-projects-client',
+      resourceClientSecret: 'rar-projects-secret',
+      resourceIssuer: 'https://projects.example.com',
+      resourceAuthorizationEndpoint: 'https://projects.example.com/authorize',
+      resourceTokenEndpoint: 'https://projects.example.com/token',
+      resourceUserInfoEndpoint: 'https://projects.example.com/userinfo',
+      resourceJwksEndpoint: 'https://projects.example.com/jwks',
+      resourceRevocationEndpoint: 'https://projects.example.com/revoke',
+      resourceProviderMetadata: {
         grant_types_supported: [
           'authorization_code',
           'refresh_token',
@@ -922,7 +946,7 @@ describe('authorization management over real D1', () => {
     const created = await postJson(harness, cookie, '/api/resource-servers', {
       identifier: 'rar-projects-api',
       resourceUrl: 'https://projects.example.com/api',
-      accessMode: 'external_oauth',
+      authorizationModel: 'external',
       connectorId: connector.id,
       ownerOrganizationId: platformOrganizationId,
       authorizationDetails,
@@ -958,7 +982,7 @@ describe('authorization management over real D1', () => {
     const input = {
       identifier: 'projects-api',
       resourceUrl: 'https://projects.example.com/api',
-      accessMode: 'realmroot' as const,
+      authorizationModel: 'native' as const,
       ownerOrganizationId: platformOrganizationId,
     }
 
@@ -987,7 +1011,7 @@ describe('authorization management over real D1', () => {
       providerId: 'projects',
       displayName: 'Projects OIDC',
       enabled: true,
-      loginEnabled: false,
+      authenticationEnabled: false,
       clientId: 'projects-client',
       clientSecret: 'projects-secret',
       clientSecretContext: null,
@@ -1004,6 +1028,24 @@ describe('authorization management over real D1', () => {
       scopes: ['openid', 'offline_access'],
       attributeMapping: null,
       providerMetadata: {
+        grant_types_supported: [
+          'authorization_code',
+          'refresh_token',
+          'urn:ietf:params:oauth:grant-type:jwt-bearer',
+          'urn:ietf:params:oauth:grant-type:token-exchange',
+        ],
+        dpop_signing_alg_values_supported: ['ES256'],
+      },
+      resourceAuthorizationEnabled: true,
+      resourceClientId: 'projects-client',
+      resourceClientSecret: 'projects-secret',
+      resourceIssuer: 'https://projects.example.com',
+      resourceAuthorizationEndpoint: 'https://projects.example.com/authorize',
+      resourceTokenEndpoint: 'https://projects.example.com/token',
+      resourceUserInfoEndpoint: 'https://projects.example.com/userinfo',
+      resourceJwksEndpoint: 'https://projects.example.com/jwks',
+      resourceRevocationEndpoint: 'https://projects.example.com/revoke',
+      resourceProviderMetadata: {
         grant_types_supported: [
           'authorization_code',
           'refresh_token',
@@ -1032,7 +1074,7 @@ describe('authorization management over real D1', () => {
     const resource = await createResource(harness.deps, {
       identifier: 'projects-api',
       resourceUrl: 'https://projects.example.com/api',
-      accessMode: 'external_oauth',
+      authorizationModel: 'external',
       connectorId: connector.id,
       ownerOrganizationId: platformOrganizationId,
     })
@@ -1045,7 +1087,7 @@ describe('authorization management over real D1', () => {
 
     expect(response.status).toBe(400)
     await expect(response.json()).resolves.toMatchObject({
-      error: { message: 'External API resource authorization server does not match the selected OIDC connector.' },
+      error: { message: 'External API resource authorization server does not match the selected Provider Connector.' },
     })
   })
 
@@ -1056,7 +1098,7 @@ describe('authorization management over real D1', () => {
       await postJson(harness, cookie, '/api/resource-servers', {
         identifier: 'https://api.example.com',
         resourceUrl: 'https://api.example.com',
-        accessMode: 'realmroot',
+        authorizationModel: 'native',
         ownerOrganizationId: platformOrganizationId,
       })
     ).json()) as { id: string }
@@ -1121,7 +1163,7 @@ describe('authorization management over real D1', () => {
       await postJson(harness, cookie, '/api/resource-servers', {
         identifier: 'history-api',
         resourceUrl: 'https://history.example.com/api',
-        accessMode: 'realmroot',
+        authorizationModel: 'native',
         ownerOrganizationId: platformOrganizationId,
       })
     ).json()) as { id: string }
@@ -1129,7 +1171,7 @@ describe('authorization management over real D1', () => {
       await postJson(harness, cookie, '/api/resource-servers', {
         identifier: 'retained-history-api',
         resourceUrl: 'https://retained-history.example.com/api',
-        accessMode: 'realmroot',
+        authorizationModel: 'native',
         ownerOrganizationId: platformOrganizationId,
       })
     ).json()) as { id: string }
@@ -1182,6 +1224,14 @@ describe('authorization management over real D1', () => {
       id: 'connection-history',
       providerConnectionId: 'provider-connection-history',
       resourceId: resource.id,
+      createdAt: now,
+      updatedAt: now,
+    })
+    await harness.db.insert(providerCredential).values({
+      id: 'credential-history',
+      providerResourceAuthorizationId: 'connection-history',
+      externalSubject: 'admin@example.com',
+      displayName: 'Admin connection',
       encryptedTokens: 'encrypted-tokens',
       grantedScopes: ['files:read'],
       createdAt: now,
@@ -1298,7 +1348,7 @@ describe('authorization management over real D1', () => {
       providerId: 'conditional',
       displayName: 'Conditional OIDC',
       enabled: true,
-      loginEnabled: false,
+      authenticationEnabled: false,
       clientId: 'conditional-client',
       clientSecret: 'conditional-secret',
       clientSecretContext: null,
@@ -1323,6 +1373,24 @@ describe('authorization management over real D1', () => {
         ],
         dpop_signing_alg_values_supported: ['ES256'],
       },
+      resourceAuthorizationEnabled: true,
+      resourceClientId: 'conditional-client',
+      resourceClientSecret: 'conditional-secret',
+      resourceIssuer: 'https://conditional.example.com',
+      resourceAuthorizationEndpoint: 'https://conditional.example.com/authorize',
+      resourceTokenEndpoint: 'https://conditional.example.com/token',
+      resourceUserInfoEndpoint: 'https://conditional.example.com/userinfo',
+      resourceJwksEndpoint: 'https://conditional.example.com/jwks',
+      resourceRevocationEndpoint: 'https://conditional.example.com/revoke',
+      resourceProviderMetadata: {
+        grant_types_supported: [
+          'authorization_code',
+          'refresh_token',
+          'urn:ietf:params:oauth:grant-type:jwt-bearer',
+          'urn:ietf:params:oauth:grant-type:token-exchange',
+        ],
+        dpop_signing_alg_values_supported: ['ES256'],
+      },
       createdAt: now,
       updatedAt: now,
     })
@@ -1339,7 +1407,7 @@ describe('authorization management over real D1', () => {
     const resource = await createResource(harness.deps, {
       identifier: 'conditional-external',
       resourceUrl: 'https://conditional.example.com/api',
-      accessMode: 'external_oauth',
+      authorizationModel: 'external',
       connectorId: connector.id,
       ownerOrganizationId: platformOrganizationId,
     })
@@ -1364,7 +1432,7 @@ describe('authorization management over real D1', () => {
       await postJson(harness, cookie, '/api/resource-servers', {
         identifier: 'deleted-api',
         resourceUrl: 'https://deleted.example.com/api',
-        accessMode: 'realmroot',
+        authorizationModel: 'native',
         ownerOrganizationId: platformOrganizationId,
       })
     ).json()) as { id: string }
@@ -1432,6 +1500,15 @@ describe('authorization management over real D1', () => {
       id: 'deleted-connection',
       providerConnectionId: 'provider-connection-deleted',
       resourceId: resource.id,
+      status: 'active',
+      createdAt: now,
+      updatedAt: now,
+    })
+    await harness.db.insert(providerCredential).values({
+      id: 'deleted-credential',
+      providerResourceAuthorizationId: 'deleted-connection',
+      externalSubject: 'admin@example.com',
+      displayName: 'Deleted connection',
       encryptedTokens: 'encrypted-tokens',
       grantedScopes: ['files:read'],
       status: 'active',

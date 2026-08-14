@@ -29,20 +29,21 @@ beforeEach(() => {
 })
 
 describe('router authentication boundaries', () => {
-  it('owns authentication at the three protected route layouts', () => {
+  it('owns authentication at the protected route layouts', () => {
     const router = createTestRouter('/profile')
 
     expect(router.routesById['/_account'].options.beforeLoad).toBeTypeOf('function')
     expect(router.routesById['/console'].options.beforeLoad).toBeTypeOf('function')
-    expect(router.routesById['/_approval'].options.beforeLoad).toBeTypeOf('function')
+    expect(router.routesById['/agent'].options.beforeLoad).toBeTypeOf('function')
+    expect(router.routesById['/auth/_protected'].options.beforeLoad).toBeTypeOf('function')
 
     for (const routeId of [
       '/_account/profile',
       '/_account/security',
       '/_account/connections',
       '/_account/organizations/',
-      '/_approval/agent/approve',
-      '/_approval/device/approve',
+      '/agent/enrollment',
+      '/auth/_protected/device',
     ] as const) {
       expect(router.routesById[routeId].options.beforeLoad).toBeUndefined()
     }
@@ -87,8 +88,8 @@ describe('router authentication boundaries', () => {
     expect(auth.profileRequest).toHaveBeenCalledTimes(1)
     expect(auth.consoleAccessRequest).toHaveBeenCalledTimes(1)
 
-    await router.navigate({ to: '/agent/approve' })
-    await router.navigate({ to: '/device/approve' })
+    await router.navigate({ to: '/agent/enrollment' })
+    await router.navigate({ to: '/auth/device', search: { user_code: '' } })
     expect(auth.profileRequest).toHaveBeenCalledTimes(1)
   })
 

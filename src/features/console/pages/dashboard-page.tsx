@@ -183,7 +183,7 @@ function hostedMethodCount(dashboard: AdminDashboard) {
     signIn.passwordEnabled,
     signIn.emailOtpEnabled && builtInProviders.email.enabled,
     signIn.socialLoginEnabled &&
-      dashboard.connectors.items.some((connector) => connector.enabled && connector.loginEnabled),
+      dashboard.connectors.items.some((connector) => connector.enabled && connector.authenticationEnabled),
     dashboard.security.policy.passkeys.enabled,
     builtInProviders.phone.enabled,
     builtInProviders.web3Wallet.enabled,

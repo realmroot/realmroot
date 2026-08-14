@@ -44,7 +44,7 @@ describe('admin console applications-detail-b', () => {
       if (url === '/api/realm/sign-in-policy') return Promise.resolve(jsonResponse(signInSettings))
       if (url === '/api/realm/configuration-status') {
         return Promise.resolve(
-          jsonResponse({ admin: { setupRequired: false, setupHref: '/console/onboarding', missing: [] } }),
+          jsonResponse({ admin: { setupRequired: false, setupHref: '/console/applications', missing: [] } }),
         )
       }
       if (url === '/api/applications/app-1') {
@@ -77,7 +77,7 @@ describe('admin console applications-detail-b', () => {
       if (url === '/api/realm/sign-in-policy') return Promise.resolve(jsonResponse(signInSettings))
       if (url === '/api/realm/configuration-status') {
         return Promise.resolve(
-          jsonResponse({ admin: { setupRequired: false, setupHref: '/console/onboarding', missing: [] } }),
+          jsonResponse({ admin: { setupRequired: false, setupHref: '/console/applications', missing: [] } }),
         )
       }
       if (url === '/api/applications/app-1') {
@@ -112,7 +112,7 @@ describe('admin console applications-detail-b', () => {
       if (url === '/api/realm/sign-in-policy') return Promise.resolve(jsonResponse(signInSettings))
       if (url === '/api/realm/configuration-status') {
         return Promise.resolve(
-          jsonResponse({ admin: { setupRequired: false, setupHref: '/console/onboarding', missing: [] } }),
+          jsonResponse({ admin: { setupRequired: false, setupHref: '/console/applications', missing: [] } }),
         )
       }
       if (url === '/api/applications/app-1' && init?.method === 'PATCH') {

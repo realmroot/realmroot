@@ -43,6 +43,7 @@ const socialTemplates = socialProviderIds.map((providerId) => ({
   providerId,
   displayName: displayName(providerId),
   icon: providerIcon(providerId),
+  capabilities: connectorCapabilities('social', providerId),
   requiredFields: requiredSocialFields(providerId),
   optionalFields: [],
   defaultScopes: defaultScopes(providerId),
@@ -60,6 +61,13 @@ export const connectorTemplates: ConnectorTemplate[] = socialTemplates
 export function isSupportedProvider(providerType: ConnectorProviderType, providerId: string) {
   if (providerType === 'generic_oauth') return true
   return socialProviderIds.includes(providerId as (typeof socialProviderIds)[number])
+}
+
+export function connectorCapabilities(providerType: ConnectorProviderType, providerId: string) {
+  return {
+    authentication: true,
+    resourceAuthorization: providerType === 'generic_oauth' || providerId === 'linear' || providerId === 'github',
+  }
 }
 
 function displayName(providerId: string) {

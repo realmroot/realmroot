@@ -333,7 +333,7 @@ function readCallbackState(search: string): {
     return {
       loading: false,
       message: tt('Consent is required before redirecting.'),
-      href: safeRedirectPath(`/oauth/consent?${consentParams.toString()}`),
+      href: safeRedirectPath(`/auth/consent?${consentParams.toString()}`),
     }
   }
   return {

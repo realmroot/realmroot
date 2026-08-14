@@ -40,8 +40,6 @@ describe('auth.test 2', () => {
         'agent:read',
         'resource-servers:read',
         'authorization-details:read',
-        'connection-requests:read',
-        'connection-requests:write',
         'access-requests:read',
         'access-requests:write',
       ],

@@ -142,7 +142,6 @@ describe('Agent identity enrollment over real D1', () => {
         kind: 'protocol',
         userCode: 'WXYZ-5678',
         decision: 'approve',
-        permissions: ['applications:read'],
       }),
     })
     expect(capabilityApproval.status, await capabilityApproval.clone().text()).toBe(200)
@@ -151,7 +150,7 @@ describe('Agent identity enrollment over real D1', () => {
       harness.db.select().from(agentCapabilityGrant).where(eq(agentCapabilityGrant.id, 'approval-management-grant')),
       harness.db.select().from(approvalRequest).where(eq(approvalRequest.id, 'approval-management')),
     ])
-    expect(grant).toMatchObject({ status: 'active', grantedBy: userId })
+    expect(grant).toMatchObject({ status: 'denied', grantedBy: null, deniedBy: userId })
     expect(capabilityRequest.status).toBe('approved')
 
     await harness.db.insert(approvalRequest).values({
@@ -431,7 +430,7 @@ describe('Agent identity enrollment over real D1', () => {
     const resource = await createResource(harness.deps, {
       identifier: 'native-api',
       resourceUrl: 'https://api.example.com',
-      accessMode: 'realmroot',
+      authorizationModel: 'native',
       ownerOrganizationId: platformOrganizationId,
     })
     const automaticScope = await harness.request(`/api/resource-servers/${resource.id}`, {

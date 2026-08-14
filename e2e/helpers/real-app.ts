@@ -82,7 +82,6 @@ export function resetLocalData() {
     DELETE FROM agent_audit_event;
     DELETE FROM ownership_quarantine;
     DELETE FROM agent_dpop_jti;
-    DELETE FROM agent_connection_request;
     DELETE FROM external_token_lease;
     DELETE FROM resource_scope_entitlement;
     DELETE FROM agent_access_request;

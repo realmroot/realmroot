@@ -29,7 +29,7 @@ describe('account agent routes', () => {
     await expect(response.json()).resolves.toEqual({ status: 'approved' })
     expect(decide).toHaveBeenCalledWith(
       expect.anything(),
-      { agentId: 'agent-1', userCode: 'ABCD-1234', action: 'approve' },
+      { agentId: 'agent-1', userCode: 'ABCD-1234', action: 'approve', capabilities: [] },
       'user-1',
     )
   })

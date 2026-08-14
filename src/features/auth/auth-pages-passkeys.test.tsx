@@ -148,7 +148,7 @@ describe('hosted auth pages 5', () => {
     window.history.pushState(
       null,
       '',
-      '/oauth/consent?client_id=client-1&redirect_uri=https%3A%2F%2Fclient.example.com%2Fcallback&state=state-1',
+      '/auth/consent?client_id=client-1&redirect_uri=https%3A%2F%2Fclient.example.com%2Fcallback&state=state-1',
     )
     const requests: Array<{ url: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
@@ -194,10 +194,10 @@ describe('hosted auth pages 5', () => {
     window.history.pushState(
       null,
       '',
-      '/oauth/consent?client_id=client-1&redirect_uri=https%3A%2F%2Fclient.example.com%2Fcallback&state=state-1',
+      '/auth/consent?client_id=client-1&redirect_uri=https%3A%2F%2Fclient.example.com%2Fcallback&state=state-1',
     )
     expect(signInWithReturnTo()).toBe(
-      '/auth/sign-in?return_to=%2Foauth%2Fconsent%3Fclient_id%3Dclient-1%26redirect_uri%3Dhttps%253A%252F%252Fclient.example.com%252Fcallback%26state%3Dstate-1',
+      '/auth/sign-in?return_to=%2Fauth%2Fconsent%3Fclient_id%3Dclient-1%26redirect_uri%3Dhttps%253A%252F%252Fclient.example.com%252Fcallback%26state%3Dstate-1',
     )
 
     const requests: Array<{ url: string; body: unknown }> = []
@@ -224,7 +224,7 @@ describe('hosted auth pages 5', () => {
     window.history.pushState(
       null,
       '',
-      '/oauth/consent?client_id=client-1&redirect_uri=https%3A%2F%2Fclient.example.com%2Fcallback',
+      '/auth/consent?client_id=client-1&redirect_uri=https%3A%2F%2Fclient.example.com%2Fcallback',
     )
     vi.spyOn(window, 'fetch').mockImplementation((input) => {
       const url = String(input)
@@ -243,7 +243,7 @@ describe('hosted auth pages 5', () => {
     window.history.pushState(
       null,
       '',
-      '/oauth/consent?client_id=client-1&redirect_uri=https%3A%2F%2Fclient.example.com%2Fcallback&state=state-1',
+      '/auth/consent?client_id=client-1&redirect_uri=https%3A%2F%2Fclient.example.com%2Fcallback&state=state-1',
     )
     vi.spyOn(window, 'fetch').mockImplementation((input, _init) => {
       const url = String(input)

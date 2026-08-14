@@ -52,7 +52,7 @@ export function createManagementReadinessRoute({ securityPolicy }: { securityPol
         label: 'Create an OIDC application',
         description: 'Register the first client so product routes can complete authorization code flows.',
         complete: hasOidcApplication,
-        href: '/console/onboarding',
+        href: '/console/applications',
         action: 'Create client',
       }),
       readinessItem({
@@ -106,7 +106,7 @@ export function createManagementReadinessRoute({ securityPolicy }: { securityPol
       recommended,
       admin: {
         setupRequired: missing.length > 0,
-        setupHref: '/console/onboarding',
+        setupHref: '/console/applications',
         missing,
       },
     } satisfies ManagementReadinessResponse

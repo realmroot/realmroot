@@ -5,7 +5,6 @@ import { ExperiencePage } from '@/features/console/extracted/branding-content/br
 import { ContentSettingsPage } from '@/features/console/extracted/branding-content/content-settings'
 import { ConnectorsPage } from '@/features/console/extracted/connectors'
 import { DeploymentSettingsPage, SettingsPage } from '@/features/console/extracted/deployment-misc/deployment'
-import { ConsoleOnboardingPage } from '@/features/console/extracted/onboarding'
 import { OrganizationsPage } from '@/features/console/extracted/organizations'
 import { SecurityPoliciesPage } from '@/features/console/extracted/security-settings'
 import { SignInSettingsPage } from '@/features/console/extracted/sign-in-settings'
@@ -41,7 +40,6 @@ import {
   jsonResponse,
   organization,
   pagination,
-  readinessIncomplete,
   renderWithQuery,
   role,
   securityPolicy,
@@ -347,12 +345,6 @@ describe('console collections', () => {
         matches: (url: string) => url === '/api/connectors',
         success: { items: [connector], pagination },
         text: 'Google',
-      },
-      {
-        component: <ConsoleOnboardingPage />,
-        matches: (url: string) => url === '/api/realm/configuration-status',
-        success: readinessIncomplete,
-        text: 'Setup checklist',
       },
       {
         component: <SignInSettingsPage />,

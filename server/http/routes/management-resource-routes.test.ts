@@ -130,7 +130,7 @@ describe('management resource routes', () => {
       {
         identifier: 'contacts',
         resourceUrl: 'https://api.example.com',
-        accessMode: 'realmroot',
+        authorizationModel: 'native',
         ownerOrganizationId: 'org-1',
       },
       201,
@@ -272,7 +272,7 @@ async function loadAuthorizationRoutes(agentMode: 'authority' | 'bootstrap' | nu
     name: 'Contacts',
     resourceUrl: 'https://api.example.com',
     description: null,
-    accessMode: 'realmroot' as const,
+    authorizationModel: 'native' as const,
     connectorId: null,
     authorizationDetails: [],
     enabled: true,
@@ -289,7 +289,6 @@ async function loadAuthorizationRoutes(agentMode: 'authority' | 'bootstrap' | nu
     links: {
       self: 'https://auth.example.com/api/resource-servers/resource-1',
       authorizationDetails: 'https://auth.example.com/api/resource-servers/resource-1/authorization-details',
-      connectionRequests: null,
     },
   }
   vi.spyOn(externalResourcesUsecase, 'listApiResources').mockResolvedValue({
@@ -541,8 +540,9 @@ function connectorServiceMock() {
     providerType: 'social',
     providerId: 'github',
     displayName: 'GitHub',
+    capabilities: { authentication: true, resourceAuthorization: true },
     enabled: true,
-    loginEnabled: true,
+    authenticationEnabled: true,
     clientId: 'client-id',
     clientSecretConfigured: true,
     issuer: null,
@@ -565,6 +565,7 @@ function connectorServiceMock() {
           providerType: 'social',
           providerId: 'github',
           displayName: 'GitHub',
+          capabilities: { authentication: true, resourceAuthorization: true },
           icon: 'github',
           requiredFields: [],
           optionalFields: [],

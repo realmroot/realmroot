@@ -7,19 +7,19 @@ import {
 import { describe, expect, it } from 'vitest'
 
 describe('Agent resource schemas', () => {
-  it('requires an explicit Resource Server access mode', () => {
+  it('requires an explicit Resource Server authorization model', () => {
     const input = {
       identifier: 'projects',
       resourceUrl: 'https://projects.example.com',
-      accessMode: 'external_oauth' as const,
+      authorizationModel: 'external' as const,
       connectorId: 'connector-1',
       ownerOrganizationId: 'org-1',
     }
 
     expect(createApiResourceSchema.safeParse(input).success).toBe(true)
-    expect(createApiResourceSchema.safeParse({ ...input, accessMode: undefined }).success).toBe(false)
+    expect(createApiResourceSchema.safeParse({ ...input, authorizationModel: undefined }).success).toBe(false)
     expect(createApiResourceSchema.safeParse({ ...input, connectorId: '' }).success).toBe(false)
-    expect(updateApiResourceSchema.safeParse({ accessMode: 'realmroot' }).success).toBe(false)
+    expect(updateApiResourceSchema.safeParse({ authorizationModel: 'native' }).success).toBe(false)
     expect(updateApiResourceSchema.safeParse({ connectorId: null }).success).toBe(true)
   })
 
@@ -27,7 +27,7 @@ describe('Agent resource schemas', () => {
     const input = {
       identifier: 'projects',
       resourceUrl: 'https://projects.example.com',
-      accessMode: 'external_oauth' as const,
+      authorizationModel: 'external' as const,
       connectorId: 'connector-1',
       ownerOrganizationId: 'org-1',
       authorizationDetails: [

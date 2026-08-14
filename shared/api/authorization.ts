@@ -88,22 +88,13 @@ export const createInvitationRequestSchema = z.object({
 })
 
 export const apiResourceVisibilitySchema = z.enum(['private', 'public'])
-export const apiResourceAccessModeSchema = z.enum(['realmroot', 'external_oauth', 'brokered'])
+export const apiResourceAuthorizationModelSchema = z.enum(['native', 'external'])
 export const resourceScopeGrantModeSchema = z.enum(['automatic', 'assigned'])
 export const resourceScopeSchema = z
   .object({
     value: nonEmptyString,
     description: z.string().nullable(),
     grantMode: resourceScopeGrantModeSchema,
-  })
-  .strict()
-export const brokeredAccountConnectionSchema = z
-  .object({
-    mode: z.literal('brokered'),
-    authorizationEndpoint: z.url(),
-    tokenEndpoint: z.url(),
-    revocationEndpoint: z.url().nullable().optional(),
-    authorizationDetailsEndpoint: z.url().nullable().optional(),
   })
   .strict()
 export const resourceScopeRegistrySchema = z
@@ -124,7 +115,6 @@ export const resourceScopeRegistrySchema = z
       })
       .strict(),
     scopes: z.array(resourceScopeSchema),
-    accountConnection: brokeredAccountConnectionSchema.nullable().optional(),
   })
   .strict()
 
@@ -133,7 +123,7 @@ export const apiResourceResponseSchema = z.object({
   identifier: z.string(),
   name: z.string(),
   resourceUrl: z.url(),
-  accessMode: apiResourceAccessModeSchema,
+  authorizationModel: apiResourceAuthorizationModelSchema,
   connectorId: z.string().nullable(),
   authorizationDetails: authorizationDetailsSchema,
   description: z.string().nullable(),
@@ -150,8 +140,8 @@ export const createApiResourceRequestSchema = z
   .object({
     identifier: nonEmptyString,
     resourceUrl: z.url(),
-    accessMode: apiResourceAccessModeSchema,
-    connectorId: nonEmptyString.optional(),
+    authorizationModel: apiResourceAuthorizationModelSchema,
+    connectorId: nonEmptyString.nullable().default(null),
     authorizationDetails: authorizationDetailsSchema.default([]),
     enabled: z.boolean().optional(),
     ownerOrganizationId: nonEmptyString,
@@ -159,6 +149,7 @@ export const createApiResourceRequestSchema = z
     availableToAgents: z.boolean().optional(),
   })
   .strict()
+  .superRefine(validateResourceAuthorizationModel)
 
 export const updateApiResourceRequestSchema = z
   .object({
@@ -175,6 +166,26 @@ export const updateApiResourceRequestSchema = z
     availableToAgents: z.boolean().optional(),
   })
   .strict()
+
+function validateResourceAuthorizationModel(
+  input: { authorizationModel: 'native' | 'external'; connectorId: string | null },
+  ctx: z.RefinementCtx,
+) {
+  if (input.authorizationModel === 'external' && !input.connectorId) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['connectorId'],
+      message: 'External authorization requires a Provider Connector.',
+    })
+  }
+  if (input.authorizationModel === 'native' && input.connectorId) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['connectorId'],
+      message: 'Native authorization does not use a Provider Connector.',
+    })
+  }
+}
 
 export const roleScopeSchema = z.object({
   resourceId: nonEmptyString,
@@ -345,7 +356,7 @@ export type ListMembersResponse = z.infer<typeof listMembersResponseSchema>
 export type ListInvitationsResponse = z.infer<typeof listInvitationsResponseSchema>
 export type ApiResourceResponse = z.infer<typeof apiResourceResponseSchema>
 export type ApiResourceVisibility = z.infer<typeof apiResourceVisibilitySchema>
-export type ApiResourceAccessMode = z.infer<typeof apiResourceAccessModeSchema>
+export type ApiResourceAuthorizationModel = z.infer<typeof apiResourceAuthorizationModelSchema>
 export type ResourceScope = z.infer<typeof resourceScopeSchema>
 export type ResourceScopeRegistry = z.infer<typeof resourceScopeRegistrySchema>
 export type ListApiResourcesResponse = z.infer<typeof listApiResourcesResponseSchema>

@@ -256,7 +256,7 @@ describe('auth.test 1', () => {
       providerName: 'Realmroot',
       modes: ['delegated'],
       approvalMethods: ['device_authorization'],
-      deviceAuthorizationPage: '/agent/approve',
+      deviceAuthorizationPage: '/agent/enrollment',
       allowDynamicHostRegistration: true,
       defaultHostCapabilities: [],
       requireAuthForCapabilities: false,

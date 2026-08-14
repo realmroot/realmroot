@@ -114,7 +114,6 @@ describe('management API client', () => {
     await management.updateSignInSettings({ signIn: { identifierFirst: true } })
     await management.getBrandingSettings()
     await management.updateBrandingSettings({ branding: { primaryColor: '#2563eb' } })
-    await management.getAdminReadiness()
     await management.getAgentInventory()
     await management.deleteAgent('agent-1')
     await management.getSecurityPolicy()
@@ -144,7 +143,7 @@ describe('management API client', () => {
     await management.createApiResource({
       identifier: 'management-api',
       resourceUrl: 'https://auth.example.com/api',
-      accessMode: 'realmroot',
+      authorizationModel: 'native',
       ownerOrganizationId: 'org-1',
     })
     await management.updateApiResource('resource-1', { enabled: false })
@@ -255,7 +254,6 @@ describe('management API client', () => {
       ['signIn.patch', { json: { signIn: { identifierFirst: true } } }],
       ['branding.get'],
       ['branding.patch', { json: { branding: { primaryColor: '#2563eb' } } }],
-      ['readiness.get'],
       ['agentInventory.get'],
       ['agent.delete', { param: { agentId: 'agent-1' } }],
       ['security.get'],
@@ -317,7 +315,7 @@ describe('management API client', () => {
           json: {
             identifier: 'management-api',
             resourceUrl: 'https://auth.example.com/api',
-            accessMode: 'realmroot',
+            authorizationModel: 'native',
             ownerOrganizationId: 'org-1',
           },
         },

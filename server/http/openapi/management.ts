@@ -3,11 +3,8 @@ import {
   accessRequestSchema,
   agentStatusSchema,
   createAccessRequestSchema,
-  createResourceConnectionRequestSchema,
-  resourceConnectionRequestSchema,
   resourceServerAuthorizationDetailsResponseSchema,
 } from '@shared/api/agent-api'
-import { providerConnectionEventIdSchema, providerConnectionEventSchema } from '@shared/api/external-resources'
 import { agentPublicIdentifierSchema } from '@shared/api/identifiers'
 import { paginationQuerySchema } from '@shared/api/pagination'
 import {
@@ -181,60 +178,6 @@ const managementRoutes: ManagementRouteConfig[] = [
       query: paginationQuerySchema,
     },
     response: resourceServerAuthorizationDetailsResponseSchema,
-  },
-  {
-    method: 'post',
-    path: '/resource-servers/{resourceServerId}/connection-requests',
-    operationId: 'createConnectionRequest',
-    summary: 'Request a controller-managed Resource Server connection',
-    cli: { name: 'connect' },
-    security: [{ oauth2: ['connection-requests:read', 'connection-requests:write'] }],
-    request: {
-      params: z.object({ resourceServerId: z.string() }),
-      body: jsonBody(createResourceConnectionRequestSchema),
-    },
-    response: resourceConnectionRequestSchema,
-    status: 201,
-    responseHeaders: { ...locationResponseHeader, ...interactiveResourceResponseHeaders },
-  },
-  {
-    method: 'put',
-    path: '/resource-servers/{resourceServerId}/connection-events/{eventId}',
-    operationId: 'replaceResourceServerConnectionEvent',
-    summary: 'Replace an idempotent Resource Server Connection Event',
-    security: [{ oauth2: ['connection-events:write'] }],
-    request: {
-      params: z.object({
-        resourceServerId: z.string(),
-        eventId: providerConnectionEventIdSchema.meta({
-          param: { name: 'eventId', in: 'path' },
-          example: 'delivery-018f4f92',
-        }),
-      }),
-      body: jsonBody(providerConnectionEventSchema),
-    },
-    status: 204,
-    noBody: true,
-    errors: {
-      400: 'The event representation or Resource Server is invalid.',
-      404: 'The referenced Connection was not found.',
-      409: 'The event identity or revision conflicts with the current Connection Event state.',
-      413: 'The event representation exceeds 64 KiB.',
-    },
-    additionalResponses: {
-      401: { description: 'The OAuth access token or DPoP proof is missing or invalid.' },
-      403: { description: 'The Application lacks the required scope or does not own the Resource Server.' },
-    },
-  },
-  {
-    method: 'get',
-    path: '/resource-servers/{resourceServerId}/connection-requests/{requestId}',
-    operationId: 'getConnectionRequest',
-    summary: 'Read a Resource Server connection request',
-    security: [{ oauth2: ['connection-requests:read'] }],
-    request: { params: z.object({ resourceServerId: z.string(), requestId: z.string() }) },
-    response: resourceConnectionRequestSchema,
-    responseHeaders: interactiveResourceResponseHeaders,
   },
   {
     method: 'post',

@@ -15,7 +15,6 @@ export const consoleQueryKeys = {
   apiResources: ['console', 'api-resources'] as const,
   webhookEndpoints: ['console', 'webhooks', 'endpoints'] as const,
   webhookRequests: ['console', 'webhooks', 'requests'] as const,
-  readiness: ['console', 'readiness'] as const,
   agents: ['console', 'agents'] as const,
   federatedCredentials: (applicationId: string) =>
     ['console', 'applications', applicationId, 'federated-credentials'] as const,

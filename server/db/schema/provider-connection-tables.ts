@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { check, index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
+import { check, index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import { account, user } from './auth-tables'
 import { organization } from './authorization-tables'
 import { identityProviderConnector } from './connector-tables'
@@ -39,32 +39,9 @@ export const providerConnection = sqliteTable(
       .on(table.connectorId, table.ownerOrganizationId)
       .where(sql`${table.ownerOrganizationId} IS NOT NULL`),
     uniqueIndex('providerConnection_authenticationAccountId_unique').on(table.authenticationAccountId),
-    uniqueIndex('providerConnection_active_user_subject_unique')
-      .on(table.connectorId, table.externalSubject)
-      .where(sql`${table.ownerUserId} IS NOT NULL AND ${table.status} = 'active'`),
     index('providerConnection_connectorId_idx').on(table.connectorId),
     index('providerConnection_ownerUserId_idx').on(table.ownerUserId),
     index('providerConnection_ownerOrganizationId_idx').on(table.ownerOrganizationId),
     index('providerConnection_status_idx').on(table.status),
-  ],
-)
-
-export const providerConnectionEventReceipt = sqliteTable(
-  'provider_connection_event_receipt',
-  {
-    resource: text('resource').notNull(),
-    id: text('id').notNull(),
-    fingerprint: text('fingerprint').notNull(),
-    claimToken: text('claim_token').notNull(),
-    occurredAt: integer('occurred_at', { mode: 'timestamp_ms' }).notNull(),
-    revision: integer('revision').notNull(),
-    receivedAt: integer('received_at', { mode: 'timestamp_ms' })
-      .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
-      .notNull(),
-    appliedAt: integer('applied_at', { mode: 'timestamp_ms' }),
-  },
-  (table) => [
-    primaryKey({ columns: [table.resource, table.id] }),
-    index('providerConnectionEventReceipt_receivedAt_idx').on(table.receivedAt),
   ],
 )

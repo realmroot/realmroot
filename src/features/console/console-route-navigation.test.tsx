@@ -53,7 +53,7 @@ describe('console route navigation', () => {
       if (url === '/api/realm/configuration-status') {
         return Promise.resolve(
           jsonResponse({
-            admin: { setupRequired: true, setupHref: '/console/onboarding', missing: ['oidc_application'] },
+            admin: { setupRequired: true, setupHref: '/console/applications', missing: ['oidc_application'] },
           }),
         )
       }
@@ -171,7 +171,7 @@ describe('console route navigation', () => {
       if (url === '/api/realm/branding') return Promise.resolve(jsonResponse(brandingSettings))
       if (url === '/api/realm/configuration-status') {
         return Promise.resolve(
-          jsonResponse({ admin: { setupRequired: false, setupHref: '/console/onboarding', missing: [] } }),
+          jsonResponse({ admin: { setupRequired: false, setupHref: '/console/applications', missing: [] } }),
         )
       }
       if (url === '/api/applications/app-1') return Promise.resolve(jsonResponse(application))

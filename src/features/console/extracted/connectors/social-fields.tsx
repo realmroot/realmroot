@@ -4,6 +4,7 @@ import {
   Copy,
   Field,
   type FormState,
+  SelectInput,
   type SetStateAction,
   TextInput,
   tt,
@@ -102,6 +103,72 @@ export function CallbackUrlField({ value }: { value: string }) {
       </div>
     </div>
   )
+}
+
+export function ResourceAuthorizationFields({
+  form,
+  isExisting,
+  setForm,
+}: {
+  form: FormState
+  isExisting: boolean
+  setForm: (value: SetStateAction<FormState>) => void
+}) {
+  const dynamic = form.resourceRegistrationMode === 'dynamic'
+  return (
+    <div className="grid gap-4 rounded-lg border p-4">
+      <div>
+        <p className="text-sm font-medium">{tt('Resource authorization')}</p>
+        <p className="text-xs text-muted-foreground">
+          {tt('Configure the external authorization server used when Agents access this provider’s APIs.')}
+        </p>
+      </div>
+      <ConnectorTextField
+        field="resourceIssuer"
+        form={form}
+        label="Authorization server issuer"
+        required
+        setForm={setForm}
+      />
+      {!isExisting ? (
+        <Field label={tt('Resource client registration')}>
+          <SelectInput
+            name="resourceRegistrationMode"
+            onChange={(event) => setValue(setForm, 'resourceRegistrationMode', event.target.value)}
+            value={form.resourceRegistrationMode ?? 'manual'}
+          >
+            <option value="manual">{tt('Pre-registered client')}</option>
+            <option value="dynamic">{tt('Dynamic registration (RFC 7591)')}</option>
+          </SelectInput>
+        </Field>
+      ) : null}
+      {!dynamic ? (
+        <>
+          <ConnectorTextField
+            field="resourceClientId"
+            form={form}
+            label="Resource client ID"
+            required
+            setForm={setForm}
+          />
+          <ConnectorTextField
+            field="resourceClientSecret"
+            form={form}
+            help={isExisting ? 'Leave blank to keep the current resource client secret.' : undefined}
+            label="Resource client secret"
+            required={!isExisting}
+            secret
+            setForm={setForm}
+          />
+        </>
+      ) : null}
+      <CallbackUrlField value={resourceAuthorizationCallbackUrl()} />
+    </div>
+  )
+}
+
+export function resourceAuthorizationCallbackUrl() {
+  return `${window.location.origin}/api/account-connections/oauth/callback`
 }
 
 export function ConnectorDynamicFields({

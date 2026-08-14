@@ -66,14 +66,36 @@ describe('Connector API schemas', () => {
         clientSecret: 'secret',
         authorizationEndpoint: 'https://issuer.example.com/authorize',
       },
-      {
-        providerType: 'generic_oauth',
-        providerId: 'disabled-incomplete-oidc',
-        displayName: 'Disabled incomplete OIDC',
-        enabled: false,
-      },
     ]
     for (const input of invalid) expect(createConnectorRequestSchema.safeParse(input).success).toBe(false)
+  })
+
+  it('requires credentials for manually registered resource authorization', () => {
+    const base = {
+      providerType: 'generic_oauth' as const,
+      providerId: 'resource-oauth',
+      displayName: 'Resource OAuth',
+      enabled: false,
+      resourceAuthorization: {
+        enabled: true,
+        registrationMode: 'manual' as const,
+        issuer: 'https://resource.example.com',
+      },
+    }
+
+    expect(createConnectorRequestSchema.safeParse(base).success).toBe(false)
+    expect(
+      createConnectorRequestSchema.safeParse({
+        ...base,
+        resourceAuthorization: { ...base.resourceAuthorization, clientId: 'client' },
+      }).success,
+    ).toBe(false)
+    expect(
+      createConnectorRequestSchema.safeParse({
+        ...base,
+        resourceAuthorization: { ...base.resourceAuthorization, clientId: 'client', clientSecret: 'secret' },
+      }).success,
+    ).toBe(true)
   })
 
   it('parses response, update, linking, and unlinking contracts', () => {
@@ -86,7 +108,8 @@ describe('Connector API schemas', () => {
         providerId: 'oauth',
         displayName: 'OAuth',
         enabled: true,
-        loginEnabled: true,
+        capabilities: { authentication: true, resourceAuthorization: true },
+        authenticationEnabled: true,
         clientId: 'client',
         clientSecretConfigured: true,
         issuer: 'https://issuer.example.com',
@@ -99,6 +122,7 @@ describe('Connector API schemas', () => {
         registrationMode: 'manual',
         scopes: [],
         providerMetadata: {},
+        resourceAuthorization: null,
         createdAt: now,
         updatedAt: now,
       }),

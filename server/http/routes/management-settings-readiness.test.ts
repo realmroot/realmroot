@@ -433,7 +433,7 @@ describe('management routes 3', () => {
           label: 'Create an OIDC application',
           description: 'Register the first client so product routes can complete authorization code flows.',
           status: 'action_needed',
-          href: '/console/onboarding',
+          href: '/console/applications',
           action: 'Create client',
         },
         {
@@ -447,7 +447,7 @@ describe('management routes 3', () => {
       ],
       admin: {
         setupRequired: true,
-        setupHref: '/console/onboarding',
+        setupHref: '/console/applications',
         missing: ['oidc_application'],
       },
     })
@@ -468,7 +468,7 @@ describe('management routes 3', () => {
     const body = managementReadinessResponseSchema.parse(await readiness.json())
     expect(body.admin).toEqual({
       setupRequired: false,
-      setupHref: '/console/onboarding',
+      setupHref: '/console/applications',
       missing: [],
     })
     expect(body.required.every((item: { status: string }) => item.status === 'complete')).toBe(true)
@@ -493,7 +493,7 @@ describe('management routes 3', () => {
     const body = managementReadinessResponseSchema.parse(await readiness.json())
     expect(body.admin).toEqual({
       setupRequired: true,
-      setupHref: '/console/onboarding',
+      setupHref: '/console/applications',
       missing: ['sign_in_method'],
     })
     expect(body.required.find((item) => item.id === 'sign_in_method')?.status).toBe('action_needed')

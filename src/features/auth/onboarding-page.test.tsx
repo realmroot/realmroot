@@ -59,7 +59,7 @@ describe('OnboardingRoute', () => {
 
     expect(await screen.findByText('First-admin onboarding is already locked.')).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Continue to sign in' }).getAttribute('href')).toBe(
-      '/auth/sign-in?return_to=/console/onboarding',
+      '/auth/sign-in?return_to=/console',
     )
     expect(screen.queryByLabelText('Password')).toBeNull()
   })

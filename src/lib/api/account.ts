@@ -21,8 +21,8 @@ import type {
   ConnectableApiResourcesResponse,
   CreateAccountConnection,
   DecideAccessRequest,
-  ResourceConnectionApproval,
 } from '@shared/api/agent-api'
+import type { AgentApprovalPreview } from '@shared/api/agents'
 import type { CreateInvitationRequest, InvitationResponse, ListRolesResponse } from '@shared/api/authorization'
 import type {
   SecurityPasskeyRegistrationOptionsInput,
@@ -254,6 +254,13 @@ export function getAgentEnrollment(enrollmentId: string): Promise<AgentEnrollmen
   }).then((response) => readJsonResponse<AgentEnrollment>(response))
 }
 
+export function getAgentApprovalPreview(agentId: string, userCode: string): Promise<AgentApprovalPreview> {
+  const query = new URLSearchParams({ user_code: userCode })
+  return fetch(`/api/account/agent-approvals/${encodeURIComponent(agentId)}?${query.toString()}`, {
+    credentials: 'same-origin',
+  }).then((response) => readJsonResponse<AgentApprovalPreview>(response))
+}
+
 export function approveAgentEnrollment(enrollmentId: string): Promise<{ agent: Agent }> {
   return fetch(`/api/account/agent-enrollments/${encodeURIComponent(enrollmentId)}/decision`, {
     method: 'PUT',
@@ -323,13 +330,6 @@ export function createAccountConnection(input: CreateAccountConnection) {
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(input),
   }).then((response) => readJsonResponse<AccountConnection>(response))
-}
-
-export function getResourceConnectionApproval(approvalToken: string) {
-  const query = new URLSearchParams({ approvalToken })
-  return fetch(`/api/account/resource-connection-requests/current?${query}`, { credentials: 'same-origin' }).then(
-    (response) => readJsonResponse<ResourceConnectionApproval>(response),
-  )
 }
 
 export function revokeAccountConnection(connectionId: string) {

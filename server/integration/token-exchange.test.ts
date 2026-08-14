@@ -89,7 +89,7 @@ describe('OAuth token exchange over real D1', () => {
       body: JSON.stringify({
         identifier: audience,
         resourceUrl: audience,
-        accessMode: 'realmroot',
+        authorizationModel: 'native',
         ownerOrganizationId: platformOrganizationId,
       }),
     })

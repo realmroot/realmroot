@@ -58,7 +58,6 @@ import type {
   ManagementBanUserRequest,
   ManagementBrandingSettingsResponse,
   ManagementCreateUserRequest,
-  ManagementReadinessResponse,
   ManagementRealmResponse,
   ManagementSignInSettingsResponse,
   ManagementUpdateUserRequest,
@@ -515,10 +514,6 @@ async function readVersionedResponse<T extends object, Status extends number = n
   if (!etag) throw new Error('Versioned resource response did not include an ETag.')
   const representation = (await readRpcResponse(Promise.resolve(response))) as T
   return { ...representation, etag }
-}
-
-export function getAdminReadiness(): Promise<ManagementReadinessResponse> {
-  return readRpcResponse(apiClient.api.realm['configuration-status'].$get())
 }
 
 export function getAgentInventory(query: Partial<import('@shared/api/agent-api').ListAgentsQuery> = {}): Promise<{

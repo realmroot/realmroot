@@ -174,10 +174,15 @@ describe('management routes 4', () => {
       }),
       undefined,
     )
-    expect(connectors.update).toHaveBeenCalledWith(expect.anything(), 'connector-1', {
-      enabled: false,
-      displayName: 'Google Workspace',
-    })
+    expect(connectors.update).toHaveBeenCalledWith(
+      expect.anything(),
+      'connector-1',
+      {
+        enabled: false,
+        displayName: 'Google Workspace',
+      },
+      undefined,
+    )
     expect(connectors.remove).toHaveBeenCalledWith(expect.anything(), 'connector-1')
   })
 
@@ -224,6 +229,7 @@ describe('management routes 4', () => {
       expect.anything(),
       'connector-1',
       expect.objectContaining({ clientSecret: 'REVIEW_CLIENT_SECRET' }),
+      undefined,
     )
   })
 

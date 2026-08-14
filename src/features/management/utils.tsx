@@ -69,7 +69,7 @@ export function connectorToForm(connector: ConnectorResponse | null): FormState 
     slug: connector.slug,
     displayName: connector.displayName,
     enabled: String(connector.enabled),
-    loginEnabled: String(connector.loginEnabled),
+    authenticationEnabled: String(connector.authenticationEnabled),
     registrationMode: connector.registrationMode ?? 'manual',
     clientId: connector.clientId ?? '',
     clientSecret: '',
@@ -80,6 +80,11 @@ export function connectorToForm(connector: ConnectorResponse | null): FormState 
     jwksEndpoint: connector.jwksEndpoint ?? '',
     scopes: connector.scopes.join(' '),
     providerMetadata: JSON.stringify(connector.providerMetadata, null, 2),
+    resourceAuthorizationEnabled: String(connector.resourceAuthorization?.enabled ?? false),
+    resourceRegistrationMode: connector.resourceAuthorization?.registrationMode ?? 'manual',
+    resourceIssuer: connector.resourceAuthorization?.issuer ?? '',
+    resourceClientId: connector.resourceAuthorization?.clientId ?? '',
+    resourceClientSecret: '',
     ...Object.fromEntries(
       Object.entries(connector.providerMetadata).flatMap(([key, value]) =>
         typeof value === 'string' || typeof value === 'boolean' ? [[`metadata.${key}`, String(value)]] : [],

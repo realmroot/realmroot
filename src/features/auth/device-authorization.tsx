@@ -8,10 +8,9 @@ import { deduplicateRequest } from '@/lib/request-deduplication'
 
 type DeviceVerificationProps = {
   userCode?: string
-  mode: 'entry' | 'approval'
 }
 
-export function DeviceVerification({ mode, userCode: initialUserCode = '' }: DeviceVerificationProps) {
+export function DeviceVerification({ userCode: initialUserCode = '' }: DeviceVerificationProps) {
   const [userCode, setUserCode] = useState(initialUserCode)
   const [verifiedCode, setVerifiedCode] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -20,7 +19,7 @@ export function DeviceVerification({ mode, userCode: initialUserCode = '' }: Dev
   const normalizedCode = useMemo(() => normalizeUserCode(userCode), [userCode])
 
   useEffect(() => {
-    if (mode !== 'approval' || !initialUserCode) return
+    if (!initialUserCode) return
     let canceled = false
     setSubmitting(true)
     setError(null)
@@ -40,12 +39,12 @@ export function DeviceVerification({ mode, userCode: initialUserCode = '' }: Dev
     return () => {
       canceled = true
     }
-  }, [initialUserCode, mode])
+  }, [initialUserCode])
 
   function submitEntry(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!normalizedCode) return
-    window.location.assign(`/device/approve?user_code=${encodeURIComponent(normalizedCode)}`)
+    window.location.assign(`/auth/device?user_code=${encodeURIComponent(normalizedCode)}`)
   }
 
   async function decide(decision: 'approve' | 'deny') {
@@ -69,7 +68,7 @@ export function DeviceVerification({ mode, userCode: initialUserCode = '' }: Dev
     }
   }
 
-  if (mode === 'entry') {
+  if (!initialUserCode) {
     return (
       <form className="grid gap-4" onSubmit={submitEntry}>
         <Field label="Device code">
@@ -117,7 +116,7 @@ export function DeviceVerification({ mode, userCode: initialUserCode = '' }: Dev
           variant="outline"
         >
           <XCircle aria-hidden="true" />
-          Deny
+          Cancel
         </Button>
         <Button
           disabled={!verifiedCode || submitting || !!message}
@@ -125,7 +124,7 @@ export function DeviceVerification({ mode, userCode: initialUserCode = '' }: Dev
           type="button"
         >
           <CheckCircle2 aria-hidden="true" />
-          {submitting ? 'Approving…' : 'Approve'}
+          {submitting ? 'Authorizing…' : 'Authorize'}
         </Button>
       </div>
     </div>

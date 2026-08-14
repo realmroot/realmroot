@@ -51,7 +51,7 @@ The complete generated workflow surface is:
 
 ```text
 whoami
-connect <resource-server-id>
+enroll
 access
 ```
 
@@ -61,10 +61,11 @@ logic out of the Realmroot plugin and avoids turning routine reads into custom
 commands.
 
 The Agent-facing product model uses Agents, Resource Servers, provider-owned
-Resources, connection requests, access requests, and short-lived credentials.
-It exposes connection and scope status without exposing account-connection IDs,
-provider authorization details, grants, refresh credentials, or token endpoints.
-Those remain internal security records.
+Resources, access requests, and short-lived credentials. An access request also
+establishes or expands the controller's account connection when required. The
+API exposes connection and scope status without exposing account-connection
+IDs, grants, refresh credentials, or token endpoints. Those remain internal
+security records.
 
 ## Authentication And Authorization
 

@@ -49,8 +49,9 @@ const genericConnector = {
   providerType: 'generic_oauth',
   slug: 'projects',
   displayName: 'Projects OIDC',
+  capabilities: { authentication: true, resourceAuthorization: true },
   enabled: true,
-  loginEnabled: false,
+  authenticationEnabled: false,
   clientId: 'realmroot',
   clientSecretConfigured: true,
   issuer: 'https://projects.example.com',
@@ -127,7 +128,7 @@ describe('console API resources and roles', () => {
       id: 'resource-external',
       name: 'Projects API',
       resourceUrl: 'https://projects.example.com/api',
-      accessMode: 'external_oauth' as const,
+      authorizationModel: 'external' as const,
       connectorId: 'connector-1',
       enabled: false,
     }
@@ -152,9 +153,9 @@ describe('console API resources and roles', () => {
     expect(screen.getByRole('columnheader', { name: 'Protected resource' })).toBeTruthy()
     expect(screen.getByRole('columnheader', { name: 'Status' })).toBeTruthy()
     expect(screen.getByRole('columnheader', { name: 'Owner' })).toBeTruthy()
-    expect(screen.getAllByText('OAuth').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('External').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Disabled').length).toBeGreaterThan(0)
-    fireEvent.change(screen.getByLabelText('Filter authorization'), { target: { value: 'realmroot' } })
+    fireEvent.change(screen.getByLabelText('Filter authorization'), { target: { value: 'native' } })
     expect(screen.queryByText('Projects API')).toBeNull()
     expect(screen.getByText('Management API')).toBeTruthy()
     fireEvent.change(screen.getByLabelText('Search resource servers'), { target: { value: 'missing' } })
@@ -168,7 +169,12 @@ describe('console API resources and roles', () => {
       if (request.url === '/api/resource-servers' && request.method === 'POST') {
         requests.push({ ...request, body: await request.body })
         return jsonResponse(
-          { ...apiResource, name: 'Projects API', accessMode: 'external_oauth', connectorId: 'connector-1' },
+          {
+            ...apiResource,
+            name: 'Projects API',
+            authorizationModel: 'external',
+            connectorId: 'connector-1',
+          },
           201,
         )
       }
@@ -191,14 +197,14 @@ describe('console API resources and roles', () => {
     fireEvent.change(screen.getByLabelText('Protected resource URL'), {
       target: { value: 'https://projects.example.com/api' },
     })
-    fireEvent.focus(screen.getByRole('button', { name: 'Access model help' }))
+    fireEvent.focus(screen.getByRole('button', { name: 'Authorization help' }))
     expect((await screen.findByRole('tooltip')).textContent).toBe(
-      'The Resource Server accepts access issued directly by Realmroot.',
+      'Agents call this Resource Server with a token issued by Realmroot.',
     )
-    fireEvent.change(screen.getByLabelText('Access model'), { target: { value: 'external_oauth' } })
+    fireEvent.change(screen.getByLabelText('Authorization'), { target: { value: 'external' } })
     await waitFor(() =>
       expect(screen.getByRole('tooltip').textContent).toBe(
-        'The Resource Server delegates authorization to an external OAuth provider.',
+        'Agents call this Resource Server with a token issued by its external authorization server.',
       ),
     )
     fireEvent.change(screen.getByLabelText('Provider connector'), { target: { value: 'connector-1' } })
@@ -220,7 +226,7 @@ describe('console API resources and roles', () => {
           body: {
             identifier: 'projects',
             resourceUrl: 'https://projects.example.com/api',
-            accessMode: 'external_oauth',
+            authorizationModel: 'external',
             connectorId: 'connector-1',
             authorizationDetails: [{ type: 'project_access', actions: ['read'], project_id: 'project-1' }],
             ownerOrganizationId: 'org-1',
@@ -274,16 +280,13 @@ describe('console API resources and roles', () => {
     expect(await screen.findByText('Disabled API')).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: 'New resource server' }))
-    expect(
-      screen.getByText('Optional. Uses Realmroot Token plus Provider Connection for delegated provider credentials.'),
-    ).toBeTruthy()
+    expect(screen.getByLabelText('Authorization')).toHaveProperty('value', 'native')
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     fireEvent.click(screen.getByRole('button', { name: 'New resource server' }))
     fireEvent.change(screen.getByLabelText('Identifier'), { target: { value: 'selected-api' } })
     fireEvent.change(screen.getByLabelText('Protected resource URL'), {
       target: { value: 'https://selected.example.com/api' },
     })
-    fireEvent.change(screen.getByLabelText('Provider connector'), { target: { value: genericConnector.id } })
     fireEvent.change(screen.getByLabelText('Owner'), { target: { value: betaOrganization.id } })
     fireEvent.change(screen.getByLabelText('Visibility'), { target: { value: 'public' } })
     fireEvent.click(screen.getByRole('switch', { name: 'Available to Agents' }))
@@ -294,8 +297,8 @@ describe('console API resources and roles', () => {
         {
           identifier: 'selected-api',
           resourceUrl: 'https://selected.example.com/api',
-          accessMode: 'realmroot',
-          connectorId: genericConnector.id,
+          authorizationModel: 'native',
+          connectorId: null,
           authorizationDetails: [],
           ownerOrganizationId: betaOrganization.id,
           visibility: 'public',
@@ -413,7 +416,9 @@ describe('console API resources and roles', () => {
     })
 
     renderWithQuery(<ApiResourceDetailPage resourceId="resource-1" />)
-    expect((await screen.findAllByRole('button', { name: 'Native access model help' })).length).toBeGreaterThan(0)
+    expect((await screen.findAllByRole('button', { name: 'Native authorization model help' })).length).toBeGreaterThan(
+      0,
+    )
     fireEvent.mouseDown(screen.getByRole('tab', { name: 'Endpoints' }), { button: 0, ctrlKey: false })
     fireEvent.click(await screen.findByRole('button', { name: 'Retry' }))
 
@@ -503,7 +508,7 @@ describe('console API resources and roles', () => {
         return Promise.resolve(
           jsonResponse({
             ...apiResource,
-            accessMode: 'external_oauth',
+            authorizationModel: 'external',
             connectorId: 'connector-1',
             authorization: null,
           }),
@@ -519,15 +524,15 @@ describe('console API resources and roles', () => {
     })
 
     renderWithQuery(<ApiResourceDetailPage resourceId="resource-1" />)
-    expect((await screen.findAllByText('OAuth')).length).toBeGreaterThan(0)
-    fireEvent.focus(screen.getAllByRole('button', { name: 'OAuth access model help' })[0])
+    expect((await screen.findAllByText('External')).length).toBeGreaterThan(0)
+    fireEvent.focus(screen.getAllByRole('button', { name: 'External authorization model help' })[0])
     expect((await screen.findByRole('tooltip')).textContent).toBe(
-      'The Resource Server delegates authorization to an external OAuth provider.',
+      'Agents call this Resource Server with a token issued by its external authorization server.',
     )
     expect(screen.getAllByText('Not configured')).toHaveLength(3)
     expect(await screen.findByText('Visibility')).toBeTruthy()
     fireEvent.mouseDown(screen.getByRole('tab', { name: 'Settings' }), { button: 0, ctrlKey: false })
-    expect(await screen.findByRole('heading', { name: 'Provider access' })).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'External authorization' })).toBeTruthy()
     expect(screen.getByText('connector-1')).toBeTruthy()
     expect(screen.getByText('Pending validation')).toBeTruthy()
   })
@@ -557,8 +562,10 @@ describe('console API resources and roles', () => {
     })
 
     renderWithQuery(<ApiResourceDetailPage organizationId="org-1" resourceId="resource-1" section="settings" />)
-    expect((await screen.findAllByRole('button', { name: 'Native access model help' })).length).toBeGreaterThan(0)
-    expect(screen.queryByRole('heading', { name: 'Provider access' })).toBeNull()
+    expect((await screen.findAllByRole('button', { name: 'Native authorization model help' })).length).toBeGreaterThan(
+      0,
+    )
+    expect(screen.queryByRole('heading', { name: 'External authorization' })).toBeNull()
     const details = screen.getByRole('heading', { name: 'Resource server details' }).closest('section') as HTMLElement
     fireEvent.click(within(details).getByRole('button', { name: 'Edit' }))
     fireEvent.change(await screen.findByLabelText('Identifier'), { target: { value: 'updated-api' } })
@@ -585,37 +592,7 @@ describe('console API resources and roles', () => {
     cleanup()
     selected = {
       ...apiResource,
-      connectorId: 'connector-1',
-    }
-    renderWithQuery(<ApiResourceDetailPage resourceId="resource-1" section="settings" />)
-    const delegatedProvider = await screen.findByRole('heading', { name: 'Provider access' })
-    const delegatedProviderSection = delegatedProvider.closest('section') as HTMLElement
-    expect(
-      within(delegatedProviderSection).getByText(
-        'Realmroot Token plus Provider Connection for delegated provider credentials.',
-      ),
-    ).toBeTruthy()
-    expect(within(delegatedProviderSection).queryByText('Authorization detail templates')).toBeNull()
-    fireEvent.click(within(delegatedProviderSection).getByRole('button', { name: 'Edit' }))
-    fireEvent.change(await screen.findByLabelText('Provider connector'), { target: { value: 'connector-2' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
-    await waitFor(() =>
-      expect(requests).toContainEqual({
-        url: '/api/resource-servers/resource-1',
-        method: 'PATCH',
-        body: {
-          connectorId: 'connector-2',
-          authorizationDetails: [],
-        },
-      }),
-    )
-    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Overview' }), { button: 0, ctrlKey: false })
-    expect(await screen.findByText('Realmroot Token plus Provider Connection')).toBeTruthy()
-
-    cleanup()
-    selected = {
-      ...apiResource,
-      accessMode: 'external_oauth',
+      authorizationModel: 'external',
       connectorId: 'connector-1',
       authorizationDetails: [{ type: 'project_access', actions: ['read'], project_id: 'project-1' }],
       authorization: {
@@ -641,8 +618,10 @@ describe('console API resources and roles', () => {
       },
     }
     renderWithQuery(<ApiResourceDetailPage resourceId="resource-1" section="settings" />)
-    expect((await screen.findAllByRole('button', { name: 'OAuth access model help' })).length).toBeGreaterThan(0)
-    const provider = screen.getByRole('heading', { name: 'Provider access' }).closest('section') as HTMLElement
+    expect(
+      (await screen.findAllByRole('button', { name: 'External authorization model help' })).length,
+    ).toBeGreaterThan(0)
+    const provider = screen.getByRole('heading', { name: 'External authorization' }).closest('section') as HTMLElement
     fireEvent.click(within(provider).getByRole('button', { name: 'Edit' }))
     fireEvent.change(screen.getByLabelText('Authorization detail templates'), { target: { value: '{}' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
@@ -664,7 +643,7 @@ describe('console API resources and roles', () => {
       }),
     )
     fireEvent.mouseDown(screen.getByRole('tab', { name: 'Overview' }), { button: 0, ctrlKey: false })
-    expect(await screen.findByText('https://projects.example.com')).toBeTruthy()
+    expect((await screen.findAllByText('https://projects.example.com')).length).toBeGreaterThan(0)
     expect(screen.getByText('active')).toBeTruthy()
     expect(screen.getByText('manual')).toBeTruthy()
   })

@@ -161,12 +161,5 @@ Feature: Hosted authentication
     Given a public native application requests a Better Auth device approval code
     When I open the device verification link while signed out
     Then hosted sign-in preserves the device verification return path
+    And code entry and the approval decision continue on the same hosted device page
     And approving or denying the device code requires the signed-in browser session
-
-  @entrypoint:product-ui @journey:oidc-client-callback
-  Scenario: OIDC client callback lands on the local callback page
-    Given an OIDC callback response is produced
-    When the browser follows the callback URL
-    Then the local callback route validates state without exposing the authorization code
-    And it shows a compact success or recovery state
-    And an incomplete local OIDC start shows a recovery state without opening the authorization server error page

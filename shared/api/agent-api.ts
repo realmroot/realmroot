@@ -218,7 +218,6 @@ export const decideAgentEnrollmentSchema = z.discriminatedUnion('kind', [
     kind: z.literal('protocol'),
     decision: z.enum(['approve', 'deny']),
     userCode: nonEmptyString,
-    permissions: z.array(nonEmptyString).optional(),
   }),
 ])
 
@@ -243,7 +242,6 @@ export const resourceServerSchema = apiResourceResponseSchema.extend({
   links: z.object({
     self: z.url(),
     authorizationDetails: z.url(),
-    connectionRequests: z.url().nullable(),
   }),
 })
 
@@ -316,28 +314,6 @@ export const capabilityRequestSchema = z.object({
   expiresAt: z.iso.datetime().nullable(),
 })
 
-export const createResourceConnectionRequestSchema = z
-  .object({
-    authorizationDetails: authorizationDetailsSchema.default([]),
-    scopes: scopeListSchema,
-    reason: z.string().trim().max(500).nullable().optional(),
-  })
-  .strict()
-
-export const resourceConnectionRequestSchema = z.object({
-  id: z.string(),
-  agentId: z.string(),
-  resourceServerId: z.string(),
-  authorizationDetails: authorizationDetailsSchema,
-  scopes: z.array(z.string()),
-  reason: z.string().nullable(),
-  status: z.enum(['pending', 'connected', 'denied', 'expired']),
-  interaction: interactionSchema,
-  links: resourceLinksSchema,
-  createdAt: z.iso.datetime(),
-  expiresAt: z.iso.datetime(),
-})
-
 export const connectableApiResourcesResponseSchema = z.object({
   items: z.array(
     z.object({
@@ -370,23 +346,6 @@ export const accountConnectionSchema = z.object({
   updatedAt: z.iso.datetime(),
 })
 
-export const resourceConnectionApprovalSchema = resourceConnectionRequestSchema.extend({
-  agent: z.object({ id: z.string(), name: z.string() }),
-  resource: z.object({ id: z.string(), name: z.string() }),
-  accountConnection: accountConnectionSchema.nullable(),
-})
-
-export const resourceConnectionApprovalTokenSchema = z.object({
-  id: z.string(),
-  agentIdentityId: z.string(),
-  bindingId: z.string(),
-  resourceId: z.string(),
-  scopes: z.array(z.string()).min(1),
-  reason: z.string().nullable(),
-  createdAt: z.iso.datetime(),
-  expiresAt: z.iso.datetime(),
-})
-
 export const createAccountConnectionSchema = z.discriminatedUnion('context', [
   z
     .object({
@@ -405,12 +364,6 @@ export const createAccountConnectionSchema = z.discriminatedUnion('context', [
     .object({
       context: z.literal('access-request'),
       accessRequestId: nonEmptyString,
-      approvalToken: nonEmptyString,
-    })
-    .strict(),
-  z
-    .object({
-      context: z.literal('connection-request'),
       approvalToken: nonEmptyString,
     })
     .strict(),
@@ -517,10 +470,6 @@ export type ConnectableApiResourcesResponse = z.infer<typeof connectableApiResou
 export type AccountConnection = z.infer<typeof accountConnectionSchema>
 export type AuthorizationDetailCatalogEntry = z.infer<typeof authorizationDetailCatalogEntrySchema>
 export type CreateAccountConnection = z.infer<typeof createAccountConnectionSchema>
-export type CreateResourceConnectionRequest = z.input<typeof createResourceConnectionRequestSchema>
-export type ResourceConnectionRequest = z.infer<typeof resourceConnectionRequestSchema>
-export type ResourceConnectionApproval = z.infer<typeof resourceConnectionApprovalSchema>
-export type ResourceConnectionApprovalToken = z.infer<typeof resourceConnectionApprovalTokenSchema>
 export type CreateAccessRequest = z.input<typeof createAccessRequestSchema>
 export type AccessRequest = z.infer<typeof accessRequestSchema>
 export type AccessRequestApproval = z.infer<typeof accessRequestApprovalSchema>

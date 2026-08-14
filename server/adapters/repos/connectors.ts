@@ -48,8 +48,12 @@ export function createConnectorRepository(db: Database, secrets: SecretCipher): 
 
     async create(input) {
       const clientSecretContext = input.clientSecret ? connectorSecretContext(input.id) : null
+      const resourceClientSecretContext = input.resourceClientSecret ? connectorResourceSecretContext(input.id) : null
       const registrationAccessTokenContext = input.registrationAccessToken
         ? connectorRegistrationTokenContext(input.id)
+        : null
+      const resourceRegistrationAccessTokenContext = input.resourceRegistrationAccessToken
+        ? connectorResourceRegistrationTokenContext(input.id)
         : null
       const [row] = await db
         .insert(identityProviderConnector)
@@ -63,6 +67,14 @@ export function createConnectorRepository(db: Database, secrets: SecretCipher): 
             ? await secrets.seal(input.registrationAccessToken, registrationAccessTokenContext!)
             : input.registrationAccessToken,
           registrationAccessTokenContext,
+          resourceClientSecret: input.resourceClientSecret
+            ? await secrets.seal(input.resourceClientSecret, resourceClientSecretContext!)
+            : input.resourceClientSecret,
+          resourceClientSecretContext,
+          resourceRegistrationAccessToken: input.resourceRegistrationAccessToken
+            ? await secrets.seal(input.resourceRegistrationAccessToken, resourceRegistrationAccessTokenContext!)
+            : input.resourceRegistrationAccessToken,
+          resourceRegistrationAccessTokenContext,
         })
         .returning()
       return decryptConnector(db, row, secrets)
@@ -79,6 +91,20 @@ export function createConnectorRepository(db: Database, secrets: SecretCipher): 
         encryptedInput.registrationAccessToken = await secrets.seal(
           input.registrationAccessToken,
           encryptedInput.registrationAccessTokenContext,
+        )
+      }
+      if (typeof input.resourceClientSecret === 'string') {
+        encryptedInput.resourceClientSecretContext = connectorResourceSecretContext(id)
+        encryptedInput.resourceClientSecret = await secrets.seal(
+          input.resourceClientSecret,
+          encryptedInput.resourceClientSecretContext,
+        )
+      }
+      if (typeof input.resourceRegistrationAccessToken === 'string') {
+        encryptedInput.resourceRegistrationAccessTokenContext = connectorResourceRegistrationTokenContext(id)
+        encryptedInput.resourceRegistrationAccessToken = await secrets.seal(
+          input.resourceRegistrationAccessToken,
+          encryptedInput.resourceRegistrationAccessTokenContext,
         )
       }
       const [row] = await db
@@ -112,6 +138,35 @@ export function createConnectorRepository(db: Database, secrets: SecretCipher): 
       return row ? decryptConnector(db, row, secrets) : null
     },
 
+    async rotateResourceClientGeneration(id, expectedGeneration, input) {
+      const encryptedInput = { ...input }
+      if (typeof input.resourceClientSecret === 'string') {
+        encryptedInput.resourceClientSecretContext = connectorResourceSecretContext(id)
+        encryptedInput.resourceClientSecret = await secrets.seal(
+          input.resourceClientSecret,
+          encryptedInput.resourceClientSecretContext,
+        )
+      }
+      if (typeof input.resourceRegistrationAccessToken === 'string') {
+        encryptedInput.resourceRegistrationAccessTokenContext = connectorResourceRegistrationTokenContext(id)
+        encryptedInput.resourceRegistrationAccessToken = await secrets.seal(
+          input.resourceRegistrationAccessToken,
+          encryptedInput.resourceRegistrationAccessTokenContext,
+        )
+      }
+      const [row] = await db
+        .update(identityProviderConnector)
+        .set(encryptedInput)
+        .where(
+          and(
+            eq(identityProviderConnector.id, id),
+            eq(identityProviderConnector.resourceClientGeneration, expectedGeneration),
+          ),
+        )
+        .returning()
+      return row ? decryptConnector(db, row, secrets) : null
+    },
+
     async delete(id) {
       await db.delete(identityProviderConnector).where(eq(identityProviderConnector.id, id))
     },
@@ -120,16 +175,25 @@ export function createConnectorRepository(db: Database, secrets: SecretCipher): 
 
 async function decryptConnector(db: Database, row: ConnectorRow, secrets: SecretCipher): Promise<ConnectorRow> {
   const clientSecret = await readConnectorSecret(db, row, secrets)
+  const resourceClientSecret = await readResourceConnectorSecret(db, row, secrets)
   const registrationAccessToken = row.registrationAccessToken
     ? await secrets.open(
         row.registrationAccessToken,
         row.registrationAccessTokenContext ?? connectorRegistrationTokenContext(row.id),
       )
     : null
+  const resourceRegistrationAccessToken = row.resourceRegistrationAccessToken
+    ? await secrets.open(
+        row.resourceRegistrationAccessToken,
+        row.resourceRegistrationAccessTokenContext ?? connectorResourceRegistrationTokenContext(row.id),
+      )
+    : null
   return {
     ...row,
     clientSecret,
     registrationAccessToken,
+    resourceClientSecret,
+    resourceRegistrationAccessToken,
   }
 }
 
@@ -152,4 +216,30 @@ function connectorSecretContext(connectorId: string) {
 
 function connectorRegistrationTokenContext(connectorId: string) {
   return `connector:${connectorId}:registration-token`
+}
+
+async function readResourceConnectorSecret(db: Database, row: ConnectorRow, secrets: SecretCipher) {
+  if (!row.resourceClientSecret) return null
+  const context = row.resourceClientSecretContext ?? connectorResourceSecretContext(row.id)
+  if (secrets.isSealed(row.resourceClientSecret)) return secrets.open(row.resourceClientSecret, context)
+
+  const encrypted = await secrets.seal(row.resourceClientSecret, context)
+  await db
+    .update(identityProviderConnector)
+    .set({ resourceClientSecret: encrypted, resourceClientSecretContext: context })
+    .where(
+      and(
+        eq(identityProviderConnector.id, row.id),
+        eq(identityProviderConnector.resourceClientSecret, row.resourceClientSecret),
+      ),
+    )
+  return row.resourceClientSecret
+}
+
+function connectorResourceSecretContext(connectorId: string) {
+  return `connector:${connectorId}:resource-client-secret`
+}
+
+function connectorResourceRegistrationTokenContext(connectorId: string) {
+  return `connector:${connectorId}:resource-registration-token`
 }

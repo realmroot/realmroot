@@ -193,6 +193,13 @@ the controller-approved subset; the target authorization server performs the
 subject/actor intersection; and the resource server still makes the final
 request decision.
 
+A compatibility Adapter occupies the external target boundary: it implements
+the target authorization server and protected Resource, issues the final DPoP
+token, retains provider credentials, and forwards published operations to the
+external provider. It does not create a third authorization model. The normative
+ownership and extension constraints are defined in
+[Provider Adapter Boundary](provider-adapter-boundary.md).
+
 ## Consequences
 
 - Resource-server RFC 9728 metadata, code, and OpenAPI operation mappings must change together.
@@ -201,6 +208,8 @@ request decision.
   editable permission vocabularies.
 - Realmroot owns issuance policy and auditable delegation, not object-level
   access policy.
+- Provider-specific OAuth, credentials, scope translation, API proxying, and
+  lifecycle semantics never move into Realmroot core code.
 - Resource servers must not treat `roles`, `groups`, `sub`, or `act` as expanding
   the granted `scope`.
 - A token can be valid and still be denied by resource-local policy.

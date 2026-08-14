@@ -71,6 +71,7 @@ import {
   ConnectorDynamicFields,
   connectorCallbackUrl,
   GenericConnectorFields,
+  ResourceAuthorizationFields,
 } from './connectors/social-fields'
 
 export function ConnectorsPage() {
@@ -312,7 +313,7 @@ export function ConnectorsPage() {
                       </TableCell>
                       <TableCell>{connector.issuer}</TableCell>
                       <TableCell>{connector.clientId}</TableCell>
-                      <TableCell>{connector.loginEnabled ? tt('Enabled') : tt('Disabled')}</TableCell>
+                      <TableCell>{connector.authenticationEnabled ? tt('Enabled') : tt('Disabled')}</TableCell>
                       <TableCell>
                         <StatusBadge active={connector.enabled} activeLabel="Ready" inactiveLabel="Disabled" />
                       </TableCell>
@@ -456,7 +457,7 @@ function ConnectorProviderDrawer({
     }
     setForm({
       enabled: provider.providerType === 'generic_oauth' ? 'true' : 'false',
-      loginEnabled: provider.providerType === 'generic_oauth' ? 'false' : 'true',
+      authenticationEnabled: provider.providerType === 'generic_oauth' ? 'false' : 'true',
       registrationMode: 'manual',
       slug: '',
       displayName: '',
@@ -464,9 +465,18 @@ function ConnectorProviderDrawer({
       clientSecret: '',
       scopes: provider.template?.defaultScopes.join(' ') ?? '',
       providerMetadata: '',
+      resourceAuthorizationEnabled: 'false',
+      resourceRegistrationMode: 'manual',
+      resourceIssuer: '',
+      resourceClientId: '',
+      resourceClientSecret: '',
     })
   }, [provider, activeConnector])
   if (!provider) return null
+  const resourceAuthorizationSupported =
+    activeConnector?.capabilities.resourceAuthorization ??
+    provider.template?.capabilities.resourceAuthorization ??
+    provider.providerType === 'generic_oauth'
   return (
     <Sheet
       open={open}
@@ -513,16 +523,33 @@ function ConnectorProviderDrawer({
                 setValidationError(null)
                 const scopes = form.scopes?.split(/\s+/).filter(Boolean)
                 const providerMetadata = parseConnectorMetadata(form)
+                const resourceAuthorization =
+                  resourceAuthorizationSupported && form.resourceAuthorizationEnabled === 'true'
+                    ? {
+                        enabled: true,
+                        registrationMode: form.resourceRegistrationMode === 'dynamic' ? 'dynamic' : 'manual',
+                        issuer: form.resourceIssuer,
+                        ...(form.resourceRegistrationMode === 'dynamic'
+                          ? {}
+                          : {
+                              clientId: form.resourceClientId,
+                              ...(form.resourceClientSecret?.trim()
+                                ? { clientSecret: form.resourceClientSecret.trim() }
+                                : {}),
+                            }),
+                      }
+                    : null
                 if (isExisting) {
                   onUpdate(
                     activeConnector,
                     parseForm(updateManagementConnectorRequestSchema, {
                       ...connectorUpdateForm(form),
                       enabled: form.enabled === 'true',
-                      loginEnabled: form.loginEnabled === 'true',
+                      authenticationEnabled: form.authenticationEnabled === 'true',
                       registrationMode: form.registrationMode,
                       scopes,
                       providerMetadata,
+                      resourceAuthorization,
                     }),
                   )
                   return
@@ -532,13 +559,14 @@ function ConnectorProviderDrawer({
                     ...form,
                     slug: provider.providerType === 'generic_oauth' ? form.slug : provider.providerId,
                     enabled: form.enabled === 'true',
-                    loginEnabled: form.loginEnabled === 'true',
+                    authenticationEnabled: form.authenticationEnabled === 'true',
                     providerType: provider.providerType,
                     providerId: provider.providerType === 'generic_oauth' ? form.slug : provider.providerId,
                     displayName: provider.providerType === 'generic_oauth' ? form.displayName : provider.displayName,
                     registrationMode: provider.providerType === 'generic_oauth' ? form.registrationMode : undefined,
                     scopes,
                     providerMetadata,
+                    resourceAuthorization,
                   }),
                 )
               } catch (submitError) {
@@ -597,22 +625,7 @@ function ConnectorProviderDrawer({
                         </Field>
                       </>
                     ) : null}
-                    <div className="flex items-center justify-between gap-4">
-                      <div>
-                        <p className="text-sm font-medium">{tt('Allow hosted login')}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {tt('Offer this OIDC connector as a Realmroot sign-in method.')}
-                        </p>
-                      </div>
-                      <Switch
-                        aria-label={tt('Allow hosted login')}
-                        checked={form.loginEnabled === 'true'}
-                        name="loginEnabled"
-                        onCheckedChange={(enabled) => setValue(setForm, 'loginEnabled', String(enabled))}
-                        type="button"
-                      />
-                    </div>
-                    {!isExisting ? (
+                    {!isExisting && form.authenticationEnabled === 'true' ? (
                       <Field label={tt('Client registration')}>
                         <SelectInput
                           name="registrationMode"
@@ -628,35 +641,79 @@ function ConnectorProviderDrawer({
                 ) : null}
                 <div className="flex items-center justify-between gap-4">
                   <div>
-                    <p className="text-sm font-medium">{tt('Allow users without an email')}</p>
+                    <p className="text-sm font-medium">{tt('Allow hosted login')}</p>
                     <p className="text-xs text-muted-foreground">
-                      {' '}
-                      {tt(
-                        'Allow this provider to enter the registration path. If it returns no email for a new user, the hosted flow shows an account-binding error.',
-                      )}{' '}
+                      {tt('Offer this Connector as a Realmroot sign-in method.')}
                     </p>
                   </div>
                   <Switch
-                    aria-label={tt('Allow users without an email')}
-                    checked={form['metadata.allowUsersWithoutEmail'] === 'true'}
-                    name="allowUsersWithoutEmail"
-                    onCheckedChange={(allowUsersWithoutEmail) =>
-                      setValue(setForm, 'metadata.allowUsersWithoutEmail', String(allowUsersWithoutEmail))
-                    }
+                    aria-label={tt('Allow hosted login')}
+                    checked={form.authenticationEnabled === 'true'}
+                    name="authenticationEnabled"
+                    onCheckedChange={(enabled) => setValue(setForm, 'authenticationEnabled', String(enabled))}
                     type="button"
                   />
                 </div>
-                {provider.providerType === 'generic_oauth' ? (
-                  <GenericConnectorFields form={form} isExisting={isExisting} setForm={setForm} />
-                ) : (
-                  <ConnectorDynamicFields
-                    form={form}
-                    isExisting={isExisting}
-                    setForm={setForm}
-                    template={provider.template}
-                  />
-                )}
-                {provider.providerId ? <CallbackUrlField value={connectorCallbackUrl(provider.providerId)} /> : null}
+                {form.authenticationEnabled === 'true' ? (
+                  <>
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <p className="text-sm font-medium">{tt('Allow users without an email')}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {tt(
+                            'Allow this provider to enter the registration path. If it returns no email for a new user, the hosted flow shows an account-binding error.',
+                          )}
+                        </p>
+                      </div>
+                      <Switch
+                        aria-label={tt('Allow users without an email')}
+                        checked={form['metadata.allowUsersWithoutEmail'] === 'true'}
+                        name="allowUsersWithoutEmail"
+                        onCheckedChange={(allowUsersWithoutEmail) =>
+                          setValue(setForm, 'metadata.allowUsersWithoutEmail', String(allowUsersWithoutEmail))
+                        }
+                        type="button"
+                      />
+                    </div>
+                    {provider.providerType === 'generic_oauth' ? (
+                      <GenericConnectorFields form={form} isExisting={isExisting} setForm={setForm} />
+                    ) : (
+                      <ConnectorDynamicFields
+                        form={form}
+                        isExisting={isExisting}
+                        setForm={setForm}
+                        template={provider.template}
+                      />
+                    )}
+                    {provider.providerId ? (
+                      <CallbackUrlField value={connectorCallbackUrl(provider.providerId)} />
+                    ) : null}
+                  </>
+                ) : null}
+                {resourceAuthorizationSupported ? (
+                  <>
+                    <div className="flex items-center justify-between gap-4 border-t pt-4">
+                      <div>
+                        <p className="text-sm font-medium">{tt('Allow resource authorization')}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {tt('Use this same Connector identity for external API account connections.')}
+                        </p>
+                      </div>
+                      <Switch
+                        aria-label={tt('Allow resource authorization')}
+                        checked={form.resourceAuthorizationEnabled === 'true'}
+                        name="resourceAuthorizationEnabled"
+                        onCheckedChange={(enabled) =>
+                          setValue(setForm, 'resourceAuthorizationEnabled', String(enabled))
+                        }
+                        type="button"
+                      />
+                    </div>
+                    {form.resourceAuthorizationEnabled === 'true' ? (
+                      <ResourceAuthorizationFields form={form} isExisting={isExisting} setForm={setForm} />
+                    ) : null}
+                  </>
+                ) : null}
               </div>
             </div>
             <SheetFooter className="border-t border-border sm:flex-row sm:justify-end">

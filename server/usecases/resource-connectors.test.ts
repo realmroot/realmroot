@@ -1,9 +1,6 @@
 import type { ConnectorRow } from '@server/adapters/repos/connectors'
 import type { Deps } from '@server/usecases/deps'
-import {
-  validateConnectorBackedNativeResource,
-  validateExternalResourceConnector,
-} from '@server/usecases/resource-connectors'
+import { validateExternalResourceConnector } from '@server/usecases/resource-connectors'
 import { describe, expect, it, vi } from 'vitest'
 
 const resourceUrl = 'https://api.example.com/v1?tenant=acme'
@@ -12,6 +9,13 @@ const jwtBearerGrant = 'urn:ietf:params:oauth:grant-type:jwt-bearer'
 const tokenExchangeGrant = 'urn:ietf:params:oauth:grant-type:token-exchange'
 
 describe('external resource connector validation', () => {
+  it('accepts a social-login Connector with an independent external authorization facet', async () => {
+    const deps = createDeps({ connector: connector({ providerType: 'social', providerId: 'linear' }) })
+    await expect(validateExternalResourceConnector(deps, resourceUrl, 'connector-1')).resolves.toMatchObject({
+      resource: resourceUrl,
+    })
+  })
+
   it('accepts a complete OIDC connector and preserves the resource path in metadata discovery', async () => {
     const deps = createDeps()
 
@@ -28,43 +32,43 @@ describe('external resource connector validation', () => {
   })
 
   it.each([
-    ['missing', null],
-    ['non-OIDC', connector({ providerType: 'social' })],
-  ])('rejects a %s connector', async (_label, value) => {
+    ['missing', null, 404],
+    ['unsupported provider', connector({ providerType: 'social', providerId: 'google' }), 400],
+  ])('rejects a %s connector', async (_label, value, status) => {
     const deps = createDeps({ connector: value })
 
     await expect(validateExternalResourceConnector(deps, resourceUrl, 'connector-1')).rejects.toMatchObject({
-      status: 404,
-      message: 'OIDC connector was not found.',
+      status,
+      message: expect.stringMatching(/Provider Connector was not found|does not support resource authorization/),
     })
   })
 
   it.each([
     ['disabled', { enabled: false }],
-    ['client ID', { clientId: null }],
-    ['client secret', { clientSecret: null }],
-    ['issuer', { issuer: null }],
+    ['client ID', { resourceClientId: null }],
+    ['client secret', { resourceClientSecret: null }],
+    ['issuer', { resourceIssuer: null }],
   ])('rejects a connector without complete %s configuration', async (_label, overrides) => {
     const deps = createDeps({ connector: connector(overrides) })
 
     await expect(validateExternalResourceConnector(deps, resourceUrl, 'connector-1')).rejects.toMatchObject({
       status: 400,
-      message: 'OIDC connector must be enabled and have complete client credentials.',
+      message: 'Provider Connector must have complete resource authorization credentials.',
     })
   })
 
   it.each([
-    'authorizationEndpoint',
-    'tokenEndpoint',
-    'userInfoEndpoint',
-    'jwksEndpoint',
-    'revocationEndpoint',
+    'resourceAuthorizationEndpoint',
+    'resourceTokenEndpoint',
+    'resourceUserInfoEndpoint',
+    'resourceJwksEndpoint',
+    'resourceRevocationEndpoint',
   ] as const)('rejects a connector without %s', async (field) => {
     const deps = createDeps({ connector: connector({ [field]: null }) })
 
     await expect(validateExternalResourceConnector(deps, resourceUrl, 'connector-1')).rejects.toMatchObject({
       status: 400,
-      message: 'OIDC connector is missing endpoints required for external API access.',
+      message: 'Provider Connector must have complete resource authorization credentials.',
     })
   })
 
@@ -122,7 +126,7 @@ describe('external resource connector validation', () => {
   it('allows an HTTP loopback authorization server for development', async () => {
     const loopbackIssuer = 'http://localhost:8787'
     const deps = createDeps({
-      connector: connector({ issuer: loopbackIssuer }),
+      connector: connector({ resourceIssuer: loopbackIssuer }),
       metadata: protectedMetadata({ authorization_servers: [`${loopbackIssuer}/`] }),
     })
 
@@ -138,7 +142,7 @@ describe('external resource connector validation', () => {
 
     await expect(validateExternalResourceConnector(deps, resourceUrl, 'connector-1')).rejects.toMatchObject({
       status: 400,
-      message: 'External API resource authorization server does not match the selected OIDC connector.',
+      message: 'External API resource authorization server does not match the selected Provider Connector.',
     })
   })
 
@@ -152,7 +156,7 @@ describe('external resource connector validation', () => {
       (grant) => grant !== missingGrant,
     )
     const deps = createDeps({
-      connector: connector({ providerMetadata: providerMetadata({ grant_types_supported: grants }) }),
+      connector: connector({ resourceProviderMetadata: providerMetadata({ grant_types_supported: grants }) }),
     })
 
     await expect(validateExternalResourceConnector(deps, resourceUrl, 'connector-1')).rejects.toMatchObject({
@@ -164,7 +168,7 @@ describe('external resource connector validation', () => {
   it('requires advertised DPoP support', async () => {
     const deps = createDeps({
       connector: connector({
-        providerMetadata: providerMetadata({ dpop_signing_alg_values_supported: undefined }),
+        resourceProviderMetadata: providerMetadata({ dpop_signing_alg_values_supported: undefined }),
       }),
     })
 
@@ -174,25 +178,25 @@ describe('external resource connector validation', () => {
     })
   })
 
-  it('[spec: agent-identity/external-resource-rich-authorization-connection] requires advertised RAR types and PAR', async () => {
+  it('[spec: agent-identity/external-resource-rich-authorization-connection] requires advertised RAR types and accepts optional PAR', async () => {
     const authorizationDetails = [{ type: 'project_access', actions: ['read'] }]
     const unsupported = createDeps()
     await expect(
       validateExternalResourceConnector(unsupported, resourceUrl, 'connector-1', authorizationDetails),
     ).rejects.toThrow('does not support every configured authorization detail type')
 
-    const missingPar = createDeps({
+    const withoutPar = createDeps({
       connector: connector({
-        providerMetadata: providerMetadata({ authorization_details_types_supported: ['project_access'] }),
+        resourceProviderMetadata: providerMetadata({ authorization_details_types_supported: ['project_access'] }),
       }),
     })
     await expect(
-      validateExternalResourceConnector(missingPar, resourceUrl, 'connector-1', authorizationDetails),
-    ).rejects.toThrow('require RFC 9126 pushed authorization requests')
+      validateExternalResourceConnector(withoutPar, resourceUrl, 'connector-1', authorizationDetails),
+    ).resolves.toMatchObject({ resource: resourceUrl })
 
     const complete = createDeps({
       connector: connector({
-        providerMetadata: providerMetadata({
+        resourceProviderMetadata: providerMetadata({
           authorization_details_types_supported: ['project_access'],
           pushed_authorization_request_endpoint: 'https://idp.example.com/par',
         }),
@@ -207,7 +211,7 @@ describe('external resource connector validation', () => {
     const authorizationDetails = [{ type: 'project_access', actions: ['read'] }]
     const withoutCatalog = createDeps({
       connector: connector({
-        providerMetadata: providerMetadata({
+        resourceProviderMetadata: providerMetadata({
           authorization_details_types_supported: ['project_access'],
           pushed_authorization_request_endpoint: 'https://idp.example.com/par',
         }),
@@ -219,7 +223,7 @@ describe('external resource connector validation', () => {
 
     const incompleteCatalog = createDeps({
       connector: connector({
-        providerMetadata: providerMetadata({
+        resourceProviderMetadata: providerMetadata({
           authorization_details_types_supported: ['project_access'],
           pushed_authorization_request_endpoint: 'https://idp.example.com/par',
           authorization_details_catalog_endpoint: 'https://idp.example.com/authorization-details',
@@ -230,69 +234,6 @@ describe('external resource connector validation', () => {
     await expect(
       validateExternalResourceConnector(incompleteCatalog, resourceUrl, 'connector-1', authorizationDetails),
     ).rejects.toThrow('must provide a valid endpoint, scope, and version 1 together')
-  })
-})
-
-describe('connector-backed native resource connector validation', () => {
-  const completeNativeMetadata = {
-    grant_types_supported: ['authorization_code', 'refresh_token'],
-    code_challenge_methods_supported: ['S256'],
-    token_endpoint_auth_methods_supported: ['client_secret_basic'],
-  }
-
-  it.each([
-    ['missing connector', null, 'OIDC connector was not found'],
-    ['wrong connector type', connector({ providerType: 'social' }), 'OIDC connector was not found'],
-    ['disabled connector', connector({ enabled: false }), 'must be enabled'],
-    ['missing endpoint', connector({ revocationEndpoint: null }), 'is missing endpoints'],
-    [
-      'missing refresh grant',
-      connector({
-        providerMetadata: {
-          ...completeNativeMetadata,
-          grant_types_supported: ['authorization_code'],
-        },
-      }),
-      'must support authorization_code and refresh_token',
-    ],
-    [
-      'missing S256',
-      connector({
-        providerMetadata: {
-          ...completeNativeMetadata,
-          code_challenge_methods_supported: ['plain'],
-        },
-      }),
-      'must support S256 PKCE',
-    ],
-    [
-      'unsupported client authentication',
-      connector({
-        providerMetadata: {
-          ...completeNativeMetadata,
-          token_endpoint_auth_methods_supported: ['client_secret_post'],
-        },
-      }),
-      'must support client_secret_basic',
-    ],
-  ])('rejects %s', async (_label, connectorValue, message) => {
-    const deps = createDeps({ connector: connectorValue })
-
-    await expect(validateConnectorBackedNativeResource(deps, 'connector-1', [])).rejects.toThrow(message)
-  })
-
-  it('enforces the Connector OAuth scope allowlist and accepts exact scopes', async () => {
-    const deps = createDeps({
-      connector: connector({
-        registeredScopes: ['openid', 'offline_access', 'projects:read'],
-        providerMetadata: completeNativeMetadata,
-      }),
-    })
-
-    await expect(validateConnectorBackedNativeResource(deps, 'connector-1', ['projects:write'])).rejects.toThrow(
-      'scope allowlist',
-    )
-    await expect(validateConnectorBackedNativeResource(deps, 'connector-1', ['projects:read'])).resolves.toBeUndefined()
   })
 })
 
@@ -356,7 +297,7 @@ function connector(overrides: Partial<ConnectorRow> = {}): ConnectorRow {
     providerId: 'projects',
     displayName: 'Projects',
     enabled: true,
-    loginEnabled: false,
+    authenticationEnabled: false,
     clientId: 'client-1',
     clientSecret: 'secret-1',
     clientSecretContext: null,
@@ -377,6 +318,25 @@ function connector(overrides: Partial<ConnectorRow> = {}): ConnectorRow {
     scopes: ['openid'],
     attributeMapping: null,
     providerMetadata: providerMetadata(),
+    resourceAuthorizationEnabled: true,
+    resourceClientId: 'client-1',
+    resourceClientSecret: 'secret-1',
+    resourceClientSecretContext: null,
+    resourceIssuer: issuer,
+    resourceAuthorizationEndpoint: `${issuer}/authorize`,
+    resourceTokenEndpoint: `${issuer}/token`,
+    resourceUserInfoEndpoint: `${issuer}/userinfo`,
+    resourceJwksEndpoint: `${issuer}/jwks`,
+    resourceRegistrationEndpoint: `${issuer}/register`,
+    resourceRevocationEndpoint: `${issuer}/revoke`,
+    resourceRegistrationMode: 'manual',
+    resourceRegistrationClientUri: null,
+    resourceRegistrationAccessToken: null,
+    resourceRegistrationAccessTokenContext: null,
+    resourceRegisteredScopes: null,
+    resourceClientGeneration: 1,
+    resourceRetiredClientGenerations: null,
+    resourceProviderMetadata: providerMetadata(),
     createdAt: now,
     updatedAt: now,
     ...overrides,

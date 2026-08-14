@@ -11,9 +11,7 @@ import type { ProtocolAgentSession } from '@server/usecases/agent-session'
 import {
   createAccessRequest,
   createAccessRequestCredential,
-  createAgentConnectionRequest,
   getAccessRequest,
-  getAgentConnectionRequest,
   listAgentResourceServerAuthorizationDetails,
 } from '@server/usecases/external-resources'
 import {
@@ -25,10 +23,8 @@ import {
   agentStatusSchema,
   createAccessRequestSchema,
   createAgentSelfEnrollmentSchema,
-  createResourceConnectionRequestSchema,
   credentialOfferProfile,
   interactiveResourceProfile,
-  resourceConnectionRequestSchema,
   resourceServerAuthorizationDetailsResponseSchema,
   targetCredentialProofSchema,
   targetTokenSchema,
@@ -155,32 +151,6 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
     )
   })
 
-  app.post('/resource-servers/:resourceServerId/connection-requests', async (c) => {
-    requireAgentScope(c, 'connection-requests:write')
-    const principal = resourcePrincipal(c)
-    const result = await createAgentConnectionRequest(
-      getDeps(c),
-      c.req.param('resourceServerId'),
-      await readJson(c, createResourceConnectionRequestSchema),
-      principal,
-      apiOrigin(c),
-    )
-    c.header('Location', result.links.self)
-    applyInteractionHeaders(c, result)
-    return c.json(resourceConnectionRequestSchema.parse(result), 201)
-  })
-
-  app.get('/resource-servers/:resourceServerId/connection-requests/:requestId', async (c) => {
-    requireAgentScope(c, 'connection-requests:read')
-    const principal = resourcePrincipal(c)
-    const result = await getAgentConnectionRequest(getDeps(c), c.req.param('requestId'), principal, apiOrigin(c))
-    if (result.resourceServerId !== c.req.param('resourceServerId')) {
-      throw forbidden('Connection request does not belong to this Resource Server.')
-    }
-    applyInteractionHeaders(c, result)
-    return c.json(resourceConnectionRequestSchema.parse(result))
-  })
-
   app.post('/agent/access-requests', async (c) => {
     requireAgentScope(c, 'access-requests:write')
     const principal = resourcePrincipal(c)
@@ -230,7 +200,7 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
   }
 
   function hostedEnrollmentUrl(intentId: string) {
-    const url = new URL('/agent/enrollments/approve', new URL(requireOidcIssuer()).origin)
+    const url = new URL('/agent/enrollment', new URL(requireOidcIssuer()).origin)
     url.searchParams.set('intent_id', intentId)
     return url.toString()
   }

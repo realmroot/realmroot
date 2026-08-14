@@ -111,115 +111,28 @@ separate product capabilities.
 | ID | Requirement | Specification | Native Resource Server | Federated Platform | Realmroot 0.1 status |
 | --- | --- | --- | --- | --- | --- |
 | `RICH-AUTHORIZATION` | Accept Resource-specific authorization details when the Resource requires structured authority beyond scopes. | [RFC 9396](https://www.rfc-editor.org/rfc/rfc9396.html) | — | COND | Implemented |
-| `BROKERED-ACCOUNT-CONNECTION` | Let a native Resource Server broker one provider account connection while retaining provider credentials at the Resource Server boundary. | [Realmroot brokered account-connection extension](#brokered-account-connection-extension) | COND | — | Implemented extension |
 | `PUSHED-AUTHORIZATION` | Receive rich authorization details through a pushed authorization request. Realmroot requires PAR whenever RFC 9396 is enabled. | [RFC 9126](https://www.rfc-editor.org/rfc/rfc9126.html) plus Realmroot profile constraint | — | COND | Implemented |
 | `AUTHORIZATION-CATALOG` | Let Realmroot enumerate provider-owned authorization-detail templates before consent. | [Realmroot authorization-details catalog extension](#authorization-details-catalog-extension) | — | COND | Implemented extension |
 | `TOKEN-REVOCATION` | Accept authenticated access-token and refresh-token revocation and fail subsequent use closed. | [RFC 7009](https://www.rfc-editor.org/rfc/rfc7009.html) | — | MUST | Implemented |
 | `LIFECYCLE-SIGNALS` | Expose installation, permission-change, Resource-removal, and revocation signals so cached authority and provider credentials can be invalidated. | Realmroot profile requirement | SHOULD | MUST | Provider-dependent |
+
+## Compatibility Adapter boundary
+
+A provider compatibility Adapter implements the Federated Platform class at
+the Adapter boundary. It publishes a standard OAuth/OIDC authorization server
+and protected Resource, owns provider credentials and lifecycle state, and
+issues the final DPoP token consumed by the Agent. It is not a third
+authorization class.
+
+Compatibility Adapters follow External Authorization as defined in the
+[Resource Server integration guide](resource-servers.md) and the normative
+[Provider Adapter Boundary](../architecture/provider-adapter-boundary.md).
 
 ## Realmroot-specific extensions
 
 Extensions are compatibility debt, not strategic differentiation. Every
 extension must have a narrow purpose, an owner, a replacement direction, and a
 removal condition.
-
-### Brokered account-connection extension
-
-A native Resource Server that must bridge to a provider-owned account may add
-these members to its RFC 9728 protected-resource metadata:
-
-- `account_connection_modes_supported: ["brokered"]`;
-- `account_connection_authorization_endpoint`;
-- `account_connection_token_endpoint`;
-- `account_connection_revocation_endpoint` (recommended during the 0.1 compatibility window).
-
-Realmroot sends the authorization endpoint a signed JWT request object in the
-`request` query parameter. The Resource Server MUST validate its signature from
-the Realmroot issuer JWKS, exact `iss`, exact Resource `aud`, expiry, and unique
-`jti`. The claims bind the owner, canonical `connection_id`, existing external
-subject when reconnecting, Realmroot callback URI, S256 PKCE challenge, scopes,
-and RFC 9396 authorization details.
-
-After provider authorization, the Resource Server returns an authorization
-code and the original Realmroot `state` to the signed callback URI. Realmroot
-exchanges that code with the verifier at the advertised token endpoint. The
-response contains the stable external subject, display label, broker reference,
-granted scopes, and concrete authorization details; it never contains provider
-access or refresh credentials.
-
-When the revocation endpoint is advertised, Realmroot sends it a short-lived
-signed JWT request before removing the local Connection. The request binds the
-Realmroot issuer, Resource audience, owner, Connection, Resource Authorization,
-and opaque broker reference. The Resource Server validates it with the same
-issuer JWKS and permanently invalidates the referenced provider credential.
-Adapters SHOULD implement this endpoint; a later profile version may require it.
-
-Provider lifecycle changes flow back through the generic Connection Event
-resource at `PUT /api/resource-servers/{resourceServerId}/connection-events/{eventId}`. The event
-representation contains the opaque `brokerReference`,
-`occurredAt`, a positive monotonic `revision`, and one of `authorityChanged`,
-`resourcesChanged`, `suspended`, `restored`, or `revoked`. `authorityChanged`
-requires complete connection-wide `scopes` and `authorityConstraints` plus its
-affected scope/detail pair. `resourcesChanged` and `restored` require complete
-`scopes`, `authorizationDetails`, and `authorityConstraints` snapshots.
-`suspended` and `revoked` carry only the common event fields. Provider
-webhook names and payloads stay inside the
-Resource Server; Realmroot accepts only this provider-neutral representation.
-An `authorityChanged` event includes `affectedAuthorizationDetails` and
-`affectedScopes` together. The details select the changed authority and
-`affectedScopes` is its resulting scope set. Optional `scopes` remains the
-connection-wide union used to update the Connection record; it cannot authorize
-the selected authority. Realmroot therefore revokes grants for that authority
-only when their scopes exceed `affectedScopes`, even when an adjacent authority
-keeps the same scope in the connection-wide union. Permission expansion preserves
-grants already within the resulting authority. The three snapshot fields are
-complete replacement context for `resourcesChanged` and `restored`; every
-authorization detail must be covered by a constraint selector. Detail
-objects are compared recursively, arrays are unordered sets, and scalar values
-must match exactly when Realmroot determines whether a grant is a subset.
-The same atomic D1 boundary expires pending access requests and revokes active
-grants that exceed the resulting authority, then invalidates their leases, so an approval racing the
-event cannot recreate stale authority. Full snapshots also atomically revoke or
-expire requests, grants, and leases no longer covered by their global scopes,
-resources, or authority constraints.
-Connection Event receipts remain durable for audit and replay safety. Operators
-monitor their row count and D1 footprint; deletion requires an explicit retention
-policy longer than the provider's delivery retry and identity-reuse window, and
-must not remove recent or unapplied receipts.
-
-The Resource Server registers a confidential Application, receives the
-`connection-events:write` Application Permission, and obtains a
-resource-bound DPoP access token through the `client_credentials` grant.
-Realmroot authenticates the Application and requires its owner Organization to
-match the addressed Resource Server owner. An event identity is scoped to its Resource URI: an exact
-replay returns `204`, while the same identity with a different representation
-returns `409`. Realmroot orders mutations only by the Resource Server's
-per-connection `revision`. A higher revision applies even when its provider
-occurrence timestamp is earlier, while a lower revision is acknowledged without
-mutating state even when its timestamp is later. A different event using the
-current revision conflicts because every event must advance that revision. `occurredAt` is retained
-as audit metadata for the applied revision. Realmroot immediately
-revokes affected active leases, constrains grants to reduced scopes and
-authorization details, keeps suspension reversible, and permanently revokes
-grants when the Connection is revoked or no safe authority remains.
-Representations larger than 64 KiB are rejected before the complete body is
-buffered.
-
-The API Resource selects the Provider Connector whose account identity it
-represents. Realmroot allows one brokered account-connection authority per
-Connector and one Provider Connection per owner and Connector. Connector type
-is deliberately outside this extension: social, generic OAuth, and future
-Connectors use the same wire contract without provider-specific Realmroot code.
-
-- **Purpose:** keep provider OAuth and installation credentials inside a thin
-  compatibility Worker while Realmroot owns the Connection and Agent grants.
-- **Owner:** the compatibility Resource Server.
-- **Replacement direction:** a standards-body profile for brokered account
-  attachment, or provider-native Agent identity and authorization that removes
-  the account bridge entirely.
-- **Removal condition:** the provider accepts the Realmroot Agent directly and
-  supplies every required native identity, authorization, revocation, and audit
-  capability without this exchange.
 
 ### Authorization-details catalog extension
 

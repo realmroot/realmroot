@@ -20,90 +20,79 @@ describe('DeviceVerification', () => {
   it('sends entered codes to the authenticated approval route', () => {
     const assign = vi.fn()
     vi.stubGlobal('location', { ...window.location, assign })
-    render(<DeviceVerification mode="entry" />)
+    render(<DeviceVerification />)
 
     fireEvent.change(screen.getByLabelText('Device code'), { target: { value: 'abcd-2345' } })
     fireEvent.submit(screen.getByRole('button', { name: 'Continue' }).closest('form')!)
 
-    expect(assign).toHaveBeenCalledWith('/device/approve?user_code=ABCD2345')
+    expect(assign).toHaveBeenCalledWith('/auth/device?user_code=ABCD2345')
   })
 
   it('claims and approves a verified device code [spec: hosted-auth/better-auth-device-approval]', async () => {
-    render(<DeviceVerification mode="approval" userCode="ABCD-2345" />)
+    render(<DeviceVerification userCode="ABCD-2345" />)
 
     await waitFor(() => expect(verifyDeviceCode).toHaveBeenCalledWith({ userCode: 'ABCD-2345' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Authorize' }))
 
     await waitFor(() => expect(approveDeviceCode).toHaveBeenCalledWith({ userCode: 'ABCD2345' }))
     expect(await screen.findByText('Device approved.')).toBeTruthy()
   })
 
   it('denies a verified device code', async () => {
-    render(<DeviceVerification mode="approval" userCode="ABCD-2345" />)
+    render(<DeviceVerification userCode="ABCD-2345" />)
 
     await waitFor(() => expect(verifyDeviceCode).toHaveBeenCalledWith({ userCode: 'ABCD-2345' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Deny' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
 
     await waitFor(() => expect(denyDeviceCode).toHaveBeenCalledWith({ userCode: 'ABCD2345' }))
     expect(await screen.findByText('Device denied.')).toBeTruthy()
   })
 
-  it('keeps approval actions disabled when no user code is available', () => {
-    render(<DeviceVerification mode="approval" />)
-
-    expect(
-      screen.getByText('Enter the device code shown by the requesting application before approving access.'),
-    ).toBeTruthy()
-    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Approve' }).disabled).toBe(true)
-    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Deny' }).disabled).toBe(true)
-    expect(verifyDeviceCode).not.toHaveBeenCalled()
-  })
-
   it('surfaces device verification failures before approval', async () => {
     vi.mocked(verifyDeviceCode).mockRejectedValueOnce(new Error('Device code expired.'))
 
-    render(<DeviceVerification mode="approval" userCode="EXPIRED1" />)
+    render(<DeviceVerification userCode="EXPIRED1" />)
 
     expect(await screen.findByText('Device code expired.')).toBeTruthy()
-    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Approve' }).disabled).toBe(true)
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Authorize' }).disabled).toBe(true)
   })
 
   it('surfaces approval failures and allows retry', async () => {
     vi.mocked(approveDeviceCode).mockRejectedValueOnce(new Error('Approval failed.'))
-    render(<DeviceVerification mode="approval" userCode="ABCD-2345" />)
+    render(<DeviceVerification userCode="ABCD-2345" />)
 
     await waitFor(() => expect(verifyDeviceCode).toHaveBeenCalledWith({ userCode: 'ABCD-2345' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Authorize' }))
 
     expect(await screen.findByText('Approval failed.')).toBeTruthy()
-    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Approve' }).disabled).toBe(false)
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Authorize' }).disabled).toBe(false)
   })
 
   it('surfaces denial failures and allows retry', async () => {
     vi.mocked(denyDeviceCode).mockRejectedValueOnce(new Error('Denial failed.'))
-    render(<DeviceVerification mode="approval" userCode="ABCD-2345" />)
+    render(<DeviceVerification userCode="ABCD-2345" />)
 
     await waitFor(() => expect(verifyDeviceCode).toHaveBeenCalledWith({ userCode: 'ABCD-2345' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Deny' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
 
     expect(await screen.findByText('Denial failed.')).toBeTruthy()
-    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Deny' }).disabled).toBe(false)
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Cancel' }).disabled).toBe(false)
   })
 
   it('uses a generic message for non-Error verification rejections', async () => {
     vi.mocked(verifyDeviceCode).mockRejectedValueOnce('boom')
 
-    render(<DeviceVerification mode="approval" userCode="EXPIRED1" />)
+    render(<DeviceVerification userCode="EXPIRED1" />)
 
     expect(await screen.findByText('Device code is invalid or expired.')).toBeTruthy()
   })
 
   it('uses a generic message for non-Error approval rejections', async () => {
     vi.mocked(approveDeviceCode).mockRejectedValueOnce('boom')
-    render(<DeviceVerification mode="approval" userCode="ABCD-2345" />)
+    render(<DeviceVerification userCode="ABCD-2345" />)
 
     await waitFor(() => expect(verifyDeviceCode).toHaveBeenCalledWith({ userCode: 'ABCD-2345' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Authorize' }))
 
     expect(await screen.findByText('Unable to update device access.')).toBeTruthy()
   })
@@ -111,7 +100,7 @@ describe('DeviceVerification', () => {
   it('does not navigate when the entry code is blank', () => {
     const assign = vi.fn()
     vi.stubGlobal('location', { ...window.location, assign })
-    render(<DeviceVerification mode="entry" />)
+    render(<DeviceVerification />)
 
     fireEvent.submit(screen.getByRole('button', { name: 'Continue' }).closest('form')!)
 
@@ -126,7 +115,7 @@ describe('DeviceVerification', () => {
       }) as ReturnType<typeof verifyDeviceCode>,
     )
 
-    const { unmount } = render(<DeviceVerification mode="approval" userCode="ABCD-2345" />)
+    const { unmount } = render(<DeviceVerification userCode="ABCD-2345" />)
     await waitFor(() => expect(verifyDeviceCode).toHaveBeenCalled())
     unmount()
     resolveVerify?.({ user_code: 'ABCD2345', status: 'pending' })

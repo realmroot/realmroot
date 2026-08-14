@@ -1,0 +1,1 @@
+ALTER TABLE `provider_credential` DROP COLUMN `authority_constraints`;

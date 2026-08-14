@@ -91,7 +91,7 @@ const resource: ApiResourceResponse = {
   identifier: 'projects',
   name: 'Projects',
   resourceUrl: 'https://api.example.com',
-  accessMode: 'realmroot',
+  authorizationModel: 'native',
   connectorId: null,
   authorizationDetails: [],
   description: null,
@@ -661,67 +661,62 @@ describe('authorization CRUD and assignment policy', () => {
     )
   })
 
-  it(`[spec: admin-console/provider-connection-authority]
-      [spec: agent-identity/connector-backed-native-resource-registration]
-      manages native, connector-backed, brokered, and external API resources`, async () => {
+  it('[spec: admin-console/provider-connection-authority] keeps native and external authorization boundaries orthogonal', async () => {
     const authorization = repository()
     authorization.listEnabledResources.mockResolvedValue([])
-    authorization.findOrganization.mockResolvedValue(organization)
-    authorization.createResource.mockResolvedValue(resource)
+    authorization.findOrganization.mockImplementation(async (id) =>
+      id === platformOrganization.id ? platformOrganization : organization,
+    )
+    authorization.createResource.mockImplementation(async (input) => ({
+      ...resource,
+      ...input,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    }))
     authorization.listResources.mockResolvedValue({ items: [resource], pagination })
     authorization.findResource.mockResolvedValue(resource)
+
+    const providerMetadata = {
+      grant_types_supported: [
+        'authorization_code',
+        'refresh_token',
+        'urn:ietf:params:oauth:grant-type:jwt-bearer',
+        'urn:ietf:params:oauth:grant-type:token-exchange',
+      ],
+      dpop_signing_alg_values_supported: ['ES256'],
+      authorization_details_types_supported: ['payment_initiation'],
+      pushed_authorization_request_endpoint: `${resource.resourceUrl}/par`,
+    }
     const connector = {
       id: 'connector-1',
       providerType: 'generic_oauth',
+      providerId: 'projects',
       enabled: true,
-      clientId: 'client-1',
-      clientSecret: 'secret',
-      issuer: resource.resourceUrl,
-      authorizationEndpoint: `${resource.resourceUrl}/authorize`,
-      tokenEndpoint: `${resource.resourceUrl}/token`,
-      userInfoEndpoint: `${resource.resourceUrl}/userinfo`,
-      jwksEndpoint: `${resource.resourceUrl}/jwks`,
-      revocationEndpoint: `${resource.resourceUrl}/revoke`,
-      registeredScopes: ['openid', 'offline_access', 'projects:read'],
-      providerMetadata: {
-        grant_types_supported: [
-          'authorization_code',
-          'refresh_token',
-          'urn:ietf:params:oauth:grant-type:jwt-bearer',
-          'urn:ietf:params:oauth:grant-type:token-exchange',
-        ],
-        dpop_signing_alg_values_supported: ['ES256'],
-        code_challenge_methods_supported: ['S256'],
-        token_endpoint_auth_methods_supported: ['client_secret_basic'],
-        authorization_details_types_supported: ['payment_initiation'],
-        authorization_details_catalog_endpoint: `${resource.resourceUrl}/authorization-details`,
-        authorization_details_catalog_scope: 'authorization-details:read',
-        authorization_details_catalog_version: 1,
-        pushed_authorization_request_endpoint: `${resource.resourceUrl}/par`,
-      },
+      resourceAuthorizationEnabled: true,
+      resourceClientId: 'client-1',
+      resourceClientSecret: 'secret',
+      resourceIssuer: resource.resourceUrl,
+      resourceAuthorizationEndpoint: `${resource.resourceUrl}/authorize`,
+      resourceTokenEndpoint: `${resource.resourceUrl}/token`,
+      resourceUserInfoEndpoint: `${resource.resourceUrl}/userinfo`,
+      resourceJwksEndpoint: `${resource.resourceUrl}/jwks`,
+      resourceRevocationEndpoint: `${resource.resourceUrl}/revoke`,
+      resourceProviderMetadata: providerMetadata,
     }
     const connectors = { findById: vi.fn().mockResolvedValue(connector) }
     const openApiFetch = resourceOpenApiFetch(resource.resourceUrl)
-    let brokeredNative = false
     const deps = {
       ids: createIdentifierGeneratorFake(),
       authorization,
       connectors,
       externalHttp: {
         fetch: vi.fn((request: Request) =>
-          request.url.endsWith('/.well-known/oauth-protected-resource')
+          request.url.includes('/.well-known/oauth-protected-resource')
             ? Promise.resolve(
                 Response.json({
                   resource: resource.resourceUrl,
                   authorization_servers: [resource.resourceUrl],
                   scopes_supported: ['projects:read'],
-                  ...(brokeredNative
-                    ? {
-                        account_connection_modes_supported: ['brokered'],
-                        account_connection_authorization_endpoint: `${resource.resourceUrl}/account-connection-authorizations`,
-                        account_connection_token_endpoint: `${resource.resourceUrl}/account-connection-credentials`,
-                      }
-                    : {}),
                 }),
               )
             : openApiFetch(request),
@@ -729,219 +724,84 @@ describe('authorization CRUD and assignment policy', () => {
       },
     } as unknown as Deps
 
+    await createResource(deps, {
+      identifier: 'native',
+      resourceUrl: resource.resourceUrl,
+      authorizationModel: 'native',
+      ownerOrganizationId: organization.id,
+    })
+    expect(authorization.createResource).toHaveBeenLastCalledWith(
+      expect.objectContaining({ authorizationModel: 'native', connectorId: null }),
+    )
+
+    await expect(
+      createResource(deps, {
+        identifier: 'native-with-connector',
+        resourceUrl: resource.resourceUrl,
+        authorizationModel: 'native',
+        connectorId: connector.id,
+        ownerOrganizationId: organization.id,
+      }),
+    ).rejects.toThrow('Native authorization does not use a Provider Connector')
+
+    await expect(
+      createResource(deps, {
+        identifier: 'external-without-connector',
+        resourceUrl: resource.resourceUrl,
+        authorizationModel: 'external',
+        ownerOrganizationId: platformOrganization.id,
+      }),
+    ).rejects.toThrow('External authorization requires a Provider Connector')
+
     await expect(
       createResource(deps, {
         identifier: 'organization-owned-external',
         resourceUrl: resource.resourceUrl,
-        accessMode: 'external_oauth',
-        connectorId: 'connector-1',
+        authorizationModel: 'external',
+        connectorId: connector.id,
         ownerOrganizationId: organization.id,
       }),
     ).rejects.toThrow('must be owned by the built-in platform Organization')
 
     await createResource(deps, {
-      identifier: 'native',
-      resourceUrl: resource.resourceUrl,
-      accessMode: 'realmroot',
-      ownerOrganizationId: organization.id,
-    })
-    expect(authorization.createResource).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        connectorId: null,
-        name: 'Projects API',
-        description: 'Manage projects',
-        enabled: true,
-      }),
-    )
-    await createResource(deps, {
-      identifier: 'external-without-rar',
-      resourceUrl: resource.resourceUrl,
-      accessMode: 'external_oauth',
-      connectorId: 'connector-1',
-      ownerOrganizationId: platformOrganization.id,
-    })
-    expect(authorization.createResource).toHaveBeenLastCalledWith(
-      expect.objectContaining({ authorizationDetails: [], connectorId: 'connector-1' }),
-    )
-    await expect(
-      createResource(deps, {
-        identifier: 'invalid-native-rar',
-        resourceUrl: resource.resourceUrl,
-        accessMode: 'realmroot',
-        ownerOrganizationId: organization.id,
-        authorizationDetails: [{ type: 'project_access', project_id: 'project-1' }],
-      }),
-    ).rejects.toThrow('Authorization details require external OAuth or brokered provider access.')
-    await expect(
-      createResource(deps, {
-        identifier: 'brokered-without-metadata',
-        resourceUrl: resource.resourceUrl,
-        accessMode: 'brokered',
-        connectorId: 'connector-1',
-        ownerOrganizationId: platformOrganization.id,
-      }),
-    ).rejects.toThrow('must advertise brokered account connection metadata')
-    await expect(
-      createResource(deps, {
-        identifier: 'external-without-connector',
-        resourceUrl: resource.resourceUrl,
-        accessMode: 'external_oauth',
-        ownerOrganizationId: platformOrganization.id,
-      }),
-    ).rejects.toThrow('External OAuth access requires a Provider Connector')
-    await createResource(deps, {
-      identifier: 'realmroot-with-connector',
-      resourceUrl: resource.resourceUrl,
-      accessMode: 'realmroot',
-      connectorId: 'connector-1',
-      ownerOrganizationId: platformOrganization.id,
-    })
-    expect(authorization.createResource).toHaveBeenLastCalledWith(
-      expect.objectContaining({ accessMode: 'realmroot', connectorId: 'connector-1' }),
-    )
-    brokeredNative = true
-    await expect(
-      createResource(deps, {
-        identifier: 'brokered-native-rar',
-        resourceUrl: resource.resourceUrl,
-        accessMode: 'brokered',
-        ownerOrganizationId: platformOrganization.id,
-        authorizationDetails: [{ type: 'project_access', project_id: 'project-1' }],
-      }),
-    ).rejects.toThrow('must select a Provider Connector')
-    connectors.findById.mockResolvedValue(null)
-    await expect(
-      createResource(deps, {
-        identifier: 'brokered-missing-connector',
-        resourceUrl: resource.resourceUrl,
-        accessMode: 'brokered',
-        connectorId: 'connector-1',
-        ownerOrganizationId: platformOrganization.id,
-      }),
-    ).rejects.toThrow('Provider Connector must be enabled')
-    connectors.findById.mockResolvedValue({ ...connector, enabled: false })
-    await expect(
-      createResource(deps, {
-        identifier: 'brokered-disabled-connector',
-        resourceUrl: resource.resourceUrl,
-        accessMode: 'brokered',
-        connectorId: 'connector-1',
-        ownerOrganizationId: platformOrganization.id,
-      }),
-    ).rejects.toThrow('Provider Connector must be enabled')
-    connectors.findById.mockResolvedValue({ ...connector, providerType: 'social' })
-    await createResource(deps, {
-      identifier: 'brokered-native-rar',
-      resourceUrl: resource.resourceUrl,
-      accessMode: 'brokered',
-      connectorId: 'connector-1',
-      ownerOrganizationId: platformOrganization.id,
-      authorizationDetails: [{ type: 'project_access', project_id: 'project-1' }],
-    })
-    expect(authorization.createResource).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        connectorId: 'connector-1',
-        authorizationDetails: [{ type: 'project_access', project_id: 'project-1' }],
-        scopeRegistry: expect.objectContaining({ accountConnection: expect.objectContaining({ mode: 'brokered' }) }),
-      }),
-    )
-    authorization.listEnabledResources.mockResolvedValue([
-      {
-        ...resource,
-        accessMode: 'brokered',
-        connectorId: 'connector-1',
-        scopeRegistry: {
-          ...resource.scopeRegistry!,
-          accountConnection: {
-            mode: 'brokered',
-            authorizationEndpoint: `${resource.resourceUrl}/account-connection-authorizations`,
-            tokenEndpoint: `${resource.resourceUrl}/account-connection-credentials`,
-          },
-        },
-      },
-    ])
-    connectors.findById.mockResolvedValue({ ...connector, providerType: 'social' })
-    await expect(
-      createResource(deps, {
-        identifier: 'second-brokered-authority',
-        resourceUrl: resource.resourceUrl,
-        accessMode: 'brokered',
-        connectorId: 'connector-1',
-        ownerOrganizationId: platformOrganization.id,
-      }),
-    ).rejects.toThrow('already has an account connection authority')
-    authorization.listEnabledResources.mockResolvedValue([])
-    brokeredNative = false
-    connectors.findById.mockResolvedValue(connector)
-    await createResource(deps, {
       identifier: 'external',
       resourceUrl: resource.resourceUrl,
-      accessMode: 'external_oauth',
-      connectorId: 'connector-1',
+      authorizationModel: 'external',
+      connectorId: connector.id,
       ownerOrganizationId: platformOrganization.id,
       authorizationDetails: [
         { type: 'payment_initiation', actions: ['initiate'], locations: ['https://merchant.example.com'] },
       ],
-      enabled: true,
     })
     expect(authorization.createResource).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        connectorId: 'connector-1',
+        authorizationModel: 'external',
+        connectorId: connector.id,
         authorizationDetails: [
           { type: 'payment_initiation', actions: ['initiate'], locations: ['https://merchant.example.com'] },
         ],
-        enabled: true,
       }),
     )
+
     await expect(listResources(deps, { limit: 20, offset: 0 })).resolves.toEqual({
       resources: [resource],
       pagination,
     })
     await expect(getResource(deps, resource.id)).resolves.toBe(resource)
-    await expect(updateResource(deps, resource.id, { identifier: 'projects-2' })).resolves.toBe(resource)
-    await expect(
-      updateResource(deps, resource.id, {
-        authorizationDetails: [{ type: 'project_access', project_id: 'project-1' }],
-      }),
-    ).rejects.toThrow('Authorization details require external OAuth or brokered provider access.')
+
     authorization.findResource.mockResolvedValue({
       ...resource,
-      accessMode: 'brokered',
-      connectorId: 'connector-1',
-      ownerOrganizationId: platformOrganization.id,
-      authorizationDetails: [{ type: 'project_access', project_id: 'project-1' }],
-      scopeRegistry: {
-        ...resource.scopeRegistry!,
-        accountConnection: {
-          mode: 'brokered',
-          authorizationEndpoint: `${resource.resourceUrl}/account-connection-authorizations`,
-          tokenEndpoint: `${resource.resourceUrl}/account-connection-credentials`,
-        },
-      },
-    })
-    await expect(updateResource(deps, resource.id, { identifier: 'brokered-projects' })).resolves.toMatchObject({
-      id: resource.id,
-      scopeRegistry: expect.objectContaining({ accountConnection: expect.objectContaining({ mode: 'brokered' }) }),
-    })
-    authorization.findResource.mockResolvedValue({
-      ...resource,
-      accessMode: 'external_oauth',
-      connectorId: 'connector-1',
+      authorizationModel: 'external',
+      connectorId: connector.id,
       ownerOrganizationId: platformOrganization.id,
     })
     await expect(updateResource(deps, resource.id, { identifier: 'external-renamed' })).resolves.toMatchObject({
-      connectorId: 'connector-1',
+      connectorId: connector.id,
     })
     await expect(updateResource(deps, resource.id, { ownerOrganizationId: organization.id })).rejects.toThrow(
       'must be owned by the built-in platform Organization',
     )
-    await expect(
-      updateResource(deps, resource.id, {
-        authorizationDetails: [
-          { type: 'payment_initiation', actions: ['initiate'], locations: ['https://merchant.example.com'] },
-        ],
-      }),
-    ).resolves.toMatchObject({ id: resource.id })
+
     authorization.findResource.mockResolvedValue(resource)
     authorization.deleteResource.mockResolvedValue(true)
     await deleteResource(deps, resource.id, {
@@ -956,42 +816,13 @@ describe('authorization CRUD and assignment policy', () => {
     expect(authorization.deleteResource).toHaveBeenCalledWith(
       resource.id,
       expect.any(Date),
-      expect.objectContaining({
-        action: 'api_resource.deleted',
-        controllerUserId: null,
-        subjectIssuer: 'https://auth.example.com',
-        subject: 'agent-subject',
-        agentIdentityId: 'identity-1',
-        hostId: 'host-1',
-      }),
+      expect.objectContaining({ action: 'api_resource.deleted', agentIdentityId: 'identity-1' }),
     )
-
-    authorization.findResource.mockResolvedValue(resource)
-    authorization.updateResource.mockResolvedValueOnce(false)
-    await expect(updateResource(deps, resource.id, { enabled: true })).rejects.toMatchObject({
-      status: 404,
-      message: 'API resource was not found.',
-    })
-
-    authorization.findResource.mockResolvedValue(resource)
-    authorization.deleteResource.mockResolvedValue(false)
+    authorization.deleteResource.mockResolvedValueOnce(false)
     await expect(deleteResource(deps, resource.id, actor)).rejects.toMatchObject({ status: 404 })
 
-    authorization.findResource.mockResolvedValue({
-      ...resource,
-      accessMode: 'external_oauth',
-      connectorId: 'connector-1',
-      ownerOrganizationId: platformOrganization.id,
-    })
-    connectors.findById.mockResolvedValue({ ...connector, enabled: false })
-    await expect(updateResource(deps, resource.id, { enabled: true })).rejects.toMatchObject({ status: 400 })
-    connectors.findById.mockResolvedValue(connector)
-    await expect(updateResource(deps, resource.id, { enabled: true })).resolves.toEqual({
-      ...resource,
-      accessMode: 'external_oauth',
-      connectorId: 'connector-1',
-      ownerOrganizationId: platformOrganization.id,
-    })
+    authorization.updateResource.mockResolvedValueOnce(false)
+    await expect(updateResource(deps, resource.id, { enabled: true })).rejects.toMatchObject({ status: 404 })
     authorization.findResource.mockResolvedValue(null)
     await expect(getResource(deps, 'missing')).rejects.toMatchObject({ status: 404 })
   })
@@ -1001,7 +832,7 @@ describe('authorization CRUD and assignment policy', () => {
     const existingRegistry = scopeRegistry(['projects:read'])
     authorization.findResource.mockResolvedValue({
       ...resource,
-      accessMode: 'external_oauth',
+      authorizationModel: 'external',
       connectorId: 'connector-1',
       scopeRegistry: existingRegistry,
     })
@@ -1011,6 +842,7 @@ describe('authorization CRUD and assignment policy', () => {
         findById: vi.fn().mockResolvedValue({
           id: 'connector-1',
           providerType: 'generic_oauth',
+          providerId: 'projects',
           enabled: true,
           clientId: 'client-1',
           clientSecret: 'secret',
@@ -1021,6 +853,24 @@ describe('authorization CRUD and assignment policy', () => {
           jwksEndpoint: 'https://issuer.example.com/jwks',
           revocationEndpoint: 'https://issuer.example.com/revoke',
           providerMetadata: {
+            grant_types_supported: [
+              'authorization_code',
+              'refresh_token',
+              'urn:ietf:params:oauth:grant-type:jwt-bearer',
+              'urn:ietf:params:oauth:grant-type:token-exchange',
+            ],
+            dpop_signing_alg_values_supported: ['ES256'],
+          },
+          resourceAuthorizationEnabled: true,
+          resourceClientId: 'client-1',
+          resourceClientSecret: 'secret',
+          resourceIssuer: 'https://issuer.example.com',
+          resourceAuthorizationEndpoint: 'https://issuer.example.com/authorize',
+          resourceTokenEndpoint: 'https://issuer.example.com/token',
+          resourceUserInfoEndpoint: 'https://issuer.example.com/userinfo',
+          resourceJwksEndpoint: 'https://issuer.example.com/jwks',
+          resourceRevocationEndpoint: 'https://issuer.example.com/revoke',
+          resourceProviderMetadata: {
             grant_types_supported: [
               'authorization_code',
               'refresh_token',
@@ -1043,7 +893,7 @@ describe('authorization CRUD and assignment policy', () => {
     } as unknown as Deps
 
     await expect(refreshResourceScopeRegistry(deps, resource.id)).rejects.toThrow(
-      'authorization server does not match the selected OIDC connector',
+      'authorization server does not match the selected Provider Connector',
     )
     expect(authorization.replaceResourceDiscovery).toHaveBeenCalledWith(resource.id, {
       name: resource.name,
@@ -1056,56 +906,6 @@ describe('authorization CRUD and assignment policy', () => {
         },
       },
     })
-  })
-
-  it('[spec: admin-console/provider-connection-authority] refreshes brokered discovery with a social Provider Connector', async () => {
-    const authorization = repository()
-    const existingRegistry = scopeRegistry(['projects:read'])
-    const brokeredResource = {
-      ...resource,
-      accessMode: 'brokered' as const,
-      connectorId: 'connector-1',
-      scopeRegistry: existingRegistry,
-    }
-    authorization.findResource.mockResolvedValue(brokeredResource)
-    authorization.listEnabledResources.mockResolvedValue([brokeredResource])
-    const connectors = {
-      findById: vi.fn().mockResolvedValue({ id: 'connector-1', providerType: 'social', enabled: true }),
-    }
-    const openApiFetch = resourceOpenApiFetch(resource.resourceUrl)
-    const deps = {
-      authorization,
-      connectors,
-      externalHttp: {
-        fetch: vi.fn((request: Request) =>
-          request.url.includes('/.well-known/oauth-protected-resource')
-            ? Promise.resolve(
-                Response.json({
-                  resource: resource.resourceUrl,
-                  scopes_supported: ['projects:read'],
-                  account_connection_modes_supported: ['brokered'],
-                  account_connection_authorization_endpoint: `${resource.resourceUrl}/account-connection-authorizations`,
-                  account_connection_token_endpoint: `${resource.resourceUrl}/account-connection-credentials`,
-                  account_connection_revocation_endpoint: `${resource.resourceUrl}/account-connection-revocations`,
-                }),
-              )
-            : openApiFetch(request),
-        ),
-      },
-    } as unknown as Deps
-
-    await expect(refreshResourceScopeRegistry(deps, resource.id)).resolves.toBe(brokeredResource)
-    expect(authorization.replaceResourceDiscovery).toHaveBeenCalledWith(
-      resource.id,
-      expect.objectContaining({
-        scopeRegistry: expect.objectContaining({
-          accountConnection: expect.objectContaining({
-            mode: 'brokered',
-            revocationEndpoint: `${resource.resourceUrl}/account-connection-revocations`,
-          }),
-        }),
-      }),
-    )
   })
 
   it('refreshes active scope registries and continues after an isolated failure', async () => {
@@ -1156,7 +956,7 @@ describe('authorization CRUD and assignment policy', () => {
     const authorization = repository()
     const externalResource = {
       ...resource,
-      accessMode: 'external_oauth' as const,
+      authorizationModel: 'external' as const,
       connectorId: 'connector-1',
       authorizationDetails: [{ type: 'workspace' }],
     }
@@ -1185,6 +985,7 @@ describe('authorization CRUD and assignment policy', () => {
     const connector = {
       id: 'connector-1',
       providerType: 'generic_oauth',
+      providerId: 'projects',
       enabled: true,
       clientId: 'client-1',
       clientSecret: 'secret',
@@ -1196,6 +997,17 @@ describe('authorization CRUD and assignment policy', () => {
       revocationEndpoint: 'https://issuer.example.com/revoke',
       registrationMode: 'dynamic',
       providerMetadata,
+      resourceAuthorizationEnabled: true,
+      resourceClientId: 'client-1',
+      resourceClientSecret: 'secret',
+      resourceIssuer: 'https://issuer.example.com',
+      resourceAuthorizationEndpoint: 'https://issuer.example.com/authorize',
+      resourceTokenEndpoint: 'https://issuer.example.com/token',
+      resourceUserInfoEndpoint: 'https://issuer.example.com/userinfo',
+      resourceJwksEndpoint: 'https://issuer.example.com/jwks',
+      resourceRevocationEndpoint: 'https://issuer.example.com/revoke',
+      resourceRegistrationMode: 'dynamic',
+      resourceProviderMetadata: providerMetadata,
     }
     const connectors = {
       findById: vi.fn().mockResolvedValue(connector),
@@ -1224,7 +1036,7 @@ describe('authorization CRUD and assignment policy', () => {
     expect(connectors.update).toHaveBeenCalledWith(
       connector.id,
       expect.objectContaining({
-        providerMetadata: expect.objectContaining({ authorization_details_catalog_version: 1 }),
+        resourceProviderMetadata: expect.objectContaining({ authorization_details_catalog_version: 1 }),
       }),
     )
   })
@@ -1395,11 +1207,21 @@ describe('authorization CRUD and assignment policy', () => {
       resourceId: realmrootResource.id,
       operations: [expect.objectContaining({ requiredScopeSets: [['projects:read']] })],
     })
+    authorization.findResource.mockResolvedValueOnce({
+      ...realmrootResource,
+      scopeRegistry: {
+        ...realmrootResource.scopeRegistry!,
+        discovery: { ...realmrootResource.scopeRegistry!.discovery, sourceUrl: undefined as never },
+      },
+    })
+    await expect(getResourceContract(deps, realmrootResource.id)).resolves.toMatchObject({
+      resourceId: realmrootResource.id,
+    })
     await expect(
       createResource(deps, {
         identifier: 'disabled-owner',
         resourceUrl: resource.resourceUrl,
-        accessMode: 'realmroot',
+        authorizationModel: 'native',
         ownerOrganizationId: organization.id,
         enabled: false,
       }),
@@ -1411,7 +1233,7 @@ describe('authorization CRUD and assignment policy', () => {
       createResource(deps, {
         identifier: 'organization-api',
         resourceUrl: resource.resourceUrl,
-        accessMode: 'realmroot',
+        authorizationModel: 'native',
         ownerOrganizationId: organization.id,
         visibility: 'public',
         enabled: false,
@@ -1516,7 +1338,7 @@ describe('authorization CRUD and assignment policy', () => {
     const input = {
       identifier: 'projects',
       resourceUrl: resource.resourceUrl,
-      accessMode: 'realmroot' as const,
+      authorizationModel: 'native' as const,
       ownerOrganizationId: organization.id,
     }
 

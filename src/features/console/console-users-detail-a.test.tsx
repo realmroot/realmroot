@@ -46,7 +46,7 @@ describe('admin console users-detail-a', () => {
       if (url === '/api/realm/sign-in-policy') return Promise.resolve(jsonResponse(signInSettings))
       if (url === '/api/realm/configuration-status') {
         return Promise.resolve(
-          jsonResponse({ admin: { setupRequired: false, setupHref: '/console/onboarding', missing: [] } }),
+          jsonResponse({ admin: { setupRequired: false, setupHref: '/console/applications', missing: [] } }),
         )
       }
       if (deleted && url.startsWith('/api/users/user-1')) {
@@ -129,7 +129,7 @@ describe('admin console users-detail-a', () => {
       if (url === '/api/realm/sign-in-policy') return Promise.resolve(jsonResponse(signInSettings))
       if (url === '/api/realm/configuration-status') {
         return Promise.resolve(
-          jsonResponse({ admin: { setupRequired: false, setupHref: '/console/onboarding', missing: [] } }),
+          jsonResponse({ admin: { setupRequired: false, setupHref: '/console/applications', missing: [] } }),
         )
       }
       if (url === '/api/users/user-1' && method === 'GET') {
@@ -192,7 +192,7 @@ describe('admin console users-detail-a', () => {
       if (url === '/api/realm/sign-in-policy') return Promise.resolve(jsonResponse(signInSettings))
       if (url === '/api/realm/configuration-status') {
         return Promise.resolve(
-          jsonResponse({ admin: { setupRequired: false, setupHref: '/console/onboarding', missing: [] } }),
+          jsonResponse({ admin: { setupRequired: false, setupHref: '/console/applications', missing: [] } }),
         )
       }
       if (url === '/api/users/user-1' && method === 'GET') {
@@ -281,7 +281,7 @@ describe('admin console users-detail-a', () => {
       if (url === '/api/realm/sign-in-policy') return Promise.resolve(jsonResponse(signInSettings))
       if (url === '/api/realm/configuration-status') {
         return Promise.resolve(
-          jsonResponse({ admin: { setupRequired: false, setupHref: '/console/onboarding', missing: [] } }),
+          jsonResponse({ admin: { setupRequired: false, setupHref: '/console/applications', missing: [] } }),
         )
       }
       if (url === '/api/users/user-1' && method === 'GET') {
