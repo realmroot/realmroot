@@ -5358,7 +5358,7 @@ describe('external API resource authorization', () => {
     })
     await expect(
       issueTargetAccessToken(deps, 'request-1', 'proof', 'https://auth.example.com/token', principal(), signer),
-    ).rejects.toThrow('Every approved scope requires an active Entitlement.')
+    ).rejects.toThrow('Approved Entitlement boundaries must remain unchanged.')
 
     vi.mocked(deps.externalResources.findEntitlement).mockResolvedValue(grantRecord())
     vi.mocked(deps.externalResources.findAccessRequest).mockResolvedValue(null)
@@ -5381,7 +5381,7 @@ describe('external API resource authorization', () => {
     })
     await expect(
       issueTargetAccessToken(deps, 'grant-1', 'proof', 'https://auth.example.com/token', principal(), signer),
-    ).rejects.toThrow('Every approved scope requires an active Entitlement.')
+    ).rejects.toThrow('Every approved Entitlement must still exist.')
     vi.mocked(deps.externalResources.findAccessRequest).mockResolvedValue({
       ...requestRecord(),
       status: 'denied',
@@ -5401,7 +5401,7 @@ describe('external API resource authorization', () => {
     })
     await expect(
       issueTargetAccessToken(deps, 'request-1', 'proof', 'https://auth.example.com/token', principal(), signer),
-    ).rejects.toThrow('Every approved scope requires an active Entitlement.')
+    ).rejects.toThrow('Every approved Entitlement must still be active.')
 
     vi.mocked(deps.externalResources.findEntitlement).mockResolvedValue(grantRecord())
     vi.mocked(deps.externalResources.findAccessRequest).mockResolvedValue({
@@ -5412,7 +5412,7 @@ describe('external API resource authorization', () => {
     })
     await expect(
       issueTargetAccessToken(deps, 'request-1', 'proof', 'https://auth.example.com/token', principal(), signer),
-    ).rejects.toThrow('Every approved scope requires an active Entitlement.')
+    ).rejects.toThrow('Approved Entitlement boundaries must remain unchanged.')
 
     vi.mocked(deps.externalResources.findAccessRequest).mockResolvedValue({
       ...requestRecord(),

@@ -531,6 +531,17 @@ describe('Agent identity enrollment over real D1', () => {
       kid: jwks.keys[0]!.kid,
       typ: 'at+jwt',
     })
+    const secondProof = await createDpopProof('POST', tokenUrl, 'native-token-proof-2')
+    await expect(
+      createAccessRequestCredential(
+        harness.deps,
+        accessRequest.id,
+        secondProof.compact,
+        tokenUrl,
+        principal,
+        harness.agentTokenSigner,
+      ),
+    ).resolves.toMatchObject({ tokenType: 'DPoP', scopes: ['repo:read'] })
     await expect(
       createAccessRequestCredential(
         harness.deps,

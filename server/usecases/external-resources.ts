@@ -1446,24 +1446,30 @@ export async function issueTargetAccessToken(
   const entitlementIds = request.approvedEntitlements.map((snapshot) => snapshot.entitlementId)
   const entitlements = await deps.externalResources.findEntitlements(entitlementIds)
   const now = new Date()
-  if (
-    entitlements.length !== request.scopes.length ||
-    request.approvedEntitlements.length !== request.scopes.length ||
-    request.approvedEntitlements.some(({ scope, entitlementId }) => {
-      const entitlement = entitlements.find((candidate) => candidate.id === entitlementId)
-      return (
-        !entitlement ||
-        entitlement.scope !== scope ||
-        entitlement.agentIdentityId !== principal.identityId ||
-        entitlement.resourceServerId !== request.resourceId ||
-        entitlement.connectionId !== request.connectionId ||
-        entitlement.endedAt !== null ||
-        (entitlement.expiresAt !== null && entitlement.expiresAt.getTime() <= now.getTime()) ||
-        !exactAuthorizationDetails(entitlement.authorizationDetails, request.authorizationDetails)
-      )
-    })
-  ) {
-    throw forbidden('Every approved scope requires an active Entitlement.')
+  if (request.approvedEntitlements.length !== request.scopes.length) {
+    throw forbidden('Every approved scope requires an Entitlement snapshot.')
+  }
+  if (entitlements.length !== entitlementIds.length) {
+    throw forbidden('Every approved Entitlement must still exist.')
+  }
+  for (const { scope, entitlementId } of request.approvedEntitlements) {
+    const entitlement = entitlements.find((candidate) => candidate.id === entitlementId)
+    if (!entitlement) throw forbidden('Every approved Entitlement must still exist.')
+    if (
+      entitlement.endedAt !== null ||
+      (entitlement.expiresAt !== null && entitlement.expiresAt.getTime() <= now.getTime())
+    ) {
+      throw forbidden('Every approved Entitlement must still be active.')
+    }
+    if (
+      entitlement.scope !== scope ||
+      entitlement.agentIdentityId !== principal.identityId ||
+      entitlement.resourceServerId !== request.resourceId ||
+      entitlement.connectionId !== request.connectionId ||
+      !exactAuthorizationDetails(entitlement.authorizationDetails, request.authorizationDetails)
+    ) {
+      throw forbidden('Approved Entitlement boundaries must remain unchanged.')
+    }
   }
   const resource = await deps.authorization.findResource(request.resourceId)
   if (!resource?.enabled) throw forbidden('Enabled Resource Server is required.')
@@ -1631,7 +1637,7 @@ export async function issueTargetAccessToken(
     now,
     audit,
   )
-  if (!lease) throw forbidden('Every approved scope requires an active Entitlement.')
+  if (!lease) throw forbidden('Approved Entitlements changed before token issuance.')
   return {
     accessToken,
     tokenType: 'DPoP' as const,
@@ -1763,7 +1769,7 @@ async function issueNativeAccessToken(
     now,
     audit,
   )
-  if (!lease) throw forbidden('Every approved scope requires an active Entitlement.')
+  if (!lease) throw forbidden('Approved Entitlements changed before token issuance.')
   return {
     accessToken,
     tokenType: 'DPoP' as const,
