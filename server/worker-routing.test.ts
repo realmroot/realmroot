@@ -38,7 +38,7 @@ describe('Workers Assets routing', () => {
     const indexBytes = readFileSync(path.join(directory, 'index.json'))
     const skillNames = ['integrate-realmroot-application', 'integrate-realmroot-resource-server', 'realmroot']
     const archives = new Map(skillNames.map((name) => [name, readFileSync(path.join(directory, `${name}.tar.gz`))]))
-    const index = JSON.parse(indexBytes.toString('utf8')) as {
+    const index = JSON.parse(new TextDecoder().decode(indexBytes)) as {
       $schema: string
       skills: Array<{ name: string; type: string; url: string; digest: string }>
     }
@@ -73,20 +73,14 @@ function parseRunWorkerFirstRoutes(config: string) {
   return [...(match?.[1].matchAll(/"([^"]+)"/g) ?? [])].map((route) => route[1])
 }
 
-function listTarEntries(tar: Buffer) {
+function listTarEntries(tar: Uint8Array) {
   const entries = []
   for (let offset = 0; offset < tar.length; ) {
-    const name = tar
-      .subarray(offset, offset + 100)
-      .toString('utf8')
-      .replace(/\0.*$/, '')
+    const name = new TextDecoder().decode(tar.subarray(offset, offset + 100)).replace(/\0.*$/, '')
     if (!name) break
     entries.push(name)
     const size = Number.parseInt(
-      tar
-        .subarray(offset + 124, offset + 136)
-        .toString('ascii')
-        .replace(/\0.*$/, ''),
+      new TextDecoder().decode(tar.subarray(offset + 124, offset + 136)).replace(/\0.*$/, ''),
       8,
     )
     offset += 512 + Math.ceil(size / 512) * 512
