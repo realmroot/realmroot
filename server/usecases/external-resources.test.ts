@@ -112,6 +112,24 @@ describe('external API resource authorization', () => {
     await expect(
       createResourceConnectionIntent(deps, 'resource-1', input, 'user-1', 'https://auth.example.com'),
     ).rejects.toThrow('Active external API resource authorization was not found.')
+
+    vi.mocked(deps.connectors.findById)
+      .mockReset()
+      .mockResolvedValueOnce(connectorRecord())
+      .mockResolvedValueOnce(connectorRecord())
+      .mockResolvedValueOnce(null)
+    await expect(
+      createResourceConnectionIntent(deps, 'resource-1', input, 'user-1', 'https://auth.example.com'),
+    ).rejects.toThrow('Provider Connector does not support resource authorization.')
+
+    vi.mocked(deps.connectors.findById)
+      .mockReset()
+      .mockResolvedValueOnce(connectorRecord())
+      .mockResolvedValueOnce(connectorRecord())
+      .mockResolvedValueOnce(connectorRecord({ resourceAuthorizationEndpoint: null }))
+    await expect(
+      createResourceConnectionIntent(deps, 'resource-1', input, 'user-1', 'https://auth.example.com'),
+    ).rejects.toThrow('Provider Connector does not support resource authorization.')
   })
 
   it('validates a reusable OIDC connector when creating an external resource [spec: agent-identity/external-api-resource-registration]', async () => {
@@ -333,6 +351,30 @@ describe('external API resource authorization', () => {
     await expect(
       completeResourceConnectionIntent(deps, { state: 'state', code: 'code' }, 'https://auth.example.com'),
     ).rejects.toThrow('Provider connection identity request failed')
+
+    vi.mocked(deps.externalHttp.fetch).mockImplementation(async (request) =>
+      request.url.endsWith('/token')
+        ? Response.json({ access_token: 'access', refresh_token: 'refresh' })
+        : Response.json({ sub: 'provider-user-1', name: 'Provider User' }),
+    )
+    vi.mocked(deps.authorization.findResource)
+      .mockReset()
+      .mockResolvedValueOnce(resource())
+      .mockResolvedValueOnce({ ...resource(), connectorId: null })
+    vi.mocked(deps.connectors.findById).mockResolvedValue(connectorRecord())
+    await expect(
+      completeResourceConnectionIntent(deps, { state: 'state', code: 'code' }, 'https://auth.example.com'),
+    ).rejects.toThrow('API resource no longer has a Provider Connector')
+
+    vi.mocked(deps.authorization.findResource).mockResolvedValue(resource())
+    let connectorReads = 0
+    vi.mocked(deps.connectors.findById).mockImplementation(async () => {
+      connectorReads += 1
+      return connectorReads === 4 ? null : connectorRecord()
+    })
+    await expect(
+      completeResourceConnectionIntent(deps, { state: 'state', code: 'code' }, 'https://auth.example.com'),
+    ).rejects.toThrow('API resource no longer has a Provider Connector')
   })
 
   it('[spec: account-center/provider-connections] starts a Provider connection without an Agent request', async () => {
@@ -399,6 +441,11 @@ describe('external API resource authorization', () => {
     vi.mocked(deps.authorization.listEnabledResources).mockResolvedValue([
       { ...external, scopeRegistry: { ...external.scopeRegistry!, scopes: [] } },
     ])
+    await expect(
+      createProviderConnectionIntent(deps, 'connector-1', 'user-1', 'https://auth.example.com'),
+    ).rejects.toThrow('does not declare any scopes')
+
+    vi.mocked(deps.authorization.listEnabledResources).mockResolvedValue([{ ...external, scopeRegistry: null }])
     await expect(
       createProviderConnectionIntent(deps, 'connector-1', 'user-1', 'https://auth.example.com'),
     ).rejects.toThrow('does not declare any scopes')
@@ -574,6 +621,60 @@ describe('external API resource authorization', () => {
     vi.mocked(deps.connectors.findById).mockResolvedValue(null)
     await expect(disconnectProviderConnection(deps, provider.id, 'user-1')).rejects.toThrow(
       'Active external API resource authorization was not found',
+    )
+
+    vi.mocked(deps.externalResources.findProviderConnection).mockResolvedValue({
+      ...provider,
+      authenticationAccountId: null,
+    })
+    vi.mocked(deps.authorization.findResource).mockResolvedValue(resource())
+    vi.mocked(deps.externalResources.listConnectionsByUser).mockResolvedValue([{ ...authorization, credentials: [] }])
+    vi.mocked(deps.externalResources.findConnection).mockResolvedValue({ ...authorization, credentials: [] })
+    vi.mocked(deps.externalResources.revokeConnection).mockResolvedValue(true)
+    vi.mocked(deps.externalResources.revokeProviderConnection).mockResolvedValue(true)
+    await expect(disconnectProviderConnection(deps, provider.id, 'user-1')).resolves.toBeUndefined()
+  })
+
+  it('revokes Provider credentials with the configured client authentication and surfaces network failures', async () => {
+    const deps = createTestDeps()
+    const connection = {
+      ...connectionRecord(),
+      ownerUserId: 'user-1',
+      ownerOrganizationId: null,
+    }
+    vi.mocked(deps.externalResources.findConnection).mockResolvedValue(connection)
+    vi.mocked(deps.externalResources.listActiveEntitlementsByConnection).mockResolvedValue([])
+    vi.mocked(deps.externalResources.revokeConnection).mockResolvedValue(true)
+    vi.mocked(deps.authorization.findResource).mockResolvedValue(resource())
+    vi.mocked(deps.connectors.findById).mockResolvedValue(
+      connectorRecord({
+        providerMetadata: {
+          ...metadata(),
+          token_endpoint_auth_methods_supported: ['client_secret_post'],
+        },
+      }),
+    )
+    const requests: Request[] = []
+    vi.mocked(deps.externalHttp.fetch).mockImplementation(async (request) => {
+      requests.push(request)
+      return new Response(null, { status: 200 })
+    })
+
+    await expect(revokeResourceConnection(deps, connection.id, 'user-1')).resolves.toBeUndefined()
+    expect(requests).toHaveLength(2)
+    expect(requests[0]!.headers.get('authorization')).toBeNull()
+    const form = new URLSearchParams(await requests[0]!.text())
+    expect(form.get('client_id')).toBe('realmroot-client')
+    expect(form.get('client_secret')).toBe('target-secret')
+
+    vi.mocked(deps.externalHttp.fetch).mockRejectedValueOnce(new Error('offline'))
+    await expect(revokeResourceConnection(deps, connection.id, 'user-1')).rejects.toThrow(
+      'External authorization server revocation is unavailable.',
+    )
+
+    vi.mocked(deps.externalHttp.fetch).mockResolvedValueOnce(new Response(null, { status: 401 }))
+    await expect(revokeResourceConnection(deps, connection.id, 'user-1')).rejects.toThrow(
+      'External authorization server rejected the revocation request.',
     )
   })
 
@@ -2121,6 +2222,25 @@ describe('external API resource authorization', () => {
     await expect(
       listAgentAuthorizationDetailCatalog(unreachable, 'resource-1', principal(), { limit: 100, offset: 0 }),
     ).rejects.toThrow('Authorization detail catalog could not be reached.')
+
+    const withoutCredential = authorizationCatalogDeps()
+    vi.mocked(withoutCredential.externalResources.findConnectionByOwnerResource).mockResolvedValue({
+      ...connectionRecord(),
+      credentials: connectionRecord().credentials.map((credential) => ({ ...credential, status: 'revoked' as const })),
+    })
+    await expect(
+      listAgentAuthorizationDetailCatalog(withoutCredential, 'resource-1', principal(), { limit: 100, offset: 0 }),
+    ).rejects.toThrow('No active provider credential covers the requested authority.')
+
+    const ambiguousCredential = authorizationCatalogDeps()
+    const connection = connectionRecord()
+    vi.mocked(ambiguousCredential.externalResources.findConnectionByOwnerResource).mockResolvedValue({
+      ...connection,
+      credentials: [connection.credentials[0]!, { ...connection.credentials[0]!, id: 'credential-2' }],
+    })
+    await expect(
+      listAgentAuthorizationDetailCatalog(ambiguousCredential, 'resource-1', principal(), { limit: 100, offset: 0 }),
+    ).rejects.toThrow('Select an authorization context that identifies one provider credential.')
   })
 
   it('rejects authorization detail catalog requests without a usable resource context', async () => {
@@ -4684,6 +4804,14 @@ describe('external API resource authorization', () => {
     vi.mocked(deps.connectors.findById).mockResolvedValueOnce(null)
     await expect(getExternalResourceAuthorization(deps, 'resource-1')).rejects.toThrow(
       'External API resource authorization was not found.',
+    )
+    vi.mocked(deps.authorization.findResource).mockResolvedValueOnce(nativeResource())
+    await expect(getExternalResourceAuthorization(deps, 'native')).rejects.toThrow(
+      'External Resource Server was not found.',
+    )
+    vi.mocked(deps.authorization.findResource).mockResolvedValueOnce(null)
+    await expect(getExternalResourceAuthorization(deps, 'missing')).rejects.toThrow(
+      'External Resource Server was not found.',
     )
     vi.mocked(deps.authorization.findResource).mockResolvedValueOnce(null)
     await expect(getApiResource(deps, 'missing', 'https://auth.example.com')).rejects.toThrow(

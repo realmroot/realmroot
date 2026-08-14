@@ -1,5 +1,6 @@
 import {
   decideAgentApproval,
+  getAgentApprovalPreview,
   listAccountAgents,
   listAgentApprovalRequests,
   listAgentCapabilityGrants,
@@ -153,6 +154,53 @@ describe('AgentService', () => {
     )
   })
 
+  it('returns the pending Agent and Host shown on the protocol approval page', async () => {
+    const repository = createAgentRepositoryMock()
+    repository.findPendingApprovalPreview.mockResolvedValue({
+      agent: { id: 'agent-1', name: 'Build Agent', userId: 'user-1' },
+      host: { id: 'host-1', name: 'Codex', userId: null },
+    })
+    const deps = { agents: repository } as unknown as Deps
+
+    await expect(
+      getAgentApprovalPreview(deps, { agentId: 'agent-1', userCode: 'abcd1234' }, 'user-1'),
+    ).resolves.toEqual({
+      agent: { id: 'agent-1', name: 'Build Agent' },
+      host: { id: 'host-1', name: 'Codex' },
+    })
+    expect(repository.findPendingApprovalPreview).toHaveBeenCalledWith({
+      agentId: 'agent-1',
+      userCodeHash: await sha256Base64url('ABCD-1234'),
+      now: expect.any(Date),
+    })
+  })
+
+  it('rejects unavailable protocol approvals and controller ownership mismatches', async () => {
+    const repository = createAgentRepositoryMock()
+    const deps = { agents: repository } as unknown as Deps
+
+    repository.findPendingApprovalPreview.mockResolvedValueOnce(null)
+    await expect(
+      getAgentApprovalPreview(deps, { agentId: 'agent-1', userCode: 'ABCD-1234' }, 'user-1'),
+    ).rejects.toThrow('Agent approval is invalid, expired, or no longer pending.')
+
+    repository.findPendingApprovalPreview.mockResolvedValueOnce({
+      agent: { id: 'agent-1', name: 'Build Agent', userId: 'user-2' },
+      host: { id: 'host-1', name: 'Codex', userId: null },
+    })
+    await expect(
+      getAgentApprovalPreview(deps, { agentId: 'agent-1', userCode: 'ABCD-1234' }, 'user-1'),
+    ).rejects.toThrow('Agent approval belongs to another controller.')
+
+    repository.findPendingApprovalPreview.mockResolvedValueOnce({
+      agent: { id: 'agent-1', name: 'Build Agent', userId: null },
+      host: { id: 'host-1', name: 'Codex', userId: 'user-2' },
+    })
+    await expect(
+      getAgentApprovalPreview(deps, { agentId: 'agent-1', userCode: 'ABCD-1234' }, 'user-1'),
+    ).rejects.toThrow('Agent host belongs to another controller.')
+  })
+
   it('preserves a nonstandard Agent approval code shape and returns denial', async () => {
     const repository = createAgentRepositoryMock()
     repository.decideApproval.mockResolvedValue('denied')
@@ -262,6 +310,7 @@ function createAgentRepositoryMock() {
     listHostsForAgents: vi.fn(),
     listCapabilityGrantsForUser: vi.fn(),
     listCapabilityGrantsForAgent: vi.fn().mockResolvedValue([]),
+    findPendingApprovalPreview: vi.fn(),
     decideApproval: vi.fn(),
     revokeAgentForUser: vi.fn(),
     revokeCapabilityGrantForUser: vi.fn(),
