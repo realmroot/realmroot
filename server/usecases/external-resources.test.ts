@@ -1290,6 +1290,7 @@ describe('external API resource authorization', () => {
     const selectedAuthorizationDetails = [{ type: 'project_access', identifier: 'project-1', actions: ['read'] }]
     const connected = {
       ...connectionRecord(),
+      grantedScopes: [...connectionRecord().grantedScopes, 'authorization-details:read'],
       authorizationDetails: selectedAuthorizationDetails,
     }
     vi.mocked(deps.externalResources.findConnectionByOwnerResource).mockResolvedValue(connected)
@@ -1299,6 +1300,18 @@ describe('external API resource authorization', () => {
       ...stored,
       ...decision,
     }))
+    vi.mocked(deps.externalHttp.fetch).mockResolvedValue(
+      Response.json({
+        items: [
+          {
+            authorizationDetail: selectedAuthorizationDetails[0],
+            grantedScopes: ['projects:read'],
+            display: { label: 'Project One' },
+          },
+        ],
+        pagination: { limit: 100, offset: 0, total: 1, hasMore: false, nextOffset: null },
+      }),
+    )
 
     await expect(
       decideAgentAccessRequest(
@@ -3474,6 +3487,50 @@ describe('external API resource authorization', () => {
     ).resolves.toMatchObject({
       items: [{ id: 'connection-1', scopes: [] }],
     })
+  })
+
+  it('[spec: agent-identity/agent-resource-approval] approves scopes granted by the selected account context', async () => {
+    const detail = { type: 'project_access', identifier: 'project-1', actions: ['read'] }
+    const deps = authorizationCatalogDeps({
+      fetchResponse: Response.json({
+        items: [
+          {
+            authorizationDetail: detail,
+            grantedScopes: ['projects:write'],
+            display: { label: 'Project One' },
+          },
+        ],
+        pagination: { limit: 100, offset: 0, total: 1, hasMore: false, nextOffset: null },
+      }),
+    })
+    const request = {
+      ...requestRecord(),
+      scopes: ['projects:write'],
+      authorizationDetails: [detail],
+    }
+    const connection = {
+      ...connectionRecord(),
+      grantedScopes: [...connectionRecord().grantedScopes, 'authorization-details:read'],
+      authorizationDetails: [detail],
+    }
+    vi.mocked(deps.externalResources.findAccessRequest).mockResolvedValue(request)
+    vi.mocked(deps.externalResources.findConnection).mockResolvedValue(connection)
+    vi.mocked(deps.externalResources.listConnectionsByOrganizations).mockResolvedValue([connection])
+    vi.mocked(deps.externalResources.approveAccessRequestWithEntitlements).mockImplementation(
+      async (records, _updates, id, decision) => ({
+        entitlements: records,
+        request: { ...request, id, ...decision },
+      }),
+    )
+
+    await expect(
+      decideAgentAccessRequest(
+        deps,
+        request.id,
+        { decision: 'approve', mode: 'persistent', authorizationDetails: [detail] },
+        'user-1',
+      ),
+    ).resolves.toMatchObject({ status: 'approved', scopes: ['projects:write'] })
   })
 
   it('enforces first-access connection context boundaries', async () => {

@@ -1268,9 +1268,19 @@ export async function decideAgentAccessRequest(
       requestIdentity.identity.ownerUserId,
       requestIdentity.identity.ownerOrganizationId,
     )
-    assertScopeSubset(request.scopes, connection.grantedScopes, 'connected account')
     assertAuthorizationDetailsSelection(resource, connection, authorizationDetails)
     assertAuthorizationDetailsSubset(authorizationDetails, connection.authorizationDetails, 'connected account')
+    const contextualScopes =
+      authorizationDetails.length > 0
+        ? await accountScopesForAuthorizationDetails(
+            deps,
+            resource,
+            connection,
+            request.agentIdentityId,
+            authorizationDetails,
+          )
+        : null
+    assertScopeSubset(request.scopes, contextualScopes ?? connection.grantedScopes, 'connected account')
   } else if (connectionId) {
     throw badRequest('Native API resources do not use account connections.')
   } else {
