@@ -3331,6 +3331,40 @@ describe('external API resource authorization', () => {
     )
   })
 
+  it('[spec: agent-identity/resource-account-reauthorization] evaluates account scopes for the selected authorization detail', async () => {
+    const detail = { type: 'project_access', identifier: 'project-1', actions: ['read'] }
+    const deps = authorizationCatalogDeps({
+      fetchResponse: Response.json({
+        items: [
+          {
+            authorizationDetail: detail,
+            grantedScopes: ['projects:read'],
+            display: { label: 'Project One' },
+          },
+        ],
+        pagination: { limit: 100, offset: 0, total: 1, hasMore: false, nextOffset: null },
+      }),
+    })
+    const request = {
+      ...requestRecord(),
+      scopes: ['projects:write'],
+      authorizationDetails: [detail],
+    }
+    vi.mocked(deps.externalResources.findAccessRequestByApprovalTokenHash).mockResolvedValue(request)
+    const connection = {
+      ...connectionRecord(),
+      grantedScopes: [...connectionRecord().grantedScopes, 'authorization-details:read', 'projects:write'],
+    }
+    vi.mocked(deps.externalResources.findConnection).mockResolvedValue(connection)
+    vi.mocked(deps.externalResources.listConnectionsByOrganizations).mockResolvedValue([connection])
+
+    await expect(
+      listAccessRequestConnections(deps, 'approval-token', 'user-1', { limit: 20, offset: 0 }),
+    ).resolves.toMatchObject({
+      items: [{ id: 'connection-1', scopes: ['projects:read'] }],
+    })
+  })
+
   it('enforces first-access connection context boundaries', async () => {
     const deps = createTestDeps()
     authorizationDeps(deps)

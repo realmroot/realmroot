@@ -469,11 +469,54 @@ export async function listAccessRequestConnections(
       ? await deps.externalResources.listConnectionsByOrganizations([identity.identity.ownerOrganizationId])
       : await deps.externalResources.listConnectionsByUser(identity.identity.ownerUserId!)
   ).filter((connection) => connection.resourceId === request.resourceId && connection.status === 'active')
-  const connections = resourceConnections.map(toAccountConnection)
+  const connections = await Promise.all(
+    resourceConnections.map(async (connection) => {
+      const accountConnection = toAccountConnection(connection)
+      if (request.authorizationDetails.length === 0) return accountConnection
+      const contextualScopes = await accountScopesForAuthorizationDetails(
+        deps,
+        resource,
+        connection,
+        request.agentIdentityId,
+        request.authorizationDetails,
+      )
+      return contextualScopes === null ? accountConnection : { ...accountConnection, scopes: contextualScopes }
+    }),
+  )
   return {
     items: connections.slice(pagination.offset, pagination.offset + pagination.limit),
     pagination: paginationMetadata({ ...pagination, total: connections.length }),
   }
+}
+
+async function accountScopesForAuthorizationDetails(
+  deps: Deps,
+  resource: NonNullable<Awaited<ReturnType<Deps['authorization']['findResource']>>>,
+  connection: ProviderResourceAuthorizationRecord,
+  agentIdentityId: string,
+  authorizationDetails: AuthorizationDetail[],
+) {
+  const requested = new Set(authorizationDetails.map(canonicalJson))
+  const grantedByDetail = new Map<string, string[] | undefined>()
+  for (let offset = 0; ; ) {
+    const catalog = await readResourceCatalog(deps, resource, connection, agentIdentityId, { limit: 100, offset })
+    for (const item of catalog.items) {
+      const key = canonicalJson(item.authorizationDetail)
+      if (requested.has(key)) grantedByDetail.set(key, item.grantedScopes)
+    }
+    if (
+      grantedByDetail.size === requested.size ||
+      !catalog.pagination.hasMore ||
+      catalog.pagination.nextOffset === null
+    )
+      break
+    offset = catalog.pagination.nextOffset
+  }
+  if (grantedByDetail.size !== requested.size) return []
+  const contextual = [...grantedByDetail.values()]
+  if (contextual.some((scopes) => scopes === undefined)) return null
+  const [first = [], ...rest] = contextual as string[][]
+  return first.filter((scope) => rest.every((scopes) => scopes.includes(scope))).sort()
 }
 
 export async function getAccountConnection(
@@ -1938,6 +1981,7 @@ async function readResourceCatalog(
       ].sort()
       return {
         authorizationDetail,
+        grantedScopes: undefined,
         display: authorizationDetailDisplay(authorizationDetail),
         connectionStatus: 'authorized' as const,
         authorizedScopes,

@@ -445,7 +445,7 @@ Feature: Agent identity and delegated API authorization
     @entrypoint:product-ui @journey:resource-account-reauthorization
     Scenario: A controller reauthorizes a connected external resource account
       Given the controller's home space already has an account connection for an external API resource
-      And a pending Agent access request requires scopes that connection does not yet cover
+      And a pending Agent access request requires scopes that its selected authorization detail does not yet cover
       When the controller opens the approval page
       Then Realmroot presents account permission update as the only available action
       And hides Agent approval controls until the account covers every requested scope
@@ -460,10 +460,11 @@ Feature: Agent identity and delegated API authorization
     @entrypoint:agent-protocol @journey:resource-account-connection-expansion
     Scenario: An Agent requests additional authority from an existing resource account
       Given the Agent's home space has an active resource account connection with covered persistent grants
-      When the Agent requests a controller-managed connection for an additional scope
+      When the Agent requests an additional scope for one selected authorization detail
       Then Realmroot leaves the account connection revision, authorization details, and grants unchanged while approval is pending or interrupted
       When the controller starts account reauthorization
       Then Realmroot requests the union of the account's still-advertised resource scopes and the Agent's additional scope
+      And sends only the selected authorization detail to the external authorization server
       And Realmroot adds provider protocol scopes only after validating that resource scope union
       And only a successful OAuth callback may replace the account authorization and invalidate grants it no longer covers
 
