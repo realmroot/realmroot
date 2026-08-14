@@ -71,6 +71,25 @@ export function createDrizzleAgentRepository(db: Database): AgentRepository {
       return db.select().from(agentCapabilityGrant).where(eq(agentCapabilityGrant.agentId, agentId))
     },
 
+    async findPendingApprovalPreview(input) {
+      const [result] = await db
+        .select({ request: approvalRequest, agent, host: agentHost })
+        .from(approvalRequest)
+        .innerJoin(agent, eq(agent.id, approvalRequest.agentId))
+        .innerJoin(agentHost, eq(agentHost.id, approvalRequest.hostId))
+        .where(
+          and(
+            eq(approvalRequest.agentId, input.agentId),
+            eq(approvalRequest.method, 'device_authorization'),
+            eq(approvalRequest.status, 'pending'),
+            eq(approvalRequest.userCodeHash, input.userCodeHash),
+            gt(approvalRequest.expiresAt, input.now),
+          ),
+        )
+        .limit(1)
+      return result ?? null
+    },
+
     async decideApproval(input, audit) {
       const [request] = await db
         .select()

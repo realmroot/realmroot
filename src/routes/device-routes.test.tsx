@@ -15,9 +15,7 @@ vi.mock('@/components/layout/auth-layout', () => ({
 }))
 
 vi.mock('@/features/auth/device-authorization', () => ({
-  DeviceVerification: ({ mode, userCode }: { mode: string; userCode?: string }) => (
-    <div data-mode={mode}>Device verification {userCode}</div>
-  ),
+  DeviceVerification: ({ userCode }: { userCode?: string }) => <div>Device verification {userCode}</div>,
 }))
 
 vi.mock('@/features/auth/hooks', () => ({
@@ -50,17 +48,17 @@ async function renderRouteAt(path: string) {
 }
 
 describe('device routes', () => {
-  it('renders the device entry mode at /device', async () => {
-    await renderRouteAt('/device?user_code=ABCD-1234')
+  it('renders device code entry at /auth/device', async () => {
+    await renderRouteAt('/auth/device')
 
-    expect(screen.getByRole('heading', { name: 'Device login' })).toBeTruthy()
-    expect(screen.getByText('Device verification ABCD-1234').getAttribute('data-mode')).toBe('entry')
+    expect(screen.getByRole('heading', { name: 'Connect a device' })).toBeTruthy()
+    expect(screen.getByText('Device verification')).toBeTruthy()
   })
 
-  it('renders the device approval mode at /device/approve through the protected layout', async () => {
-    await renderRouteAt('/device/approve?user_code=ABCD-1234')
+  it('renders a supplied device code through the protected layout', async () => {
+    await renderRouteAt('/auth/device?user_code=ABCD-1234')
 
-    expect(screen.getByRole('heading', { name: 'Approve device' })).toBeTruthy()
-    expect(screen.getByText('Device verification ABCD-1234').getAttribute('data-mode')).toBe('approval')
+    expect(screen.getByRole('heading', { name: 'Connect a device' })).toBeTruthy()
+    expect(screen.getByText('Device verification ABCD-1234')).toBeTruthy()
   })
 })

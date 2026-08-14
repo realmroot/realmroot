@@ -3,8 +3,6 @@ import {
   accessRequestSchema,
   agentStatusSchema,
   createAccessRequestSchema,
-  createResourceConnectionRequestSchema,
-  resourceConnectionRequestSchema,
   resourceServerAuthorizationDetailsResponseSchema,
 } from '@shared/api/agent-api'
 import { agentPublicIdentifierSchema } from '@shared/api/identifiers'
@@ -180,31 +178,6 @@ const managementRoutes: ManagementRouteConfig[] = [
       query: paginationQuerySchema,
     },
     response: resourceServerAuthorizationDetailsResponseSchema,
-  },
-  {
-    method: 'post',
-    path: '/resource-servers/{resourceServerId}/connection-requests',
-    operationId: 'createConnectionRequest',
-    summary: 'Request a controller-managed Resource Server connection',
-    cli: { name: 'connect' },
-    security: [{ oauth2: ['connection-requests:read', 'connection-requests:write'] }],
-    request: {
-      params: z.object({ resourceServerId: z.string() }),
-      body: jsonBody(createResourceConnectionRequestSchema),
-    },
-    response: resourceConnectionRequestSchema,
-    status: 201,
-    responseHeaders: { ...locationResponseHeader, ...interactiveResourceResponseHeaders },
-  },
-  {
-    method: 'get',
-    path: '/resource-servers/{resourceServerId}/connection-requests/{requestId}',
-    operationId: 'getConnectionRequest',
-    summary: 'Read a Resource Server connection request',
-    security: [{ oauth2: ['connection-requests:read'] }],
-    request: { params: z.object({ resourceServerId: z.string(), requestId: z.string() }) },
-    response: resourceConnectionRequestSchema,
-    responseHeaders: interactiveResourceResponseHeaders,
   },
   {
     method: 'post',

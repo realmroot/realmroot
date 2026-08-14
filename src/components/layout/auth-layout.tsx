@@ -29,32 +29,14 @@ export function AuthLayout({
   description,
   variant = 'form',
 }: AuthLayoutProps) {
-  const style = brandingStyle(config)
   const resolvedLayout = layout ?? (variant === 'message' || icon ? 'focused' : 'split')
-  useEffect(() => {
-    if (!config?.branding.faviconUrl) return
-    const link = document.querySelector<HTMLLinkElement>('link[rel="icon"]') ?? document.createElement('link')
-    link.rel = 'icon'
-    link.href = config.branding.faviconUrl
-    document.head.appendChild(link)
-  }, [config?.branding.faviconUrl])
   return (
-    <main
+    <HostedPageLayout
+      backHref={backHref}
+      backLabel={backLabel}
       className={`authShell authShell-${variant} authShell-${resolvedLayout}`}
-      id="auth-content"
-      style={style}
-      tabIndex={-1}
-      aria-label={tt('auth.hostedAuthentication')}
+      config={config}
     >
-      <a className="skipLink" href="#auth-content">
-        {tt('Skip to content')}
-      </a>
-      {backHref ? (
-        <SpaLink className="authBackLink" to={backHref}>
-          <ArrowLeft aria-hidden="true" size={16} />
-          {backLabel ?? tt('auth.back')}
-        </SpaLink>
-      ) : null}
       <AuthCardFrame
         brand={icon ? <div className="authMessageIcon">{icon}</div> : <BrandIdentity config={config} />}
         className={`authPanel authPanel-${resolvedLayout}`}
@@ -68,6 +50,48 @@ export function AuthLayout({
       >
         {children}
       </AuthCardFrame>
+    </HostedPageLayout>
+  )
+}
+
+export function HostedPageLayout({
+  backHref,
+  backLabel,
+  children,
+  className,
+  config,
+}: {
+  backHref?: string
+  backLabel?: string
+  children: ReactNode
+  className: string
+  config: ConfigzConfigResponse | null
+}) {
+  useEffect(() => {
+    if (!config?.branding.faviconUrl) return
+    const link = document.querySelector<HTMLLinkElement>('link[rel="icon"]') ?? document.createElement('link')
+    link.rel = 'icon'
+    link.href = config.branding.faviconUrl
+    document.head.appendChild(link)
+  }, [config?.branding.faviconUrl])
+  return (
+    <main
+      className={className}
+      id="auth-content"
+      style={brandingStyle(config)}
+      tabIndex={-1}
+      aria-label={tt('auth.hostedAuthentication')}
+    >
+      <a className="skipLink" href="#auth-content">
+        {tt('Skip to content')}
+      </a>
+      {backHref ? (
+        <SpaLink className="authBackLink" to={backHref}>
+          <ArrowLeft aria-hidden="true" size={16} />
+          {backLabel ?? tt('auth.back')}
+        </SpaLink>
+      ) : null}
+      {children}
     </main>
   )
 }

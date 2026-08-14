@@ -75,7 +75,7 @@ const nativeRequest = {
 
 describe('Agent resource access approval', () => {
   beforeEach(() => {
-    window.history.replaceState(null, '', '/agent/resource-access/approve')
+    window.history.replaceState(null, '', '/agent/access')
     window.location.hash = 'token=approval%20token'
     window.sessionStorage.clear()
     api.getAgentResourceApproval.mockResolvedValue(request)
@@ -125,7 +125,7 @@ describe('Agent resource access approval', () => {
     expect(screen.getByText('Read project status')).toBeTruthy()
     expect(screen.queryByRole('region', { name: 'Requested authorization details' })).toBeNull()
     expect(screen.queryByText('{"actions":["read"],"project_id":"project-1","type":"project"}')).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Approve exact access' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Authorize' }))
 
     await waitFor(() =>
       expect(api.decideAgentResourceApproval).toHaveBeenCalledWith('request-1', 'approval token', {
@@ -162,7 +162,7 @@ describe('Agent resource access approval', () => {
     window.history.replaceState(
       null,
       '',
-      '/agent/resource-access/approve?resource_connection=failed&error=invalid_target&error_description=The+requested+workspace+resource+is+not+configured#token=approval%20token',
+      '/agent/access?resource_connection=failed&error=invalid_target&error_description=The+requested+workspace+resource+is+not+configured#token=approval%20token',
     )
     api.listApprovalAccountConnections.mockResolvedValue({
       items: [],
@@ -214,7 +214,7 @@ describe('Agent resource access approval', () => {
 
     render(<ResourceAccessApproval />)
 
-    const approve = await screen.findByRole('button', { name: 'Approve exact access' })
+    const approve = await screen.findByRole('button', { name: 'Authorize' })
     expect(approve.hasAttribute('disabled')).toBe(true)
     const select = screen.getByLabelText('Authorization detail 1')
     fireEvent.click(select)
@@ -243,7 +243,7 @@ describe('Agent resource access approval', () => {
 
     render(<ResourceAccessApproval />)
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Approve exact access' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Authorize' }))
     await waitFor(() =>
       expect(api.decideAgentResourceApproval).toHaveBeenCalledWith('request-1', 'approval token', {
         decision: 'approve',
@@ -314,7 +314,7 @@ describe('Agent resource access approval', () => {
 
     expect(await screen.findByText('Billing API')).toBeTruthy()
     expect(screen.queryByText(/Connect your Billing API account/)).toBeNull()
-    expect(screen.getByRole('button', { name: 'Approve exact access' }).hasAttribute('disabled')).toBe(false)
+    expect(screen.getByRole('button', { name: 'Authorize' }).hasAttribute('disabled')).toBe(false)
   })
 
   it('[spec: agent-identity/native-api-resource-access-request] approves exact native Account authority once without an account connection', async () => {
@@ -325,7 +325,7 @@ describe('Agent resource access approval', () => {
     })
     render(<ResourceAccessApproval />)
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Approve exact access' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Authorize' }))
     await waitFor(() =>
       expect(api.decideAgentResourceApproval).toHaveBeenCalledWith('request-1', 'approval token', {
         decision: 'approve',
@@ -345,7 +345,7 @@ describe('Agent resource access approval', () => {
 
     await screen.findByText('Example User')
     fireEvent.click(screen.getByRole('radio', { name: 'Persistent until revoked' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Approve exact access' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Authorize' }))
     await waitFor(() =>
       expect(api.decideAgentResourceApproval).toHaveBeenCalledWith('request-1', 'approval token', {
         decision: 'approve',
@@ -363,7 +363,7 @@ describe('Agent resource access approval', () => {
 
     render(<ResourceAccessApproval />)
 
-    const approve = await screen.findByRole('button', { name: 'Approve exact access' })
+    const approve = await screen.findByRole('button', { name: 'Authorize' })
     expect(approve.hasAttribute('disabled')).toBe(true)
     fireEvent.click(approve)
     expect(api.decideAgentResourceApproval).not.toHaveBeenCalled()
@@ -378,7 +378,7 @@ describe('Agent resource access approval', () => {
     render(<ResourceAccessApproval />)
 
     expect(await screen.findByText('Connect your ZPan account before deciding this Agent request.')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Approve exact access' }).hasAttribute('disabled')).toBe(true)
+    expect(screen.getByRole('button', { name: 'Authorize' }).hasAttribute('disabled')).toBe(true)
     fireEvent.click(screen.getByRole('button', { name: 'Connect ZPan account' }))
     await waitFor(() =>
       expect(api.createAccountConnection).toHaveBeenCalledWith({
@@ -397,12 +397,12 @@ describe('Agent resource access approval', () => {
     render(<ResourceAccessApproval />)
 
     expect(screen.getByText('Loading resource access request…')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Approve exact access' }).hasAttribute('disabled')).toBe(true)
-    expect(screen.getByRole('button', { name: 'Deny' }).hasAttribute('disabled')).toBe(true)
+    expect(screen.getByRole('button', { name: 'Authorize' }).hasAttribute('disabled')).toBe(true)
+    expect(screen.getByRole('button', { name: 'Cancel' }).hasAttribute('disabled')).toBe(true)
   })
 
   it('[spec: agent-identity/external-resource-first-access] displays the connected account after OAuth and waits for approval', async () => {
-    window.history.replaceState(null, '', '/agent/resource-access/approve')
+    window.history.replaceState(null, '', '/agent/access')
     window.location.hash = ''
     window.sessionStorage.setItem('realmroot.resource-access-approval-token', 'approval token')
     api.getAgentResourceApproval.mockResolvedValue(request)
@@ -415,7 +415,7 @@ describe('Agent resource access approval', () => {
 
     expect(await screen.findByText('ZPan Demo')).toBeTruthy()
     expect(api.decideAgentResourceApproval).not.toHaveBeenCalled()
-    fireEvent.click(screen.getByRole('button', { name: 'Approve exact access' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Authorize' }))
     await waitFor(() =>
       expect(api.decideAgentResourceApproval).toHaveBeenCalledWith('request-1', 'approval token', {
         decision: 'approve',
@@ -438,7 +438,7 @@ describe('Agent resource access approval', () => {
     expect(
       await screen.findByText('This account needs expanded authorization before it can cover every requested scope.'),
     ).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Approve exact access' }).hasAttribute('disabled')).toBe(true)
+    expect(screen.getByRole('button', { name: 'Authorize' }).hasAttribute('disabled')).toBe(true)
     fireEvent.click(screen.getByRole('button', { name: 'Expand ZPan account access' }))
     await waitFor(() =>
       expect(api.createAccountConnection).toHaveBeenCalledWith({
@@ -485,7 +485,7 @@ describe('Agent resource access approval', () => {
     const { unmount } = render(<ResourceAccessApproval />)
     await screen.findByText('agent-1')
     fireEvent.click(screen.getByRole('radio', { name: 'Until a date and time' }))
-    const approve = screen.getByRole('button', { name: 'Approve exact access' })
+    const approve = screen.getByRole('button', { name: 'Authorize' })
     expect(approve.hasAttribute('disabled')).toBe(true)
     const expiry = screen.getByLabelText('Grant expiry')
     fireEvent.change(expiry, { target: { value: '2020-08-01T00:30' } })
@@ -508,9 +508,10 @@ describe('Agent resource access approval', () => {
     unmount()
 
     api.decideAgentResourceApproval.mockResolvedValue({ ...request, status: 'denied' })
+    window.location.hash = 'token=approval%20token'
     render(<ResourceAccessApproval />)
     await screen.findByText('agent-1')
-    fireEvent.click(screen.getByRole('button', { name: 'Deny' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(await screen.findByText('Resource access denied')).toBeTruthy()
   })
 
@@ -559,10 +560,10 @@ describe('Agent resource access approval', () => {
       .mockRejectedValueOnce('offline')
     render(<ResourceAccessApproval />)
     await screen.findByText('agent-1')
-    fireEvent.click(screen.getByRole('button', { name: 'Approve exact access' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Authorize' }))
     expect(await screen.findByText('Decision expired')).toBeTruthy()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Deny' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(await screen.findByText('Unable to decide the Agent resource request.')).toBeTruthy()
   })
 })

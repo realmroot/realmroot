@@ -1,7 +1,7 @@
 import type { ConsentRequestResponse } from '@shared/api/applications'
 import { ChevronRight, CircleAlert, Globe2, ShieldCheck, UserRound } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { AuthLayout, authLegalLinks, BrandIdentity, brandingStyle } from '@/components/layout/auth-layout'
+import { AuthLayout, authLegalLinks, BrandIdentity, HostedPageLayout } from '@/components/layout/auth-layout'
 import { SpaLink } from '@/components/spa-link'
 import { Button } from '@/components/ui/button'
 import { Status } from '@/components/ui/status'
@@ -47,14 +47,6 @@ export function ConsentPage() {
       active = false
     }
   }, [search])
-
-  useEffect(() => {
-    if (!config?.branding.faviconUrl) return
-    const link = document.querySelector<HTMLLinkElement>('link[rel="icon"]') ?? document.createElement('link')
-    link.rel = 'icon'
-    link.href = config.branding.faviconUrl
-    document.head.appendChild(link)
-  }, [config?.branding.faviconUrl])
 
   async function approve() {
     if (!consent) return
@@ -129,16 +121,7 @@ export function ConsentPage() {
 
   const disabled = submitting || switchingAccount
   return (
-    <main
-      aria-label={tt('auth.hostedAuthentication')}
-      className="consentPage"
-      id="auth-content"
-      style={brandingStyle(config)}
-      tabIndex={-1}
-    >
-      <a className="skipLink" href="#auth-content">
-        {tt('Skip to content')}
-      </a>
+    <HostedPageLayout className="consentPage" config={config}>
       <BrandIdentity config={config} />
 
       <div className="consentFrame">
@@ -208,7 +191,7 @@ export function ConsentPage() {
         </article>
         <ConsentFooter links={authLegalLinks(config)} />
       </div>
-    </main>
+    </HostedPageLayout>
   )
 }
 

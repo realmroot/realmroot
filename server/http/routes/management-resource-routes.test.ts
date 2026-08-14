@@ -289,7 +289,6 @@ async function loadAuthorizationRoutes(agentMode: 'authority' | 'bootstrap' | nu
     links: {
       self: 'https://auth.example.com/api/resource-servers/resource-1',
       authorizationDetails: 'https://auth.example.com/api/resource-servers/resource-1/authorization-details',
-      connectionRequests: null,
     },
   }
   vi.spyOn(externalResourcesUsecase, 'listApiResources').mockResolvedValue({

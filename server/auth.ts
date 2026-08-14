@@ -344,7 +344,7 @@ export function createAuth(
         providerDescription: 'Delegated Realmroot account access for approved agents.',
         modes: ['delegated'],
         approvalMethods: ['device_authorization'],
-        deviceAuthorizationPage: '/agent/approve',
+        deviceAuthorizationPage: '/agent/enrollment',
         allowDynamicHostRegistration: true,
         defaultHostCapabilities: [],
         requireAuthForCapabilities: false,
@@ -360,7 +360,7 @@ export function createAuth(
         },
       }),
       deviceAuthorization({
-        verificationUri: '/device',
+        verificationUri: '/auth/device',
         schema: {},
         ...createDeviceAuthorizationOptions(applications),
       }),
@@ -467,11 +467,11 @@ export function createAuth(
       }),
       oauthProvider({
         loginPage: '/auth/sign-in',
-        consentPage: '/oauth/consent',
+        consentPage: '/auth/consent',
         scopes: oauthScopes,
         validAudiences: options.validAudiences,
         postLogin: {
-          page: '/oauth/consent',
+          page: '/auth/consent',
           consentReferenceId: async () => undefined,
           shouldRedirect: async ({ headers, user, scopes }) => {
             const clientId = headers.get('x-realmroot-oauth-client-id')

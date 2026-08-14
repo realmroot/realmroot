@@ -74,13 +74,12 @@ reviewed.
 | Recovery | `/auth/forgot-password` | Real | Split layout |
 | Verification | `/auth/email-verification` | Real | Compact decision card |
 | MFA | `/auth/continue` and hosted continuation | Real | Compact challenge card |
-| OAuth consent | `/oauth/consent` | Real | Narrow decision card with scalable scope details |
-| Device approval | `/device/*` | Real | Narrow decision card |
-| Agent login | `/agent/approve` | Real | Narrow decision card |
-| Agent enrollment | `/agent/enrollments/approve` | Real | Narrow decision card |
-| Resource access | `/agent/resource-access/approve` | Real | Narrow decision card with exact scopes and lifetime controls |
-| Callback/result | callback routes | Real | Compact status/result card |
-| First admin | `/onboarding` and `/console/onboarding` | Real | Focused setup journey |
+| OAuth consent | `/auth/consent` | Real | Narrow decision card with scalable scope details |
+| Device authorization | `/auth/device` | Real | One signed-in flow for code entry and access decision |
+| Agent enrollment | `/agent/enrollment` | Real | Narrow decision card for first enrollment and additional Hosts |
+| Resource access | `/agent/access` | Real | Narrow decision card with exact scopes and lifetime controls |
+| Callback/result | `/auth/callback` | Real | Compact status/result card |
+| First admin | `/onboarding` | Real | Focused setup journey |
 
 ## Backend closure
 

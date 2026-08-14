@@ -39,7 +39,6 @@ export function ResourceAccessApproval() {
   const [authorizationDetailSelections, setAuthorizationDetailSelections] = useState<Record<number, string>>({})
   const [catalogError, setCatalogError] = useState<string | null>(null)
   const [agentName, setAgentName] = useState<string | null>(null)
-  const [resourceName, setResourceName] = useState<string | null>(null)
   const [mode, setMode] = useState<ApprovalMode>('once')
   const [expiresAt, setExpiresAt] = useState('')
   const [decision, setDecision] = useState<'approved' | 'denied' | null>(null)
@@ -47,9 +46,16 @@ export function ResourceAccessApproval() {
   const [error, setError] = useState<string | null>(callbackError)
 
   useEffect(() => {
-    const readCurrentHash = () => setToken(readApprovalToken())
-    window.addEventListener('hashchange', readCurrentHash)
-    return () => window.removeEventListener('hashchange', readCurrentHash)
+    const consumeCurrentHash = () => {
+      const hashToken = readHashApprovalToken()
+      if (!hashToken) return
+      window.sessionStorage.setItem(approvalTokenStorageKey, hashToken)
+      window.history.replaceState(window.history.state, '', `${window.location.pathname}${window.location.search}`)
+      setToken(hashToken)
+    }
+    consumeCurrentHash()
+    window.addEventListener('hashchange', consumeCurrentHash)
+    return () => window.removeEventListener('hashchange', consumeCurrentHash)
   }, [])
 
   useEffect(() => {
@@ -59,7 +65,6 @@ export function ResourceAccessApproval() {
     setAuthorizationDetailSelections({})
     setCatalogError(null)
     setAgentName(null)
-    setResourceName(null)
     setDecision(null)
     setError(callbackError)
     if (!token) {
@@ -97,7 +102,6 @@ export function ResourceAccessApproval() {
         setRequest(accessRequest)
         setConnection(availableConnection)
         setAgentName(accessRequest.agent.name)
-        setResourceName(accessRequest.authorizationDetail?.name ?? accessRequest.resourceServer.name)
         setAuthorizationDetailCatalog(catalog)
         setCatalogError(authorizationCatalogError)
       })
@@ -232,11 +236,14 @@ export function ResourceAccessApproval() {
         {request ? (
           <dl className="decisionFacts">
             <RequestField id={request.agentId} label="Agent" name={agentName ?? request.agentId} />
-            <RequestField
-              id={request.resourceServerId}
-              label="Resource Server"
-              name={resourceName ?? request.resourceServer.name}
-            />
+            <RequestField id={request.resourceServerId} label="Resource Server" name={request.resourceServer.name} />
+            {request.authorizationDetail ? (
+              <RequestField
+                id={authorizationDetailId(request)}
+                label={request.authorizationDetail.metadata.authority ? 'Authority' : 'Context'}
+                name={request.authorizationDetail.name}
+              />
+            ) : null}
             {request.reason ? <RequestField label="Reason" value={request.reason} /> : null}
           </dl>
         ) : null}
@@ -295,7 +302,7 @@ export function ResourceAccessApproval() {
             </div>
           </section>
         ) : null}
-        {request && resourceName && requiresAccountConnection && connection ? (
+        {request && requiresAccountConnection && connection ? (
           <section className="decisionSection">
             <h2>{request.resourceServer.name} account</h2>
             <div>
@@ -317,7 +324,7 @@ export function ResourceAccessApproval() {
             ) : null}
           </section>
         ) : null}
-        {request && resourceName && requiresAccountConnection && !connection ? (
+        {request && requiresAccountConnection && !connection ? (
           <section className="decisionSection">
             <h2>{request.resourceServer.name} account</h2>
             <p>Connect your {request.resourceServer.name} account before deciding this Agent request.</p>
@@ -388,7 +395,7 @@ export function ResourceAccessApproval() {
         {error ? <Status tone="error">{error}</Status> : null}
         <div className="decisionActions">
           <Button disabled={!request || submitting} onClick={() => void submit('deny')} variant="outline">
-            Deny
+            Cancel
           </Button>
           <Button
             disabled={
@@ -400,7 +407,7 @@ export function ResourceAccessApproval() {
             }
             onClick={() => void submit('approve')}
           >
-            {submitting ? 'Updating…' : 'Approve exact access'}
+            {submitting ? 'Authorizing…' : 'Authorize'}
           </Button>
         </div>
       </div>
@@ -428,12 +435,11 @@ function clearStoredApproval() {
 }
 
 function readApprovalToken() {
-  const hashToken = new URLSearchParams(window.location.hash.slice(1)).get('token')
-  if (hashToken) {
-    window.sessionStorage.setItem(approvalTokenStorageKey, hashToken)
-    return hashToken
-  }
-  return window.sessionStorage.getItem(approvalTokenStorageKey) ?? ''
+  return readHashApprovalToken() || window.sessionStorage.getItem(approvalTokenStorageKey) || ''
+}
+
+function readHashApprovalToken() {
+  return new URLSearchParams(window.location.hash.slice(1)).get('token') ?? ''
 }
 
 function resolveAuthorizationDetails(
@@ -504,6 +510,11 @@ function canonicalJson(value: unknown): string {
       .join(',')}}`
   }
   return JSON.stringify(value)
+}
+
+function authorizationDetailId(request: AccessRequestApproval) {
+  const metadata = request.authorizationDetail?.metadata
+  return metadata?.organizationId ?? metadata?.userId ?? String(request.authorizationDetails[0]?.id ?? '')
 }
 
 function RequestField({ label, value, name, id }: { label: string; value?: string; name?: string; id?: string }) {

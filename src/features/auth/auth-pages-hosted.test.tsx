@@ -226,14 +226,14 @@ describe('hosted auth pages 6', () => {
     render(<AuthCallbackPage />)
     expect(await screen.findByRole('heading', { name: 'Consent is required before redirecting.' })).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Continue' }).getAttribute('href')).toBe(
-      '/oauth/consent?client_id=client-1&redirect_uri=https%3A%2F%2Fclient.example.com%2Fcallback&state=state-1',
+      '/auth/consent?client_id=client-1&redirect_uri=https%3A%2F%2Fclient.example.com%2Fcallback&state=state-1',
     )
 
     cleanup()
-    window.history.pushState(null, '', '/auth/callback?return_to=/console/onboarding')
+    window.history.pushState(null, '', '/auth/callback?return_to=/console/applications')
     render(<AuthCallbackPage />)
     expect(await screen.findByRole('heading', { name: 'Sign-in complete.' })).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Continue' }).getAttribute('href')).toBe('/console/onboarding')
+    expect(screen.getByRole('link', { name: 'Continue' }).getAttribute('href')).toBe('/console/applications')
   })
 
   it('renders callback fallback error and account continuation defaults', async () => {
@@ -252,7 +252,7 @@ describe('hosted auth pages 6', () => {
   })
 
   it('accepts callbackURL fields from native auth responses', () => {
-    expect(resolveAuthRedirect({ callbackURL: '/console/onboarding' }, '/profile')).toBe('/console/onboarding')
+    expect(resolveAuthRedirect({ callbackURL: '/console/applications' }, '/profile')).toBe('/console/applications')
   })
 })
 

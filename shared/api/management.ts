@@ -294,7 +294,7 @@ export const managementReadinessResponseSchema = z.object({
   recommended: z.array(managementReadinessItemSchema),
   admin: z.object({
     setupRequired: z.boolean(),
-    setupHref: z.literal('/console/onboarding'),
+    setupHref: z.literal('/console/applications'),
     missing: z.array(managementReadinessItemIdSchema),
   }),
 })

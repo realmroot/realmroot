@@ -81,6 +81,8 @@ describe('OpenAPI semantic contract gate', () => {
       'GET:/access/requests/{requestId}/decision',
       'PUT:/access/requests/{requestId}/decision',
       'GET:/agent/status',
+      'POST:/resource-servers/{resourceServerId}/connection-requests',
+      'GET:/resource-servers/{resourceServerId}/connection-requests/{requestId}',
       'POST:/agents/{agentId}/scope-entitlements/{grantId}/credentials',
       'GET:/resource-servers/{resourceServerId}/resources',
       'GET:/resource-servers/{resourceServerId}/resources/{resourceId}',

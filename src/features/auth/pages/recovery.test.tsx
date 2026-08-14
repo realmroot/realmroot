@@ -173,7 +173,7 @@ describe('AuthCallbackPage consent handoff', () => {
 
     expect(await screen.findByRole('heading', { name: 'Consent is required before redirecting.' })).toBeTruthy()
     const link = screen.getByRole('link', { name: 'Continue' }).getAttribute('href')!
-    expect(link.startsWith('/oauth/consent?')).toBe(true)
+    expect(link.startsWith('/auth/consent?')).toBe(true)
     expect(link).not.toContain('state=')
   })
 })

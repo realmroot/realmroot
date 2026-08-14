@@ -29,7 +29,7 @@ Feature: Agent identity and delegated API authorization
       Then the Restish authentication adapter registers locally generated host and Agent keys
       And Realmroot preserves the requested username without deriving it from another field
       And an omitted nickname defaults to the detected runtime while the Host is named after its local device
-      And enrollment waits while an authorized controller approves the Agent once from the hosted verification page
+      And enrollment waits while an authorized controller approves the Agent once from the hosted enrollment page
       And the adapter creates a personal stable identity through the approved Agent session
       Then Realmroot creates an Agent with a stable issuer and subject
       And Realmroot assigns the requested immutable username independently of the Agent's nickname
@@ -65,9 +65,9 @@ Feature: Agent identity and delegated API authorization
 
     @entrypoint:product-ui @journey:agent-enrollment-denial
     Scenario: A controller can deny Agent enrollment
-      Given an Agent login request is pending
+      Given an Agent enrollment request is pending
       When the authorized controller denies the request
-      Then Realmroot resolves the existing AgentAuth approval as denied
+      Then Realmroot resolves the enrollment as denied
       And the hosted approval page clearly says the request was denied and can be closed
       And the waiting Realmroot command exits without receiving an Agent identity
 
@@ -483,13 +483,6 @@ Feature: Agent identity and delegated API authorization
       And the connected account permits every requested scope
       Then Realmroot creates one pending access request and returns a hosted approval URL
       And it does not require a pre-existing Agent resource grant
-
-    @entrypoint:agent-protocol @journey:agent-resource-connection-ensure
-    Scenario: An Agent connects a resource without observing account connection internals
-      Given an Agent requests least-privilege scopes for an external API resource
-      When the controller completes the hosted resource connection approval
-      Then the Restish plugin resolves that exact request through a hidden adapter boundary
-      And the public connection response reports connected without an account connection identifier
 
     @entrypoint:agent-protocol @journey:agent-resource-access-ensure
     Scenario: An Agent ensures exact resource access without selecting grants or tokens

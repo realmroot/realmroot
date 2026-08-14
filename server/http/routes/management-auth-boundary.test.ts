@@ -222,7 +222,6 @@ describe('management routes 1', () => {
 
     expect(generatedCommands).toEqual([
       { group: 'Agent', name: 'whoami', operationId: 'getAgentStatus' },
-      { group: 'Resource Servers', name: 'connect', operationId: 'createConnectionRequest' },
       { group: 'Agent', name: 'access', operationId: 'createAgentAuthorizationRequest' },
       { group: 'Agent', name: 'enroll', operationId: 'createAgentEnrollment' },
     ])
@@ -461,8 +460,9 @@ describe('management routes 1', () => {
         approval: {
           method: 'device_authorization',
           device_code: 'approval-1',
-          verification_uri: 'https://auth.example.com/agent/approve',
-          verification_uri_complete: 'https://auth.example.com/agent/approve?agent_id=protocol-agent-1&code=ABCD-1234',
+          verification_uri: 'https://auth.example.com/agent/enrollments/approve',
+          verification_uri_complete:
+            'https://auth.example.com/agent/enrollments/approve?agent_id=protocol-agent-1&code=ABCD-1234',
           user_code: 'ABCD-1234',
           expires_in: 600,
           interval: 5,

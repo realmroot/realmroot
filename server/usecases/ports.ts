@@ -629,21 +629,6 @@ export interface ResourceConnectionIntentRecord {
   updatedAt: Date
 }
 
-export interface AgentConnectionRequestRecord {
-  id: string
-  resourceId: string
-  agentIdentityId: string
-  bindingId: string
-  scopes: string[]
-  authorizationDetails: AuthorizationDetail[]
-  reason: string | null
-  approvalTokenHash: string
-  encryptedApprovalToken: string
-  expiresAt: Date
-  createdAt: Date
-  updatedAt: Date
-}
-
 export interface AgentAccessRequestRecord {
   id: string
   resourceId: string
@@ -824,9 +809,6 @@ export interface ExternalResourceRepository {
   revokeResourceAuthorizationsByConnector(connectorId: string, now: Date): Promise<number>
   createConnectionIntent(input: ResourceConnectionIntentRecord): Promise<ResourceConnectionIntentRecord | null>
   consumeConnectionIntent(stateHash: string, now: Date): Promise<ResourceConnectionIntentRecord | null>
-  createAgentConnectionRequest(input: AgentConnectionRequestRecord): Promise<AgentConnectionRequestRecord | null>
-  findAgentConnectionRequest(id: string): Promise<AgentConnectionRequestRecord | null>
-  findAgentConnectionRequestByApprovalTokenHash(tokenHash: string): Promise<AgentConnectionRequestRecord | null>
   createAccessRequest(input: AgentAccessRequestRecord): Promise<AgentAccessRequestRecord | null>
   createAccessRequestWithAudit(
     input: AgentAccessRequestRecord,
@@ -1002,6 +984,11 @@ export interface AgentRepository {
   listHostsForAgents(hostIds: string[]): Promise<AgentHostRecord[]>
   listCapabilityGrantsForUser(userId: string): Promise<AgentCapabilityGrantRecord[]>
   listCapabilityGrantsForAgent(agentId: string): Promise<AgentCapabilityGrantRecord[]>
+  findPendingApprovalPreview(input: {
+    agentId: string
+    userCodeHash: string
+    now: Date
+  }): Promise<{ request: ApprovalRequestRecord; agent: AgentRecord; host: AgentHostRecord } | null>
   decideApproval(
     input: {
       agentId: string

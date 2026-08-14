@@ -119,7 +119,7 @@ describe('auth.test 3', () => {
     )
 
     expect(findPlugin<DeviceAuthorizationPluginOptions>(auth, 'device-authorization').options).toMatchObject({
-      verificationUri: '/device',
+      verificationUri: '/auth/device',
     })
   })
 

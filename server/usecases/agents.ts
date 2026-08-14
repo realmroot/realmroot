@@ -1,3 +1,4 @@
+import { badRequest, forbidden } from '@server/domain/errors'
 import { agentGovernanceAuditRecord } from '@server/usecases/agent-audit'
 import type { Deps } from '@server/usecases/deps'
 import type { AgentRepository } from '@server/usecases/ports'
@@ -67,6 +68,29 @@ export function revokeAccountCapabilityGrant(deps: Deps, grantId: string, userId
   return deps.agents.revokeCapabilityGrantForUser(grantId, userId)
 }
 
+export async function getAgentApprovalPreview(
+  deps: Deps,
+  input: { agentId: string; userCode: string },
+  userId: string,
+) {
+  const preview = await deps.agents.findPendingApprovalPreview({
+    agentId: input.agentId,
+    userCodeHash: await hashAgentUserCode(input.userCode),
+    now: new Date(),
+  })
+  if (!preview) throw badRequest('Agent approval is invalid, expired, or no longer pending.')
+  if (preview.agent.userId && preview.agent.userId !== userId) {
+    throw forbidden('Agent approval belongs to another controller.')
+  }
+  if (preview.host.userId && preview.host.userId !== userId) {
+    throw forbidden('Agent host belongs to another controller.')
+  }
+  return {
+    agent: { id: preview.agent.id, name: preview.agent.name },
+    host: { id: preview.host.id, name: preview.host.name },
+  }
+}
+
 export async function decideAgentApproval(
   deps: Deps,
   input: {
@@ -102,7 +126,7 @@ export async function decideAgentApproval(
       now: new Date(),
     },
     agentGovernanceAuditRecord(deps.ids.generate(), {
-      action: 'agent.capability_decided',
+      action: capabilities.length > 0 ? 'agent.capability_decided' : 'agent.enrollment_decided',
       result: input.action === 'approve' ? 'allowed' : 'denied',
       tenant,
       controllerUserId: userId,

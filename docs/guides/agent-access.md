@@ -57,17 +57,16 @@ personal or organization home space. The Agent creates one access request by
 Resource Server and scopes; it never selects a connection ID or creates a
 second connection approval first.
 
-When an account is absent or insufficient, the same hosted access approval asks
+When an account is absent or insufficient, the same hosted Agent access page asks
 the controller to connect or expand it. Realmroot performs OAuth, PKCE, PAR,
 RAR, refresh, and subject validation internally, then returns the controller to
 that original approval. The controller selects any required Context and decides
 the Agent scopes and lifetime there. The original access request is bound to
 the resulting connection when approved.
 
-Native Resource Servers report `not_required` and skip this step.
-
-Standalone connection requests remain available for explicit account
-management, but are not part of first task access.
+Native Resource Servers report `not_required` and skip this step. Account Center
+may still initiate a user-owned connection directly, but Agents have no separate
+connection-request protocol or separate connection page.
 
 ## 4. Select Provider Authorization Details In The Approval
 

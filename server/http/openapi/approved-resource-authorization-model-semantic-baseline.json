@@ -5,8 +5,9 @@
   { "method": "GET", "path": "/connectors/{connectorId}", "operationId": "getConnector", "semanticHash": "46d723f8dc7b88f8d85dae9067862750219fdcb52ca7b8c06acdf23896125971" },
   { "method": "PATCH", "path": "/connectors/{connectorId}", "operationId": "updateConnector", "semanticHash": "6affc7e349faf8c30ee4d8256aacba241bb4d795c84b9d9a8b19c8bdb30c433e" },
   { "method": "GET", "path": "/connectors/templates", "operationId": "listConnectorTemplates", "semanticHash": "58c3689de4ba582a822e63a9df53d41e1d63ce4bcdb22ee956a17a6e6deed635" },
-  { "method": "GET", "path": "/resource-servers", "operationId": "listResourceServers", "semanticHash": "7910fc45079bbc8ccaa973d819c317f01310155d41c5528b598388abc833dbbe" },
-  { "method": "POST", "path": "/resource-servers", "operationId": "createResourceServer", "semanticHash": "72da8b8c5d08361a771e79ca086712ea18120218031dea776ef69566fbddc259" },
-  { "method": "GET", "path": "/resource-servers/{resourceServerId}", "operationId": "getResourceServer", "semanticHash": "ed39227a3f647d79c672d6f4f540227dbbb4ca5040563b081b5dc142bdf0d7f8" },
-  { "method": "PATCH", "path": "/resource-servers/{resourceServerId}", "operationId": "updateResourceServer", "semanticHash": "7d1bb8329338fd2afda14b6c375dc1046725daa5d2f2e4e645cb65b898140776" }
+  { "method": "GET", "path": "/realm/configuration-status", "operationId": "getRealmConfigurationStatus", "semanticHash": "aed4b8bf7c7f59125ba25b4e570a19d5d8a9a6aa134f00739a1e32b8ea9c1a80" },
+  { "method": "GET", "path": "/resource-servers", "operationId": "listResourceServers", "semanticHash": "a73827cd3a1e14b7fdbe4cf28552a00c711c0c87455a6b276d70d31d12525460" },
+  { "method": "POST", "path": "/resource-servers", "operationId": "createResourceServer", "semanticHash": "162c0a99dd97996ddc1a0de990a7516ba93f78b2f3c27924705bc7f2cf805d4b" },
+  { "method": "GET", "path": "/resource-servers/{resourceServerId}", "operationId": "getResourceServer", "semanticHash": "f32299f52b4f401911e20c67ed502e6b0cc71979003b2789636138895bb1568c" },
+  { "method": "PATCH", "path": "/resource-servers/{resourceServerId}", "operationId": "updateResourceServer", "semanticHash": "61679d1d474d509fdb268a2e4a8df5b351f4b33ffd7dcd7708271d65cd6e6d85" }
 ]

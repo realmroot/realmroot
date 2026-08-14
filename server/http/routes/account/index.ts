@@ -12,7 +12,7 @@ import {
   recoverAgentIdentity,
   toAgent,
 } from '@server/usecases/agent-identities'
-import { decideAgentApproval } from '@server/usecases/agents'
+import { decideAgentApproval, getAgentApprovalPreview } from '@server/usecases/agents'
 import {
   getApplicationAuthorization,
   listApplicationAuthorizations,
@@ -28,7 +28,6 @@ import {
   getAccountAccessRequest,
   getAccountAccessRequestByToken,
   getAccountConnection,
-  getAccountResourceConnectionApproval,
   listAccessRequestConnections,
   listAccountAccessRequestAuthorizationDetailCatalog,
   listAccountAccessRequests,
@@ -63,9 +62,8 @@ import {
   createAccountConnectionSchema,
   decideAccessRequestSchema,
   decideAgentEnrollmentSchema,
-  resourceConnectionApprovalSchema,
 } from '@shared/api/agent-api'
-import { decideAgentApprovalResponseSchema } from '@shared/api/agents'
+import { agentApprovalPreviewSchema, decideAgentApprovalResponseSchema } from '@shared/api/agents'
 import {
   listApplicationAuthorizationsQuerySchema,
   listApplicationAuthorizationsResponseSchema,
@@ -448,6 +446,19 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
     )
   })
 
+  app.get('/agent-approvals/:agentId', async (c) => {
+    const query = readQuery(c, z.object({ user_code: z.string().trim().min(1) }))
+    return c.json(
+      agentApprovalPreviewSchema.parse(
+        await getAgentApprovalPreview(
+          getDeps(c),
+          { agentId: c.req.param('agentId'), userCode: query.user_code },
+          getPrincipal(c).user!.id,
+        ),
+      ),
+    )
+  })
+
   app.put('/agent-enrollments/:enrollmentId/decision', async (c) => {
     const input = await readJson(c, decideAgentEnrollmentSchema)
     if (input.kind === 'protocol') {
@@ -457,7 +468,7 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
           agentId: c.req.param('enrollmentId'),
           userCode: input.userCode,
           action: input.decision,
-          capabilities: input.permissions,
+          capabilities: [],
         },
         getPrincipal(c).user!.id,
       )
@@ -551,15 +562,6 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
     )
     c.header('Location', `/api/account/account-connections/${encodeURIComponent(result.id)}`)
     return c.json(accountConnectionSchema.parse(result), 201)
-  })
-
-  app.get('/resource-connection-requests/current', async (c) => {
-    const query = readQuery(c, z.object({ approvalToken: z.string().trim().min(1) }))
-    return c.json(
-      resourceConnectionApprovalSchema.parse(
-        await getAccountResourceConnectionApproval(getDeps(c), query.approvalToken, getPrincipal(c).user!.id),
-      ),
-    )
   })
 
   app.get('/account-connections/:connectionId', async (c) => {

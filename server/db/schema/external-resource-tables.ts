@@ -117,42 +117,6 @@ export const resourceConnectionIntent = sqliteTable(
   ],
 )
 
-export const agentConnectionRequest = sqliteTable(
-  'agent_connection_request',
-  {
-    id: text('id').primaryKey(),
-    resourceId: text('resource_id')
-      .notNull()
-      .references(() => apiResource.id, { onDelete: 'restrict' }),
-    agentIdentityId: text('agent_identity_id')
-      .notNull()
-      .references(() => agentIdentity.id, { onDelete: 'restrict' }),
-    bindingId: text('binding_id')
-      .notNull()
-      .references(() => agentIdentityBinding.id, { onDelete: 'restrict' }),
-    scopes: text('scopes', { mode: 'json' }).$type<string[]>().notNull(),
-    authorizationDetails: text('authorization_details', { mode: 'json' })
-      .$type<AuthorizationDetail[]>()
-      .notNull()
-      .default(sql`'[]'`),
-    reason: text('reason'),
-    approvalTokenHash: text('approval_token_hash').notNull().unique(),
-    encryptedApprovalToken: text('encrypted_approval_token').notNull(),
-    expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
-    createdAt: integer('created_at', { mode: 'timestamp_ms' })
-      .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
-      .notNull(),
-    updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
-      .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
-      .notNull(),
-  },
-  (table) => [
-    index('agentConnectionRequest_resourceId_idx').on(table.resourceId),
-    index('agentConnectionRequest_agentIdentityId_idx').on(table.agentIdentityId),
-    index('agentConnectionRequest_expiresAt_idx').on(table.expiresAt),
-  ],
-)
-
 export const agentAccessRequest = sqliteTable(
   'agent_access_request',
   {

@@ -40,19 +40,6 @@ Feature: Admin Console
     When I open Console
     Then setup guidance is shown without blocking persistent Console routes
 
-  @entrypoint:product-ui @journey:admin-onboarding
-  Scenario: Admin onboarding creates the first OIDC client
-    Given no OIDC application exists
-    When I complete Console onboarding
-    Then the first OIDC client is created
-    And integration details are visible
-
-  @entrypoint:product-ui @journey:admin-onboarding-complete
-  Scenario: Completed Console setup does not offer another first client
-    Given an OIDC application and a sign-in method already exist
-    When I reopen Console onboarding
-    Then I am redirected to the Console dashboard
-
   @entrypoint:product-ui @journey:admin-route-backed-navigation
   Scenario: Console navigation exposes persistent route-backed pages
     When I use Console navigation

@@ -131,6 +131,19 @@ export const decideAgentApprovalResponseSchema = z.object({
   status: z.enum(['approved', 'denied']),
 })
 
+export const agentApprovalPreviewSchema = z.object({
+  agent: z.object({
+    id: z.string(),
+    name: z.string(),
+  }),
+  host: z.object({
+    id: z.string(),
+    name: z.string().nullable(),
+  }),
+})
+
+export type AgentApprovalPreview = z.infer<typeof agentApprovalPreviewSchema>
+
 export const approveAgentEnrollmentResponseSchema = z.object({
   identity: agentIdentitySchema,
 })

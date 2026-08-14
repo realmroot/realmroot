@@ -160,7 +160,7 @@ export const readinessIncomplete = {
       label: 'Create an OIDC application',
       description: 'Register the first client so product routes can complete authorization code flows.',
       status: 'action_needed',
-      href: '/console/onboarding',
+      href: '/console/applications',
       action: 'Create client',
     },
     {
@@ -182,7 +182,7 @@ export const readinessIncomplete = {
       action: 'Review deployment',
     },
   ],
-  admin: { setupRequired: true, setupHref: '/console/onboarding', missing: ['oidc_application'] },
+  admin: { setupRequired: true, setupHref: '/console/applications', missing: ['oidc_application'] },
 }
 
 export const accountSecurity = {

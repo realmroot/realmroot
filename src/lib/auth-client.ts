@@ -151,11 +151,10 @@ export function verifySignInTotp(input: { code: string; trustDevice?: boolean })
   return nativeAuth('/two-factor/verify-totp', input)
 }
 
-export function decideAgentCapability(input: {
+export function decideProtocolAgentEnrollment(input: {
   agentId: string
   userCode: string
   action: 'approve' | 'deny'
-  capabilities?: string[]
 }) {
   return postAccount(
     `/api/account/agent-enrollments/${encodeURIComponent(input.agentId)}/decision`,
@@ -163,7 +162,6 @@ export function decideAgentCapability(input: {
       kind: 'protocol',
       decision: input.action,
       userCode: input.userCode,
-      ...(input.capabilities ? { permissions: input.capabilities } : {}),
     },
     'PUT',
   )

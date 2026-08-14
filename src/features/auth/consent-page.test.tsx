@@ -96,7 +96,7 @@ const consentResponse = {
 let assign: ReturnType<typeof vi.fn>
 
 beforeEach(() => {
-  window.history.pushState(null, '', '/oauth/consent?client_id=client-1&redirect_uri=https%3A%2F%2Fclient.example.com')
+  window.history.pushState(null, '', '/auth/consent?client_id=client-1&redirect_uri=https%3A%2F%2Fclient.example.com')
   assign = vi.fn()
   vi.stubGlobal('location', { ...window.location, assign })
 })
@@ -413,8 +413,8 @@ describe('ConsentPage error and fallback paths', () => {
 
   it('builds a return-to sign-in link from the current location', () => {
     vi.unstubAllGlobals()
-    window.history.pushState(null, '', '/oauth/consent?client_id=client-1&state=state-1')
-    const expected = `/auth/sign-in?return_to=${encodeURIComponent('/oauth/consent?client_id=client-1&state=state-1')}`
+    window.history.pushState(null, '', '/auth/consent?client_id=client-1&state=state-1')
+    const expected = `/auth/sign-in?return_to=${encodeURIComponent('/auth/consent?client_id=client-1&state=state-1')}`
     expect(signInWithReturnTo()).toBe(expected)
   })
 })

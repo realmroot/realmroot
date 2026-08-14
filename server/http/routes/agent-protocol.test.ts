@@ -162,7 +162,6 @@ describe('Agent protocol routes', () => {
           links: {
             self: 'https://auth.example.com/api/resource-servers/resource-1',
             authorizationDetails: 'https://auth.example.com/api/resource-servers/resource-1/authorization-details',
-            connectionRequests: 'https://auth.example.com/api/resource-servers/resource-1/connection-requests',
           },
         },
       ],
@@ -186,25 +185,6 @@ describe('Agent protocol routes', () => {
     const details = await app.request('/api/resource-servers/resource-1/authorization-details')
     expect(details.status, await details.clone().text()).toBe(200)
     await expect(details.json()).resolves.toMatchObject({ items: [{ authorizationDetail }] })
-  })
-
-  it('creates a generic interactive connection request with canonical polling metadata', async () => {
-    vi.spyOn(agentIdentities, 'getAgentIdentityByProtocolAgent').mockResolvedValue(activeIdentity())
-    const request = connectionRequest()
-    vi.spyOn(externalResources, 'createAgentConnectionRequest').mockResolvedValue(request)
-    const response = await createRouteApp().request('/api/resource-servers/resource-1/connection-requests', {
-      method: 'POST',
-      headers: jsonHeaders(),
-      body: JSON.stringify({
-        authorizationDetails: [authorizationDetail],
-        scopes: ['objects:read'],
-        reason: 'Use ZPan',
-      }),
-    })
-    expect(response.status).toBe(201)
-    expect(response.headers.get('location')).toBe(request.links.self)
-    expect(response.headers.get('link')).toContain('interactive-resource')
-    expect(response.headers.get('retry-after')).toBe('2')
   })
 
   it('creates Resource access and exchanges its credential offer without exposing a grant', async () => {
@@ -344,8 +324,6 @@ function createRouteApp(overrides: { signJWT?: () => Promise<{ token: string }> 
             'agent:read',
             'resource-servers:read',
             'authorization-details:read',
-            'connection-requests:read',
-            'connection-requests:write',
             'access-requests:read',
             'access-requests:write',
           ],
@@ -381,27 +359,6 @@ function activeIdentity() {
         revokedAt: null,
       },
     ],
-  }
-}
-
-function connectionRequest() {
-  return {
-    id: 'connection-request-1',
-    agentId: 'identity-1',
-    resourceServerId: 'resource-1',
-    authorizationDetails: [authorizationDetail],
-    scopes: ['objects:read'],
-    reason: 'Use ZPan',
-    status: 'pending' as const,
-    interaction: {
-      type: 'user-approval' as const,
-      status: 'pending' as const,
-      url: 'https://auth.example.com/agent/resource-connection/approve#token=opaque',
-      expiresAt,
-    },
-    links: { self: 'https://auth.example.com/api/connection-requests/connection-request-1' },
-    createdAt: now.toISOString(),
-    expiresAt,
   }
 }
 

@@ -40,16 +40,7 @@ export function ApplicationsPage({ organizationId }: { organizationId?: string }
   useEffect(() => setOwner(organizationId ?? ''), [organizationId])
   const createMutation = useAdminMutation({
     mutationFn: createApplication,
-    onSuccess: () => {
-      return Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: consoleQueryKeys.applications,
-        }),
-        queryClient.invalidateQueries({
-          queryKey: consoleQueryKeys.readiness,
-        }),
-      ])
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: consoleQueryKeys.applications }),
   })
   const toggleMutation = useAdminMutation({
     mutationFn: ({ id, disabled }: { id: string; disabled: boolean }) => updateApplication(id, { disabled }),
