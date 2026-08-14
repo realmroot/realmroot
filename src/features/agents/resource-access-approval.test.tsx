@@ -452,6 +452,17 @@ describe('Agent resource access approval', () => {
     expect(api.decideAgentResourceApproval).not.toHaveBeenCalled()
   })
 
+  it('[spec: agent-identity/resource-account-reauthorization] reports catalog failures without starting permission update', async () => {
+    api.listApprovalAuthorizationDetailCatalog.mockRejectedValue(new Error('Authorization context lookup failed.'))
+
+    render(<ResourceAccessApproval />)
+
+    expect(await screen.findByText('Authorization context lookup failed.')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Update permissions' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Authorize' })).toBeTruthy()
+    expect(api.createAccountConnection).not.toHaveBeenCalled()
+  })
+
   it('rejects multiple connected accounts instead of presenting selection controls', async () => {
     api.listApprovalAccountConnections.mockResolvedValue({
       items: [connection, { ...connection, id: 'connection-2' }],

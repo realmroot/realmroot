@@ -179,15 +179,17 @@ export function ResourceAccessApproval() {
     requiresAccountConnection,
   )
   const approvedAuthorizationDetails = authorizationDetailResolution.approved
-  const connectionCoversRequest =
-    request !== null &&
-    connection !== null &&
-    request.scopes.every((scope) => connection.scopes.includes(scope)) &&
-    catalogError === null &&
-    authorizationDetailResolution.accountAuthorized
+  const connectionHasRequestedScopes =
+    request !== null && connection !== null && request.scopes.every((scope) => connection.scopes.includes(scope))
   const expiryIsValid = mode !== 'until' || isFutureExpiry(expiresAt)
   const accountAuthorizationStep =
-    request && requiresAccountConnection ? (connectionCoversRequest ? null : connection ? 'update' : 'connect') : null
+    request && requiresAccountConnection
+      ? !connection
+        ? 'connect'
+        : !connectionHasRequestedScopes || (catalogError === null && !authorizationDetailResolution.accountAuthorized)
+          ? 'update'
+          : null
+      : null
 
   if (decision) {
     const approved = decision === 'approved'
@@ -278,6 +280,7 @@ export function ResourceAccessApproval() {
           />
         ) : (
           <>
+            {catalogError ? <Status tone="error">{catalogError}</Status> : null}
             {request &&
             authorizationDetailResolution.requirements.some((requirement) => requirement.kind !== 'fixed') ? (
               <section className="decisionPermissions" aria-label="Requested authorization details">

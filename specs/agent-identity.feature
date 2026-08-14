@@ -450,6 +450,7 @@ Feature: Agent identity and delegated API authorization
       When the controller opens the approval page
       Then Realmroot presents account permission update as the only available action
       And hides Agent approval controls until the account covers every requested scope
+      But a failed authorization-detail catalog lookup reports that failure without presenting account permission update
       When the controller reauthorizes that account for the union of its existing scopes and the pending Agent request's exact scope set
       And OAuth returns the same external subject with replacement credentials and scopes
       Then Realmroot preserves the account connection identity
