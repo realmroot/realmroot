@@ -14,7 +14,9 @@ export const accessLog = (): MiddlewareHandler => async (c, next) => {
     const error = c.error ?? (caught instanceof Error ? caught : null)
 
     const entry = JSON.stringify({
+      event: 'request.complete',
       requestId: context.id,
+      correlationId: context.correlationId,
       method: c.req.method,
       path: new URL(c.req.url).pathname,
       status,

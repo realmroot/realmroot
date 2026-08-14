@@ -1,3 +1,4 @@
+import { tracing } from 'cloudflare:workers'
 import { createConfiguredEmailSender } from '@server/adapters/gateways/email/sender'
 import { createSecretCipher } from '@server/adapters/gateways/secrets'
 import { createDrizzleConfigzRepository } from '@server/adapters/repos/configz'
@@ -7,6 +8,7 @@ import { createDeps } from '@server/composition'
 import { createDb } from '@server/db/client'
 import { type Env, type RuntimeConfig, validateEnv } from '@server/env'
 import { createApp, healthStatus } from '@server/http/app'
+import { readCorrelationId } from '@server/http/correlation'
 import {
   reconcileRealmrootResourceServer,
   synchronizeEnabledResourceScopeRegistries,
@@ -18,8 +20,11 @@ import { managementBuiltInProviderSettingsSchema } from '@shared/api/management'
 
 let cachedAuth: Auth | null = null
 let cachedKey: string | null = null
+let cachedStaticKey: string | null = null
+let cachedValidatedAt = 0
 let cachedDb: D1Database | null = null
 let cachedEmail: Env['EMAIL'] | null = null
+let reconciledBaseURL: string | null = null
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -27,16 +32,27 @@ export default {
     // reports the worker is up even when the database is unmigrated or down.
     const path = new URL(request.url).pathname
     if (path === '/api/health') return Response.json(healthStatus)
-    const config = validateEnv(env, request.url)
-    const deps = createDeps(env, config)
-    await reconcileRealmrootResourceServer(deps, config.baseURL)
-    const securityPolicy = await deps.security.getPolicy()
-    const auth = await getAuth(env, { ...config, securityPolicy }, deps)
-    return createApp(auth, deps, {
-      baseURL: config.baseURL,
-      trustedOrigins: config.trustedOrigins,
-      securityPolicy,
-    }).fetch(request, env, ctx)
+    return tracing.enterSpan('realmroot.request.prepare', async (span) => {
+      span.setAttribute('url.path', path)
+      const config = validateEnv(env, request.url)
+      const correlationId = readCorrelationId(request.headers.get('x-correlation-id')) ?? undefined
+      if (correlationId) span.setAttribute('realmroot.correlation_id', correlationId)
+      const deps = createDeps(env, config, correlationId)
+      const [, securityPolicy] = await Promise.all([
+        reconcileResourceOnce(deps, config.baseURL),
+        tracing.enterSpan('realmroot.security-policy.load', () => deps.security.getPolicy()),
+      ])
+      const auth = await tracing.enterSpan('realmroot.auth.prepare', () =>
+        getAuth(env, { ...config, securityPolicy }, deps),
+      )
+      return tracing.enterSpan('realmroot.router.dispatch', () =>
+        createApp(auth, deps, {
+          baseURL: config.baseURL,
+          trustedOrigins: config.trustedOrigins,
+          securityPolicy,
+        }).fetch(request, env, ctx),
+      )
+    })
   },
   async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext) {
     const config = validateEnv(env, env.BETTER_AUTH_URL ?? 'https://scheduled.realmroot.invalid')
@@ -45,13 +61,31 @@ export default {
 }
 
 async function getAuth(env: Env, config: RuntimeConfig, deps: ReturnType<typeof createDeps>): Promise<Auth> {
+  const staticKey = [
+    config.authSecret,
+    config.baseURL,
+    config.emailFrom ?? '',
+    config.emailFromName ?? '',
+    config.trustedOrigins.join(','),
+    JSON.stringify(config.securityPolicy),
+  ].join('\n')
+  if (
+    cachedAuth &&
+    cachedStaticKey === staticKey &&
+    cachedDb === env.DB &&
+    cachedEmail === env.EMAIL &&
+    Date.now() - cachedValidatedAt < 5_000
+  ) {
+    return cachedAuth
+  }
   const db = createDb(env.DB)
   const configz = createDrizzleConfigzRepository(db)
-  const connectors = await loadAuthConnectorConfig(
-    createConnectorRepository(db, createSecretCipher(config.credentialEncryptionKey)),
-  )
-  const validAudiences = await loadValidAudiences(env.DB, config.baseURL)
-  const storedBuiltInProviders = (await configz.getSettings())?.metadata?.builtInProviders
+  const [connectors, validAudiences, settings] = await Promise.all([
+    loadAuthConnectorConfig(createConnectorRepository(db, createSecretCipher(config.credentialEncryptionKey))),
+    loadValidAudiences(env.DB, config.baseURL),
+    configz.getSettings(),
+  ])
+  const storedBuiltInProviders = settings?.metadata?.builtInProviders
   const builtInProviders = managementBuiltInProviderSettingsSchema.parse(
     mergeBuiltInProviders(defaultBuiltInProviders, storedBuiltInProviders),
   )
@@ -96,11 +130,19 @@ async function getAuth(env: Env, config: RuntimeConfig, deps: ReturnType<typeof 
       },
     )
     cachedKey = cacheKey
+    cachedStaticKey = staticKey
     cachedDb = env.DB
     cachedEmail = env.EMAIL
   }
+  cachedValidatedAt = Date.now()
 
   return cachedAuth
+}
+
+async function reconcileResourceOnce(deps: ReturnType<typeof createDeps>, baseURL: string) {
+  if (reconciledBaseURL === baseURL) return
+  await tracing.enterSpan('realmroot.resource.reconcile', () => reconcileRealmrootResourceServer(deps, baseURL))
+  reconciledBaseURL = baseURL
 }
 
 async function loadValidAudiences(db: D1Database, baseURL: string) {

@@ -1,7 +1,9 @@
 import type { Context, MiddlewareHandler } from 'hono'
+import { readCorrelationId } from '../correlation'
 
 export interface RequestContext {
   id: string
+  correlationId: string
   startedAt: number
 }
 
@@ -12,10 +14,14 @@ declare module 'hono' {
 }
 
 export const requestContext = (): MiddlewareHandler => async (c, next) => {
+  const id = c.req.header('cf-ray') || crypto.randomUUID()
   c.set('requestContext', {
-    id: c.req.header('cf-ray') || crypto.randomUUID(),
+    id,
+    correlationId: readCorrelationId(c.req.header('x-correlation-id')) ?? id,
     startedAt: Date.now(),
   })
+
+  c.header('Request-Id', id)
 
   await next()
 }
