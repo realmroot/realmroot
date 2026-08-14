@@ -23,11 +23,6 @@ WHERE `revoked_at` IS NULL
           AND `authorization`.`status` = 'active'
           AND `connection`.`status` = 'active'
           AND `credential`.`status` = 'active'
-          AND EXISTS (
-            SELECT 1
-            FROM json_each(`credential`.`granted_scopes`) AS `granted_scope`
-            WHERE `granted_scope`.`value` = `entitlement`.`scope`
-          )
       )
   );
 
@@ -52,9 +47,4 @@ WHERE `agent_identity_id` IS NOT NULL
       AND `authorization`.`status` = 'active'
       AND `connection`.`status` = 'active'
       AND `credential`.`status` = 'active'
-      AND EXISTS (
-        SELECT 1
-        FROM json_each(`credential`.`granted_scopes`) AS `granted_scope`
-        WHERE `granted_scope`.`value` = `resource_scope_entitlement`.`scope`
-      )
   );

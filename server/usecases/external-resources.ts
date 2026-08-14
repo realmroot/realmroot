@@ -999,16 +999,18 @@ export async function createAgentAccessRequest(
   const binding = identity.bindings.find(
     (candidate) => candidate.hostId === principal.hostId && candidate.protocolAgentId === principal.protocolAgentId,
   )!
-  const pending = (await deps.externalResources.listPendingAccessRequestsByAgent(principal.identityId, now)).find(
-    (request) =>
-      request.resourceId === resource.id &&
-      request.connectionId === (connection?.id ?? null) &&
-      exactScopes(request.scopes, scopes) &&
-      exactAuthorizationDetails(request.authorizationDetails, authorizationDetails),
-  )
-  if (pending) {
-    const token = await deps.secrets.open(pending.encryptedApprovalToken, accessRequestTokenContext(pending.id))
-    return toAgentAccessRequest(pending, principal.hostId, approvalUrl(approvalOrigin, token))
+  if (!alreadyAuthorized) {
+    const pending = (await deps.externalResources.listPendingAccessRequestsByAgent(principal.identityId, now)).find(
+      (request) =>
+        request.resourceId === resource.id &&
+        request.connectionId === (connection?.id ?? null) &&
+        exactScopes(request.scopes, scopes) &&
+        exactAuthorizationDetails(request.authorizationDetails, authorizationDetails),
+    )
+    if (pending) {
+      const token = await deps.secrets.open(pending.encryptedApprovalToken, accessRequestTokenContext(pending.id))
+      return toAgentAccessRequest(pending, principal.hostId, approvalUrl(approvalOrigin, token))
+    }
   }
   const expiresAt = new Date(now.getTime() + 10 * 60 * 1000)
   const rawApprovalToken = randomToken()
