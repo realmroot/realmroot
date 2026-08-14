@@ -782,7 +782,8 @@ export async function discoverAgentResources(deps: Deps, principal: AgentResourc
                   (scope) =>
                     scope !== 'openid' &&
                     scope !== 'offline_access' &&
-                    scope !== authorization?.authorizationDetailsCatalogScope,
+                    scope !== authorization?.authorizationDetailsCatalogScope &&
+                    resource.scopeRegistry?.scopes.some((declared) => declared.value === scope),
                 ),
               }
             : { status: 'not_connected' as const, displayName: null, authorizedScopes: [] },
@@ -1861,6 +1862,7 @@ async function readAuthorizationDetailCatalog(
     const connectionAuthorized = connection.authorizationDetails.some((detail) =>
       exactAuthorizationDetails([detail], [item.authorizationDetail]),
     )
+    const grantedScopes = new Set(item.grantedScopes ?? connection.grantedScopes)
     const authorizedScopes = new Set(
       entitlements
         .filter((entitlement) =>
@@ -1868,14 +1870,15 @@ async function readAuthorizationDetailCatalog(
             exactAuthorizationDetails([detail], [item.authorizationDetail]),
           ),
         )
-        .map((entitlement) => entitlement.scope),
+        .map((entitlement) => entitlement.scope)
+        .filter((scope) => grantedScopes.has(scope)),
     )
     return {
       ...item,
       connectionStatus: connectionAuthorized ? ('authorized' as const) : ('authorization_required' as const),
       authorizedScopes: connectionAuthorized ? [...authorizedScopes].sort() : [],
       requestableScopes: connectionAuthorized
-        ? connection.grantedScopes
+        ? [...grantedScopes]
             .filter(
               (scope) =>
                 scope !== 'openid' &&
@@ -1918,7 +1921,12 @@ async function requestAuthorizationDetailCatalog(
     throw badGateway('Authorization detail catalog request failed.', { url: endpoint, status: response.status })
   }
   const parsed = authorizationDetailCatalogSchema.safeParse(await response.json().catch(() => null))
-  if (!parsed.success) throw badGateway('Authorization detail catalog response is invalid.', { url: endpoint })
+  if (!parsed.success) {
+    throw badGateway('Authorization detail catalog response is invalid.', {
+      url: endpoint,
+      issues: parsed.error.issues.map((issue) => ({ path: issue.path.join('.'), message: issue.message })),
+    })
+  }
   if (parsed.data.pagination.limit !== pagination.limit || parsed.data.pagination.offset !== pagination.offset) {
     throw badGateway('Authorization detail catalog returned mismatched pagination metadata.', { url: endpoint })
   }

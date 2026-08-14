@@ -2104,7 +2104,11 @@ describe('external API resource authorization', () => {
       expect(fetchRequest.headers.get('authorization')).toBe('Bearer subject')
       return Response.json({
         items: [
-          { authorizationDetail: connectedDetail, display: { label: 'Project One' } },
+          {
+            authorizationDetail: connectedDetail,
+            display: { label: 'Project One' },
+            grantedScopes: ['projects:read', 'projects:create'],
+          },
           {
             authorizationDetail: availableDetail,
             display: { label: 'Project Two', metadata: { region: 'ca-central-1' } },
@@ -2124,7 +2128,7 @@ describe('external API resource authorization', () => {
           description: null,
           metadata: {},
           accountAuthorizationStatus: 'authorized',
-          authorizedScopes: ['projects:read', 'projects:write'],
+          authorizedScopes: ['projects:read'],
           requestableScopes: ['projects:create'],
         },
         {
@@ -4915,6 +4919,7 @@ describe('external API resource authorization', () => {
     vi.mocked(deps.externalResources.listConnectionsByOrganizations).mockResolvedValue([
       {
         ...connectionRecord(),
+        grantedScopes: [...connectionRecord().grantedScopes, 'projects:removed'],
         ownerUserId: null,
         ownerOrganizationId: 'org-1',
         externalSubject: 'abc',
