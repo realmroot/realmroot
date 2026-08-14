@@ -375,6 +375,25 @@ diff --git a/dist/utils-CZyscB8_.mjs b/dist/utils-CZyscB8_.mjs
 index ff135a7305796fbf3c53270f837c03512776caea..852771a58517a7684d3d706cdba848e86dc5c6f1 100644
 --- a/dist/utils-CZyscB8_.mjs
 +++ b/dist/utils-CZyscB8_.mjs
+@@ -264,7 +264,16 @@ function basicToClientCredentials(authorization) {
+ 			error: "invalid_client"
+ 		});
+-		const id = decoded.slice(0, separatorIndex);
+-		const secret = decoded.slice(separatorIndex + 1);
++		let id;
++		let secret;
++		try {
++			id = decodeURIComponent(decoded.slice(0, separatorIndex).replaceAll("+", " "));
++			secret = decodeURIComponent(decoded.slice(separatorIndex + 1).replaceAll("+", " "));
++		} catch {
++			throw new APIError$1("BAD_REQUEST", {
++				error_description: "invalid authorization header format",
++				error: "invalid_client"
++			});
++		}
+ 		if (!id || !secret) throw new APIError$1("BAD_REQUEST", {
+ 			error_description: "invalid authorization header format",
+ 			error: "invalid_client"
 @@ -278,14 +278,14 @@ function basicToClientCredentials(authorization) {
  *
  * A client's registered `grantTypes` defaults to the documented default

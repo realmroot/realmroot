@@ -213,11 +213,12 @@ describe('OAuth token claim building over real D1', () => {
 
     const token = await harness.request('/api/auth/oauth2/token', {
       method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+        authorization: `Basic ${btoa(`${encodeURIComponent(application.clientId)}:${encodeURIComponent(application.clientSecret)}`)}`,
+      },
       body: new URLSearchParams({
         grant_type: 'authorization_code',
-        client_id: application.clientId,
-        client_secret: application.clientSecret,
         redirect_uri: 'https://app.example.com/callback',
         code: code ?? '',
         code_verifier: verifier,
