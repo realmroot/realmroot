@@ -1371,7 +1371,10 @@ describe('external API resource authorization', () => {
     const existingConnection = {
       ...connectionRecord(),
       grantedScopes: ['openid', 'offline_access', 'workspaces:discover', 'projects:read'],
-      authorizationDetails: [{ type: 'project_access', identifier: 'project-1', actions: ['read'] }],
+      authorizationDetails: [
+        { type: 'project_access', identifier: 'project-1', actions: ['read'] },
+        { type: 'project_access', identifier: 'project-2', actions: ['read'] },
+      ],
     }
     vi.mocked(deps.connectors.findById).mockResolvedValue(
       connectorRecord({
@@ -3283,10 +3286,7 @@ describe('external API resource authorization', () => {
             'teams:read',
           ].sort(),
         )
-        expect(JSON.parse(form.get('authorization_details')!)).toEqual([
-          existingDetail,
-          request.authorizationDetails[0],
-        ])
+        expect(JSON.parse(form.get('authorization_details')!)).toEqual(request.authorizationDetails)
         return Response.json({ request_uri: 'urn:example:par:expanded', expires_in: 300 }, { status: 201 })
       }
       return openApiFetch(fetchRequest)
@@ -3311,7 +3311,7 @@ describe('external API resource authorization', () => {
     ).resolves.toMatchObject({
       apiResourceId: 'resource-1',
       scopes: ['objects:create', 'quota:purchase', 'shares:create', 'teams:read'],
-      authorizationDetails: [existingDetail, request.authorizationDetails[0]],
+      authorizationDetails: request.authorizationDetails,
       status: 'pending_authorization',
     })
     expect(deps.externalResources.createConnectionIntent).toHaveBeenCalledWith(
@@ -3325,7 +3325,7 @@ describe('external API resource authorization', () => {
           'teams:read',
           'workspaces:discover',
         ],
-        authorizationDetails: [existingDetail, request.authorizationDetails[0]],
+        authorizationDetails: request.authorizationDetails,
         returnTo: 'access-approval',
       }),
     )

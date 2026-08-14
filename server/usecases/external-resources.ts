@@ -411,13 +411,7 @@ export async function createAccountConnection(
       {
         owner,
         scopes: connectionScopes,
-        authorizationDetails:
-          request.authorizationDetails.length > 0
-            ? mergeAuthorizationDetails(
-                (controlledConnection ?? ownerConnection)?.authorizationDetails ?? [],
-                request.authorizationDetails,
-              )
-            : undefined,
+        authorizationDetails: request.authorizationDetails.length > 0 ? request.authorizationDetails : undefined,
         returnTo: 'access-approval',
       },
       actorUserId,
@@ -2231,12 +2225,6 @@ function providerCredentialExpiry(connection: ProviderResourceAuthorizationRecor
     .map((credential) => credential.credentialExpiresAt)
     .filter((expiresAt): expiresAt is Date => expiresAt !== null)
   return expiries.length > 0 ? new Date(Math.min(...expiries.map((expiresAt) => expiresAt.getTime()))) : null
-}
-
-function mergeAuthorizationDetails(current: AuthorizationDetail[], requested: AuthorizationDetail[]) {
-  const entries = new Map(current.map((detail) => [canonicalJson(detail), detail]))
-  for (const detail of requested) entries.set(canonicalJson(detail), detail)
-  return [...entries.values()]
 }
 
 async function refreshConnectionToken(
