@@ -1454,7 +1454,20 @@ export async function issueTargetAccessToken(
   if (!connection || connection.status !== 'active') {
     throw forbidden('Active external API resource grant is required.')
   }
-  const providerCredential = requireProviderCredential(connection, request.scopes, request.authorizationDetails)
+  const contextualScopes =
+    request.authorizationDetails.length > 0
+      ? await accountScopesForAuthorizationDetails(
+          deps,
+          resource,
+          connection,
+          request.agentIdentityId,
+          request.authorizationDetails,
+        )
+      : null
+  const providerCredential =
+    contextualScopes === null
+      ? requireProviderCredential(connection, request.scopes, request.authorizationDetails)
+      : requireProviderCredential(connection, [], [])
   const connectionClientGeneration = providerCredential.clientGeneration
   const connectorId = resource.connectorId!
   const connector = await deps.connectors.findById(connectorId)
@@ -1473,7 +1486,7 @@ export async function issueTargetAccessToken(
   if (authorization?.status !== 'active') {
     throw forbidden('Active external authorization server is required.')
   }
-  assertScopeSubset(request.scopes, connection.grantedScopes, 'connected account')
+  assertScopeSubset(request.scopes, contextualScopes ?? connection.grantedScopes, 'connected account')
   assertAuthorizationDetailsSelection(resource, connection, request.authorizationDetails)
   assertAuthorizationDetailsSubset(request.authorizationDetails, connection.authorizationDetails, 'connected account')
   const confirmationJkt = await validateDpopTokenProof(deps, dpopProof, authorization.tokenEndpoint)

@@ -2773,10 +2773,15 @@ describe('external API resource authorization', () => {
       authorizationDetails,
     }
     const grant = { ...grantRecord(), authorizationDetails }
-    const connection = connectionWithCredential(connectionRecord(), {
-      authorizationDetails,
-      credentialExpiresAt: new Date(Date.now() - 1_000),
-    })
+    const credentialScopes = ['openid', 'offline_access', 'authorization-details:read']
+    const connection = connectionWithCredential(
+      { ...connectionRecord(), grantedScopes: credentialScopes, authorizationDetails },
+      {
+        grantedScopes: credentialScopes,
+        authorizationDetails,
+        credentialExpiresAt: new Date(Date.now() - 1_000),
+      },
+    )
     vi.mocked(deps.authorization.findResource).mockResolvedValue(rarResource)
     vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
     vi.mocked(deps.externalResources.findAccessRequest).mockResolvedValue(request)
@@ -2790,6 +2795,8 @@ describe('external API resource authorization', () => {
         providerMetadata: {
           ...metadata(),
           authorization_details_types_supported: ['project_access'],
+          authorization_details_catalog_endpoint: 'https://projects.example.com/authorization-details',
+          authorization_details_catalog_scope: 'authorization-details:read',
           pushed_authorization_request_endpoint: 'https://projects.example.com/par',
         },
       }),
@@ -2801,6 +2808,22 @@ describe('external API resource authorization', () => {
     vi.mocked(deps.externalHttp.fetch).mockImplementation(async (outbound) => {
       if (outbound.url === rarResource.resourceUrl || outbound.url === 'https://projects.example.com/openapi.json') {
         return openApiFetch(outbound)
+      }
+      if (outbound.url.startsWith('https://projects.example.com/authorization-details?')) {
+        return Response.json({
+          items: expectedAuthorizationDetails.map((authorizationDetail, index) => ({
+            authorizationDetail,
+            grantedScopes: ['projects:read'],
+            display: { label: `Project ${index + 1}` },
+          })),
+          pagination: {
+            limit: 100,
+            offset: 0,
+            total: expectedAuthorizationDetails.length,
+            hasMore: false,
+            nextOffset: null,
+          },
+        })
       }
       const form = new URLSearchParams(await outbound.text())
       if (form.get('grant_type') === 'refresh_token') {
