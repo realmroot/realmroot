@@ -467,7 +467,9 @@ Feature: Agent identity and delegated API authorization
       Then Realmroot requests the union of the account's still-advertised resource scopes and the Agent's additional scope
       And sends only the selected authorization detail to the external authorization server
       And Realmroot adds provider protocol scopes only after validating that resource scope union
-      And only a successful OAuth callback may replace the account authorization and invalidate grants it no longer covers
+      And the external authorization server returns the connection's complete current authorization-detail snapshot
+      And Realmroot accepts the selected authorization detail as a subset of that snapshot
+      And only a successful OAuth callback may replace the account authorization and invalidate grants the complete snapshot no longer covers
 
     @entrypoint:agent-protocol @journey:agent-resource-discovery
     Scenario: An Agent discovers resource connection and scope status before requesting exact authority

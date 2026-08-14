@@ -2935,7 +2935,7 @@ function assertProviderConnectionAuthorizationDetails(
     if (configuredTemplates.some((template) => canonicalJson(template) === canonicalJson(detail))) {
       throw invalidProviderConnectionAuthorizationDetails()
     }
-    if (!requested.some((requirement) => authorizationDetailMatchesTemplate(detail, requirement))) {
+    if (!configuredTemplates.some((template) => authorizationDetailMatchesTemplate(detail, template))) {
       throw invalidProviderConnectionAuthorizationDetails()
     }
   }

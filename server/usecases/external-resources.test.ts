@@ -1084,7 +1084,8 @@ describe('external API resource authorization', () => {
     authorizationDeps(deps)
     const template = [{ type: 'project_access', actions: ['read'] }]
     const retained = [{ type: 'project_access', identifier: 'project-1', actions: ['read'] }]
-    const removed = [{ type: 'project_access', identifier: 'project-2', actions: ['read'] }]
+    const returnedExtra = [{ type: 'project_access', identifier: 'project-2', actions: ['read'] }]
+    const removed = [{ type: 'project_access', identifier: 'project-3', actions: ['read'] }]
     vi.mocked(deps.authorization.findResource).mockResolvedValue({ ...resource(), authorizationDetails: template })
     vi.mocked(deps.connectors.findById).mockResolvedValue(
       connectorRecord({
@@ -1116,9 +1117,10 @@ describe('external API resource authorization', () => {
       ...connectionRecord(),
       ownerUserId: null,
       ownerOrganizationId: 'org-1',
-      authorizationDetails: [...retained, ...removed],
+      authorizationDetails: [...retained, ...returnedExtra, ...removed],
     }
     const staleGrant = { ...grantRecord(), authorizationDetails: removed }
+    const returnedExtraGrant = { ...grantRecord(), id: 'returned-extra-grant', authorizationDetails: returnedExtra }
     const staleScopeGrant = { ...grantRecord(), id: 'stale-scope-grant', scopes: ['projects:write'] }
     const missingContextGrant = { ...grantRecord(), id: 'missing-context-grant', authorizationDetails: [] }
     const retainedGrant = { ...grantRecord(), id: 'retained-grant', authorizationDetails: retained }
@@ -1132,6 +1134,7 @@ describe('external API resource authorization', () => {
     )
     vi.mocked(deps.externalResources.listActiveEntitlementsByConnection).mockResolvedValue([
       retainedGrant,
+      returnedExtraGrant,
       staleGrant,
       staleScopeGrant,
       missingContextGrant,
@@ -1145,7 +1148,7 @@ describe('external API resource authorization', () => {
           refresh_token: 'replacement-refresh',
           token_type: 'Bearer',
           scope: 'openid offline_access projects:read',
-          authorization_details: retained,
+          authorization_details: [...retained, ...returnedExtra],
         })
       }
       if (request.url.endsWith('/userinfo')) return Response.json({ sub: 'target-user-1' })
@@ -1169,13 +1172,22 @@ describe('external API resource authorization', () => {
       'revoked',
       expect.any(Date),
     )
+    expect(deps.externalResources.endEntitlement).not.toHaveBeenCalledWith(
+      returnedExtraGrant.id,
+      'revoked',
+      expect.any(Date),
+    )
+    expect(deps.externalResources.upsertProviderCredential).toHaveBeenCalledWith(
+      existing.id,
+      expect.objectContaining({ authorizationDetails: [...retained, ...returnedExtra] }),
+    )
     expect(deps.agentAudit.append).toHaveBeenCalledWith(
       expect.objectContaining({
         action: 'api_resource.access_revoked',
         ownerUserId: null,
         ownerOrganizationId: 'org-1',
         reasonCode: 'connection_authorization_changed',
-        metadata: { authorizationDetails: [{ type: 'project_access', identifier: 'project-2' }] },
+        metadata: { authorizationDetails: [{ type: 'project_access', identifier: 'project-3' }] },
       }),
     )
   })
