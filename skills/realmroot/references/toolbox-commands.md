@@ -63,9 +63,13 @@ realmroot toolbox <resource-server> <group> <operation> <arguments> --json
 Use generic HTTP operations when appropriate:
 
 ```bash
-realmroot toolbox get <target> --json
-realmroot toolbox post <target> --content-type application/json --json < body.json
+realmroot toolbox get <resource-server>/<path> --json
+realmroot toolbox post <resource-server>/<path> --content-type application/json --json < body.json
 ```
+
+Address registered Resource Servers by their Toolbox name. Realmroot resolves
+the deployment URL internally. Use an absolute URL only for an unregistered
+public HTTP target.
 
 Use a native tool only when the Resource Server advertises it:
 

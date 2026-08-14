@@ -20,7 +20,7 @@
       "type": "archive",
       "description": "Use Realmroot as the stable Agent identity for private Resources, controller-approved access, Realmroot administration, Agent-attributed Git commits, and authenticated git, gh, or wrangler commands.",
       "url": "/.well-known/agent-skills/realmroot.tar.gz",
-      "digest": "sha256:0c9afcf549b345beccb25b893c25c4730d9ba067e0ca0fef64c7f4ef7e16c676"
+      "digest": "sha256:cb96ef5f198122e70b128a6f93085400df734218aa2290914eb4e2598813e112"
     }
   ]
 }
