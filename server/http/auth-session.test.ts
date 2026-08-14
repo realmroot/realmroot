@@ -104,6 +104,30 @@ describe('auth.test 1', () => {
     })
   })
 
+  it('accepts RFC 8628 form encoding at the mounted device authorization boundary [spec: management-api/management-native-device-approval]', async () => {
+    const auth = createAuth(
+      {} as Database,
+      createIdentifierGeneratorFake(),
+      '01234567890123456789012345678901',
+      'https://auth.example.com',
+      ['https://auth.example.com'],
+      createEmailSenderMock(),
+      createSecurityPolicy(),
+    )
+
+    const response = await createApp(auth, createTestDeps()).request('/api/auth/device/code', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+      body: new URLSearchParams({ scope: 'openid' }),
+    })
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toMatchObject({
+      code: 'VALIDATION_ERROR',
+      message: expect.stringContaining('body.client_id'),
+    })
+  })
+
   it('passes mounted authorize query parameters to Better Auth', async () => {
     const auth = createAuth(
       {} as Database,

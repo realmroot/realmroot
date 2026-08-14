@@ -507,10 +507,28 @@ export function createAuth(
   return {
     ...auth,
     handler: async (request: Request) => {
-      const response = await auth.handler(await withOAuthConsentContext(request))
-      return translateNonInteractiveConsentError(request, response)
+      const normalizedRequest = await normalizeDeviceAuthorizationRequest(request)
+      const response = await auth.handler(await withOAuthConsentContext(normalizedRequest))
+      return translateNonInteractiveConsentError(normalizedRequest, response)
     },
   }
+}
+
+export async function normalizeDeviceAuthorizationRequest(request: Request) {
+  const url = new URL(request.url)
+  if (request.method !== 'POST' || !url.pathname.endsWith('/device/code')) return request
+
+  const mediaType = request.headers.get('content-type')?.split(';', 1)[0]?.trim().toLowerCase()
+  if (mediaType !== 'application/x-www-form-urlencoded') return request
+
+  const parameters = await request.clone().formData()
+  const headers = new Headers(request.headers)
+  headers.set('content-type', 'application/json')
+  headers.delete('content-length')
+  return new Request(request, {
+    headers,
+    body: JSON.stringify(Object.fromEntries(parameters.entries())),
+  })
 }
 
 async function withOAuthConsentContext(request: Request) {

@@ -165,6 +165,23 @@ describe('applications management over real D1', () => {
       'urn:ietf:params:oauth:grant-type:device_code',
     ])
 
+    const deviceCode = await harness.request('/api/auth/device/code', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: created.clientId,
+        scope: 'openid profile email offline_access',
+      }),
+    })
+    expect(deviceCode.status, await deviceCode.clone().text()).toBe(200)
+    await expect(deviceCode.json()).resolves.toMatchObject({
+      device_code: expect.any(String),
+      user_code: expect.any(String),
+      verification_uri: expect.any(String),
+      expires_in: expect.any(Number),
+      interval: expect.any(Number),
+    })
+
     const disabled = await harness.request(`/api/applications/${created.id}`, {
       method: 'PATCH',
       headers: { 'content-type': 'application/json', cookie },

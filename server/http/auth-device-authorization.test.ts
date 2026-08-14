@@ -1,5 +1,5 @@
 import { oauthProvider } from '@better-auth/oauth-provider'
-import { createDeviceAuthorizationOptions } from '@server/auth'
+import { createDeviceAuthorizationOptions, normalizeDeviceAuthorizationRequest } from '@server/auth'
 import type { ApplicationAggregate } from '@server/usecases/ports'
 import { deviceCodeGrantType } from '@shared/api/applications'
 import { betterAuth } from 'better-auth'
@@ -51,6 +51,29 @@ describe('auth device authorization endpoints', () => {
       error: 'invalid_request',
       error_description: 'Scope is not allowed for this client: applications:read',
     })
+  })
+
+  it('accepts RFC 8628 form-encoded device authorization requests while preserving JSON clients [spec: management-api/management-native-device-approval]', async () => {
+    const auth = createDeviceAuth()
+
+    const form = await requestDeviceForm(auth, {
+      client_id: 'native',
+      scope: 'openid profile email offline_access',
+    })
+    expect(form.status).toBe(200)
+    await expect(form.json()).resolves.toMatchObject({
+      device_code: 'device-code-1',
+      user_code: 'USERCODE',
+      verification_uri: 'https://auth.example.com/auth/device',
+      expires_in: 1800,
+      interval: 5,
+    })
+
+    const json = await requestJson(auth, '/device/code', {
+      client_id: 'native',
+      scope: 'openid profile email offline_access',
+    })
+    expect(json.status).toBe(200)
   })
 
   it('returns pending and slow_down while the device code waits for browser approval', async () => {
@@ -426,6 +449,15 @@ async function requestForm(auth: TestAuth, path: string, body: Record<string, st
       body: new URLSearchParams(body),
     }),
   )
+}
+
+async function requestDeviceForm(auth: TestAuth, body: Record<string, string>) {
+  const request = new Request('https://auth.example.com/api/auth/device/code', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams(body),
+  })
+  return auth.handler(await normalizeDeviceAuthorizationRequest(request))
 }
 
 function getCookieHeader(response: Response) {
