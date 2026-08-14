@@ -3369,6 +3369,113 @@ describe('external API resource authorization', () => {
     })
   })
 
+  it('[spec: agent-identity/resource-account-reauthorization] intersects contextual scopes across catalog pages', async () => {
+    const firstDetail = { type: 'project_access', identifier: 'project-1', actions: ['read'] }
+    const secondDetail = { type: 'project_access', identifier: 'project-2', actions: ['read'] }
+    const deps = authorizationCatalogDeps()
+    vi.mocked(deps.externalHttp.fetch)
+      .mockResolvedValueOnce(
+        Response.json({
+          items: [
+            {
+              authorizationDetail: firstDetail,
+              grantedScopes: ['projects:read', 'projects:write'],
+              display: { label: 'Project One' },
+            },
+            {
+              authorizationDetail: { type: 'project_access', identifier: 'project-other', actions: ['read'] },
+              grantedScopes: ['projects:read'],
+              display: { label: 'Other Project' },
+            },
+          ],
+          pagination: { limit: 100, offset: 0, total: 3, hasMore: true, nextOffset: 2 },
+        }),
+      )
+      .mockResolvedValueOnce(
+        Response.json({
+          items: [
+            {
+              authorizationDetail: secondDetail,
+              grantedScopes: ['projects:read'],
+              display: { label: 'Project Two' },
+            },
+          ],
+          pagination: { limit: 100, offset: 2, total: 3, hasMore: false, nextOffset: null },
+        }),
+      )
+    const request = {
+      ...requestRecord(),
+      authorizationDetails: [firstDetail, secondDetail],
+    }
+    vi.mocked(deps.externalResources.findAccessRequestByApprovalTokenHash).mockResolvedValue(request)
+    const connection = {
+      ...connectionRecord(),
+      grantedScopes: [...connectionRecord().grantedScopes, 'authorization-details:read', 'projects:write'],
+    }
+    vi.mocked(deps.externalResources.findConnection).mockResolvedValue(connection)
+    vi.mocked(deps.externalResources.listConnectionsByOrganizations).mockResolvedValue([connection])
+
+    await expect(
+      listAccessRequestConnections(deps, 'approval-token', 'user-1', { limit: 20, offset: 0 }),
+    ).resolves.toMatchObject({
+      items: [{ id: 'connection-1', scopes: ['projects:read'] }],
+    })
+  })
+
+  it('[spec: agent-identity/resource-account-reauthorization] preserves account scopes when a catalog cannot report contextual scopes', async () => {
+    const detail = { type: 'project_access', identifier: 'project-1', actions: ['read'] }
+    const deps = authorizationCatalogDeps({
+      fetchResponse: Response.json({
+        items: [{ authorizationDetail: detail, display: { label: 'Project One' } }],
+        pagination: { limit: 100, offset: 0, total: 1, hasMore: false, nextOffset: null },
+      }),
+    })
+    const request = { ...requestRecord(), authorizationDetails: [detail] }
+    vi.mocked(deps.externalResources.findAccessRequestByApprovalTokenHash).mockResolvedValue(request)
+    const connection = {
+      ...connectionRecord(),
+      grantedScopes: [...connectionRecord().grantedScopes, 'authorization-details:read'],
+    }
+    vi.mocked(deps.externalResources.findConnection).mockResolvedValue(connection)
+    vi.mocked(deps.externalResources.listConnectionsByOrganizations).mockResolvedValue([connection])
+
+    await expect(
+      listAccessRequestConnections(deps, 'approval-token', 'user-1', { limit: 20, offset: 0 }),
+    ).resolves.toMatchObject({
+      items: [{ id: 'connection-1', scopes: ['projects:read', 'authorization-details:read'] }],
+    })
+  })
+
+  it('[spec: agent-identity/resource-account-reauthorization] reports no contextual scopes when the selected detail is absent', async () => {
+    const requestedDetail = { type: 'project_access', identifier: 'project-1', actions: ['read'] }
+    const deps = authorizationCatalogDeps({
+      fetchResponse: Response.json({
+        items: [
+          {
+            authorizationDetail: { type: 'project_access', identifier: 'project-other', actions: ['read'] },
+            grantedScopes: ['projects:read'],
+            display: { label: 'Other Project' },
+          },
+        ],
+        pagination: { limit: 100, offset: 0, total: 1, hasMore: false, nextOffset: null },
+      }),
+    })
+    const request = { ...requestRecord(), authorizationDetails: [requestedDetail] }
+    vi.mocked(deps.externalResources.findAccessRequestByApprovalTokenHash).mockResolvedValue(request)
+    const connection = {
+      ...connectionRecord(),
+      grantedScopes: [...connectionRecord().grantedScopes, 'authorization-details:read'],
+    }
+    vi.mocked(deps.externalResources.findConnection).mockResolvedValue(connection)
+    vi.mocked(deps.externalResources.listConnectionsByOrganizations).mockResolvedValue([connection])
+
+    await expect(
+      listAccessRequestConnections(deps, 'approval-token', 'user-1', { limit: 20, offset: 0 }),
+    ).resolves.toMatchObject({
+      items: [{ id: 'connection-1', scopes: [] }],
+    })
+  })
+
   it('enforces first-access connection context boundaries', async () => {
     const deps = createTestDeps()
     authorizationDeps(deps)
