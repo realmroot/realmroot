@@ -92,7 +92,7 @@ export function createApp(auth: AuthHandler, deps: Deps, config: AppConfig = {})
   app.use('/api/*', cors)
   for (const path of publicIssuerMetadataPaths) app.use(path, cors)
   app.use('/api/*', authn(auth))
-  app.use('/api/*', requireSecurityPolicy(deps.security))
+  app.use('/api/*', requireSecurityPolicy(deps.security, config.securityPolicy))
 
   app.onError((error, c) => {
     if (error instanceof ApiError && error.status === 401 && c.req.path.startsWith('/api/')) {
@@ -140,7 +140,7 @@ export function createApp(auth: AuthHandler, deps: Deps, config: AppConfig = {})
     await requireLinkedSiweWallet(c, c.get('deps').wallets)
     if (isLegacyAgentCapabilityPath(c.req.path)) throw notFound()
 
-    const tokenExchangeResponse = await maybeHandleTokenExchange(c, oauthIssuer(config, c.req.url), auth)
+    const tokenExchangeResponse = await maybeHandleTokenExchange(c, oauthIssuer(config, c.req.url), auth, config)
     if (tokenExchangeResponse) return tokenExchangeResponse
 
     return auth.handler(c.req.raw)
@@ -304,7 +304,7 @@ async function requireOnboardingComplete(deps: Deps) {
   }
 }
 
-async function maybeHandleTokenExchange(c: Context, issuer: string, auth: AuthHandler) {
+async function maybeHandleTokenExchange(c: Context, issuer: string, auth: AuthHandler, config: AppConfig) {
   if (c.req.method !== 'POST') return null
   if (c.req.path !== '/api/auth/oauth2/token' && c.req.path !== '/api/auth/oauth2/introspect') return null
 
@@ -316,14 +316,14 @@ async function maybeHandleTokenExchange(c: Context, issuer: string, auth: AuthHa
 
   const grantType = formString(form, 'grant_type')
   if (c.req.path === '/api/auth/oauth2/token' && grantType === 'urn:ietf:params:oauth:grant-type:jwt-bearer') {
-    return issueAgentToken(c, issuer, auth, form)
+    return issueAgentToken(c, issuer, auth, form, config.realmrootResourceReconciled)
   }
   if (
     c.req.path === '/api/auth/oauth2/token' &&
     grantType === 'client_credentials' &&
     formString(form, 'resource') === `${new URL(issuer).origin}/api`
   ) {
-    return issueApplicationToken(c, issuer, auth, form)
+    return issueApplicationToken(c, issuer, auth, form, config.realmrootResourceReconciled)
   }
   if (c.req.path === '/api/auth/oauth2/introspect' && !(formString(form, 'token') ?? '').startsWith('fatx_')) {
     return null
@@ -402,7 +402,13 @@ async function maybeHandleTokenExchange(c: Context, issuer: string, auth: AuthHa
   return c.json(introspection)
 }
 
-async function issueApplicationToken(c: Context, issuer: string, auth: AuthHandler, form: FormData) {
+async function issueApplicationToken(
+  c: Context,
+  issuer: string,
+  auth: AuthHandler,
+  form: FormData,
+  realmrootResourceReconciled = false,
+) {
   if (!auth.api.signJWT) throw oauthError('temporarily_unavailable', 'OAuth token issuance is unavailable.', 503)
   const client = readClientAuthentication(c.req.raw.headers, form)
   if (!client) {
@@ -416,7 +422,7 @@ async function issueApplicationToken(c: Context, issuer: string, auth: AuthHandl
   }
   const dpopProof = c.req.header('DPoP')
   if (!dpopProof) throw oauthError('invalid_dpop_proof', 'A DPoP proof is required.')
-  await ensureRealmrootResourceServer(c.get('deps'), new URL(issuer).origin)
+  if (!realmrootResourceReconciled) await ensureRealmrootResourceServer(c.get('deps'), new URL(issuer).origin)
   const response = await issueApplicationAccessToken(
     c.get('deps'),
     {
@@ -440,7 +446,13 @@ async function issueApplicationToken(c: Context, issuer: string, auth: AuthHandl
   return c.json(response)
 }
 
-async function issueAgentToken(c: Context, issuer: string, auth: AuthHandler, form: FormData) {
+async function issueAgentToken(
+  c: Context,
+  issuer: string,
+  auth: AuthHandler,
+  form: FormData,
+  realmrootResourceReconciled = false,
+) {
   if (!auth.api.getAgentSession || !auth.api.signJWT) {
     throw oauthError('temporarily_unavailable', 'Agent OAuth token issuance is unavailable.', 503)
   }
@@ -450,16 +462,12 @@ async function issueAgentToken(c: Context, issuer: string, auth: AuthHandler, fo
   const session = await auth.api.getAgentSession({ headers, asResponse: false }).catch(() => null)
   if (!session) throw oauthError('invalid_grant', 'The Agent assertion is invalid.')
   const deps = c.get('deps')
-  await ensureRealmrootResourceServer(deps, new URL(issuer).origin)
-  const aggregate = await deps.agentIdentities.findActiveByProtocolAgent(session.agent.id)
-  if (!aggregate) throw oauthError('invalid_grant', 'The Agent is not enrolled.')
-  const binding = aggregate.bindings.find(
-    (candidate) =>
-      candidate.protocolAgentId === session.agent.id &&
-      candidate.hostId === session.agent.hostId &&
-      candidate.status === 'active',
-  )
-  if (!binding) throw oauthError('invalid_grant', 'The Agent host binding is inactive.')
+  if (!realmrootResourceReconciled) await ensureRealmrootResourceServer(deps, new URL(issuer).origin)
+  const active = await deps.agentIdentities.findActiveBindingByProtocolAgent(session.agent.id)
+  if (!active) throw oauthError('invalid_grant', 'The Agent is not enrolled.')
+  if (active.binding.hostId !== session.agent.hostId) {
+    throw oauthError('invalid_grant', 'The Agent host binding is inactive.')
+  }
   const tokenEndpoint = `${issuer.replace(/\/$/, '')}/oauth2/token`
   const resource = formString(form, 'resource') ?? ''
   const dpopProof = c.req.header('DPoP')
@@ -474,11 +482,13 @@ async function issueAgentToken(c: Context, issuer: string, auth: AuthHandler, fo
       tokenEndpoint,
     },
     {
-      issuer: aggregate.identity.issuer,
-      subject: aggregate.identity.subject,
-      identityId: aggregate.identity.id,
+      issuer: active.identity.issuer,
+      subject: active.identity.subject,
+      identityId: active.identity.id,
       protocolAgentId: session.agent.id,
       hostId: session.agent.hostId,
+      identity: active.identity,
+      binding: active.binding,
     },
     {
       issuer,

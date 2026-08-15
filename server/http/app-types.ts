@@ -16,4 +16,5 @@ export interface AppConfig {
   baseURL?: string
   trustedOrigins?: string[]
   securityPolicy?: SecurityPolicy
+  realmrootResourceReconciled?: boolean
 }

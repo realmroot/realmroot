@@ -14,6 +14,9 @@ import { isRealmrootResourceServer } from '@server/domain/realmroot-resource-ser
 import type { Deps } from '@server/usecases/deps'
 import type {
   AgentAccessRequestRecord,
+  AgentIdentityBindingRecord,
+  AgentIdentityRecord,
+  ConnectorRecord,
   ExternalResourceAuthorizationRecord,
   ProviderCredentialRecord,
   ProviderResourceAuthorizationRecord,
@@ -61,6 +64,8 @@ export interface AgentResourcePrincipal {
   identityId: string
   protocolAgentId: string
   hostId: string
+  identity: AgentIdentityRecord
+  binding: AgentIdentityBindingRecord
 }
 
 export interface AgentAssertionSigner {
@@ -732,23 +737,30 @@ async function revokeRealmrootCustodiedProviderAuthorization(
 }
 
 export async function discoverAgentResources(deps: Deps, principal: AgentResourcePrincipal) {
-  const identity = await requireActiveIdentityAndBinding(deps, principal)
-  const visibleOrganizationIds = await activeIdentityOrganizationIds(deps, identity.identity)
-  const connections = identity.identity.ownerUserId
-    ? await deps.externalResources.listConnectionsByUser(identity.identity.ownerUserId)
-    : await deps.externalResources.listConnectionsByOrganizations([identity.identity.ownerOrganizationId!])
-  const activeConnections = connections.filter((connection) => connection.status === 'active')
-  const configuredResources = await deps.authorization.listEnabledResources()
-  const visibleResourceIds = new Set([
-    ...activeConnections.map((connection) => connection.resourceId),
-    ...configuredResources.map((resource) => resource.id),
+  const records = await discoverAgentResourceRecords(deps, principal)
+  return { items: records.map((record) => record.summary) }
+}
+
+async function discoverAgentResourceRecords(deps: Deps, principal: AgentResourcePrincipal) {
+  const identity = await requireActiveIdentityAndBinding(principal)
+  const [visibleOrganizationIds, connections, configuredResources, connectors] = await Promise.all([
+    activeIdentityOrganizationIds(deps, identity.identity),
+    identity.identity.ownerUserId
+      ? deps.externalResources.listConnectionsByUser(identity.identity.ownerUserId)
+      : deps.externalResources.listConnectionsByOrganizations([identity.identity.ownerOrganizationId!]),
+    deps.authorization.listEnabledResources(),
+    deps.connectors.listEnabled(),
   ])
-  const resources = await Promise.all(
-    [...visibleResourceIds].map(async (resourceId) => {
-      const resource = await deps.authorization.findResource(resourceId)
-      const authorization = await findExternalAuthorization(deps, resourceId)
+  const activeConnections = connections.filter((connection) => connection.status === 'active')
+  const connectorsById = new Map(connectors.map((connector) => [connector.id, connector]))
+  const records = await Promise.all(
+    configuredResources.map(async (resource) => {
+      const authorization = await resolveExternalAuthorization(
+        deps,
+        resource,
+        resource.connectorId ? connectorsById.get(resource.connectorId) : undefined,
+      )
       if (
-        !resource?.enabled ||
         !resource.availableToAgents ||
         !activeResourceVisibleToAgent(resource, visibleOrganizationIds) ||
         (resource.authorizationModel === 'external' && authorization?.status !== 'active')
@@ -756,42 +768,46 @@ export async function discoverAgentResources(deps: Deps, principal: AgentResourc
         return null
       }
       const scopes = discoverAgentResourceScopes(resource)
-      const connection = activeConnections.find((candidate) => candidate.resourceId === resourceId) ?? null
+      const connection = activeConnections.find((candidate) => candidate.resourceId === resource.id) ?? null
       return {
-        id: resource.id,
-        identifier: resource.identifier,
-        name: resource.name,
-        description: resource.description,
-        availability: {
-          status: scopes ? ('available' as const) : ('unavailable' as const),
-          checkedAt: new Date().toISOString(),
+        resource,
+        authorization,
+        summary: {
+          id: resource.id,
+          identifier: resource.identifier,
+          name: resource.name,
+          description: resource.description,
+          availability: {
+            status: scopes ? ('available' as const) : ('unavailable' as const),
+            checkedAt: new Date().toISOString(),
+          },
+          scopes: scopes ?? [],
+          resourcesAvailable:
+            !requiresAccountConnection(resource) ||
+            Boolean(
+              connection &&
+                (authorization?.authorizationDetailsCatalogEndpoint || connection.authorizationDetails.length > 0),
+            ),
+          connection: !requiresAccountConnection(resource)
+            ? { status: 'not_required' as const, displayName: null, authorizedScopes: [] }
+            : connection
+              ? {
+                  status: 'connected' as const,
+                  displayName: connection.displayName,
+                  authorizedScopes: connection.grantedScopes.filter(
+                    (scope) =>
+                      scope !== 'openid' &&
+                      scope !== 'offline_access' &&
+                      scope !== authorization?.authorizationDetailsCatalogScope &&
+                      resource.scopeRegistry?.scopes.some((declared) => declared.value === scope),
+                  ),
+                }
+              : { status: 'not_connected' as const, displayName: null, authorizedScopes: [] },
         },
-        scopes: scopes ?? [],
-        resourcesAvailable:
-          !requiresAccountConnection(resource) ||
-          Boolean(
-            connection &&
-              (authorization?.authorizationDetailsCatalogEndpoint || connection.authorizationDetails.length > 0),
-          ),
-        connection: !requiresAccountConnection(resource)
-          ? { status: 'not_required' as const, displayName: null, authorizedScopes: [] }
-          : connection
-            ? {
-                status: 'connected' as const,
-                displayName: connection.displayName,
-                authorizedScopes: connection.grantedScopes.filter(
-                  (scope) =>
-                    scope !== 'openid' &&
-                    scope !== 'offline_access' &&
-                    scope !== authorization?.authorizationDetailsCatalogScope &&
-                    resource.scopeRegistry?.scopes.some((declared) => declared.value === scope),
-                ),
-              }
-            : { status: 'not_connected' as const, displayName: null, authorizedScopes: [] },
       }
     }),
   )
-  return { items: resources.filter((resource) => resource !== null) }
+  return records.filter((record) => record !== null)
 }
 
 function discoverAgentResourceScopes(
@@ -823,9 +839,11 @@ export async function listAgentResourceServers(
   apiOrigin: string,
 ) {
   const origin = apiOrigin.replace(/\/$/, '')
-  const resources = await Promise.all(
-    (await discoverAgentResources(deps, principal)).items.map(async (resource) =>
-      toResourceServer(await getApiResourceConfiguration(deps, resource.id), origin, resource.connection),
+  const resources = (await discoverAgentResourceRecords(deps, principal)).map(({ resource, authorization, summary }) =>
+    toResourceServer(
+      { ...resource, authorization: authorization ? omitResourceId(toExternalAuthorization(authorization)) : null },
+      origin,
+      summary.connection,
     ),
   )
   return {
@@ -840,14 +858,17 @@ export async function getAgentResourceServer(
   principal: AgentResourcePrincipal,
   apiOrigin: string,
 ) {
-  const resource = (await discoverAgentResources(deps, principal)).items.find(
-    (candidate) => candidate.id === resourceServerId,
+  const record = (await discoverAgentResourceRecords(deps, principal)).find(
+    (candidate) => candidate.resource.id === resourceServerId,
   )
-  if (!resource) throw notFound('Resource Server was not found.')
+  if (!record) throw notFound('Resource Server was not found.')
   return toResourceServer(
-    await getApiResourceConfiguration(deps, resource.id),
+    {
+      ...record.resource,
+      authorization: record.authorization ? omitResourceId(toExternalAuthorization(record.authorization)) : null,
+    },
     apiOrigin.replace(/\/$/, ''),
-    resource.connection,
+    record.summary.connection,
   )
 }
 
@@ -857,8 +878,8 @@ export async function listAgentResourceServerAuthorizationDetails(
   principal: AgentResourcePrincipal,
   pagination: PaginationInput,
 ) {
-  const identity = await requireActiveIdentityAndBinding(deps, principal)
-  const resource = await requireEnabledResource(deps, resourceServerId)
+  const identity = await requireActiveIdentityAndBinding(principal)
+  const { resource, authorization } = await requireEnabledResourceConfiguration(deps, resourceServerId)
   await requireAgentResourceVisibility(deps, resource, identity.identity)
   if (isRealmrootResourceServer(resource)) {
     const items = await realmrootAuthorityDetailsCatalog(deps, identity, principal.identityId, resource)
@@ -882,7 +903,7 @@ export async function listAgentResourceServerAuthorizationDetails(
   if (fallbackAuthorization) {
     return { items: [], pagination: paginationMetadata({ ...pagination, total: 0 }) }
   }
-  const catalog = await readResourceCatalog(deps, resource, connection, principal.identityId, pagination)
+  const catalog = await readResourceCatalog(deps, resource, connection, principal.identityId, pagination, authorization)
   return {
     items: catalog.items.map(toResourceServerAuthorizationDetail),
     pagination: catalog.pagination,
@@ -924,7 +945,7 @@ export async function createAgentAccessRequest(
   principal: AgentResourcePrincipal,
   approvalOrigin: string,
 ) {
-  const identity = await requireActiveIdentityAndBinding(deps, principal)
+  const identity = await requireActiveIdentityAndBinding(principal)
   let resource = await requireEnabledResource(deps, input.resourceId)
   const connection = requiresAccountConnection(resource)
     ? await deps.externalResources.findConnectionByOwnerResource({
@@ -1074,7 +1095,7 @@ export async function createAccessRequest(
 }
 
 export async function getAgentAccessRequest(deps: Deps, requestId: string, principal: AgentResourcePrincipal) {
-  await requireActiveIdentityAndBinding(deps, principal)
+  await requireActiveIdentityAndBinding(principal)
   const request = await deps.externalResources.findAccessRequest(requestId)
   if (!request || request.agentIdentityId !== principal.identityId)
     throw notFound('Agent access request was not found.')
@@ -1436,7 +1457,7 @@ export async function issueTargetAccessToken(
   principal: AgentResourcePrincipal,
   signer: AgentAssertionSigner,
 ) {
-  const identity = await requireActiveIdentityAndBinding(deps, principal)
+  const identity = await requireActiveIdentityAndBinding(principal)
   const request = await deps.externalResources.findAccessRequest(requestId)
   if (
     !request ||
@@ -1792,7 +1813,7 @@ export async function listAgentPermissions(
   principal: AgentResourcePrincipal,
   query: ListAgentPermissionsQuery,
 ) {
-  await requireActiveIdentityAndBinding(deps, principal)
+  await requireActiveIdentityAndBinding(principal)
   const result = await deps.externalResources.listAgentPermissions({ ...query, agentId: principal.identityId })
   return {
     items: result.items.map(({ entitlement, resource }) => toPermission(entitlement, resource)),
@@ -1805,7 +1826,7 @@ export async function getAgentPermission(
   entitlementId: string,
   principal: AgentResourcePrincipal,
 ): Promise<AgentPermission> {
-  await requireActiveIdentityAndBinding(deps, principal)
+  await requireActiveIdentityAndBinding(principal)
   const entitlement = await deps.externalResources.findEntitlement(entitlementId)
   if (!entitlement || entitlement.agentIdentityId !== principal.identityId) {
     throw notFound('Agent Permission was not found.')
@@ -1910,9 +1931,9 @@ async function readAuthorizationDetailCatalog(
   connection: ProviderResourceAuthorizationRecord,
   agentIdentityId: string,
   pagination: PaginationInput,
+  authorization: ResolvedExternalAuthorization,
 ) {
   const credential = requireProviderCredential(connection, [], [])
-  const authorization = await requireActiveExternalAuthorization(deps, resource.id, credential.clientGeneration)
   const endpoint = authorization.authorizationDetailsCatalogEndpoint
   const requiredScope = authorization.authorizationDetailsCatalogScope
   if (!endpoint || !requiredScope) {
@@ -2033,10 +2054,15 @@ async function readResourceCatalog(
   connection: ProviderResourceAuthorizationRecord,
   agentIdentityId: string,
   pagination: PaginationInput,
+  resolvedAuthorization?: ResolvedExternalAuthorization | null,
 ) {
-  const authorization = await externalOAuthAuthorization(deps, resource, providerCredentialGeneration(connection))
+  const clientGeneration = providerCredentialGeneration(connection)
+  const authorization =
+    resolvedAuthorization?.clientGeneration === clientGeneration
+      ? resolvedAuthorization
+      : await activeConnectorAuthorizationForResource(deps, resource, clientGeneration)
   if (authorization?.authorizationDetailsCatalogEndpoint && authorization.authorizationDetailsCatalogScope) {
-    return readAuthorizationDetailCatalog(deps, resource, connection, agentIdentityId, pagination)
+    return readAuthorizationDetailCatalog(deps, resource, connection, agentIdentityId, pagination, authorization)
   }
   const details = connection.authorizationDetails.slice(pagination.offset, pagination.offset + pagination.limit)
   const entitlements = (await deps.externalResources.listActiveEntitlementsByAgent(agentIdentityId, new Date())).filter(
@@ -2500,6 +2526,15 @@ async function findExternalAuthorization(
   const resource = await deps.authorization.findResource(resourceId)
   if (!resource?.connectorId || resource.authorizationModel !== 'external') return null
   const connector = await deps.connectors.findById(resource.connectorId)
+  return resolveExternalAuthorization(deps, resource, connector ?? undefined, clientGeneration)
+}
+
+async function resolveExternalAuthorization(
+  deps: Deps,
+  resource: ApiResourceResponse,
+  connector?: ConnectorRecord,
+  clientGeneration?: number,
+): Promise<ResolvedExternalAuthorization | null> {
   const driver = connector ? resourceOAuthDriver(connector) : null
   if (
     !connector ||
@@ -2523,7 +2558,7 @@ async function findExternalAuthorization(
     ? await deps.secrets.open(retired.encryptedClientSecret, retired.clientSecretContext)
     : connector.resourceClientSecret
   return {
-    resourceId,
+    resourceId: resource.id,
     connectorId: connector.id,
     resourceUrl: resource.resourceUrl,
     issuer: connector.resourceIssuer,
@@ -2591,24 +2626,38 @@ async function connectorOAuthAuthorization(
 }
 
 async function requireEnabledResource(deps: Deps, resourceId: string) {
-  const resource = await deps.authorization.findResource(resourceId)
-  if (!resource?.enabled) throw notFound('Enabled Resource Server was not found.')
-  await connectorOAuthAuthorization(deps, resource)
-  return resource
+  return (await requireEnabledResourceConfiguration(deps, resourceId)).resource
 }
 
-async function requireActiveIdentityAndBinding(deps: Deps, principal: AgentResourcePrincipal) {
-  const identity = await deps.agentIdentities.findIdentity(principal.identityId)
-  const binding = identity?.bindings.find(
-    (candidate) =>
-      candidate.status === 'active' &&
-      candidate.hostId === principal.hostId &&
-      candidate.protocolAgentId === principal.protocolAgentId,
-  )
-  if (!identity || identity.identity.status !== 'active' || !binding) {
+async function requireEnabledResourceConfiguration(deps: Deps, resourceId: string) {
+  const resource = await deps.authorization.findResource(resourceId)
+  if (!resource?.enabled) throw notFound('Enabled Resource Server was not found.')
+  const authorization = await activeConnectorAuthorizationForResource(deps, resource)
+  return { resource, authorization }
+}
+
+async function activeConnectorAuthorizationForResource(
+  deps: Deps,
+  resource: ApiResourceResponse,
+  clientGeneration?: number,
+) {
+  if (!resource.connectorId || resource.authorizationModel !== 'external') return null
+  const connector = await deps.connectors.findById(resource.connectorId)
+  return resolveExternalAuthorization(deps, resource, connector ?? undefined, clientGeneration)
+}
+
+async function requireActiveIdentityAndBinding(principal: AgentResourcePrincipal) {
+  if (
+    principal.identity.id !== principal.identityId ||
+    principal.identity.status !== 'active' ||
+    principal.binding.agentIdentityId !== principal.identityId ||
+    principal.binding.protocolAgentId !== principal.protocolAgentId ||
+    principal.binding.hostId !== principal.hostId ||
+    principal.binding.status !== 'active'
+  ) {
     throw forbidden('An active Agent identity and host binding are required.')
   }
-  return identity
+  return { identity: principal.identity, bindings: [principal.binding] }
 }
 
 async function requireControlledConnection(deps: Deps, connectionId: string, actorUserId: string) {

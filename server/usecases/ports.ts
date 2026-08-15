@@ -1078,6 +1078,9 @@ export interface AgentIdentityRepository {
   findLatestApprovedIdentityIntent(protocolAgentId: string): Promise<AgentEnrollmentIntentRecord | null>
   findProtocolAgent(id: string): Promise<AgentRecord | null>
   findBindingByProtocolAgent(id: string): Promise<AgentIdentityBindingRecord | null>
+  findActiveBindingByProtocolAgent(
+    id: string,
+  ): Promise<{ identity: AgentIdentityRecord; binding: AgentIdentityBindingRecord } | null>
   findActiveByProtocolAgent(id: string): Promise<AgentIdentityAggregate | null>
   createIdentity(input: {
     identity: AgentIdentityRecord

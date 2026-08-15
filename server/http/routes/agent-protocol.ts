@@ -222,6 +222,8 @@ function resourcePrincipal(c: Context) {
     identityId: authenticated.identityId,
     protocolAgentId: authenticated.protocolAgentId,
     hostId: authenticated.hostId,
+    identity: authenticated.identity,
+    binding: authenticated.binding,
   }
 }
 

@@ -340,6 +340,31 @@ async function loadAuthorizationRoutes(agentMode: 'authority' | 'bootstrap' | nu
 function withAgentContext(hasAuthority: boolean) {
   const app = new Hono()
   const deps = createTestDeps()
+  const now = new Date('2026-08-14T00:00:00.000Z')
+  const identity = {
+    id: 'identity-1',
+    issuer: 'https://auth.example.com/api/auth',
+    subject: 'agt_1',
+    username: 'agent',
+    name: 'Agent',
+    ownerUserId: null,
+    ownerOrganizationId: 'org-1',
+    status: 'active' as const,
+    deletedAt: null,
+    createdAt: now,
+    updatedAt: now,
+  }
+  const binding = {
+    id: 'binding-1',
+    agentIdentityId: identity.id,
+    protocolAgentId: 'agent-1',
+    hostId: 'host-1',
+    status: 'active',
+    boundAt: now,
+    revokedAt: null,
+    createdAt: now,
+    updatedAt: now,
+  }
   app.use('*', async (c, next) => {
     c.set('principal', {
       session: null,
@@ -350,6 +375,8 @@ function withAgentContext(hasAuthority: boolean) {
         identityId: 'identity-1',
         protocolAgentId: 'agent-1',
         hostId: 'host-1',
+        identity,
+        binding,
         scopes: ['resource-servers:read'],
         authority: hasAuthority ? { kind: 'organization', organizationId: 'org-1' } : null,
       },

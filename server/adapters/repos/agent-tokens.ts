@@ -20,8 +20,10 @@ async function consumeJti(
   input: { jtiHash: string; keyThumbprint: string; expiresAt: Date; createdAt: Date },
 ) {
   try {
-    await db.delete(agentDpopJti).where(lt(agentDpopJti.expiresAt, input.createdAt))
-    await db.insert(agentDpopJti).values(input)
+    await db.batch([
+      db.delete(agentDpopJti).where(lt(agentDpopJti.expiresAt, input.createdAt)),
+      db.insert(agentDpopJti).values(input),
+    ])
     return true
   } catch (error) {
     if (isUniqueConstraint(error)) return false

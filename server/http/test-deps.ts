@@ -122,6 +122,7 @@ export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> =
       findLatestApprovedIdentityIntent: vi.fn().mockResolvedValue(null),
       findProtocolAgent: vi.fn().mockResolvedValue(null),
       findBindingByProtocolAgent: vi.fn().mockResolvedValue(null),
+      findActiveBindingByProtocolAgent: vi.fn().mockResolvedValue(null),
       findActiveByProtocolAgent: vi.fn().mockResolvedValue(null),
       createIdentity: vi.fn(),
       claimIdentityProfile: vi.fn().mockResolvedValue(null),
