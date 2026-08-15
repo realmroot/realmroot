@@ -14,6 +14,15 @@ export interface TransactionalEmail {
   template: EmailTemplate
 }
 
+export function isEmailDeliveryReady(
+  binding: SendEmail | undefined,
+  stored: EmailServiceSettings | null,
+  fallback?: EmailSenderConfig,
+) {
+  if (!binding) return false
+  return stored ? stored.enabled : Boolean(fallback)
+}
+
 export function createEmailSender(binding: SendEmail, config: EmailSenderConfig): EmailGateway {
   return {
     async send(email: TransactionalEmail) {

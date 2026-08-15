@@ -27,6 +27,7 @@ export const authClient = createAuthClient({
 })
 
 type NativeAuthResult = {
+  token?: string | null
   redirect?: boolean
   url?: string
   redirectTo?: string

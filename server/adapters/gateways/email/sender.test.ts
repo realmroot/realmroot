@@ -1,8 +1,29 @@
-import { createConfiguredEmailSender, createEmailSender } from '@server/adapters/gateways/email/sender'
+import {
+  createConfiguredEmailSender,
+  createEmailSender,
+  isEmailDeliveryReady,
+} from '@server/adapters/gateways/email/sender'
 import { renderEmailTemplate } from '@server/adapters/gateways/email/templates'
 import { describe, expect, it, vi } from 'vitest'
 
 describe('createEmailSender', () => {
+  it('treats email delivery as ready only with a binding and an enabled sender', () => {
+    const binding = { send: vi.fn(async () => ({ messageId: 'test' })) }
+    const enabled = {
+      provider: 'cloudflare_email' as const,
+      enabled: true,
+      fromEmail: 'auth@example.com',
+      fromName: null,
+      replyToEmail: null,
+    }
+
+    expect(isEmailDeliveryReady(binding, enabled)).toBe(true)
+    expect(isEmailDeliveryReady(binding, { ...enabled, enabled: false }, { from: 'fallback@example.com' })).toBe(false)
+    expect(isEmailDeliveryReady(binding, null, { from: 'fallback@example.com' })).toBe(true)
+    expect(isEmailDeliveryReady(binding, null)).toBe(false)
+    expect(isEmailDeliveryReady(undefined, enabled)).toBe(false)
+  })
+
   it('sends rendered transactional email through the injected binding', async () => {
     const send = vi.fn().mockResolvedValue({ messageId: 'email-1' })
     const sender = createEmailSender(

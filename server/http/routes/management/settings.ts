@@ -164,6 +164,7 @@ export function createManagementSettingsRoutes(securityPolicy?: SecurityPolicy) 
 
 async function versionedResponse<T>(c: Context, representation: T) {
   const current = await representationWithEtag(representation)
+  c.header('Cache-Control', 'private, no-store, no-transform')
   c.header('ETag', current.etag)
   return c.json(current.representation)
 }

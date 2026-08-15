@@ -230,6 +230,37 @@ describe('auth.test 1', () => {
     })
   })
 
+  it('[spec: hosted-auth/normal-signup-signin-account] requires email verification when delivery is ready', () => {
+    const auth = createAuth(
+      {} as Database,
+      createIdentifierGeneratorFake(),
+      '01234567890123456789012345678901',
+      'https://auth.example.com',
+      ['https://auth.example.com'],
+      createEmailSenderMock(),
+      createSecurityPolicy(),
+      undefined,
+      { emailDeliveryReady: true },
+    )
+
+    expect(auth.options.emailVerification?.sendOnSignUp).toBe(true)
+    expect(auth.options.emailVerification?.sendOnSignIn).toBe(true)
+    expect(auth.options.emailAndPassword?.requireEmailVerification).toBe(true)
+
+    const withoutDelivery = createAuth(
+      {} as Database,
+      createIdentifierGeneratorFake(),
+      '01234567890123456789012345678901',
+      'https://auth.example.com',
+      ['https://auth.example.com'],
+      createEmailSenderMock(),
+      createSecurityPolicy(),
+    )
+    expect(withoutDelivery.options.emailVerification?.sendOnSignUp).toBe(false)
+    expect(withoutDelivery.options.emailVerification?.sendOnSignIn).toBe(false)
+    expect(withoutDelivery.options.emailAndPassword?.requireEmailVerification).toBe(false)
+  })
+
   it('exposes security, email OTP, username, and organization invitation APIs', () => {
     const auth = createAuth(
       {} as Database,

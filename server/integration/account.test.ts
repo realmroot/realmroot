@@ -4,7 +4,10 @@ import {
   agentIdentity,
   agentIdentityBinding,
   apiResource,
+  account as authAccount,
   identityProviderConnector,
+  providerConnection,
+  providerResourceAuthorization,
   resourceConnectionIntent,
   resourceScopeEntitlement,
   verification,
@@ -72,6 +75,7 @@ describe('account self-service over real D1', () => {
   })
 
   it('completes hosted sign-up, sign-in, and account center as one real journey [spec: hosted-auth/normal-signup-signin-account]', async () => {
+    harness = await createHarness({ emailDeliveryReady: true })
     // Bootstrap the first admin so the deployment is past first-run onboarding,
     // then run public hosted sign-up -> sign-in -> account center over real D1.
     await bootstrapAdmin(harness)
@@ -88,11 +92,60 @@ describe('account self-service over real D1', () => {
     })
     expect(signUp.status, await signUp.clone().text()).toBe(200)
 
+    const unverifiedSignIn = await harness.request('/api/auth/sign-in/email', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'newcomer@example.com', password: 'newcomer-password-2026' }),
+    })
+    expect(unverifiedSignIn.status).toBe(403)
+    await expect(unverifiedSignIn.json()).resolves.toMatchObject({ code: 'EMAIL_NOT_VERIFIED' })
+
+    const verificationMessage = harness.sentEmails.find((message) => message.subject === 'Verify your email address')
+    expect(verificationMessage?.text).toBeTruthy()
+    const verificationUrl = new URL(verificationMessage?.text?.split('\n').at(-1) ?? '')
+    const verify = await harness.request(`${verificationUrl.pathname}${verificationUrl.search}`)
+    expect(verify.status).toBe(302)
+
     const cookie = await signIn(harness, 'newcomer@example.com', 'newcomer-password-2026')
 
     const profile = await harness.request('/api/account/profile', { headers: { cookie } })
     expect(profile.status).toBe(200)
     expect(((await profile.json()) as { user: { email: string } }).user.email).toBe('newcomer@example.com')
+  })
+
+  it('sends verification when delivery becomes ready for an existing account [spec: hosted-auth/email-readiness-verification]', async () => {
+    await bootstrapAdmin(harness)
+    const signUp = await harness.request('/api/auth/sign-up/email', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: baseURL },
+      body: JSON.stringify({
+        email: 'existing@example.com',
+        name: 'Existing User',
+        username: 'existinguser',
+        password: 'existing-password-2026',
+      }),
+    })
+    expect(signUp.status, await signUp.clone().text()).toBe(200)
+    expect(harness.sentEmails).toHaveLength(0)
+
+    harness = await createHarness({ emailDeliveryReady: true })
+    const blockedSignIn = await harness.request('/api/auth/sign-in/username', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ username: 'existinguser', password: 'existing-password-2026' }),
+    })
+    expect(blockedSignIn.status).toBe(403)
+    await expect(blockedSignIn.json()).resolves.toMatchObject({ code: 'EMAIL_NOT_VERIFIED' })
+
+    const verificationMessage = harness.sentEmails.find((message) => message.subject === 'Verify your email address')
+    expect(verificationMessage?.text).toBeTruthy()
+    const verificationUrl = new URL(verificationMessage?.text?.split('\n').at(-1) ?? '')
+    const verify = await harness.request(`${verificationUrl.pathname}${verificationUrl.search}`)
+    expect(verify.status).toBe(302)
+
+    await expect(signIn(harness, 'existing@example.com', 'existing-password-2026')).resolves.toContain(
+      'better-auth.session_token=',
+    )
   })
 
   it('reads and updates the profile through real SQL [spec: account-center/profile-update]', async () => {
@@ -467,6 +520,115 @@ describe('account self-service over real D1', () => {
       ownerUserId: userId,
       status: 'pending',
     })
+  })
+
+  it('[spec: account-center/provider-connection-sign-in-linking] attaches matching sign-in without replacing Provider authority', async () => {
+    const { userId } = await signedInUser(harness)
+    const now = new Date()
+    await harness.db.insert(identityProviderConnector).values({
+      id: 'connector-link-provider',
+      slug: 'link-provider',
+      providerType: 'social',
+      providerId: 'link-provider',
+      displayName: 'Link Provider',
+      enabled: true,
+      authenticationEnabled: true,
+      resourceAuthorizationEnabled: true,
+      createdAt: now,
+      updatedAt: now,
+    })
+    await harness.db.insert(apiResource).values({
+      id: 'resource-link-provider',
+      identifier: 'link-provider-api',
+      name: 'Link Provider API',
+      resourceUrl: 'https://adapter.example.com/link-provider',
+      authorizationModel: 'external',
+      connectorId: 'connector-link-provider',
+      ownerOrganizationId: platformOrganizationId,
+      createdAt: now,
+      updatedAt: now,
+    })
+    await harness.db.insert(providerConnection).values({
+      id: 'connection-link-provider',
+      connectorId: 'connector-link-provider',
+      ownerUserId: userId,
+      externalSubject: 'provider-subject',
+      displayName: 'Provider Subject',
+      status: 'active',
+      createdAt: now,
+      updatedAt: now,
+    })
+    await harness.db.insert(providerResourceAuthorization).values({
+      id: 'authorization-link-provider',
+      providerConnectionId: 'connection-link-provider',
+      resourceId: 'resource-link-provider',
+      status: 'active',
+      createdAt: now,
+      updatedAt: now,
+    })
+
+    await harness.db.insert(authAccount).values({
+      id: 'account-link-provider',
+      accountId: 'provider-subject',
+      providerId: 'link-provider',
+      userId,
+      createdAt: now,
+      updatedAt: now,
+    })
+
+    expect(
+      await harness.db
+        .select()
+        .from(providerConnection)
+        .where(eq(providerConnection.connectorId, 'connector-link-provider')),
+    ).toMatchObject([
+      {
+        id: 'connection-link-provider',
+        authenticationAccountId: 'account-link-provider',
+        externalSubject: 'provider-subject',
+      },
+    ])
+    expect(
+      await harness.db
+        .select()
+        .from(providerResourceAuthorization)
+        .where(eq(providerResourceAuthorization.id, 'authorization-link-provider')),
+    ).toMatchObject([{ providerConnectionId: 'connection-link-provider', status: 'active' }])
+
+    await expect(
+      harness.db.insert(authAccount).values({
+        id: 'account-link-provider-mismatch',
+        accountId: 'different-provider-subject',
+        providerId: 'link-provider',
+        userId,
+        createdAt: now,
+        updatedAt: now,
+      }),
+    ).rejects.toThrow()
+    expect(
+      await harness.db
+        .select({ id: authAccount.id })
+        .from(authAccount)
+        .where(eq(authAccount.id, 'account-link-provider-mismatch')),
+    ).toEqual([])
+    expect(
+      await harness.db
+        .select()
+        .from(providerConnection)
+        .where(eq(providerConnection.connectorId, 'connector-link-provider')),
+    ).toMatchObject([
+      {
+        id: 'connection-link-provider',
+        authenticationAccountId: 'account-link-provider',
+        externalSubject: 'provider-subject',
+      },
+    ])
+    expect(
+      await harness.db
+        .select()
+        .from(providerResourceAuthorization)
+        .where(eq(providerResourceAuthorization.id, 'authorization-link-provider')),
+    ).toMatchObject([{ providerConnectionId: 'connection-link-provider', status: 'active' }])
   })
 
   it('links and unlinks a SIWE wallet address through real SQL', async () => {

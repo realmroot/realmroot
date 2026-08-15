@@ -427,10 +427,10 @@ export type DeveloperSettingsViewModel = {
 export async function getDeveloperSettings(): Promise<DeveloperSettingsViewModel> {
   const [organizationCreation, consoleAccess] = await Promise.all([
     readVersionedResponse<OrganizationCreationPolicyResponse>(
-      apiClient.api.realm['organization-creation-policy'].$get(),
+      apiClient.api.realm['organization-creation-policy'].$get(undefined, versionedGetOptions),
     ),
     readVersionedResponse<DeveloperConsoleAccessPolicyResponse>(
-      apiClient.api.realm['developer-console-access-policy'].$get(),
+      apiClient.api.realm['developer-console-access-policy'].$get(undefined, versionedGetOptions),
     ),
   ])
   return developerSettingsViewModel(organizationCreation, consoleAccess)
@@ -464,7 +464,7 @@ export async function updateDeveloperSettings(input: DeveloperSettingsViewModel)
 }
 
 export function getRealm(): Promise<ManagementRealmResponse & { etag: string }> {
-  return readVersionedResponse<ManagementRealmResponse>(apiClient.api.realm.$get())
+  return readVersionedResponse<ManagementRealmResponse>(apiClient.api.realm.$get(undefined, versionedGetOptions))
 }
 
 export function updateRealm({ input, etag }: { input: UpdateManagementRealmRequest; etag: string }) {
@@ -475,7 +475,7 @@ export function updateRealm({ input, etag }: { input: UpdateManagementRealmReque
 
 export function getEmailDeliveryConfiguration(): Promise<EmailDeliveryConfigurationResponse & { etag: string }> {
   return readVersionedResponse<EmailDeliveryConfigurationResponse>(
-    apiClient.api.realm['email-delivery-configuration'].$get(),
+    apiClient.api.realm['email-delivery-configuration'].$get(undefined, versionedGetOptions),
   )
 }
 
@@ -510,11 +510,13 @@ async function readVersionedResponse<T extends object, Status extends number = n
   request: Promise<ClientResponse<T, Status, 'json'>>,
 ): Promise<T & { etag: string }> {
   const response = await request
+  const representation = (await readRpcResponse(Promise.resolve(response))) as T
   const etag = response.headers.get('etag')
   if (!etag) throw new Error('Versioned resource response did not include an ETag.')
-  const representation = (await readRpcResponse(Promise.resolve(response))) as T
   return { ...representation, etag }
 }
+
+const versionedGetOptions = { init: { cache: 'no-store' as const } }
 
 export function getAgentInventory(query: Partial<import('@shared/api/agent-api').ListAgentsQuery> = {}): Promise<{
   items: import('@shared/api/agent-api').ManagementAgent[]

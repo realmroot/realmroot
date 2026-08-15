@@ -25,6 +25,8 @@ function requestDetails(input: RequestInfo | URL, init?: RequestInit) {
   const url = new URL(request?.url ?? String(input), 'https://realmroot.test')
   return {
     body: request?.body ? request.clone().json() : Promise.resolve(init?.body ? JSON.parse(String(init.body)) : null),
+    cache: request?.cache ?? init?.cache ?? 'default',
+    headers: request?.headers ?? new Headers(init?.headers),
     method: request?.method ?? init?.method ?? 'GET',
     path: url.pathname,
   }
@@ -130,6 +132,81 @@ describe('deployment settings operations', () => {
     fireEvent.change(screen.getByLabelText('Sender address'), { target: { value: 'sender@example.com' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
     await waitFor(() => expect(screen.queryByRole('heading', { name: 'Configure email delivery' })).toBeNull())
+  })
+
+  it('[spec: admin-console/admin-email-delivery-settings] refreshes a stale Email version and retries a safe save', async () => {
+    let reads = 0
+    const readCaches: Array<RequestCache | undefined> = []
+    const ifMatches: string[] = []
+    vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
+      const request = requestDetails(input, init)
+      if (request.path === '/api/realm/email-delivery-configuration') {
+        if (request.method === 'GET') {
+          reads += 1
+          readCaches.push(request.cache)
+          return jsonResponse(emailSettings, 200, { ETag: reads === 1 ? 'W/"email-v1"' : '"email-v2"' })
+        }
+        ifMatches.push(request.headers.get('If-Match') ?? '')
+        if (ifMatches.length === 1) {
+          return jsonResponse(
+            {
+              error: {
+                code: 'precondition_failed',
+                message: 'Email delivery configuration changed after it was read.',
+              },
+            },
+            412,
+          )
+        }
+        return jsonResponse({ ...(await request.body), bindingAvailable: true, source: 'database' }, 200, {
+          ETag: '"email-v3"',
+        })
+      }
+      return consoleSharedFetch(input, init)
+    })
+
+    renderWithQuery(<SettingsPage section="email" />)
+    fireEvent.change(await screen.findByLabelText('Sender address'), { target: { value: 'auth@example.com' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() => expect(ifMatches).toEqual(['W/"email-v1"', '"email-v2"']))
+    expect(readCaches).toEqual(['no-store', 'no-store'])
+    expect(screen.getByLabelText('Sender address')).toHaveProperty('value', 'auth@example.com')
+    expect(screen.queryByText('Versioned resource response did not include an ETag.')).toBeNull()
+  })
+
+  it('does not retry a stale Email save after another administrator changes editable settings', async () => {
+    let reads = 0
+    let writes = 0
+    vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
+      const request = requestDetails(input, init)
+      if (request.path === '/api/realm/email-delivery-configuration') {
+        if (request.method === 'GET') {
+          reads += 1
+          return jsonResponse(
+            reads === 1 ? emailSettings : { ...emailSettings, fromEmail: 'other-admin@example.com' },
+            200,
+            { ETag: reads === 1 ? '"email-v1"' : '"email-v2"' },
+          )
+        }
+        writes += 1
+        return jsonResponse(
+          {
+            error: { code: 'precondition_failed', message: 'Email delivery configuration changed after it was read.' },
+          },
+          412,
+        )
+      }
+      return consoleSharedFetch(input, init)
+    })
+
+    renderWithQuery(<SettingsPage section="email" />)
+    fireEvent.change(await screen.findByLabelText('Sender address'), { target: { value: 'auth@example.com' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    expect(await screen.findByText('Email delivery configuration changed after it was read.')).toBeTruthy()
+    expect(writes).toBe(1)
+    expect(screen.getByLabelText('Sender address')).toHaveProperty('value', 'auth@example.com')
   })
 
   it('renders approved-user fallback labels while keeping Console access read-only', async () => {

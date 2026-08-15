@@ -134,6 +134,15 @@ Feature: Account Center
     When I disconnect the Provider Connection
     Then its sign-in binding and external Resource authorizations are revoked together
 
+  @entrypoint:product-ui @journey:provider-connection-sign-in-linking
+  Scenario: An existing Provider Connection can add sign-in
+    Given I connected a Provider account for Agent access without enabling sign-in
+    And the Provider Connector is available for sign-in
+    And the Provider account uses a different verified email from my Realmroot account
+    When I link sign-in from the existing Provider Connection
+    Then Realmroot redirects me through the Provider account-linking flow
+    And the existing Provider Connection gains sign-in without creating a second connection
+
   @entrypoint:product-ui @journey:provider-identity-ownership
   Scenario: A Provider identity belongs to one Realmroot account
     Given my Provider identity is already connected to another Realmroot account

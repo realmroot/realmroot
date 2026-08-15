@@ -2,6 +2,7 @@
 /// <reference path="./worker-configuration.d.ts" />
 
 import type { SecurityPolicy } from '@shared/api/security'
+import { z } from 'zod'
 
 export interface EmailAddress {
   email: string
@@ -88,6 +89,10 @@ export function validateEnv(env: Env, requestUrl: string): RuntimeConfig {
 
   if (!env.CREDENTIAL_ENCRYPTION_KEY || env.CREDENTIAL_ENCRYPTION_KEY.length < 32) {
     throw new Error('CREDENTIAL_ENCRYPTION_KEY must contain at least 32 characters.')
+  }
+
+  if (env.EMAIL_FROM && !z.email().safeParse(env.EMAIL_FROM).success) {
+    throw new Error('EMAIL_FROM must be a valid email address.')
   }
 
   return {

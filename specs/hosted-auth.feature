@@ -54,16 +54,20 @@ Feature: Hosted authentication
   @entrypoint:product-ui @journey:normal-signup-signin-account
   Scenario: Sign-up, sign-in, and Account Center complete as one real journey
     Given public sign-up is enabled
+    And system email delivery is ready
     When I create a user from hosted sign-up
+    Then sign-in is blocked until I verify the email address
+    When I follow the verification message
     And I sign in as that user
     Then Account Center loads for the created account
 
   @entrypoint:product-ui @journey:sign-up
   Scenario: Hosted sign-up creates an account
     Given public sign-up is enabled
+    And system email delivery is not ready
     When I submit name, email, username, and password on /auth/sign-up
     Then the account is created through the real auth endpoint
-    And the page shows next-step confirmation
+    And the authenticated session continues without claiming a verification message was sent
 
   @entrypoint:product-ui @journey:sign-up-disabled
   Scenario: Disabled sign-up blocks UI and direct API registration
@@ -101,6 +105,15 @@ Feature: Hosted authentication
     And I submit the latest verification code
     Then the email is marked verified
     And the confirmation offers a return to hosted sign-in
+
+  @entrypoint:product-ui @journey:email-readiness-verification
+  Scenario: Email readiness activates verification without locking existing accounts
+    Given an existing password account has an unverified email
+    And system email delivery becomes ready
+    When I sign in with valid credentials
+    Then sign-in is blocked and a verification message is sent
+    When I follow the verification message
+    Then I can sign in to the existing account
 
   @entrypoint:product-ui @journey:hosted-auth-error-flow
   Scenario: Hosted auth errors show recovery UI

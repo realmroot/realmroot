@@ -72,6 +72,7 @@ export function createAuth(
   },
   options: {
     builtInProviders?: ManagementSignInSettingsResponse['builtInProviders']
+    emailDeliveryReady?: boolean
     twoFactorEmailOtpEnabled?: boolean
     validAudiences?: string[]
     externalHttp?: Deps['externalHttp']
@@ -229,6 +230,7 @@ export function createAuth(
     account: {
       accountLinking: {
         trustedProviders: connectors.trustedProviders,
+        allowDifferentEmails: true,
       },
     },
     user: {
@@ -250,7 +252,8 @@ export function createAuth(
       },
     },
     emailVerification: {
-      sendOnSignUp: true,
+      sendOnSignUp: options.emailDeliveryReady ?? false,
+      sendOnSignIn: options.emailDeliveryReady ?? false,
       sendVerificationEmail: async ({ user, url }) => {
         await emailSender.send({
           to: user.email,
@@ -263,6 +266,7 @@ export function createAuth(
     },
     emailAndPassword: {
       enabled: true,
+      requireEmailVerification: options.emailDeliveryReady ?? false,
       sendResetPassword: async ({ user, url }) => {
         await emailSender.send({
           to: user.email,
