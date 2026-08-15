@@ -1458,42 +1458,32 @@ export async function issueTargetAccessToken(
   signer: AgentAssertionSigner,
 ) {
   const identity = await requireActiveIdentityAndBinding(principal)
-  const request = await deps.externalResources.findAccessRequest(requestId)
+  const storedRequest = await deps.externalResources.findAccessRequest(requestId)
   if (
-    !request ||
-    request.agentIdentityId !== principal.identityId ||
-    (request.status !== 'approved' && request.status !== 'consumed')
+    !storedRequest ||
+    storedRequest.agentIdentityId !== principal.identityId ||
+    (storedRequest.status !== 'approved' && storedRequest.status !== 'consumed')
   ) {
     throw forbidden('Approved Agent access request is required.')
   }
-  const entitlementIds = request.approvedEntitlements.map((snapshot) => snapshot.entitlementId)
-  const entitlements = await deps.externalResources.findEntitlements(entitlementIds)
   const now = new Date()
-  if (request.approvedEntitlements.length !== request.scopes.length) {
-    throw forbidden('Every approved scope requires an Entitlement snapshot.')
+  const entitlements = await activeContextEntitlements(deps, {
+    agentIdentityId: principal.identityId,
+    resourceServerId: storedRequest.resourceId,
+    connectionId: storedRequest.connectionId,
+    authorizationDetails: storedRequest.authorizationDetails,
+    now,
+  })
+  if (entitlements.length === 0) throw forbidden('The selected Resource Context has no active Permissions.')
+  const request: AgentAccessRequestRecord = {
+    ...storedRequest,
+    scopes: entitlements.map((entitlement) => entitlement.scope).sort(),
+    approvedEntitlements: entitlements.map((entitlement) => ({
+      scope: entitlement.scope,
+      entitlementId: entitlement.id,
+    })),
   }
-  if (entitlements.length !== entitlementIds.length) {
-    throw forbidden('Every approved Entitlement must still exist.')
-  }
-  for (const { scope, entitlementId } of request.approvedEntitlements) {
-    const entitlement = entitlements.find((candidate) => candidate.id === entitlementId)
-    if (!entitlement) throw forbidden('Every approved Entitlement must still exist.')
-    if (
-      entitlement.endedAt !== null ||
-      (entitlement.expiresAt !== null && entitlement.expiresAt.getTime() <= now.getTime())
-    ) {
-      throw forbidden('Every approved Entitlement must still be active.')
-    }
-    if (
-      entitlement.scope !== scope ||
-      entitlement.agentIdentityId !== principal.identityId ||
-      entitlement.resourceServerId !== request.resourceId ||
-      entitlement.connectionId !== request.connectionId ||
-      !exactAuthorizationDetails(entitlement.authorizationDetails, request.authorizationDetails)
-    ) {
-      throw forbidden('Approved Entitlement boundaries must remain unchanged.')
-    }
-  }
+  const entitlementIds = entitlements.map((entitlement) => entitlement.id)
   const resource = await deps.authorization.findResource(request.resourceId)
   if (!resource?.enabled) throw forbidden('Enabled Resource Server is required.')
   validateResourceRequestedScopes(resource, request.scopes)
@@ -1659,6 +1649,13 @@ export async function issueTargetAccessToken(
   })
   const lease = await deps.externalResources.issueTokenLeaseWithAudit(
     leaseRecord,
+    {
+      agentIdentityId: request.agentIdentityId,
+      resourceServerId: request.resourceId,
+      connectionId: request.connectionId,
+      authorizationContextHash: await sha256(canonicalJson(request.authorizationDetails)),
+      scopes: request.scopes,
+    },
     entitlements.filter((entitlement) => entitlement.mode === 'once').map((entitlement) => entitlement.id),
     now,
     audit,
@@ -1685,10 +1682,7 @@ export async function createAccessRequestCredential(
   signer: AgentAssertionSigner,
 ) {
   const request = await getAgentAccessRequest(deps, requestId, principal)
-  if (
-    (request.status !== 'approved' && request.status !== 'consumed') ||
-    request.approvedEntitlements.length !== request.scopes.length
-  ) {
+  if (request.status !== 'approved' && request.status !== 'consumed') {
     throw forbidden('Approved Resource access is required.')
   }
   const token = await issueTargetAccessToken(deps, request.id, dpopProof, credentialRequestUrl, principal, signer)
@@ -1791,6 +1785,13 @@ async function issueNativeAccessToken(
   })
   const lease = await deps.externalResources.issueTokenLeaseWithAudit(
     leaseRecord,
+    {
+      agentIdentityId: request.agentIdentityId,
+      resourceServerId: request.resourceId,
+      connectionId: request.connectionId,
+      authorizationContextHash: await sha256(canonicalJson(request.authorizationDetails)),
+      scopes: request.scopes,
+    },
     entitlements.filter((entitlement) => entitlement.mode === 'once').map((entitlement) => entitlement.id),
     now,
     audit,
@@ -2114,6 +2115,26 @@ async function activeResourceScopes(
         .map((entitlement) => entitlement.scope),
     ),
   ].sort()
+}
+
+async function activeContextEntitlements(
+  deps: Deps,
+  context: {
+    agentIdentityId: string
+    resourceServerId: string
+    connectionId: string | null
+    authorizationDetails: AuthorizationDetail[]
+    now: Date
+  },
+) {
+  return (await deps.externalResources.listActiveEntitlementsByAgent(context.agentIdentityId, context.now))
+    .filter(
+      (entitlement) =>
+        entitlement.resourceServerId === context.resourceServerId &&
+        entitlement.connectionId === context.connectionId &&
+        exactAuthorizationDetails(entitlement.authorizationDetails, context.authorizationDetails),
+    )
+    .sort((left, right) => left.scope.localeCompare(right.scope))
 }
 
 async function realmrootAuthorityDetailsCatalog(
@@ -3454,11 +3475,7 @@ function toAccessRequest(
     },
     links: {
       self,
-      credentials:
-        (request.status === 'approved' || request.status === 'consumed') &&
-        request.approvedEntitlements.length === request.scopes.length
-          ? `${self}/credentials`
-          : null,
+      credentials: null,
     },
     credentialOffer: null,
     expiresAt: request.expiresAt,
@@ -3474,12 +3491,17 @@ async function agentAccessRequestRepresentation(
   apiOrigin: string,
 ): Promise<AccessRequest> {
   const representation = toAccessRequest(request, apiOrigin)
-  if (
-    (request.status !== 'approved' && request.status !== 'consumed') ||
-    request.approvedEntitlements.length !== request.scopes.length
-  ) {
+  if (request.status !== 'approved' && request.status !== 'consumed') {
     return representation
   }
+  const entitlements = await activeContextEntitlements(deps, {
+    agentIdentityId: request.agentIdentityId,
+    resourceServerId: request.resourceId,
+    connectionId: request.connectionId,
+    authorizationDetails: request.authorizationDetails,
+    now: new Date(),
+  })
+  if (entitlements.length === 0) return { ...representation, links: { ...representation.links, credentials: null } }
   const resourceServer = await requireEnabledResource(deps, request.resourceId)
   const authorization = await externalOAuthAuthorization(
     deps,
@@ -3488,13 +3510,15 @@ async function agentAccessRequestRepresentation(
       ? providerCredentialGeneration((await deps.externalResources.findConnection(request.connectionId))!)
       : 1,
   )
-  const credentials = representation.links.credentials!
+  const credentials = `${representation.links.self}/credentials`
   return {
     ...representation,
+    links: { ...representation.links, credentials },
     credentialOffer: {
       type: 'dpop',
       resourceIndicator: resourceServer.resourceUrl,
       authorizationDetails: request.authorizationDetails,
+      scopes: entitlements.map((entitlement) => entitlement.scope),
       endpoint: credentials,
       proof: {
         algorithm: 'ES256',

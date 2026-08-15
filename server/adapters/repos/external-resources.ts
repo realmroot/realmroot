@@ -7,6 +7,7 @@ import type {
   ProviderConnectionRecord,
   ProviderResourceAuthorizationRecord,
   ResourceScopeEntitlementRecord,
+  TokenLeaseAuthorizationBoundary,
 } from '@server/usecases/ports'
 import { and, count, desc, eq, exists, gt, inArray, isNotNull, isNull, lte, notExists, or, sql } from 'drizzle-orm'
 import type { Database } from '../../db/client'
@@ -836,9 +837,9 @@ export function createExternalResourceRepository(db: Database, ids: IdentifierGe
       return row ?? null
     },
 
-    async issueTokenLeaseWithAudit(input, consumeEntitlementIds, now, audit) {
+    async issueTokenLeaseWithAudit(input, boundary, consumeEntitlementIds, now, audit) {
       const statements = [
-        insertTokenLease(input),
+        insertTokenLease(input, boundary),
         db
           .update(agentAccessRequest)
           .set({ status: 'consumed', updatedAt: now })
@@ -1068,7 +1069,62 @@ export function createExternalResourceRepository(db: Database, ids: IdentifierGe
     return db.insert(resourceScopeEntitlement).select(source).returning()
   }
 
-  function insertTokenLease(input: Parameters<ExternalResourceRepository['createTokenLease']>[0]) {
+  function insertTokenLease(
+    input: Parameters<ExternalResourceRepository['createTokenLease']>[0],
+    boundary?: TokenLeaseAuthorizationBoundary,
+  ) {
+    const entitlementConditions = boundary
+      ? [
+          eq(agentAccessRequest.agentIdentityId, boundary.agentIdentityId),
+          eq(agentAccessRequest.resourceId, boundary.resourceServerId),
+          sql`${agentAccessRequest.connectionId} is ${boundary.connectionId}`,
+          sql`json_array_length(${JSON.stringify(input.entitlementIds)}) = json_array_length(${JSON.stringify(boundary.scopes)})`,
+          sql`not exists (
+            select 1 from json_each(${JSON.stringify(input.entitlementIds)}) as supplied
+            left join resource_scope_entitlement as entitlement on entitlement.id = supplied.value
+            where entitlement.id is null
+              or entitlement.agent_identity_id <> ${boundary.agentIdentityId}
+              or entitlement.resource_server_id <> ${boundary.resourceServerId}
+              or entitlement.connection_id is not ${boundary.connectionId}
+              or entitlement.authorization_context_hash <> ${boundary.authorizationContextHash}
+              or entitlement.ended_at is not null
+              or (entitlement.expires_at is not null and entitlement.expires_at <= ${input.createdAt.getTime()})
+              or not exists (
+                select 1 from json_each(${JSON.stringify(boundary.scopes)}) as requested
+                where requested.value = entitlement.scope
+              )
+          )`,
+          sql`not exists (
+            select 1 from json_each(${JSON.stringify(boundary.scopes)}) as requested
+            where not exists (
+              select 1 from json_each(${JSON.stringify(input.entitlementIds)}) as supplied
+              join resource_scope_entitlement as entitlement on entitlement.id = supplied.value
+              where entitlement.scope = requested.value
+            )
+          )`,
+        ]
+      : [
+          sql`json_array_length(${agentAccessRequest.approvedEntitlements}) > 0`,
+          sql`not exists (
+            select 1 from json_each(${agentAccessRequest.approvedEntitlements}) as approved
+            left join resource_scope_entitlement as entitlement
+              on entitlement.id = json_extract(approved.value, '$.entitlementId')
+            where entitlement.id is null
+              or entitlement.ended_at is not null
+              or (entitlement.expires_at is not null and entitlement.expires_at <= ${input.createdAt.getTime()})
+              or not exists (
+                select 1 from json_each(${JSON.stringify(input.entitlementIds)}) as supplied
+                where supplied.value = entitlement.id
+              )
+          )`,
+          sql`not exists (
+            select 1 from json_each(${JSON.stringify(input.entitlementIds)}) as supplied
+            where not exists (
+              select 1 from json_each(${agentAccessRequest.approvedEntitlements}) as approved
+              where json_extract(approved.value, '$.entitlementId') = supplied.value
+            )
+          )`,
+        ]
     return db
       .insert(externalTokenLease)
       .select(
@@ -1095,27 +1151,7 @@ export function createExternalResourceRepository(db: Database, ids: IdentifierGe
             and(
               eq(agentAccessRequest.id, input.requestId),
               inArray(agentAccessRequest.status, ['approved', 'consumed']),
-              sql`json_array_length(${agentAccessRequest.approvedEntitlements}) > 0`,
-              sql`not exists (
-                select 1
-                from json_each(${agentAccessRequest.approvedEntitlements}) as approved
-                left join resource_scope_entitlement as entitlement
-                  on entitlement.id = json_extract(approved.value, '$.entitlementId')
-                where entitlement.id is null
-                  or entitlement.ended_at is not null
-                  or (entitlement.expires_at is not null and entitlement.expires_at <= ${input.createdAt.getTime()})
-                  or not exists (
-                    select 1 from json_each(${JSON.stringify(input.entitlementIds)}) as supplied
-                    where supplied.value = entitlement.id
-                  )
-              )`,
-              sql`not exists (
-                select 1 from json_each(${JSON.stringify(input.entitlementIds)}) as supplied
-                where not exists (
-                  select 1 from json_each(${agentAccessRequest.approvedEntitlements}) as approved
-                  where json_extract(approved.value, '$.entitlementId') = supplied.value
-                )
-              )`,
+              ...entitlementConditions,
               or(
                 isNull(agentAccessRequest.connectionId),
                 exists(

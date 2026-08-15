@@ -253,7 +253,11 @@ Feature: Agent identity and delegated API authorization
       And the token identifies the controller as subject and the stable Agent as the RFC 8693 actor
       And the Agent actor carries its issuer, subject, and ai_agent subject profile
       And the Host remains internal credential, binding, revocation, and audit context
-      And the token carries only the approved scopes
+      And the approved access request remains an audit record of the scopes approved in that interaction
+      And its credential offer exposes the Context's one current cumulative scope set
+      And the token carries every currently active Permission for the same Agent, Resource Server, Account Connection, and authorization details
+      And a later expansion replaces the client's Context credential instead of creating a selectable historical offer
+      And revoking one Permission removes only that scope from subsequently issued tokens
       And groups identifies the Agent's organization home space
       And the token does not contain Agent roles
       And the token is bound to the Agent's DPoP key
