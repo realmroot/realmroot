@@ -532,15 +532,24 @@ describe('authorization management over real D1', () => {
       revokedAt: null,
       createdAt: now,
     })
+    const onceBoundary = {
+      agentIdentityId: 'atomic-identity',
+      resourceServerId: resource.id,
+      connectionId: null,
+      authorizationContextHash: 'ctx-empty',
+      scopes: ['files:once'],
+    }
     const [firstLease, secondLease] = await Promise.all([
       harness.deps.externalResources.issueTokenLeaseWithAudit(
         onceLease('atomic-once-lease-1'),
+        onceBoundary,
         ['atomic-once-entitlement'],
         now,
         { ...audit, id: 'atomic-once-audit-1', accessRequestId: 'atomic-once-request' },
       ),
       harness.deps.externalResources.issueTokenLeaseWithAudit(
         onceLease('atomic-once-lease-2'),
+        onceBoundary,
         ['atomic-once-entitlement'],
         now,
         { ...audit, id: 'atomic-once-audit-2', accessRequestId: 'atomic-once-request' },

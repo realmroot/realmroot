@@ -117,13 +117,16 @@ switch for individual workflows.
 ## 6. Obtain And Use A Short-Lived Credential
 
 An approved access request includes a DPoP credential offer containing the
-resource indicator, authorization details, credential endpoint, and proof target. The
-plugin creates the DPoP key locally, obtains the short-lived credential, and
-caches it by Resource Server authorization context. The Agent sees only a safe receipt.
+resource indicator, authorization details, current cumulative scopes, credential
+endpoint, and proof target. The plugin stores exactly one credential source per
+Resource Server authorization context. A later expansion atomically replaces that
+credential metadata instead of adding another selectable offer. The Agent sees only a
+safe receipt.
 
-The Agent reuses that credential across the task. It requests another one only
-when it switches authorization details, the credential expires or is rejected, or the task
-requires an additional scope.
+Each short-lived token is issued from the Context's active Permissions at request
+time. The access request remains approval history; it is not an executable scope
+snapshot. The Agent requests additional approval only when the current cumulative
+authority does not cover an operation.
 
 For native services, Realmroot signs an audience-bound `at+jwt`. For external
 services, Realmroot exchanges controller and Agent authority at the target
@@ -146,9 +149,10 @@ Revoking controller authority, a connection, or an internal grant stops new
 credential issuance; active external leases are sent to the target revocation
 endpoint when supported.
 
-The plugin renews only through the stored generic credential offer. It removes
-credentials rejected during renewal or by a target `401`, after which the
-Agent must rediscover and request current access.
+The plugin renews only through the Context's stored credential endpoint. Realmroot
+returns the current cumulative scope set, so a revoked Permission disappears from
+subsequent tokens and local credential metadata. When no active Permission remains,
+issuance fails and the Agent must request access again.
 
 ## Sources Of Truth
 

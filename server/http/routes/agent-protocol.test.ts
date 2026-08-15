@@ -382,6 +382,7 @@ function accessRequest() {
       type: 'dpop' as const,
       resourceIndicator: 'https://drive.example.com/api',
       authorizationDetails: [authorizationDetail],
+      scopes: ['objects:read'],
       endpoint: 'https://auth.example.com/api/agent/access-requests/request-1/credentials',
       proof: {
         algorithm: 'ES256' as const,

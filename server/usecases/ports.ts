@@ -717,6 +717,14 @@ export interface ExternalTokenLeaseRecord {
   createdAt: Date
 }
 
+export interface TokenLeaseAuthorizationBoundary {
+  agentIdentityId: string
+  resourceServerId: string
+  connectionId: string | null
+  authorizationContextHash: string
+  scopes: string[]
+}
+
 export interface ExternalResourceRepository {
   connectAuthenticationAccount(input: {
     authenticationAccountId: string
@@ -890,6 +898,7 @@ export interface ExternalResourceRepository {
   createTokenLease(input: ExternalTokenLeaseRecord): Promise<ExternalTokenLeaseRecord | null>
   issueTokenLeaseWithAudit(
     input: ExternalTokenLeaseRecord,
+    boundary: TokenLeaseAuthorizationBoundary,
     consumeEntitlementIds: string[],
     now: Date,
     audit: AgentAuditEventRecord,

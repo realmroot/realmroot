@@ -1,5 +1,6 @@
 [
-  { "method": "POST", "path": "/agent/access-requests", "operationId": "createAgentAuthorizationRequest", "semanticHash": "e17abb69020fd31f0a8e50ca6c5760a673ca8ababf97cde3d998367c1546309e" },
+  { "method": "POST", "path": "/agent/access-requests", "operationId": "createAgentAuthorizationRequest", "semanticHash": "4bf72b04074ffc01b02a3cffcb4a26e28187f7fee28c4764a0e85840e81a8a85" },
+  { "method": "GET", "path": "/agent/access-requests/{requestId}", "operationId": "getAgentAuthorizationRequest", "semanticHash": "a10dd22b4bfea3d2d2e124b29b09c54bacb22fe585c15c9d3503ed8f9f48dd4e" },
   { "method": "GET", "path": "/connectors", "operationId": "listConnectors", "semanticHash": "1c13661ea755227cc8d6613a611c8028d540d104aab4bdf5ef0c43c2b5a314c8" },
   { "method": "POST", "path": "/connectors", "operationId": "createConnector", "semanticHash": "712a5a248dbe910a1a08b23abddca92c4c66bf4e903b7ef2897a6c1488072f6b" },
   { "method": "GET", "path": "/connectors/{connectorId}", "operationId": "getConnector", "semanticHash": "46d723f8dc7b88f8d85dae9067862750219fdcb52ca7b8c06acdf23896125971" },

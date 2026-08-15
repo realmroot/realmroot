@@ -464,7 +464,7 @@ export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> =
     },
   )
   base.externalResources.issueTokenLeaseWithAudit.mockImplementation(
-    async (input, _consumeEntitlementIds, now, audit) => {
+    async (input, _boundary, _consumeEntitlementIds, now, audit) => {
       const lease = await base.externalResources.createTokenLease(input)
       if (!lease) return null
       await base.externalResources.consumeAccessRequest(input.requestId, now)

@@ -398,6 +398,7 @@ export const accessRequestSchema = z.object({
       type: z.literal('dpop'),
       resourceIndicator: z.url(),
       authorizationDetails: authorizationDetailsSchema,
+      scopes: scopeListSchema,
       endpoint: z.url(),
       proof: z.object({ algorithm: z.literal('ES256'), method: z.literal('POST'), uri: z.url() }),
     })
