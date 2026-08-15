@@ -3886,6 +3886,28 @@ describe('external API resource authorization', () => {
     ).rejects.toThrow('Resource Server is not visible to this Agent.')
   })
 
+  it('discovers a personal external resource before its account is connected', async () => {
+    const deps = createTestDeps()
+    authorizationDeps(deps)
+    const agent = principal()
+    agent.identity = {
+      ...agent.identity,
+      ownerUserId: 'user-1',
+      ownerOrganizationId: null,
+    }
+    vi.mocked(deps.externalResources.listConnectionsByUser).mockResolvedValue([])
+
+    await expect(discoverAgentResources(deps, agent)).resolves.toMatchObject({
+      items: [{ connection: { status: 'not_connected', displayName: null, authorizedScopes: [] } }],
+    })
+    await expect(
+      listAgentApiResources(deps, agent, { limit: 10, offset: 0 }, 'https://auth.example.com'),
+    ).resolves.toMatchObject({
+      items: [{ authorization: { issuer: 'https://projects.example.com' } }],
+    })
+    expect(deps.externalResources.listConnectionsByUser).toHaveBeenCalledWith('user-1')
+  })
+
   it('exposes Organization and User tenant authority as separate Realmroot Resources [spec: agent-identity/realmroot-built-in-resource-server] [spec: management-api/management-canonical-authority-inventory]', async () => {
     const deps = createTestDeps()
     const builtIn = {
