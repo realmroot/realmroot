@@ -93,6 +93,7 @@ describe('AccountConnectionsPage', () => {
     expect(await screen.findByRole('heading', { name: 'GitHub' })).toBeTruthy()
     expect(screen.getAllByText('octocat')).toHaveLength(2)
     expect(screen.getByText('GitHub Adapter')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Link sign-in' })).toBeNull()
   })
 
   it('[spec: account-center/provider-connections] starts an available Provider authorization flow', async () => {
@@ -177,6 +178,54 @@ describe('AccountConnectionsPage', () => {
     await waitFor(() =>
       expect(assign).toHaveBeenCalledWith('https://github.com/login/oauth/authorize?reauthorize=true'),
     )
+  })
+
+  it('[spec: account-center/provider-connection-sign-in-linking] links sign-in to an existing Provider Connection', async () => {
+    const assign = vi.fn()
+    vi.stubGlobal('location', { ...window.location, origin: 'http://localhost:3000', assign })
+    let linkedBody: unknown
+    server.use(
+      http.get(`${base}/api/account/provider-connectors`, () =>
+        HttpResponse.json({ items: [githubConnector], pagination }),
+      ),
+      http.get(`${base}/api/account/provider-connections`, () =>
+        HttpResponse.json({
+          items: [
+            {
+              id: 'provider-connection-github',
+              connector: githubConnector,
+              externalSubject: 'octocat',
+              displayName: 'The Octocat',
+              capabilities: {
+                signIn: { available: true, active: false },
+                agentAccess: {
+                  available: true,
+                  active: true,
+                  authorizationCount: 1,
+                  resourceNames: ['GitHub Adapter'],
+                },
+              },
+              createdAt: '2026-08-08T00:00:00.000Z',
+              updatedAt: '2026-08-08T00:00:00.000Z',
+            },
+          ],
+          pagination,
+        }),
+      ),
+      http.post(`${base}/api/auth/link-social`, async ({ request }) => {
+        linkedBody = await request.json()
+        return HttpResponse.json({ url: 'https://github.com/login/oauth' })
+      }),
+    )
+
+    renderWithClient(<AccountConnectionsPage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Manage' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Link sign-in' }))
+    await waitFor(() => expect(assign).toHaveBeenCalledWith('https://github.com/login/oauth'))
+    expect(linkedBody).toMatchObject({
+      provider: 'github',
+      callbackURL: 'http://localhost:3000/connections',
+    })
   })
 
   it('stays on the page when a Provider authorization intent cannot be created', async () => {

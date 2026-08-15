@@ -26,6 +26,12 @@ describe('validateEnv', () => {
     ).not.toThrow()
   })
 
+  it('rejects an invalid fallback sender email', () => {
+    expect(() => validateEnv(createEnv({ EMAIL_FROM: 'not-an-email' }), 'https://tenant.example.com')).toThrow(
+      'EMAIL_FROM must be a valid email address.',
+    )
+  })
+
   it('normalizes trusted origins and rejects non-origin entries', () => {
     expect(
       validateEnv(

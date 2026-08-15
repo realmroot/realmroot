@@ -16,6 +16,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { IdentityMultiSelectControl, userOptions } from '@/features/management/ownership-controls'
 import { ResourcePage } from '@/features/management/resource-components'
 import { useAdminMutation } from '@/features/management/utils'
+import { ApiRequestError } from '@/lib/api'
 import {
   consoleQueryKeys,
   getDeveloperSettings,
@@ -60,6 +61,36 @@ const initialSettings: SettingsState = {
   selectedOrganizationIds: [],
 }
 
+type EmailDeliveryConfiguration = Awaited<ReturnType<typeof getEmailDeliveryConfiguration>>
+type ReplaceEmailDeliveryInput = Parameters<typeof replaceEmailDeliveryConfiguration>[0]['input']
+
+async function replaceEmailDeliveryConfigurationSafely({
+  baseline,
+  input,
+}: {
+  baseline: EmailDeliveryConfiguration
+  input: ReplaceEmailDeliveryInput
+}) {
+  try {
+    return await replaceEmailDeliveryConfiguration({ input, etag: baseline.etag })
+  } catch (error) {
+    if (!(error instanceof ApiRequestError) || error.status !== 412) throw error
+    const latest = await getEmailDeliveryConfiguration()
+    if (!sameEditableEmailConfiguration(baseline, latest)) throw error
+    return replaceEmailDeliveryConfiguration({ input, etag: latest.etag })
+  }
+}
+
+function sameEditableEmailConfiguration(left: EmailDeliveryConfiguration, right: EmailDeliveryConfiguration) {
+  return (
+    left.provider === right.provider &&
+    left.enabled === right.enabled &&
+    left.fromEmail === right.fromEmail &&
+    left.fromName === right.fromName &&
+    left.replyToEmail === right.replyToEmail
+  )
+}
+
 export function SettingsPage({ section = 'general' }: { section?: SettingsSection }) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -89,7 +120,7 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
     },
   })
   const emailMutation = useAdminMutation({
-    mutationFn: replaceEmailDeliveryConfiguration,
+    mutationFn: replaceEmailDeliveryConfigurationSafely,
     onSuccess: async (settings) => {
       queryClient.setQueryData(consoleQueryKeys.email, settings)
       setSaved((current) => ({ ...current, ...emailSettingsState(settings) }))
@@ -205,7 +236,7 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
             onSubmit={(event: FormEvent<HTMLFormElement>) => {
               event.preventDefault()
               emailMutation.mutate({
-                etag: emailSettings.data!.etag,
+                baseline: emailSettings.data!,
                 input: {
                   provider: 'cloudflare_email',
                   enabled: saved.emailEnabled,

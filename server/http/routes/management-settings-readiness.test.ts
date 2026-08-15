@@ -196,6 +196,8 @@ describe('management routes 3', () => {
     expect(realmWrite.headers.get('ETag')).toMatch(/^"[a-f0-9]{64}"$/)
     expect(emailRead.headers.get('ETag')).toMatch(/^"[a-f0-9]{64}"$/)
     expect(emailWrite.headers.get('ETag')).toMatch(/^"[a-f0-9]{64}"$/)
+    expect(emailRead.headers.get('Cache-Control')).toBe('private, no-store, no-transform')
+    expect(emailWrite.headers.get('Cache-Control')).toBe('private, no-store, no-transform')
     expect(missingRealmPrecondition.status).toBe(428)
     expect(staleRealmPrecondition.status).toBe(412)
     await expect(realmRead.json()).resolves.toEqual(realm)

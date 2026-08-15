@@ -138,12 +138,33 @@ afterEach(() => {
   cleanup()
   vi.useRealTimers()
   vi.restoreAllMocks()
+  vi.unstubAllGlobals()
   delete window.turnstile
   delete window.ethereum
   window.history.pushState(null, '', '/')
 })
 
 describe('hosted auth pages 2', () => {
+  it('[spec: hosted-auth/sign-up] continues the authenticated session when email delivery is not ready', async () => {
+    const assign = vi.fn()
+    vi.stubGlobal('location', { ...window.location, pathname: '/auth/sign-up', search: '', assign })
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      if (String(input) === '/api/configz') return Promise.resolve(jsonResponse(configz))
+      return Promise.resolve(jsonResponse({ token: 'session-token', user: { email: 'jane@example.com' } }))
+    })
+
+    render(<SignUpPage />)
+
+    fireEvent.change(await screen.findByLabelText('Name'), { target: { value: 'Jane' } })
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'jane@example.com' } })
+    fireEvent.change(screen.getByLabelText('Username'), { target: { value: 'jane' } })
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password-2026' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create account' }))
+
+    await waitFor(() => expect(assign).toHaveBeenCalledWith('/profile'))
+    expect(screen.queryByRole('heading', { name: 'Check your inbox' })).toBeNull()
+  })
+
   it('uses OTP when password auth is disabled', async () => {
     vi.spyOn(window, 'fetch').mockResolvedValue(
       jsonResponse({

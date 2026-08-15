@@ -3,7 +3,7 @@ import { createAuth } from '@server/auth'
 import { createDeps } from '@server/composition'
 import { createDb } from '@server/db/client'
 import { agent, agentCapabilityGrant, agentHost, approvalRequest } from '@server/db/schema'
-import type { Env, RuntimeConfig } from '@server/env'
+import type { EmailMessageBuilder, Env, RuntimeConfig } from '@server/env'
 import { createApp } from '@server/http/app'
 import type { AgentAssertionSigner } from '@server/usecases/external-resources'
 import { publishWebhookEvent } from '@server/usecases/webhooks'
@@ -19,11 +19,16 @@ const authSecret = 'integration-secret-with-enough-entropy-2026-realmroot'
  * outward network/storage gateways (email, R2) are stubbed at the env boundary
  * — every repository, usecase, and SQL statement is the production code path.
  */
-function integrationEnv(): Env {
+function integrationEnv(sentEmails: EmailMessageBuilder[] = []): Env {
   return {
     DB: env.DB,
     ASSET_BUCKET: noopBucket(),
-    EMAIL: { send: async () => ({ messageId: 'integration' }) },
+    EMAIL: {
+      send: async (message: EmailMessageBuilder) => {
+        sentEmails.push(message)
+        return { messageId: 'integration' }
+      },
+    },
     ASSETS: { fetch: async () => new Response(null, { status: 404 }) },
     BETTER_AUTH_SECRET: authSecret,
     CREDENTIAL_ENCRYPTION_KEY: 'integration-credential-encryption-key-2026',
@@ -74,15 +79,20 @@ export interface Harness {
   request: (input: string, init?: RequestInit) => Promise<Response>
   db: ReturnType<typeof createDb>
   deps: ReturnType<typeof createDeps>
+  sentEmails: EmailMessageBuilder[]
   agentTokenSigner: AgentAssertionSigner
 }
 
 /**
  * Build the production app over real D1.
  */
-export async function createHarness(options: { validAudiences?: string[] } = {}): Promise<Harness> {
+export async function createHarness(
+  options: { validAudiences?: string[]; emailDeliveryReady?: boolean } = {},
+): Promise<Harness> {
   const config = integrationConfig()
-  const deps = createDeps(integrationEnv(), config)
+  const sentEmails: EmailMessageBuilder[] = []
+  const runtimeEnv = integrationEnv(sentEmails)
+  const deps = createDeps(runtimeEnv, config)
   const db = createDb(env.DB)
   const emailSender = deps.email
   const auth = createAuth(
@@ -95,6 +105,7 @@ export async function createHarness(options: { validAudiences?: string[] } = {})
     config.securityPolicy,
     undefined,
     {
+      emailDeliveryReady: options.emailDeliveryReady,
       validAudiences: options.validAudiences,
       externalHttp: deps.externalHttp,
       publishWebhookEvent: async (event, data) => {
@@ -111,9 +122,10 @@ export async function createHarness(options: { validAudiences?: string[] } = {})
 
   return {
     app,
-    request: async (input, init) => app.request(new URL(input, baseURL).toString(), init, integrationEnv()),
+    request: async (input, init) => app.request(new URL(input, baseURL).toString(), init, runtimeEnv),
     db,
     deps,
+    sentEmails,
     agentTokenSigner: {
       issuer: `${config.baseURL}/api/auth`,
       sign: async (payload, type) =>

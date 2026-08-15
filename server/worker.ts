@@ -1,5 +1,5 @@
 import { tracing } from 'cloudflare:workers'
-import { createConfiguredEmailSender } from '@server/adapters/gateways/email/sender'
+import { createConfiguredEmailSender, isEmailDeliveryReady } from '@server/adapters/gateways/email/sender'
 import { createSecretCipher } from '@server/adapters/gateways/secrets'
 import { createDrizzleConfigzRepository } from '@server/adapters/repos/configz'
 import { createConnectorRepository } from '@server/adapters/repos/connectors'
@@ -31,6 +31,11 @@ let reconciledBaseURL: string | null = null
 const dynamicConfigRefreshIntervalMs = 5_000
 const publicMetadataCacheControl = 'public, max-age=15, stale-while-revalidate=15, stale-if-error=86400'
 const cachedPublicMetadataPaths = new Set(['/.well-known/agent-configuration'])
+const emailVerificationPolicyPaths = new Set([
+  '/api/auth/sign-up/email',
+  '/api/auth/sign-in/email',
+  '/api/auth/sign-in/username',
+])
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -60,7 +65,7 @@ export default {
         ),
       ])
       const auth = await tracing.enterSpan('realmroot.auth.prepare', () =>
-        getAuth(env, { ...config, securityPolicy }, deps, resourceTokenRequest),
+        getAuth(env, { ...config, securityPolicy }, deps, resourceTokenRequest, emailVerificationPolicyPaths.has(path)),
       )
       const response = await tracing.enterSpan('realmroot.router.dispatch', () =>
         createApp(auth, deps, {
@@ -93,6 +98,7 @@ async function getAuth(
   config: RuntimeConfig,
   deps: ReturnType<typeof createDeps>,
   resourceTokenRequest = false,
+  forceDynamicRefresh = false,
 ): Promise<Auth> {
   const staticKey = [
     config.authSecret,
@@ -107,16 +113,18 @@ async function getAuth(
     cachedStaticKey === staticKey &&
     cachedDb === env.DB &&
     cachedEmail === env.EMAIL &&
+    !forceDynamicRefresh &&
     (resourceTokenRequest || Date.now() - cachedValidatedAt < dynamicConfigRefreshIntervalMs)
   ) {
     return cachedAuth
   }
   const db = createDb(env.DB)
   const configz = createDrizzleConfigzRepository(db)
-  const [connectors, validAudiences, settings] = await Promise.all([
+  const [connectors, validAudiences, settings, emailSettings] = await Promise.all([
     loadAuthConnectorConfig(createConnectorRepository(db, createSecretCipher(config.credentialEncryptionKey))),
     loadValidAudiences(env.DB, config.baseURL),
     configz.getSettings(),
+    configz.getEmailSettings(),
   ])
   const storedBuiltInProviders = settings?.metadata?.builtInProviders
   const builtInProviders = managementBuiltInProviderSettingsSchema.parse(
@@ -130,18 +138,16 @@ async function getAuth(
     config.trustedOrigins.join(','),
     JSON.stringify(config.securityPolicy),
     JSON.stringify(builtInProviders ?? {}),
+    JSON.stringify(emailSettings),
     connectors.cacheKey,
     validAudiences.join(','),
   ].join('\n')
 
   if (!cachedAuth || cachedKey !== cacheKey || cachedDb !== env.DB || cachedEmail !== env.EMAIL) {
-    const emailSender = createConfiguredEmailSender(
-      env.EMAIL,
-      () => configz.getEmailSettings(),
-      config.emailFrom
-        ? { from: config.emailFrom, ...(config.emailFromName ? { fromName: config.emailFromName } : {}) }
-        : undefined,
-    )
+    const fallbackEmailSender = config.emailFrom
+      ? { from: config.emailFrom, ...(config.emailFromName ? { fromName: config.emailFromName } : {}) }
+      : undefined
+    const emailSender = createConfiguredEmailSender(env.EMAIL, () => configz.getEmailSettings(), fallbackEmailSender)
 
     cachedAuth = createAuth(
       db,
@@ -154,6 +160,7 @@ async function getAuth(
       connectors,
       {
         builtInProviders,
+        emailDeliveryReady: isEmailDeliveryReady(env.EMAIL, emailSettings, fallbackEmailSender),
         twoFactorEmailOtpEnabled: config.securityPolicy.mfa.emailOtpEnabled,
         validAudiences,
         externalHttp: deps.externalHttp,

@@ -38,12 +38,7 @@ export function AccountConnectionsPage() {
     if (intent) window.location.assign(intent.authorizationUrl)
   }
 
-  async function connect(connector: AccountProviderConnector) {
-    if (connector.capabilities.connection.method === 'provider_authorization') {
-      await authorizeProvider(connector)
-      return
-    }
-    if (connector.capabilities.connection.method !== 'sign_in') return
+  async function linkProviderSignIn(connector: AccountProviderConnector) {
     const result = await mutate(tt('Redirecting to {{providerName}}.', { providerName: connector.displayName }), () =>
       linkAccount({
         providerType: connector.providerType === 'generic_oauth' ? 'generic_oauth' : 'social',
@@ -54,6 +49,15 @@ export function AccountConnectionsPage() {
     )
     const redirectUrl = readRedirectUrl(result)
     if (redirectUrl) window.location.assign(redirectUrl)
+  }
+
+  async function connect(connector: AccountProviderConnector) {
+    if (connector.capabilities.connection.method === 'provider_authorization') {
+      await authorizeProvider(connector)
+      return
+    }
+    if (connector.capabilities.connection.method !== 'sign_in') return
+    await linkProviderSignIn(connector)
   }
 
   function disconnect(connection: AccountProviderConnection) {
@@ -168,6 +172,7 @@ export function AccountConnectionsPage() {
             connection={selected}
             onClose={() => setSelected(null)}
             onDisconnect={disconnect}
+            onLinkSignIn={(connection) => linkProviderSignIn(connection.connector)}
             onReauthorize={(connection) => authorizeProvider(connection.connector)}
           />
           <DestructiveConfirmationDialog confirmation={confirmation} onClose={() => setConfirmation(null)} />
@@ -214,11 +219,13 @@ function ConnectionSheet({
   connection,
   onClose,
   onDisconnect,
+  onLinkSignIn,
   onReauthorize,
 }: {
   connection: AccountProviderConnection | null
   onClose: () => void
   onDisconnect: (connection: AccountProviderConnection) => void
+  onLinkSignIn: (connection: AccountProviderConnection) => Promise<void>
   onReauthorize: (connection: AccountProviderConnection) => Promise<void>
 }) {
   return (
@@ -281,6 +288,9 @@ function ConnectionSheet({
             </Button>
           ) : null}
           <div className="flex gap-2">
+            {connection?.capabilities.signIn.available && !connection.capabilities.signIn.active ? (
+              <Button onClick={() => void onLinkSignIn(connection)}>{tt('Link sign-in')}</Button>
+            ) : null}
             {connection?.connector.capabilities.connection.method === 'provider_authorization' ? (
               <Button onClick={() => void onReauthorize(connection)}>{tt('Update authorization')}</Button>
             ) : null}

@@ -4,6 +4,7 @@ import {
   authPageHref,
   authRequestContext,
   CaptchaTokenField,
+  navigateAfterAuth,
   PasswordInput,
   resetCaptchaState,
   SocialButtons,
@@ -34,7 +35,7 @@ export function SignUpPage() {
   const [password, setPassword] = useState('')
   const [captchaToken, setCaptchaToken] = useState('')
   const [captchaResetKey, setCaptchaResetKey] = useState(0)
-  const created = submit.message !== null && submit.error === null
+  const [verificationSent, setVerificationSent] = useState(false)
   const authContext = authRequestContext('sign-up')
   const callback = callbackURL()
   const socialProviders = config?.identityProviders ?? []
@@ -44,7 +45,7 @@ export function SignUpPage() {
     event.preventDefault()
     await submitRequest(setSubmit, async () => {
       try {
-        await signUp({
+        const response = await signUp({
           email,
           name,
           password,
@@ -52,6 +53,11 @@ export function SignUpPage() {
           callbackURL: callback,
           captchaToken: config?.captcha?.enabled ? captchaToken : undefined,
         })
+        if (response.token) {
+          navigateAfterAuth(response, callback)
+          return 'Account created. Redirecting to Account Center.'
+        }
+        setVerificationSent(true)
         return 'Account created.'
       } finally {
         resetCaptcha()
@@ -67,7 +73,7 @@ export function SignUpPage() {
     >
       {signupEnabled ? (
         <SignUpCardBody
-          created={created}
+          created={verificationSent}
           email={email}
           form={
             <SignUpForm
@@ -91,7 +97,7 @@ export function SignUpPage() {
           socialButtons={
             socialProviders.length > 0 ? <SocialButtons callback={callback} providers={socialProviders} /> : undefined
           }
-          status={created ? undefined : <SubmitStatus state={submit} />}
+          status={verificationSent ? undefined : <SubmitStatus state={submit} />}
         />
       ) : (
         <SignUpDisabled signInAction={<SpaLink to={authPageHref('/auth/sign-in')}>{tt('Back to sign in')}</SpaLink>} />

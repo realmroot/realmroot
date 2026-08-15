@@ -88,6 +88,20 @@ describe('auth.test 3', () => {
     })
   })
 
+  it('[spec: account-center/provider-connection-sign-in-linking] allows linking a Provider identity with a different email', () => {
+    const auth = createAuth(
+      {} as Database,
+      createIdentifierGeneratorFake(),
+      '01234567890123456789012345678901',
+      'https://auth.example.com',
+      ['https://auth.example.com'],
+      createEmailSenderMock(),
+      createSecurityPolicy(),
+    )
+
+    expect(auth.options.account?.accountLinking?.allowDifferentEmails).toBe(true)
+  })
+
   it('configures username plugin policy', () => {
     const auth = createAuth(
       {} as Database,

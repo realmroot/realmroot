@@ -314,6 +314,8 @@ Feature: Admin Console
     Given the deployment exposes a Cloudflare Email binding
     When I configure the sender identity in Email delivery settings
     Then the management API replaces the Email delivery configuration resource
+    And a stale representation retries only when the editable configuration is unchanged
+    And edge delivery preserves the strong version validator used for conditional writes
     And authentication messages use the stored sender configuration
     And Console reports the binding and configuration state separately
 

@@ -224,6 +224,10 @@ export const credentialOfferResponseHeader = {
   },
 }
 export const etagResponseHeader = {
+  'Cache-Control': {
+    description: 'Prevents storage or transformation of the authenticated mutable representation.',
+    schema: { type: 'string', example: 'private, no-store, no-transform' },
+  },
   ETag: { description: 'Current strong entity tag for the representation.', schema: { type: 'string' } },
 }
 export const idempotencyReplayResponseHeader = {
