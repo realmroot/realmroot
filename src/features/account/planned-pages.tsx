@@ -30,7 +30,6 @@ import {
   rejectAccountOrganizationInvitation,
   removeAccountOrganizationMember,
   revokeAccountApplicationAuthorization,
-  setActiveAccountOrganization,
   updateAccountOrganization,
   updateAccountOrganizationMemberRole,
 } from '@/lib/api/account'
@@ -42,6 +41,7 @@ import {
   AccountPageHeader,
   AccountRow,
   AccountRows,
+  AccountSectionContent,
   AccountTabContent,
   AccountTabs,
 } from './account-page'
@@ -668,7 +668,7 @@ export function AccountOrganizationsPage() {
   const invitations = (invitationsQuery.data ?? []).filter((invitation) => invitation.status === 'pending')
   return (
     <AccountSurface>
-      {(_profile, access, activeOrganizationId) => (
+      {(_profile, access) => (
         <>
           <AccountPageHeader
             action={
@@ -727,22 +727,12 @@ export function AccountOrganizationsPage() {
               {organizations.map((organization) => (
                 <section className="accountObjectSection accountOrganizationCard is-surface" key={organization.id}>
                   <header>
-                    <OrganizationName
-                      active={activeOrganizationId === organization.id}
-                      id={organization.id}
-                      name={organization.name}
-                    />
+                    <OrganizationName id={organization.id} name={organization.name} />
                   </header>
                   <AccountRows>
                     <AccountRow label={tt('Slug')} value={<code>{organization.slug}</code>} />
                     <AccountRow
-                      action={
-                        <OrganizationActions
-                          active={activeOrganizationId === organization.id}
-                          id={organization.id}
-                          mutate={mutate}
-                        />
-                      }
+                      action={<OrganizationActions id={organization.id} />}
                       label={tt('Created')}
                       value={formatDate(organization.createdAt)}
                     />
@@ -779,45 +769,19 @@ export function AccountOrganizationsPage() {
   )
 }
 
-function OrganizationName({ active, id, name }: { active: boolean; id: string; name: string }) {
+function OrganizationName({ id, name }: { id: string; name: string }) {
   return (
     <div className="min-w-0">
-      <span className="flex items-center gap-2">
-        <strong className="truncate">{name}</strong>
-        {active ? <Badge variant="secondary">{tt('Current')}</Badge> : null}
-      </span>
+      <strong className="block truncate">{name}</strong>
       <span className="block truncate font-mono text-xs text-muted-foreground">{id}</span>
     </div>
   )
 }
 
-function OrganizationActions({
-  active,
-  className,
-  id,
-  mutate,
-}: {
-  active: boolean
-  className?: string
-  id: string
-  mutate: ReturnType<typeof useAccountMutation>
-}) {
+function OrganizationActions({ id }: { id: string }) {
   return (
-    <div className={`flex justify-end gap-2 ${className ?? ''}`}>
-      {!active ? (
-        <Button
-          className={className ? 'flex-1' : undefined}
-          onClick={() =>
-            mutate('Active organization changed.', () => setActiveAccountOrganization(id), {
-              invalidate: [accountQueryKeys.profile, accountQueryKeys.organizationContext],
-            })
-          }
-          variant={className ? 'secondary' : 'ghost'}
-        >
-          {tt('Switch')}
-        </Button>
-      ) : null}
-      <Button asChild className={className ? 'flex-1' : undefined} variant="outline">
+    <div className="flex justify-end">
+      <Button asChild variant="outline">
         <Link params={{ organizationId: id }} to="/organizations/$organizationId">
           {tt('Manage')}
         </Link>
@@ -924,12 +888,11 @@ export function AccountOrganizationDetailPage({
     | 'settings'
 }) {
   const navigate = useNavigate()
-  const [activeSection, setActiveSection] = useState(section)
   const organizationQuery = useAccountOrganization(organizationId)
-  const organizationRolesQuery = useAccountOrganizationRoles(organizationId, activeSection === 'members')
+  const organizationRolesQuery = useAccountOrganizationRoles(organizationId, section === 'members')
   const agentsQuery = useAccountOrganizationAgents(
     organizationId,
-    activeSection === 'overview' || (activeSection === 'agents' && !content),
+    section === 'overview' || (section === 'agents' && !content),
   )
   const mutate = useAccountMutation()
   const [editOpen, setEditOpen] = useState(false)
@@ -944,7 +907,6 @@ export function AccountOrganizationDetailPage({
   >(null)
   const organization = organizationQuery.data
   const agents = agentsQuery.data?.items ?? []
-  useEffect(() => setActiveSection(section), [section])
   return (
     <AccountSurface>
       {(profile) => {
@@ -964,175 +926,149 @@ export function AccountOrganizationDetailPage({
           (role) => role === 'owner' || role === 'admin',
         )
         const pendingInvitations = organization.invitations.filter((invitation) => invitation.status === 'pending')
+        if (content) return content
         return (
           <>
-            <Link className="accountBackLink" to="/organizations">
-              ← {tt('Organizations')}
-            </Link>
             <AccountPageHeader
               description={tt('Manage members, Agent identities, shared authority, and Organization settings.')}
               title={organization.name}
             />
-            <AccountTabs
-              onValueChange={(next) => {
-                const routes = {
-                  overview: '/organizations/$organizationId/overview',
-                  members: '/organizations/$organizationId/members',
-                  roles: '/organizations/$organizationId/roles',
-                  applications: '/organizations/$organizationId/applications',
-                  'resource-servers': '/organizations/$organizationId/resource-servers',
-                  agents: '/organizations/$organizationId/agents',
-                  webhooks: '/organizations/$organizationId/webhooks/endpoints',
-                  activity: '/organizations/$organizationId/activity',
-                  settings: '/organizations/$organizationId/settings',
-                } as const
-                const route = routes[next as keyof typeof routes]
-                if (route) {
-                  setActiveSection(next as typeof activeSection)
-                  void navigate({ params: { organizationId }, to: route })
-                }
-              }}
-              tabs={[
-                { value: 'overview', label: tt('Overview') },
-                { value: 'members', label: tt('Members') },
-                { value: 'roles', label: tt('Roles') },
-                { value: 'applications', label: tt('Applications') },
-                { value: 'resource-servers', label: tt('Resource Servers') },
-                { value: 'agents', label: tt('Agents') },
-                { value: 'webhooks', label: tt('Webhooks') },
-                { value: 'activity', label: tt('Activity') },
-                { value: 'settings', label: tt('Settings') },
-              ]}
-              value={activeSection}
-            >
-              <AccountTabContent surface value="overview">
-                <AccountRows>
-                  <AccountRow
-                    description={tt('Controls Organization administration, not business API authority.')}
-                    label={tt('Your access level')}
-                    value={organizationAccessLevelLabel(accessLevel)}
-                  />
-                  <AccountRow label={tt('Organization ID')} value={<code>{organization.id}</code>} />
-                  <AccountRow label={tt('Slug')} value={<code>{organization.slug}</code>} />
-                  <AccountRow label={tt('Members')} value={String(organization.members.length)} />
-                  <AccountRow label={tt('Pending invitations')} value={String(pendingInvitations.length)} />
-                  <AccountRow label={tt('Agent identities')} value={String(agents.length)} />
-                  <AccountRow label={tt('Created')} value={formatDate(organization.createdAt)} />
-                </AccountRows>
-              </AccountTabContent>
-              <AccountTabContent surface value="members">
-                <div className="accountTabBody">
-                  {canManageOrganization ? (
-                    <div className="accountTabToolbar">
-                      <Button onClick={() => setInviteOpen(true)} size="sm">
-                        <Plus />
-                        {tt('Invite member')}
-                      </Button>
-                    </div>
-                  ) : null}
-                  <OrganizationMembersTable
-                    canManage={canManageOrganization}
-                    currentUserId={profile.id}
-                    invitations={pendingInvitations}
-                    members={organization.members}
-                    onInvitationSelect={setSelectedInvitation}
-                    onMemberSelect={setSelectedMember}
-                  />
-                </div>
-              </AccountTabContent>
-              <AccountTabContent surface value={content && section === 'agents' ? '__legacy-agents' : 'agents'}>
-                <AccountRows>
-                  {agents.map((agent) => (
-                    <AccountRow
-                      description={agent.subject}
-                      key={agent.id}
-                      label={agent.name}
-                      value={
-                        <Badge variant={agent.status === 'active' ? 'secondary' : 'outline'}>{tt(agent.status)}</Badge>
-                      }
-                    />
-                  ))}
-                  {!agents.length ? (
-                    <AccountRow
-                      description={tt(
-                        'Agents can belong to a person or an Organization and are established only through enrollment.',
-                      )}
-                      label={tt('No Organization Agents')}
-                      value="—"
-                    />
-                  ) : null}
-                </AccountRows>
-                {agentsQuery.error ? (
-                  <p className="pt-4 text-sm text-destructive" role="alert">
-                    {agentsQuery.error instanceof Error
-                      ? agentsQuery.error.message
-                      : tt('Unable to load Organization Agents.')}
-                  </p>
-                ) : null}
-              </AccountTabContent>
-              <AccountTabContent surface value={content && section === 'roles' ? '__legacy-roles' : 'roles'}>
-                <AccountObjectSection
-                  description={tt('Better Auth Organization Roles assigned to your membership.')}
-                  title={tt('Your Organization Roles')}
-                >
+            <div className="accountTabs">
+              {section === 'overview' ? (
+                <AccountSectionContent surface>
                   <AccountRows>
                     <AccountRow
-                      description={tt('Roles are resolved to scopes for this Organization only.')}
-                      label={tt('Assigned Roles')}
-                      value={<code>{membership?.role ?? 'member'}</code>}
+                      description={tt('Controls Organization administration, not business API authority.')}
+                      label={tt('Your access level')}
+                      value={organizationAccessLevelLabel(accessLevel)}
                     />
+                    <AccountRow label={tt('Organization ID')} value={<code>{organization.id}</code>} />
+                    <AccountRow label={tt('Slug')} value={<code>{organization.slug}</code>} />
+                    <AccountRow label={tt('Members')} value={String(organization.members.length)} />
+                    <AccountRow label={tt('Pending invitations')} value={String(pendingInvitations.length)} />
+                    <AccountRow label={tt('Agent identities')} value={String(agents.length)} />
+                    <AccountRow label={tt('Created')} value={formatDate(organization.createdAt)} />
                   </AccountRows>
-                </AccountObjectSection>
-              </AccountTabContent>
-              <AccountTabContent surface value="settings">
-                <AccountRows>
-                  <AccountRow
-                    action={
-                      canManageOrganization ? (
-                        <Button onClick={() => setEditOpen(true)} variant="outline">
-                          {tt('Edit')}
+                </AccountSectionContent>
+              ) : null}
+              {section === 'members' ? (
+                <AccountSectionContent surface>
+                  <div className="accountTabBody">
+                    {canManageOrganization ? (
+                      <div className="accountTabToolbar">
+                        <Button onClick={() => setInviteOpen(true)} size="sm">
+                          <Plus />
+                          {tt('Invite member')}
                         </Button>
-                      ) : null
-                    }
-                    label={tt('Organization profile')}
-                    value={organization.name}
-                  />
-                  <AccountRow
-                    action={
-                      accessLevel !== 'owner' ? (
-                        <Button onClick={() => setConfirmation('leave')} variant="destructive">
-                          {tt('Leave')}
-                        </Button>
-                      ) : null
-                    }
-                    description={
-                      accessLevel === 'owner'
-                        ? tt('Transfer ownership before leaving this Organization.')
-                        : tt('Your Organization-scoped access stops immediately.')
-                    }
-                    label={tt('Leave organization')}
-                    value={organizationAccessLevelLabel(accessLevel)}
-                  />
-                  {accessLevel === 'owner' ? (
+                      </div>
+                    ) : null}
+                    <OrganizationMembersTable
+                      canManage={canManageOrganization}
+                      currentUserId={profile.id}
+                      invitations={pendingInvitations}
+                      members={organization.members}
+                      onInvitationSelect={setSelectedInvitation}
+                      onMemberSelect={setSelectedMember}
+                    />
+                  </div>
+                </AccountSectionContent>
+              ) : null}
+              {section === 'agents' ? (
+                <AccountSectionContent surface>
+                  <AccountRows>
+                    {agents.map((agent) => (
+                      <AccountRow
+                        description={agent.subject}
+                        key={agent.id}
+                        label={agent.name}
+                        value={
+                          <Badge variant={agent.status === 'active' ? 'secondary' : 'outline'}>
+                            {tt(agent.status)}
+                          </Badge>
+                        }
+                      />
+                    ))}
+                    {!agents.length ? (
+                      <AccountRow
+                        description={tt(
+                          'Agents can belong to a person or an Organization and are established only through enrollment.',
+                        )}
+                        label={tt('No Organization Agents')}
+                        value="—"
+                      />
+                    ) : null}
+                  </AccountRows>
+                  {agentsQuery.error ? (
+                    <p className="pt-4 text-sm text-destructive" role="alert">
+                      {agentsQuery.error instanceof Error
+                        ? agentsQuery.error.message
+                        : tt('Unable to load Organization Agents.')}
+                    </p>
+                  ) : null}
+                </AccountSectionContent>
+              ) : null}
+              {section === 'roles' ? (
+                <AccountSectionContent surface>
+                  <AccountObjectSection
+                    description={tt('Better Auth Organization Roles assigned to your membership.')}
+                    title={tt('Your Organization Roles')}
+                  >
+                    <AccountRows>
+                      <AccountRow
+                        description={tt('Roles are resolved to scopes for this Organization only.')}
+                        label={tt('Assigned Roles')}
+                        value={<code>{membership?.role ?? 'member'}</code>}
+                      />
+                    </AccountRows>
+                  </AccountObjectSection>
+                </AccountSectionContent>
+              ) : null}
+              {section === 'settings' ? (
+                <AccountSectionContent surface>
+                  <AccountRows>
                     <AccountRow
                       action={
-                        <Button onClick={() => setConfirmation('delete')} variant="destructive">
-                          {tt('Delete')}
-                        </Button>
+                        canManageOrganization ? (
+                          <Button onClick={() => setEditOpen(true)} variant="outline">
+                            {tt('Edit')}
+                          </Button>
+                        ) : null
                       }
-                      description={tt('Permanently delete this Organization after resolving its dependencies.')}
-                      label={tt('Delete organization')}
-                      value={tt('Permanent')}
+                      label={tt('Organization profile')}
+                      value={organization.name}
                     />
-                  ) : null}
-                </AccountRows>
-              </AccountTabContent>
-              {content ? (
-                <AccountTabContent surface value={section}>
-                  {content}
-                </AccountTabContent>
+                    <AccountRow
+                      action={
+                        accessLevel !== 'owner' ? (
+                          <Button onClick={() => setConfirmation('leave')} variant="destructive">
+                            {tt('Leave')}
+                          </Button>
+                        ) : null
+                      }
+                      description={
+                        accessLevel === 'owner'
+                          ? tt('Transfer ownership before leaving this Organization.')
+                          : tt('Your Organization-scoped access stops immediately.')
+                      }
+                      label={tt('Leave organization')}
+                      value={organizationAccessLevelLabel(accessLevel)}
+                    />
+                    {accessLevel === 'owner' ? (
+                      <AccountRow
+                        action={
+                          <Button onClick={() => setConfirmation('delete')} variant="destructive">
+                            {tt('Delete')}
+                          </Button>
+                        }
+                        description={tt('Permanently delete this Organization after resolving its dependencies.')}
+                        label={tt('Delete organization')}
+                        value={tt('Permanent')}
+                      />
+                    ) : null}
+                  </AccountRows>
+                </AccountSectionContent>
               ) : null}
-            </AccountTabs>
+            </div>
             <EditOrganizationDialog
               onClose={() => setEditOpen(false)}
               onSave={async (input) => {

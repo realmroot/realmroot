@@ -7,6 +7,7 @@ import type { QueryClient } from '@tanstack/react-query'
 import { redirect } from '@tanstack/react-router'
 import { accountQueryKeys, accountQueryOptions } from '@/lib/account-query'
 import { apiClient } from '@/lib/api'
+import { getAccountOrganizationContext, setActiveAccountOrganization } from '@/lib/api/account'
 
 const returnTargetPrefix = 'realmroot:return-target:'
 
@@ -31,6 +32,19 @@ export function loadCachedDeveloperConsoleAccess(queryClient: QueryClient) {
     queryFn: loadDeveloperConsoleAccess,
     ...accountQueryOptions,
   })
+}
+
+export async function synchronizeActiveAccountOrganization(queryClient: QueryClient, organizationId: string) {
+  const context = await queryClient.fetchQuery({
+    queryKey: accountQueryKeys.organizationContext,
+    queryFn: getAccountOrganizationContext,
+    ...accountQueryOptions,
+    staleTime: 0,
+  })
+  if (context.activeOrganizationId === organizationId) return
+
+  await setActiveAccountOrganization(organizationId)
+  queryClient.setQueryData(accountQueryKeys.organizationContext, { activeOrganizationId: organizationId })
 }
 
 export async function requireAccountProfile(locationHref: string, queryClient: QueryClient) {

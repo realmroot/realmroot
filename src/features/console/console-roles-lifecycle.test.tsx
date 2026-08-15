@@ -20,7 +20,7 @@ const dynamicRole = {
 }
 
 describe('Organization Role lifecycle', () => {
-  it('lists Organization Roles and creates a dynamic Role', async () => {
+  it('lists Organization Roles and creates a dynamic Role without Scope assignments [spec: admin-console/admin-create-role]', async () => {
     const requests: Array<{ method: string; path: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
       const url = new URL(
@@ -50,10 +50,10 @@ describe('Organization Role lifecycle', () => {
     fireEvent.keyDown(document, { key: 'Escape' })
     await waitFor(() => expect(screen.queryByRole('heading', { name: 'Create Role' })).toBeNull())
     fireEvent.click(screen.getByRole('button', { name: 'New role' }))
+    expect(screen.queryByLabelText('Scopes')).toBeNull()
     fireEvent.change(screen.getByLabelText('Key'), { target: { value: 'reviewer' } })
     fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'Reviewer' } })
     fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Reviews projects.' } })
-    fireEvent.change(screen.getByLabelText('Scopes'), { target: { value: 'resource-1 projects:read' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() =>
@@ -65,7 +65,7 @@ describe('Organization Role lifecycle', () => {
             key: 'reviewer',
             displayName: 'Reviewer',
             description: 'Reviews projects.',
-            scopes: [{ resourceId: 'resource-1', scope: 'projects:read' }],
+            scopes: [],
           },
         },
       ]),
@@ -85,10 +85,10 @@ describe('Organization Role lifecycle', () => {
       Promise.resolve(jsonResponse({ ...dynamicRole, key: 'admin', displayName: 'Admin', predefined: true })),
     )
     renderWithQuery(<RoleDetailPage organizationId="org-1" roleId="admin" section="settings" />)
-    expect(await screen.findByText('Predefined')).toBeTruthy()
+    expect(await screen.findAllByText('Predefined')).toHaveLength(2)
   })
 
-  it('edits and deletes a dynamic Role from its detail page', async () => {
+  it('uses the canonical resource detail surface and edits and deletes a dynamic Role [spec: account-center/account-organization-management]', async () => {
     const requests: Array<{ method: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
       const request = input instanceof Request ? input : null
@@ -107,6 +107,13 @@ describe('Organization Role lifecycle', () => {
 
     const { router } = renderWithQuery(<RoleDetailPage organizationId="org-1" roleId="operator" />)
     expect(await screen.findByText('Operates projects.')).toBeTruthy()
+    const heading = screen.getByRole('heading', { name: 'Operator' })
+    expect(heading.closest('.consoleDetailHeader')).toBeTruthy()
+    expect(heading.closest('.consoleResourceFrame')).toBeNull()
+    expect(screen.getByRole('link', { name: 'Roles' }).className).toContain('consoleBackLink')
+    expect(screen.getByRole('tablist', { name: 'Role detail sections' }).className).toContain('w-full')
+    expect(screen.getByText('Created').closest('.detailFlatRows')).toBeTruthy()
+    expect(screen.queryByText('2026-08-01T00:00:00.000Z')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     fireEvent.click(screen.getByRole('button', { name: 'Edit' }))

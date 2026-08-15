@@ -7,6 +7,7 @@ import {
   loadAccountProfile,
   loadDeveloperConsoleAccess,
   requireAccountProfile,
+  synchronizeActiveAccountOrganization,
   takeAccountReturnTarget,
 } from '@/lib/route-auth'
 
@@ -78,6 +79,67 @@ describe('loadDeveloperConsoleAccess', () => {
       ),
     )
     await expect(loadDeveloperConsoleAccess()).rejects.toThrow('Access policy unavailable.')
+  })
+})
+
+describe('synchronizeActiveAccountOrganization', () => {
+  it('updates and caches the session Organization when the Workspace URL changes', async () => {
+    let selectedOrganizationId: string | null = null
+    server.use(
+      http.get(`${base}/api/account/organization-context`, () =>
+        HttpResponse.json({ activeOrganizationId: 'org-before' }),
+      ),
+      http.post(`${base}/api/auth/organization/set-active`, async ({ request }) => {
+        const body = (await request.json()) as { organizationId: string }
+        selectedOrganizationId = body.organizationId
+        return HttpResponse.json({ id: body.organizationId })
+      }),
+    )
+    const queryClient = routeQueryClient()
+    queryClient.setQueryData(accountQueryKeys.organizationContext, { activeOrganizationId: 'org-current' })
+
+    await synchronizeActiveAccountOrganization(queryClient, 'org-current')
+
+    expect(selectedOrganizationId).toBe('org-current')
+    expect(queryClient.getQueryData(accountQueryKeys.organizationContext)).toEqual({
+      activeOrganizationId: 'org-current',
+    })
+  })
+
+  it('does not repeat the session write when it already matches the Workspace URL', async () => {
+    let writes = 0
+    server.use(
+      http.get(`${base}/api/account/organization-context`, () =>
+        HttpResponse.json({ activeOrganizationId: 'org-current' }),
+      ),
+      http.post(`${base}/api/auth/organization/set-active`, () => {
+        writes += 1
+        return HttpResponse.json({ id: 'org-current' })
+      }),
+    )
+
+    await synchronizeActiveAccountOrganization(routeQueryClient(), 'org-current')
+
+    expect(writes).toBe(0)
+  })
+
+  it('surfaces a failed session synchronization without replacing the cached context', async () => {
+    server.use(
+      http.get(`${base}/api/account/organization-context`, () =>
+        HttpResponse.json({ activeOrganizationId: 'org-before' }),
+      ),
+      http.post(`${base}/api/auth/organization/set-active`, () =>
+        HttpResponse.json({ message: 'Organization synchronization failed.' }, { status: 503 }),
+      ),
+    )
+    const queryClient = routeQueryClient()
+
+    await expect(synchronizeActiveAccountOrganization(queryClient, 'org-current')).rejects.toThrow(
+      'Organization synchronization failed.',
+    )
+    expect(queryClient.getQueryData(accountQueryKeys.organizationContext)).toEqual({
+      activeOrganizationId: 'org-before',
+    })
   })
 })
 

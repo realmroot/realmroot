@@ -11,11 +11,17 @@ export const Route = createFileRoute('/_account')({
 
 function AccountRoute() {
   const pathname = useRouterState({ select: (state) => state.location.pathname })
+  const organizationId = organizationIdFromPathname(pathname)
   return (
-    <AccountCenterLayout section={accountSection(pathname)}>
+    <AccountCenterLayout organizationId={organizationId} pathname={pathname} section={accountSection(pathname)}>
       <Outlet />
     </AccountCenterLayout>
   )
+}
+
+function organizationIdFromPathname(pathname: string) {
+  const [, collection, organizationId] = pathname.split('/')
+  return collection === 'organizations' && organizationId ? organizationId : undefined
 }
 
 function accountSection(pathname: string) {

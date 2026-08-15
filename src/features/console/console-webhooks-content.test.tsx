@@ -71,7 +71,7 @@ describe('admin console authorization creation and Organization detail', () => {
     fireEvent.change(await screen.findByLabelText('Key'), { target: { value: 'auditor' } })
     fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'Auditor' } })
     fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Reads audit events' } })
-    expect(screen.getByLabelText('Scopes')).toBeTruthy()
+    expect(screen.queryByLabelText('Scopes')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(requests).toHaveLength(2))
 

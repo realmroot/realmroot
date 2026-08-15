@@ -33,30 +33,12 @@ afterEach(() => {
 afterAll(() => server.close())
 
 describe('AccountSurface', () => {
-  it('uses default settings and a null active Organization for sparse optional configuration', async () => {
-    server.use(
-      http.get(`${base}/api/configz`, () => HttpResponse.json({})),
-      http.get(`${base}/api/account/organization-context`, () => HttpResponse.json({})),
-    )
+  it('uses default settings for sparse optional configuration', async () => {
+    server.use(http.get(`${base}/api/configz`, () => HttpResponse.json({})))
     renderWithClient(
-      <AccountSurface>
-        {(profile, access, activeOrganizationId) => (
-          <p>{`${profile.email}|${access.platformOperator}|${String(activeOrganizationId)}`}</p>
-        )}
-      </AccountSurface>,
+      <AccountSurface>{(profile, access) => <p>{`${profile.email}|${access.platformOperator}`}</p>}</AccountSurface>,
     )
-    expect(await screen.findByText('jane@example.com|false|null')).toBeTruthy()
-  })
-
-  it('surfaces query failures through the shared account error boundary', async () => {
-    server.use(
-      http.get(`${base}/api/account/organization-context`, () =>
-        HttpResponse.json({ error: 'Organization context unavailable.' }, { status: 503 }),
-      ),
-    )
-    renderWithClient(<AccountSurface>{() => <p>Loaded</p>}</AccountSurface>)
-    expect(await screen.findByText('Organization context unavailable.')).toBeTruthy()
-    expect(screen.queryByText('Loaded')).toBeNull()
+    expect(await screen.findByText('jane@example.com|false')).toBeTruthy()
   })
 
   it('keeps the shared shell mounted when cached account data fails to refresh', async () => {
@@ -74,21 +56,6 @@ describe('AccountSurface', () => {
     await waitFor(() => expect(screen.getByText('Profile refresh unavailable.')).toBeTruthy())
     expect(document.querySelector('.accountShell')).toBe(shell)
     expect(screen.getByText('Loaded')).toBeTruthy()
-  })
-
-  it('keeps leaf content mounted when cached Organization context fails to refresh', async () => {
-    const { queryClient } = renderWithClient(<AccountSurface>{() => <p>Loaded</p>}</AccountSurface>)
-    const content = await screen.findByText('Loaded')
-    server.use(
-      http.get(`${base}/api/account/organization-context`, () =>
-        HttpResponse.json({ error: 'Organization context refresh unavailable.' }, { status: 503 }),
-      ),
-    )
-
-    await queryClient.invalidateQueries({ queryKey: accountQueryKeys.organizationContext })
-
-    await waitFor(() => expect(screen.getByText('Organization context refresh unavailable.')).toBeTruthy())
-    expect(screen.getByText('Loaded')).toBe(content)
   })
 
   it('rejects missing profile and developer access payloads', async () => {

@@ -64,6 +64,10 @@ export function AccountTabContent({
   )
 }
 
+export function AccountSectionContent({ children, surface = false }: { children: ReactNode; surface?: boolean }) {
+  return <div className={cn('mt-3', surface && 'accountTabPanel')}>{children}</div>
+}
+
 export function AccountRows({ children, className }: { children: ReactNode; className?: string }) {
   return <div className={cn('accountRows', className)}>{children}</div>
 }

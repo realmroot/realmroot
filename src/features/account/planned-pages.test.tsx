@@ -123,7 +123,7 @@ describe('planned Account Center journeys', () => {
     renderWithClient(<AccountOverviewPage />)
 
     expect(await screen.findByRole('heading', { name: 'Good morning, Jane.' })).toBeTruthy()
-    expect(screen.getByText('Strong')).toBeTruthy()
+    expect(await screen.findByText('Strong')).toBeTruthy()
     expect(screen.getByText('Chrome on macOS')).toBeTruthy()
     expect(screen.getByText('Unknown device')).toBeTruthy()
     expect(screen.getByText('Acme')).toBeTruthy()
@@ -156,7 +156,7 @@ describe('planned Account Center journeys', () => {
     server.use(http.get(`${base}/api/account/access-requests`, () => json({ items: [], pagination: pagination(0) })))
     renderWithClient(<AccountOverviewPage />)
     expect(await screen.findByRole('heading', { name: heading })).toBeTruthy()
-    expect(screen.getByText("You're all caught up")).toBeTruthy()
+    expect(await screen.findByText("You're all caught up")).toBeTruthy()
     expect(screen.getByText('No active sessions')).toBeTruthy()
     expect(screen.getByText('Basic')).toBeTruthy()
   })
@@ -357,7 +357,6 @@ describe('planned Account Center journeys', () => {
   it('creates, switches, accepts, and declines Organizations', async () => {
     let created: unknown = null
     const invitationActions: string[] = []
-    let switched: string | null = null
     server.use(
       http.get(`${base}/api/auth/organization/list`, () =>
         json([
@@ -389,11 +388,6 @@ describe('planned Account Center journeys', () => {
         created = await request.json()
         return json({ id: 'org-new', ...(created as object) })
       }),
-      http.post(`${base}/api/auth/organization/set-active`, async ({ request }) => {
-        const body = (await request.json()) as { organizationId: string }
-        switched = body.organizationId
-        return json({ id: body.organizationId })
-      }),
       http.post(`${base}/api/auth/organization/accept-invitation`, async ({ request }) => {
         invitationActions.push(`accept:${JSON.stringify(await request.json())}`)
         return json({ invitation: { id: 'invitation-accept' } })
@@ -403,12 +397,11 @@ describe('planned Account Center journeys', () => {
         return json({ invitation: { id: 'invitation-decline' } })
       }),
     )
-    store.activeOrganizationId = 'org-active'
-
     renderWithClient(<AccountOrganizationsPage />)
-    expect((await screen.findAllByText('Current')).length).toBeGreaterThan(0)
-    fireEvent.click(screen.getAllByRole('button', { name: 'Switch' })[0]!)
-    await waitFor(() => expect(switched).toBe('org-other'))
+    expect(await screen.findByText('Active org')).toBeTruthy()
+    expect(screen.queryByText('Current')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Switch' })).toBeNull()
+    expect(screen.getAllByRole('link', { name: 'Manage' })).toHaveLength(2)
     fireEvent.click(screen.getAllByRole('button', { name: 'Accept' })[0]!)
     fireEvent.click(screen.getAllByRole('button', { name: 'Decline' })[1]!)
     await waitFor(() => expect(invitationActions).toHaveLength(2))
@@ -472,7 +465,7 @@ describe('planned Account Center journeys', () => {
     expect(await screen.findByRole('heading', { name: 'Family' })).toBeTruthy()
     expect(screen.queryByRole('link', { name: 'Open Console' })).toBeNull()
 
-    openTab('Members')
+    await openOrganizationSection('members')
     fireEvent.click(await screen.findByRole('button', { name: 'Invite member' }))
     closeDialogWithEscape()
     fireEvent.click(await screen.findByRole('button', { name: 'Invite member' }))
@@ -506,7 +499,7 @@ describe('planned Account Center journeys', () => {
     fireEvent.click(screen.getAllByRole('button', { name: 'Cancel invitation' }).at(-1)!)
     await waitFor(() => expect(actions.some((action) => action.path.endsWith('/cancel-invitation'))).toBe(true))
 
-    openTab('Settings')
+    await openOrganizationSection('settings')
     fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
     closeDialogWithEscape()
     fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
@@ -529,12 +522,12 @@ describe('planned Account Center journeys', () => {
 
     renderWithClient(<AccountOrganizationDetailPage organizationId="org-family" />)
     expect(await screen.findByText('Member')).toBeTruthy()
-    openTab('Agents')
+    await openOrganizationSection('agents')
     expect(await screen.findByText('No Organization Agents')).toBeTruthy()
-    openTab('Roles')
+    await openOrganizationSection('roles')
     expect(await screen.findByText('Your Organization Roles')).toBeTruthy()
     expect(screen.getByText('Assigned Roles')).toBeTruthy()
-    openTab('Settings')
+    await openOrganizationSection('settings')
     fireEvent.click(screen.getByRole('button', { name: 'Leave' }))
     fireEvent.click(screen.getByRole('button', { name: 'Leave organization' }))
     await waitFor(() => expect(actions.some((action) => action.path.endsWith('/leave'))).toBe(true))
@@ -580,7 +573,7 @@ describe('planned Account Center journeys', () => {
     renderWithClient(<AccountOrganizationDetailPage organizationId="org-family" />)
     expect(await screen.findByRole('heading', { name: 'Family' })).toBeTruthy()
 
-    openTab('Members')
+    await openOrganizationSection('members')
     fireEvent.click(await screen.findByRole('button', { name: 'Invite member' }))
     fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'failed@example.com' } })
     fireEvent.click(await screen.findByLabelText('member'))
@@ -609,7 +602,7 @@ describe('planned Account Center journeys', () => {
     await waitFor(() => expect(screen.getByRole('alertdialog')).toBeTruthy())
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
 
-    openTab('Settings')
+    await openOrganizationSection('settings')
     fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Failed update' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
@@ -631,7 +624,7 @@ describe('planned Account Center journeys', () => {
     renderWithClient(<AccountOrganizationDetailPage organizationId="org-family" />)
     expect(await screen.findByRole('heading', { name: 'Family' })).toBeTruthy()
 
-    openTab('Agents')
+    await openOrganizationSection('agents')
     expect((await screen.findByRole('alert')).textContent).toContain('Agents unavailable.')
   })
 
@@ -648,6 +641,12 @@ describe('planned Account Center journeys', () => {
     expect((await screen.findByRole('alert')).textContent).toContain('Organization unavailable')
   })
 })
+
+async function openOrganizationSection(section: 'members' | 'roles' | 'agents' | 'settings') {
+  cleanup()
+  renderWithClient(<AccountOrganizationDetailPage organizationId="org-family" section={section} />)
+  await screen.findByRole('heading', { name: 'Family' })
+}
 
 function openTab(name: string) {
   fireEvent.mouseDown(screen.getByRole('tab', { name }), { button: 0, ctrlKey: false })

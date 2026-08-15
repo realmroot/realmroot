@@ -1,11 +1,12 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { AnchorHTMLAttributes } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AccountPageShell } from '@/features/account/account-shell'
 import { type AccountCenterSection, defaultAccountCenterSettings } from '@/features/account/settings'
 import type { UserProfile } from '@/features/account/types'
+import { accountQueryKeys } from '@/lib/account-query'
 import { i18n } from '@/lib/i18n'
 
 const navigate = vi.fn().mockResolvedValue(undefined)
@@ -64,9 +65,23 @@ function profile(overrides: Partial<UserProfile> = {}): UserProfile {
   } as UserProfile
 }
 
-function renderShell(profileValue: UserProfile, section: AccountCenterSection = 'profile') {
+function renderShell(
+  profileValue: UserProfile,
+  section: AccountCenterSection = 'profile',
+  workspace?: { organizationId: string; pathname: string },
+) {
   const platformOperator = profileValue.role === 'admin'
   const queryClient = new QueryClient()
+  if (workspace) {
+    queryClient.setQueryData(accountQueryKeys.organizations, [
+      {
+        id: workspace.organizationId,
+        name: 'Studio',
+        slug: 'studio',
+        createdAt: new Date('2026-08-01T00:00:00.000Z'),
+      },
+    ])
+  }
   render(
     <QueryClientProvider client={queryClient}>
       <AccountPageShell
@@ -78,6 +93,8 @@ function renderShell(profileValue: UserProfile, section: AccountCenterSection = 
         }}
         accountCenter={defaultAccountCenterSettings}
         config={null}
+        organizationId={workspace?.organizationId}
+        pathname={workspace?.pathname}
         profile={profileValue}
         section={section}
       >
@@ -234,6 +251,30 @@ describe('AccountPageShell', () => {
 
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Account Center' })).toBeNull())
     await waitFor(() => expect(document.activeElement).toBe(trigger))
+  })
+
+  it('brands the Organization layout as Developer Center and closes mobile navigation after a selection', async () => {
+    renderShell(profile())
+    fireEvent.click(screen.getByRole('button', { name: 'Open Account Center navigation' }))
+    const accountDialog = screen.getByRole('dialog', { name: 'Account Center' })
+    fireEvent.click(within(accountDialog).getByRole('link', { name: 'Profile' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Account Center' })).toBeNull())
+
+    cleanup()
+    renderShell(profile(), 'organizations', {
+      organizationId: 'org-studio',
+      pathname: '/organizations/org-studio/members',
+    })
+    const developerHome = screen.getByRole('link', { name: 'Developer Center home' })
+    expect(developerHome.getAttribute('href')).toBe('/organizations/org-studio/overview')
+    expect(developerHome.textContent).toContain('Developer Center')
+    expect(screen.queryByText('Account Center')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open Developer Center navigation' }))
+    const organizationDialog = screen.getByRole('dialog', { name: 'Developer Center' })
+    expect(within(organizationDialog).getByRole('link', { name: 'Members' }).getAttribute('aria-current')).toBe('page')
+    fireEvent.click(within(organizationDialog).getByRole('link', { name: 'Members' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Developer Center' })).toBeNull())
   })
 
   it('switches language and theme from the avatar submenus', async () => {

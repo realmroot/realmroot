@@ -173,13 +173,19 @@ Feature: Account Center
     When I open /connections
     Then I see the external Provider account and its Resource authorization summary
 
-  @entrypoint:product-ui @journey:account-organization-management
+  @e2e @entrypoint:product-ui @journey:account-organization-management
   Scenario: Organization members manage their shared context
     When I create an Organization from Account Center
     Then I become its Owner
     And I can open its route-backed Organization Workspace with members, Roles, Applications, Resource Servers, Agents, Webhooks, activity, and settings
+    And the Organization Workspace identifies its product layout as Developer Center rather than Account Center
+    And the Workspace presents an Organization switcher and section navigation beside its content on wide screens
+    And the same navigation is available from an accessible drawer on narrow screens
+    And nested resource detail routes retain the Workspace navigation while reusing the canonical resource detail surface
+    And Role details use the same object header, route-backed navigation tabs, and responsive content rhythm as other Workspace resources
     And its Agent identities, my Better Auth membership Roles, and active Agent Permissions come from canonical resource collections
-    And I can switch the active Organization without changing Developer Console eligibility
+    And the Organization collection opens a Workspace without a separate Current badge or Switch action
+    And the Workspace URL is the current Organization while the authenticated session is synchronized for protocol context
     When I update its profile or invite a member with one or more Roles
     Then the Organization detail reflects the change
 

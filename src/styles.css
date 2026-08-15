@@ -2301,6 +2301,10 @@ textarea {
   width: min(100%, 960px);
 }
 
+.accountContent.is-workspace {
+  width: min(100%, 1240px);
+}
+
 .accountStandaloneState {
   width: min(100% - 32px, 900px);
   margin: 48px auto;
@@ -2557,6 +2561,127 @@ textarea {
 .accountNavItem.is-active {
   background: var(--brand-primary-soft);
   color: var(--brand-primary-active);
+}
+
+.organizationWorkspaceSidebar {
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  padding: 18px 14px 14px;
+}
+
+.organizationWorkspacePicker {
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.organizationWorkspacePickerTrigger {
+  display: grid;
+  width: 100%;
+  min-height: 54px;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  border-radius: 9px;
+  color: var(--foreground);
+}
+
+.organizationWorkspacePickerTrigger:hover,
+.organizationWorkspacePickerTrigger[data-state='open'] {
+  background: var(--soft);
+}
+
+.organizationWorkspacePickerTrigger:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.organizationWorkspacePickerTrigger:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.organizationWorkspacePickerTrigger strong,
+.organizationWorkspacePickerTrigger small,
+.organizationWorkspaceMenuItem strong,
+.organizationWorkspaceMenuItem small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.organizationWorkspacePickerTrigger strong,
+.organizationWorkspaceMenuItem strong {
+  font-size: 13px;
+  font-weight: 680;
+}
+
+.organizationWorkspacePickerTrigger small,
+.organizationWorkspaceMenuItem small {
+  margin-top: 2px;
+  color: var(--muted-foreground);
+  font-size: 11px;
+}
+
+.organizationWorkspacePickerTrigger > svg {
+  width: 16px;
+  color: var(--muted-foreground);
+}
+
+.organizationWorkspaceMark,
+.organizationWorkspaceMenuMark {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--brand-primary) 22%, var(--border));
+  border-radius: 8px;
+  background: var(--brand-primary-soft);
+  color: var(--brand-primary-active);
+  font-weight: 750;
+}
+
+.organizationWorkspaceMark {
+  width: 34px;
+  height: 34px;
+  font-size: 13px;
+}
+
+.organizationWorkspaceMenu {
+  min-width: 240px;
+}
+
+.organizationWorkspaceMenuItem {
+  min-height: 48px;
+  gap: 9px;
+  padding: 6px 8px;
+}
+
+.organizationWorkspaceMenuMark {
+  width: 30px;
+  height: 30px;
+  font-size: 11px;
+}
+
+.organizationWorkspaceNav {
+  min-height: 0;
+  margin-top: 16px;
+  gap: 16px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+.organizationWorkspaceNav .accountNavItem {
+  min-height: 38px;
+}
+
+.organizationWorkspaceFooter {
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.organizationWorkspaceFooter .accountNavItem {
+  min-height: 40px;
 }
 
 .accountNavItem svg {

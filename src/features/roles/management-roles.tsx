@@ -2,7 +2,7 @@ import type { CreateRoleRequest, RoleResponse, UpdateRoleRequest } from '@shared
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { ArrowLeft, Plus, Trash2 } from 'lucide-react'
-import { type FormEvent, useState } from 'react'
+import { type FormEvent, type ReactNode, useEffect, useState } from 'react'
 import { DestructiveConfirmation } from '@/components/destructive-confirmation'
 import { Field, TextArea, TextInput } from '@/components/product-form'
 import { TableEmptyRow } from '@/components/table-empty-row'
@@ -17,9 +17,11 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ErrorState, LoadingState, MutationError } from '@/features/management/dialogs'
-import { DetailTabs, navigateConsoleTab, ResourcePage } from '@/features/management/resource-components'
+import { navigateConsoleTab, ResourcePage } from '@/features/management/resource-components'
 import type { RoleDetailSection } from '@/features/management/shared'
+import { formatDate } from '@/features/management/utils'
 import { createRole, deleteRole, getRole, listRoles, updateRole } from '@/lib/api/management'
 import { tt } from '@/lib/i18n'
 
@@ -124,6 +126,9 @@ export function RoleDetailPage({
   const queryClient = useQueryClient()
   const [editOpen, setEditOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
+  const routeSection = section === 'permissions' ? 'permissions' : 'overview'
+  const [selectedTab, setSelectedTab] = useState<'overview' | 'permissions'>(routeSection)
+  useEffect(() => setSelectedTab(routeSection), [routeSection])
   const query = useQuery({
     queryKey: [...rolesKey(organizationId), roleId],
     queryFn: () => getRole(organizationId, roleId),
@@ -145,90 +150,98 @@ export function RoleDetailPage({
   if (query.isLoading) return <LoadingState label={tt('Loading Role…')} />
   if (query.error || !query.data) return <ErrorState error={query.error ?? new Error('Role was not found.')} />
   const role = query.data
-  const activeSection = section === 'settings' ? 'overview' : section
   return (
-    <ResourcePage
-      action={
-        role.predefined ? undefined : (
-          <div className="flex gap-2">
-            <Button onClick={() => setEditOpen(true)} variant="outline">
-              {tt('Edit')}
-            </Button>
-            <Button onClick={() => setDeleteOpen(true)} variant="destructive">
-              <Trash2 />
-              {tt('Delete')}
-            </Button>
+    <>
+      <div className="consoleDetailStack">
+        <Link className="consoleBackLink" params={{ organizationId }} to="/organizations/$organizationId/roles">
+          <ArrowLeft />
+          {tt('Roles')}
+        </Link>
+        <header className="consoleDetailHeader">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h1>{role.displayName}</h1>
+              <Badge variant="outline">{role.predefined ? tt('Predefined') : tt('Dynamic')}</Badge>
+            </div>
+            <p>{role.description ?? tt('Organization Role')}</p>
+            <span className="consoleDetailMeta">
+              {role.key} · {tt('{{count}} scopes', { count: role.scopes.length })}
+            </span>
           </div>
-        )
-      }
-      auxiliary={
-        <>
-          <RoleEditor
-            error={updateMutation.error}
-            initial={role}
-            onClose={() => setEditOpen(false)}
-            onSubmit={(input) => updateMutation.mutate(input)}
-            open={editOpen}
-            pending={updateMutation.isPending}
-          />
-          <DestructiveConfirmation
-            confirmLabel={tt('Delete Role')}
-            description={tt('Assigned Roles cannot be deleted.')}
-            error={deleteMutation.error instanceof Error ? deleteMutation.error.message : undefined}
-            onClose={() => setDeleteOpen(false)}
-            onConfirm={() => deleteMutation.mutate()}
-            open={deleteOpen}
-            pending={deleteMutation.isPending}
-            title={tt('Delete {{name}}?', { name: role.displayName })}
-          />
-        </>
-      }
-      description={role.description ?? tt('Organization Role')}
-      title={role.displayName}
-    >
-      <Link
-        className="mb-4 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
-        params={{ organizationId }}
-        to="/organizations/$organizationId/roles"
-      >
-        <ArrowLeft /> {tt('Roles')}
-      </Link>
-      <DetailTabs
-        label={tt('Role detail sections')}
-        onChange={(next) => navigateConsoleTab(navigate, `/organizations/${organizationId}/roles/${roleId}/${next}`)}
-        tabs={[
-          { label: tt('Overview'), value: 'overview' },
-          { label: tt('Permissions'), value: 'permissions' },
-        ]}
-        value={activeSection}
+          {role.predefined ? null : (
+            <div className="flex flex-wrap gap-2">
+              <Button onClick={() => setEditOpen(true)} variant="outline">
+                {tt('Edit')}
+              </Button>
+              <Button onClick={() => setDeleteOpen(true)} variant="destructive">
+                <Trash2 />
+                {tt('Delete')}
+              </Button>
+            </div>
+          )}
+        </header>
+        <Tabs
+          onValueChange={(value) => {
+            const next = value as 'overview' | 'permissions'
+            setSelectedTab(next)
+            navigateConsoleTab(navigate, `/organizations/${organizationId}/roles/${roleId}/${next}`)
+          }}
+          value={selectedTab}
+        >
+          <TabsList aria-label={tt('Role detail sections')} className="w-full" variant="navigation">
+            <TabsTrigger value="overview">{tt('Overview')}</TabsTrigger>
+            <TabsTrigger value="permissions">{tt('Permissions')}</TabsTrigger>
+          </TabsList>
+          <TabsContent className="mt-5" value="overview">
+            <RoleOverview role={role} />
+          </TabsContent>
+          <TabsContent className="mt-5" value="permissions">
+            <RoleScopes role={role} />
+          </TabsContent>
+        </Tabs>
+      </div>
+      <RoleEditor
+        error={updateMutation.error}
+        initial={role}
+        onClose={() => setEditOpen(false)}
+        onSubmit={(input) => updateMutation.mutate(input)}
+        open={editOpen}
+        pending={updateMutation.isPending}
       />
-      {activeSection === 'overview' ? <RoleOverview role={role} /> : <RoleScopes role={role} />}
-    </ResourcePage>
+      <DestructiveConfirmation
+        confirmLabel={tt('Delete Role')}
+        description={tt('Assigned Roles cannot be deleted.')}
+        error={deleteMutation.error instanceof Error ? deleteMutation.error.message : undefined}
+        onClose={() => setDeleteOpen(false)}
+        onConfirm={() => deleteMutation.mutate()}
+        open={deleteOpen}
+        pending={deleteMutation.isPending}
+        title={tt('Delete {{name}}?', { name: role.displayName })}
+      />
+    </>
   )
 }
 
 function RoleOverview({ role }: { role: RoleResponse }) {
   return (
-    <dl className="grid gap-4 rounded-lg border p-5 sm:grid-cols-2">
+    <div className="detailFlatRows">
+      <RoleDetailRow label={tt('Key')} value={<code>{role.key}</code>} />
+      <RoleDetailRow label={tt('Type')} value={role.predefined ? tt('Predefined') : tt('Dynamic')} />
+      <RoleDetailRow label={tt('Created')} value={role.createdAt ? formatDate(role.createdAt) : '—'} />
+      <RoleDetailRow label={tt('Updated')} value={role.updatedAt ? formatDate(role.updatedAt) : '—'} />
+    </div>
+  )
+}
+
+function RoleDetailRow({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="detailFlatRow">
       <div>
-        <dt className="text-sm text-muted-foreground">{tt('Key')}</dt>
-        <dd>
-          <code>{role.key}</code>
-        </dd>
+        <strong>{label}</strong>
       </div>
-      <div>
-        <dt className="text-sm text-muted-foreground">{tt('Type')}</dt>
-        <dd>{role.predefined ? tt('Predefined') : tt('Dynamic')}</dd>
-      </div>
-      <div>
-        <dt className="text-sm text-muted-foreground">{tt('Created')}</dt>
-        <dd>{role.createdAt ?? '—'}</dd>
-      </div>
-      <div>
-        <dt className="text-sm text-muted-foreground">{tt('Updated')}</dt>
-        <dd>{role.updatedAt ?? '—'}</dd>
-      </div>
-    </dl>
+      <span>{value}</span>
+      <i />
+    </div>
   )
 }
 
@@ -281,7 +294,7 @@ function RoleEditor({
     const base = {
       displayName: String(form.get('displayName') ?? '').trim(),
       description: String(form.get('description') ?? '').trim() || null,
-      scopes: parseScopes(String(form.get('scopes') ?? '')),
+      scopes: initial ? parseScopes(String(form.get('scopes') ?? '')) : [],
     }
     onSubmit(initial ? base : { ...base, key: String(form.get('key') ?? '').trim() })
   }
@@ -290,7 +303,11 @@ function RoleEditor({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{initial ? tt('Edit Role') : tt('Create Role')}</DialogTitle>
-          <DialogDescription>{tt('One scope per line: resourceId scope-name.')}</DialogDescription>
+          <DialogDescription>
+            {initial
+              ? tt('One scope per line: resourceId scope-name.')
+              : tt('Create the Role first, then assign Scopes from its detail page.')}
+          </DialogDescription>
         </DialogHeader>
         <form className="grid gap-4" onSubmit={submit}>
           {!initial ? (
@@ -304,13 +321,15 @@ function RoleEditor({
           <Field label={tt('Description')}>
             <TextArea defaultValue={initial?.description ?? ''} name="description" />
           </Field>
-          <Field label={tt('Scopes')}>
-            <TextArea
-              defaultValue={initial?.scopes.map((scope) => `${scope.resourceId} ${scope.scope}`).join('\n') ?? ''}
-              name="scopes"
-              rows={8}
-            />
-          </Field>
+          {initial ? (
+            <Field label={tt('Scopes')}>
+              <TextArea
+                defaultValue={initial.scopes.map((scope) => `${scope.resourceId} ${scope.scope}`).join('\n')}
+                name="scopes"
+                rows={8}
+              />
+            </Field>
+          ) : null}
           <MutationError error={error instanceof Error ? error.message : undefined} />
           <DialogFooter>
             <Button onClick={onClose} type="button" variant="outline">
