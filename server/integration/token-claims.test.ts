@@ -1,5 +1,6 @@
 import { applyD1Migrations, env, reset } from 'cloudflare:test'
 import { buildTokenClaims } from '@server/usecases/authorization'
+import { decodeProtectedHeader } from 'jose'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   baseURL,
@@ -225,8 +226,10 @@ describe('OAuth token claim building over real D1', () => {
       }),
     })
     expect(token.status, await token.clone().text()).toBe(200)
-    const tokenBody = (await token.json()) as { access_token: string; scope: string }
+    const tokenBody = (await token.json()) as { access_token: string; id_token: string; scope: string }
     expect(tokenBody.scope).toBe('openid')
+    expect(decodeProtectedHeader(tokenBody.access_token).typ).toBe('at+jwt')
+    expect(decodeProtectedHeader(tokenBody.id_token).typ).not.toBe('at+jwt')
     expect(decodeJwtPayload(tokenBody.access_token)).toMatchObject({
       scope: 'openid',
       authorization: { scopes: ['openid'] },
