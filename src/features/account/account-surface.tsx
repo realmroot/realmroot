@@ -2,12 +2,7 @@ import type { DeveloperConsoleAccessResponse } from '@shared/api/account'
 import { createContext, type ReactNode, useContext } from 'react'
 import { Status } from '@/components/ui/status'
 import { AccountPageError, AccountPageLoading, AccountPageShell } from './account-shell'
-import {
-  useAccountConfig,
-  useAccountOrganizationContext,
-  useAccountProfile,
-  useDeveloperConsoleAccess,
-} from './queries'
+import { useAccountConfig, useAccountProfile, useDeveloperConsoleAccess } from './queries'
 import type { AccountCenterSection } from './settings'
 import { defaultAccountCenterSettings } from './settings'
 import type { UserProfile } from './types'
@@ -21,7 +16,17 @@ type AccountCenterLayoutValue = {
 
 const AccountCenterLayoutContext = createContext<AccountCenterLayoutValue | null>(null)
 
-export function AccountCenterLayout({ children, section }: { children: ReactNode; section: AccountCenterSection }) {
+export function AccountCenterLayout({
+  children,
+  organizationId,
+  pathname,
+  section,
+}: {
+  children: ReactNode
+  organizationId?: string
+  pathname?: string
+  section: AccountCenterSection
+}) {
   const configQuery = useAccountConfig()
   const profileQuery = useAccountProfile()
   const accessQuery = useDeveloperConsoleAccess()
@@ -50,6 +55,8 @@ export function AccountCenterLayout({ children, section }: { children: ReactNode
         access={access}
         accountCenter={accountCenter}
         config={config}
+        organizationId={organizationId}
+        pathname={pathname}
         profile={profile}
         section={section}
       >
@@ -69,24 +76,8 @@ export function useAccountCenterLayout() {
 export function AccountSurface({
   children,
 }: {
-  children: (
-    profile: UserProfile,
-    access: DeveloperConsoleAccessResponse,
-    activeOrganizationId: string | null,
-  ) => ReactNode
+  children: (profile: UserProfile, access: DeveloperConsoleAccessResponse) => ReactNode
 }) {
   const { access, profile } = useAccountCenterLayout()
-  const organizationContextQuery = useAccountOrganizationContext()
-  const error = organizationContextQuery.error
-
-  if (organizationContextQuery.isLoading) return <Status>Loading account center</Status>
-  if (error && !organizationContextQuery.data) {
-    return <Status tone="error">{error.message}</Status>
-  }
-  return (
-    <>
-      {error ? <Status tone="error">{error.message}</Status> : null}
-      {children(profile, access, organizationContextQuery.data?.activeOrganizationId ?? null)}
-    </>
-  )
+  return <>{children(profile, access)}</>
 }

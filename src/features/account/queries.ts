@@ -4,7 +4,6 @@ import { accountQueryKeys, accountQueryOptions } from '@/lib/account-query'
 import { getConfigz } from '@/lib/api'
 import {
   getAccountOrganization,
-  getAccountOrganizationContext,
   getAccountProfile,
   getAccountSecurity,
   getDeveloperConsoleAccess,
@@ -47,14 +46,6 @@ export function useDeveloperConsoleAccess() {
   return useQuery({
     queryKey: accountQueryKeys.developerConsoleAccess,
     queryFn: getDeveloperConsoleAccess,
-    ...accountQueryOptions,
-  })
-}
-
-export function useAccountOrganizationContext() {
-  return useQuery({
-    queryKey: accountQueryKeys.organizationContext,
-    queryFn: getAccountOrganizationContext,
     ...accountQueryOptions,
   })
 }

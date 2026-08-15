@@ -1,18 +1,5 @@
-import { createFileRoute } from '@tanstack/react-router'
-import { AccountOrganizationDetailPage } from '@/features/account/account-center'
-import { ApiResourcesPage } from '@/features/resource-servers/management-resource-servers'
+import { createFileRoute, Outlet } from '@tanstack/react-router'
 
 export const Route = createFileRoute('/_account/organizations/$organizationId/resource-servers')({
-  component: OrganizationResourceServersRoute,
+  component: Outlet,
 })
-
-function OrganizationResourceServersRoute() {
-  const { organizationId } = Route.useParams()
-  return (
-    <AccountOrganizationDetailPage
-      content={<ApiResourcesPage organizationId={organizationId} />}
-      organizationId={organizationId}
-      section="resource-servers"
-    />
-  )
-}

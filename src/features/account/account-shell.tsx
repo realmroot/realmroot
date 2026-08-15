@@ -26,6 +26,7 @@ import { Status } from '@/components/ui/status'
 import { signOut } from '@/lib/auth-client'
 import { tt } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
+import { OrganizationWorkspaceNavigation } from './organization-workspace-navigation'
 import type { AccountCenterSection, defaultAccountCenterSettings } from './settings'
 import type { UserProfile } from './types'
 
@@ -56,6 +57,8 @@ export function AccountPageShell({
   accountCenter,
   children,
   config,
+  organizationId,
+  pathname = window.location.pathname,
   profile,
   section,
 }: {
@@ -63,6 +66,8 @@ export function AccountPageShell({
   accountCenter: AccountCenterSettings
   children: ReactNode
   config: Parameters<typeof brandingStyle>[0]
+  organizationId?: string
+  pathname?: string
   profile: UserProfile
   section: AccountCenterSection
 }) {
@@ -71,6 +76,7 @@ export function AccountPageShell({
   const queryClient = useQueryClient()
   const [navigationOpen, setNavigationOpen] = useState(false)
   const navigationTriggerRef = useRef<HTMLButtonElement>(null)
+  const productName = organizationId ? 'Developer Center' : 'Account Center'
 
   function changeNavigation(open: boolean) {
     setNavigationOpen(open)
@@ -96,7 +102,8 @@ export function AccountPageShell({
       <header className="accountProductTopbar">
         <div className="flex min-w-0 items-center gap-2">
           <Button
-            aria-label={tt('Open Account Center navigation')}
+            aria-expanded={navigationOpen}
+            aria-label={tt(organizationId ? 'Open Developer Center navigation' : 'Open Account Center navigation')}
             className="accountMobileMenu"
             onClick={() => setNavigationOpen(true)}
             ref={navigationTriggerRef}
@@ -105,9 +112,19 @@ export function AccountPageShell({
           >
             <Menu />
           </Button>
-          <Link aria-label={tt('Account Center home')} to="/">
-            <RealmrootWordmark context={tt('Account Center')} />
-          </Link>
+          {organizationId ? (
+            <Link
+              aria-label={tt('Developer Center home')}
+              params={{ organizationId }}
+              to="/organizations/$organizationId/overview"
+            >
+              <RealmrootWordmark context={tt(productName)} />
+            </Link>
+          ) : (
+            <Link aria-label={tt('Account Center home')} to="/">
+              <RealmrootWordmark context={tt(productName)} />
+            </Link>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <Button
@@ -131,9 +148,17 @@ export function AccountPageShell({
         </div>
       </header>
       <div className="accountShellLayout">
-        <AccountSidebar access={access} profile={profile} section={section} />
+        {organizationId ? (
+          <OrganizationWorkspaceNavigation organizationId={organizationId} pathname={pathname} />
+        ) : (
+          <AccountSidebar access={access} profile={profile} section={section} />
+        )}
         <section
-          className={cn('accountContent', (section === 'profile' || section === 'security') && 'is-settings')}
+          className={cn(
+            'accountContent',
+            (section === 'profile' || section === 'security') && 'is-settings',
+            organizationId && 'is-workspace',
+          )}
           id="account-content"
           tabIndex={-1}
         >
@@ -150,15 +175,25 @@ export function AccountPageShell({
           side="left"
         >
           <SheetHeader className="border-b">
-            <SheetTitle>{tt('Account Center')}</SheetTitle>
-            <SheetDescription className="sr-only">{tt('Navigate Account Center pages.')}</SheetDescription>
+            <SheetTitle>{tt(productName)}</SheetTitle>
+            <SheetDescription className="sr-only">
+              {tt(organizationId ? 'Navigate Developer Center pages.' : 'Navigate Account Center pages.')}
+            </SheetDescription>
           </SheetHeader>
-          <AccountSidebar
-            access={access}
-            onNavigate={() => setNavigationOpen(false)}
-            profile={profile}
-            section={section}
-          />
+          {organizationId ? (
+            <OrganizationWorkspaceNavigation
+              onNavigate={() => setNavigationOpen(false)}
+              organizationId={organizationId}
+              pathname={pathname}
+            />
+          ) : (
+            <AccountSidebar
+              access={access}
+              onNavigate={() => setNavigationOpen(false)}
+              profile={profile}
+              section={section}
+            />
+          )}
         </SheetContent>
       </Sheet>
     </main>

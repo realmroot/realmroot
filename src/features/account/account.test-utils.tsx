@@ -261,13 +261,26 @@ export function createAccountServer(store: AccountStore, config?: ReturnType<typ
   return setupServer(...(accountHandlers(store, config) as unknown as Parameters<typeof setupServer>))
 }
 
-export function renderWithClient(ui: ReactNode) {
+export function renderWithClient(
+  ui: ReactNode,
+  layout: {
+    organizationId?: string
+    pathname?: string
+    section?: Parameters<typeof AccountCenterLayout>[0]['section']
+  } = {},
+) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return {
     queryClient,
     ...render(
       <QueryClientProvider client={queryClient}>
-        <AccountCenterLayout section="overview">{ui}</AccountCenterLayout>
+        <AccountCenterLayout
+          organizationId={layout.organizationId}
+          pathname={layout.pathname}
+          section={layout.section ?? 'overview'}
+        >
+          {ui}
+        </AccountCenterLayout>
       </QueryClientProvider>,
     ),
   }

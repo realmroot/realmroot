@@ -76,7 +76,7 @@ test.describe('password sign-in, session, and routing', () => {
 
     await page.goto(`/organizations/${organizationOwner.organizationId}/overview`)
     await expect(page.getByRole('heading', { name: organizationOwner.organizationName })).toBeVisible()
-    await page.getByRole('tab', { name: 'Applications' }).click()
+    await page.getByRole('link', { name: 'Applications' }).click()
     await expect(page).toHaveURL(new RegExp(`/organizations/${organizationOwner.organizationId}/applications$`))
     await expect(page.getByRole('heading', { name: 'Applications', exact: true })).toBeVisible()
 

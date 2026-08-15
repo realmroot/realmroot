@@ -193,6 +193,7 @@ Feature: Admin Console
     Given I selected an Organization where my membership grants roles:write
     When I create a dynamic role
     Then it appears in authorization inventory
+    And the creation form initializes it without Scope assignments
     And the Organization Role can include only assigned scopes from visible Resource Servers
     And its stable Role key cannot be changed after creation
     And another Role in the same Organization cannot reuse its key

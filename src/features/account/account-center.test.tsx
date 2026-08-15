@@ -105,7 +105,6 @@ describe('account pages', () => {
         '/api/configz',
         '/api/account/profile',
         '/api/account/developer-console-access',
-        '/api/account/organization-context',
         '/api/account/provider-connectors?limit=100&offset=0',
         '/api/account/provider-connections?limit=100&offset=0',
       ]),

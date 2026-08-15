@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { routeTree } from '@/routeTree.gen'
 
 const auth = vi.hoisted(() => ({
+  activeOrganizationSync: vi.fn(async (_organizationId: string) => undefined),
   consoleAccessRequest: vi.fn(async () => ({ platformOperator: true })),
   profileRequest: vi.fn(async () => ({ user: { id: 'user-1' } })),
 }))
@@ -21,9 +22,12 @@ vi.mock('@/lib/route-auth', () => ({
       queryKey: ['account', 'profile'],
       staleTime: 60_000,
     }),
+  synchronizeActiveAccountOrganization: (_queryClient: QueryClient, organizationId: string) =>
+    auth.activeOrganizationSync(organizationId),
 }))
 
 beforeEach(() => {
+  auth.activeOrganizationSync.mockReset().mockResolvedValue(undefined)
   auth.consoleAccessRequest.mockReset().mockResolvedValue({ platformOperator: true })
   auth.profileRequest.mockReset().mockResolvedValue({ user: { id: 'user-1' } })
 })
@@ -105,6 +109,15 @@ describe('router authentication boundaries', () => {
     resolveProfile({ user: { id: 'user-1' } })
     await loading
     expect(auth.consoleAccessRequest).toHaveBeenCalledTimes(1)
+  })
+
+  it('synchronizes the session Organization at the Workspace route boundary', async () => {
+    const router = createTestRouter('/organizations/org-current/overview')
+
+    await router.load()
+
+    expect(auth.activeOrganizationSync).toHaveBeenCalledOnce()
+    expect(auth.activeOrganizationSync).toHaveBeenCalledWith('org-current')
   })
 })
 
