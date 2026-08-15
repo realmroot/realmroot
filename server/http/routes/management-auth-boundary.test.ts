@@ -371,6 +371,10 @@ describe('management routes 1', () => {
     const deps = createTestDeps({
       users,
       agentIdentities: {
+        findActiveBindingByProtocolAgent: vi.fn().mockResolvedValue({
+          identity: identity.identity,
+          binding: identity.bindings[0],
+        }),
         findActiveByProtocolAgent: vi.fn().mockResolvedValue(identity),
         findIdentity: vi.fn().mockResolvedValue(identity),
       },

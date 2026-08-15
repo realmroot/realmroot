@@ -320,6 +320,8 @@ function createRouteApp(overrides: { signJWT?: () => Promise<{ token: string }> 
           identityId: 'identity-1',
           protocolAgentId: 'protocol-agent-1',
           hostId: 'host-1',
+          identity: aggregate.identity,
+          binding: aggregate.bindings[0],
           scopes: [
             'agent:read',
             'resource-servers:read',

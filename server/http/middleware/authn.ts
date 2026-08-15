@@ -3,6 +3,7 @@ import type { MutationActor } from '@server/domain/mutation-actor'
 import type { ProtocolAgentSession } from '@server/usecases/agent-session'
 import type { Deps } from '@server/usecases/deps'
 import { validateDpopResourceProof } from '@server/usecases/dpop'
+import type { AgentIdentityBindingRecord, AgentIdentityRecord } from '@server/usecases/ports'
 import type { Context, MiddlewareHandler } from 'hono'
 import { toBoundaryError } from '../routes/auth-api'
 
@@ -40,6 +41,8 @@ export interface PrincipalContext {
     identityId: string
     protocolAgentId: string
     hostId: string
+    identity: AgentIdentityRecord
+    binding: AgentIdentityBindingRecord
     scopes: string[]
     authority: { kind: 'organization'; organizationId: string } | { kind: 'user'; userId: string } | null
   } | null
@@ -77,6 +80,10 @@ export function authn(auth: SessionReader, options: AuthnOptions = {}): Middlewa
   return async (c, next) => {
     const current = c.get('principal')
     const explicitAuthorization = c.req.header('Authorization')
+    if (explicitAuthorization && !options.oauth) {
+      await next()
+      return
+    }
     if (explicitAuthorization && options.oauth) {
       if (!explicitAuthorization.startsWith('DPoP ')) {
         throw unauthorized('OAuth Resource API requests require a DPoP access token.')
@@ -161,16 +168,19 @@ async function authenticateOAuthApplication(
   if (!applicationId || !clientId || !confirmationJkt || !proof) {
     throw unauthorized('OAuth access token is missing its Application or DPoP binding.')
   }
-  await validateDpopResourceProof(c.get('deps') as Deps, {
-    proof,
-    accessToken,
-    method: c.req.method,
-    url: oauth.resourceRequestUrl(c.req.url),
-    confirmationJkt,
-  }).catch((error: unknown) => {
-    throw unauthorized(error instanceof Error ? error.message : 'DPoP proof is invalid.')
-  })
-  const application = await (c.get('deps') as Deps).applications.findByClientId(clientId)
+  const deps = c.get('deps') as Deps
+  const [, application] = await Promise.all([
+    validateDpopResourceProof(deps, {
+      proof,
+      accessToken,
+      method: c.req.method,
+      url: oauth.resourceRequestUrl(c.req.url),
+      confirmationJkt,
+    }).catch((error: unknown) => {
+      throw unauthorized(error instanceof Error ? error.message : 'DPoP proof is invalid.')
+    }),
+    deps.applications.findByClientId(clientId),
+  ])
   if (!application || application.disabled || application.id !== applicationId) {
     throw forbidden('The OAuth token does not belong to an active Application.')
   }
@@ -207,21 +217,25 @@ async function authenticateOAuthAgent(
   if (!subject || !protocolAgentId || !hostId || !confirmationJkt || !proof) {
     throw unauthorized('OAuth access token is missing its Agent or DPoP binding.')
   }
-  await validateDpopResourceProof(c.get('deps') as Deps, {
-    proof,
-    accessToken,
-    method: c.req.method,
-    url: oauth.resourceRequestUrl(c.req.url),
-    confirmationJkt,
-  }).catch((error: unknown) => {
-    throw unauthorized(error instanceof Error ? error.message : 'DPoP proof is invalid.')
-  })
-  const aggregate = await (c.get('deps') as Deps).agentIdentities.findActiveByProtocolAgent(protocolAgentId)
-  const binding = aggregate?.bindings.find(
-    (candidate) =>
-      candidate.protocolAgentId === protocolAgentId && candidate.hostId === hostId && candidate.status === 'active',
-  )
-  if (!aggregate || !binding || aggregate.identity.issuer !== issuer || aggregate.identity.subject !== subject) {
+  const deps = c.get('deps') as Deps
+  const [, active] = await Promise.all([
+    validateDpopResourceProof(deps, {
+      proof,
+      accessToken,
+      method: c.req.method,
+      url: oauth.resourceRequestUrl(c.req.url),
+      confirmationJkt,
+    }).catch((error: unknown) => {
+      throw unauthorized(error instanceof Error ? error.message : 'DPoP proof is invalid.')
+    }),
+    deps.agentIdentities.findActiveBindingByProtocolAgent(protocolAgentId),
+  ])
+  if (
+    !active ||
+    active.binding.hostId !== hostId ||
+    active.identity.issuer !== issuer ||
+    active.identity.subject !== subject
+  ) {
     throw unauthorized('The OAuth token does not belong to an active Agent identity and Host binding.')
   }
   const scopes = typeof payload.scope === 'string' ? [...new Set(payload.scope.split(/\s+/).filter(Boolean))] : []
@@ -229,9 +243,11 @@ async function authenticateOAuthAgent(
   return {
     issuer,
     subject,
-    identityId: aggregate.identity.id,
+    identityId: active.identity.id,
     protocolAgentId,
     hostId,
+    identity: active.identity,
+    binding: active.binding,
     scopes,
     authority,
   }
@@ -251,21 +267,19 @@ async function authenticateAgent(
   if (!session) return null
 
   const deps = c.get('deps') as Deps
-  const identity = await deps.agentIdentities.findActiveByProtocolAgent(session.agent.id)
-  const binding = identity?.bindings.find(
-    (candidate) =>
-      candidate.protocolAgentId === session.agent.id &&
-      candidate.hostId === session.agent.hostId &&
-      candidate.status === 'active',
-  )
-  if (!identity || !binding) throw forbidden('The Agent host is not bound to an active Agent identity.')
+  const active = await deps.agentIdentities.findActiveBindingByProtocolAgent(session.agent.id)
+  if (!active || active.binding.hostId !== session.agent.hostId) {
+    throw forbidden('The Agent host is not bound to an active Agent identity.')
+  }
 
   return {
-    issuer: identity.identity.issuer,
-    subject: identity.identity.subject,
-    identityId: identity.identity.id,
+    issuer: active.identity.issuer,
+    subject: active.identity.subject,
+    identityId: active.identity.id,
     protocolAgentId: session.agent.id,
     hostId: session.agent.hostId,
+    identity: active.identity,
+    binding: active.binding,
     scopes: [],
     authority: null,
   }

@@ -165,6 +165,37 @@ export function createDrizzleAgentIdentityRepository(db: Database): AgentIdentit
       return row ?? null
     },
 
+    async findActiveBindingByProtocolAgent(id) {
+      const [row] = await db
+        .select({
+          identity: agentIdentity,
+          binding: {
+            id: agentIdentityBinding.id,
+            agentIdentityId: agentIdentityBinding.agentIdentityId,
+            protocolAgentId: agentIdentityBinding.protocolAgentId,
+            hostId: agent.hostId,
+            status: agentIdentityBinding.status,
+            boundAt: agentIdentityBinding.boundAt,
+            revokedAt: agentIdentityBinding.revokedAt,
+            createdAt: agentIdentityBinding.createdAt,
+            updatedAt: agentIdentityBinding.updatedAt,
+          },
+        })
+        .from(agentIdentityBinding)
+        .innerJoin(agentIdentity, eq(agentIdentity.id, agentIdentityBinding.agentIdentityId))
+        .innerJoin(agent, eq(agent.id, agentIdentityBinding.protocolAgentId))
+        .where(
+          and(
+            eq(agentIdentityBinding.protocolAgentId, id),
+            eq(agentIdentityBinding.status, 'active'),
+            eq(agentIdentity.status, 'active'),
+            isNull(agentIdentity.deletedAt),
+          ),
+        )
+        .limit(1)
+      return row ?? null
+    },
+
     async findActiveByProtocolAgent(id) {
       const [row] = await db
         .select({ identity: agentIdentity })

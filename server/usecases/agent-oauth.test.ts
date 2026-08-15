@@ -21,13 +21,7 @@ describe('Agent OAuth token issuance', () => {
           dpopProof: proof,
           tokenEndpoint: endpoint,
         },
-        {
-          issuer: 'https://auth.example.com/api/auth',
-          subject: 'agt_1',
-          identityId: 'identity-1',
-          protocolAgentId: 'protocol-agent-1',
-          hostId: 'host-1',
-        },
+        principal('https://auth.example.com/api/auth'),
         { issuer: 'https://auth.example.com/api/auth', sign },
       ),
     ).resolves.toMatchObject({
@@ -54,13 +48,7 @@ describe('Agent OAuth token issuance', () => {
     const deps = createTestDeps()
     const endpoint = 'https://auth.example.com/api/auth/oauth2/token'
     const signer = { issuer: 'https://auth.example.com/api/auth', sign: vi.fn() }
-    const principal = {
-      issuer: signer.issuer,
-      subject: 'agt_1',
-      identityId: 'identity-1',
-      protocolAgentId: 'protocol-agent-1',
-      hostId: 'host-1',
-    }
+    const agent = principal(signer.issuer)
 
     await expect(
       issueAgentBootstrapAccessToken(
@@ -72,7 +60,7 @@ describe('Agent OAuth token issuance', () => {
           dpopProof: await dpopProof(endpoint),
           tokenEndpoint: endpoint,
         },
-        principal,
+        agent,
         signer,
       ),
     ).rejects.toMatchObject({ error: 'invalid_scope' })
@@ -86,7 +74,7 @@ describe('Agent OAuth token issuance', () => {
           dpopProof: await dpopProof(endpoint),
           tokenEndpoint: endpoint,
         },
-        principal,
+        agent,
         signer,
       ),
     ).rejects.toMatchObject({ error: 'invalid_target' })
@@ -96,13 +84,7 @@ describe('Agent OAuth token issuance', () => {
     const deps = createTestDeps()
     const endpoint = 'https://auth.example.com/api/auth/oauth2/token'
     const signer = { issuer: 'https://auth.example.com/api/auth', sign: vi.fn().mockResolvedValue('token') }
-    const principal = {
-      issuer: signer.issuer,
-      subject: 'agt_1',
-      identityId: 'identity-1',
-      protocolAgentId: 'protocol-agent-1',
-      hostId: 'host-1',
-    }
+    const agent = principal(signer.issuer)
 
     await expect(
       issueAgentBootstrapAccessToken(
@@ -113,7 +95,7 @@ describe('Agent OAuth token issuance', () => {
           dpopProof: await dpopProof(endpoint),
           tokenEndpoint: endpoint,
         },
-        principal,
+        agent,
         signer,
       ),
     ).resolves.toMatchObject({ scope: [...agentBootstrapScopes].sort().join(' ') })
@@ -128,7 +110,7 @@ describe('Agent OAuth token issuance', () => {
           dpopProof: await dpopProof(endpoint),
           tokenEndpoint: endpoint,
         },
-        principal,
+        agent,
         signer,
       ),
     ).resolves.toMatchObject({ scope: 'agent:read resource-servers:read' })
@@ -142,21 +124,15 @@ describe('Agent OAuth token issuance', () => {
       dpopProof: 'malformed',
       tokenEndpoint: 'https://auth.example.com/api/auth/oauth2/token',
     }
-    const principal = {
-      issuer: 'https://auth.example.com/api/auth',
-      subject: 'agt_1',
-      identityId: 'identity-1',
-      protocolAgentId: 'protocol-agent-1',
-      hostId: 'host-1',
-    }
-    const signer = { issuer: principal.issuer, sign: vi.fn() }
+    const agent = principal('https://auth.example.com/api/auth')
+    const signer = { issuer: agent.issuer, sign: vi.fn() }
 
-    await expect(
-      issueAgentBootstrapAccessToken(deps, { ...input, scope: '   ' }, principal, signer),
-    ).rejects.toMatchObject({
-      error: 'invalid_scope',
-    })
-    await expect(issueAgentBootstrapAccessToken(deps, input, principal, signer)).rejects.toMatchObject({
+    await expect(issueAgentBootstrapAccessToken(deps, { ...input, scope: '   ' }, agent, signer)).rejects.toMatchObject(
+      {
+        error: 'invalid_scope',
+      },
+    )
+    await expect(issueAgentBootstrapAccessToken(deps, input, agent, signer)).rejects.toMatchObject({
       error: 'invalid_dpop_proof',
       message: 'DPoP proof is malformed.',
     })
@@ -166,12 +142,49 @@ describe('Agent OAuth token issuance', () => {
       issueAgentBootstrapAccessToken(
         deps,
         { ...input, dpopProof: await dpopProof(input.tokenEndpoint) },
-        principal,
+        agent,
         signer,
       ),
     ).rejects.toMatchObject({ error: 'invalid_dpop_proof', message: 'The DPoP proof is invalid.' })
   })
 })
+
+function principal(issuer: string) {
+  const now = new Date('2026-08-14T00:00:00.000Z')
+  const identity = {
+    id: 'identity-1',
+    issuer,
+    subject: 'agt_1',
+    username: 'agent',
+    name: 'Agent',
+    ownerUserId: 'user-1',
+    ownerOrganizationId: null,
+    status: 'active' as const,
+    deletedAt: null,
+    createdAt: now,
+    updatedAt: now,
+  }
+  const binding = {
+    id: 'binding-1',
+    agentIdentityId: identity.id,
+    protocolAgentId: 'protocol-agent-1',
+    hostId: 'host-1',
+    status: 'active',
+    boundAt: now,
+    revokedAt: null,
+    createdAt: now,
+    updatedAt: now,
+  }
+  return {
+    issuer,
+    subject: identity.subject,
+    identityId: identity.id,
+    protocolAgentId: binding.protocolAgentId,
+    hostId: binding.hostId,
+    identity,
+    binding,
+  }
+}
 
 async function dpopProof(endpoint: string) {
   const { privateKey, publicKey } = await generateKeyPair('ES256', { extractable: true })

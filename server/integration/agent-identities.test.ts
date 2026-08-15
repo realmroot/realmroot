@@ -439,12 +439,16 @@ describe('Agent identity enrollment over real D1', () => {
       body: JSON.stringify({ scopeGrantModes: [{ scope: 'repo:read', grantMode: 'automatic' }] }),
     })
     expect(automaticScope.status, await automaticScope.clone().text()).toBe(200)
+    const active = await harness.deps.agentIdentities.findActiveBindingByProtocolAgent(seeded.agentId)
+    if (!active) throw new Error('Approved Agent identity binding was not persisted.')
     const principal = {
       issuer: approved.agent.issuer,
       subject: approved.agent.subject,
       identityId: approved.agent.id,
       protocolAgentId: seeded.agentId,
       hostId: seeded.hostId,
+      identity: active.identity,
+      binding: active.binding,
     }
 
     const discovery = await listAgentResourceServers(

@@ -13,9 +13,12 @@ const mfaEnrollmentPaths = new Set([
   '/api/account/security/mfa/backup-codes',
 ])
 
-export function requireSecurityPolicy(security: SecurityRepository): MiddlewareHandler {
+export function requireSecurityPolicy(
+  security: SecurityRepository,
+  resolvedPolicy?: SecurityPolicy,
+): MiddlewareHandler {
   return async (c, next) => {
-    const policy = await security.getPolicy()
+    const policy = resolvedPolicy ?? (await security.getPolicy())
 
     if (policy.mfa.mode === 'required') {
       const { user } = getPrincipal(c)

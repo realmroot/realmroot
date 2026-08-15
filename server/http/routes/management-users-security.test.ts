@@ -310,7 +310,7 @@ describe('management routes 2', () => {
     expect(updated.status).toBe(200)
     await expect(current.json()).resolves.toEqual({ policy: managementSecurityPolicy(securityPolicy()) })
     await expect(updated.json()).resolves.toEqual({ policy: managementSecurityPolicy(updatedSecurityPolicy()) })
-    expect(security.getPolicy).toHaveBeenCalledTimes(4)
+    expect(security.getPolicy).toHaveBeenCalledTimes(2)
     expect(security.getSecurityState).toHaveBeenCalledWith('admin-1')
     expect(security.updatePolicy).toHaveBeenCalledWith(body)
   })
