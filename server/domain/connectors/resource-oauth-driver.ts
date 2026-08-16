@@ -44,6 +44,9 @@ function genericOidcDriver(connector: ResourceOAuthConnector): ResourceOAuthDriv
   ) {
     return null
   }
+  const identityScopes = supportsScope(connector.resourceProviderMetadata, 'profile')
+    ? ['openid', 'offline_access', 'profile']
+    : ['openid', 'offline_access']
   return {
     authorizationEndpoint: connector.resourceAuthorizationEndpoint,
     tokenEndpoint: connector.resourceTokenEndpoint,
@@ -53,7 +56,7 @@ function genericOidcDriver(connector: ResourceOAuthConnector): ResourceOAuthDriv
     revocationAuthentication: genericTokenEndpointAuthentication(connector),
     authorizationDetailsMode: 'provider',
     revokeAccessToken: true,
-    normalizeScopes: (scopes) => [...new Set([...scopes, 'openid', 'offline_access'])].sort(),
+    normalizeScopes: (scopes) => [...new Set([...scopes, ...identityScopes])].sort(),
     authorizationParameters: { prompt: 'consent' },
     scopeSeparator: ' ',
     profileRequest: (accessToken) =>
@@ -69,6 +72,11 @@ function genericOidcDriver(connector: ResourceOAuthConnector): ResourceOAuthDriv
       }
     },
   }
+}
+
+function supportsScope(metadata: Record<string, unknown> | null, scope: string) {
+  const scopes = metadata?.scopes_supported
+  return Array.isArray(scopes) && scopes.includes(scope)
 }
 
 function genericTokenEndpointAuthentication(connector: ResourceOAuthConnector): 'basic' | 'post' {

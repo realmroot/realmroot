@@ -314,6 +314,35 @@ describe('external API resource authorization', () => {
     ).rejects.toThrow('deleted while completing the connection')
   })
 
+  it('[spec: agent-identity/adapter-external-resource-authorization] requests an advertised OIDC profile for the connection label', async () => {
+    const deps = createTestDeps()
+    authorizationDeps(deps)
+    const providerMetadata = metadata()
+    vi.mocked(deps.connectors.findById).mockResolvedValue(
+      connectorRecord({
+        resourceProviderMetadata: {
+          ...providerMetadata,
+          scopes_supported: [...providerMetadata.scopes_supported, 'profile'],
+        },
+      }),
+    )
+
+    const started = await createResourceConnectionIntent(
+      deps,
+      'resource-1',
+      { owner: { type: 'user' }, scopes: ['projects:read'] },
+      'user-1',
+      'https://auth.example.com',
+    )
+
+    expect(new URL(started.authorizationUrl).searchParams.get('scope')).toBe(
+      'offline_access openid profile projects:read',
+    )
+    expect(deps.externalResources.createConnectionIntent).toHaveBeenCalledWith(
+      expect.objectContaining({ scopes: ['offline_access', 'openid', 'profile', 'projects:read'] }),
+    )
+  })
+
   it('fails managed OAuth completion when its driver disappears or identity lookup fails', async () => {
     const deps = createTestDeps()
     authorizationDeps(deps)

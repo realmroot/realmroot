@@ -32,6 +32,14 @@ describe('resource OAuth drivers', () => {
     expect(driver).toMatchObject({ tokenEndpointAuthentication: 'post', revocationAuthentication: 'post' })
   })
 
+  it('[spec: agent-identity/adapter-external-resource-authorization] requests an advertised profile scope for the Provider label', () => {
+    const driver = resourceOAuthDriver(
+      connector({ resourceProviderMetadata: { scopes_supported: ['openid', 'profile', 'offline_access'] } }),
+    )
+
+    expect(driver!.normalizeScopes(['projects:read'])).toEqual(['offline_access', 'openid', 'profile', 'projects:read'])
+  })
+
   it('rejects unsupported and incomplete connectors', () => {
     expect(resourceOAuthDriver(connector({ resourceAuthorizationEnabled: false }))).toBeNull()
 

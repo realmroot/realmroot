@@ -367,8 +367,10 @@ The token endpoint must authenticate the client with
 `access_token`, `refresh_token`, `expires_in`, and the granted `scope`.
 Refresh-token requests must return a current subject access token.
 
-Realmroot calls `userinfo_endpoint` with the subject access token. The response
-must contain `sub`; `name` or `preferred_username` may provide a display label.
+Realmroot calls `userinfo_endpoint` with the subject access token. When
+authorization-server metadata advertises the OIDC `profile` scope, Realmroot
+requests it so `name` or `preferred_username` can provide a display label. The
+response must contain `sub`.
 The refresh credential is encrypted by Realmroot and is never given to the
 Agent.
 

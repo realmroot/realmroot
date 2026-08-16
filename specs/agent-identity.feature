@@ -324,6 +324,7 @@ Feature: Agent identity and delegated API authorization
       When the controller connects the provider through the Connector's resource-authorization facet
       Then the Adapter completes provider authorization without exposing provider credentials to Realmroot
       And Realmroot stores one standard external connection issued by the Adapter
+      And Realmroot requests an advertised OIDC profile scope so the connection keeps a readable Provider label
       When an Agent receives access through that connection
       Then Realmroot sends the connected subject, Agent actor, scopes, and authorization details through standard token exchange
       And the Adapter issues a DPoP token bound to the Agent and selected provider authority
