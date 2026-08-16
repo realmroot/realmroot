@@ -1239,8 +1239,6 @@ describe('authorization management over real D1', () => {
     await harness.db.insert(providerCredential).values({
       id: 'credential-history',
       providerResourceAuthorizationId: 'connection-history',
-      externalSubject: 'admin@example.com',
-      displayName: 'Admin connection',
       encryptedTokens: 'encrypted-tokens',
       grantedScopes: ['files:read'],
       createdAt: now,
@@ -1516,8 +1514,6 @@ describe('authorization management over real D1', () => {
     await harness.db.insert(providerCredential).values({
       id: 'deleted-credential',
       providerResourceAuthorizationId: 'deleted-connection',
-      externalSubject: 'admin@example.com',
-      displayName: 'Deleted connection',
       encryptedTokens: 'encrypted-tokens',
       grantedScopes: ['files:read'],
       status: 'active',

@@ -32,6 +32,7 @@ const staleEntitlementCleanupMigrationName = '20260813211853_cleanup_stale_agent
 const unboundExternalEntitlementCleanupMigrationName = '20260814193000_retire_unbound_external_entitlements.sql'
 const githubContextEntitlementRestoreMigrationName = '20260814195000_restore_github_context_entitlements.sql'
 const providerConnectionDisplayNameMigrationName = '20260816034000_preserve_provider_connection_display_name.sql'
+const providerCredentialIdentityCleanupMigrationName = '20260816050000_drop_provider_credential_identity.sql'
 
 describe('tenant ownership migration', () => {
   it('backfills authority constraints for existing brokered connections', () => {
@@ -109,6 +110,7 @@ describe('tenant ownership migration', () => {
             unboundExternalEntitlementCleanupMigrationName,
             githubContextEntitlementRestoreMigrationName,
             providerConnectionDisplayNameMigrationName,
+            providerCredentialIdentityCleanupMigrationName,
           ].includes(name),
       )) {
         database.exec(readFileSync(new URL(`../../migrations/${name}`, import.meta.url), 'utf8'))
@@ -196,6 +198,12 @@ describe('tenant ownership migration', () => {
           'utf8',
         ),
       )
+      database.exec(
+        readFileSync(
+          new URL(`../../migrations/${providerCredentialIdentityCleanupMigrationName}`, import.meta.url),
+          'utf8',
+        ),
+      )
 
       expect(columnNames(database, 'application')).not.toContain('owner_user_id')
       expect(columnNames(database, 'application')).not.toContain('audience_mode')
@@ -203,6 +211,8 @@ describe('tenant ownership migration', () => {
       expect(columnNames(database, 'application_consent')).not.toContain('organization_id')
       expect(columnNames(database, 'application_consent')).not.toContain('permissions')
       expect(columnNames(database, 'provider_credential')).not.toContain('authority_constraints')
+      expect(columnNames(database, 'provider_credential')).not.toContain('external_subject')
+      expect(columnNames(database, 'provider_credential')).not.toContain('display_name')
       expect(database.prepare("select id from application_consent where id = 'consent-1'").get()).toEqual({
         id: 'consent-1',
       })

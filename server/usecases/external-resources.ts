@@ -283,8 +283,6 @@ export async function completeResourceConnectionIntent(
   const grantedScopes = scopeString(token.scope) ?? intent.scopes
   const credentialInput = {
     id: credentialId,
-    externalSubject,
-    displayName,
     encryptedTokens: await deps.secrets.seal(
       JSON.stringify({ accessToken, refreshToken, scope: grantedScopes.join(' ') }),
       providerCredentialTokensContext(credentialId, connectionId),

@@ -234,8 +234,6 @@ export function createExternalResourceRepository(db: Database): ExternalResource
           .onConflictDoUpdate({
             target: providerCredential.providerResourceAuthorizationId,
             set: {
-              externalSubject: input.externalSubject,
-              displayName: input.displayName,
               encryptedTokens: input.encryptedTokens,
               grantedScopes: input.grantedScopes,
               authorizationDetails: input.authorizationDetails,

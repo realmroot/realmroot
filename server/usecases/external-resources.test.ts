@@ -1014,7 +1014,6 @@ describe('external API resource authorization', () => {
     }
     const existing = {
       ...connectionRecord(),
-      credentials: [{ ...connectionRecord().credentials[0]!, externalSubject: 'legacy-provider-subject' }],
       status: 'revoked',
       revokedAt: now,
     }
@@ -6167,8 +6166,6 @@ function connectionRecord(): ProviderResourceAuthorizationRecord {
       {
         id: 'credential-1',
         providerResourceAuthorizationId: 'connection-1',
-        externalSubject: 'target-user-1',
-        displayName: 'Project Owner',
         encryptedTokens: 'sealed:{"accessToken":"subject","refreshToken":"refresh"}',
         grantedScopes: ['openid', 'offline_access', 'projects:read'],
         authorizationDetails: [],

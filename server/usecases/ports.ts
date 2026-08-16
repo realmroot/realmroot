@@ -594,8 +594,6 @@ export interface ProviderResourceAuthorizationRecord {
 export interface ProviderCredentialRecord {
   id: string
   providerResourceAuthorizationId: string
-  externalSubject: string
-  displayName: string
   encryptedTokens: string
   grantedScopes: string[]
   authorizationDetails: AuthorizationDetail[]
@@ -763,8 +761,6 @@ export interface ExternalResourceRepository {
     providerResourceAuthorizationId: string,
     input: {
       id: string
-      externalSubject: string
-      displayName: string
       encryptedTokens: string
       grantedScopes: string[]
       authorizationDetails: AuthorizationDetail[]

@@ -43,8 +43,6 @@ export const providerCredential = sqliteTable(
     providerResourceAuthorizationId: text('provider_resource_authorization_id')
       .notNull()
       .references(() => providerResourceAuthorization.id, { onDelete: 'cascade' }),
-    externalSubject: text('external_subject').notNull(),
-    displayName: text('display_name').notNull(),
     encryptedTokens: text('encrypted_tokens').notNull(),
     grantedScopes: text('granted_scopes', { mode: 'json' }).$type<string[]>().notNull(),
     authorizationDetails: text('authorization_details', { mode: 'json' })
