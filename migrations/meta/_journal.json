@@ -428,6 +428,13 @@
       "when": 1786663981007,
       "tag": "20260813233301_drop_agent_connection_requests",
       "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "6",
+      "when": 1786856400000,
+      "tag": "20260816050000_drop_provider_credential_identity",
+      "breakpoints": true
     }
   ]
 }
