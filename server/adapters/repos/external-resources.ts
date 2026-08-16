@@ -1,4 +1,3 @@
-import type { IdentifierGenerator } from '@server/usecases/identifier-generator'
 import type {
   AgentAccessRequestRecord,
   AgentAuditEventRecord,
@@ -27,7 +26,7 @@ import {
 } from '../../db/schema'
 import { scopeEntitlementStatusCondition } from './resource-scope-entitlement-filters'
 
-export function createExternalResourceRepository(db: Database, ids: IdentifierGenerator): ExternalResourceRepository {
+export function createExternalResourceRepository(db: Database): ExternalResourceRepository {
   async function upsertProviderConnection(input: ProviderConnectionRecord) {
     const inserted = await db.insert(providerConnection).values(input).onConflictDoNothing().returning()
     if (inserted[0]) return inserted[0]
@@ -60,42 +59,6 @@ export function createExternalResourceRepository(db: Database, ids: IdentifierGe
   }
 
   return {
-    async connectAuthenticationAccount(input) {
-      const [connector] = await db
-        .select({ id: identityProviderConnector.id })
-        .from(identityProviderConnector)
-        .where(eq(identityProviderConnector.providerId, input.providerId))
-        .limit(1)
-      if (!connector) return null
-      return upsertProviderConnection({
-        id: ids.generate(),
-        connectorId: connector.id,
-        ownerUserId: input.userId,
-        ownerOrganizationId: null,
-        authenticationAccountId: input.authenticationAccountId,
-        externalSubject: input.externalSubject,
-        displayName: input.externalSubject,
-        status: 'active',
-        createdAt: input.now,
-        updatedAt: input.now,
-      })
-    },
-
-    async disconnectAuthenticationAccount(authenticationAccountId) {
-      const [connection] = await db
-        .update(providerConnection)
-        .set({ authenticationAccountId: null, updatedAt: new Date() })
-        .where(eq(providerConnection.authenticationAccountId, authenticationAccountId))
-        .returning({ id: providerConnection.id })
-      if (!connection) return
-      const [authorization] = await db
-        .select({ id: providerResourceAuthorization.id })
-        .from(providerResourceAuthorization)
-        .where(eq(providerResourceAuthorization.providerConnectionId, connection.id))
-        .limit(1)
-      if (!authorization) await db.delete(providerConnection).where(eq(providerConnection.id, connection.id))
-    },
-
     upsertProviderConnection,
 
     async findProviderConnectionByOwnerConnector(input) {

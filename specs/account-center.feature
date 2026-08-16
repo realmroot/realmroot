@@ -142,6 +142,7 @@ Feature: Account Center
     When I link sign-in from the existing Provider Connection
     Then Realmroot redirects me through the Provider account-linking flow
     And the existing Provider Connection gains sign-in without creating a second connection
+    And the connection keeps the account label returned by the Provider
 
   @entrypoint:product-ui @journey:provider-identity-ownership
   Scenario: A Provider identity belongs to one Realmroot account

@@ -31,6 +31,7 @@ const scopeRegistryCleanupMigrationName = '20260813204636_remove_account_connect
 const staleEntitlementCleanupMigrationName = '20260813211853_cleanup_stale_agent_entitlements.sql'
 const unboundExternalEntitlementCleanupMigrationName = '20260814193000_retire_unbound_external_entitlements.sql'
 const githubContextEntitlementRestoreMigrationName = '20260814195000_restore_github_context_entitlements.sql'
+const providerConnectionDisplayNameMigrationName = '20260816034000_preserve_provider_connection_display_name.sql'
 
 describe('tenant ownership migration', () => {
   it('backfills authority constraints for existing brokered connections', () => {
@@ -107,6 +108,7 @@ describe('tenant ownership migration', () => {
             staleEntitlementCleanupMigrationName,
             unboundExternalEntitlementCleanupMigrationName,
             githubContextEntitlementRestoreMigrationName,
+            providerConnectionDisplayNameMigrationName,
           ].includes(name),
       )) {
         database.exec(readFileSync(new URL(`../../migrations/${name}`, import.meta.url), 'utf8'))
@@ -185,6 +187,12 @@ describe('tenant ownership migration', () => {
       database.exec(
         readFileSync(
           new URL(`../../migrations/${githubContextEntitlementRestoreMigrationName}`, import.meta.url),
+          'utf8',
+        ),
+      )
+      database.exec(
+        readFileSync(
+          new URL(`../../migrations/${providerConnectionDisplayNameMigrationName}`, import.meta.url),
           'utf8',
         ),
       )

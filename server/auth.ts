@@ -81,7 +81,7 @@ export function createAuth(
 ) {
   const applications = createDrizzleApplicationRepository(db, ids)
   const configz = createDrizzleConfigzRepository(db)
-  const externalResources = createExternalResourceRepository(db, ids)
+  const externalResources = createExternalResourceRepository(db)
   // The better-auth boundary builds its own repos; only the slices the token-claim
   // and agent-capability usecases read are populated here.
   const deps = {
@@ -209,19 +209,6 @@ export function createAuth(
             }
             return { data: account }
           },
-          after: async (account) => {
-            if (account.providerId === 'credential') return
-            await externalResources.connectAuthenticationAccount({
-              authenticationAccountId: account.id,
-              providerId: account.providerId,
-              userId: account.userId,
-              externalSubject: account.accountId,
-              now: account.createdAt,
-            })
-          },
-        },
-        delete: {
-          after: async (account) => externalResources.disconnectAuthenticationAccount(account.id),
         },
       },
     },

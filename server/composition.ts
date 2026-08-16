@@ -50,7 +50,7 @@ export function createDeps(env: Env, config: RuntimeConfig, correlationId?: stri
     authorization: createDrizzleAuthorizationRepository(db, ids),
     configz,
     connectors: createConnectorRepository(db, secrets),
-    externalResources: createExternalResourceRepository(db, ids),
+    externalResources: createExternalResourceRepository(db),
     externalHttp: {
       fetch: (request) => {
         const outbound = withCorrelationId(request, correlationId)

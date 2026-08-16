@@ -586,6 +586,7 @@ describe('account self-service over real D1', () => {
         id: 'connection-link-provider',
         authenticationAccountId: 'account-link-provider',
         externalSubject: 'provider-subject',
+        displayName: 'Provider Subject',
       },
     ])
     expect(

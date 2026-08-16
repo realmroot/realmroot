@@ -726,14 +726,6 @@ export interface TokenLeaseAuthorizationBoundary {
 }
 
 export interface ExternalResourceRepository {
-  connectAuthenticationAccount(input: {
-    authenticationAccountId: string
-    providerId: string
-    userId: string
-    externalSubject: string
-    now: Date
-  }): Promise<ProviderConnectionRecord | null>
-  disconnectAuthenticationAccount(authenticationAccountId: string): Promise<void>
   upsertProviderConnection(input: ProviderConnectionRecord): Promise<ProviderConnectionRecord>
   findProviderConnectionByOwnerConnector(input: {
     connectorId: string
