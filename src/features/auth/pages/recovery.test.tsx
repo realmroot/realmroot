@@ -132,6 +132,29 @@ describe('ForgotPasswordPage resend and reset', () => {
     )
   })
 
+  it('returns to email entry when the user chooses a different address', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      if (String(input) === '/api/configz') return Promise.resolve(jsonResponse(configz))
+      return Promise.resolve(jsonResponse({ success: true }))
+    })
+
+    render(<ForgotPasswordPage />)
+
+    fireEvent.change(await screen.findByLabelText('Email'), { target: { value: 'jane@example.com' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send reset code' }))
+    await screen.findByLabelText('One-time code')
+
+    fireEvent.change(screen.getByLabelText('One-time code'), { target: { value: '123456' } })
+    fireEvent.change(screen.getByLabelText('New password'), { target: { value: 'new-password-1' } })
+    fireEvent.change(screen.getByLabelText('Confirm new password'), { target: { value: 'new-password-1' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Use a different email' }))
+
+    expect((screen.getByLabelText('Email') as HTMLInputElement).value).toBe('')
+    expect(screen.queryByLabelText('One-time code')).toBeNull()
+    expect(screen.queryByLabelText('New password')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Send reset code' })).toBeTruthy()
+  })
+
   it('re-enables the resend control after the cooldown elapses and re-requests the code', async () => {
     vi.useFakeTimers()
     const requests: Array<{ url: string; body: unknown }> = []
