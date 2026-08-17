@@ -243,22 +243,31 @@ function mountApiRoutes(app: Hono, auth: AuthHandler, config: AppConfig) {
 
 export function protectResourceRoutes(app: Hono, auth: SessionReader, config: AppConfig = {}) {
   for (const prefix of Object.keys(resourceByRoutePrefix)) {
-    app.use(`/api/${prefix}`, authn(auth, { allowAgent: true, required: true, oauth: realmrootOAuth(config) }))
-    app.use(`/api/${prefix}/*`, authn(auth, { allowAgent: true, required: true, oauth: realmrootOAuth(config) }))
+    app.use(
+      `/api/${prefix}`,
+      authn(auth, { allowAgent: true, allowApplication: true, required: true, oauth: realmrootOAuth(config) }),
+    )
+    app.use(
+      `/api/${prefix}/*`,
+      authn(auth, { allowAgent: true, allowApplication: true, required: true, oauth: realmrootOAuth(config) }),
+    )
   }
   const protectAssetCreation = async (c: Context, next: () => Promise<void>) => {
     if ((c.req.method === 'GET' || c.req.method === 'HEAD') && /^\/api\/assets\/[^/]+$/.test(c.req.path)) {
       await next()
       return
     }
-    await authn(auth, { allowAgent: true, required: true, oauth: realmrootOAuth(config) })(c, async () => {
-      if (getPrincipal(c).user) {
-        await authorizePlatformOrganization(c, 'applications:write')
-        await next()
-        return
-      }
-      await authz('applications')(c, next)
-    })
+    await authn(auth, { allowAgent: true, allowApplication: true, required: true, oauth: realmrootOAuth(config) })(
+      c,
+      async () => {
+        if (getPrincipal(c).user) {
+          await authorizePlatformOrganization(c, 'applications:write')
+          await next()
+          return
+        }
+        await authz('applications')(c, next)
+      },
+    )
   }
   app.use('/api/assets', protectAssetCreation)
   app.use('/api/assets/*', protectAssetCreation)

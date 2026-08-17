@@ -17,11 +17,11 @@ import { getDeps } from './deps'
 
 export function authz(resource: ProtectedResource): MiddlewareHandler {
   return async (c, next) => {
-    const { user, agent } = getPrincipal(c)
-    if (!user && !agent) throw unauthorized()
-    if (agent) {
+    const { user, agent, application } = getPrincipal(c)
+    if (!user && !agent && !application) throw unauthorized()
+    if (agent || application) {
       const required = requiredResourceScope(c.req.method, resource)
-      if (!required || !agent.scopes.includes(required)) {
+      if (!required || !(agent ?? application)!.scopes.includes(required)) {
         throw forbidden(required ? `OAuth scope "${required}" is required.` : 'This resource is read-only.')
       }
     }
@@ -92,6 +92,12 @@ export async function authorizedTenantInventory(
     }
     return tenants
   }
+  if (principal.application) {
+    if (!principal.application.scopes.includes(requiredScope)) {
+      throw forbidden(`OAuth scope "${requiredScope}" is required.`)
+    }
+    return [{ type: 'organization', id: principal.application.ownerOrganizationId }]
+  }
   const agent = principal.agent
   if (!agent?.scopes.includes(requiredScope)) {
     throw forbidden(`OAuth scope "${requiredScope}" is required.`)
@@ -141,6 +147,16 @@ export async function resolveAuthorizationContext(
     if (platformContext.scopes.size > 0) return { ...platformContext, tenant: targetTenant }
     return resolveOrganizationUserAuthorizationContext(getDeps(c), targetTenant.id, principal.user.id)
   }
+  if (principal.application) {
+    return {
+      subject: { type: 'application', id: principal.application.id },
+      tenant: {
+        type: 'organization',
+        id: principal.application.ownerOrganizationId,
+      },
+      scopes: new Set(principal.application.scopes),
+    }
+  }
   const agent = principal.agent
   if (!agent) throw unauthorized()
   const authority = agent.authority
@@ -181,6 +197,17 @@ async function resolvePlatformOrganizationContext(
   const principal = getPrincipal(c)
   if (principal.user) {
     return resolveOrganizationUserAuthorizationContext(getDeps(c), platformId, principal.user.id)
+  }
+  if (principal.application) {
+    return {
+      subject: { type: 'application', id: principal.application.id },
+      tenant: {
+        type: 'organization',
+        id: principal.application.ownerOrganizationId,
+      },
+      scopes:
+        principal.application.ownerOrganizationId === platformId ? new Set(principal.application.scopes) : new Set(),
+    }
   }
   const agent = principal.agent
   if (agent?.authority?.kind === 'organization' && agent.authority.organizationId === platformId) {

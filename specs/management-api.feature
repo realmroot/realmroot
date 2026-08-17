@@ -122,6 +122,16 @@ Feature: Unified Realmroot resource API
     And Application authorizations form one Realm inventory whose application and status filters are optional
 
 
+  @entrypoint:restish @journey:management-machine-application-crud
+  Scenario: A Machine Application manages resources within its owner Organization
+    Given a Machine Application has a direct Permission and matching configured Resource scope
+    When it presents a client-credentials access token and fresh DPoP proof to the unified API
+    Then Realmroot authenticates the Application principal
+    And the required OAuth scope is enforced for each operation
+    And the Application can operate only within its persisted owner Organization
+    And it cannot use its Organization scope to access another Organization or the platform Organization
+
+
   @entrypoint:restish @journey:management-restish-user-crud
   Scenario: Platform administration follows the built-in Organization authority
     Given the bootstrap administrator is an Owner of the built-in platform Organization

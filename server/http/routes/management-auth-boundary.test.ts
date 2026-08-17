@@ -443,6 +443,61 @@ describe('management routes 1', () => {
     expect(users.deleteManagedUser).toHaveBeenCalledWith('user-1')
   })
 
+  it('limits a Machine Application to its scopes and owner Organization [spec: management-api/management-machine-application-crud]', async () => {
+    const auth = createAuthMock()
+    const dpop = await createTestDpopKey()
+    let scopes = ['applications:read']
+    Object.assign(auth.api, {
+      verifyJWT: vi.fn().mockImplementation(async () => ({
+        payload: {
+          iss: 'http://localhost/api/auth',
+          sub: 'application-1',
+          sub_profile: 'application',
+          client_id: 'client-1',
+          scope: scopes.join(' '),
+          cnf: { jkt: dpop.thumbprint },
+        },
+      })),
+    })
+    const deps = createTestDeps()
+    vi.mocked(deps.applications.findByClientId).mockResolvedValue({
+      id: 'application-1',
+      clientId: 'client-1',
+      ownerOrganizationId: 'organization-1',
+      disabled: false,
+    } as never)
+    const app = createApp(auth, deps)
+
+    const ownUrl = 'http://localhost/api/applications?ownerOrganizationId=organization-1'
+    const own = await app.request(ownUrl, {
+      headers: await dpop.headers('GET', ownUrl),
+    })
+    expect(own.status).toBe(200)
+
+    scopes = ['applications:write']
+    const otherUrl = 'http://localhost/api/applications'
+    const other = await app.request(otherUrl, {
+      method: 'POST',
+      headers: {
+        ...(await dpop.headers('POST', otherUrl)),
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        name: 'Other Organization App',
+        clientType: 'public_native',
+        ownerOrganizationId: 'organization-2',
+        redirectUris: ['com.example:/callback'],
+      }),
+    })
+    expect(other.status).toBe(403)
+
+    scopes = []
+    const missingScope = await app.request(ownUrl, {
+      headers: await dpop.headers('GET', ownUrl),
+    })
+    expect(missingScope.status).toBe(403)
+  })
+
   it('does not expose the removed capability request resource', async () => {
     const auth = createAuthMock()
     auth.api.getAgentSession.mockResolvedValue(agentSession())
