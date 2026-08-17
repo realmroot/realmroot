@@ -5,6 +5,7 @@ const corsMethods = 'GET,POST,PUT,PATCH,DELETE,OPTIONS'
 const corsHeaders = 'authorization,content-type'
 
 interface TrustedOriginCorsOptions {
+  isOriginExemptPath?: (path: string) => boolean
   isPublicPath?: (path: string) => boolean
   resolveAllowedOrigins?: (context: { path: string; context: Context }) => Promise<string[]>
 }
@@ -15,7 +16,7 @@ export function trustedOriginCors(trustedOrigins: string[], options: TrustedOrig
   return async (c, next) => {
     const origin = c.req.header('origin')
 
-    if (!origin) {
+    if (!origin || options.isOriginExemptPath?.(c.req.path)) {
       await next()
       return
     }

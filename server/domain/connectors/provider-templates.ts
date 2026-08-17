@@ -46,7 +46,7 @@ const socialTemplates = socialProviderIds.map((providerId) => ({
   capabilities: connectorCapabilities('social', providerId),
   requiredFields: requiredSocialFields(providerId),
   optionalFields: [],
-  defaultScopes: defaultScopes(providerId),
+  defaultScopes: [],
   endpoints: {
     issuer: null,
     authorizationEndpoint: null,
@@ -96,13 +96,6 @@ function requiredSocialFields(providerId: string) {
     ]
   }
   return ['clientId', 'clientSecret']
-}
-
-function defaultScopes(providerId: string) {
-  if (providerId === 'github') return ['read:user', 'user:email']
-  if (providerId === 'discord') return ['identify', 'email']
-  if (providerId === 'slack') return ['openid', 'email', 'profile']
-  return ['openid', 'email', 'profile']
 }
 
 function providerIcon(providerId: string) {

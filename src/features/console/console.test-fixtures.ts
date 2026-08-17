@@ -151,8 +151,8 @@ export const connectorTemplates = {
       icon: 'google',
       capabilities: { authentication: true, resourceAuthorization: false },
       requiredFields: ['clientId', 'clientSecret'],
-      optionalFields: ['scopes'],
-      defaultScopes: ['openid', 'email', 'profile'],
+      optionalFields: [],
+      defaultScopes: [],
       endpoints: {
         issuer: null,
         authorizationEndpoint: null,
@@ -174,8 +174,8 @@ export const connectorTemplates = {
         'providerMetadata.region',
         'providerMetadata.userPoolId',
       ],
-      optionalFields: ['scopes'],
-      defaultScopes: ['openid', 'email', 'profile'],
+      optionalFields: [],
+      defaultScopes: [],
       endpoints: {
         issuer: null,
         authorizationEndpoint: null,
@@ -191,8 +191,8 @@ export const connectorTemplates = {
       icon: 'github',
       capabilities: { authentication: true, resourceAuthorization: true },
       requiredFields: ['clientId', 'clientSecret'],
-      optionalFields: ['scopes'],
-      defaultScopes: ['read:user', 'user:email'],
+      optionalFields: [],
+      defaultScopes: [],
       endpoints: {
         issuer: null,
         authorizationEndpoint: null,

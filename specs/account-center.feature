@@ -144,6 +144,15 @@ Feature: Account Center
     And the existing Provider Connection gains sign-in without creating a second connection
     And the connection keeps the account label returned by the Provider
 
+  @entrypoint:product-ui @journey:provider-connection-social-sign-in
+  Scenario: Social sign-in establishes one named Provider Connection
+    Given a Provider Connector is available for sign-in
+    When I sign in with that Provider account
+    Then Account Center shows one Provider Connection for that provider
+    And the connection shows a readable account label instead of the Provider subject
+    When I later authorize an external Resource through the same Provider account
+    Then the Resource authorization is attached to the existing Provider Connection
+
   @entrypoint:product-ui @journey:provider-identity-ownership
   Scenario: A Provider identity belongs to one Realmroot account
     Given my Provider identity is already connected to another Realmroot account

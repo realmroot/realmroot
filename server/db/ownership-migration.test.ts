@@ -33,6 +33,8 @@ const unboundExternalEntitlementCleanupMigrationName = '20260814193000_retire_un
 const githubContextEntitlementRestoreMigrationName = '20260814195000_restore_github_context_entitlements.sql'
 const providerConnectionDisplayNameMigrationName = '20260816034000_preserve_provider_connection_display_name.sql'
 const providerCredentialIdentityCleanupMigrationName = '20260816050000_drop_provider_credential_identity.sql'
+const appleProviderConnectionBackfillMigrationName = '20260817163500_backfill_apple_provider_connections.sql'
+const providerConnectionLifecycleMigrationName = '20260817185000_provider_connection_before_account.sql'
 
 describe('tenant ownership migration', () => {
   it('backfills authority constraints for existing brokered connections', () => {
@@ -111,6 +113,8 @@ describe('tenant ownership migration', () => {
             githubContextEntitlementRestoreMigrationName,
             providerConnectionDisplayNameMigrationName,
             providerCredentialIdentityCleanupMigrationName,
+            appleProviderConnectionBackfillMigrationName,
+            providerConnectionLifecycleMigrationName,
           ].includes(name),
       )) {
         database.exec(readFileSync(new URL(`../../migrations/${name}`, import.meta.url), 'utf8'))
@@ -203,6 +207,15 @@ describe('tenant ownership migration', () => {
           new URL(`../../migrations/${providerCredentialIdentityCleanupMigrationName}`, import.meta.url),
           'utf8',
         ),
+      )
+      database.exec(
+        readFileSync(
+          new URL(`../../migrations/${appleProviderConnectionBackfillMigrationName}`, import.meta.url),
+          'utf8',
+        ),
+      )
+      database.exec(
+        readFileSync(new URL(`../../migrations/${providerConnectionLifecycleMigrationName}`, import.meta.url), 'utf8'),
       )
 
       expect(columnNames(database, 'application')).not.toContain('owner_user_id')

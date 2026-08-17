@@ -282,8 +282,8 @@ export function createConnectorServiceMock() {
           capabilities: { authentication: true, resourceAuthorization: false },
           icon: 'google',
           requiredFields: ['clientId', 'clientSecret'],
-          optionalFields: ['scopes'],
-          defaultScopes: ['openid', 'email', 'profile'],
+          optionalFields: [],
+          defaultScopes: [],
           endpoints: {
             issuer: null,
             authorizationEndpoint: null,

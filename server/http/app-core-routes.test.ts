@@ -378,6 +378,34 @@ describe('app.test 1', () => {
     expect(auth.api.getSession).not.toHaveBeenCalled()
   })
 
+  it('allows cross-site identity-provider callbacks without granting CORS access', async () => {
+    const auth = createAuthMock()
+    const response = await createApp(auth, createTestDeps(), {
+      trustedOrigins: ['https://tenant.example.com'],
+    }).request('/api/auth/callback/apple', {
+      method: 'POST',
+      headers: {
+        origin: 'https://appleid.apple.com',
+        'content-type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({ code: 'provider-code', state: 'provider-state' }),
+    })
+
+    expect(response.status).toBe(204)
+    expect(response.headers.get('access-control-allow-origin')).toBeNull()
+    expect(auth.handler).toHaveBeenCalledOnce()
+
+    const unrelatedResponse = await createApp(auth, createTestDeps(), {
+      trustedOrigins: ['https://tenant.example.com'],
+    }).request('/api/auth/callback/apple/unrelated', {
+      method: 'POST',
+      headers: { origin: 'https://appleid.apple.com' },
+    })
+
+    expect(unrelatedResponse.status).toBe(403)
+    expect(auth.handler).toHaveBeenCalledOnce()
+  })
+
   it('allows trusted API origins and emits CORS response headers', async () => {
     const response = await createApp(createAuthMock(), createTestDeps(), {
       trustedOrigins: ['https://tenant.example.com'],

@@ -249,7 +249,6 @@ export async function loadAuthConnectorConfig(repository: ConnectorRepository): 
         ...signupEnabledMetadata(connector.providerMetadata),
         clientId,
         clientSecret,
-        scope: connector.scopes ?? undefined,
         issuer: connector.issuer ?? undefined,
       }
       continue

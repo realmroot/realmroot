@@ -30,6 +30,12 @@ describe('service.test 1', () => {
     )
   })
 
+  it('does not publish generic OIDC scopes for built-in social providers', () => {
+    const items = listConnectorTemplates().items
+
+    expect(items.every((template) => template.defaultScopes.length === 0)).toBe(true)
+  })
+
   it('returns connector templates without secret values', () => {
     expect(listConnectorTemplates().items).toEqual(
       expect.arrayContaining([
@@ -59,6 +65,12 @@ describe('service.test 1', () => {
             providerMetadata: { clientSecret: 'metadata-secret', redirectURI: 'https://auth.example.com/callback' },
           }),
           connector({
+            providerType: 'social',
+            providerId: 'apple',
+            clientSecret: 'apple-secret',
+            scopes: ['openid', 'email', 'profile'],
+          }),
+          connector({
             providerType: 'generic_oauth',
             providerId: 'okta-main',
             clientSecret: 'okta-secret',
@@ -74,20 +86,26 @@ describe('service.test 1', () => {
       }),
     )
 
-    expect(config.trustedProviders).toEqual(['google', 'okta-main'])
+    expect(config.trustedProviders).toEqual(['google', 'apple', 'okta-main'])
     expect(config.socialProviders.google).toMatchObject({
       clientId: 'client-id',
       clientSecret: 'google-secret',
-      scope: ['openid', 'email', 'profile'],
       redirectURI: 'https://auth.example.com/callback',
     })
+    expect(config.socialProviders.google).not.toHaveProperty('scope')
     expect(config.socialProviders.google?.clientSecret).not.toBe('metadata-secret')
+    expect(config.socialProviders.apple).toMatchObject({
+      clientId: 'client-id',
+      clientSecret: 'apple-secret',
+    })
+    expect(config.socialProviders.apple).not.toHaveProperty('scope')
     expect(config.genericOAuthProviders).toEqual([
       expect.objectContaining({
         providerId: 'okta-main',
         clientId: 'client-id',
         clientSecret: 'okta-secret',
         discoveryUrl: 'https://idp.example.com/.well-known/openid-configuration/oauth2/default',
+        scopes: ['openid', 'email'],
         pkce: true,
         requireIssuerValidation: true,
       }),

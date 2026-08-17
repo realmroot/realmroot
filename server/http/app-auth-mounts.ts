@@ -65,6 +65,10 @@ export function isPublicCorsPath(path: string) {
   return path.startsWith('/api/public/') || publicOAuthMetadataPaths.has(path)
 }
 
+export function isIdentityProviderCallbackPath(path: string) {
+  return /^\/api\/auth\/callback\/[^/]+$/.test(path)
+}
+
 export const publicIssuerMetadataPaths = [
   '/.well-known/openid-configuration/api/auth',
   '/.well-known/oauth-authorization-server/api/auth',

@@ -19,6 +19,7 @@ import { agentBootstrapScopes, realmrootOAuthScopes, resourceByRoutePrefix } fro
 import type { Context } from 'hono'
 import { Hono } from 'hono'
 import {
+  isIdentityProviderCallbackPath,
   isPublicCorsPath,
   mountAgentConfiguration,
   oauthClientCorsOrigins,
@@ -86,6 +87,7 @@ export function createApp(auth: AuthHandler, deps: Deps, config: AppConfig = {})
   app.use('*', accessLog())
   app.on(['GET', 'HEAD'], ['/.well-known/jwks.json', '/api/auth/jwks'], (c) => publishJwks(c, auth))
   const cors = trustedOriginCors(config.trustedOrigins ?? [], {
+    isOriginExemptPath: isIdentityProviderCallbackPath,
     isPublicPath: isPublicCorsPath,
     resolveAllowedOrigins: oauthClientCorsOrigins(),
   })
