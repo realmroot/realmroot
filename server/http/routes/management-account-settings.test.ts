@@ -335,7 +335,7 @@ function createAuthMock() {
       listUserSessions: vi.fn().mockResolvedValue({ sessions: [] }),
       revokeUserSession: vi.fn().mockResolvedValue({ success: true }),
       revokeUserSessions: vi.fn().mockResolvedValue({ success: true }),
-      requestPasswordReset: vi.fn().mockResolvedValue({ status: true }),
+      requestPasswordReset: vi.fn().mockResolvedValue({ success: true }),
       sendVerificationEmail: vi.fn().mockResolvedValue({ status: true }),
       changeEmail: vi.fn().mockResolvedValue({ status: true }),
       requestEmailChangeEmailOTP: vi.fn().mockResolvedValue({ success: true }),

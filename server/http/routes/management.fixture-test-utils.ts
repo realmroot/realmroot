@@ -156,8 +156,6 @@ export function createConfigzServiceMock(
         signInUsernamePath: '/api/auth/sign-in/username' as const,
         signUpEmailPath: '/api/auth/sign-up/email' as const,
         signOutPath: '/api/auth/sign-out' as const,
-        requestPasswordResetPath: '/api/auth/request-password-reset' as const,
-        resetPasswordPath: '/api/auth/reset-password' as const,
         sendVerificationEmailPath: '/api/auth/send-verification-email' as const,
         verifyEmailPath: '/api/auth/verify-email' as const,
         emailOtpPath: '/api/auth/email-otp/send-verification-otp' as const,

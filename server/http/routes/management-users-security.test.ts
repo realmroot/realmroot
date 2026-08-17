@@ -142,7 +142,7 @@ describe('management routes 2', () => {
     await app.request('/api/users/user-1/password-reset-requests', {
       method: 'POST',
       headers,
-      body: JSON.stringify({ email: 'ada@example.com', redirectTo: 'https://app.example.com/reset' }),
+      body: JSON.stringify({}),
     })
     await app.request('/api/users/user-1/suspension', {
       method: 'PUT',
@@ -154,7 +154,7 @@ describe('management routes 2', () => {
     expect(auth.api.requestPasswordReset).toHaveBeenCalledWith({
       body: {
         email: 'ada@example.com',
-        redirectTo: 'https://app.example.com/reset',
+        redirectTo: 'http://localhost/auth/forgot-password?mode=link',
       },
       headers: expect.any(Headers),
     })
@@ -177,7 +177,7 @@ describe('management routes 2', () => {
     const reset = await app.request('/api/users/user-1/password-reset-requests', {
       method: 'POST',
       headers,
-      body: JSON.stringify({ redirectTo: 'https://app.example.com/reset' }),
+      body: JSON.stringify({}),
     })
 
     expect(detail.status).toBe(200)
@@ -214,7 +214,7 @@ describe('management routes 2', () => {
     expect(auth.api.requestPasswordReset).toHaveBeenCalledWith({
       body: {
         email: 'user-1@example.com',
-        redirectTo: 'https://app.example.com/reset',
+        redirectTo: 'http://localhost/auth/forgot-password?mode=link',
       },
       headers: expect.any(Headers),
     })

@@ -1,4 +1,4 @@
-import { forbidden } from '@server/domain/errors'
+import { forbidden, notFound } from '@server/domain/errors'
 import { listApplications } from '@server/usecases/applications'
 import { type ConfigzOptions, getConfig } from '@server/usecases/configz'
 import type { WalletRepository } from '@server/usecases/ports'
@@ -89,6 +89,7 @@ const oauthClientCorsPaths = new Set([
 
 export async function requireHostedAuthMethodEnabled(c: Context, options: ConfigzOptions) {
   const path = c.req.path
+  if (path === '/api/auth/request-password-reset') throw notFound()
   if (!isManagedHostedAuthPath(path)) return
 
   const config = await getConfig(getDeps(c), options)
@@ -113,8 +114,6 @@ const passwordAuthPaths = new Set([
   '/api/auth/sign-in/email',
   '/api/auth/sign-in/username',
   '/api/auth/sign-up/email',
-  '/api/auth/request-password-reset',
-  '/api/auth/reset-password',
   '/api/auth/email-otp/request-password-reset',
   '/api/auth/email-otp/reset-password',
   '/api/auth/change-password',

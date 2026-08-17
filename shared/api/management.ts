@@ -24,13 +24,7 @@ import {
   listConnectorsResponseSchema,
   updateConnectorRequestSchema,
 } from './connectors'
-import {
-  adminBanUserSchema,
-  adminCreateUserSchema,
-  adminPasswordResetSchema,
-  adminUpdateUserSchema,
-  adminUserListQuerySchema,
-} from './users'
+import { adminBanUserSchema, adminCreateUserSchema, adminUpdateUserSchema, adminUserListQuerySchema } from './users'
 
 export const managementErrorResponseSchema = z.object({
   error: z.object({
@@ -502,7 +496,6 @@ export const managementUserListQuerySchema = adminUserListQuerySchema
 export const managementCreateUserRequestSchema = adminCreateUserSchema
 export const managementUpdateUserRequestSchema = adminUpdateUserSchema
 export const managementBanUserRequestSchema = adminBanUserSchema
-export const managementPasswordResetRequestSchema = adminPasswordResetSchema
 
 export const protectedResourceCollectionRoutes = [
   '/applications',
@@ -528,7 +521,6 @@ export type ManagementUserListQuery = z.infer<typeof managementUserListQuerySche
 export type ManagementCreateUserRequest = z.infer<typeof managementCreateUserRequestSchema>
 export type ManagementUpdateUserRequest = z.infer<typeof managementUpdateUserRequestSchema>
 export type ManagementBanUserRequest = z.infer<typeof managementBanUserRequestSchema>
-export type ManagementPasswordResetRequest = z.infer<typeof managementPasswordResetRequestSchema>
 export type ManagementSignInSettingsResponse = z.infer<typeof managementSignInSettingsResponseSchema>
 export type UpdateManagementSignInSettingsRequest = z.infer<typeof updateManagementSignInSettingsRequestSchema>
 export type ManagementBrandingSettingsResponse = z.infer<typeof managementBrandingSettingsResponseSchema>

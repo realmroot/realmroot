@@ -102,7 +102,7 @@ describe('management users and account routes', () => {
     expect(auth.api.requestPasswordReset).toHaveBeenCalledWith({
       body: {
         email: 'ada@example.com',
-        redirectTo: undefined,
+        redirectTo: 'http://localhost/auth/forgot-password?mode=link',
       },
       headers: expect.any(Headers),
     })
@@ -336,7 +336,7 @@ function createAuthMock() {
       listUserSessions: vi.fn().mockResolvedValue({ sessions: [] }),
       revokeUserSession: vi.fn().mockResolvedValue({ success: true }),
       revokeUserSessions: vi.fn().mockResolvedValue({ success: true }),
-      requestPasswordReset: vi.fn().mockResolvedValue({ status: true }),
+      requestPasswordReset: vi.fn().mockResolvedValue({ success: true }),
       sendVerificationEmail: vi.fn().mockResolvedValue({ status: true }),
       changeEmail: vi.fn().mockResolvedValue({ status: true }),
       requestEmailChangeEmailOTP: vi.fn().mockResolvedValue({ success: true }),

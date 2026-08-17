@@ -49,6 +49,54 @@ afterEach(() => {
 })
 
 describe('ForgotPasswordPage resend and reset', () => {
+  it('opens a new-password-only form from an administrator password reset link', async () => {
+    const requests: Array<{ url: string; body: unknown }> = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
+      requests.push({ url, body: init?.body ? JSON.parse(String(init.body)) : null })
+      return Promise.resolve(jsonResponse({ success: true }))
+    })
+    window.history.pushState(null, '', '/auth/forgot-password?mode=link&token=reset-token')
+
+    render(<ForgotPasswordPage />)
+
+    expect(await screen.findByLabelText('New password')).toBeTruthy()
+    expect(screen.getByLabelText('Confirm new password')).toBeTruthy()
+    expect(screen.queryByLabelText('Email')).toBeNull()
+    expect(screen.queryByLabelText('One-time code')).toBeNull()
+    expect(screen.getByRole('link', { name: 'Use an email code instead' }).getAttribute('href')).toBe(
+      '/auth/forgot-password',
+    )
+
+    fireEvent.change(screen.getByLabelText('New password'), { target: { value: 'new-password-1' } })
+    fireEvent.change(screen.getByLabelText('Confirm new password'), { target: { value: 'new-password-1' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Reset password' }))
+
+    await waitFor(() =>
+      expect(requests).toContainEqual({
+        url: '/api/auth/reset-password',
+        body: { newPassword: 'new-password-1', token: 'reset-token' },
+      }),
+    )
+  })
+
+  it('offers the OTP recovery flow when an administrator reset link is invalid', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      if (String(input) === '/api/configz') return Promise.resolve(jsonResponse(configz))
+      return Promise.resolve(jsonResponse({ success: true }))
+    })
+    window.history.pushState(null, '', '/auth/forgot-password?mode=link&error=INVALID_TOKEN')
+
+    render(<ForgotPasswordPage />)
+
+    expect(await screen.findByText('This password reset link is invalid or has expired.')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Use an email code instead' }).getAttribute('href')).toBe(
+      '/auth/forgot-password',
+    )
+    expect(screen.queryByRole('button', { name: 'Reset password' })).toBeNull()
+  })
+
   it('starts a resend cooldown after sending the code and resets the password with the OTP', async () => {
     const requests: Array<{ url: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {

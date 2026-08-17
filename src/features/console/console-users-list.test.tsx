@@ -101,7 +101,7 @@ describe('admin console users-list', () => {
 
     expect(await screen.findByText('jane@example.com')).toBeTruthy()
     fireEvent.pointerDown(screen.getByLabelText('Actions for jane@example.com'), { button: 0, ctrlKey: false })
-    expect(await screen.findByText('Send password reset')).toBeTruthy()
+    expect(await screen.findByText('Send reset link')).toBeTruthy()
     expect(screen.queryByText('Make Realm administrator')).toBeNull()
     expect(screen.queryByText('Remove Realm administrator')).toBeNull()
     expect(requests).toEqual([])
@@ -207,7 +207,7 @@ describe('admin console users-list', () => {
     fireEvent.change(screen.getByLabelText('Search users'), { target: { value: 'jane' } })
     expect(await screen.findByLabelText('Actions for jane@example.com')).toBeTruthy()
     fireEvent.pointerDown(screen.getByLabelText('Actions for jane@example.com'), { button: 0, ctrlKey: false })
-    fireEvent.click(await screen.findByText('Send password reset'))
+    fireEvent.click(await screen.findByText('Send reset link'))
 
     await waitFor(() => {
       expect(requests).toEqual([{ url: '/api/users/user-1/password-reset-requests', body: {} }])
@@ -254,6 +254,6 @@ describe('admin console users-list', () => {
       expect(requests.some((url) => url.includes('banned=true') && url.includes('offset=10'))).toBe(true)
     })
     fireEvent.pointerDown(screen.getByLabelText('Actions for user-1'), { button: 0, ctrlKey: false })
-    expect(screen.queryByText('Send password reset')).toBeNull()
+    expect(screen.queryByText('Send reset link')).toBeNull()
   })
 })

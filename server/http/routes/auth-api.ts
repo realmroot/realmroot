@@ -12,7 +12,7 @@ export interface ManagementAuthApi {
   revokeSession: AuthEndpoint<{ body: { token: string }; headers: Headers }, unknown>
   revokeSessions: AuthEndpoint<{ headers: Headers }, unknown>
   revokeOtherSessions: AuthEndpoint<{ headers: Headers }, unknown>
-  requestPasswordReset: AuthEndpoint<{ body: Record<string, unknown>; headers: Headers }, unknown>
+  requestPasswordReset: AuthEndpoint<{ body: { email: string; redirectTo: string }; headers: Headers }, unknown>
   sendVerificationEmail: AuthEndpoint<{ body: Record<string, unknown>; headers: Headers }, unknown>
   changeEmail: AuthEndpoint<{ body: Record<string, unknown>; headers: Headers }, unknown>
   requestEmailChangeEmailOTP: AuthEndpoint<{ body: Record<string, unknown>; headers: Headers }, unknown>

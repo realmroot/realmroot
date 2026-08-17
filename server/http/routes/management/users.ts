@@ -15,7 +15,6 @@ import { paginationMetadata, paginationQuerySchema } from '@shared/api/paginatio
 import {
   adminBanUserSchema,
   adminCreateUserSchema,
-  adminPasswordResetSchema,
   adminUpdateUserSchema,
   adminUserListQuerySchema,
 } from '@shared/api/users'
@@ -102,14 +101,13 @@ export function managementUserRoutes(authApi: ManagementAuthApi, _options: Manag
 
   app.post('/:id/password-reset-requests', async (c) => {
     await authorizePlatformOrganization(c, 'users:write')
-    const body = await readJson(c, adminPasswordResetSchema.pick({ redirectTo: true }))
     const user = await getDeps(c).users.getUser(c.req.param('id'))
 
     try {
       await authApi.requestPasswordReset({
         body: {
           email: user.email,
-          redirectTo: body.redirectTo,
+          redirectTo: new URL('/auth/forgot-password?mode=link', c.req.url).toString(),
         },
         headers: c.req.raw.headers,
       })

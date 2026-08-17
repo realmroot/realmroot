@@ -80,14 +80,6 @@ export function signUp(input: {
   return nativeAuth('/sign-up/email', input)
 }
 
-export function requestPasswordReset(input: { email: string; redirectTo?: string; captchaToken?: string }) {
-  return nativeAuth('/request-password-reset', input)
-}
-
-export function resetPassword(input: { token: string; newPassword: string }) {
-  return nativeAuth('/reset-password', input)
-}
-
 export function requestEmailVerification(input: { email: string; callbackURL?: string }) {
   return nativeAuth('/send-verification-email', input)
 }
@@ -194,6 +186,10 @@ export function requestEmailOtpPasswordReset(input: { email: string; captchaToke
 
 export function resetPasswordWithEmailOtp(input: { email: string; otp: string; password: string }) {
   return nativeAuth('/email-otp/reset-password', input)
+}
+
+export function resetPasswordWithToken(input: { token: string; newPassword: string }) {
+  return nativeAuth('/reset-password', input)
 }
 
 export async function nativeAuth(

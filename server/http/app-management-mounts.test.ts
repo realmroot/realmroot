@@ -147,6 +147,29 @@ describe('app.test 2', () => {
     expect(auth.handler).not.toHaveBeenCalled()
   })
 
+  it('blocks public link requests while allowing token consumption and completion', async () => {
+    const auth = createAuthMock()
+    mockConfig()
+    const app = createApp(auth, createTestDeps())
+
+    const requestReset = await app.request('/api/auth/request-password-reset', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'user@example.com', redirectTo: 'https://auth.example.com/auth/forgot-password' }),
+    })
+    const consumeReset = await app.request('/api/auth/reset-password/reset-token?callbackURL=%2Fauth%2Fforgot-password')
+    const completeReset = await app.request('/api/auth/reset-password', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ token: 'reset-token', newPassword: 'New-password-123' }),
+    })
+
+    expect(requestReset.status).toBe(404)
+    expect(consumeReset.status).toBe(204)
+    expect(completeReset.status).toBe(204)
+    expect(auth.handler).toHaveBeenCalledTimes(2)
+  })
+
   it('blocks email OTP sign-in while allowing email verification when email code sign-in is disabled [spec: hosted-auth/email-otp] [spec: connectors-and-methods/connectors-email]', async () => {
     const auth = createAuthMock()
     mockConfig({

@@ -42,11 +42,6 @@ export const adminBanUserSchema = z.object({
   expiresInSeconds: z.number().int().positive().optional(),
 })
 
-export const adminPasswordResetSchema = z.object({
-  email: z.email(),
-  redirectTo: z.string().url().optional(),
-})
-
 export type AdminCreateUserInput = z.infer<typeof adminCreateUserSchema>
 export type AdminUpdateUserInput = z.infer<typeof adminUpdateUserSchema>
 export type AdminUserListQuery = z.infer<typeof adminUserListQuerySchema>

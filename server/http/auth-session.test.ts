@@ -153,7 +153,7 @@ describe('auth.test 1', () => {
     expect(response.headers.get('location') ?? (await response.text())).not.toContain('client_id is required')
   })
 
-  it('wires Better Auth email flows to the transactional email sender', async () => {
+  it('wires supported Better Auth email flows to the transactional email sender', async () => {
     const emailSender = createEmailSenderMock()
     const auth = createAuth(
       {} as Database,
@@ -172,7 +172,7 @@ describe('auth.test 1', () => {
     })
     await auth.options.emailAndPassword?.sendResetPassword?.({
       user: createUser(),
-      url: 'https://auth.example.com/reset',
+      url: 'https://auth.example.com/api/auth/reset-password/reset-token?callbackURL=callback',
       token: 'reset-token',
     })
     await auth.options.emailAndPassword?.onPasswordReset?.({
@@ -182,6 +182,11 @@ describe('auth.test 1', () => {
       email: 'user@example.com',
       otp: '123456',
       type: 'sign-in',
+    })
+    await findPlugin<EmailOtpPluginOptions>(auth, 'email-otp').options.sendVerificationOTP({
+      email: 'user@example.com',
+      otp: '654321',
+      type: 'forget-password',
     })
     await findPlugin<OrganizationPluginOptions>(auth, 'organization').options.sendInvitationEmail({
       email: 'user@example.com',
@@ -201,13 +206,6 @@ describe('auth.test 1', () => {
     expect(emailSender.send).toHaveBeenCalledWith({
       to: 'user@example.com',
       template: {
-        type: 'password-reset',
-        url: 'https://auth.example.com/reset',
-      },
-    })
-    expect(emailSender.send).toHaveBeenCalledWith({
-      to: 'user@example.com',
-      template: {
         type: 'security-notification',
         title: 'Your password was changed',
         body: 'Your Realmroot password was changed. If this was not you, reset your password immediately.',
@@ -218,6 +216,20 @@ describe('auth.test 1', () => {
       template: {
         type: 'otp',
         otp: '123456',
+      },
+    })
+    expect(emailSender.send).toHaveBeenCalledWith({
+      to: 'user@example.com',
+      template: {
+        type: 'otp',
+        otp: '654321',
+      },
+    })
+    expect(emailSender.send).toHaveBeenCalledWith({
+      to: 'user@example.com',
+      template: {
+        type: 'password-reset',
+        url: 'https://auth.example.com/api/auth/reset-password/reset-token?callbackURL=callback',
       },
     })
     expect(emailSender.send).toHaveBeenCalledWith({
@@ -279,6 +291,7 @@ describe('auth.test 1', () => {
         'listPasskeys',
         'generatePasskeyRegistrationOptions',
         'sendVerificationOTP',
+        'requestPasswordReset',
         'requestPasswordResetEmailOTP',
         'signInUsername',
         'isUsernameAvailable',

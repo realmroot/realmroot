@@ -356,8 +356,12 @@ export function createAuth(
         ...createDeviceAuthorizationOptions(applications),
       }),
       emailOTP({
-        otpLength: options.builtInProviders?.email.otpLength,
-        expiresIn: options.builtInProviders?.email.expiresInSeconds,
+        ...(options.builtInProviders?.email.otpLength === undefined
+          ? {}
+          : { otpLength: options.builtInProviders.email.otpLength }),
+        ...(options.builtInProviders?.email.expiresInSeconds === undefined
+          ? {}
+          : { expiresIn: options.builtInProviders.email.expiresInSeconds }),
         changeEmail: {
           enabled: true,
           verifyCurrentEmail: false,

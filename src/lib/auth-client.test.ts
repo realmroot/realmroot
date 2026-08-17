@@ -8,11 +8,10 @@ import {
   requestEmailOtp,
   requestEmailOtpPasswordReset,
   requestEmailVerification,
-  requestPasswordReset,
   requestPhoneOtp,
   requestWalletNonce,
-  resetPassword,
   resetPasswordWithEmailOtp,
+  resetPasswordWithToken,
   signInWithEmailOtp,
   signInWithOneTap,
   signInWithPassword,
@@ -109,8 +108,6 @@ describe('native auth client', () => {
     await signInWithUsername({ username: 'jane', password: 'password-1' })
     await signOut()
     await signUp({ email: 'jane@example.com', name: 'Jane', password: 'password-1', username: 'jane' })
-    await requestPasswordReset({ email: 'jane@example.com', redirectTo: '/auth/forgot-password' })
-    await resetPassword({ token: 'token-1', newPassword: 'new-password' })
     await requestEmailVerification({ email: 'jane@example.com', callbackURL: '/' })
     await requestEmailOtp({ email: 'jane@example.com', type: 'sign-in' })
     await signInWithEmailOtp({ email: 'jane@example.com', otp: '123456' })
@@ -119,6 +116,7 @@ describe('native auth client', () => {
     await verifyEmailOtp({ email: 'jane@example.com', otp: '123456' })
     await requestEmailOtpPasswordReset({ email: 'jane@example.com' })
     await resetPasswordWithEmailOtp({ email: 'jane@example.com', otp: '123456', password: 'new-password' })
+    await resetPasswordWithToken({ token: 'reset-token', newPassword: 'new-password' })
     await requestWalletNonce({ walletAddress: '0x0000000000000000000000000000000000000001', chainId: 1 })
     await signInWithWallet({
       message: 'Sign this message.',
@@ -143,8 +141,6 @@ describe('native auth client', () => {
       '/api/auth/sign-in/username',
       '/api/auth/sign-out',
       '/api/auth/sign-up/email',
-      '/api/auth/request-password-reset',
-      '/api/auth/reset-password',
       '/api/auth/send-verification-email',
       '/api/auth/email-otp/send-verification-otp',
       '/api/auth/sign-in/email-otp',
@@ -153,6 +149,7 @@ describe('native auth client', () => {
       '/api/auth/email-otp/verify-email',
       '/api/auth/email-otp/request-password-reset',
       '/api/auth/email-otp/reset-password',
+      '/api/auth/reset-password',
       '/api/auth/siwe/nonce',
       '/api/auth/siwe/verify',
       '/api/auth/one-tap/callback',

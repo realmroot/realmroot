@@ -98,8 +98,6 @@ export const configzConfigResponseSchema = z.object({
     signInUsernamePath: z.literal('/api/auth/sign-in/username'),
     signUpEmailPath: z.literal('/api/auth/sign-up/email'),
     signOutPath: z.literal('/api/auth/sign-out'),
-    requestPasswordResetPath: z.literal('/api/auth/request-password-reset'),
-    resetPasswordPath: z.literal('/api/auth/reset-password'),
     sendVerificationEmailPath: z.literal('/api/auth/send-verification-email'),
     verifyEmailPath: z.literal('/api/auth/verify-email'),
     emailOtpPath: z.literal('/api/auth/email-otp/send-verification-otp'),

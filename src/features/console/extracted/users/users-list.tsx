@@ -168,7 +168,7 @@ export function UsersPage() {
                           {user.email ? (
                             <DropdownMenuItem onClick={() => requestUserPasswordReset(user.id)}>
                               {' '}
-                              {tt('Send password reset')}{' '}
+                              {tt('Send reset link')}{' '}
                             </DropdownMenuItem>
                           ) : null}
                         </DropdownMenuGroup>

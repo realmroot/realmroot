@@ -148,6 +148,38 @@ describe('account self-service over real D1', () => {
     )
   })
 
+  it('completes self-service password recovery with a code-only email', async () => {
+    const adminCookie = await signInAdmin(harness)
+    await createUser(harness, adminCookie, {
+      email: 'otp-recovery@example.com',
+      username: 'otprecovery',
+      displayName: 'OTP Recovery',
+      password: 'old-password-2026',
+    })
+
+    const requested = await harness.request('/api/auth/email-otp/request-password-reset', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'otp-recovery@example.com' }),
+    })
+    expect(requested.status, await requested.clone().text()).toBe(200)
+
+    const message = harness.sentEmails.find((email) => email.subject === 'Your Realmroot code')
+    expect(message?.text).not.toMatch(/https?:\/\//)
+    const otp = message?.text?.match(/\b\d{6}\b/)?.[0]
+    expect(otp).toBeTruthy()
+
+    const completed = await harness.request('/api/auth/email-otp/reset-password', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'otp-recovery@example.com', otp, password: 'new-password-2026' }),
+    })
+    expect(completed.status, await completed.clone().text()).toBe(200)
+    await expect(signIn(harness, 'otp-recovery@example.com', 'new-password-2026')).resolves.toContain(
+      'better-auth.session_token=',
+    )
+  })
+
   it('reads and updates the profile through real SQL [spec: account-center/profile-update]', async () => {
     const { cookie } = await signedInUser(harness)
 

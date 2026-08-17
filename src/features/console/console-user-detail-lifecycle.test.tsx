@@ -296,8 +296,8 @@ describe('admin console user detail lifecycle', () => {
     expect(requestedUrls).toContain('/api/users/user-1/application-authorizations?limit=100')
 
     fireEvent.mouseDown(screen.getByRole('tab', { name: 'Settings' }), { button: 0, ctrlKey: false })
-    fireEvent.click(await screen.findByRole('button', { name: 'Send password reset' }))
-    fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Send password reset' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Send reset link' }))
+    fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Send reset link' }))
     await waitFor(() =>
       expect(requests).toContainEqual({ method: 'POST', url: '/api/users/user-1/password-reset-requests' }),
     )

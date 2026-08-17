@@ -255,14 +255,16 @@ export function UserDetailPage({ userId, section = 'overview' }: { userId: strin
         userName={userDisplayName(user)}
       />
       <DangerConfirmDialog
-        actionLabel={tt('Send password reset')}
-        description={tt('Send a recovery message to {{email}}.', { email: user.email ?? tt('this user') })}
+        actionLabel={tt('Send reset link')}
+        description={tt('Send a secure password reset link to {{email}}.', {
+          email: user.email ?? tt('this user'),
+        })}
         error={reset.error}
         onClose={() => setResetOpen(false)}
         onConfirm={() => reset.mutate(undefined)}
         open={resetOpen}
         pending={reset.isPending}
-        title={tt('Send password reset?')}
+        title={tt('Send password reset link?')}
       />
       <DangerConfirmDialog
         actionLabel={tt('Delete user')}
@@ -637,10 +639,10 @@ function UserSettings({
       <DetailRow
         action={
           <Button disabled={pending} onClick={onReset} variant="outline">
-            {tt('Send password reset')}
+            {tt('Send reset link')}
           </Button>
         }
-        description="Send a password recovery message to the primary email."
+        description="Send a secure password reset link to the primary email."
         label="Password reset"
         value={user.email ?? tt('No email')}
       />

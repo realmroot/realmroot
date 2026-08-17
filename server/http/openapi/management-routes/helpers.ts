@@ -72,7 +72,6 @@ export {
   managementConnectorResponseSchema,
   managementCreateUserRequestSchema,
   managementErrorResponseSchema,
-  managementPasswordResetRequestSchema,
   managementReadinessResponseSchema,
   managementRealmResponseSchema,
   managementSignInSettingsResponseSchema,

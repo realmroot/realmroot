@@ -223,6 +223,45 @@ describe('user management over real D1', () => {
     expect(removed.status).toBe(204)
   })
 
+  it('completes an administrator-issued password reset link through the real auth boundary', async () => {
+    const cookie = await signInAdmin(harness)
+    const userId = await createUser(harness, cookie, {
+      email: 'reset-link@example.com',
+      username: 'resetlink',
+      displayName: 'Reset Link',
+      password: 'old-password-2026',
+    })
+
+    const requested = await harness.request(`/api/users/${userId}/password-reset-requests`, {
+      method: 'POST',
+      headers: { cookie },
+    })
+    expect(requested.status, await requested.clone().text()).toBe(201)
+
+    const message = harness.sentEmails.find((email) => email.subject === 'Reset your password')
+    const link = new URL(message?.text?.split('\n').at(-1) ?? '')
+    expect(link.pathname).toMatch(/^\/api\/auth\/reset-password\/[A-Za-z0-9_-]+$/)
+    expect(link.searchParams.get('callbackURL')).toBe('http://localhost/auth/forgot-password?mode=link')
+
+    const verified = await harness.request(`${link.pathname}${link.search}`)
+    expect(verified.status).toBe(302)
+    const destination = new URL(verified.headers.get('location') ?? '')
+    expect(`${destination.origin}${destination.pathname}`).toBe('http://localhost/auth/forgot-password')
+    expect(destination.searchParams.get('mode')).toBe('link')
+    const token = destination.searchParams.get('token')
+    expect(token).toBeTruthy()
+
+    const completed = await harness.request('/api/auth/reset-password', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ token, newPassword: 'new-password-2026' }),
+    })
+    expect(completed.status, await completed.clone().text()).toBe(200)
+    await expect(signIn(harness, 'reset-link@example.com', 'new-password-2026')).resolves.toContain(
+      'better-auth.session_token=',
+    )
+  })
+
   it('rejects an invalid admin create payload with 400', async () => {
     const cookie = await signInAdmin(harness)
     const response = await harness.request('/api/users', {

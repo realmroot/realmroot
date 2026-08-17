@@ -129,11 +129,30 @@ describe('createEmailSender', () => {
 describe('renderEmailTemplate', () => {
   it('renders auth and security notification templates', () => {
     expect([
-      renderEmailTemplate({ type: 'password-reset', url: 'https://auth.example.com/reset' }).subject,
+      renderEmailTemplate({ type: 'verification', url: 'https://auth.example.com/verify' }).subject,
       renderEmailTemplate({ type: 'invitation', inviterName: 'Admin', url: 'https://auth.example.com/invite' }).subject,
       renderEmailTemplate({ type: 'otp', otp: '654321' }).text,
       renderEmailTemplate({ type: 'security-notification', title: 'New login', body: 'A new login was detected.' })
         .subject,
-    ]).toEqual(['Reset your password', 'You were invited to Realmroot', 'Your one-time code is 654321.', 'New login'])
+    ]).toEqual([
+      'Verify your email address',
+      'You were invited to Realmroot',
+      'Your one-time code is 654321.',
+      'New login',
+    ])
+  })
+
+  it('renders a password reset link without an OTP', () => {
+    const rendered = renderEmailTemplate({
+      type: 'password-reset',
+      url: 'https://auth.example.com/api/auth/reset-password/reset-token?callbackURL=callback',
+    })
+
+    expect(rendered.subject).toBe('Reset your password')
+    expect(rendered.text).toContain('https://auth.example.com/api/auth/reset-password/reset-token?callbackURL=callback')
+    expect(rendered.text).not.toContain('654321')
+    expect(rendered.html).toContain(
+      'href="https://auth.example.com/api/auth/reset-password/reset-token?callbackURL=callback"',
+    )
   })
 })

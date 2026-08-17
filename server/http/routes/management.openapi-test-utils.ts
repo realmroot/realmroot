@@ -34,7 +34,7 @@ export function createAuthMock() {
       removeUser: vi.fn().mockResolvedValue({ success: true }),
       revokeUserSession: vi.fn().mockResolvedValue({ success: true }),
       revokeUserSessions: vi.fn().mockResolvedValue({ success: true }),
-      requestPasswordReset: vi.fn().mockResolvedValue({ status: true }),
+      requestPasswordReset: vi.fn().mockResolvedValue({ success: true }),
       sendVerificationEmail: vi.fn().mockResolvedValue({ status: true }),
       changeEmail: vi.fn().mockResolvedValue({ status: true }),
       changePassword: vi.fn().mockResolvedValue(Response.json({ status: true })),

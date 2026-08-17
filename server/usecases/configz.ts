@@ -177,8 +177,6 @@ export async function getConfig(deps: Deps, options: ConfigzOptions): Promise<Co
       signInUsernamePath: '/api/auth/sign-in/username',
       signUpEmailPath: '/api/auth/sign-up/email',
       signOutPath: '/api/auth/sign-out',
-      requestPasswordResetPath: '/api/auth/request-password-reset',
-      resetPasswordPath: '/api/auth/reset-password',
       sendVerificationEmailPath: '/api/auth/send-verification-email',
       verifyEmailPath: '/api/auth/verify-email',
       emailOtpPath: '/api/auth/email-otp/send-verification-otp',

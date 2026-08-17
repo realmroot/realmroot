@@ -179,26 +179,20 @@ describe('management security user routes', () => {
       }),
       headers: { 'content-type': 'application/json' },
     })
-    const weakReset = await app.request('/api/auth/reset-password', {
-      method: 'POST',
-      body: JSON.stringify({ token: 'token-1', newPassword: 'abc123abc123' }),
-      headers: { 'content-type': 'application/json' },
-    })
     const weakOtpReset = await app.request('/api/auth/email-otp/reset-password', {
       method: 'POST',
       body: JSON.stringify({ email: 'allowed@example.com', otp: '123456', password: 'abc123abc123' }),
       headers: { 'content-type': 'application/json' },
     })
-    const missingResetPassword = await app.request('/api/auth/reset-password', {
+    const weakLinkReset = await app.request('/api/auth/reset-password', {
       method: 'POST',
-      body: JSON.stringify({ token: 'token-1' }),
+      body: JSON.stringify({ token: 'reset-token', newPassword: 'abc123abc123' }),
       headers: { 'content-type': 'application/json' },
     })
     const nonJsonSignup = await app.request('/api/auth/sign-up/email', {
       method: 'POST',
       body: new FormData(),
     })
-    const getReset = await app.request('/api/auth/reset-password')
 
     expect(weakSignup.status).toBe(400)
     await expect(weakSignup.json()).resolves.toMatchObject({
@@ -220,25 +214,14 @@ describe('management security user routes', () => {
     await expect(weakNativePasswordChange.json()).resolves.toMatchObject({
       error: { message: 'Password must include at least 3 character types.' },
     })
-    expect(weakReset.status).toBe(400)
-    await expect(weakReset.json()).resolves.toMatchObject({
-      error: { message: 'Password must include at least 3 character types.' },
-    })
     expect(weakOtpReset.status).toBe(400)
+    expect(weakLinkReset.status).toBe(400)
     await expect(weakOtpReset.json()).resolves.toMatchObject({
       error: { message: 'Password must include at least 3 character types.' },
-    })
-    expect(missingResetPassword.status).toBe(400)
-    await expect(missingResetPassword.json()).resolves.toMatchObject({
-      error: { message: 'newPassword is required.' },
     })
     expect(nonJsonSignup.status).toBe(400)
     await expect(nonJsonSignup.json()).resolves.toMatchObject({
       error: { message: 'email is required.' },
-    })
-    expect(getReset.status).toBe(400)
-    await expect(getReset.json()).resolves.toMatchObject({
-      error: { message: 'newPassword is required.' },
     })
   })
 })
@@ -276,6 +259,7 @@ function createAuthMock() {
       revokeOtherSessions: vi.fn().mockResolvedValue({ status: true }),
       revokeUserSession: vi.fn().mockResolvedValue({ success: true }),
       revokeUserSessions: vi.fn().mockResolvedValue({ success: true }),
+      requestPasswordReset: vi.fn().mockResolvedValue({ status: true }),
       changeEmail: vi.fn().mockResolvedValue({ status: true }),
       changePassword: vi.fn().mockResolvedValue(Response.json({ status: true })),
     },

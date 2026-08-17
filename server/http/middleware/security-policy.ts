@@ -63,12 +63,12 @@ async function enforceHostedAuthPolicy(request: Request, policy: SecurityPolicy,
     })
   }
 
-  if (path === '/api/auth/reset-password') {
-    validatePasswordPolicy(readString(body, 'newPassword'), policy.password)
-  }
-
   if (path === '/api/auth/email-otp/reset-password') {
     validatePasswordPolicy(readString(body, 'password'), policy.password, { email: readOptionalString(body, 'email') })
+  }
+
+  if (path === '/api/auth/reset-password') {
+    validatePasswordPolicy(readString(body, 'newPassword'), policy.password)
   }
 
   if (path === '/api/auth/change-password') {
@@ -86,7 +86,6 @@ function requiresCaptcha(path: string) {
     '/api/auth/sign-in/username',
     '/api/auth/email-otp/send-verification-otp',
     '/api/auth/sign-up/email',
-    '/api/auth/request-password-reset',
     '/api/auth/email-otp/request-password-reset',
   ]).has(path)
 }
