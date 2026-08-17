@@ -1,7 +1,16 @@
 diff --git a/dist/index.mjs b/dist/index.mjs
-index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..58a85dfb1f573df3dd3bd160c1caf249495b827b 100644
+index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..1231e85c1cb469a91ae1f2db8e0eef54881ead88 100644
 --- a/dist/index.mjs
 +++ b/dist/index.mjs
+@@ -9,7 +9,7 @@ import { generateRandomString, makeSignature } from "better-auth/crypto";
+ import { defineRequestState } from "@better-auth/core/context";
+ import { logger } from "@better-auth/core/env";
+ import { BetterAuthError } from "@better-auth/core/error";
+-import { parseSetCookieHeader } from "better-auth/cookies";
++import { deleteSessionCookie, parseSetCookieHeader } from "better-auth/cookies";
+ import { mergeSchema } from "better-auth/db";
+ import * as z from "zod";
+ import { signJWT, toExpJWT } from "better-auth/plugins";
 @@ -262,6 +262,7 @@ async function userInfoEndpoint(ctx, opts) {
  }
  //#endregion
@@ -202,7 +211,15 @@ index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..58a85dfb1f573df3dd3bd160c1caf249
  	const scopes = refreshToken?.scopes;
  	const requestedScopes = scope?.split(" ");
  	if (requestedScopes) {
-@@ -1658,7 +1796,8 @@ const adminCreateOAuthClient = (opts) => createAuthEndpoint("/admin/oauth2/creat
+@@ -1167,6 +1305,7 @@ async function rpInitiatedLogoutEndpoint(ctx, opts) {
+ 			}]
+ 		});
+ 	} catch {}
++	deleteSessionCookie(ctx);
+ 	if (post_logout_redirect_uri) {
+ 		if (client.postLogoutRedirectUris?.includes(post_logout_redirect_uri)) {
+ 			const redirectUri = new URL(post_logout_redirect_uri);
+@@ -1658,7 +1797,8 @@ const adminCreateOAuthClient = (opts) => createAuthEndpoint("/admin/oauth2/creat
  		grant_types: z.array(z.enum([
  			"authorization_code",
  			"client_credentials",
@@ -212,7 +229,7 @@ index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..58a85dfb1f573df3dd3bd160c1caf249
  		])).default(["authorization_code"]).optional(),
  		response_types: z.array(z.enum(["code"])).default(["code"]).optional(),
  		type: z.enum([
-@@ -1842,7 +1981,8 @@ const createOAuthClient = (opts) => createAuthEndpoint("/oauth2/create-client",
+@@ -1842,7 +1982,8 @@ const createOAuthClient = (opts) => createAuthEndpoint("/oauth2/create-client",
  		grant_types: z.array(z.enum([
  			"authorization_code",
  			"client_credentials",
@@ -222,7 +239,7 @@ index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..58a85dfb1f573df3dd3bd160c1caf249
  		])).default(["authorization_code"]).optional(),
  		response_types: z.array(z.enum(["code"])).default(["code"]).optional(),
  		type: z.enum([
-@@ -1944,7 +2084,8 @@ const createOAuthClient = (opts) => createAuthEndpoint("/oauth2/create-client",
+@@ -1944,7 +2085,8 @@ const createOAuthClient = (opts) => createAuthEndpoint("/oauth2/create-client",
  							enum: [
  								"authorization_code",
  								"client_credentials",
@@ -232,7 +249,7 @@ index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..58a85dfb1f573df3dd3bd160c1caf249
  							]
  						},
  						description: "Requested authentication method for the token endpoint"
-@@ -2044,7 +2185,8 @@ const adminUpdateOAuthClient = (opts) => createAuthEndpoint("/admin/oauth2/updat
+@@ -2044,7 +2186,8 @@ const adminUpdateOAuthClient = (opts) => createAuthEndpoint("/admin/oauth2/updat
  			grant_types: z.array(z.enum([
  				"authorization_code",
  				"client_credentials",
@@ -242,7 +259,7 @@ index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..58a85dfb1f573df3dd3bd160c1caf249
  			])).optional(),
  			response_types: z.array(z.enum(["code"])).optional(),
  			type: z.enum([
-@@ -2086,7 +2228,8 @@ const updateOAuthClient = (opts) => createAuthEndpoint("/oauth2/update-client",
+@@ -2086,7 +2229,8 @@ const updateOAuthClient = (opts) => createAuthEndpoint("/oauth2/update-client",
  			grant_types: z.array(z.enum([
  				"authorization_code",
  				"client_credentials",
@@ -252,7 +269,7 @@ index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..58a85dfb1f573df3dd3bd160c1caf249
  			])).optional(),
  			response_types: z.array(z.enum(["code"])).optional(),
  			type: z.enum([
-@@ -2800,7 +2943,8 @@ const oauthProvider = (options) => {
+@@ -2800,7 +2944,8 @@ const oauthProvider = (options) => {
  		grantTypes: [
  			"authorization_code",
  			"client_credentials",
@@ -262,7 +279,7 @@ index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..58a85dfb1f573df3dd3bd160c1caf249
  		],
  		...options,
  		scopes: Array.from(scopes),
-@@ -2863,6 +3007,7 @@ const oauthProvider = (options) => {
+@@ -2863,6 +3008,7 @@ const oauthProvider = (options) => {
  			request_uri: z.string().optional(),
  			code_challenge: z.string().optional(),
  			code_challenge_method: z.enum(["S256"]).optional(),
@@ -270,7 +287,7 @@ index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..58a85dfb1f573df3dd3bd160c1caf249
  			nonce: z.string().optional(),
  			prompt: z.enum([
  				"none",
-@@ -3152,11 +3297,13 @@ const oauthProvider = (options) => {
+@@ -3152,11 +3298,13 @@ const oauthProvider = (options) => {
  					grant_type: z.enum([
  						"authorization_code",
  						"client_credentials",
@@ -285,7 +302,7 @@ index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..58a85dfb1f573df3dd3bd160c1caf249
  					code_verifier: z.string().optional(),
  					redirect_uri: SafeUrlSchema.optional(),
  					refresh_token: z.string().optional(),
-@@ -3174,11 +3321,12 @@ const oauthProvider = (options) => {
+@@ -3174,11 +3322,12 @@ const oauthProvider = (options) => {
  								properties: {
  									grant_type: {
  										type: "string",
@@ -303,7 +320,7 @@ index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..58a85dfb1f573df3dd3bd160c1caf249
  										description: "OAuth2 grant type"
  									},
  									client_id: {
-@@ -3193,6 +3341,10 @@ const oauthProvider = (options) => {
+@@ -3193,6 +3342,10 @@ const oauthProvider = (options) => {
  										type: "string",
  										description: "Authorization code (for authorization_code grant)"
  									},
@@ -314,7 +331,7 @@ index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..58a85dfb1f573df3dd3bd160c1caf249
  									code_verifier: {
  										type: "string",
  										description: "PKCE code verifier (for authorization_code grant)"
-@@ -3600,7 +3752,8 @@ const oauthProvider = (options) => {
+@@ -3600,7 +3753,8 @@ const oauthProvider = (options) => {
  					grant_types: z.array(z.enum([
  						"authorization_code",
  						"client_credentials",
@@ -324,7 +341,7 @@ index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..58a85dfb1f573df3dd3bd160c1caf249
  					])).default(["authorization_code"]).optional(),
  					response_types: z.array(z.enum(["code"])).default(["code"]).optional(),
  					type: z.enum([
-@@ -4083,12 +4236,14 @@ function authServerMetadata(ctx, opts, overrides) {
+@@ -4083,12 +4237,14 @@ function authServerMetadata(ctx, opts, overrides) {
  		registration_endpoint: overrides?.dynamic_client_registration_supported ? `${baseURL}/oauth2/register` : void 0,
  		introspection_endpoint: `${baseURL}/oauth2/introspect`,
  		revocation_endpoint: `${baseURL}/oauth2/revoke`,

@@ -143,6 +143,14 @@ Feature: Hosted authentication
     And the published RSA public key declares signature verification usage
     And the token can be verified with that key
 
+  @entrypoint:product-ui @journey:oidc-provider-logout
+  Scenario: OIDC provider logout ends the browser session
+    Given I am signed in through an OIDC application
+    When the application sends my identity token to the end-session endpoint
+    Then Realmroot revokes the server session
+    And Realmroot expires the browser session cookie and cache
+    And a subsequent authorization request requires hosted sign-in
+
   @entrypoint:product-ui @journey:oauth-consent
   Scenario: OAuth consent approves requested scopes
     Given a third-party OIDC application requests scopes

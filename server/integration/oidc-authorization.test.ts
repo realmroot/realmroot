@@ -1,5 +1,5 @@
 import { applyD1Migrations, env, reset } from 'cloudflare:test'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   baseURL,
   createHarness,
@@ -10,6 +10,7 @@ import {
 } from './harness'
 
 afterEach(async () => {
+  vi.unstubAllGlobals()
   await reset()
   await applyD1Migrations(env.DB, env.TEST_MIGRATIONS)
 })
@@ -188,5 +189,97 @@ describe('OIDC authorization over real D1', () => {
       new TextEncoder().encode(`${encodedHeader}.${encodedPayload}`),
     )
     expect(verified).toBe(true)
+  })
+
+  it('expires the provider browser session during RP-initiated logout [spec: hosted-auth/oidc-provider-logout]', async () => {
+    const cookie = await signInAdmin(harness)
+    const redirectUri = 'http://localhost/callback'
+    const postLogoutRedirectUri = 'http://localhost/signed-out'
+    const verifier = 'logout-flow-pkce-verifier-0123456789abcdefghijklmnop'
+    const createApp = await harness.request('/api/applications', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({
+        name: 'Logout SPA',
+        slug: 'logout-spa',
+        clientType: 'public_spa',
+        redirectUris: [redirectUri],
+        postLogoutRedirectUris: [postLogoutRedirectUri],
+        ownerOrganizationId: platformOrganizationId,
+        consentRequired: false,
+      }),
+    })
+    expect(createApp.status, await createApp.clone().text()).toBe(201)
+    const application = (await createApp.json()) as { clientId: string }
+    const authorizeParams = new URLSearchParams({
+      response_type: 'code',
+      client_id: application.clientId,
+      redirect_uri: redirectUri,
+      scope: 'openid profile email',
+      state: 'logout-state',
+      code_challenge: await pkceChallenge(verifier),
+      code_challenge_method: 'S256',
+    })
+    const authorized = await harness.request(`/api/auth/oauth2/authorize?${authorizeParams}`, {
+      headers: { cookie },
+      redirect: 'manual',
+    })
+    expect(authorized.status, await authorized.clone().text()).toBe(302)
+    const code = new URL(authorized.headers.get('location') ?? '', redirectUri).searchParams.get('code')
+    expect(code).toBeTruthy()
+
+    const token = await harness.request('/api/auth/oauth2/token', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        client_id: application.clientId,
+        redirect_uri: redirectUri,
+        code: code ?? '',
+        code_verifier: verifier,
+      }),
+    })
+    expect(token.status, await token.clone().text()).toBe(200)
+    const { id_token: idToken } = (await token.json()) as { id_token: string }
+    const jwks = await harness.request('/api/auth/jwks')
+    expect(jwks.status, await jwks.clone().text()).toBe(200)
+    const jwksBody = await jwks.text()
+    vi.stubGlobal('fetch', async (input: RequestInfo | URL) => {
+      if (new URL(input instanceof Request ? input.url : input.toString()).pathname === '/api/auth/jwks') {
+        return new Response(jwksBody, { headers: { 'content-type': 'application/json' } })
+      }
+      throw new Error(`unexpected integration fetch: ${input.toString()}`)
+    })
+
+    const logout = await harness.request(
+      `/api/auth/oauth2/end-session?${new URLSearchParams({
+        id_token_hint: idToken,
+        post_logout_redirect_uri: postLogoutRedirectUri,
+      })}`,
+      { headers: { cookie }, redirect: 'manual' },
+    )
+    expect(logout.status, await logout.clone().text()).toBe(302)
+    expect(logout.headers.get('location')).toBe(postLogoutRedirectUri)
+    const setCookie = logout.headers.get('set-cookie') ?? ''
+    expect(setCookie).toContain('better-auth.session_token=')
+    expect(setCookie).toContain('better-auth.session_data=')
+    expect(setCookie).toMatch(/Max-Age=0/i)
+
+    const expiredCookieNames = new Set(
+      setCookie
+        .split(',')
+        .map((entry) => entry.trim().split('=')[0])
+        .filter(Boolean),
+    )
+    const browserCookieAfterLogout = cookie
+      .split('; ')
+      .filter((entry) => !expiredCookieNames.has(entry.split('=')[0]))
+      .join('; ')
+    const authorizeAfterLogout = await harness.request(`/api/auth/oauth2/authorize?${authorizeParams}`, {
+      headers: browserCookieAfterLogout ? { cookie: browserCookieAfterLogout } : undefined,
+      redirect: 'manual',
+    })
+    expect(authorizeAfterLogout.status).toBe(302)
+    expect(new URL(authorizeAfterLogout.headers.get('location') ?? '', baseURL).pathname).toBe('/auth/sign-in')
   })
 })
