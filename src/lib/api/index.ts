@@ -1,5 +1,5 @@
 import type { AppType } from '@server/http/app'
-import type { HostedConsentApprovalRequest } from '@shared/api/applications'
+import type { ConsentRequestResponse, HostedConsentApprovalRequest } from '@shared/api/applications'
 import type { AssetPurpose, UploadedAssetResponse } from '@shared/api/assets'
 import type { OnboardingAdminRequest } from '@shared/api/onboarding'
 import { type ClientResponse, hc } from 'hono/client'
@@ -73,11 +73,9 @@ export function getConfigz() {
 }
 
 export function getConsentRequest(search: string) {
-  return readRpcResponse(
-    apiClient.api.account['application-authorization-request'].$get({
-      query: query(search) as { client_id: string; redirect_uri: string; scope?: string; state?: string },
-    }),
-  )
+  return fetch(`/api/account/application-authorization-request${search}`, {
+    credentials: 'same-origin',
+  }).then((response) => readJsonResponse<ConsentRequestResponse>(response))
 }
 
 export function createConsent(input: HostedConsentApprovalRequest) {
@@ -103,8 +101,4 @@ export function uploadApiFile(path: string, file: File): Promise<UploadedAssetRe
 
 export function uploadAsset(purpose: AssetPurpose, file: File): Promise<UploadedAssetResponse> {
   return readRpcResponse(apiClient.api.assets.$post({ form: { purpose, file } }))
-}
-
-function query(search: string): Record<string, string> {
-  return Object.fromEntries(new URLSearchParams(search))
 }

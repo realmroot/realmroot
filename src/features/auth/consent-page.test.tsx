@@ -165,6 +165,9 @@ describe('ConsentPage error and fallback paths', () => {
 
   it('approves two resource authorizations before one OAuth consent handshake [spec: hosted-auth/oauth-multi-resource-grant]', async () => {
     const approvalBodies: unknown[] = []
+    const search =
+      '?client_id=client-1&redirect_uri=https%3A%2F%2Fclient.example.com&scope=openid+calendar%3Aread+contacts%3Aread&resource=https%3A%2F%2Fcalendar.example.com%2F&resource=https%3A%2F%2Fcontacts.example.com%2F'
+    vi.stubGlobal('location', { ...window.location, search, assign })
     const multiResourceConsent = {
       ...consentResponse,
       requestedScopes: ['openid', 'calendar:read', 'contacts:read'],
@@ -197,6 +200,7 @@ describe('ConsentPage error and fallback paths', () => {
       const url = String(input)
       if (url.startsWith('/api/configz')) return Promise.resolve(jsonResponse(configz))
       if (url.startsWith('/api/account/application-authorization-request')) {
+        expect(url).toBe(`/api/account/application-authorization-request${search}`)
         return Promise.resolve(jsonResponse(multiResourceConsent))
       }
       if (url.startsWith('/api/account/application-authorizations')) {
