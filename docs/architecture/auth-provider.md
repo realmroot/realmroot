@@ -51,27 +51,26 @@ examples.
 
 ## Token Model
 
-OAuth access tokens issued for a registered API Resource audience are
-JWT-verifiable. Provider flows that require server-side token state may use
-opaque access tokens. Refresh tokens are opaque, stored hashed, and rotated.
+OAuth access tokens issued for a registered API Resource audience are signed
+JWTs following the RFC 9068 profile. Refresh tokens remain opaque, are stored
+hashed, and rotate.
 
 Common JWT claims include:
 
 - `iss`: `AUTH_ORIGIN/api/auth`;
 - `aud`: the provider or registered API Resource audience;
 - `sub`: the user for user grants;
-- `azp`: the OAuth client ID;
+- `client_id`: the OAuth client ID;
 - `scope`: the granted scope string;
 - `sid`: the user session when applicable.
 
-Resource-aware authorization adds:
-
-- `authorization.scopes`;
-- `authorization.groups`;
-- `authorization.roles`;
-- `authorization.organization_id` when organization-scoped;
-- `authorization.resource` and `authorization.audience`;
-- top-level `groups` and `roles` for standard consumers.
+Resource-aware authorization adds top-level `groups` and `roles`, plus
+`urn:realmroot:params:oauth:tenant` with the selected user or Organization
+tenant. The access token does not duplicate these values under an
+`authorization` object and does not emit `azp`, `application_id`, or a
+top-level `organization_id`. ID tokens and UserInfo remain identity-only OIDC
+surfaces. Stored legacy per-Application claim selections no longer alter
+issuance.
 
 Better Auth Organization Roles map human memberships to scopes within exactly
 one Organization. Agents, Applications, and workloads do not receive Roles;
@@ -87,8 +86,9 @@ Native API Resource tokens use the same issuer, JWKS, and key lifecycle as
 product OAuth tokens. They are five-minute `at+jwt` access tokens containing:
 
 - the Agent's personal-owner user ID or organization home-space ID as `sub`;
-- the stable Agent as the RFC 8693 `act` actor, including its issuer, subject,
-  and `ai_agent` subject profile;
+- the stable Agent as the RFC 8693 `act` actor with exact `iss` and `sub`;
+- `client_id: realmroot-cli`, the reserved Realmroot Agent protocol client
+  identifier; it is not an Application or persisted OAuth client;
 - the exact approved `scope`;
 - applicable Organization `roles` and `groups` for human tokens; Agent tokens
   rely on the exact approved scope instead;
@@ -106,10 +106,13 @@ Workload exchange accepts RS256 or ES256 assertions only when issuer, subject
 pattern, audience, verification key, and calling client match a registered
 federated credential.
 
-Realmroot controls issuer, audience, client, scope, activity, token type, and
-lifetime. Private assertion claims cannot replace those security fields.
-Opaque exchanged tokens may be introspected only by their owning confidential
-client.
+Realmroot controls issuer, audience, client, scope, tenant, token type,
+and lifetime. Private assertion claims are not copied into the issued token.
+New exchanged access tokens are signed `at+jwt` tokens whose `sub` is the
+trusted external workload and whose `client_id` identifies the authenticated
+Application. Since this profile accepts no `actor_token`, it emits no `act`. They may
+be introspected only by their owning confidential client. Previously issued
+`fatx_` opaque access tokens remain introspectable until expiry or revocation.
 
 Token-exchange refresh credentials are hashed and rotate on every use. Reuse
 revokes the token family, and every refresh rechecks client authentication,

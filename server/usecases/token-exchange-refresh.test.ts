@@ -12,7 +12,7 @@ import type {
   TokenExchangeRepository,
 } from '@server/usecases/ports'
 import {
-  exchangeToken,
+  exchangeToken as exchangeTokenVerified,
   jwtTokenType,
   refreshTokenGrantType,
   refreshToken as refreshTokenVerified,
@@ -23,9 +23,22 @@ import { describe, expect, it } from 'vitest'
 const applicationClientId = 'runner-client'
 const defaultAudience = 'https://ama.example.com'
 const testClient = { clientId: applicationClientId, clientSecret: 'runner-client-secret' }
+const tokenSigner = {
+  issuer: 'https://auth.example.com/api/auth',
+  sign: async (payload: Record<string, unknown>) =>
+    `${btoa(JSON.stringify({ alg: 'RS256', typ: 'at+jwt' }))}.${btoa(JSON.stringify(payload))}.signature`,
+}
+
+function exchangeToken(
+  deps: Deps,
+  input: Parameters<typeof exchangeTokenVerified>[1],
+  client: Parameters<typeof exchangeTokenVerified>[2],
+) {
+  return exchangeTokenVerified(deps, input, client, tokenSigner)
+}
 
 function refreshToken(deps: Deps, input: Parameters<typeof refreshTokenVerified>[1], client = testClient) {
-  return refreshTokenVerified(deps, input, client)
+  return refreshTokenVerified(deps, input, client, tokenSigner)
 }
 
 describe('token exchange refresh and assertion boundaries', () => {
@@ -162,6 +175,35 @@ describe('token exchange refresh and assertion boundaries', () => {
 
     expect(refreshed.scope).toBe('runner:connect offline_access')
     expect(repository.storedTokens()).toBe(2)
+  })
+
+  it('keeps the current refresh token usable when JWT signing fails', async () => {
+    const { deps, clientSecret } = await fixture({
+      grantTypes: [tokenExchangeGrantType, refreshTokenGrantType],
+      scopes: ['runner:connect', 'offline_access'],
+    })
+    const exchanged = await exchangeToken(
+      deps,
+      {
+        grantType: tokenExchangeGrantType,
+        subjectToken: await signEs256TestJwt(validClaims(), 'external-platform-secret'),
+        subjectTokenType: jwtTokenType,
+        audience: defaultAudience,
+        scope: 'runner:connect offline_access',
+      },
+      { clientId: applicationClientId, clientSecret },
+    )
+    const input = { grantType: refreshTokenGrantType, refreshToken: exchanged.refresh_token! }
+
+    await expect(
+      refreshTokenVerified(deps, input, testClient, {
+        issuer: tokenSigner.issuer,
+        sign: async () => {
+          throw new Error('signing unavailable')
+        },
+      }),
+    ).rejects.toThrow('signing unavailable')
+    await expect(refreshToken(deps, input)).resolves.toMatchObject({ token_type: 'Bearer' })
   })
 
   it('binds refresh to client authentication, stored scopes, and an enabled federated credential', async () => {
@@ -723,6 +765,34 @@ class InMemoryRepository implements TokenExchangeRepository {
       }
     }
     return false
+  }
+
+  async rotateRefreshToken(input: Parameters<TokenExchangeRepository['rotateRefreshToken']>[0]) {
+    if (this.revokeNextRefreshFamily) {
+      this.revokeNextRefreshFamily = false
+      await this.revokeRefreshTokenFamily(input.refreshToken.familyId, new Date())
+      return false
+    }
+    if (this.rejectConsume) {
+      this.rejectConsume = false
+      return false
+    }
+    const parent = [...this.refreshTokens.entries()].find(([, token]) => token.id === input.refreshToken.parentId)
+    if (!parent || parent[1].consumedAt || parent[1].revokedAt) return false
+    const consumedAt = new Date()
+    this.refreshTokens.set(parent[0], { ...parent[1], consumedAt })
+    this.refreshTokens.set(input.refreshToken.tokenHash, {
+      ...input.refreshToken,
+      consumedAt: null,
+      revokedAt: null,
+      createdAt: consumedAt,
+    })
+    this.tokens.set(input.accessToken.tokenHash, {
+      ...input.accessToken,
+      createdAt: consumedAt,
+      revokedAt: null,
+    })
+    return true
   }
 
   async revokeRefreshTokenFamily(familyId: string, revokedAt: Date) {

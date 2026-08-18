@@ -6,14 +6,14 @@
       "type": "archive",
       "description": "Integrate a browser, mobile, desktop, CLI, or server-side application with Realmroot as its OAuth 2.1 and OpenID Connect provider. Use when building or changing product sign-in, callback, session, refresh, logout, device authorization, PKCE, client-secret handling, or end-to-end authentication against a Realmroot deployment.",
       "url": "/.well-known/agent-skills/integrate-realmroot-application.tar.gz",
-      "digest": "sha256:4109023059eb245495e2147e8cd7c0081183e5e7783d4c12335f8542f9e03310"
+      "digest": "sha256:031338e5b081b43e6c6659e182eb73cc76d5e0a6dc0c1674f3fbf9f2d3dc91ad"
     },
     {
       "name": "integrate-realmroot-resource-server",
       "type": "archive",
       "description": "Integrate and assess an existing protected API as a Realmroot Resource Server. Use when determining required, conditional, and recommended integration capabilities; implementing or validating RFC 9728 and OpenAPI discovery; selecting native, external, or brokered authorization; enforcing Realmroot token, audience, scope, actor, or DPoP requirements; registering the Resource Server; or proving end-to-end Agent access. This Skill does not design the business API or its resource model.",
       "url": "/.well-known/agent-skills/integrate-realmroot-resource-server.tar.gz",
-      "digest": "sha256:60a4ab96112a15aca26b1a46d6c3863fc3fb9cc4ab9638c9354e17cf8ccd7920"
+      "digest": "sha256:59ecd132148aae68834581fc83ba8142a7483018d19952a89a14bcf41ec17510"
     },
     {
       "name": "realmroot",

@@ -1,6 +1,8 @@
 import { applyD1Migrations, env, reset } from 'cloudflare:test'
-import { buildTokenClaims } from '@server/usecases/authorization'
-import { decodeProtectedHeader } from 'jose'
+import { filterOAuthAccessTokenScopes } from '@server/auth'
+import { buildTokenClaims, ensureRealmrootResourceServer } from '@server/usecases/authorization'
+import { realmrootTenantClaim } from '@shared/oauth-token-profile'
+import { calculateJwkThumbprint, decodeProtectedHeader, exportJWK, generateKeyPair, SignJWT } from 'jose'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   baseURL,
@@ -128,6 +130,40 @@ describe('OAuth token claim building over real D1', () => {
       200,
       'PUT',
     )
+    const tenantApplication = (await (
+      await postJson(harness, cookie, '/api/applications', {
+        name: 'Tenant Claims App',
+        clientType: 'confidential_web',
+        redirectUris: ['https://tenant-app.example.com/callback'],
+        ownerOrganizationId: organization.id,
+        resourceScopes: [{ resourceServerId: resource.id, scopes: ['contacts:read'] }],
+      })
+    ).json()) as { id: string }
+    const foreignOrganization = (await (
+      await postJson(harness, cookie, '/api/organizations', { slug: 'foreign-active-org', name: 'Foreign Active Org' })
+    ).json()) as { id: string }
+    await postJson(harness, cookie, `/api/organizations/${foreignOrganization.id}/members`, {
+      userId,
+      roles: ['member'],
+    })
+    await expect(
+      filterOAuthAccessTokenScopes(harness.deps, {
+        user: { id: userId },
+        scopes: ['openid', 'contacts:read'],
+        resource: audience,
+        referenceId: foreignOrganization.id,
+        metadata: { applicationId: tenantApplication.id },
+      }),
+    ).rejects.toMatchObject({ body: { error: 'invalid_target' } })
+    await expect(
+      filterOAuthAccessTokenScopes(harness.deps, {
+        user: { id: userId },
+        scopes: ['openid', 'contacts:read'],
+        resource: audience,
+        referenceId: organization.id,
+        metadata: { applicationId: tenantApplication.id },
+      }),
+    ).resolves.toEqual(['openid'])
 
     const claims = (await buildTokenClaims(harness.deps, {
       userId,
@@ -230,10 +266,18 @@ describe('OAuth token claim building over real D1', () => {
     expect(tokenBody.scope).toBe('openid')
     expect(decodeProtectedHeader(tokenBody.access_token).typ).toBe('at+jwt')
     expect(decodeProtectedHeader(tokenBody.id_token).typ).not.toBe('at+jwt')
-    expect(decodeJwtPayload(tokenBody.access_token)).toMatchObject({
+    const accessPayload = decodeJwtPayload(tokenBody.access_token)
+    expect(accessPayload).toMatchObject({
       scope: 'openid',
-      authorization: { scopes: ['openid'] },
+      client_id: application.clientId,
+      roles: ['contacts-reader', 'member'],
+      groups: [organization.id],
+      [realmrootTenantClaim]: { type: 'organization', id: organization.id },
     })
+    expect(accessPayload).not.toHaveProperty('authorization')
+    expect(accessPayload).not.toHaveProperty('azp')
+    expect(accessPayload).not.toHaveProperty('application_id')
+    expect(accessPayload).not.toHaveProperty('organization_id')
 
     const introspection = await harness.request('/api/auth/oauth2/introspect', {
       method: 'POST',
@@ -303,20 +347,91 @@ describe('OAuth token claim building over real D1', () => {
         ownerOrganizationId: ownerOrganization.id,
         resourceScopes: [{ resourceServerId: ownerResource.id, scopes: ['contacts:read'] }],
       })
-    ).json()) as { clientId: string; clientSecret: string }
+    ).json()) as { id: string; clientId: string; clientSecret: string }
 
     harness = await createHarness({ validAudiences: [baseURL, audience, ownerAudience] })
     harness.deps.externalHttp.fetch = contactsScopeOpenApiFetch
     const ownerToken = await issueClientCredentials(harness, application, ownerAudience)
     expect(ownerToken.scope).toBe('contacts:read')
-    expect(decodeJwtPayload(ownerToken.access_token)).toMatchObject({
+    const ownerPayload = decodeJwtPayload(ownerToken.access_token)
+    expect(ownerPayload).toMatchObject({
       scope: 'contacts:read',
-      authorization: { organization_id: ownerOrganization.id, scopes: ['contacts:read'] },
+      sub: application.id,
+      client_id: application.clientId,
+      [realmrootTenantClaim]: { type: 'organization', id: ownerOrganization.id },
     })
+    expect(ownerPayload).not.toHaveProperty('authorization')
 
     const token = await clientCredentialsResponse(harness, application, audience)
     expect(token.status).toBe(400)
     await expect(token.json()).resolves.toMatchObject({ error: 'invalid_target' })
+  })
+
+  it('issues a signed DPoP-bound Realmroot resource token to a machine Application', async () => {
+    const cookie = await signInAdmin(harness)
+    const realmrootResource = await ensureRealmrootResourceServer(harness.deps, baseURL)
+    const application = (await (
+      await postJson(harness, cookie, '/api/applications', {
+        name: 'Realmroot Automation',
+        clientType: 'machine',
+        redirectUris: [],
+        ownerOrganizationId: platformOrganizationId,
+        resourceScopes: [{ resourceServerId: realmrootResource.id, scopes: ['applications:read'] }],
+      })
+    ).json()) as { id: string; clientId: string; clientSecret: string }
+    const admin = await env.DB.prepare("SELECT id FROM user WHERE email = 'admin@example.com'").first<{ id: string }>()
+    expect(admin?.id).toBeTruthy()
+    await env.DB.prepare(
+      `INSERT INTO resource_scope_entitlement
+       (id, application_id, resource_server_id, authorization_context_hash, scope, mode, granted_by_user_id,
+        created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, 'persistent', ?, ?, ?)`,
+    )
+      .bind(
+        'application-realmroot-read',
+        application.id,
+        realmrootResource.id,
+        'none',
+        'applications:read',
+        admin!.id,
+        Date.now(),
+        Date.now(),
+      )
+      .run()
+
+    const keys = await generateKeyPair('ES256', { extractable: true })
+    const publicJwk = await exportJWK(keys.publicKey)
+    const tokenEndpoint = `${baseURL}/api/auth/oauth2/token`
+    const proof = await new SignJWT({ htm: 'POST', htu: tokenEndpoint })
+      .setProtectedHeader({ alg: 'ES256', typ: 'dpop+jwt', jwk: publicJwk })
+      .setIssuedAt()
+      .setJti(crypto.randomUUID())
+      .sign(keys.privateKey)
+    const token = await harness.request('/api/auth/oauth2/token', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+        authorization: `Basic ${btoa(`${application.clientId}:${application.clientSecret}`)}`,
+        dpop: proof,
+      },
+      body: new URLSearchParams({
+        grant_type: 'client_credentials',
+        resource: `${baseURL}/api`,
+        scope: 'applications:read',
+      }),
+    })
+    expect(token.status, await token.clone().text()).toBe(200)
+    const body = (await token.json()) as { access_token: string; token_type: string }
+    expect(body.token_type).toBe('DPoP')
+    expect(decodeProtectedHeader(body.access_token).typ).toBe('at+jwt')
+    expect(decodeJwtPayload(body.access_token)).toMatchObject({
+      sub: application.id,
+      client_id: application.clientId,
+      aud: `${baseURL}/api`,
+      scope: 'applications:read',
+      cnf: { jkt: await calculateJwkThumbprint(publicJwk) },
+      [realmrootTenantClaim]: { type: 'organization', id: platformOrganizationId },
+    })
   })
 })
 

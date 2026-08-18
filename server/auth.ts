@@ -29,11 +29,8 @@ import type { ManagementSignInSettingsResponse } from '../shared/api/management'
 import type { SecurityPolicy } from '../shared/api/security'
 import {
   buildOAuthAccessTokenClaims,
-  buildOAuthIdTokenClaims,
-  buildOAuthUserInfoClaims,
   createNonce,
   filterOAuthAccessTokenScopes,
-  readString,
   sendPasswordChangedNotification,
   sendSmsOtp,
   siweDomain,
@@ -45,8 +42,6 @@ import { hashPassword, verifyPassword } from './domain/password'
 
 export {
   buildOAuthAccessTokenClaims,
-  buildOAuthIdTokenClaims,
-  buildOAuthUserInfoClaims,
   filterOAuthAccessTokenScopes,
 } from './auth-helpers'
 
@@ -467,7 +462,8 @@ export function createAuth(
         validAudiences: options.validAudiences,
         postLogin: {
           page: '/auth/consent',
-          consentReferenceId: async () => undefined,
+          consentReferenceId: async ({ session }) =>
+            typeof session.activeOrganizationId === 'string' ? session.activeOrganizationId : undefined,
           shouldRedirect: async ({ headers, user, scopes }) => {
             const clientId = headers.get('x-realmroot-oauth-client-id')
             if (!clientId) throw new Error('OAuth consent context is missing the client ID.')
@@ -483,11 +479,6 @@ export function createAuth(
         },
         filterAccessTokenScopes: (input) => filterOAuthAccessTokenScopes(deps, input),
         customAccessTokenClaims: (input) => buildOAuthAccessTokenClaims(deps, input),
-        customUserInfoClaims: async ({ user, scopes, jwt }) => {
-          const clientId = readString(jwt, 'client_id') ?? readString(jwt, 'azp')
-          return buildOAuthUserInfoClaims(deps, applications, { clientId, user, scopes, jwt })
-        },
-        customIdTokenClaims: (input) => buildOAuthIdTokenClaims(deps, input),
         clientRegistrationDefaultScopes: ['openid', 'profile', 'email'],
         clientRegistrationAllowedScopes: [...userConfigurableApplicationScopes],
         storeClientSecret: 'hashed',

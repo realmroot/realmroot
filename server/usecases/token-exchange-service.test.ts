@@ -16,14 +16,14 @@ import {
   accessTokenType,
   createFederatedCredential,
   deleteFederatedCredential,
-  exchangeToken,
+  exchangeToken as exchangeTokenVerified,
   getFederatedCredential,
-  introspectToken,
+  introspectToken as introspectTokenVerified,
   jwtTokenType,
   listFederatedCredentials,
   parseBasicClientAuthorization,
-  refreshToken,
   refreshTokenGrantType,
+  refreshToken as refreshTokenVerified,
   tokenExchangeGrantType,
   updateFederatedCredential,
 } from '@server/usecases/token-exchange'
@@ -34,6 +34,46 @@ const applicationClientId = 'runner-client'
 const audienceResourceId = 'res_1'
 const defaultAudience = 'https://ama.example.com'
 const realmrootIssuer = 'https://auth.example.com/api/auth'
+const tokenSigner = {
+  issuer: realmrootIssuer,
+  sign: async (payload: Record<string, unknown>) => testAccessToken(payload),
+}
+const tokenVerifier = { verify: async (token: string) => decodeTestAccessToken(token) }
+
+function exchangeToken(
+  deps: Deps,
+  input: Parameters<typeof exchangeTokenVerified>[1],
+  client: Parameters<typeof exchangeTokenVerified>[2],
+) {
+  return exchangeTokenVerified(deps, input, client, tokenSigner)
+}
+
+function refreshToken(
+  deps: Deps,
+  input: Parameters<typeof refreshTokenVerified>[1],
+  client: Parameters<typeof refreshTokenVerified>[2],
+) {
+  return refreshTokenVerified(deps, input, client, tokenSigner)
+}
+
+function introspectToken(
+  deps: Deps,
+  token: string,
+  client: Parameters<typeof introspectTokenVerified>[2],
+  issuer: string,
+) {
+  return introspectTokenVerified(deps, token, client, issuer, tokenVerifier)
+}
+
+function testAccessToken(payload: Record<string, unknown>) {
+  return `${btoa(JSON.stringify({ alg: 'RS256', typ: 'at+jwt' }))}.${btoa(JSON.stringify(payload))}.signature`
+}
+
+function decodeTestAccessToken(token: string) {
+  const payload = token.split('.')[1]
+  if (!payload) throw new Error('Malformed test access token.')
+  return JSON.parse(atob(payload)) as Record<string, unknown>
+}
 
 afterEach(() => {
   vi.restoreAllMocks()
@@ -133,7 +173,22 @@ describe('token exchange service', () => {
     })
     expect(exchanged.expires_in).toBeGreaterThan(0)
     expect(exchanged.expires_in).toBeLessThanOrEqual(60)
-    expect(exchanged.access_token).toMatch(/^fatx_/)
+    const accessPayload = decodeTestAccessToken(exchanged.access_token)
+    expect(accessPayload).toMatchObject({
+      iss: realmrootIssuer,
+      sub: 'org_1:runner_1',
+      aud: defaultAudience,
+      client_id: applicationClientId,
+      scope: 'runner:connect',
+      'urn:realmroot:params:oauth:tenant': { type: 'organization', id: 'org_1' },
+      jti: expect.any(String),
+    })
+    expect(accessPayload).not.toHaveProperty('ama_project_id')
+    expect(accessPayload).not.toHaveProperty('ama_environment_id')
+    expect(accessPayload).not.toHaveProperty('ama_runner_id')
+    expect(accessPayload).not.toHaveProperty('runner_capabilities')
+    expect(accessPayload).not.toHaveProperty('active')
+    expect(accessPayload).not.toHaveProperty('token_type')
 
     await expect(
       introspectToken(deps, exchanged.access_token, { clientId: applicationClientId, clientSecret }, realmrootIssuer),
@@ -144,17 +199,7 @@ describe('token exchange service', () => {
       aud: defaultAudience,
       client_id: applicationClientId,
       scope: 'runner:connect',
-      'urn:realmroot:params:oauth:token-exchange:subject-claims': {
-        'urn:realmroot:params:oauth:tenant': { type: 'organization', id: 'org_1' },
-        ama_project_id: 'project_1',
-        ama_environment_id: 'env_1',
-        ama_runner_id: 'runner_1',
-        runner_capabilities: ['session:poll', 'session:claim'],
-        active: false,
-        client_id: 'attacker-client',
-        scope: 'admin',
-        token_type: 'attacker',
-      },
+      'urn:realmroot:params:oauth:tenant': { type: 'organization', id: 'org_1' },
     })
 
     repository.client = {
@@ -191,8 +236,34 @@ describe('token exchange service', () => {
     })
   })
 
+  it('keeps previously issued opaque exchange tokens introspectable during migration', async () => {
+    const { deps, repository, clientSecret } = await tokenExchangeFixture()
+    const token = 'fatx_legacy-token'
+    await repository.storeAccessToken({
+      id: 'legacy-token-1',
+      tokenHash: await hashProviderSecret(token),
+      clientId: applicationClientId,
+      credentialId: 'fcr_1',
+      subject: 'org_1:runner_1',
+      subjectTokenIssuer: 'https://platform.example.com',
+      audience: defaultAudience,
+      scopes: ['runner:connect'],
+      claims: { ama_runner_id: 'runner_1' },
+      expiresAt: new Date(Date.now() + 60_000),
+    })
+
+    await expect(
+      introspectToken(deps, token, { clientId: applicationClientId, clientSecret }, realmrootIssuer),
+    ).resolves.toMatchObject({
+      active: true,
+      sub: 'org_1:runner_1',
+      client_id: applicationClientId,
+      'urn:realmroot:params:oauth:token-exchange:subject-claims': { ama_runner_id: 'runner_1' },
+    })
+  })
+
   it('refreshes token-exchange access tokens with a signed refresh token', async () => {
-    const { deps, clientSecret } = await tokenExchangeFixture({
+    const { deps, repository, clientSecret } = await tokenExchangeFixture({
       grantTypes: [tokenExchangeGrantType, refreshTokenGrantType],
       scopes: ['runner:connect', 'offline_access'],
     })
@@ -223,6 +294,12 @@ describe('token exchange service', () => {
     )
 
     expect(exchanged.refresh_token).toMatch(/^fatr_/)
+    repository.injectLegacyRefreshClaims({
+      client_id: 'attacker-client',
+      scope: 'admin',
+      act: { iss: 'https://attacker.example.com', sub: 'attacker' },
+      token_type: 'attacker',
+    })
     const refreshed = await refreshToken(
       deps,
       {
@@ -238,7 +315,13 @@ describe('token exchange service', () => {
       token_type: 'Bearer',
       scope: 'runner:connect',
     })
-    expect(refreshed.access_token).toMatch(/^fatx_/)
+    const refreshedPayload = decodeTestAccessToken(refreshed.access_token)
+    expect(refreshedPayload).toMatchObject({
+      sub: 'org_1:runner_1',
+      client_id: applicationClientId,
+      scope: 'runner:connect',
+    })
+    expect(refreshedPayload).not.toHaveProperty('token_type')
     await expect(
       introspectToken(deps, refreshed.access_token, { clientId: applicationClientId, clientSecret }, realmrootIssuer),
     ).resolves.toMatchObject({
@@ -248,11 +331,7 @@ describe('token exchange service', () => {
       aud: defaultAudience,
       client_id: applicationClientId,
       scope: 'runner:connect',
-      'urn:realmroot:params:oauth:token-exchange:subject-claims': {
-        'urn:realmroot:params:oauth:tenant': { type: 'organization', id: 'org_1' },
-        ama_project_id: 'project_1',
-        ama_environment_id: 'env_1',
-      },
+      'urn:realmroot:params:oauth:tenant': { type: 'organization', id: 'org_1' },
     })
   })
 
@@ -1258,6 +1337,12 @@ class InMemoryTokenExchangeRepository implements TokenExchangeRepository {
     return this.refreshTokens.get(tokenHash) ?? null
   }
 
+  injectLegacyRefreshClaims(claims: Record<string, unknown>) {
+    for (const [hash, token] of this.refreshTokens) {
+      this.refreshTokens.set(hash, { ...token, claims: { ...token.claims, ...claims } })
+    }
+  }
+
   async consumeRefreshToken(id: string, consumedAt: Date) {
     for (const [hash, token] of this.refreshTokens) {
       if (token.id === id && !token.consumedAt && !token.revokedAt) {
@@ -1266,6 +1351,25 @@ class InMemoryTokenExchangeRepository implements TokenExchangeRepository {
       }
     }
     return false
+  }
+
+  async rotateRefreshToken(input: Parameters<TokenExchangeRepository['rotateRefreshToken']>[0]) {
+    const parent = [...this.refreshTokens.entries()].find(([, token]) => token.id === input.refreshToken.parentId)
+    if (!parent || parent[1].consumedAt || parent[1].revokedAt) return false
+    const now = new Date()
+    this.refreshTokens.set(parent[0], { ...parent[1], consumedAt: now })
+    this.refreshTokens.set(input.refreshToken.tokenHash, {
+      ...input.refreshToken,
+      consumedAt: null,
+      revokedAt: null,
+      createdAt: now,
+    })
+    this.tokens.set(input.accessToken.tokenHash, {
+      ...input.accessToken,
+      createdAt: now,
+      revokedAt: null,
+    })
+    return true
   }
 
   async revokeRefreshTokenFamily(familyId: string, revokedAt: Date) {

@@ -1,0 +1,199 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-18T09:04:00Z",
+  "environment": "production",
+  "sourceBinding": {
+    "algorithm": "sha256 over each sorted path, NUL, sha256(file bytes), NUL for every tracked or untracked non-ignored file",
+    "reproduce": "node scripts/hash-worktree.mjs --exclude docs/reports",
+    "repositories": [
+      {
+        "name": "realmroot",
+        "head": "f19c3ebc0667e36078f0596a50a6b0044827affe",
+        "worktreeDigest": "c7cb6db6f7e6f1bbc8bc59cb02f6e02bae09f0743bc78103938cce08d4fb2f53"
+      },
+      {
+        "name": "wakatoken-cloud",
+        "head": "5a1f8a31eef220a681d071c1cf8fe0461aabe026",
+        "worktreeDigest": "52824c59f867ae5138f82a9bd7485618636d8adfac565ef419ec834887788abf"
+      },
+      {
+        "name": "realmroot-adapters",
+        "head": "befe6f2da53df74202b6e02cb11440d414ef43ba",
+        "worktreeDigest": "bfe6cc2c9136378ac1d19a2f8ff59d92cfb88d2b4c39ef209c5c93a2a0e62036"
+      },
+      {
+        "name": "agent-wallet",
+        "head": "7cb7558c2e1608ce0f679c347d87b034c819ee5a",
+        "worktreeDigest": "a8d52d4d8ea61e67e0b96370a15d05a0210cd03e69951ccb7ef90fb21eae8318"
+      },
+      {
+        "name": "agent-inbox",
+        "head": "9d15b897c788e3adbe9a28b285ad68a76f757d3d",
+        "worktreeDigest": "b31652507b78be97148696073cd5d45dee2e08e4f33bc285c59015bb8097f92d"
+      },
+      {
+        "name": "zme",
+        "head": "1fbc3d4e052989439293c2c8b2cf96ccbfe7b8d4",
+        "worktreeDigest": "03dcb4366f5a0944c55aac6f3eb8fefcdf64c8bfa16ac274d64b597ae5610e95"
+      },
+      {
+        "name": "zpan",
+        "head": "82f5988d56c5d5c6ed836e4c88388f4079ed1bb5",
+        "worktreeDigest": "aa9dc4322db94bf880889cc39b56944ce0d0f47e420e09696fe8143f2a103c5b"
+      }
+    ]
+  },
+  "database": {
+    "migrations": [
+      "20260818040000_enable_machine_exchange_refresh.sql",
+      "20260818050000_atomic_exchange_refresh_rotation.sql"
+    ],
+    "status": "applied",
+    "command": "realmroot exec cloudflare -- wrangler d1 migrations apply DB --remote"
+  },
+  "deployments": [
+    { "worker": "realmroot", "version": "f6ccefe7-c53e-4774-be82-08109a1fb405", "deploymentId": "f2ecdf7f-67d8-41d8-be63-fc03d1093296", "createdAt": "2026-08-18T08:59:42.824278Z", "sourceDigest": "c7cb6db6f7e6f1bbc8bc59cb02f6e02bae09f0743bc78103938cce08d4fb2f53", "cloudflareMessage": "token-profile-worktree-sha256:c7cb6db6f7e6f1bbc8bc59cb02f6e02bae09f0743bc78103938cce08d4fb2f53" },
+    { "worker": "realmroot-adapters", "version": "51caa161-b21d-4aee-b394-798bd83dec44", "deploymentId": "f0fcd303-099b-40cb-abca-aece8885368b", "createdAt": "2026-08-18T08:52:11.6885Z", "sourceDigest": "bfe6cc2c9136378ac1d19a2f8ff59d92cfb88d2b4c39ef209c5c93a2a0e62036", "cloudflareMessage": "token-profile-worktree-sha256:bfe6cc2c9136378ac1d19a2f8ff59d92cfb88d2b4c39ef209c5c93a2a0e62036" },
+    { "worker": "wakatoken", "version": "93f27d22-8682-4074-b3b3-3cf3387705b1", "deploymentId": "bdfca0cd-44ff-43e8-9677-6953402fb641", "createdAt": "2026-08-18T08:51:52.57038Z", "sourceDigest": "52824c59f867ae5138f82a9bd7485618636d8adfac565ef419ec834887788abf", "cloudflareMessage": "token-profile-worktree-sha256:52824c59f867ae5138f82a9bd7485618636d8adfac565ef419ec834887788abf" },
+    { "worker": "agent-wallet", "version": "72093319-34d3-4184-b2bb-b3595adb7e7e", "deploymentId": "544ecc60-c5d8-459a-a151-9336c4d693cd", "createdAt": "2026-08-18T08:52:32.466953Z", "sourceDigest": "a8d52d4d8ea61e67e0b96370a15d05a0210cd03e69951ccb7ef90fb21eae8318", "cloudflareMessage": "token-profile-worktree-sha256:a8d52d4d8ea61e67e0b96370a15d05a0210cd03e69951ccb7ef90fb21eae8318" },
+    { "worker": "agent-inbox", "version": "1214d90d-30ee-447b-a3ca-4d9ff0c27ccd", "deploymentId": "f4f67e3e-0df8-46bb-9f03-01e2cb882346", "createdAt": "2026-08-18T08:52:53.071176Z", "sourceDigest": "b31652507b78be97148696073cd5d45dee2e08e4f33bc285c59015bb8097f92d", "cloudflareMessage": "token-profile-worktree-sha256:b31652507b78be97148696073cd5d45dee2e08e4f33bc285c59015bb8097f92d" },
+    { "worker": "zme", "version": "1d1b1f56-7422-4768-9756-85f8a2f0127c", "deploymentId": "6603cad3-5b08-4d91-927b-97dd1506b128", "createdAt": "2026-08-18T08:53:16.537511Z", "sourceDigest": "03dcb4366f5a0944c55aac6f3eb8fefcdf64c8bfa16ac274d64b597ae5610e95", "cloudflareMessage": "token-profile-worktree-sha256:03dcb4366f5a0944c55aac6f3eb8fefcdf64c8bfa16ac274d64b597ae5610e95" },
+    { "worker": "zpan", "version": "035e60f8-16e1-4d42-8dda-c3a040a5db7e", "deploymentId": "caed5f00-25be-4066-8cda-096ed2d94f82", "createdAt": "2026-08-18T08:54:31.985169Z", "sourceDigest": "aa9dc4322db94bf880889cc39b56944ce0d0f47e420e09696fe8143f2a103c5b", "cloudflareMessage": "token-profile-worktree-sha256:aa9dc4322db94bf880889cc39b56944ce0d0f47e420e09696fe8143f2a103c5b" },
+    { "worker": "zpan-staging", "version": "8ecdc19e-0e3e-4577-a3b0-c94623f14dcc", "deploymentId": "dbed2e39-1997-49a1-b41f-f6eea9b9d539", "createdAt": "2026-08-18T08:53:42.380728Z", "sourceDigest": "aa9dc4322db94bf880889cc39b56944ce0d0f47e420e09696fe8143f2a103c5b", "cloudflareMessage": "token-profile-worktree-sha256:aa9dc4322db94bf880889cc39b56944ce0d0f47e420e09696fe8143f2a103c5b" }
+  ],
+  "tokenContractProof": {
+    "rawTokensPersisted": false,
+    "expectedAccessTokenProfile": {
+      "headerTyp": "at+jwt",
+      "required": ["iss", "sub", "aud", "exp", "iat", "jti", "client_id", "scope"],
+      "retainedAuthorizationClaims": ["roles", "groups"],
+      "removed": ["authorization", "azp", "application_id", "organization_id"]
+    },
+    "expectedIdentityTokenExclusions": [
+      "authorization",
+      "roles",
+      "groups",
+      "urn:realmroot:params:oauth:tenant",
+      "application_id"
+    ],
+    "executableBoundaries": [
+      "server/integration/token-claims.test.ts",
+      "server/integration/oidc-authorization.test.ts",
+      "server/integration/token-exchange.test.ts",
+      "server/http/app-core-routes.test.ts",
+      "server/db/token-exchange-rotation-migration.test.ts",
+      "server/usecases/application-oauth.test.ts",
+      "server/usecases/agent-oauth.test.ts",
+      "server/usecases/token-exchange-refresh.test.ts",
+      "server/usecases/token-exchange-service.test.ts"
+    ],
+    "productionProof": "Four live Agent token paths completed after deployment through Realmroot, Cloudflare, GitHub, and ZME. Tokens were intentionally not printed or persisted; HTTP bootstrap/JWS payload proof is executable locally in server/http/app-core-routes.test.ts."
+  },
+  "applications": {
+    "enabled": 11,
+    "interactive": 10,
+    "interactiveAuthorizationInitiation": {
+      "status": "registration-and-authorization-initiation-pass",
+      "result": "Each registered client and redirect URI returned HTTP 200 with redirect=true and a Realmroot /auth/sign-in continuation; no invalid_client, invalid_redirect_uri, PKCE, or scope error."
+    },
+    "interactiveChecks": [
+      { "clientId": "01a00e0b-1051-7137-a867-8ea8586ea47b", "clientType": "public_native", "status": "authorization-initiation-pass" },
+      { "slug": "agent-wallet", "clientId": "019ff41f-c1bf-732e-8ebf-69aa80eafce7", "clientType": "public_spa", "status": "authorization-initiation-pass" },
+      { "slug": "echola", "clientId": "01a010aa-f8f2-738b-9697-3da23729917e", "clientType": "public_native", "status": "authorization-initiation-pass" },
+      { "slug": "sink-to-tftt-cc", "clientId": "01a000c9-587d-77b0-8473-3e4f9182734d", "clientType": "confidential_web", "status": "authorization-initiation-pass" },
+      { "slug": "sublyra-native", "clientId": "01a00615-dde8-764b-9634-da49c522cf96", "clientType": "public_native", "status": "authorization-initiation-pass" },
+      { "slug": "vocnet", "clientId": "01a00e0b-0da0-76e1-bf35-e42202373b50", "clientType": "confidential_web", "status": "authorization-initiation-pass" },
+      { "slug": "vocnet-cloud", "clientId": "01a00df7-1885-70df-85e6-2bb93af006cc", "clientType": "confidential_web", "status": "authorization-initiation-pass" },
+      { "slug": "wakatoken-desktop", "clientId": "019ffead-3679-7648-9a3d-60a1bb3732de", "clientType": "public_native", "status": "authorization-initiation-pass" },
+      { "slug": "wakatoken-web", "clientId": "019ffead-26ad-7303-a423-741fddca1887", "clientType": "confidential_web", "status": "authorization-initiation-pass" },
+      { "slug": "zme-production", "clientId": "019ff41f-cd32-765e-863b-a8fb22b6132f", "clientType": "public_spa", "status": "authorization-initiation-pass" }
+    ],
+    "machine": {
+      "count": 1,
+      "grantTypes": [
+        "client_credentials",
+        "urn:ietf:params:oauth:grant-type:token-exchange",
+        "refresh_token"
+      ],
+      "scopes": ["offline_access"],
+      "status": "registration-and-grant-configuration-pass"
+    }
+  },
+  "resourceServers": [
+    { "id": "realmroot", "resource": "https://id.realmroot.dev/api", "metadata": 200, "openapi": "3.1.0" },
+    { "id": "github", "resource": "https://adapters.realmroot.dev/github", "metadata": 200, "openapi": "3.0.3" },
+    { "id": "linear", "resource": "https://adapters.realmroot.dev/linear", "metadata": 200, "openapi": "3.1.0" },
+    { "id": "cloudflare", "resource": "https://adapters.realmroot.dev/cloudflare", "metadata": 200, "openapi": "3.0.3" },
+    { "id": "zpan", "resource": "https://drive.zpan.space/api", "metadata": 200, "openapi": "3.1.0" },
+    { "id": "zpan-staging", "resource": "https://zpan-staging.saltbo.workers.dev/api", "metadata": 200, "openapi": "3.1.0" },
+    { "id": "zme", "resource": "https://zme.tftt.cc/api", "metadata": 200, "openapi": "3.1.0" },
+    { "id": "agent-wallet", "resource": "https://wallet.realmroot.dev/api", "metadata": 200, "openapi": "3.1.0" },
+    { "id": "agent-inbox", "resource": "https://inbox.realmroot.dev/api", "metadata": 200, "openapi": "3.1.0" },
+    { "id": "wakatoken", "resource": "https://wakatoken.com/api/v1", "metadata": 200, "openapi": "3.1.0" },
+    { "id": "echola-appbase", "resource": "https://echola-server.saltbo.workers.dev/appbase", "metadata": 200, "openapi": "3.1.0" },
+    { "id": "sublyra", "resource": "https://sublyra-server.saltbo.workers.dev", "metadata": 200, "openapi": "3.1.0" },
+    { "id": "vocnet-learning", "resource": "https://api.vocnet.app/rpc", "metadata": 200, "openapi": "3.1.0" }
+  ],
+  "liveAgentCalls": [
+    { "resourceServer": "realmroot", "operation": "list applications and Resource Servers", "status": "pass" },
+    { "resourceServer": "cloudflare", "operation": "D1 migration, Worker deployments, deployment inventory", "status": "pass" },
+    { "resourceServer": "github", "operation": "GET /rate_limit with an approved Context", "status": "pass" },
+    { "resourceServer": "zme", "operation": "list safe downloader choices", "status": "pass" },
+    { "resourceServer": "agent-wallet", "operation": "show wallet", "status": "not a live token-path proof: stopped before Resource access because wallet:read is not delegated" },
+    { "resourceServer": "agent-inbox", "operation": "show mailbox", "status": "not a live token-path proof: stopped before Resource access because mailbox:read is not delegated" }
+  ],
+  "qualityGates": {
+    "realmroot": {
+      "typecheck": "pass",
+      "specCheck": "180/180",
+      "tests": "200 files, 1558 tests, pass",
+      "coverage": "pass",
+      "e2e": "10/10",
+      "lint": "pass",
+      "architecture": "pass",
+      "build": "pass",
+      "diffCheck": "pass"
+    },
+    "consumers": {
+      "wakatoken": "34 files, 570 tests, typecheck and build pass",
+      "adapters": "29 files, 184 tests, typecheck, lint, docs and build pass",
+      "wallet": "5 files, 54 tests, typecheck and build pass",
+      "inbox": "3 files, 13 tests and typecheck pass",
+      "zme": "65 files, 414 tests, typecheck, lint and build pass",
+      "zpan": "275 files, 5546 tests, typecheck and build pass"
+    }
+  },
+  "identityUse": {
+    "agent": "Jarvis performed all operations in this evidence run, including production reads, migration, deployments, and live calls.",
+    "agentAuditIdentity": {
+      "issuer": "https://id.realmroot.dev/api/auth",
+      "subject": "019ff41a-7da6-708f-8b05-49a4cc6d5300",
+      "agentIdentityId": "019ff41a-7da6-708f-8b05-44d4d0373685",
+      "hostId": "019ff419-e833-7119-8d25-271b6ef30ae2",
+      "resourceId": "019ff423-2505-75cc-b3a4-4b5261ce534e",
+      "action": "api_resource.token_issued",
+      "result": "allowed"
+    },
+    "finalCloudflareOperationAuditEvents": [
+      { "id": "01a01411-6bab-7528-a268-7a5c3616ef74", "occurredAt": "2026-08-18T08:51:21.131Z", "operation": "initial Realmroot digest deployment" },
+      { "id": "01a01411-ca52-7138-9a51-40f719f3c609", "occurredAt": "2026-08-18T08:51:45.362Z", "operation": "WakaToken deployment" },
+      { "id": "01a01412-0f19-779b-847d-83279a2158e8", "occurredAt": "2026-08-18T08:52:02.969Z", "operation": "Adapters deployment" },
+      { "id": "01a01412-5d4e-74c3-8994-d84f94fa404c", "occurredAt": "2026-08-18T08:52:22.990Z", "operation": "Wallet deployment" },
+      { "id": "01a01412-c05a-760e-905f-273c8857593f", "occurredAt": "2026-08-18T08:52:48.346Z", "operation": "Inbox deployment" },
+      { "id": "01a01413-0f55-7568-b925-22a76492f280", "occurredAt": "2026-08-18T08:53:08.565Z", "operation": "ZME deployment" },
+      { "id": "01a01413-69c3-72f1-a5ce-e7a18811b68a", "occurredAt": "2026-08-18T08:53:31.715Z", "operation": "ZPan staging deployment" },
+      { "id": "01a01414-2a42-7191-8580-7f58039785be", "occurredAt": "2026-08-18T08:54:20.994Z", "operation": "ZPan production deployment" },
+      { "id": "01a01418-ef98-77c4-86dd-2c3e59bc996d", "occurredAt": "2026-08-18T08:59:33.656Z", "operation": "final rebuilt Realmroot deployment" }
+    ],
+    "user": [
+      "Earlier in the migration, the user's Cloudflare credentials performed one corrective Realmroot deployment because the preceding release temporarily broke the old Agent CLI bootstrap request.",
+      "Earlier in the migration, the user's existing Realmroot browser session was used read-only to inspect the Linear connection page; no reauthorization or permission change occurred."
+    ],
+    "additionalUserIdentityUseAfterFinalReviewFixes": false
+  },
+  "knownOperationalNotes": [
+    "WakaToken version 93f27d22-8682-4074-b3b3-3cf3387705b1 deployed cleanly to wakatoken.com after the obsolete wkt.tftt.cc Worker route was removed; that hostname remains an HTTP 301 redirect to the canonical domain.",
+    "Linear's external provider grant was already stale. Restoring it requires controller/provider authorization and was not silently changed.",
+    "The adapters deployment includes pre-existing, user-owned Linear changes that were preserved and passed the repository's complete test, type, lint, documentation, and build gates."
+  ]
+}

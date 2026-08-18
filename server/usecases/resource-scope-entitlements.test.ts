@@ -42,6 +42,7 @@ describe('effective Resource Server scopes', () => {
         'user-1',
         { ...resource, visibility: 'private' },
         now,
+        'org-1',
       ),
     ).resolves.toEqual(['auto', 'direct', 'role'])
   })

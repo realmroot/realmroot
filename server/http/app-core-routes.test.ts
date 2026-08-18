@@ -1,4 +1,6 @@
 import { createApp } from '@server/http/app'
+import { realmrootAgentBindingClaim } from '@shared/oauth-token-profile'
+import { exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createTestDeps } from './test-deps'
 
@@ -132,6 +134,7 @@ describe('app.test 1', () => {
         },
         body: new URLSearchParams({
           grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+          client_id: 'realmroot-cli',
           assertion: 'agent-assertion',
           resource: 'https://auth.example.com/api',
           scope: 'agent:read',
@@ -145,6 +148,91 @@ describe('app.test 1', () => {
       error_description: 'The Agent is not enrolled.',
     })
     expect(deps.agentIdentities.findProtocolAgent).not.toHaveBeenCalled()
+  })
+
+  it('issues and verifies an Agent bootstrap JWT through the OAuth HTTP boundary', async () => {
+    const issuer = 'https://auth.example.com/api/auth'
+    const endpoint = `${issuer}/oauth2/token`
+    const auth = createAuthMock()
+    auth.api.getAgentSession.mockResolvedValue({
+      agentId: 'protocol-agent-1',
+      agent: { id: 'protocol-agent-1', hostId: 'host-1', mode: 'delegated', capabilityGrants: [] },
+      host: { id: 'host-1', userId: 'controller-1', status: 'active' },
+    })
+    const signingKey = await generateKeyPair('ES256', { extractable: true })
+    auth.api.signJWT.mockImplementation(async ({ body }) => ({
+      token: await new SignJWT(body.payload)
+        .setProtectedHeader({ alg: 'ES256', kid: 'issuer-key', typ: body.overrideOptions.jwt.type })
+        .sign(signingKey.privateKey),
+    }))
+    const now = new Date('2026-08-18T00:00:00.000Z')
+    const identity = {
+      id: 'identity-1',
+      issuer,
+      subject: 'agt_1',
+      username: 'agent',
+      name: 'Agent',
+      ownerUserId: 'user-1',
+      ownerOrganizationId: null,
+      status: 'active' as const,
+      deletedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    }
+    const binding = {
+      id: 'binding-1',
+      agentIdentityId: identity.id,
+      protocolAgentId: 'protocol-agent-1',
+      hostId: 'host-1',
+      status: 'active',
+      boundAt: now,
+      revokedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    }
+    const deps = createTestDeps()
+    vi.mocked(deps.agentIdentities.findActiveBindingByProtocolAgent).mockResolvedValue({ identity, binding })
+    const dpopKey = await generateKeyPair('ES256', { extractable: true })
+    const proof = await new SignJWT({ htm: 'POST', htu: endpoint })
+      .setProtectedHeader({ typ: 'dpop+jwt', alg: 'ES256', jwk: await exportJWK(dpopKey.publicKey) })
+      .setIssuedAt()
+      .setJti(crypto.randomUUID())
+      .sign(dpopKey.privateKey)
+
+    const response = await createApp(auth, deps, { baseURL: 'https://auth.example.com' }).request(endpoint, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded', DPoP: proof },
+      body: new URLSearchParams({
+        grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+        client_id: 'realmroot-cli',
+        assertion: 'agent-assertion',
+        resource: 'https://auth.example.com/api',
+        scope: 'agent:read',
+      }),
+    })
+
+    expect(response.status).toBe(200)
+    const body = await response.json<{ access_token: string; token_type: string; scope: string }>()
+    expect(body).toMatchObject({ token_type: 'DPoP', scope: 'agent:read' })
+    const verified = await jwtVerify(body.access_token, signingKey.publicKey, {
+      issuer,
+      audience: 'https://auth.example.com/api',
+      typ: 'at+jwt',
+    })
+    expect(verified.protectedHeader).toMatchObject({ alg: 'ES256', kid: 'issuer-key', typ: 'at+jwt' })
+    expect(verified.payload).toMatchObject({
+      sub: 'agt_1',
+      client_id: 'realmroot-cli',
+      scope: 'agent:read',
+      cnf: { jkt: expect.any(String) },
+      [realmrootAgentBindingClaim]: { protocol_agent_id: 'protocol-agent-1', host_id: 'host-1' },
+    })
+    expect(verified.payload).not.toHaveProperty('act')
+    expect(auth.api.getAgentSession).toHaveBeenCalledWith({
+      headers: expect.any(Headers),
+      asResponse: false,
+    })
+    expect(auth.api.signJWT).toHaveBeenCalledOnce()
   })
 
   it('serves OpenID metadata at the issuer-path well-known route', async () => {

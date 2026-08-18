@@ -7,7 +7,7 @@ import type {
   TokenExchangeRepository,
   UpdateFederatedCredentialInput,
 } from '@server/usecases/ports'
-import { and, desc, eq, isNotNull, isNull } from 'drizzle-orm'
+import { and, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm'
 import type { Database } from '../../db/client'
 import {
   apiResource,
@@ -210,12 +210,81 @@ export function createTokenExchangeRepository(db: Database, ids: IdentifierGener
       return Boolean(row)
     },
 
+    async rotateRefreshToken(input) {
+      const parentIsActive = and(
+        eq(tokenExchangeRefreshToken.id, input.refreshToken.parentId!),
+        isNull(tokenExchangeRefreshToken.consumedAt),
+        isNull(tokenExchangeRefreshToken.revokedAt),
+      )
+      const childId = input.refreshToken.id
+      const [children, parents, accessTokens] = await db.batch([
+        db
+          .insert(tokenExchangeRefreshToken)
+          .select(
+            db.select(refreshTokenProjection(input.refreshToken)).from(tokenExchangeRefreshToken).where(parentIsActive),
+          )
+          .returning({ id: tokenExchangeRefreshToken.id }),
+        db
+          .update(tokenExchangeRefreshToken)
+          .set({ consumedAt: new Date() })
+          .where(parentIsActive)
+          .returning({ id: tokenExchangeRefreshToken.id }),
+        db
+          .insert(tokenExchangeAccessToken)
+          .select(
+            db
+              .select(accessTokenProjection(input.accessToken))
+              .from(tokenExchangeRefreshToken)
+              .where(eq(tokenExchangeRefreshToken.id, childId)),
+          )
+          .returning({ id: tokenExchangeAccessToken.id }),
+      ])
+      return children.length === 1 && parents.length === 1 && accessTokens.length === 1
+    },
+
     async revokeRefreshTokenFamily(familyId, now) {
       await db
         .update(tokenExchangeRefreshToken)
         .set({ revokedAt: now })
         .where(and(eq(tokenExchangeRefreshToken.familyId, familyId), isNull(tokenExchangeRefreshToken.revokedAt)))
     },
+  }
+}
+
+function refreshTokenProjection(input: Parameters<TokenExchangeRepository['rotateRefreshToken']>[0]['refreshToken']) {
+  return {
+    id: sql<string>`${input.id}`.as('id'),
+    familyId: sql<string>`${input.familyId}`.as('family_id'),
+    parentId: sql<string | null>`${input.parentId}`.as('parent_id'),
+    tokenHash: sql<string>`${input.tokenHash}`.as('token_hash'),
+    clientId: sql<string>`${input.clientId}`.as('client_id'),
+    credentialId: sql<string>`${input.credentialId}`.as('credential_id'),
+    subject: sql<string>`${input.subject}`.as('subject'),
+    subjectTokenIssuer: sql<string>`${input.subjectTokenIssuer}`.as('subject_token_issuer'),
+    audience: sql<string>`${input.audience}`.as('audience'),
+    scopes: sql<string[]>`${JSON.stringify(input.scopes)}`.as('scopes'),
+    claims: sql<Record<string, unknown>>`${JSON.stringify(input.claims)}`.as('claims'),
+    expiresAt: sql<Date>`${input.expiresAt.getTime()}`.as('expires_at'),
+    consumedAt: sql<Date | null>`${null}`.as('consumed_at'),
+    revokedAt: sql<Date | null>`${null}`.as('revoked_at'),
+    createdAt: sql<Date>`${Date.now()}`.as('created_at'),
+  }
+}
+
+function accessTokenProjection(input: Parameters<TokenExchangeRepository['rotateRefreshToken']>[0]['accessToken']) {
+  return {
+    id: sql<string>`${input.id}`.as('id'),
+    tokenHash: sql<string>`${input.tokenHash}`.as('token_hash'),
+    clientId: sql<string>`${input.clientId}`.as('client_id'),
+    credentialId: sql<string>`${input.credentialId}`.as('credential_id'),
+    subject: sql<string>`${input.subject}`.as('subject'),
+    subjectTokenIssuer: sql<string>`${input.subjectTokenIssuer}`.as('subject_token_issuer'),
+    audience: sql<string>`${input.audience}`.as('audience'),
+    scopes: sql<string[]>`${JSON.stringify(input.scopes)}`.as('scopes'),
+    claims: sql<Record<string, unknown>>`${JSON.stringify(input.claims)}`.as('claims'),
+    expiresAt: sql<Date>`${input.expiresAt.getTime()}`.as('expires_at'),
+    createdAt: sql<Date>`${Date.now()}`.as('created_at'),
+    revokedAt: sql<Date | null>`${null}`.as('revoked_at'),
   }
 }
 

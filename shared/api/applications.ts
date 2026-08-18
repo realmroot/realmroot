@@ -87,18 +87,11 @@ export const applicationOidcClaimsSchema = z
 
 export const defaultApplicationOidcClaims = {
   accessToken: {
-    authorization: true,
     groups: true,
     roles: true,
   },
-  idToken: {
-    groups: true,
-    roles: true,
-  },
-  userInfo: {
-    groups: true,
-    roles: true,
-  },
+  idToken: {},
+  userInfo: {},
 }
 
 export const applicationResponseSchema = z
@@ -123,11 +116,12 @@ export const applicationResponseSchema = z
     allowedGrantTypes: z.array(applicationGrantTypeSchema),
     oidcScopes: z.array(applicationScopeSchema),
     resourceScopes: applicationResourceScopesSchema,
+    /** @deprecated Realmroot uses one platform token profile. This value is fixed and input is ignored. */
+    oidcClaims: applicationOidcClaimsSchema.optional(),
     requirePkce: z.boolean(),
     tokenEndpointAuthMethod: z.enum(['none', 'client_secret_basic', 'client_secret_post']),
     secretMetadata: z.array(applicationSecretMetadataSchema),
     oidc: oidcEndpointMetadataSchema,
-    oidcClaims: applicationOidcClaimsSchema,
     createdAt: z.string(),
     updatedAt: z.string(),
   })
@@ -156,8 +150,9 @@ export const createApplicationRequestSchema = z
     resourceScopes: applicationResourceScopesSchema.optional(),
     consentRequired: z.boolean().optional(),
     ownerOrganizationId: nonEmptyString,
-    oidcClaims: applicationOidcClaimsSchema.optional(),
     deviceLoginEnabled: z.boolean().optional(),
+    /** @deprecated Accepted for migration compatibility and ignored. */
+    oidcClaims: applicationOidcClaimsSchema.optional(),
   })
   .strict()
   .superRefine((input, context) => {
@@ -205,8 +200,9 @@ export const updateApplicationRequestSchema = z
     disabled: z.boolean().optional(),
     disabledReason: z.string().trim().max(500).nullable().optional(),
     ownerOrganizationId: nonEmptyString.optional(),
-    oidcClaims: applicationOidcClaimsSchema.optional(),
     deviceLoginEnabled: z.boolean().optional(),
+    /** @deprecated Accepted for migration compatibility and ignored. */
+    oidcClaims: applicationOidcClaimsSchema.optional(),
   })
   .strict()
 

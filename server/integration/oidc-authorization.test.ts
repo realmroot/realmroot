@@ -145,7 +145,8 @@ describe('OIDC authorization over real D1', () => {
     const audience = Array.isArray(payload.aud) ? payload.aud : [payload.aud]
 
     expect(audience).toContain(resource)
-    expect(payload.azp).toBe(application.clientId)
+    expect(payload.client_id).toBe(application.clientId)
+    expect(payload).not.toHaveProperty('azp')
 
     const header = decodeJwtHeader(tokenBody.id_token)
     expect(header).toMatchObject({ alg: 'RS256', kid: expect.any(String) })
@@ -202,7 +203,7 @@ describe('OIDC authorization over real D1', () => {
       body: JSON.stringify({
         name: 'Logout SPA',
         slug: 'logout-spa',
-        clientType: 'public_spa',
+        clientType: 'confidential_web',
         redirectUris: [redirectUri],
         postLogoutRedirectUris: [postLogoutRedirectUri],
         ownerOrganizationId: platformOrganizationId,
@@ -210,7 +211,7 @@ describe('OIDC authorization over real D1', () => {
       }),
     })
     expect(createApp.status, await createApp.clone().text()).toBe(201)
-    const application = (await createApp.json()) as { clientId: string }
+    const application = (await createApp.json()) as { clientId: string; clientSecret: string }
     const authorizeParams = new URLSearchParams({
       response_type: 'code',
       client_id: application.clientId,
@@ -230,17 +231,52 @@ describe('OIDC authorization over real D1', () => {
 
     const token = await harness.request('/api/auth/oauth2/token', {
       method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+        authorization: `Basic ${btoa(`${application.clientId}:${application.clientSecret}`)}`,
+      },
       body: new URLSearchParams({
         grant_type: 'authorization_code',
-        client_id: application.clientId,
         redirect_uri: redirectUri,
         code: code ?? '',
         code_verifier: verifier,
       }),
     })
     expect(token.status, await token.clone().text()).toBe(200)
-    const { id_token: idToken } = (await token.json()) as { id_token: string }
+    const { access_token: accessToken, id_token: idToken } = (await token.json()) as {
+      access_token: string
+      id_token: string
+    }
+    expect(decodeJwtHeader(accessToken).typ).toBe('at+jwt')
+    expect(decodeJwtPayload(accessToken)).toMatchObject({
+      aud: `${baseURL}/api/auth/oauth2/userinfo`,
+      client_id: application.clientId,
+      jti: expect.any(String),
+    })
+    const identityOnlyClaims = ['authorization', 'roles', 'groups', 'application_id', 'organization_id']
+    const idPayload = decodeJwtPayload(idToken)
+    for (const claim of identityOnlyClaims) expect(idPayload).not.toHaveProperty(claim)
+    expect(idPayload).not.toHaveProperty('urn:realmroot:params:oauth:tenant')
+
+    const userInfo = await harness.request('/api/auth/oauth2/userinfo', {
+      headers: { authorization: `Bearer ${accessToken}` },
+    })
+    expect(userInfo.status, await userInfo.clone().text()).toBe(200)
+    const userInfoBody = (await userInfo.json()) as Record<string, unknown>
+    expect(userInfoBody).toMatchObject({ sub: idPayload.sub })
+    for (const claim of identityOnlyClaims) expect(userInfoBody).not.toHaveProperty(claim)
+    expect(userInfoBody).not.toHaveProperty('urn:realmroot:params:oauth:tenant')
+
+    const introspection = await harness.request('/api/auth/oauth2/introspect', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+        authorization: `Basic ${btoa(`${application.clientId}:${application.clientSecret}`)}`,
+      },
+      body: new URLSearchParams({ token: accessToken }),
+    })
+    expect(introspection.status, await introspection.clone().text()).toBe(200)
+    expect(await introspection.json()).toMatchObject({ active: true, client_id: application.clientId })
     const jwks = await harness.request('/api/auth/jwks')
     expect(jwks.status, await jwks.clone().text()).toBe(200)
     const jwksBody = await jwks.text()

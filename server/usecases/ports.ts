@@ -1509,6 +1509,7 @@ export interface TokenExchangeAccessTokenRecord {
 export interface TokenExchangeRefreshTokenRecord {
   id: string
   familyId: string
+  parentId: string | null
   tokenHash: string
   clientId: string
   credentialId: string
@@ -1549,6 +1550,10 @@ export interface TokenExchangeRepository {
   ): Promise<boolean>
   findRefreshTokenByHash(tokenHash: string): Promise<TokenExchangeRefreshTokenRecord | null>
   consumeRefreshToken(id: string, now: Date): Promise<boolean>
+  rotateRefreshToken(input: {
+    refreshToken: Omit<TokenExchangeRefreshTokenRecord, 'createdAt' | 'consumedAt' | 'revokedAt'>
+    accessToken: Omit<TokenExchangeAccessTokenRecord, 'createdAt' | 'revokedAt'>
+  }): Promise<boolean>
   revokeRefreshTokenFamily(familyId: string, now: Date): Promise<void>
 }
 

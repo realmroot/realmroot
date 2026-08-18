@@ -22,12 +22,19 @@ export async function userEffectiveResourceScopes(
   userId: string,
   resource: ApiResourceResponse,
   now = new Date(),
+  tenantOrganizationId?: string | null,
 ) {
   const memberships = await deps.authorization.listUserMemberships(userId)
+  const tenantMemberships =
+    tenantOrganizationId === undefined
+      ? memberships
+      : tenantOrganizationId === null
+        ? []
+        : memberships.filter((membership) => membership.organizationId === tenantOrganizationId)
   const visibleMemberships =
     resource.visibility === 'private'
-      ? memberships.filter((membership) => membership.organizationId === resource.ownerOrganizationId)
-      : memberships
+      ? tenantMemberships.filter((membership) => membership.organizationId === resource.ownerOrganizationId)
+      : tenantMemberships
   if (resource.visibility === 'private' && visibleMemberships.length === 0) return []
 
   const scopes = automaticScopes(resource)

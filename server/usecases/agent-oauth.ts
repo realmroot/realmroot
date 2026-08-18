@@ -3,12 +3,14 @@ import type { Deps } from '@server/usecases/deps'
 import { validateDpopTokenProof } from '@server/usecases/dpop'
 import type { AgentAssertionSigner, AgentResourcePrincipal } from '@server/usecases/external-resources'
 import { agentBootstrapScopes } from '@shared/authz'
+import { realmrootAgentBindingClaim, realmrootCliClientId } from '@shared/oauth-token-profile'
 
 const accessTokenLifetimeSeconds = 5 * 60
 
 export async function issueAgentBootstrapAccessToken(
   deps: Deps,
   input: {
+    clientId: string
     scope?: string
     resource: string
     expectedResource: string
@@ -18,6 +20,11 @@ export async function issueAgentBootstrapAccessToken(
   principal: AgentResourcePrincipal,
   signer: AgentAssertionSigner,
 ) {
+  // CLI releases predating the fixed public-client identifier omit client_id.
+  // Continue accepting that wire shape while normalizing every issued token.
+  if (input.clientId && input.clientId !== realmrootCliClientId) {
+    throw oauthError('invalid_client', 'Unknown Agent OAuth client.', 401)
+  }
   if (input.resource !== input.expectedResource) throw oauthError('invalid_target', 'Unknown OAuth resource.')
   const scopes = normalizeScopes(input.scope)
   const allowed = new Set<string>(agentBootstrapScopes)
@@ -34,10 +41,12 @@ export async function issueAgentBootstrapAccessToken(
     {
       iss: signer.issuer,
       sub: principal.subject,
-      sub_profile: 'ai_agent',
       aud: input.resource,
-      client_id: principal.protocolAgentId,
-      host_id: principal.hostId,
+      client_id: realmrootCliClientId,
+      [realmrootAgentBindingClaim]: {
+        protocol_agent_id: principal.protocolAgentId,
+        host_id: principal.hostId,
+      },
       scope: scopes.join(' '),
       cnf: { jkt: confirmationJkt },
       iat: now,

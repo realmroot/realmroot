@@ -1,4 +1,4 @@
-import { buildOAuthAccessTokenClaims, buildOAuthIdTokenClaims, createAuth } from '@server/auth'
+import { buildOAuthAccessTokenClaims, createAuth } from '@server/auth'
 import type { OAuthProviderPluginOptions } from '@server/auth-test-plugin-types'
 import type { Database } from '@server/db/client'
 import { createApp } from '@server/http/app'
@@ -86,21 +86,15 @@ describe('auth.test 2', () => {
     )
     const oauth = findPlugin<OAuthProviderPluginOptions>(auth, 'oauth-provider').options
     expect(oauth.clientRegistrationAllowedScopes).toEqual(['openid', 'profile', 'email', 'offline_access'])
-    await expect(
-      oauth.customUserInfoClaims({
-        user: createUser(),
-        scopes: ['openid', 'applications:read'],
-        jwt: {},
-      }),
-    ).resolves.toEqual({})
+    expect(oauth.customUserInfoClaims).toBeUndefined()
   })
 
   it('maps OAuth provider context into authorization token claims', async () => {
     const deps = {} as Deps
     const buildTokenClaims = vi.spyOn(authorizationUsecase, 'buildTokenClaims').mockResolvedValue({
-      authorization: {
-        roles: ['contacts-reader'],
-      },
+      authorization: { roles: ['contacts-reader'] },
+      roles: ['contacts-reader'],
+      groups: ['org-1'],
     })
 
     await expect(
@@ -115,9 +109,9 @@ describe('auth.test 2', () => {
         },
       }),
     ).resolves.toEqual({
-      authorization: {
-        roles: ['contacts-reader'],
-      },
+      roles: ['contacts-reader'],
+      groups: ['org-1'],
+      'urn:realmroot:params:oauth:tenant': { type: 'organization', id: 'org-1' },
     })
 
     expect(buildTokenClaims).toHaveBeenCalledWith(deps, {
@@ -127,45 +121,6 @@ describe('auth.test 2', () => {
       resource: 'https://api.example.com/contacts',
       scopes: ['openid', 'contacts:read'],
       authorizedScopes: ['contacts:read'],
-      destination: 'access_token',
-      claimSelection: {
-        authorization: true,
-        roles: true,
-        groups: true,
-      },
-    })
-  })
-
-  it('maps configured OAuth provider context into ID token claims', async () => {
-    const deps = {} as Deps
-    const buildTokenClaims = vi.spyOn(authorizationUsecase, 'buildTokenClaims').mockResolvedValue({
-      roles: ['admin'],
-    })
-
-    await expect(
-      buildOAuthIdTokenClaims(deps, {
-        user: { id: 'user-1' },
-        scopes: ['openid', 'contacts:read'],
-        metadata: {
-          applicationId: 'app-1',
-          oidcClaims: {
-            accessToken: {},
-            idToken: { roles: true },
-            userInfo: {},
-          },
-        },
-      }),
-    ).resolves.toEqual({
-      application_id: 'app-1',
-      roles: ['admin'],
-    })
-
-    expect(buildTokenClaims).toHaveBeenCalledWith(deps, {
-      userId: 'user-1',
-      applicationId: 'app-1',
-      scopes: ['openid', 'contacts:read'],
-      destination: 'id_token',
-      claimSelection: { roles: true },
     })
   })
 })
@@ -173,18 +128,6 @@ describe('auth.test 2', () => {
 function createEmailSenderMock() {
   return {
     send: vi.fn().mockResolvedValue({ messageId: 'email-1' }),
-  }
-}
-
-function createUser() {
-  return {
-    id: 'user-1',
-    name: 'User',
-    email: 'user@example.com',
-    emailVerified: false,
-    image: null,
-    createdAt: new Date(),
-    updatedAt: new Date(),
   }
 }
 

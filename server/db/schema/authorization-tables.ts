@@ -351,6 +351,7 @@ export const tokenExchangeRefreshToken = sqliteTable(
   {
     id: text('id').primaryKey(),
     familyId: text('family_id').notNull(),
+    parentId: text('parent_id'),
     tokenHash: text('token_hash').notNull().unique(),
     clientId: text('client_id')
       .notNull()
@@ -375,5 +376,6 @@ export const tokenExchangeRefreshToken = sqliteTable(
     index('tokenExchangeRefreshToken_clientId_idx').on(table.clientId),
     index('tokenExchangeRefreshToken_credentialId_idx').on(table.credentialId),
     index('tokenExchangeRefreshToken_expiresAt_idx').on(table.expiresAt),
+    uniqueIndex('tokenExchangeRefreshToken_parentId_uidx').on(table.parentId),
   ],
 )

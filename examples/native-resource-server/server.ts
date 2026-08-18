@@ -8,6 +8,8 @@ const resource = `${origin}/api`
 const realmrootOrigin = process.env.REALMROOT_ORIGIN ?? 'http://localhost:4189'
 const realmrootIssuer = process.env.REALMROOT_ISSUER ?? `${realmrootOrigin}/api/auth`
 const realmrootJwksUrl = process.env.REALMROOT_JWKS_URL ?? `${realmrootOrigin}/api/auth/jwks`
+const realmrootCliClientId = 'realmroot-cli'
+const realmrootTenantClaim = 'urn:realmroot:params:oauth:tenant'
 const realmrootJwks = createRemoteJWKSet(new URL(realmrootJwksUrl))
 const usedDpopProofs = new Map<string, number>()
 
@@ -111,12 +113,20 @@ async function requireRealmrootDpopAccess(request: Request, response: Response, 
     if (proof.payload.ath !== sha256Base64Url(token)) {
       throw oauthError('invalid_dpop_proof', 'DPoP ath is invalid.', 401)
     }
+    if (verified.payload.client_id !== realmrootCliClientId) {
+      throw oauthError('invalid_token', 'Token was not issued to the Realmroot Agent protocol client.', 401)
+    }
+    const actor = verified.payload.act as { iss?: unknown; sub?: unknown } | undefined
+    if (typeof actor?.iss !== 'string' || typeof actor.sub !== 'string') {
+      throw oauthError('invalid_token', 'Token has no stable Agent actor.', 401)
+    }
     response.locals.authorization = {
       sub: verified.payload.sub,
       act: verified.payload.act,
       scope: verified.payload.scope,
       roles: verified.payload.roles,
       groups: verified.payload.groups,
+      tenant: verified.payload[realmrootTenantClaim],
     }
     next()
   } catch (error) {

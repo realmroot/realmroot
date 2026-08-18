@@ -4,6 +4,7 @@ import type { ProtocolAgentSession } from '@server/usecases/agent-session'
 import type { Deps } from '@server/usecases/deps'
 import { validateDpopResourceProof } from '@server/usecases/dpop'
 import type { AgentIdentityBindingRecord, AgentIdentityRecord } from '@server/usecases/ports'
+import { realmrootAgentBindingClaim, realmrootCliClientId } from '@shared/oauth-token-profile'
 import type { Context, MiddlewareHandler } from 'hono'
 import { toBoundaryError } from '../routes/auth-api'
 
@@ -160,9 +161,9 @@ async function authenticateOAuthApplication(
     .catch(() => null)
   const payload = verified?.payload
   if (!payload) throw unauthorized('OAuth access token is invalid.')
-  if (stringClaim(payload, 'sub_profile') !== 'application') return null
   const applicationId = stringClaim(payload, 'sub')
   const clientId = stringClaim(payload, 'client_id')
+  if (clientId === realmrootCliClientId) return null
   const confirmationJkt = objectStringClaim(payload, 'cnf', 'jkt')
   const proof = c.req.header('DPoP')
   if (!applicationId || !clientId || !confirmationJkt || !proof) {
@@ -208,17 +209,26 @@ async function authenticateOAuthAgent(
     .catch(() => null)
   const payload = verified?.payload
   if (!payload) throw unauthorized('OAuth access token is invalid.')
-  if (stringClaim(payload, 'sub_profile') !== 'ai_agent') return null
-  const subject = stringClaim(payload, 'sub')
-  const protocolAgentId = stringClaim(payload, 'client_id')
-  const hostId = stringClaim(payload, 'host_id')
+  const clientId = stringClaim(payload, 'client_id')
+  if (!clientId) return null
+  const legacyAgentToken = clientId !== realmrootCliClientId && stringClaim(payload, 'sub_profile') === 'ai_agent'
+  if (clientId !== realmrootCliClientId && !legacyAgentToken) return null
+  const tokenSubject = stringClaim(payload, 'sub')
   const confirmationJkt = objectStringClaim(payload, 'cnf', 'jkt')
   const proof = c.req.header('DPoP')
-  if (!subject || !protocolAgentId || !hostId || !confirmationJkt || !proof) {
+  if (!tokenSubject || !confirmationJkt || !proof) {
     throw unauthorized('OAuth access token is missing its Agent or DPoP binding.')
   }
   const deps = c.get('deps') as Deps
-  const [, active] = await Promise.all([
+  const actorIssuer = objectStringClaim(payload, 'act', 'iss')
+  const actorSubject = objectStringClaim(payload, 'act', 'sub')
+  const activeAgent = legacyAgentToken
+    ? resolveLegacyAgentToken(deps, issuer, tokenSubject, clientId, stringClaim(payload, 'host_id'))
+    : actorIssuer && actorSubject
+      ? resolveResourceTokenAgent(deps, accessToken, issuer, tokenSubject, actorIssuer, actorSubject)
+      : resolveBootstrapTokenAgent(deps, payload, issuer, tokenSubject)
+  const [active] = await Promise.all([
+    activeAgent,
     validateDpopResourceProof(deps, {
       proof,
       accessToken,
@@ -228,8 +238,52 @@ async function authenticateOAuthAgent(
     }).catch((error: unknown) => {
       throw unauthorized(error instanceof Error ? error.message : 'DPoP proof is invalid.')
     }),
-    deps.agentIdentities.findActiveBindingByProtocolAgent(protocolAgentId),
   ])
+  const scopes = typeof payload.scope === 'string' ? [...new Set(payload.scope.split(/\s+/).filter(Boolean))] : []
+  const authority = authorityClaim(payload.realmroot_authority)
+  return {
+    issuer,
+    subject: active.identity.subject,
+    identityId: active.identity.id,
+    protocolAgentId: active.binding.protocolAgentId,
+    hostId: active.binding.hostId,
+    identity: active.identity,
+    binding: active.binding,
+    scopes,
+    authority,
+  }
+}
+
+async function resolveLegacyAgentToken(
+  deps: Deps,
+  issuer: string,
+  subject: string,
+  protocolAgentId: string,
+  hostId: string | null,
+) {
+  if (!hostId) throw unauthorized('Legacy OAuth access token is missing its Agent Host binding.')
+  const active = await deps.agentIdentities.findActiveBindingByProtocolAgent(protocolAgentId)
+  if (
+    !active ||
+    active.binding.hostId !== hostId ||
+    active.identity.issuer !== issuer ||
+    active.identity.subject !== subject
+  ) {
+    throw unauthorized('The legacy OAuth token does not belong to an active Agent identity and Host binding.')
+  }
+  return active
+}
+
+async function resolveBootstrapTokenAgent(
+  deps: Deps,
+  payload: Record<string, unknown>,
+  issuer: string,
+  subject: string,
+) {
+  const protocolAgentId = objectStringClaim(payload, realmrootAgentBindingClaim, 'protocol_agent_id')
+  const hostId = objectStringClaim(payload, realmrootAgentBindingClaim, 'host_id')
+  if (!protocolAgentId || !hostId) throw unauthorized('OAuth bootstrap token is missing its Agent binding.')
+  const active = await deps.agentIdentities.findActiveBindingByProtocolAgent(protocolAgentId)
   if (
     !active ||
     active.binding.hostId !== hostId ||
@@ -238,19 +292,33 @@ async function authenticateOAuthAgent(
   ) {
     throw unauthorized('The OAuth token does not belong to an active Agent identity and Host binding.')
   }
-  const scopes = typeof payload.scope === 'string' ? [...new Set(payload.scope.split(/\s+/).filter(Boolean))] : []
-  const authority = authorityClaim(payload.realmroot_authority)
-  return {
-    issuer,
-    subject,
-    identityId: active.identity.id,
-    protocolAgentId,
-    hostId,
-    identity: active.identity,
-    binding: active.binding,
-    scopes,
-    authority,
+  return active
+}
+
+async function resolveResourceTokenAgent(
+  deps: Deps,
+  accessToken: string,
+  issuer: string,
+  ownerSubject: string,
+  actorIssuer: string,
+  actorSubject: string,
+) {
+  if (actorIssuer !== issuer) throw unauthorized('The OAuth actor issuer is invalid.')
+  const [identity, lease] = await Promise.all([
+    deps.agentIdentities.findByIssuerSubject(actorIssuer, actorSubject),
+    deps.externalResources.findActiveTokenLeaseByTokenHash(await sha256(accessToken), new Date()),
+  ])
+  if (!identity || !lease || (identity.ownerUserId ?? identity.ownerOrganizationId) !== ownerSubject) {
+    throw unauthorized('The OAuth token does not belong to an active Agent resource grant.')
   }
+  const aggregate = await deps.agentIdentities.findIdentity(identity.id)
+  const binding = aggregate?.bindings.find(
+    (candidate) => candidate.id === lease.bindingId && candidate.status === 'active' && !candidate.revokedAt,
+  )
+  if (!aggregate || aggregate.identity.status !== 'active' || !binding) {
+    throw unauthorized('The OAuth token does not belong to an active Agent identity and Host binding.')
+  }
+  return { identity: aggregate.identity, binding }
 }
 
 async function authenticateAgent(
@@ -307,6 +375,18 @@ function objectStringClaim(payload: Record<string, unknown>, objectName: string,
 
 function scopeClaim(payload: Record<string, unknown>) {
   return typeof payload.scope === 'string' ? [...new Set(payload.scope.split(/\s+/).filter(Boolean))] : []
+}
+
+async function sha256(value: string) {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))
+  return base64Url(new Uint8Array(digest))
+}
+
+function base64Url(value: Uint8Array) {
+  return btoa(String.fromCharCode(...value))
+    .replaceAll('+', '-')
+    .replaceAll('/', '_')
+    .replace(/=+$/, '')
 }
 
 export function getPrincipal(c: Context): PrincipalContext {

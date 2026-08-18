@@ -161,10 +161,17 @@ Validate the access token before using any claims:
 Native Agent tokens may also contain:
 
 - `sub`: the controlling user or organization;
-- `client_id`: the presenting AgentAuth registration;
-- `act`: the stable Agent's `iss`, `sub`, and `sub_profile: ai_agent`;
+- `client_id`: the reserved protocol value `realmroot-cli`;
+- `act`: the stable Agent's exact `iss` and `sub`;
 - `roles`: effective roles for this API Resource;
 - `groups`: the Agent's organization home space.
+- `urn:realmroot:params:oauth:tenant`: the controlling user or Organization
+  tenant.
+
+`realmroot-cli` does not identify an Application or a dynamically registered
+OAuth client. Reject other `client_id` values for Realmroot-native Agent
+tokens. Host and AgentAuth registration identifiers are intentionally private
+to Realmroot.
 
 Treat `scope` as the granted API authority. `roles`, `groups`, `sub`, and `act`
 provide policy and audit context; they do not expand the token's scopes.

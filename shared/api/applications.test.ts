@@ -110,11 +110,6 @@ describe('application API pagination contracts', () => {
         userInfoEndpoint: 'https://auth.example.com/api/auth/oauth2/userinfo',
         endSessionEndpoint: 'https://auth.example.com/api/auth/oauth2/end-session',
       },
-      oidcClaims: {
-        accessToken: { authorization: true, roles: true, groups: true },
-        idToken: { organizationId: true },
-        userInfo: { roles: true, groups: true },
-      },
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-01T00:00:00.000Z',
       clientSecret: 'fas_secret',
@@ -237,7 +232,7 @@ describe('application API pagination contracts', () => {
     ).toThrow()
   })
 
-  it('validates per-application OIDC claim configuration at API boundaries', () => {
+  it('accepts valid retired OIDC claim configuration only as compatibility input', () => {
     expect(
       createApplicationRequestSchema.parse({
         name: 'Customer app',
@@ -249,12 +244,8 @@ describe('application API pagination contracts', () => {
           idToken: { organizationId: true, organizationName: true },
           userInfo: { roles: true, groups: true },
         },
-      }).oidcClaims,
-    ).toEqual({
-      accessToken: { authorization: true, scopes: true },
-      idToken: { organizationId: true, organizationName: true },
-      userInfo: { roles: true, groups: true },
-    })
+      }),
+    ).toHaveProperty('oidcClaims')
     expect(() =>
       updateApplicationRequestSchema.parse({
         oidcClaims: {

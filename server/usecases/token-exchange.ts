@@ -11,6 +11,7 @@ import type {
 } from '@server/usecases/ports'
 import { applicationEffectiveResourceScopes } from '@server/usecases/resource-scope-entitlements'
 import { activeResourceVisibleToOrganization } from '@server/usecases/resource-visibility'
+import { realmrootTenantClaim } from '@shared/oauth-token-profile'
 
 export const tokenExchangeGrantType = 'urn:ietf:params:oauth:grant-type:token-exchange'
 export const refreshTokenGrantType = 'refresh_token'
@@ -21,7 +22,16 @@ const defaultExpiresInSeconds = 60 * 60
 const defaultRefreshExpiresInSeconds = 30 * 24 * 60 * 60
 const refreshTokenPrefix = 'fatr_'
 const subjectClaimsMember = 'urn:realmroot:params:oauth:token-exchange:subject-claims'
-const tenantClaim = 'urn:realmroot:params:oauth:tenant'
+const opaqueAccessTokenPrefix = 'fatx_'
+
+export interface TokenExchangeJwtSigner {
+  issuer: string
+  sign(payload: Record<string, unknown>, type: 'at+jwt'): Promise<string>
+}
+
+export interface TokenExchangeJwtVerifier {
+  verify(token: string, issuer: string, audience: string): Promise<Record<string, unknown>>
+}
 
 export interface TokenExchangeRequest {
   grantType: string
@@ -65,6 +75,7 @@ export async function exchangeToken(
   deps: Deps,
   input: TokenExchangeRequest,
   client: { clientId: string; clientSecret: string | null },
+  signer: TokenExchangeJwtSigner,
 ) {
   if (input.grantType !== tokenExchangeGrantType) {
     throw oauthError('unsupported_grant_type', 'Unsupported grant_type.')
@@ -92,8 +103,7 @@ export async function exchangeToken(
   if (!issuerValue || !subject) throw oauthError('invalid_grant', 'Subject token is missing required claims.')
 
   // Trust is scoped to the authenticated client's application: only a credential
-  // registered under THIS application can be exchanged. The minted token then
-  // represents the application, not the self-asserted external subject.
+  // registered under this client may establish the RFC 8693 subject.
   const credential = await resolveCredential(deps, oauthClient.clientId, issuerValue, subject)
   if (credential.audience !== input.audience) {
     throw oauthError('invalid_target', 'Requested audience does not match the federated credential.')
@@ -111,11 +121,18 @@ export async function exchangeToken(
     Math.min(now.getTime() + defaultExpiresInSeconds * 1000, readNumber(assertion.payload.exp)! * 1000),
   )
   const expiresIn = Math.max(0, Math.floor((expiresAt.getTime() - now.getTime()) / 1000))
-  const accessToken = `fatx_${base64Url(randomBytes(32))}`
   const claims = {
-    ...tokenClaims(assertion.payload),
-    [tenantClaim]: { type: 'organization', id: credential.ownerOrganizationId },
+    [realmrootTenantClaim]: { type: 'organization', id: credential.ownerOrganizationId },
   }
+  const accessToken = await issueJwtAccessToken(signer, {
+    clientId: oauthClient.clientId,
+    subject,
+    audience: credential.audience,
+    scopes,
+    claims,
+    issuedAt: now,
+    expiresAt,
+  })
   await deps.tokenExchange.storeAccessToken({
     id: deps.ids.generate(),
     tokenHash: await hashProviderSecret(accessToken),
@@ -160,6 +177,7 @@ export async function refreshToken(
   deps: Deps,
   input: TokenRefreshRequest,
   client: { clientId: string; clientSecret: string | null },
+  signer: TokenExchangeJwtSigner,
 ) {
   if (input.grantType !== refreshTokenGrantType) {
     throw oauthError('unsupported_grant_type', 'Unsupported grant_type.')
@@ -186,7 +204,7 @@ export async function refreshToken(
   if (!credential?.enabled) {
     throw oauthError('invalid_grant', 'The federated credential is no longer active.')
   }
-  const tenant = row.claims[tenantClaim]
+  const tenant = row.claims[realmrootTenantClaim]
   const tenantId =
     tenant && typeof tenant === 'object' && (tenant as Record<string, unknown>).type === 'organization'
       ? (tenant as Record<string, unknown>).id
@@ -205,34 +223,44 @@ export async function refreshToken(
     row.audience,
     input.scope ?? row.scopes.join(' '),
   )
-  if (!(await deps.tokenExchange.consumeRefreshToken(row.id, now))) {
+  const expiresIn = defaultExpiresInSeconds
+  const expiresAt = new Date(now.getTime() + expiresIn * 1000)
+  const accessToken = await issueJwtAccessToken(signer, {
+    clientId: oauthClient.clientId,
+    subject: row.subject,
+    audience: row.audience,
+    scopes: requestedScopes,
+    claims: row.claims,
+    issuedAt: now,
+    expiresAt,
+  })
+  const rotated = await prepareRefreshToken(deps, oauthClient.clientId, row.familyId, row.id, {
+    credentialId: row.credentialId,
+    subject: row.subject,
+    subjectTokenIssuer: row.subjectTokenIssuer,
+    audience: row.audience,
+    scopes: requestedScopes,
+    claims: row.claims,
+  })
+  const stored = await deps.tokenExchange.rotateRefreshToken({
+    refreshToken: rotated.record,
+    accessToken: {
+      id: deps.ids.generate(),
+      tokenHash: await hashProviderSecret(accessToken),
+      clientId: oauthClient.clientId,
+      credentialId: row.credentialId,
+      subject: row.subject,
+      subjectTokenIssuer: row.subjectTokenIssuer,
+      audience: row.audience,
+      scopes: requestedScopes,
+      claims: row.claims,
+      expiresAt,
+    },
+  })
+  if (!stored) {
     await deps.tokenExchange.revokeRefreshTokenFamily(row.familyId, now)
     throw oauthError('invalid_grant', 'Refresh token reuse was detected.')
   }
-
-  const expiresIn = defaultExpiresInSeconds
-  const expiresAt = new Date(now.getTime() + expiresIn * 1000)
-  const accessToken = `fatx_${base64Url(randomBytes(32))}`
-  const rotatedRefreshToken = await issueRefreshToken(deps, oauthClient.clientId, row.familyId, {
-    credentialId: row.credentialId,
-    subject: row.subject,
-    subjectTokenIssuer: row.subjectTokenIssuer,
-    audience: row.audience,
-    scopes: requestedScopes,
-    claims: row.claims,
-  })
-  await deps.tokenExchange.storeAccessToken({
-    id: deps.ids.generate(),
-    tokenHash: await hashProviderSecret(accessToken),
-    clientId: oauthClient.clientId,
-    credentialId: row.credentialId,
-    subject: row.subject,
-    subjectTokenIssuer: row.subjectTokenIssuer,
-    audience: row.audience,
-    scopes: requestedScopes,
-    claims: row.claims,
-    expiresAt,
-  })
 
   return {
     access_token: accessToken,
@@ -240,7 +268,7 @@ export async function refreshToken(
     token_type: 'Bearer',
     expires_in: expiresIn,
     scope: requestedScopes.join(' '),
-    refresh_token: rotatedRefreshToken,
+    refresh_token: rotated.token,
   } satisfies TokenExchangeResponse
 }
 
@@ -249,11 +277,23 @@ export async function introspectToken(
   token: string,
   client: { clientId: string; clientSecret: string | null },
   issuer: string,
+  verifier: TokenExchangeJwtVerifier,
 ) {
   await authenticateApplicationClient(deps, client.clientId, client.clientSecret)
   const tokenHash = await hashProviderSecret(token)
   const row = await deps.tokenExchange.findAccessTokenByHash(tokenHash)
   if (row && row.clientId === client.clientId && !row.revokedAt && row.expiresAt.getTime() > Date.now()) {
+    if (!token.startsWith(opaqueAccessTokenPrefix)) {
+      const payload = await verifier.verify(token, issuer, row.audience).catch(() => null)
+      if (!payload || !tokenExchangeJwtMatches(payload, row, issuer)) {
+        return { active: false } satisfies IntrospectionResponse
+      }
+      return {
+        ...payload,
+        active: true,
+        token_type: 'Bearer',
+      } satisfies IntrospectionResponse
+    }
     return {
       active: true,
       iss: issuer,
@@ -269,6 +309,59 @@ export async function introspectToken(
   }
 
   return { active: false } satisfies IntrospectionResponse
+}
+
+export async function isTokenExchangeAccessToken(deps: Deps, token: string) {
+  if (token.startsWith(opaqueAccessTokenPrefix)) return true
+  return Boolean(await deps.tokenExchange.findAccessTokenByHash(await hashProviderSecret(token)))
+}
+
+async function issueJwtAccessToken(
+  signer: TokenExchangeJwtSigner,
+  input: {
+    clientId: string
+    subject: string
+    audience: string
+    scopes: string[]
+    claims: Record<string, unknown>
+    issuedAt: Date
+    expiresAt: Date
+  },
+) {
+  const tenant = input.claims[realmrootTenantClaim]
+  return signer.sign(
+    {
+      iss: signer.issuer,
+      sub: input.subject,
+      aud: input.audience,
+      client_id: input.clientId,
+      scope: input.scopes.join(' '),
+      ...(tenant === undefined ? {} : { [realmrootTenantClaim]: tenant }),
+      iat: Math.floor(input.issuedAt.getTime() / 1000),
+      exp: Math.floor(input.expiresAt.getTime() / 1000),
+      jti: crypto.randomUUID(),
+    },
+    'at+jwt',
+  )
+}
+
+function tokenExchangeJwtMatches(
+  payload: Record<string, unknown>,
+  row: NonNullable<Awaited<ReturnType<Deps['tokenExchange']['findAccessTokenByHash']>>>,
+  issuer: string,
+) {
+  if (
+    payload.iss !== issuer ||
+    payload.sub !== row.subject ||
+    payload.aud !== row.audience ||
+    payload.client_id !== row.clientId ||
+    payload.scope !== row.scopes.join(' ') ||
+    payload.exp !== Math.floor(row.expiresAt.getTime() / 1000)
+  ) {
+    return false
+  }
+  const expectedTenant = row.claims[realmrootTenantClaim]
+  return payload.act === undefined && JSON.stringify(payload[realmrootTenantClaim]) === JSON.stringify(expectedTenant)
 }
 
 export async function listFederatedCredentials(deps: Deps, applicationId: string) {
@@ -411,18 +504,40 @@ async function issueRefreshToken(
     claims: Record<string, unknown>
   },
 ) {
+  const prepared = await prepareRefreshToken(deps, clientId, familyId, null, input)
+  const stored = await deps.tokenExchange.storeRefreshToken(prepared.record)
+  if (!stored) throw oauthError('invalid_grant', 'Refresh token family was revoked.')
+  return prepared.token
+}
+
+async function prepareRefreshToken(
+  deps: Deps,
+  clientId: string,
+  familyId: string,
+  parentId: string | null,
+  input: {
+    credentialId: string
+    subject: string
+    subjectTokenIssuer: string
+    audience: string
+    scopes: string[]
+    claims: Record<string, unknown>
+  },
+) {
   const token = `${refreshTokenPrefix}${base64Url(randomBytes(32))}`
   const now = new Date()
-  const stored = await deps.tokenExchange.storeRefreshToken({
-    id: deps.ids.generate(),
-    familyId,
-    tokenHash: await hashProviderSecret(token),
-    clientId,
-    ...input,
-    expiresAt: new Date(now.getTime() + defaultRefreshExpiresInSeconds * 1000),
-  })
-  if (!stored) throw oauthError('invalid_grant', 'Refresh token family was revoked.')
-  return token
+  return {
+    token,
+    record: {
+      id: deps.ids.generate(),
+      familyId,
+      parentId,
+      tokenHash: await hashProviderSecret(token),
+      clientId,
+      ...input,
+      expiresAt: new Date(now.getTime() + defaultRefreshExpiresInSeconds * 1000),
+    },
+  }
 }
 
 function decodeFormComponent(value: string) {
@@ -581,11 +696,6 @@ async function importVerificationKey(jwk: JsonWebKey, alg: string) {
 function verificationAlgorithm(alg: string) {
   if (alg === 'RS256') return { name: 'RSASSA-PKCS1-v1_5' }
   return { name: 'ECDSA', hash: 'SHA-256' }
-}
-
-function tokenClaims(payload: Record<string, unknown>) {
-  const reserved = new Set(['iss', 'sub', 'aud', 'exp', 'nbf', 'iat', 'jti'])
-  return Object.fromEntries(Object.entries(payload).filter(([key]) => !reserved.has(key)))
 }
 
 function audienceMatches(value: unknown, audience: string) {

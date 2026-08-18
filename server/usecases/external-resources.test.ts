@@ -55,6 +55,7 @@ import type {
 import { validateExternalResourceConnector } from '@server/usecases/resource-connectors'
 import { protectedResourceMetadataUrl } from '@server/usecases/resource-metadata'
 import type { ApiResourceResponse } from '@shared/api/authorization'
+import { realmrootCliClientId, realmrootTenantClaim } from '@shared/oauth-token-profile'
 import { exportJWK, generateKeyPair, type JWTHeaderParameters, SignJWT } from 'jose'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -5738,9 +5739,11 @@ describe('external API resource authorization', () => {
     })
     expect(signer.sign).toHaveBeenCalledWith(
       expect.objectContaining({
-        sub: principal().subject,
+        sub: 'org-1',
         aud: builtIn.resourceUrl,
-        host_id: principal().hostId,
+        client_id: realmrootCliClientId,
+        act: { iss: principal().issuer, sub: principal().subject },
+        [realmrootTenantClaim]: { type: 'organization', id: 'org-1' },
         groups: ['org-1'],
         realmroot_authority: authority,
       }),

@@ -355,19 +355,23 @@ Feature: Admin Console
     And protocol Agent implementation records and credential material are not exposed
 
   @entrypoint:product-ui @journey:admin-application-oidc-claims
-  Scenario: Application detail configures OIDC claim settings
+  Scenario: Application detail exposes one platform token profile
     Given an application exists
-    When I configure organization and RBAC claims for access tokens, ID tokens, and userinfo
-    Then the Console saves the claim settings through the Management API
-    And the application detail shows the saved claim settings after reload
+    When I inspect or update the Application through the Console or Management API
+    Then the Console exposes no per-Application OIDC claim settings
+    And the Management API accepts legacy oidcClaims input without applying it and returns the fixed platform profile for migration compatibility
+    And existing stored claim settings do not alter newly issued tokens
 
   @entrypoint:product-ui @journey:oidc-claim-emission
-  Scenario: Applications apply configured OIDC claim emission per token destination
+  Scenario: Applications receive standard identity and access token claims
     Given a user has organization membership, optional resource roles, and approved resource scopes
-    When OIDC claims are configured for access tokens, ID tokens, and userinfo
-    Then issued tokens identify relevant organizations in groups
-    And identify effective resource roles in roles
-    And carry only approved scopes
+    When the Application completes an OIDC authorization flow for a Resource Server
+    Then the ID token contains only standard identity and authentication claims allowed by the requested OIDC scopes
+    And the access token is an RFC 9068 JWT containing client_id, audience, subject, lifetime, token identifier, and approved scope
+    And the access token identifies relevant organizations in groups
+    And identifies effective resource roles in roles
+    And carries tenant context in the Realmroot tenant claim
+    But the access token contains no duplicate authorization object, azp, application_id, or top-level organization_id
 
   @entrypoint:product-ui @journey:agent-discovery
   Scenario: AgentAuth discovery exposes a narrow delegated protocol surface

@@ -48,7 +48,7 @@ Select these authorization dimensions before creation:
 - `ownerOrganizationId`: the Organization responsible for the Application;
 - `resourceScopes`: optional Resource Server IDs and scopes the client may
   request, selected from current Resource Server responses and contracts;
-- `oidcClaims`: optional access-token, ID-token, and UserInfo claim selection.
+- `oidcClaims`: deprecated compatibility input. Realmroot accepts and ignores it while all Applications migrate to the platform token profile.
 
 Client selection is complete when its type, redirects, Resource Server scope
 allowlists, consent policy, and secret-handling capability are explicit.
@@ -177,9 +177,11 @@ only. Federated credentials live under
 `/applications/{applicationId}/federated-credentials` and use their published
 GET, POST, PATCH, and DELETE contracts.
 
-Use `oidcClaims` on create or update to select optional authorization, scopes,
-groups, roles, Organization ID, and Organization name claims independently for
-the access token, ID token, and UserInfo response.
+Do not send `oidcClaims` in new integrations. During the compatibility window,
+create and update accept the legacy field but ignore it. Application responses
+return the fixed profile: authorization data (`scope`, `roles`, `groups`, and the
+namespaced tenant claim) belongs only in access tokens; ID Token and UserInfo
+remain identity-only.
 
 Use `deviceLoginEnabled` on a `public_native` Application to enable or disable
 the device-code grant.

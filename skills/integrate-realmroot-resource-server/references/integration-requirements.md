@@ -24,7 +24,7 @@ These requirements apply to native and external Resource Servers.
 | `API-OPENAPI` | REQUIRED | Serve a live OpenAPI 3.x document from that link. Declare OAuth/OIDC scopes for operations exposed to Agents, and keep every declared scope within RFC 9728 `scopes_supported`. |
 | `AGENT-SKILLS-DISCOVERY` | RECOMMENDED | Publish an Agent Skills Discovery v0.2.0 index at `/.well-known/agent-skills/index.json` on the Resource Server origin, with a skill that teaches Agents how to use the service through Realmroot Toolbox. |
 | `ACTOR-CHAIN` | REQUIRED | Preserve the controlling subject and stable Agent as distinct identities in the issued authority and audit boundary. |
-| `ACTOR-PROFILE` | REQUIRED | Classify the verified Agent actor with `sub_profile: ai_agent` without treating classification as identity or permission. |
+| `ACTOR-PROFILE` | REQUIRED | Classify a verified `act` actor as an Agent from the selected Realmroot Agent-token profile and trusted issuer. Do not require the retired `act.sub_profile` compatibility member. |
 | `ACTOR-NATIVE` | REQUIRED | Represent the stable Agent as a distinct non-human actor in authorization and audit records; a shared application actor or content footer is insufficient. |
 | `JWT-ACCESS-TOKEN` | REQUIRED | Use signed `at+jwt` access tokens with exact issuer and audience, expiry, client identity, scopes, and confirmation data. |
 | `DPOP` | REQUIRED | Bind each access token to the Agent key, require `Authorization: DPoP`, validate a fresh proof for every request, and provide no Bearer fallback. |
@@ -45,7 +45,7 @@ REALMROOT_ORIGIN/api/auth/.well-known/openid-configuration
 ```
 
 Validate the Realmroot-signed access token before using any claims. Require the
-operation's existing scopes, validate `act`, and validate proof type, algorithm,
+operation's existing scopes, validate `act.iss` and `act.sub`, and validate proof type, algorithm,
 signature, method, effective URI, freshness, unique `jti`, `ath`, and
 `cnf.jkt`. Enforce local ownership and business policy after cryptographic
 validation.

@@ -1,6 +1,7 @@
 import { createTestDeps } from '@server/http/test-deps'
 import { issueAgentBootstrapAccessToken } from '@server/usecases/agent-oauth'
 import { agentBootstrapScopes } from '@shared/authz'
+import { realmrootAgentBindingClaim, realmrootCliClientId } from '@shared/oauth-token-profile'
 import { exportJWK, generateKeyPair, SignJWT } from 'jose'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -15,6 +16,7 @@ describe('Agent OAuth token issuance', () => {
       issueAgentBootstrapAccessToken(
         deps,
         {
+          clientId: realmrootCliClientId,
           scope: 'agent:read resource-servers:read',
           resource: 'https://auth.example.com/api',
           expectedResource: 'https://auth.example.com/api',
@@ -35,8 +37,8 @@ describe('Agent OAuth token issuance', () => {
       expect.objectContaining({
         sub: 'agt_1',
         aud: 'https://auth.example.com/api',
-        client_id: 'protocol-agent-1',
-        host_id: 'host-1',
+        client_id: realmrootCliClientId,
+        [realmrootAgentBindingClaim]: { protocol_agent_id: 'protocol-agent-1', host_id: 'host-1' },
         scope: 'agent:read resource-servers:read',
         cnf: { jkt: expect.any(String) },
       }),
@@ -54,6 +56,7 @@ describe('Agent OAuth token issuance', () => {
       issueAgentBootstrapAccessToken(
         deps,
         {
+          clientId: realmrootCliClientId,
           scope: 'users:read',
           resource: 'https://auth.example.com/api',
           expectedResource: 'https://auth.example.com/api',
@@ -68,6 +71,7 @@ describe('Agent OAuth token issuance', () => {
       issueAgentBootstrapAccessToken(
         deps,
         {
+          clientId: realmrootCliClientId,
           scope: 'agent:read',
           resource: 'https://other.example.com/api',
           expectedResource: 'https://auth.example.com/api',
@@ -90,6 +94,7 @@ describe('Agent OAuth token issuance', () => {
       issueAgentBootstrapAccessToken(
         deps,
         {
+          clientId: realmrootCliClientId,
           resource: 'https://auth.example.com/api',
           expectedResource: 'https://auth.example.com/api',
           dpopProof: await dpopProof(endpoint),
@@ -104,6 +109,7 @@ describe('Agent OAuth token issuance', () => {
       issueAgentBootstrapAccessToken(
         deps,
         {
+          clientId: realmrootCliClientId,
           scope: ' resource-servers:read  agent:read resource-servers:read ',
           resource: 'https://auth.example.com/api',
           expectedResource: 'https://auth.example.com/api',
@@ -119,6 +125,7 @@ describe('Agent OAuth token issuance', () => {
   it('returns OAuth errors for an empty scope or invalid DPoP proof', async () => {
     const deps = createTestDeps()
     const input = {
+      clientId: realmrootCliClientId,
       resource: 'https://auth.example.com/api',
       expectedResource: 'https://auth.example.com/api',
       dpopProof: 'malformed',
@@ -146,6 +153,46 @@ describe('Agent OAuth token issuance', () => {
         signer,
       ),
     ).rejects.toMatchObject({ error: 'invalid_dpop_proof', message: 'The DPoP proof is invalid.' })
+  })
+
+  it('rejects an unregistered Agent OAuth client before processing its assertion context', async () => {
+    const agent = principal('https://auth.example.com/api/auth')
+    await expect(
+      issueAgentBootstrapAccessToken(
+        createTestDeps(),
+        {
+          clientId: 'another-cli',
+          resource: 'https://auth.example.com/api',
+          expectedResource: 'https://auth.example.com/api',
+          dpopProof: 'not-evaluated',
+          tokenEndpoint: 'https://auth.example.com/api/auth/oauth2/token',
+        },
+        agent,
+        { issuer: agent.issuer, sign: vi.fn() },
+      ),
+    ).rejects.toMatchObject({ error: 'invalid_client', status: 401 })
+  })
+
+  it('accepts a legacy CLI request without client_id and normalizes the issued token', async () => {
+    const deps = createTestDeps()
+    const agent = principal('https://auth.example.com/api/auth')
+    const signer = { issuer: agent.issuer, sign: vi.fn(async () => 'signed') }
+
+    await issueAgentBootstrapAccessToken(
+      deps,
+      {
+        clientId: '',
+        scope: 'agent:read',
+        resource: 'https://auth.example.com/api',
+        expectedResource: 'https://auth.example.com/api',
+        dpopProof: await dpopProof('https://auth.example.com/api/auth/oauth2/token'),
+        tokenEndpoint: 'https://auth.example.com/api/auth/oauth2/token',
+      },
+      agent,
+      signer,
+    )
+
+    expect(signer.sign).toHaveBeenCalledWith(expect.objectContaining({ client_id: realmrootCliClientId }), 'at+jwt')
   })
 })
 
