@@ -126,8 +126,8 @@ token contains:
 - the protected resource audience;
 - the exact approved scope set;
 - the Agent's personal-owner user ID or organization home-space ID as `sub`;
-- the stable Agent issuer and subject in `act`, classified by
-  `sub_profile: ai_agent`;
+- the stable Agent issuer and subject in the RFC 8693 `act` claim;
+- the reserved protocol identifier `client_id: realmroot-cli`;
 - the DPoP public-key thumbprint in `cnf.jkt`;
 - exact grant scopes and the User or Organization home-space tenant.
 
@@ -139,8 +139,7 @@ needed and submits a stable-Agent assertion using RFC 7523. The target issues an
 Agent actor token, then intersects the subject's scopes with the approved Agent
 scopes during RFC 8693 token exchange. The target authorization server issues
 the final DPoP-bound token with the connected user as `sub` and the Agent in
-`act`. Targets preserve the Agent's original issuer, subject, and `ai_agent`
-subject profile.
+`act`. Targets preserve the Agent's original issuer and subject.
 
 An Adapter-issued final token follows the same external flow. Realmroot returns
 it unchanged; the Agent calls the Adapter Resource directly, and the Adapter

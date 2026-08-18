@@ -309,23 +309,6 @@ describe('admin console applications-detail-a', () => {
       }),
     )
 
-    const claims = screen.getByRole('heading', { name: 'Token claims' }).closest('section') as HTMLElement
-    fireEvent.click(within(claims).getByRole('button', { name: 'Edit' }))
-    fireEvent.click(await screen.findByRole('switch', { name: 'ID token roles' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
-    await waitFor(() =>
-      expect(requests).toContainEqual({
-        url: '/api/applications/app-1',
-        method: 'PATCH',
-        body: {
-          oidcClaims: {
-            ...application.oidcClaims,
-            idToken: { roles: true },
-          },
-        },
-      }),
-    )
-
     cleanup()
     renderWithQuery(<ApplicationDetailPage applicationId="app-1" section="settings" />)
     await screen.findByRole('heading', { name: 'Customer portal' })
@@ -391,6 +374,10 @@ describe('admin console applications-detail-a', () => {
       }),
     )
 
+    cleanup()
+    queryClient.clear()
+    renderWithQuery(<ApplicationDetailPage applicationId="app-1" organizationId="org-1" section="settings" />)
+    await screen.findByRole('heading', { name: 'Updated portal' })
     fireEvent.click(screen.getByRole('button', { name: 'Delete application' }))
     expect(await screen.findByRole('heading', { name: 'Delete application' })).toBeTruthy()
     expect(screen.getByText(/Deleting Updated portal/)).toBeTruthy()
@@ -468,5 +455,23 @@ describe('admin console applications-detail-a', () => {
     expect(await screen.findByText('fas_rotated_secret')).toBeTruthy()
     fireEvent.click(within(screen.getByRole('dialog')).getAllByRole('button', { name: 'Close' })[0]!)
     await waitFor(() => expect(screen.queryByText('fas_rotated_secret')).toBeNull())
+  })
+
+  it('returns to the global Application collection after deletion', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url === '/api/applications/app-1' && init?.method === 'DELETE') {
+        return Promise.resolve(new Response(null, { status: 204 }))
+      }
+      if (url === '/api/applications/app-1') return Promise.resolve(jsonResponse(application))
+      return consoleSharedFetch(input, init)
+    })
+
+    const { router } = renderWithQuery(<ApplicationDetailPage applicationId="app-1" section="settings" />)
+    await screen.findByRole('heading', { name: 'Customer portal' })
+    fireEvent.click(screen.getByRole('button', { name: 'Delete application' }))
+    fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete application' }))
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/console/applications'))
   })
 })

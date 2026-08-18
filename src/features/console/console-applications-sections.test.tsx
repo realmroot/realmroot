@@ -1,10 +1,7 @@
 import type { ApplicationResponse } from '@shared/api/applications'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import {
-  ApplicationOidcClaimsForm,
-  ApplicationsTableContent,
-} from '@/features/applications/management/application-detail-sections'
+import { ApplicationsTableContent } from '@/features/applications/management/application-detail-sections'
 import { application, renderWithQuery } from './console.test-utils'
 
 globalThis.ResizeObserver ??= class ResizeObserver {
@@ -19,32 +16,6 @@ afterEach(() => {
 })
 
 const app = application as unknown as ApplicationResponse
-
-describe('ApplicationOidcClaimsForm', () => {
-  it('toggles a claim, saves, and discards back to the loaded value', () => {
-    const onSave = vi.fn()
-    render(
-      <ApplicationOidcClaimsForm
-        claims={app.oidcClaims}
-        error={new Error('claims failed')}
-        onSave={onSave}
-        pending={false}
-      />,
-    )
-    expect(screen.getByText('claims failed')).toBeTruthy()
-    const toggle = screen.getByRole('switch', { name: 'Access token roles' })
-    fireEvent.click(toggle)
-    fireEvent.click(screen.getByRole('button', { name: 'Save OIDC claims' }))
-    expect(onSave).toHaveBeenCalled()
-    // discard via the reset button restores the loaded claims
-    fireEvent.click(screen.getByRole('button', { name: 'Discard' }))
-  })
-
-  it('disables controls while pending', () => {
-    render(<ApplicationOidcClaimsForm claims={app.oidcClaims} error={null} onSave={vi.fn()} pending />)
-    expect(screen.getByRole('button', { name: 'Save OIDC claims' })).toHaveProperty('disabled', true)
-  })
-})
 
 describe('ApplicationsTableContent', () => {
   it('renders applications and toggles disabled state', async () => {

@@ -203,7 +203,7 @@ async function loadValidAudiences(db: D1Database, baseURL: string) {
   const result = await db
     .prepare('SELECT resource_url FROM api_resource WHERE enabled = 1 ORDER BY resource_url')
     .all<{ resource_url: string }>()
-  return [baseURL, ...result.results.map((row) => row.resource_url)]
+  return [`${baseURL}/api/auth/oauth2/userinfo`, baseURL, ...result.results.map((row) => row.resource_url)]
 }
 
 function mergeBuiltInProviders(

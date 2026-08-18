@@ -62,6 +62,10 @@ Feature: Agent identity and delegated API authorization
       And the Realmroot adapter is the explicit default for Realmroot oauth2 operations unless the caller selects a configured credential override
       And Realmroot never substitutes the approving user's identity for the Agent
       And the controller's browser session is used only to approve enrollment or authority
+      And the CLI requests bootstrap authority with the reserved client_id realmroot-cli
+      And Realmroot issues an RFC 9068 DPoP-bound bootstrap token with the stable Agent as subject
+      And the bootstrap token contains no actor claim or public Host claim
+      And previously issued legacy Agent tokens remain accepted only until their existing expiry
 
     @entrypoint:product-ui @journey:agent-enrollment-denial
     Scenario: A controller can deny Agent enrollment
@@ -251,7 +255,8 @@ Feature: Agent identity and delegated API authorization
       Then Realmroot issues a short-lived audience-bound JWT access token
       And the token uses the Better Auth issuer and signing keys
       And the token identifies the controller as subject and the stable Agent as the RFC 8693 actor
-      And the Agent actor carries its issuer, subject, and ai_agent subject profile
+      And the Agent actor carries only its issuer and stable subject
+      And the Realmroot-issued token identifies the presenting CLI with client_id realmroot-cli
       And the Host remains internal credential, binding, revocation, and audit context
       And the approved access request remains an audit record of the scopes approved in that interaction
       And its credential offer exposes the Context's one current cumulative scope set
@@ -290,10 +295,13 @@ Feature: Agent identity and delegated API authorization
     @entrypoint:agent-protocol @journey:workload-token-exchange-claims
     Scenario: Introspection reports only authorization-server controlled security claims
       Given a trusted workload assertion contains untrusted private claims
-      When Realmroot exchanges and introspects its opaque access token
-      Then issuer, audience, client, scope, activity, token type, and lifetime come only from Realmroot
+      When Realmroot exchanges and introspects its RFC 9068 JWT access token
+      Then the JWT identifies the trusted external workload as the RFC 8693 subject and the authenticated Application as client_id
+      And Realmroot's workload profile accepts no actor_token and the JWT contains no act claim
+      And issuer, audience, client, scope, activity, token type, and lifetime come only from Realmroot
       And subject assertion claims cannot override introspection security fields
       And only the confidential client that owns the exchange can introspect the token
+      And previously issued opaque exchange access tokens remain introspectable until they expire
 
     @entrypoint:agent-protocol @journey:workload-refresh-security
     Scenario: Token-exchange refresh tokens are confidential, rotating, and revocable

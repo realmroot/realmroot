@@ -103,7 +103,7 @@ describe('admin console users-detail-b', () => {
             clientId: 'google-client',
             clientSecret: 'GOOGLE_SECRET',
             resourceAuthorization: null,
-            scopes: ['openid', 'email', 'profile'],
+            scopes: [],
           },
         },
       ])

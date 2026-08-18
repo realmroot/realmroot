@@ -1,4 +1,7 @@
 import { applyD1Migrations, env, reset } from 'cloudflare:test'
+import { hashProviderSecret } from '@server/usecases/applications-utils'
+import { realmrootTenantClaim } from '@shared/oauth-token-profile'
+import { decodeJwt, decodeProtectedHeader } from 'jose'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createHarness, type Harness, platformOrganizationId, resourceOpenApiFetch, signInAdmin } from './harness'
 
@@ -95,6 +98,14 @@ describe('OAuth token exchange over real D1', () => {
     })
     expect(createResource.status, await createResource.clone().text()).toBe(201)
     const resource = (await createResource.json()) as { id: string }
+    const configureApplication = await harness.request(`/api/applications/${application.id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({
+        resourceScopes: [{ resourceServerId: resource.id, scopes: ['resource:read'] }],
+      }),
+    })
+    expect(configureApplication.status, await configureApplication.clone().text()).toBe(200)
 
     // Federated credential under the application (asymmetric, inline public JWK).
     const issuerUrl = 'https://issuer.partner.example.com'
@@ -111,6 +122,7 @@ describe('OAuth token exchange over real D1', () => {
       }),
     })
     expect(createCredential.status, await createCredential.clone().text()).toBe(201)
+    const { credential } = (await createCredential.json()) as { credential: { id: string } }
 
     const now = Math.floor(Date.now() / 1000)
     const subjectToken = await es256Jwt(privateKey, {
@@ -135,12 +147,19 @@ describe('OAuth token exchange over real D1', () => {
         subject_token: subjectToken,
         subject_token_type: 'urn:ietf:params:oauth:token-type:jwt',
         audience,
+        scope: 'resource:read offline_access',
       }).toString(),
     })
     expect(exchange.status, await exchange.clone().text()).toBe(200)
-    const exchanged = (await exchange.json()) as { access_token: string; token_type: string }
+    const exchanged = (await exchange.json()) as { access_token: string; refresh_token: string; token_type: string }
     expect(exchanged.token_type).toBe('Bearer')
-    expect(exchanged.access_token).toMatch(/^fatx_/)
+    expect(decodeProtectedHeader(exchanged.access_token).typ).toBe('at+jwt')
+    expect(decodeJwt(exchanged.access_token)).toMatchObject({
+      sub: 'partner-user-1',
+      aud: audience,
+      client_id: application.clientId,
+      [realmrootTenantClaim]: { type: 'organization', id: platformOrganizationId },
+    })
 
     // Introspection reads the stored token by hash (storeAccessToken + findAccessTokenByHash).
     const introspect = await harness.request('/api/auth/oauth2/introspect', {
@@ -153,10 +172,63 @@ describe('OAuth token exchange over real D1', () => {
       body: new URLSearchParams({ token: exchanged.access_token }).toString(),
     })
     expect(introspect.status, await introspect.clone().text()).toBe(200)
-    const introspection = (await introspect.json()) as { active: boolean; sub?: string; aud?: string }
+    const introspection = (await introspect.json()) as { active: boolean; sub?: string; aud?: string; act?: unknown }
     expect(introspection.active).toBe(true)
     expect(introspection.sub).toBe('partner-user-1')
     expect(introspection.aud).toBe(audience)
+    expect(introspection.act).toBeUndefined()
+
+    const refresh = await harness.request('/api/auth/oauth2/token', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+        authorization: basic,
+        origin: 'http://localhost',
+      },
+      body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: exchanged.refresh_token }).toString(),
+    })
+    expect(refresh.status, await refresh.clone().text()).toBe(200)
+    const refreshed = (await refresh.json()) as { access_token: string; refresh_token: string }
+    expect(decodeProtectedHeader(refreshed.access_token).typ).toBe('at+jwt')
+    expect(decodeJwt(refreshed.access_token)).toMatchObject({
+      sub: 'partner-user-1',
+      client_id: application.clientId,
+      aud: audience,
+    })
+    expect(refreshed.refresh_token).toMatch(/^fatr_/)
+    expect(refreshed.refresh_token).not.toBe(exchanged.refresh_token)
+
+    const legacyToken = 'fatx_legacy-d1-token'
+    await env.DB.prepare(
+      `INSERT INTO token_exchange_access_token
+       (id, token_hash, client_id, credential_id, subject, subject_token_issuer, audience, scopes, claims, expires_at, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+      .bind(
+        'legacy-access-token',
+        await hashProviderSecret(legacyToken),
+        application.clientId,
+        credential.id,
+        'partner-user-1',
+        issuerUrl,
+        audience,
+        JSON.stringify(['resource:read']),
+        JSON.stringify({ legacy: true }),
+        Date.now() + 60_000,
+        Date.now(),
+      )
+      .run()
+    const legacyIntrospection = await harness.request('/api/auth/oauth2/introspect', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded', authorization: basic },
+      body: new URLSearchParams({ token: legacyToken }),
+    })
+    expect(legacyIntrospection.status, await legacyIntrospection.clone().text()).toBe(200)
+    expect(await legacyIntrospection.json()).toMatchObject({
+      active: true,
+      sub: 'partner-user-1',
+      client_id: application.clientId,
+    })
   })
 
   it('rejects an untrusted issuer subject token', async () => {

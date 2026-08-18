@@ -44,6 +44,7 @@ import type {
 } from '@shared/api/external-resources'
 import { type PaginationInput, paginationMetadata } from '@shared/api/pagination'
 import { agentBootstrapScopes, realmrootOAuthScopes } from '@shared/authz'
+import { realmrootCliClientId, realmrootTenantClaim } from '@shared/oauth-token-profile'
 import { realmrootManagementScopes } from '@shared/scope-registry'
 import { authorizationCodeRequest, generateCodeChallenge, refreshAccessTokenRequest } from 'better-auth/oauth2'
 import { refreshResourceScopeRegistry } from './authorization'
@@ -1726,7 +1727,7 @@ async function issueNativeAccessToken(
   const accessToken = await signer.sign(
     {
       iss: signer.issuer,
-      sub: realmroot ? principal.subject : subject,
+      sub: subject,
       aud: resource.resourceUrl,
       jti: createProtocolId('resat'),
       iat: Math.floor(now.getTime() / 1000),
@@ -1738,16 +1739,16 @@ async function issueNativeAccessToken(
           : identity.identity.ownerOrganizationId
             ? [identity.identity.ownerOrganizationId]
             : [],
-      client_id: principal.protocolAgentId,
+      client_id: realmrootCliClientId,
+      [realmrootTenantClaim]: identity.identity.ownerOrganizationId
+        ? { type: 'organization', id: identity.identity.ownerOrganizationId }
+        : { type: 'user', id: subject },
       ...(request.authorizationDetails.length > 0 ? { authorization_details: request.authorizationDetails } : {}),
-      ...(realmroot
-        ? { host_id: principal.hostId, sub_profile: 'ai_agent', realmroot_authority: realmrootAuthority }
-        : {}),
+      ...(realmroot ? { realmroot_authority: realmrootAuthority } : {}),
       cnf: { jkt: confirmationJkt },
       act: {
         iss: principal.issuer,
         sub: principal.subject,
-        sub_profile: 'ai_agent',
       },
     },
     'at+jwt',

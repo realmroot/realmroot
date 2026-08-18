@@ -16,6 +16,7 @@ import {
   createAccessRequestCredential,
   listAgentResourceServers,
 } from '@server/usecases/external-resources'
+import { realmrootCliClientId, realmrootTenantClaim } from '@shared/oauth-token-profile'
 import { eq } from 'drizzle-orm'
 import { decodeProtectedHeader, exportJWK, generateKeyPair, importJWK, type JWK, jwtVerify, SignJWT } from 'jose'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -527,8 +528,9 @@ describe('Agent identity enrollment over real D1', () => {
       act: {
         iss: 'http://localhost/api/auth',
         sub: approved.agent.subject,
-        sub_profile: 'ai_agent',
       },
+      client_id: realmrootCliClientId,
+      [realmrootTenantClaim]: { type: 'organization', id: platformOrganizationId },
     })
     expect(decodeProtectedHeader(issued.accessToken)).toMatchObject({
       alg: jwks.keys[0]!.alg,

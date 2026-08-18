@@ -59,11 +59,6 @@ describe('management API client', () => {
     await management.getApplication('app-1')
     await management.updateApplication('app-1', {
       disabled: true,
-      oidcClaims: {
-        accessToken: { authorization: true, roles: true, groups: true, organizationId: true },
-        idToken: { roles: true },
-        userInfo: { organizationName: true },
-      },
     })
     await management.deleteApplication('app-1')
     await management.listFederatedCredentials('app-1')
@@ -182,11 +177,6 @@ describe('management API client', () => {
           param: { id: 'app-1' },
           json: {
             disabled: true,
-            oidcClaims: {
-              accessToken: { authorization: true, roles: true, groups: true, organizationId: true },
-              idToken: { roles: true },
-              userInfo: { organizationName: true },
-            },
           },
         },
       ],

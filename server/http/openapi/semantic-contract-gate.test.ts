@@ -53,6 +53,9 @@ describe('OpenAPI semantic contract gate', () => {
     const resourceAuthorizationModelContract = JSON.parse(
       readFileSync(new URL('./approved-resource-authorization-model-semantic-baseline.json', import.meta.url), 'utf8'),
     ) as typeof unchanged
+    const tokenProfileContract = JSON.parse(
+      readFileSync(new URL('./approved-token-profile-semantic-baseline.json', import.meta.url), 'utf8'),
+    ) as typeof unchanged
     const brokeredNativeChanges = new Set(brokeredNativeContract.map(({ method, path }) => `${method}:${path}`))
     const resourceDiscoveryChanges = new Set(resourceDiscoveryContract.map(({ method, path }) => `${method}:${path}`))
     const approvedChanges = new Set(
@@ -155,12 +158,16 @@ describe('OpenAPI semantic contract gate', () => {
     const resourceAuthorizationModelChanges = new Set(
       resourceAuthorizationModelContract.map(({ method, path }) => `${method}:${path}`),
     )
+    const tokenProfileChanges = new Set(tokenProfileContract.map(({ method, path }) => `${method}:${path}`))
     const baseline = [
       ...preResourceAuthorizationModelBaseline.filter(
         ({ method, path }) =>
-          !resourceAuthorizationModelChanges.has(`${method}:${path}`) && !approvedRemovals.has(`${method}:${path}`),
+          !resourceAuthorizationModelChanges.has(`${method}:${path}`) &&
+          !tokenProfileChanges.has(`${method}:${path}`) &&
+          !approvedRemovals.has(`${method}:${path}`),
       ),
-      ...resourceAuthorizationModelContract,
+      ...resourceAuthorizationModelContract.filter(({ method, path }) => !tokenProfileChanges.has(`${method}:${path}`)),
+      ...tokenProfileContract,
     ].sort((left, right) => `${left.path}:${left.method}`.localeCompare(`${right.path}:${right.method}`))
 
     expect(openApiSemanticSnapshot(unifiedOpenApi as unknown as Record<string, unknown>, () => true)).toEqual(baseline)

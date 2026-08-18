@@ -2,6 +2,7 @@ import { realmrootResourceServer } from '@server/domain/realmroot-resource-serve
 import { createTestDeps } from '@server/http/test-deps'
 import { issueApplicationAccessToken } from '@server/usecases/application-oauth'
 import { hashProviderSecret } from '@server/usecases/applications-utils'
+import { realmrootTenantClaim } from '@shared/oauth-token-profile'
 import { exportJWK, generateKeyPair, SignJWT } from 'jose'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -37,9 +38,8 @@ describe('Application OAuth token issuance', () => {
     expect(sign).toHaveBeenCalledWith(
       expect.objectContaining({
         sub: 'app_adapter',
-        sub_profile: 'application',
         client_id: 'client_adapter',
-        organization_id: 'org_platform',
+        [realmrootTenantClaim]: { type: 'organization', id: 'org_platform' },
         aud: audience,
         scope: 'connection-events:write',
         cnf: { jkt: expect.any(String) },

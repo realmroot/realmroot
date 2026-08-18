@@ -79,7 +79,7 @@ export async function createApplication(
       resourceScopes,
       requirePkce: settings.requirePkce,
       tokenEndpointAuthMethod: settings.tokenEndpointAuthMethod,
-      oidcClaims: input.oidcClaims ?? defaultApplicationOidcClaims,
+      oidcClaims: defaultApplicationOidcClaims,
     },
     clientSecret: secretHash
       ? {
@@ -179,7 +179,6 @@ export async function updateApplication(
     allowedGrantTypes: settings?.allowedGrantTypes,
     oidcScopes: settings?.oidcScopes,
     resourceScopes,
-    oidcClaims: input.oidcClaims,
   })
   if (updated === 'application_not_found') throw notFound('Application was not found.')
   if (updated === 'resource_inactive') throw badRequest('Resource Server is not active.')
@@ -457,6 +456,7 @@ function toResponse(
     allowedGrantTypes: application.allowedGrantTypes,
     oidcScopes: application.oidcScopes,
     resourceScopes: application.resourceScopes,
+    oidcClaims: defaultApplicationOidcClaims,
     requirePkce: application.requirePkce,
     tokenEndpointAuthMethod: application.tokenEndpointAuthMethod,
     secretMetadata: secrets.map(toSecretMetadata),
@@ -469,7 +469,6 @@ function toResponse(
       userInfoEndpoint: `${issuer}/api/auth/oauth2/userinfo`,
       endSessionEndpoint: `${issuer}/api/auth/oauth2/end-session`,
     },
-    oidcClaims: application.oidcClaims,
     createdAt: application.createdAt.toISOString(),
     updatedAt: application.updatedAt.toISOString(),
   }

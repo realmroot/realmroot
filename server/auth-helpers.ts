@@ -7,8 +7,8 @@ import {
 } from '@server/usecases/resource-scope-entitlements'
 import { resourceVisibleToOrganization } from '@server/usecases/resource-visibility'
 import { userConfigurableApplicationScopes } from '@shared/api/applications'
+import { realmrootTenantClaim } from '@shared/oauth-token-profile'
 import { APIError } from 'better-auth'
-import { type ApplicationOidcClaims, defaultApplicationOidcClaims } from '../shared/api/applications'
 import type { ManagementSignInSettingsResponse } from '../shared/api/management'
 
 export function siweDomain(baseURL: string, configuredDomain: string) {
@@ -114,33 +114,6 @@ export async function sendSmsOtp(
   throw new Error(`Unsupported SMS provider: ${config.smsProvider}`)
 }
 
-export async function buildOAuthUserInfoClaims(
-  deps: Deps,
-  applications: {
-    findByClientId(clientId: string): Promise<{ id: string; oidcClaims: ApplicationOidcClaims } | null>
-  },
-  input: {
-    clientId?: string
-    user: unknown
-    scopes: Iterable<string>
-    jwt: Record<string, unknown>
-  },
-): Promise<Record<string, unknown>> {
-  if (!input.clientId) return {}
-  const application = await applications.findByClientId(input.clientId)
-  if (!application) return {}
-  return buildTokenClaims(deps, {
-    userId: readUserId(input.user),
-    applicationId: application.id,
-    organizationId:
-      readAuthorizationString(input.jwt, 'organization_id') ?? readJwtString(input.jwt, 'organization_id'),
-    resource: readString(input.jwt, 'aud'),
-    scopes: [...input.scopes],
-    destination: 'userinfo',
-    claimSelection: application.oidcClaims.userInfo,
-  })
-}
-
 export async function buildOAuthAccessTokenClaims(
   deps: Deps,
   input: {
@@ -151,22 +124,27 @@ export async function buildOAuthAccessTokenClaims(
     metadata?: Record<string, unknown>
   },
 ): Promise<Record<string, unknown>> {
-  const oidcClaims = readOidcClaims(input.metadata)
   const scopes = [...input.scopes]
   const identityScopes = new Set<string>(userConfigurableApplicationScopes)
   const applicationId = readString(input.metadata, 'applicationId')
   const application = !input.user && applicationId ? await deps.applications.findById(applicationId) : null
-  const claims = await buildTokenClaims(deps, {
+  const tenantOrganizationId = await resolveOAuthTenantOrganizationId(deps, input)
+  const { authorization: _authorization, ...claims } = await buildTokenClaims(deps, {
     userId: input.user?.id,
     applicationId,
-    organizationId: input.referenceId ?? application?.ownerOrganizationId,
+    organizationId: tenantOrganizationId ?? application?.ownerOrganizationId,
     resource: input.resource,
     scopes,
     authorizedScopes: scopes.filter((scope) => !identityScopes.has(scope)),
-    destination: 'access_token',
-    claimSelection: oidcClaims.accessToken,
   } satisfies AuthorizationTokenClaimInput)
-  return claims
+  const tenant = tenantOrganizationId
+    ? { type: 'organization' as const, id: tenantOrganizationId }
+    : input.user?.id
+      ? { type: 'user' as const, id: input.user.id }
+      : application
+        ? { type: 'organization' as const, id: application.ownerOrganizationId }
+        : null
+  return { ...claims, ...(tenant ? { [realmrootTenantClaim]: tenant } : {}) }
 }
 
 export async function filterOAuthAccessTokenScopes(
@@ -209,11 +187,9 @@ export async function filterOAuthAccessTokenScopes(
   if (!resource?.enabled || !resource.scopeRegistry) {
     throw oauthProviderError('invalid_target', 'Requested Resource Server is not active.')
   }
+  const tenantOrganizationId = await resolveOAuthTenantOrganizationId(deps, input)
   const visible = input.user?.id
-    ? resource.visibility === 'public' ||
-      (await deps.authorization.listUserMemberships(input.user.id)).some(
-        (membership) => membership.organizationId === resource.ownerOrganizationId,
-      )
+    ? resource.visibility === 'public' || tenantOrganizationId === resource.ownerOrganizationId
     : resourceVisibleToOrganization(resource, application.ownerOrganizationId)
   if (!visible)
     throw oauthProviderError('invalid_target', 'Requested Resource Server is not visible to this principal.')
@@ -229,7 +205,9 @@ export async function filterOAuthAccessTokenScopes(
     return requestedResourceScopes.filter((scope) => effective.has(scope))
   }
 
-  const effective = new Set(await userEffectiveResourceScopes(deps, input.user.id, resource))
+  const effective = new Set(
+    await userEffectiveResourceScopes(deps, input.user.id, resource, new Date(), tenantOrganizationId),
+  )
   const consent = !application.consentRequired
     ? null
     : await deps.applications.findConsent(application.id, input.user.id, resource.id)
@@ -249,72 +227,25 @@ export async function filterOAuthAccessTokenScopes(
   return authorizedScopes
 }
 
+async function resolveOAuthTenantOrganizationId(
+  deps: Deps,
+  input: { user?: ({ id?: string } & Record<string, unknown>) | null; resource?: string; referenceId?: string },
+) {
+  if (input.referenceId) return input.referenceId
+  if (!input.user?.id || !input.resource) return null
+  const resource = await deps.authorization.findResourceByResourceUrl(input.resource)
+  if (resource?.visibility !== 'private') return null
+  const memberships = await deps.authorization.listUserMemberships(input.user.id)
+  return memberships.some((membership) => membership.organizationId === resource.ownerOrganizationId)
+    ? resource.ownerOrganizationId
+    : null
+}
+
 function oauthProviderError(error: string, description: string) {
   return new APIError('BAD_REQUEST', { error, error_description: description })
-}
-
-export async function buildOAuthIdTokenClaims(
-  deps: Deps,
-  input: {
-    user?: ({ id?: string } & Record<string, unknown>) | null
-    scopes?: Iterable<string>
-    metadata?: Record<string, unknown>
-  },
-): Promise<Record<string, unknown>> {
-  const applicationId = readString(input.metadata, 'applicationId')
-  const oidcClaims = readOidcClaims(input.metadata)
-  return {
-    ...(applicationId ? { application_id: applicationId } : {}),
-    ...(await buildTokenClaims(deps, {
-      userId: input.user?.id,
-      applicationId,
-      scopes: input.scopes ? [...input.scopes] : [],
-      destination: 'id_token',
-      claimSelection: oidcClaims.idToken,
-    })),
-  }
-}
-
-export function readOidcClaims(metadata: Record<string, unknown> | undefined): ApplicationOidcClaims {
-  const value = metadata?.oidcClaims
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return defaultApplicationOidcClaims
-  return {
-    accessToken: readClaimSelection((value as Record<string, unknown>).accessToken),
-    idToken: readClaimSelection((value as Record<string, unknown>).idToken),
-    userInfo: readClaimSelection((value as Record<string, unknown>).userInfo),
-  }
-}
-
-export function readClaimSelection(value: unknown): ApplicationOidcClaims['accessToken'] {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return {}
-  const input = value as Record<string, unknown>
-  return {
-    ...(input.authorization === true ? { authorization: true } : {}),
-    ...(input.scopes === true ? { scopes: true } : {}),
-    ...(input.groups === true ? { groups: true } : {}),
-    ...(input.roles === true ? { roles: true } : {}),
-    ...(input.organizationId === true ? { organizationId: true } : {}),
-    ...(input.organizationName === true ? { organizationName: true } : {}),
-  }
-}
-
-export function readAuthorizationString(jwt: Record<string, unknown>, key: string) {
-  const authorization = jwt.authorization
-  if (typeof authorization !== 'object' || authorization === null || !(key in authorization)) return undefined
-  const value = (authorization as Record<string, unknown>)[key]
-  return typeof value === 'string' ? value : undefined
-}
-
-export function readJwtString(jwt: Record<string, unknown>, key: string) {
-  const value = jwt[key]
-  return typeof value === 'string' ? value : undefined
 }
 
 export function readString(metadata: Record<string, unknown> | undefined, key: string) {
   const value = metadata?.[key]
   return typeof value === 'string' ? value : undefined
-}
-
-export function readUserId(user: unknown) {
-  return typeof user === 'object' && user !== null && 'id' in user && typeof user.id === 'string' ? user.id : undefined
 }

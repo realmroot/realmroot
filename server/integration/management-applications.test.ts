@@ -125,8 +125,8 @@ describe('applications management over real D1', () => {
     expect(created).toMatchObject({
       clientType: 'machine',
       redirectUris: [],
-      allowedGrantTypes: ['client_credentials', 'urn:ietf:params:oauth:grant-type:token-exchange'],
-      oidcScopes: [],
+      allowedGrantTypes: ['client_credentials', 'urn:ietf:params:oauth:grant-type:token-exchange', 'refresh_token'],
+      oidcScopes: ['offline_access'],
     })
     expect(created.clientSecret).toMatch(/^fas_/)
 
@@ -213,7 +213,7 @@ describe('applications management over real D1', () => {
     expect(((await replaced.json()) as { items: string[] }).items).toEqual(['http://localhost/a', 'http://localhost/b'])
   })
 
-  it('persists every OIDC claim selection through real SQL [spec: admin-console/admin-application-oidc-claims]', async () => {
+  it('uses one platform token profile while accepting retired settings as ignored compatibility input [spec: admin-console/admin-application-oidc-claims]', async () => {
     const cookie = await signInAdmin(harness)
     const created = await createApplication(harness, cookie)
     const oidcClaims = {
@@ -228,11 +228,15 @@ describe('applications management over real D1', () => {
       body: JSON.stringify({ oidcClaims }),
     })
     expect(updated.status, await updated.clone().text()).toBe(200)
-    expect(((await updated.json()) as { oidcClaims: unknown }).oidcClaims).toEqual(oidcClaims)
+    expect(await updated.json()).toMatchObject({
+      oidcClaims: { accessToken: { groups: true, roles: true }, idToken: {}, userInfo: {} },
+    })
 
     const reloaded = await harness.request(`/api/applications/${created.id}`, { headers: { cookie } })
     expect(reloaded.status, await reloaded.clone().text()).toBe(200)
-    expect(((await reloaded.json()) as { oidcClaims: unknown }).oidcClaims).toEqual(oidcClaims)
+    expect(await reloaded.json()).toMatchObject({
+      oidcClaims: { accessToken: { groups: true, roles: true }, idToken: {}, userInfo: {} },
+    })
   })
 
   it('lists and rotates client secrets', async () => {

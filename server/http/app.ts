@@ -10,6 +10,7 @@ import type { Deps } from '@server/usecases/deps'
 import {
   exchangeToken,
   introspectToken,
+  isTokenExchangeAccessToken,
   parseBasicClientAuthorization,
   refreshToken,
   refreshTokenGrantType,
@@ -336,8 +337,21 @@ async function maybeHandleTokenExchange(c: Context, issuer: string, auth: AuthHa
   ) {
     return issueApplicationToken(c, issuer, auth, form, config.realmrootResourceReconciled)
   }
-  if (c.req.path === '/api/auth/oauth2/introspect' && !(formString(form, 'token') ?? '').startsWith('fatx_')) {
-    return null
+  const introspectionClient =
+    c.req.path === '/api/auth/oauth2/introspect' ? readClientAuthentication(c.req.raw.headers, form) : null
+  if (c.req.path === '/api/auth/oauth2/introspect') {
+    const token = formString(form, 'token') ?? ''
+    if (!introspectionClient) {
+      if (!token.startsWith('fatx_')) return null
+      throw oauthError(
+        'invalid_client',
+        'Client authentication is required.',
+        401,
+        {},
+        { 'WWW-Authenticate': 'Basic realm="Realmroot token endpoint"' },
+      )
+    }
+    if (!(await isTokenExchangeAccessToken(c.get('deps'), token))) return null
   }
   const tokenExchangeRefresh =
     grantType === refreshTokenGrantType && (formString(form, 'refresh_token') ?? '').startsWith('fatr_')
@@ -345,7 +359,7 @@ async function maybeHandleTokenExchange(c: Context, issuer: string, auth: AuthHa
     return null
   }
 
-  const client = readClientAuthentication(c.req.raw.headers, form)
+  const client = introspectionClient ?? readClientAuthentication(c.req.raw.headers, form)
   if (!client) {
     throw oauthError(
       'invalid_client',
@@ -358,6 +372,14 @@ async function maybeHandleTokenExchange(c: Context, issuer: string, auth: AuthHa
 
   const deps = c.get('deps')
   if (c.req.path === '/api/auth/oauth2/token') {
+    if (!auth.api.signJWT) throw oauthError('temporarily_unavailable', 'OAuth token issuance is unavailable.', 503)
+    const signer = {
+      issuer,
+      sign: (payload: Record<string, unknown>, type: 'at+jwt') =>
+        auth.api.signJWT!({ body: { payload, overrideOptions: { jwt: { type } } }, asResponse: false }).then(
+          ({ token }) => token,
+        ),
+    }
     if (tokenExchangeRefresh) {
       const response = await refreshToken(
         deps,
@@ -367,6 +389,7 @@ async function maybeHandleTokenExchange(c: Context, issuer: string, auth: AuthHa
           scope: formString(form, 'scope') ?? undefined,
         },
         client,
+        signer,
       )
       return c.json(response)
     }
@@ -403,13 +426,23 @@ async function maybeHandleTokenExchange(c: Context, issuer: string, auth: AuthHa
         verifiedSubjectClaims,
       },
       client,
+      signer,
     )
     c.header('Cache-Control', 'no-store')
     c.header('Pragma', 'no-cache')
     return c.json(response)
   }
 
-  const introspection = await introspectToken(deps, formString(form, 'token') ?? '', client, issuer)
+  if (!auth.api.verifyJWT) throw oauthError('temporarily_unavailable', 'OAuth token verification is unavailable.', 503)
+  const introspection = await introspectToken(deps, formString(form, 'token') ?? '', client, issuer, {
+    verify: (token, expectedIssuer, audience) =>
+      auth.api.verifyJWT!({ body: { token, issuer: expectedIssuer, audience }, asResponse: false }).then(
+        ({ payload }) => {
+          if (!payload) throw new Error('JWT payload is unavailable.')
+          return payload
+        },
+      ),
+  })
   return c.json(introspection)
 }
 
@@ -486,6 +519,7 @@ async function issueAgentToken(
   const response = await issueAgentBootstrapAccessToken(
     c.get('deps'),
     {
+      clientId: formString(form, 'client_id') ?? '',
       scope: formString(form, 'scope') ?? undefined,
       resource,
       expectedResource: `${new URL(issuer).origin}/api`,

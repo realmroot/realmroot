@@ -377,6 +377,7 @@ export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> =
       storeRefreshToken: vi.fn().mockResolvedValue(true),
       findRefreshTokenByHash: vi.fn().mockResolvedValue(null),
       consumeRefreshToken: vi.fn().mockResolvedValue(false),
+      rotateRefreshToken: vi.fn().mockResolvedValue(false),
       revokeRefreshTokenFamily: vi.fn(),
     },
     users: {

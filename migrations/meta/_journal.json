@@ -435,6 +435,13 @@
       "when": 1786856400000,
       "tag": "20260816050000_drop_provider_credential_identity",
       "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "6",
+      "when": 1787029200000,
+      "tag": "20260818050000_atomic_exchange_refresh_rotation",
+      "breakpoints": true
     }
   ]
 }

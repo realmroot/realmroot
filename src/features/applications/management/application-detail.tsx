@@ -1,5 +1,4 @@
 import {
-  type ApplicationOidcClaims,
   type ApplicationResponse,
   deviceCodeGrantType,
   tokenExchangeGrantType,
@@ -18,7 +17,6 @@ import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet'
-import { Switch } from '@/components/ui/switch'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { PermissionsPanel } from '@/features/authorization/permissions-panel'
@@ -53,7 +51,7 @@ import {
 import { tt } from '@/lib/i18n'
 import { ApplicationFederatedCredentialsPanel } from './application-federated-credentials'
 
-type Editor = 'details' | 'redirects' | 'authorization' | 'claims' | 'ownership' | 'consent' | null
+type Editor = 'details' | 'redirects' | 'authorization' | 'ownership' | 'consent' | null
 
 export function ApplicationDetailPage({
   applicationId,
@@ -209,7 +207,6 @@ export function ApplicationDetailPage({
             <ApplicationOAuth
               application={application}
               onEditAuthorization={() => setEditor('authorization')}
-              onEditClaims={() => setEditor('claims')}
               onEditRedirects={() => setEditor('redirects')}
               onRotate={() => setRotateOpen(true)}
               pending={rotateMutation.isPending}
@@ -312,7 +309,6 @@ function ApplicationOverview({
 function ApplicationOAuth({
   application,
   onEditAuthorization,
-  onEditClaims,
   onEditRedirects,
   onRotate,
   pending,
@@ -320,7 +316,6 @@ function ApplicationOAuth({
 }: {
   application: ApplicationResponse
   onEditAuthorization: () => void
-  onEditClaims: () => void
   onEditRedirects: () => void
   onRotate: () => void
   pending: boolean
@@ -389,21 +384,6 @@ function ApplicationOAuth({
           }
         />
       </DetailSection>
-      {application.clientType === 'machine' ? null : (
-        <DetailSection
-          action={
-            <Button onClick={onEditClaims} variant="outline">
-              {tt('Edit')}
-            </Button>
-          }
-          description="Claims returned to this client after authorization."
-          title="Token claims"
-        >
-          <DetailRow label="Access token" value={enabledClaims(application.oidcClaims.accessToken)} />
-          <DetailRow label="ID token" value={enabledClaims(application.oidcClaims.idToken)} />
-          <DetailRow label="UserInfo" value={enabledClaims(application.oidcClaims.userInfo)} />
-        </DetailSection>
-      )}
       <DetailSection description="Standard endpoints used by OIDC clients and SDKs." title="Integration endpoints">
         <DetailRow label="Issuer" value={<code>{application.oidc.issuer}</code>} />
         <DetailRow label="Discovery" value={<code>{application.oidc.issuer}/.well-known/openid-configuration</code>} />
@@ -677,8 +657,6 @@ function ApplicationEditor({
   pending: boolean
   resources: ApiResourceResponse[]
 }) {
-  const [claims, setClaims] = useState(application.oidcClaims)
-  useEffect(() => setClaims(application.oidcClaims), [application.oidcClaims])
   const title = editorTitle(editor)
   return (
     <Sheet
@@ -753,7 +731,6 @@ function ApplicationEditor({
           {editor === 'authorization' ? (
             <AuthorizationEditor application={application} onSave={onSave} resources={resources} />
           ) : null}
-          {editor === 'claims' ? <ClaimsEditor claims={claims} onChange={setClaims} /> : null}
           {editor === 'ownership' ? (
             <OwnershipEditor
               application={application}
@@ -775,12 +752,7 @@ function ApplicationEditor({
           <Button onClick={onClose} variant="outline">
             {tt('Cancel')}
           </Button>
-          <Button
-            disabled={pending}
-            form={editor === 'claims' ? undefined : editorFormId(editor)}
-            onClick={editor === 'claims' ? () => onSave({ oidcClaims: claims }) : undefined}
-            type={editor === 'claims' ? 'button' : 'submit'}
-          >
+          <Button disabled={pending} form={editorFormId(editor)} type="submit">
             {pending ? tt('Saving…') : tt('Save changes')}
           </Button>
         </SheetFooter>
@@ -843,38 +815,6 @@ function AuthorizationEditor({
         )
       })}
     </form>
-  )
-}
-
-function ClaimsEditor({
-  claims,
-  onChange,
-}: {
-  claims: ApplicationOidcClaims
-  onChange: (claims: ApplicationOidcClaims) => void
-}) {
-  return (
-    <div className="grid gap-6 px-4 py-5">
-      {(['accessToken', 'idToken', 'userInfo'] as const).map((destination) => (
-        <div className="grid gap-3" key={destination}>
-          <strong className="text-sm">
-            {tt({ accessToken: 'Access token', idToken: 'ID token', userInfo: 'UserInfo' }[destination])}
-          </strong>
-          {(['authorization', 'groups', 'roles', 'scopes'] as const).map((claim) => (
-            <div className="flex items-center justify-between gap-4 text-sm" key={claim}>
-              <span>{claim}</span>
-              <Switch
-                aria-label={tt(`${tokenDestinationLabel(destination)} ${claim}`)}
-                checked={claims[destination][claim] === true}
-                onCheckedChange={(checked) =>
-                  onChange({ ...claims, [destination]: { ...claims[destination], [claim]: checked } })
-                }
-              />
-            </div>
-          ))}
-        </div>
-      ))}
-    </div>
   )
 }
 
@@ -978,10 +918,6 @@ function EditorForm({
   )
 }
 
-function tokenDestinationLabel(destination: keyof ApplicationOidcClaims) {
-  return { accessToken: 'Access token', idToken: 'ID token', userInfo: 'UserInfo' }[destination]
-}
-
 function CheckGroup<T extends string>({
   description,
   disabledValues = [],
@@ -1079,15 +1015,6 @@ function CodeList({ values }: { values: string[] }) {
   )
 }
 
-function enabledClaims(claims: Record<string, boolean | undefined>) {
-  return (
-    Object.entries(claims)
-      .filter(([, enabled]) => enabled)
-      .map(([name]) => name)
-      .join(' · ') || tt('None')
-  )
-}
-
 function isPlatformApplication(application: ApplicationResponse, organizations: OrganizationResponse[]) {
   return organizations.some(
     (organization) => organization.id === application.ownerOrganizationId && organization.slug === 'realmroot',
@@ -1100,7 +1027,6 @@ function editorTitle(editor: Editor) {
       details: 'Edit application details',
       redirects: 'Edit redirects and origins',
       authorization: 'Edit Resource Server scope allowlists',
-      claims: 'Edit token claims',
       ownership: 'Edit ownership',
       consent: 'Edit consent policy',
     } as Record<Exclude<Editor, null>, string>
@@ -1113,7 +1039,6 @@ function editorDescription(editor: Editor) {
       details: 'Change the name and metadata used to recognize this client.',
       redirects: 'Set the exact callbacks and browser origins accepted by Realmroot.',
       authorization: 'Choose the Resource Server scopes this application may request.',
-      claims: 'Choose the authorization claims emitted to each token destination.',
       ownership: 'Set the Organization responsible for this client.',
       consent: 'Decide whether users approve access on first use and when requested scopes expand.',
     } as Record<Exclude<Editor, null>, string>

@@ -17,7 +17,7 @@ import type {
   ClientSecretRecord,
   ConsentRecord,
 } from '@server/usecases/ports'
-import { deviceCodeGrantType } from '@shared/api/applications'
+import { defaultApplicationOidcClaims, deviceCodeGrantType } from '@shared/api/applications'
 import { describe, expect, it, vi } from 'vitest'
 
 function createApplication(
@@ -179,15 +179,6 @@ describe('service.test 1', () => {
       oidc: {
         endSessionEndpoint: 'https://auth.example.com/api/auth/oauth2/end-session',
       },
-      oidcClaims: {
-        accessToken: {
-          authorization: true,
-          roles: true,
-          groups: true,
-        },
-        idToken: {},
-        userInfo: {},
-      },
     })
 
     await expect(listApplications(deps, issuer, { limit: 50, offset: 0 })).resolves.toMatchObject({
@@ -234,8 +225,8 @@ describe('service.test 1', () => {
       ),
     ).resolves.toMatchObject({
       redirectUris: [],
-      allowedGrantTypes: ['client_credentials', 'urn:ietf:params:oauth:grant-type:token-exchange'],
-      oidcScopes: [],
+      allowedGrantTypes: ['client_credentials', 'urn:ietf:params:oauth:grant-type:token-exchange', 'refresh_token'],
+      oidcScopes: ['offline_access'],
       public: false,
       requirePkce: false,
     })
@@ -408,7 +399,7 @@ describe('service.test 1', () => {
     })
   })
 
-  it('round-trips OIDC claim configuration on create and update', async () => {
+  it('uses one fixed platform token profile in Application responses', async () => {
     const repository = new InMemoryApplicationRepository()
     const deps = { ids: createIdentifierGeneratorFake(), applications: repository } as unknown as Deps
     const issuer = 'https://auth.example.com'
@@ -419,35 +410,13 @@ describe('service.test 1', () => {
         name: 'Claims App',
         clientType: 'public_spa',
         redirectUris: ['https://spa.example.com/callback'],
-        oidcClaims: {
-          accessToken: { authorization: true, roles: true, scopes: true },
-          idToken: { organizationId: true, organizationName: true },
-          userInfo: { roles: true, groups: true },
-        },
       },
       'admin-1',
     )
 
-    expect(created.oidcClaims).toEqual({
-      accessToken: { authorization: true, roles: true, scopes: true },
-      idToken: { organizationId: true, organizationName: true },
-      userInfo: { roles: true, groups: true },
-    })
-
-    await expect(
-      updateApplication(deps, issuer, created.id, {
-        oidcClaims: {
-          accessToken: { groups: true },
-          idToken: { roles: true },
-          userInfo: { authorization: true, organizationName: true },
-        },
-      }),
-    ).resolves.toMatchObject({
-      oidcClaims: {
-        accessToken: { groups: true },
-        idToken: { roles: true },
-        userInfo: { authorization: true, organizationName: true },
-      },
+    expect(created).toMatchObject({ oidcClaims: defaultApplicationOidcClaims })
+    await expect(updateApplication(deps, issuer, created.id, { name: 'Claims App Renamed' })).resolves.toMatchObject({
+      oidcClaims: defaultApplicationOidcClaims,
     })
   })
 

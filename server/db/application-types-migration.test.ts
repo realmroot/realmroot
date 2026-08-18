@@ -87,6 +87,23 @@ describe('Application type migration', () => {
           String(database.prepare(`SELECT scopes FROM oauth_client WHERE id = 'oauth-machine'`).get()?.scopes),
         ),
       ).toEqual(['payments:write'])
+
+      database.exec(
+        readFileSync(
+          new URL('../../migrations/20260818040000_enable_machine_exchange_refresh.sql', import.meta.url),
+          'utf8',
+        ),
+      )
+      expect(
+        JSON.parse(
+          String(
+            database.prepare(`SELECT grant_types FROM oauth_client WHERE id = 'oauth-machine'`).get()?.grant_types,
+          ),
+        ),
+      ).toEqual(['client_credentials', 'urn:ietf:params:oauth:grant-type:token-exchange', 'refresh_token'])
+      expect(database.prepare(`SELECT oidc_scopes FROM application WHERE id = 'app-machine'`).get()).toEqual({
+        oidc_scopes: '["offline_access"]',
+      })
     } finally {
       database.close()
     }

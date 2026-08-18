@@ -3,6 +3,7 @@ import { createApp } from '@server/http/app'
 import { unifiedOpenApi } from '@server/http/openapi/management'
 import { protectedResourceCollectionRoutes } from '@shared/api/management'
 import { requiredProtectedScope } from '@shared/authz'
+import { realmrootCliClientId } from '@shared/oauth-token-profile'
 import { calculateJwkThumbprint, exportJWK, generateKeyPair, SignJWT } from 'jose'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -324,18 +325,29 @@ describe('management routes 1', () => {
     const auth = createAuthMock()
     const dpop = await createTestDpopKey()
     let scopes = ['agent:read']
+    let legacyAgentToken = false
     Object.assign(auth.api, {
       verifyJWT: vi.fn().mockImplementation(async () => ({
-        payload: {
-          iss: 'http://localhost/api/auth',
-          sub: 'agt_1',
-          sub_profile: 'ai_agent',
-          client_id: 'protocol-agent-1',
-          host_id: 'host-1',
-          scope: scopes.join(' '),
-          cnf: { jkt: dpop.thumbprint },
-          realmroot_authority: { type: 'realmroot_authority', authority: 'organization', id: 'org-platform' },
-        },
+        payload: legacyAgentToken
+          ? {
+              iss: 'http://localhost/api/auth',
+              sub: 'agt_1',
+              sub_profile: 'ai_agent',
+              client_id: 'protocol-agent-1',
+              host_id: 'host-1',
+              scope: scopes.join(' '),
+              cnf: { jkt: dpop.thumbprint },
+              realmroot_authority: { type: 'realmroot_authority', authority: 'organization', id: 'org-platform' },
+            }
+          : {
+              iss: 'http://localhost/api/auth',
+              sub: 'controller-1',
+              client_id: realmrootCliClientId,
+              act: { iss: 'http://localhost/api/auth', sub: 'agt_1' },
+              scope: scopes.join(' '),
+              cnf: { jkt: dpop.thumbprint },
+              realmroot_authority: { type: 'realmroot_authority', authority: 'organization', id: 'org-platform' },
+            },
       })),
     })
     const now = new Date()
@@ -371,12 +383,16 @@ describe('management routes 1', () => {
     const deps = createTestDeps({
       users,
       agentIdentities: {
+        findByIssuerSubject: vi.fn().mockResolvedValue(identity.identity),
         findActiveBindingByProtocolAgent: vi.fn().mockResolvedValue({
           identity: identity.identity,
           binding: identity.bindings[0],
         }),
         findActiveByProtocolAgent: vi.fn().mockResolvedValue(identity),
         findIdentity: vi.fn().mockResolvedValue(identity),
+      },
+      externalResources: {
+        findActiveTokenLeaseByTokenHash: vi.fn().mockResolvedValue({ bindingId: 'binding-1' }),
       },
     })
     const app = createApp(auth, deps)
@@ -389,6 +405,12 @@ describe('management routes 1', () => {
     await expect(agent.json()).resolves.toMatchObject({
       agent: { issuer: 'http://localhost/api/auth', subject: 'agt_1' },
     })
+    legacyAgentToken = true
+    const legacyAgent = await app.request('/api/agent', {
+      headers: await headers('GET', '/api/agent'),
+    })
+    expect(legacyAgent.status, await legacyAgent.clone().text()).toBe(200)
+    legacyAgentToken = false
 
     scopes = ['resource-servers:read']
     const discovery = await app.request('/api/resource-servers', {
@@ -452,7 +474,6 @@ describe('management routes 1', () => {
         payload: {
           iss: 'http://localhost/api/auth',
           sub: 'application-1',
-          sub_profile: 'application',
           client_id: 'client-1',
           scope: scopes.join(' '),
           cnf: { jkt: dpop.thumbprint },

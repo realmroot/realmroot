@@ -51,8 +51,8 @@ export function clientTypeConfiguration(
   if (clientType === 'machine') {
     return {
       public: false,
-      allowedGrantTypes: ['client_credentials', tokenExchangeGrantType],
-      oidcScopes: [],
+      allowedGrantTypes: ['client_credentials', tokenExchangeGrantType, 'refresh_token'],
+      oidcScopes: ['offline_access'],
       requirePkce: false,
       tokenEndpointAuthMethod: 'client_secret_basic',
     }

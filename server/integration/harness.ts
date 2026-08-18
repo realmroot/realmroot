@@ -106,7 +106,7 @@ export async function createHarness(
     undefined,
     {
       emailDeliveryReady: options.emailDeliveryReady,
-      validAudiences: options.validAudiences,
+      validAudiences: [`${config.baseURL}/api/auth/oauth2/userinfo`, ...(options.validAudiences ?? [config.baseURL])],
       externalHttp: deps.externalHttp,
       publishWebhookEvent: async (event, data) => {
         await publishWebhookEvent(deps, event, data)
