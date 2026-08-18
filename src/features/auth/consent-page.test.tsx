@@ -163,6 +163,65 @@ describe('ConsentPage error and fallback paths', () => {
     )
   })
 
+  it('approves two resource authorizations before one OAuth consent handshake [spec: hosted-auth/oauth-multi-resource-grant]', async () => {
+    const approvalBodies: unknown[] = []
+    const multiResourceConsent = {
+      ...consentResponse,
+      requestedScopes: ['openid', 'calendar:read', 'contacts:read'],
+      resourceAuthorizations: [
+        {
+          resourceServerId: 'calendar-resource',
+          resourceUrl: 'https://calendar.example.com/',
+          resourceName: 'Calendar API',
+          requestedScopes: ['openid', 'calendar:read'],
+          requestedPermissions: [{ value: 'calendar:read', description: 'Read calendar entries.' }],
+          addedScopes: ['openid', 'calendar:read'],
+          previouslyApprovedScopes: [],
+          consentReason: 'initial',
+          existingConsent: null,
+        },
+        {
+          resourceServerId: 'contacts-resource',
+          resourceUrl: 'https://contacts.example.com/',
+          resourceName: 'Contacts API',
+          requestedScopes: ['openid', 'contacts:read'],
+          requestedPermissions: [{ value: 'contacts:read', description: 'Read contacts.' }],
+          addedScopes: ['openid', 'contacts:read'],
+          previouslyApprovedScopes: [],
+          consentReason: 'initial',
+          existingConsent: null,
+        },
+      ],
+    }
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url.startsWith('/api/configz')) return Promise.resolve(jsonResponse(configz))
+      if (url.startsWith('/api/account/application-authorization-request')) {
+        return Promise.resolve(jsonResponse(multiResourceConsent))
+      }
+      if (url.startsWith('/api/account/application-authorizations')) {
+        approvalBodies.push(JSON.parse(String(init?.body)))
+        return Promise.resolve(jsonResponse({ consent: { id: `consent-${approvalBodies.length}` } }, 201))
+      }
+      if (url.startsWith('/api/auth/oauth2/consent')) {
+        return Promise.resolve(jsonResponse({ redirect: true, url: 'https://client.example.com/callback?code=code-1' }))
+      }
+      throw new Error(`Unexpected request: ${url}`)
+    })
+
+    render(<ConsentPage />)
+
+    expect(await screen.findByRole('heading', { name: 'Calendar API' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Contacts API' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Authorize' }))
+
+    await waitFor(() => expect(assign).toHaveBeenCalled())
+    expect(approvalBodies).toEqual([
+      { clientId: 'client-1', resourceServerId: 'calendar-resource', scopes: ['openid', 'calendar:read'] },
+      { clientId: 'client-1', resourceServerId: 'contacts-resource', scopes: ['openid', 'contacts:read'] },
+    ])
+  })
+
   it('completes denial through the OAuth server [spec: hosted-auth/oauth-consent-deny]', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)

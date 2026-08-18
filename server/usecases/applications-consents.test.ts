@@ -382,6 +382,113 @@ describe('service.test 3', () => {
       ),
     ).rejects.toMatchObject({ status: 400, message: expect.stringContaining('not active') })
   })
+
+  it('groups one consent decision by every RFC 8707 resource [spec: hosted-auth/oauth-multi-resource-grant]', async () => {
+    const repository = new InMemoryApplicationRepository()
+    const resources = [
+      {
+        id: 'calendar-resource',
+        identifier: 'calendar',
+        name: 'Calendar API',
+        resourceUrl: 'https://calendar.example.com/',
+        enabled: true,
+        visibility: 'public',
+        ownerOrganizationId: 'org-1',
+        scopeRegistry: {
+          scopes: [{ value: 'calendar:read', description: 'Read calendar entries.', grantMode: 'automatic' }],
+        },
+      },
+      {
+        id: 'contacts-resource',
+        identifier: 'contacts',
+        name: 'Contacts API',
+        resourceUrl: 'https://contacts.example.com/',
+        enabled: true,
+        visibility: 'public',
+        ownerOrganizationId: 'org-1',
+        scopeRegistry: {
+          scopes: [{ value: 'contacts:read', description: 'Read contacts.', grantMode: 'automatic' }],
+        },
+      },
+    ]
+    const deps = {
+      ids: createIdentifierGeneratorFake(),
+      applications: repository,
+      authorization: {
+        findOrganization: async () => ({ disabled: false }),
+        findResources: async () => resources,
+        findResource: async (id: string) => resources.find((resource) => resource.id === id) ?? null,
+        findResourceByResourceUrl: async (resourceUrl: string) =>
+          resources.find((resource) => resource.resourceUrl === resourceUrl) ?? null,
+      },
+    } as unknown as Deps
+    const application = await createApplication(
+      deps,
+      'https://auth.example.com',
+      {
+        name: 'Multi-resource App',
+        clientType: 'public_spa',
+        redirectUris: ['https://spa.example.com/callback'],
+        ownerOrganizationId: 'org-1',
+        resourceScopes: resources.map((resource) => ({
+          resourceServerId: resource.id,
+          scopes: [`${resource.identifier}:read`],
+        })),
+      },
+      'admin-1',
+    )
+    const authorizationParams = new URLSearchParams()
+    authorizationParams.append('resource', resources[0].resourceUrl)
+    authorizationParams.append('resource', resources[1].resourceUrl)
+
+    const request = await loadConsentRequest(
+      deps,
+      'https://auth.example.com',
+      {
+        clientId: application.clientId,
+        redirectUri: 'https://spa.example.com/callback',
+        scope: 'openid calendar:read contacts:read',
+        authorizationParams,
+      },
+      { id: 'user-1' },
+    )
+
+    expect(request.resourceAuthorizations).toEqual([
+      expect.objectContaining({
+        resourceServerId: resources[0].id,
+        resourceUrl: resources[0].resourceUrl,
+        resourceName: resources[0].name,
+        requestedScopes: ['openid', 'calendar:read'],
+      }),
+      expect.objectContaining({
+        resourceServerId: resources[1].id,
+        resourceUrl: resources[1].resourceUrl,
+        resourceName: resources[1].name,
+        requestedScopes: ['openid', 'contacts:read'],
+      }),
+    ])
+    expect(new URL(request.redirects.approveUrl, 'https://auth.example.com').searchParams.getAll('resource')).toEqual(
+      resources.map((resource) => resource.resourceUrl),
+    )
+
+    for (const authorization of request.resourceAuthorizations) {
+      await createConsent(
+        deps,
+        {
+          clientId: application.clientId,
+          resourceServerId: authorization.resourceServerId,
+          scopes: authorization.requestedScopes,
+        },
+        'user-1',
+      )
+    }
+    await expect(repository.findConsent(application.id, 'user-1', resources[0].id)).resolves.toMatchObject({
+      scopes: ['calendar:read', 'openid'],
+    })
+    await expect(repository.findConsent(application.id, 'user-1', resources[1].id)).resolves.toMatchObject({
+      scopes: ['contacts:read', 'openid'],
+    })
+  })
 })
 
 class InMemoryApplicationRepository implements ApplicationRepository {
@@ -469,8 +576,8 @@ class InMemoryApplicationRepository implements ApplicationRepository {
     return nextSecret
   }
 
-  async findConsent(applicationId: string, userId: string) {
-    return this.consents.get(consentKey(applicationId, userId)) ?? null
+  async findConsent(applicationId: string, userId: string, resourceServerId: string | null) {
+    return this.consents.get(consentKey(applicationId, userId, resourceServerId)) ?? null
   }
 
   async listAuthorizations(query: {
@@ -481,14 +588,14 @@ class InMemoryApplicationRepository implements ApplicationRepository {
     status?: 'active' | 'expired' | 'revoked'
   }) {
     const authorizations = [...this.consents.entries()]
-      .filter(([key]) => !query.applicationId || key.startsWith(`${query.applicationId}:`))
-      .filter(([key]) => !query.userId || key.slice(key.indexOf(':') + 1) === query.userId)
+      .filter(([key]) => !query.applicationId || parseConsentKey(key).applicationId === query.applicationId)
+      .filter(([key]) => !query.userId || parseConsentKey(key).userId === query.userId)
       .map(([key, consent]) => ({
         ...consent,
-        applicationId: key.slice(0, key.indexOf(':')),
+        applicationId: parseConsentKey(key).applicationId,
         applicationName: 'Test application',
         applicationSlug: 'test-application',
-        userId: key.slice(key.indexOf(':') + 1),
+        userId: parseConsentKey(key).userId,
         userDisplayName: 'Test user',
         userEmail: 'user@example.com',
         expiresAt: null,
@@ -504,13 +611,13 @@ class InMemoryApplicationRepository implements ApplicationRepository {
     const entry = [...this.consents.entries()].find(([, consent]) => consent.id === authorizationId)
     if (!entry) return null
     const [key, consent] = entry
-    const applicationId = key.slice(0, key.indexOf(':'))
+    const { applicationId, userId } = parseConsentKey(key)
     return {
       ...consent,
       applicationId,
       applicationName: 'Test application',
       applicationSlug: 'test-application',
-      userId: key.slice(applicationId.length + 1),
+      userId,
       userDisplayName: 'Test user',
       userEmail: 'user@example.com',
       expiresAt: null,
@@ -528,7 +635,7 @@ class InMemoryApplicationRepository implements ApplicationRepository {
 
   async revokeConsent(consentId: string, userId: string) {
     const entry = [...this.consents.entries()].find(
-      ([key, consent]) => key.endsWith(`:${userId}`) && consent.id === consentId,
+      ([key, consent]) => parseConsentKey(key).userId === userId && consent.id === consentId,
     )
     if (!entry) return false
     this.consents.delete(entry[0])
@@ -549,7 +656,7 @@ class InMemoryApplicationRepository implements ApplicationRepository {
       authorizationSource: 'user_consent' as const,
       grantedAt: new Date('2026-05-18T15:00:00.000Z'),
     }
-    this.consents.set(consentKey(input.applicationId, input.userId), consent)
+    this.consents.set(consentKey(input.applicationId, input.userId, input.resourceServerId), consent)
     return consent
   }
 
@@ -566,13 +673,18 @@ class InMemoryApplicationRepository implements ApplicationRepository {
       authorizationSource: 'platform_policy' as const,
       grantedAt: new Date('2026-05-18T15:00:00.000Z'),
     }
-    this.consents.set(consentKey(input.applicationId, input.userId), authorization)
+    this.consents.set(consentKey(input.applicationId, input.userId, input.resourceServerId), authorization)
     return authorization
   }
 }
 
-function consentKey(applicationId: string, userId: string) {
-  return `${applicationId}:${userId}`
+function consentKey(applicationId: string, userId: string, resourceServerId: string | null) {
+  return JSON.stringify([applicationId, userId, resourceServerId])
+}
+
+function parseConsentKey(key: string) {
+  const [applicationId, userId, resourceServerId] = JSON.parse(key) as [string, string, string | null]
+  return { applicationId, userId, resourceServerId }
 }
 
 function withoutUndefined<T extends object>(input: T) {

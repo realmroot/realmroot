@@ -259,6 +259,7 @@ export const oauthRefreshToken = sqliteTable(
     revoked: integer('revoked', { mode: 'timestamp_ms' }),
     authTime: integer('auth_time', { mode: 'timestamp_ms' }),
     scopes: text('scopes').notNull(),
+    resources: text('resources'),
   },
   (table) => [
     index('oauthRefreshToken_clientId_idx').on(table.clientId),

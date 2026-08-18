@@ -105,6 +105,18 @@ describe('filterOAuthAccessTokenScopes', () => {
     ).resolves.toEqual(['openid'])
   })
 
+  it('downscopes an interactive multi-resource grant to the selected resource [spec: hosted-auth/oauth-multi-resource-grant]', async () => {
+    await expect(
+      filterOAuthAccessTokenScopes(createDeps(), {
+        user: { id: 'user_1' },
+        scopes: ['openid', 'orders:read', 'contacts:read'],
+        resource: resource.resourceUrl,
+        metadata: { applicationId: application.id },
+        grantType: 'authorization_code',
+      }),
+    ).resolves.toEqual(['openid', 'orders:read'])
+  })
+
   it('combines direct Permissions with effective scopes without treating public visibility as authority [spec: admin-console/admin-resource-permissions]', async () => {
     await expect(
       filterOAuthAccessTokenScopes(createDeps({ directScopes: ['orders:admin'] }), {

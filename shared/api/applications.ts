@@ -275,6 +275,31 @@ export const consentRequestQuerySchema = z.object({
   state: z.string().trim().optional(),
 })
 
+const consentPermissionSchema = z.object({
+  value: z.string(),
+  description: z.string().nullable(),
+})
+
+const existingConsentSchema = z
+  .object({
+    id: z.string(),
+    scopes: z.array(z.string()),
+    grantedAt: z.string(),
+  })
+  .nullable()
+
+export const consentResourceAuthorizationSchema = z.object({
+  resourceServerId: z.string().nullable(),
+  resourceUrl: z.url().nullable(),
+  resourceName: z.string(),
+  requestedScopes: z.array(z.string()),
+  requestedPermissions: z.array(consentPermissionSchema),
+  addedScopes: z.array(z.string()),
+  previouslyApprovedScopes: z.array(z.string()),
+  consentReason: z.enum(['initial', 'expanded', 'reauthorization']),
+  existingConsent: existingConsentSchema,
+})
+
 export const consentRequestResponseSchema = z.object({
   application: applicationResponseSchema.omit({ secretMetadata: true }),
   user: z.object({
@@ -288,22 +313,12 @@ export const consentRequestResponseSchema = z.object({
   }),
   resourceServerId: z.string().nullable(),
   requestedScopes: z.array(z.string()),
-  requestedPermissions: z.array(
-    z.object({
-      value: z.string(),
-      description: z.string().nullable(),
-    }),
-  ),
+  requestedPermissions: z.array(consentPermissionSchema),
   addedScopes: z.array(z.string()),
   previouslyApprovedScopes: z.array(z.string()),
   consentReason: z.enum(['initial', 'expanded', 'reauthorization']),
-  existingConsent: z
-    .object({
-      id: z.string(),
-      scopes: z.array(z.string()),
-      grantedAt: z.string(),
-    })
-    .nullable(),
+  existingConsent: existingConsentSchema,
+  resourceAuthorizations: z.array(consentResourceAuthorizationSchema).min(1).optional(),
   state: z.string().nullable(),
 })
 

@@ -471,10 +471,20 @@ export function createAuth(
             if (!application) throw new Error('OAuth consent context does not reference an Application.')
             if (!application.consentRequired) return false
 
-            const resourceUrl = headers.get('x-realmroot-oauth-resource')
-            const resource = resourceUrl ? await deps.authorization.findResourceByResourceUrl(resourceUrl) : null
-            const consent = await applications.findConsent(application.id, user.id, resource?.id ?? null)
-            return !consent || scopes.some((scope) => !consent.scopes.includes(scope))
+            const resourceUrls = oauthResourceUrlsFromHeader(headers)
+            const targets = resourceUrls.length ? resourceUrls : [null]
+            for (const resourceUrl of targets) {
+              const resource = resourceUrl ? await deps.authorization.findResourceByResourceUrl(resourceUrl) : null
+              if (resourceUrl && !resource) return true
+              const configuredResourceScopes = resource
+                ? (application.resourceScopes.find((item) => item.resourceServerId === resource.id)?.scopes ?? [])
+                : []
+              const allowedScopes = new Set([...application.oidcScopes, ...configuredResourceScopes])
+              const targetScopes = scopes.filter((scope) => allowedScopes.has(scope))
+              const consent = await applications.findConsent(application.id, user.id, resource?.id ?? null)
+              if (!consent || targetScopes.some((scope) => !consent.scopes.includes(scope))) return true
+            }
+            return false
           },
         },
         filterAccessTokenScopes: (input) => filterOAuthAccessTokenScopes(deps, input),
@@ -524,12 +534,22 @@ async function withOAuthConsentContext(request: Request) {
 
   const headers = new Headers(request.headers)
   const clientId = params.get('client_id')
-  const resource = params.get('resource')
+  const resources = [...new Set(params.getAll('resource'))]
   if (clientId) headers.set('x-realmroot-oauth-client-id', clientId)
   else headers.delete('x-realmroot-oauth-client-id')
-  if (resource) headers.set('x-realmroot-oauth-resource', resource)
-  else headers.delete('x-realmroot-oauth-resource')
+  if (resources.length) headers.set('x-realmroot-oauth-resources', JSON.stringify(resources))
+  else headers.delete('x-realmroot-oauth-resources')
   return new Request(request, { headers })
+}
+
+function oauthResourceUrlsFromHeader(headers: Headers) {
+  const encoded = headers.get('x-realmroot-oauth-resources')
+  if (!encoded) return []
+  const values: unknown = JSON.parse(encoded)
+  if (!Array.isArray(values) || values.some((value) => typeof value !== 'string')) {
+    throw new Error('OAuth consent context contains invalid Resource Server targets.')
+  }
+  return values as string[]
 }
 
 async function oauthAuthorizationParams(request: Request, url: URL) {

@@ -317,7 +317,7 @@ export async function loadConsentRequest(
     redirectUri: string
     scope?: string
     state?: string
-    authorizationParams?: Record<string, string>
+    authorizationParams?: URLSearchParams | Record<string, string>
   },
   user: { id: string; email?: string | null; name?: string | null; username?: string | null; image?: string | null },
 ) {
@@ -328,25 +328,56 @@ export async function loadConsentRequest(
   if (!application.redirectUris.includes(input.redirectUri)) {
     throw badRequest('redirect_uri is not registered for this client.')
   }
-  const resource = await resolveRequestedResource(deps, input.authorizationParams?.resource, user.id)
+  const resourceUrls = authorizationParameterValues(input.authorizationParams, 'resource')
+  const resources = await Promise.all(
+    resourceUrls.map((resourceUrl) => resolveRequestedResource(deps, resourceUrl, user.id)),
+  )
+  const targets = resources.length ? resources : [null]
   const allowedScopes = [
     ...application.oidcScopes,
-    ...(resource
-      ? (application.resourceScopes.find((item) => item.resourceServerId === resource.id)?.scopes ?? [])
-      : []),
+    ...targets.flatMap((resource) =>
+      resource ? (application.resourceScopes.find((item) => item.resourceServerId === resource.id)?.scopes ?? []) : [],
+    ),
   ]
   const requestedScopes = normalizeRequestedScopes(input.scope, allowedScopes)
-  const resourceScopeDescriptions = new Map(
-    resource?.scopeRegistry?.scopes.map((scope) => [scope.value, scope.description] as const) ?? [],
+  const resourceAuthorizations = await Promise.all(
+    targets.map(async (resource) => {
+      const targetAllowedScopes = new Set([
+        ...application.oidcScopes,
+        ...(resource
+          ? (application.resourceScopes.find((item) => item.resourceServerId === resource.id)?.scopes ?? [])
+          : []),
+      ])
+      const targetRequestedScopes = requestedScopes.filter((scope) => targetAllowedScopes.has(scope))
+      const resourceScopeDescriptions = new Map(
+        resource?.scopeRegistry?.scopes.map((scope) => [scope.value, scope.description] as const) ?? [],
+      )
+      const existingConsent = await deps.applications.findConsent(application.id, user.id, resource?.id ?? null)
+      const previouslyApproved = new Set(existingConsent?.scopes ?? [])
+      const addedScopes = targetRequestedScopes.filter((scope) => !previouslyApproved.has(scope))
+      return {
+        resourceServerId: resource?.id ?? null,
+        resourceUrl: resource?.resourceUrl ?? null,
+        resourceName: resource?.name ?? 'Realmroot account',
+        requestedScopes: targetRequestedScopes,
+        requestedPermissions: targetRequestedScopes.map((scope) => ({
+          value: scope,
+          description: oidcScopeDescription(scope) ?? resourceScopeDescriptions.get(scope) ?? null,
+        })),
+        addedScopes,
+        previouslyApprovedScopes: targetRequestedScopes.filter((scope) => previouslyApproved.has(scope)),
+        consentReason: !existingConsent ? 'initial' : addedScopes.length > 0 ? 'expanded' : 'reauthorization',
+        existingConsent: existingConsent
+          ? {
+              id: existingConsent.id,
+              scopes: existingConsent.scopes,
+              grantedAt: existingConsent.grantedAt.toISOString(),
+            }
+          : null,
+      } as const
+    }),
   )
-  const requestedPermissions = requestedScopes.map((scope) => ({
-    value: scope,
-    description: oidcScopeDescription(scope) ?? resourceScopeDescriptions.get(scope) ?? null,
-  }))
-  const existingConsent = await deps.applications.findConsent(application.id, user.id, resource?.id ?? null)
-  const previouslyApproved = new Set(existingConsent?.scopes ?? [])
-  const addedScopes = requestedScopes.filter((scope) => !previouslyApproved.has(scope))
-  const previouslyApprovedScopes = requestedScopes.filter((scope) => previouslyApproved.has(scope))
+  const firstAuthorization = resourceAuthorizations[0]!
 
   const { secretMetadata: _secretMetadata, ...applicationResponse } = toResponse(issuer, application, [])
   const approveParams = new URLSearchParams(input.authorizationParams)
@@ -366,19 +397,20 @@ export async function loadConsentRequest(
       approveUrl: `/api/auth/oauth2/authorize?${approveParams.toString()}`,
       denyUrl: buildDeniedAuthorizationUrl(input.redirectUri, input.state),
     },
-    resourceServerId: resource?.id ?? null,
+    resourceServerId: firstAuthorization.resourceServerId,
     requestedScopes,
-    requestedPermissions,
-    addedScopes,
-    previouslyApprovedScopes,
-    consentReason: !existingConsent ? 'initial' : addedScopes.length > 0 ? 'expanded' : 'reauthorization',
-    existingConsent: existingConsent
-      ? {
-          id: existingConsent.id,
-          scopes: existingConsent.scopes,
-          grantedAt: existingConsent.grantedAt.toISOString(),
-        }
-      : null,
+    requestedPermissions: resourceAuthorizations.flatMap((authorization) => authorization.requestedPermissions),
+    addedScopes: [...new Set(resourceAuthorizations.flatMap((authorization) => authorization.addedScopes))],
+    previouslyApprovedScopes: [
+      ...new Set(resourceAuthorizations.flatMap((authorization) => authorization.previouslyApprovedScopes)),
+    ],
+    consentReason: resourceAuthorizations.some((authorization) => authorization.consentReason === 'initial')
+      ? 'initial'
+      : resourceAuthorizations.some((authorization) => authorization.consentReason === 'expanded')
+        ? 'expanded'
+        : 'reauthorization',
+    existingConsent: firstAuthorization.existingConsent,
+    resourceAuthorizations,
     state: input.state ?? null,
   }
 }
@@ -524,6 +556,12 @@ async function resolveRequestedResource(deps: Deps, resourceUrl: string | undefi
   const resource = await deps.authorization.findResourceByResourceUrl(resourceUrl)
   if (!resource) throw badRequest('Requested Resource Server is not active.')
   return requireResourceVisibleToUser(deps, resource.id, userId)
+}
+
+function authorizationParameterValues(params: URLSearchParams | Record<string, string> | undefined, name: string) {
+  if (!params) return []
+  const values = params instanceof URLSearchParams ? params.getAll(name) : params[name] ? [params[name]] : []
+  return [...new Set(values)]
 }
 
 function oidcScopeDescription(scope: string) {

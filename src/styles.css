@@ -4321,6 +4321,29 @@ textarea {
   padding: 18px 40px 20px;
 }
 
+.consentResourceAuthorizations {
+  display: grid;
+  gap: 18px;
+}
+
+.consentResourceAuthorizationHeader h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 750;
+  letter-spacing: -0.015em;
+}
+
+.consentResourceAuthorizationHeader small {
+  display: block;
+  overflow: hidden;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .consentPermissions {
   min-width: 0;
   padding-top: 18px;
@@ -4335,7 +4358,7 @@ textarea {
   margin-bottom: 9px;
 }
 
-.consentPermissionsHeader h2 {
+.consentPermissionsHeader h3 {
   margin: 0;
   color: var(--ink);
   font-size: 16px;

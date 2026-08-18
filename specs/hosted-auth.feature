@@ -133,6 +133,15 @@ Feature: Hosted authentication
     When the user completes hosted sign-in
     Then Realmroot exchanges the authorization code for an access token whose audience is that URL
 
+  @entrypoint:product-ui @journey:oauth-multi-resource-grant
+  Scenario: One authorization grant covers multiple protected resources
+    Given an OIDC client requests two registered protected resources with their allowed scopes
+    When I approve the combined request once
+    Then Realmroot records consent for both protected resources
+    And the authorization code can issue an audience-restricted access token for either granted resource
+    And the refresh token remains bound to the full original resource grant
+    But a token request for a resource outside the original grant is rejected
+
   @entrypoint:product-ui @journey:oidc-native-token-verification
   Scenario: Native OIDC clients can verify issued identity tokens
     Given a native OIDC client uses a standards-compliant JOSE verifier

@@ -24,7 +24,7 @@ export function createOAuthConsentRoute() {
         redirectUri: query.redirect_uri,
         scope: query.scope,
         state: query.state,
-        authorizationParams: Object.fromEntries(new URL(c.req.url).searchParams),
+        authorizationParams: new URL(c.req.url).searchParams,
       },
       user!,
     )
