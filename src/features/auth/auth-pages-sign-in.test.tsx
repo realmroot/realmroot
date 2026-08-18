@@ -153,7 +153,7 @@ afterEach(() => {
 })
 
 describe('hosted auth pages 1', () => {
-  it('normalizes hosted auth continuation and redirect helpers', () => {
+  it('normalizes hosted auth continuation and preserves repeated resource indicators [spec: hosted-auth/oauth-multi-resource-grant]', () => {
     expect(primarySignInMode({ ...configz.signIn, passwordEnabled: true, emailOtpEnabled: true })).toBe('password')
     expect(primarySignInMode({ ...configz.signIn, passwordEnabled: false, emailOtpEnabled: true })).toBe('otp')
     expect(primarySignInMode({ ...configz.signIn, passwordEnabled: false, emailOtpEnabled: false })).toBeNull()
@@ -175,13 +175,13 @@ describe('hosted auth pages 1', () => {
     window.history.pushState(
       null,
       '',
-      '/auth/sign-in?client_id=client-1&redirect_uri=https%3A%2F%2Fclient.example.com%2Fcallback&state=state-1&token=ignored',
+      '/auth/sign-in?client_id=client-1&redirect_uri=https%3A%2F%2Fclient.example.com%2Fcallback&state=state-1&resource=https%3A%2F%2Fappbase.example.com&resource=https%3A%2F%2Fvocnet.example.com&token=ignored',
     )
     expect(authContinuationParams().toString()).toBe(
-      'client_id=client-1&redirect_uri=https%3A%2F%2Fclient.example.com%2Fcallback&state=state-1',
+      'client_id=client-1&redirect_uri=https%3A%2F%2Fclient.example.com%2Fcallback&state=state-1&resource=https%3A%2F%2Fappbase.example.com&resource=https%3A%2F%2Fvocnet.example.com',
     )
     expect(authPageHref('/auth/sign-up')).toBe(
-      '/auth/sign-up?client_id=client-1&redirect_uri=https%3A%2F%2Fclient.example.com%2Fcallback&state=state-1',
+      '/auth/sign-up?client_id=client-1&redirect_uri=https%3A%2F%2Fclient.example.com%2Fcallback&state=state-1&resource=https%3A%2F%2Fappbase.example.com&resource=https%3A%2F%2Fvocnet.example.com',
     )
     expect(authRequestContext('sign-in')).toEqual({
       title: 'Continue to client.example.com.',
