@@ -33,6 +33,11 @@ function decodeJwtPayload(token: string): Record<string, unknown> {
   return JSON.parse(atob(padded.replaceAll('-', '+').replaceAll('_', '/'))) as Record<string, unknown>
 }
 
+function jwtAudiences(token: string) {
+  const audience = decodeJwtPayload(token).aud
+  return Array.isArray(audience) ? audience : [audience]
+}
+
 function decodeJwtHeader(token: string): Record<string, unknown> {
   const header = token.split('.')[0]
   expect(header).toBeTruthy()
@@ -190,6 +195,154 @@ describe('OIDC authorization over real D1', () => {
       new TextEncoder().encode(`${encodedHeader}.${encodedPayload}`),
     )
     expect(verified).toBe(true)
+  })
+
+  it('binds a refresh token to the complete multi-resource grant [spec: hosted-auth/oauth-multi-resource-grant]', async () => {
+    const resources = [
+      { url: 'https://calendar.example.com', scope: 'calendar:read' },
+      { url: 'https://contacts.example.com', scope: 'contacts:read' },
+      { url: 'https://files.example.com', scope: 'files:read' },
+    ]
+    harness = await createHarness({ validAudiences: [baseURL, ...resources.map((resource) => resource.url)] })
+    harness.deps.externalHttp.fetch = async (request) => {
+      const target = resources.find((resource) => request.url.includes(new URL(resource.url).host))
+      if (!target) throw new Error(`Unexpected resource discovery request: ${request.url}`)
+      if (request.url.includes('/.well-known/oauth-protected-resource')) {
+        return Response.json({ resource: target.url, scopes_supported: [target.scope] })
+      }
+      if (new URL(request.url).pathname.endsWith('/openapi.json')) {
+        return Response.json({
+          openapi: '3.1.0',
+          info: { title: `${target.scope} API`, version: '1.0.0' },
+          paths: {},
+        })
+      }
+      return new Response(null, { headers: { link: '</openapi.json>; rel="service-desc"' } })
+    }
+    const cookie = await signInAdmin(harness)
+    const resourceIds: string[] = []
+    for (const [index, target] of resources.entries()) {
+      const response = await harness.request('/api/resource-servers', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', cookie },
+        body: JSON.stringify({
+          identifier: `multi-resource-${index + 1}`,
+          resourceUrl: target.url,
+          authorizationModel: 'native',
+          ownerOrganizationId: platformOrganizationId,
+          visibility: 'public',
+        }),
+      })
+      expect(response.status, await response.clone().text()).toBe(201)
+      const resource = (await response.json()) as { id: string }
+      resourceIds.push(resource.id)
+      const update = await harness.request(`/api/resource-servers/${resource.id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json', cookie },
+        body: JSON.stringify({ scopeGrantModes: [{ scope: target.scope, grantMode: 'automatic' }] }),
+      })
+      expect(update.status, await update.clone().text()).toBe(200)
+    }
+
+    const redirectUri = 'http://localhost/multi-resource-callback'
+    const createApp = await harness.request('/api/applications', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({
+        name: 'Multi-resource SPA',
+        slug: 'multi-resource-spa',
+        clientType: 'public_spa',
+        redirectUris: [redirectUri],
+        ownerOrganizationId: platformOrganizationId,
+        consentRequired: false,
+        resourceScopes: resourceIds.map((resourceServerId, index) => ({
+          resourceServerId,
+          scopes: [resources[index]!.scope],
+        })),
+      }),
+    })
+    expect(createApp.status, await createApp.clone().text()).toBe(201)
+    const application = (await createApp.json()) as { clientId: string }
+    const verifier = 'multi-resource-pkce-verifier-0123456789abcdefghijklmnop'
+    const authorizeParams = new URLSearchParams({
+      response_type: 'code',
+      client_id: application.clientId,
+      redirect_uri: redirectUri,
+      scope: `openid offline_access ${resources
+        .slice(0, 2)
+        .map((resource) => resource.scope)
+        .join(' ')}`,
+      code_challenge: await pkceChallenge(verifier),
+      code_challenge_method: 'S256',
+    })
+    authorizeParams.append('resource', resources[0].url)
+    authorizeParams.append('resource', resources[1].url)
+
+    const authorized = await harness.request(`/api/auth/oauth2/authorize?${authorizeParams}`, {
+      headers: { cookie },
+      redirect: 'manual',
+    })
+    expect(authorized.status, await authorized.clone().text()).toBe(302)
+    const code = new URL(authorized.headers.get('location') ?? '', redirectUri).searchParams.get('code')
+    expect(code).toBeTruthy()
+
+    const initialToken = await harness.request('/api/auth/oauth2/token', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        client_id: application.clientId,
+        redirect_uri: redirectUri,
+        code: code ?? '',
+        code_verifier: verifier,
+        resource: resources[0].url,
+      }),
+    })
+    expect(initialToken.status, await initialToken.clone().text()).toBe(200)
+    const initialBody = (await initialToken.json()) as { access_token: string; refresh_token: string; scope: string }
+    expect(jwtAudiences(initialBody.access_token)).toEqual([resources[0].url])
+    expect(initialBody.scope.split(' ')).toEqual(['openid', 'offline_access', resources[0].scope])
+    expect(initialBody.refresh_token).toBeTruthy()
+
+    const missingTarget = await harness.request('/api/auth/oauth2/token', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'refresh_token',
+        client_id: application.clientId,
+        refresh_token: initialBody.refresh_token,
+      }),
+    })
+    expect(missingTarget.status).toBe(400)
+    await expect(missingTarget.json()).resolves.toMatchObject({ error: 'invalid_target' })
+
+    const secondToken = await harness.request('/api/auth/oauth2/token', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'refresh_token',
+        client_id: application.clientId,
+        refresh_token: initialBody.refresh_token,
+        resource: resources[1].url,
+      }),
+    })
+    expect(secondToken.status, await secondToken.clone().text()).toBe(200)
+    const secondBody = (await secondToken.json()) as { access_token: string; refresh_token: string; scope: string }
+    expect(jwtAudiences(secondBody.access_token)).toEqual([resources[1].url])
+    expect(secondBody.scope.split(' ')).toEqual(['openid', 'offline_access', resources[1].scope])
+
+    const outsideGrant = await harness.request('/api/auth/oauth2/token', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'refresh_token',
+        client_id: application.clientId,
+        refresh_token: secondBody.refresh_token,
+        resource: resources[2].url,
+      }),
+    })
+    expect(outsideGrant.status).toBe(400)
+    await expect(outsideGrant.json()).resolves.toMatchObject({ error: 'invalid_target' })
   })
 
   it('expires the provider browser session during RP-initiated logout [spec: hosted-auth/oidc-provider-logout]', async () => {

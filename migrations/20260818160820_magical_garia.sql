@@ -1,0 +1,1 @@
+ALTER TABLE `oauth_refresh_token` ADD `resources` text;

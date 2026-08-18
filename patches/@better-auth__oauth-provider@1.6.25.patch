@@ -60,7 +60,23 @@ index 7091595..cfeeaf4 100644
  		}
  	});
  }
-@@ -487,24 +499,35 @@ async function createRefreshToken(ctx, opts, user, referenceId, client, scopes,
+@@ -447,6 +459,6 @@ async function invalidateRefreshFamily(ctx, clientId, userId) {
+ 	});
+ }
+-async function createRefreshToken(ctx, opts, user, referenceId, client, scopes, payload, originalRefresh, authTime) {
++async function createRefreshToken(ctx, opts, user, referenceId, client, scopes, resources, payload, originalRefresh, authTime) {
+ 	const iat = payload.iat ?? Math.floor(Date.now() / 1e3);
+ 	const exp = payload?.exp ?? iat + (opts.refreshTokenExpiresIn ?? 2592e3);
+ 	const token = opts.generateRefreshToken ? await opts.generateRefreshToken() : generateRandomString(32, "A-Z", "a-z");
+@@ -457,6 +469,7 @@ async function createRefreshToken(ctx, opts, user, referenceId, client, scopes,
+ 		referenceId,
+ 		authTime,
+ 		scopes,
++		resources,
+ 		createdAt: /* @__PURE__ */ new Date(iat * 1e3),
+ 		expiresAt: /* @__PURE__ */ new Date(exp * 1e3)
+ 	};
+@@ -487,24 +500,60 @@ async function createRefreshToken(ctx, opts, user, referenceId, client, scopes,
  */
  async function checkResource(ctx, opts, scopes) {
  	const resource = ctx.body.resource;
@@ -75,22 +91,48 @@ index 7091595..cfeeaf4 100644
 -	}
 +	const userInfoAudience = `${ctx.context.baseURL}/oauth2/userinfo`;
 +	const audience = typeof resource === "string" ? [resource] : resource ? [...resource] : [scopes.includes("openid") ? userInfoAudience : ctx.context.baseURL];
-+	if (resource && scopes.includes("openid")) audience.push(userInfoAudience);
 +	const validAudiences = new Set([...opts.validAudiences ?? [ctx.context.baseURL], userInfoAudience].flat().filter((v) => v?.length));
 +	for (const aud of audience) if (!validAudiences.has(aud)) throw new APIError("BAD_REQUEST", {
 +		error_description: "requested resource invalid",
-+		error: "invalid_request"
++		error: "invalid_target"
 +	});
  	return audience?.length === 1 ? audience.at(0) : audience;
  }
++function resourceValues(value) {
++	if (typeof value === "string") return [value];
++	if (Array.isArray(value)) return [...new Set(value)];
++	return [];
++}
++function selectAccessTokenResource(ctx, grantedResources) {
++	const requestedResources = resourceValues(ctx.body.resource);
++	if (requestedResources.length > 1) throw new APIError("BAD_REQUEST", {
++		error_description: "request one resource per access token",
++		error: "invalid_target"
++	});
++	if (grantedResources !== void 0) {
++		const granted = new Set(grantedResources);
++		for (const resource of requestedResources) if (!granted.has(resource)) throw new APIError("BAD_REQUEST", {
++			error_description: "requested resource is outside the original authorization grant",
++			error: "invalid_target"
++		});
++		if (!requestedResources.length && grantedResources.length > 1) throw new APIError("BAD_REQUEST", {
++			error_description: "resource is required for a multi-resource authorization grant",
++			error: "invalid_target"
++		});
++		if (!requestedResources.length && grantedResources.length === 1) requestedResources.push(grantedResources[0]);
++	}
++	ctx.body.resource = requestedResources[0];
++	return requestedResources[0];
++}
  async function createUserTokens(ctx, opts, params) {
 -	const { client, scopes, user, grantType, referenceId, sessionId, nonce, refreshToken: existingRefreshToken, authTime, verificationValue } = params;
 +	const { client, scopes: requestedScopes, user, grantType, referenceId, sessionId, nonce, refreshToken: existingRefreshToken, authTime, verificationValue } = params;
-+	const resource = ctx.body.resource ?? verificationValue?.query.resource;
++	const grantedResources = verificationValue ? resourceValues(verificationValue.query.resource) : existingRefreshToken?.resources ?? void 0;
++	const resource = selectAccessTokenResource(ctx, grantedResources);
 +	const filteredScopes = opts.filterAccessTokenScopes ? await opts.filterAccessTokenScopes({
 +		user,
 +		scopes: requestedScopes,
-+		resource: typeof resource === "string" ? resource : void 0,
++		resource,
 +		referenceId,
 +		metadata: parseClientMetadata(client.metadata),
 +		grantType
@@ -102,10 +144,28 @@ index 7091595..cfeeaf4 100644
  	const exp = opts.scopeExpirations ? scopes.map((sc) => opts.scopeExpirations?.[sc] ? toExpJWT(opts.scopeExpirations[sc], iat) : defaultExp).reduce((prev, curr) => {
  		return prev < curr ? prev : curr;
  	}, defaultExp) : defaultExp;
-+	if (!ctx.body.resource && verificationValue?.query.resource) ctx.body.resource = verificationValue.query.resource;
  	const audience = await checkResource(ctx, opts, scopes);
  	const isRefreshToken = user && clientAllowsGrant(client, "refresh_token") && (existingRefreshToken?.scopes?.includes("offline_access") || scopes.includes("offline_access"));
  	const isJwtAccessToken = audience && !opts.disableJwtPlugin;
+@@ -516,8 +566,8 @@ async function createUserTokens(ctx, opts, params) {
+ 		scopes,
+ 		metadata: parseClientMetadata(client.metadata),
+ 		verificationValue
+ 	}) : void 0;
+-	const earlyRefreshToken = isRefreshToken && user && !isJwtAccessToken ? await createRefreshToken(ctx, opts, user, referenceId, client, scopes, {
++	const earlyRefreshToken = isRefreshToken && user && !isJwtAccessToken ? await createRefreshToken(ctx, opts, user, referenceId, client, requestedScopes, grantedResources, {
+ 		iat,
+ 		exp: iat + (opts.refreshTokenExpiresIn ?? 2592e3),
+ 		sid: sessionId
+@@ -531,7 +581,7 @@ async function createUserTokens(ctx, opts, params) {
+ 			exp,
+ 			sid: sessionId
+ 		}, referenceId, earlyRefreshToken?.id),
+-		earlyRefreshToken ? earlyRefreshToken : isRefreshToken && user ? createRefreshToken(ctx, opts, user, referenceId, client, scopes, {
++		earlyRefreshToken ? earlyRefreshToken : isRefreshToken && user ? createRefreshToken(ctx, opts, user, referenceId, client, requestedScopes, grantedResources, {
+ 			iat,
+ 			exp: iat + (opts.refreshTokenExpiresIn ?? 2592e3),
+ 			sid: sessionId
 @@ -682,6 +705,125 @@ async function handleAuthorizationCodeGrant(ctx, opts) {
  		verificationValue
  	});
@@ -330,7 +390,18 @@ index 7091595..cfeeaf4 100644
  			])).optional(),
  			response_types: z.array(z.enum(["code"])).optional(),
  			type: z.enum([
-@@ -2800,7 +2947,8 @@ const oauthProvider = (options) => {
+@@ -2639,6 +2813,10 @@ const oauthProviderSchema = {
+ 		scopes: {
+ 			type: "string[]",
+ 			required: true
++		},
++		resources: {
++			type: "string[]",
++			required: false
+ 		}
+ 	} },
+ 	/**
+@@ -2800,7 +2986,8 @@ const oauthProvider = (options) => {
  		grantTypes: [
  			"authorization_code",
  			"client_credentials",
@@ -448,7 +519,17 @@ index 21db9f6..753122a 100644
    /**
     * Custom fields to include in the token response body.
     *
-@@ -1349,7 +1368,7 @@ type OAuthConsent<Scopes extends readonly Scope[] = InternallySupportedScopes[]>
+@@ -1323,7 +1342,9 @@ interface OAuthRefreshToken<Scopes extends readonly Scope[] = InternallySupporte
+   /**
+    * The time the user originally authenticated.
+    * Persisted so refreshed ID tokens can include a correct `auth_time` claim.
+    */
+   authTime?: Date;
++  /** Resource indicators bound to the complete original authorization grant. */
++  resources?: string[];
+   /**
+    * Scopes granted for this refresh token.
+@@ -1349,7 +1370,7 @@ type OAuthConsent<Scopes extends readonly Scope[] = InternallySupportedScopes[]>
  /**
   * Supported grant types of the token endpoint
   */

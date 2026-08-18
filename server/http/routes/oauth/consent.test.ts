@@ -36,25 +36,45 @@ describe('OAuth consent routes', () => {
     )
 
     expect(response.status).toBe(200)
-    expect(service.loadConsentRequest).toHaveBeenCalledWith(
-      {
-        clientId: 'client-1',
-        redirectUri: 'https://client.example.com/callback',
-        scope: 'openid profile',
-        state: 'state-1',
-        authorizationParams: {
-          client_id: 'client-1',
-          redirect_uri: 'https://client.example.com/callback',
-          response_type: 'code',
-          scope: 'openid profile',
-          state: 'state-1',
-          code_challenge: 'challenge-1',
-          code_challenge_method: 'S256',
-          nonce: 'nonce-1',
-        },
-      },
-      { id: 'user-1', email: 'jane@example.com', name: 'Jane Stone', image: 'https://auth.example.com/avatar.png' },
+    const [input, user] = service.loadConsentRequest.mock.calls[0]!
+    expect(input).toMatchObject({
+      clientId: 'client-1',
+      redirectUri: 'https://client.example.com/callback',
+      scope: 'openid profile',
+      state: 'state-1',
+    })
+    expect(Object.fromEntries((input.authorizationParams as URLSearchParams).entries())).toEqual({
+      client_id: 'client-1',
+      redirect_uri: 'https://client.example.com/callback',
+      response_type: 'code',
+      scope: 'openid profile',
+      state: 'state-1',
+      code_challenge: 'challenge-1',
+      code_challenge_method: 'S256',
+      nonce: 'nonce-1',
+    })
+    expect(user).toEqual({
+      id: 'user-1',
+      email: 'jane@example.com',
+      name: 'Jane Stone',
+      image: 'https://auth.example.com/avatar.png',
+    })
+  })
+
+  it('preserves repeated RFC 8707 resource parameters [spec: hosted-auth/oauth-multi-resource-grant]', async () => {
+    const service = createConsentServiceMock()
+    const response = await createTestApp(service).request(
+      '/api/account/application-authorization-request?client_id=client-1&redirect_uri=https%3A%2F%2Fclient.example.com%2Fcallback&scope=openid%20calendar%3Aread%20contacts%3Aread&resource=https%3A%2F%2Fcalendar.example.com%2F&resource=https%3A%2F%2Fcontacts.example.com%2F',
+      { headers: userHeaders() },
     )
+
+    expect(response.status).toBe(200)
+    const input = service.loadConsentRequest.mock.calls[0]?.[0]
+    expect(input?.authorizationParams).toBeInstanceOf(URLSearchParams)
+    expect((input?.authorizationParams as URLSearchParams).getAll('resource')).toEqual([
+      'https://calendar.example.com/',
+      'https://contacts.example.com/',
+    ])
   })
 
   it('validates hosted consent approval without accepting client permissions', async () => {

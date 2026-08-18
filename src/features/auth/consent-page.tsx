@@ -53,11 +53,13 @@ export function ConsentPage() {
     setSubmitting(true)
     setError(null)
     try {
-      await createConsent({
-        clientId: consent.application.clientId,
-        resourceServerId: consent.resourceServerId,
-        scopes: consent.requestedScopes,
-      })
+      for (const authorization of consentAuthorizations(consent)) {
+        await createConsent({
+          clientId: consent.application.clientId,
+          resourceServerId: authorization.resourceServerId,
+          scopes: authorization.requestedScopes,
+        })
+      }
       const result = await completeOAuthConsent({
         accept: true,
         scope: consent.requestedScopes.join(' '),
@@ -168,7 +170,24 @@ export function ConsentPage() {
           <div className="consentDecision">
             <div className="consentDecisionBody">
               {error ? <Status tone="error">{error}</Status> : null}
-              <ConsentPermissions consent={consent} />
+              <div className="consentResourceAuthorizations">
+                {consentAuthorizations(consent).map((authorization, index) => {
+                  const headingId = `consent-resource-${index}`
+                  return (
+                    <section
+                      aria-labelledby={headingId}
+                      className="consentResourceAuthorization"
+                      key={authorization.resourceServerId ?? 'realmroot-account'}
+                    >
+                      <header className="consentResourceAuthorizationHeader">
+                        <h2 id={headingId}>{tt(authorization.resourceName)}</h2>
+                        {authorization.resourceUrl ? <small>{authorization.resourceUrl}</small> : null}
+                      </header>
+                      <ConsentPermissions authorization={authorization} headingId={`${headingId}-permissions`} />
+                    </section>
+                  )
+                })}
+              </div>
               <p className="consentControlNote">
                 <ShieldCheck aria-hidden="true" />
                 <span>
@@ -235,18 +254,39 @@ function ConsentFooter({ links }: { links: Array<[string, string]> }) {
   )
 }
 
-function ConsentPermissions({ consent }: { consent: ConsentRequestResponse }) {
-  const requested = consent.requestedPermissions
-  const added = new Set(consent.addedScopes)
-  const previouslyApproved = new Set(consent.previouslyApprovedScopes)
+type ConsentAuthorization = NonNullable<ConsentRequestResponse['resourceAuthorizations']>[number]
+
+function consentAuthorizations(consent: ConsentRequestResponse): ConsentAuthorization[] {
+  return (
+    consent.resourceAuthorizations ?? [
+      {
+        resourceServerId: consent.resourceServerId,
+        resourceUrl: null,
+        resourceName: 'Realmroot account',
+        requestedScopes: consent.requestedScopes,
+        requestedPermissions: consent.requestedPermissions,
+        addedScopes: consent.addedScopes,
+        previouslyApprovedScopes: consent.previouslyApprovedScopes,
+        consentReason: consent.consentReason,
+        existingConsent: consent.existingConsent,
+      },
+    ]
+  )
+}
+
+function ConsentPermissions({ authorization, headingId }: { authorization: ConsentAuthorization; headingId: string }) {
+  const requested = authorization.requestedPermissions
+  const added = new Set(authorization.addedScopes)
+  const previouslyApproved = new Set(authorization.previouslyApprovedScopes)
   const newPermissions = requested.filter((permission) => added.has(permission.value))
   const existingPermissions = requested.filter((permission) => previouslyApproved.has(permission.value))
 
-  if (consent.consentReason === 'expanded') {
+  if (authorization.consentReason === 'expanded') {
     return (
-      <section className="consentPermissions" aria-labelledby="consent-permissions-title">
+      <div className="consentPermissions">
         <PermissionHeading
           count={tt('{{count}} added', { count: newPermissions.length })}
+          id={headingId}
           title={tt('New permissions')}
         />
         <PermissionTable permissions={newPermissions} />
@@ -258,38 +298,40 @@ function ConsentPermissions({ consent }: { consent: ConsentRequestResponse }) {
           </summary>
           <PermissionTable permissions={existingPermissions} />
         </details>
-      </section>
+      </div>
     )
   }
 
-  if (consent.consentReason === 'reauthorization') {
+  if (authorization.consentReason === 'reauthorization') {
     return (
-      <section className="consentPermissions" aria-labelledby="consent-permissions-title">
+      <div className="consentPermissions">
         <PermissionHeading
           count={tt('{{count}} permissions', { count: requested.length })}
+          id={headingId}
           title={tt('Confirm existing access')}
         />
         <p className="consentPermissionsIntro">{tt('No new permissions are being requested.')}</p>
         <PermissionTable permissions={requested} />
-      </section>
+      </div>
     )
   }
 
   return (
-    <section className="consentPermissions" aria-labelledby="consent-permissions-title">
+    <div className="consentPermissions">
       <PermissionHeading
         count={tt('{{count}} total', { count: requested.length })}
+        id={headingId}
         title={tt('Permissions requested')}
       />
       <PermissionTable permissions={requested} />
-    </section>
+    </div>
   )
 }
 
-function PermissionHeading({ count, title }: { count: string; title: string }) {
+function PermissionHeading({ count, id, title }: { count: string; id: string; title: string }) {
   return (
     <div className="consentPermissionsHeader">
-      <h2 id="consent-permissions-title">{title}</h2>
+      <h3 id={id}>{title}</h3>
       <span>{count}</span>
     </div>
   )

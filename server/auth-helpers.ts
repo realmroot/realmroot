@@ -155,6 +155,7 @@ export async function filterOAuthAccessTokenScopes(
     resource?: string
     referenceId?: string
     metadata?: Record<string, unknown>
+    grantType?: string
   },
 ) {
   const requestedScopes = [...input.scopes]
@@ -196,13 +197,20 @@ export async function filterOAuthAccessTokenScopes(
   const configuration = application.resourceScopes.find((item) => item.resourceServerId === resource.id)
   const requestedResourceScopes = requestedScopes.filter((scope) => !oidcScopeSet.has(scope))
   const declaredScopes = new Set(resource.scopeRegistry.scopes.map((scope) => scope.value))
-  if (requestedResourceScopes.some((scope) => !configuration?.scopes.includes(scope) || !declaredScopes.has(scope))) {
+  const targetResourceScopes = requestedResourceScopes.filter(
+    (scope) => configuration?.scopes.includes(scope) && declaredScopes.has(scope),
+  )
+  if (
+    input.grantType !== 'authorization_code' &&
+    input.grantType !== 'refresh_token' &&
+    targetResourceScopes.length !== requestedResourceScopes.length
+  ) {
     throw oauthProviderError('invalid_scope', 'Requested Resource Server scope is not allowed for this client.')
   }
 
   if (!input.user?.id) {
     const effective = new Set(await applicationEffectiveResourceScopes(deps, application, resource))
-    return requestedResourceScopes.filter((scope) => effective.has(scope))
+    return targetResourceScopes.filter((scope) => effective.has(scope))
   }
 
   const effective = new Set(
@@ -211,10 +219,10 @@ export async function filterOAuthAccessTokenScopes(
   const consent = !application.consentRequired
     ? null
     : await deps.applications.findConsent(application.id, input.user.id, resource.id)
-  const consented = !application.consentRequired ? new Set(requestedResourceScopes) : new Set(consent?.scopes ?? [])
+  const consented = !application.consentRequired ? new Set(targetResourceScopes) : new Set(consent?.scopes ?? [])
   const authorizedScopes = [
     ...requestedOidcScopes,
-    ...requestedResourceScopes.filter((scope) => effective.has(scope) && consented.has(scope)),
+    ...targetResourceScopes.filter((scope) => effective.has(scope) && consented.has(scope)),
   ]
   if (!application.consentRequired) {
     await deps.applications.recordPolicyAuthorization({
