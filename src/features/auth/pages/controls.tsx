@@ -278,9 +278,11 @@ export function authContinuationParams() {
     'code_challenge',
     'code_challenge_method',
     'nonce',
+    'resource',
   ]) {
-    const value = params.get(name)
-    if (value) continuation.set(name, value)
+    for (const value of params.getAll(name)) {
+      if (value) continuation.append(name, value)
+    }
   }
   return continuation.has('client_id') && continuation.has('redirect_uri') ? continuation : new URLSearchParams()
 }
