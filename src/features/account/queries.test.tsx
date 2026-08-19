@@ -89,12 +89,25 @@ describe('account query hooks', () => {
       http.get(`${base}/api/auth/organization/list-teams`, () =>
         json([{ id: 'team-1', name: 'platform-admins', organizationId: 'org-1' }]),
       ),
-      http.get(`${base}/api/account/organizations/org-1/teams/team-1/members`, () =>
-        json({
-          items: [{ id: 'membership-1', teamId: 'team-1', userId: 'user-1', createdAt: '2026-08-01T00:00:00Z' }],
-          pagination: { limit: 20, offset: 0, total: 1, hasMore: false, nextOffset: null },
-        }),
-      ),
+      http.get(`${base}/api/account/organizations/org-1/teams/team-1/members`, ({ request }) => {
+        const offset = Number(new URL(request.url).searchParams.get('offset'))
+        const items = Array.from({ length: offset === 0 ? 100 : 1 }, (_, index) => ({
+          id: `membership-${offset + index + 1}`,
+          teamId: 'team-1',
+          userId: `user-${offset + index + 1}`,
+          createdAt: '2026-08-01T00:00:00Z',
+        }))
+        return json({
+          items,
+          pagination: {
+            limit: 100,
+            offset,
+            total: 101,
+            hasMore: offset === 0,
+            nextOffset: offset === 0 ? 100 : null,
+          },
+        })
+      }),
     )
     const client = newClient()
     const teams = renderHook(() => useAccountOrganizationTeams('org-1'), { wrapper: wrapper(client) })
@@ -107,7 +120,8 @@ describe('account query hooks', () => {
     const members = renderHook(() => useAccountOrganizationTeamMembers('org-1', 'team-1'), {
       wrapper: wrapper(client),
     })
-    await waitFor(() => expect(members.result.current.data?.[0]?.userId).toBe('user-1'))
+    await waitFor(() => expect(members.result.current.data).toHaveLength(101))
+    expect(members.result.current.data?.[100]?.userId).toBe('user-101')
   })
 })
 

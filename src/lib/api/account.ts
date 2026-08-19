@@ -150,13 +150,19 @@ export async function deleteAccountOrganizationTeam(organizationId: string, team
 }
 
 export async function listAccountOrganizationTeamMembers(organizationId: string, teamId: string) {
-  const response: AccountOrganizationTeamMembersResponse = await readRpcResponse(
-    apiClient.api.account.organizations[':organizationId'].teams[':teamId'].members.$get({
-      param: { organizationId, teamId },
-      query: {},
-    }),
-  )
-  return response.items
+  const members: AccountOrganizationTeamMembersResponse['items'] = []
+  let nextOffset: number | null = 0
+  while (nextOffset !== null) {
+    const response: AccountOrganizationTeamMembersResponse = await readRpcResponse(
+      apiClient.api.account.organizations[':organizationId'].teams[':teamId'].members.$get({
+        param: { organizationId, teamId },
+        query: { limit: '100', offset: String(nextOffset) },
+      }),
+    )
+    members.push(...response.items)
+    nextOffset = response.pagination.nextOffset
+  }
+  return members
 }
 
 export async function addAccountOrganizationTeamMember(organizationId: string, teamId: string, userId: string) {
