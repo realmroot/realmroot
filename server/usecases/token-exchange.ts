@@ -11,7 +11,7 @@ import type {
 } from '@server/usecases/ports'
 import { applicationEffectiveResourceScopes } from '@server/usecases/resource-scope-entitlements'
 import { activeResourceVisibleToOrganization } from '@server/usecases/resource-visibility'
-import { realmrootTenantClaim } from '@shared/oauth-token-profile'
+import { realmrootOrganizationClaim } from '@shared/oauth-token-profile'
 
 export const tokenExchangeGrantType = 'urn:ietf:params:oauth:grant-type:token-exchange'
 export const refreshTokenGrantType = 'refresh_token'
@@ -105,6 +105,9 @@ export async function exchangeToken(
   // Trust is scoped to the authenticated client's application: only a credential
   // registered under this client may establish the RFC 8693 subject.
   const credential = await resolveCredential(deps, oauthClient.clientId, issuerValue, subject)
+  if (credential.ownerOrganizationId !== application.ownerOrganizationId) {
+    throw oauthError('invalid_grant', 'Federated credential is outside the Application Organization.')
+  }
   if (credential.audience !== input.audience) {
     throw oauthError('invalid_target', 'Requested audience does not match the federated credential.')
   }
@@ -122,7 +125,7 @@ export async function exchangeToken(
   )
   const expiresIn = Math.max(0, Math.floor((expiresAt.getTime() - now.getTime()) / 1000))
   const claims = {
-    [realmrootTenantClaim]: { type: 'organization', id: credential.ownerOrganizationId },
+    [realmrootOrganizationClaim]: credential.ownerOrganizationId,
   }
   const accessToken = await issueJwtAccessToken(signer, {
     clientId: oauthClient.clientId,
@@ -204,11 +207,7 @@ export async function refreshToken(
   if (!credential?.enabled) {
     throw oauthError('invalid_grant', 'The federated credential is no longer active.')
   }
-  const tenant = row.claims[realmrootTenantClaim]
-  const tenantId =
-    tenant && typeof tenant === 'object' && (tenant as Record<string, unknown>).type === 'organization'
-      ? (tenant as Record<string, unknown>).id
-      : null
+  const tenantId = row.claims[realmrootOrganizationClaim]
   if (
     credential.audience !== row.audience ||
     tenantId !== credential.ownerOrganizationId ||
@@ -328,7 +327,7 @@ async function issueJwtAccessToken(
     expiresAt: Date
   },
 ) {
-  const tenant = input.claims[realmrootTenantClaim]
+  const tenant = input.claims[realmrootOrganizationClaim]
   return signer.sign(
     {
       iss: signer.issuer,
@@ -336,7 +335,7 @@ async function issueJwtAccessToken(
       aud: input.audience,
       client_id: input.clientId,
       scope: input.scopes.join(' '),
-      ...(tenant === undefined ? {} : { [realmrootTenantClaim]: tenant }),
+      ...(tenant === undefined ? {} : { [realmrootOrganizationClaim]: tenant }),
       iat: Math.floor(input.issuedAt.getTime() / 1000),
       exp: Math.floor(input.expiresAt.getTime() / 1000),
       jti: crypto.randomUUID(),
@@ -360,8 +359,8 @@ function tokenExchangeJwtMatches(
   ) {
     return false
   }
-  const expectedTenant = row.claims[realmrootTenantClaim]
-  return payload.act === undefined && JSON.stringify(payload[realmrootTenantClaim]) === JSON.stringify(expectedTenant)
+  const expectedTenant = row.claims[realmrootOrganizationClaim]
+  return payload.act === undefined && payload[realmrootOrganizationClaim] === expectedTenant
 }
 
 export async function listFederatedCredentials(deps: Deps, applicationId: string) {

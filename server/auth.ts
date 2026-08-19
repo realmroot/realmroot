@@ -22,13 +22,16 @@ import { deviceAuthorization, genericOAuth, jwt, oneTap, phoneNumber, siwe, twoF
 import { emailOTP } from 'better-auth/plugins/email-otp'
 import { organization } from 'better-auth/plugins/organization'
 import { username } from 'better-auth/plugins/username'
+import { and, eq, inArray, isNull, ne } from 'drizzle-orm'
 import { verifyMessage } from 'viem'
 import { parseSiweMessage, validateSiweMessage } from 'viem/siwe'
 import { deviceCodeGrantType, userConfigurableApplicationScopes } from '../shared/api/applications'
 import type { ManagementSignInSettingsResponse } from '../shared/api/management'
 import type { SecurityPolicy } from '../shared/api/security'
 import {
+  applicationUserHasAccess,
   buildOAuthAccessTokenClaims,
+  buildOAuthIdTokenClaims,
   createNonce,
   filterOAuthAccessTokenScopes,
   sendPasswordChangedNotification,
@@ -49,7 +52,8 @@ import { createUserRepository } from '@server/adapters/repos/users'
 import type { WebhookEvent } from '@shared/api/webhooks'
 import { organizationAccessControl, organizationRoles } from '@shared/organization-access'
 
-const oauthScopes = ['openid', 'profile', 'email', 'offline_access']
+const oauthScopes = ['openid', 'profile', 'email', 'groups', 'offline_access']
+const teamNamePattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 
 export function createAuth(
   db: Database,
@@ -436,7 +440,56 @@ export function createAuth(
           )
         },
         teams: {
-          enabled: false,
+          enabled: true,
+          defaultTeam: {
+            enabled: false,
+          },
+        },
+        organizationHooks: {
+          beforeRemoveMember: async ({ member, organization }) => {
+            const now = new Date()
+            const privateApplicationClientIds = db
+              .select({ clientId: schema.application.oauthClientId })
+              .from(schema.application)
+              .where(
+                and(
+                  eq(schema.application.ownerOrganizationId, organization.id),
+                  eq(schema.application.visibility, 'private'),
+                ),
+              )
+            const organizationTeamIds = db
+              .select({ teamId: schema.team.id })
+              .from(schema.team)
+              .where(eq(schema.team.organizationId, organization.id))
+            await db.batch([
+              db
+                .delete(schema.teamMember)
+                .where(
+                  and(
+                    eq(schema.teamMember.userId, member.userId),
+                    inArray(schema.teamMember.teamId, organizationTeamIds),
+                  ),
+                ),
+              db
+                .update(schema.oauthRefreshToken)
+                .set({ revoked: now })
+                .where(
+                  and(
+                    eq(schema.oauthRefreshToken.userId, member.userId),
+                    inArray(schema.oauthRefreshToken.clientId, privateApplicationClientIds),
+                    isNull(schema.oauthRefreshToken.revoked),
+                  ),
+                ),
+            ])
+          },
+          beforeCreateTeam: async ({ team }) => {
+            await validateTeamName(db, team.organizationId, team.name)
+          },
+          beforeUpdateTeam: async ({ team, updates }) => {
+            if (updates.name !== undefined) {
+              await validateTeamName(db, team.organizationId, updates.name, team.id)
+            }
+          },
         },
         ac: organizationAccessControl,
         roles: organizationRoles,
@@ -469,6 +522,12 @@ export function createAuth(
             if (!clientId) throw new Error('OAuth consent context is missing the client ID.')
             const application = await applications.findByClientId(clientId)
             if (!application) throw new Error('OAuth consent context does not reference an Application.')
+            if (!(await applicationUserHasAccess(deps, application, user.id))) {
+              throw new APIError('FORBIDDEN', {
+                error: 'access_denied',
+                error_description: 'The user is not an active member of the Application Organization.',
+              })
+            }
             if (!application.consentRequired) return false
 
             const resourceUrls = oauthResourceUrlsFromHeader(headers)
@@ -489,7 +548,9 @@ export function createAuth(
         },
         filterAccessTokenScopes: (input) => filterOAuthAccessTokenScopes(deps, input),
         customAccessTokenClaims: (input) => buildOAuthAccessTokenClaims(deps, input),
-        clientRegistrationDefaultScopes: ['openid', 'profile', 'email'],
+        customIdTokenClaims: (input) => buildOAuthIdTokenClaims(deps, input),
+        idTokenExpiresIn: 10 * 60,
+        clientRegistrationDefaultScopes: ['openid', 'profile', 'email', 'groups'],
         clientRegistrationAllowedScopes: [...userConfigurableApplicationScopes],
         storeClientSecret: 'hashed',
         storeTokens: 'hashed',
@@ -504,9 +565,70 @@ export function createAuth(
     ...auth,
     handler: async (request: Request) => {
       const normalizedRequest = await normalizeDeviceAuthorizationRequest(request)
+      const deviceAdmissionError = await enforceDeviceApprovalAccess(
+        normalizedRequest,
+        (headers) => auth.api.getSession({ headers, asResponse: false }),
+        db,
+        applications,
+        deps,
+      )
+      if (deviceAdmissionError) return deviceAdmissionError
       const response = await auth.handler(await withOAuthConsentContext(normalizedRequest))
       return translateNonInteractiveConsentError(normalizedRequest, response)
     },
+  }
+}
+
+async function enforceDeviceApprovalAccess(
+  request: Request,
+  getSession: (headers: Headers) => Promise<{ user: { id: string } } | null>,
+  db: Database,
+  applications: ApplicationRepository,
+  deps: Deps,
+) {
+  const url = new URL(request.url)
+  if (request.method !== 'POST' || !url.pathname.endsWith('/device/approve')) return null
+  const body = (await request.clone().json()) as { userCode?: unknown }
+  if (typeof body.userCode !== 'string') return null
+  const [record] = await db
+    .select({ clientId: schema.deviceCode.clientId })
+    .from(schema.deviceCode)
+    .where(eq(schema.deviceCode.userCode, body.userCode.replace(/-/g, '').toUpperCase()))
+    .limit(1)
+  if (!record?.clientId) return null
+  const application = await applications.findByClientId(record.clientId)
+  if (!application || application.visibility === 'public') return null
+  const session = await getSession(request.headers)
+  if (!session?.user.id) return null
+  if (await applicationUserHasAccess(deps, application, session.user.id)) return null
+  return Response.json(
+    {
+      error: 'access_denied',
+      error_description: 'The user is not an active member of the Application Organization.',
+    },
+    { status: 403 },
+  )
+}
+
+async function validateTeamName(db: Database, organizationId: string, name: string, excludedTeamId?: string) {
+  if (!teamNamePattern.test(name)) {
+    throw new APIError('BAD_REQUEST', {
+      message: 'Team names must use lowercase letters, numbers, and single hyphens.',
+    })
+  }
+  const duplicate = await db
+    .select({ id: schema.team.id })
+    .from(schema.team)
+    .where(
+      and(
+        eq(schema.team.organizationId, organizationId),
+        eq(schema.team.name, name),
+        excludedTeamId ? ne(schema.team.id, excludedTeamId) : undefined,
+      ),
+    )
+    .limit(1)
+  if (duplicate.length) {
+    throw new APIError('CONFLICT', { message: 'A Team with this name already exists in the Organization.' })
   }
 }
 

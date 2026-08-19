@@ -16,22 +16,28 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import type { AccountOrganizationTeam } from '@/lib/api/account'
 import {
   acceptAccountOrganizationInvitation,
   activateAgent,
+  addAccountOrganizationTeamMember,
   cancelAccountOrganizationInvitation,
   createAccountOrganization,
+  createAccountOrganizationTeam,
   deactivateAgent,
   decideAccountAgentResourceRequest,
   deleteAccountOrganization,
+  deleteAccountOrganizationTeam,
   deleteAgent,
   inviteAccountOrganizationMember,
   leaveAccountOrganization,
   rejectAccountOrganizationInvitation,
   removeAccountOrganizationMember,
+  removeAccountOrganizationTeamMember,
   revokeAccountApplicationAuthorization,
   updateAccountOrganization,
   updateAccountOrganizationMemberRole,
+  updateAccountOrganizationTeam,
 } from '@/lib/api/account'
 import { toLocalDateTimeValue } from '@/lib/date-time'
 import { tt } from '@/lib/i18n'
@@ -58,6 +64,8 @@ import {
   useAccountOrganizationInvitations,
   useAccountOrganizationRoles,
   useAccountOrganizations,
+  useAccountOrganizationTeamMembers,
+  useAccountOrganizationTeams,
   useAccountSecurity,
   useAccountSessions,
 } from './queries'
@@ -879,6 +887,7 @@ export function AccountOrganizationDetailPage({
   section?:
     | 'overview'
     | 'members'
+    | 'teams'
     | 'roles'
     | 'applications'
     | 'resource-servers'
@@ -972,6 +981,13 @@ export function AccountOrganizationDetailPage({
                     />
                   </div>
                 </AccountSectionContent>
+              ) : null}
+              {section === 'teams' ? (
+                <OrganizationTeamsPanel
+                  canManage={canManageOrganization}
+                  members={organization.members}
+                  organizationId={organization.id}
+                />
               ) : null}
               {section === 'agents' ? (
                 <AccountSectionContent surface>
@@ -1219,6 +1235,223 @@ export function AccountOrganizationDetailPage({
         )
       }}
     </AccountSurface>
+  )
+}
+
+function OrganizationTeamsPanel({
+  canManage,
+  members,
+  organizationId,
+}: {
+  canManage: boolean
+  members: OrganizationMemberRow[]
+  organizationId: string
+}) {
+  const teamsQuery = useAccountOrganizationTeams(organizationId)
+  const mutate = useAccountMutation()
+  const [editingTeam, setEditingTeam] = useState<AccountOrganizationTeam | 'create' | null>(null)
+  const [managedTeam, setManagedTeam] = useState<AccountOrganizationTeam | null>(null)
+  const [deleteTeam, setDeleteTeam] = useState<AccountOrganizationTeam | null>(null)
+  const teamMembersQuery = useAccountOrganizationTeamMembers(managedTeam?.id ?? null)
+  const teamMemberIds = new Set((teamMembersQuery.data ?? []).map((member) => member.userId))
+  const invalidateTeams = [accountQueryKeys.organizationTeams(organizationId)] as const
+
+  return (
+    <AccountSectionContent surface>
+      <div className="accountTabBody">
+        {canManage ? (
+          <div className="accountTabToolbar">
+            <Button onClick={() => setEditingTeam('create')} size="sm">
+              <Plus />
+              {tt('Create Team')}
+            </Button>
+          </div>
+        ) : null}
+        {teamsQuery.isLoading ? <p className="text-sm text-muted-foreground">{tt('Loading Teams…')}</p> : null}
+        {teamsQuery.error ? (
+          <p className="text-sm text-destructive" role="alert">
+            {teamsQuery.error.message}
+          </p>
+        ) : null}
+        <AccountRows>
+          {(teamsQuery.data ?? []).map((team) => (
+            <AccountRow
+              action={
+                canManage ? (
+                  <div className="flex flex-wrap gap-2">
+                    <Button onClick={() => setManagedTeam(team)} size="sm" variant="outline">
+                      {tt('Members')}
+                    </Button>
+                    <Button onClick={() => setEditingTeam(team)} size="sm" variant="outline">
+                      {tt('Rename')}
+                    </Button>
+                    <Button onClick={() => setDeleteTeam(team)} size="sm" variant="destructive">
+                      {tt('Delete')}
+                    </Button>
+                  </div>
+                ) : null
+              }
+              description={tt('Issued verbatim as an OIDC group for members of this Team.')}
+              key={team.id}
+              label={team.name}
+              value={<code>{team.name}</code>}
+            />
+          ))}
+          {!teamsQuery.isLoading && !teamsQuery.data?.length ? (
+            <AccountRow
+              description={tt('Teams are created explicitly; Realmroot does not create a default Team.')}
+              label={tt('No Teams')}
+              value="—"
+            />
+          ) : null}
+        </AccountRows>
+      </div>
+      <TeamNameDialog
+        onClose={() => setEditingTeam(null)}
+        onSave={async (name) => {
+          const current = editingTeam
+          if (!current) return
+          let failed = false
+          await mutate(
+            current === 'create' ? 'Team created.' : 'Team renamed.',
+            () =>
+              current === 'create'
+                ? createAccountOrganizationTeam(organizationId, name)
+                : updateAccountOrganizationTeam(current.id, name),
+            {
+              invalidate: [...invalidateTeams],
+              onError: () => {
+                failed = true
+              },
+            },
+          )
+          if (!failed) setEditingTeam(null)
+        }}
+        team={editingTeam}
+      />
+      <Dialog onOpenChange={(open) => !open && setManagedTeam(null)} open={managedTeam !== null}>
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>{tt('Manage {{name}} members', { name: managedTeam?.name ?? '' })}</DialogTitle>
+            <DialogDescription>{tt('Only Organization members can be added to this OIDC group.')}</DialogDescription>
+          </DialogHeader>
+          <div className="grid max-h-[55vh] gap-2 overflow-y-auto p-4">
+            {members.map((member) => {
+              const included = teamMemberIds.has(member.userId)
+              return (
+                <div className="flex items-center justify-between gap-3 rounded-lg border p-3" key={member.userId}>
+                  <span className="min-w-0">
+                    <strong className="block truncate text-sm">{member.user.name}</strong>
+                    <small className="text-muted-foreground">{member.user.email}</small>
+                  </span>
+                  <Button
+                    disabled={teamMembersQuery.isLoading}
+                    onClick={() => {
+                      const team = managedTeam
+                      if (!team) return
+                      void mutate(
+                        included ? 'Team member removed.' : 'Team member added.',
+                        async () => {
+                          if (included) {
+                            await removeAccountOrganizationTeamMember(organizationId, team.id, member.userId)
+                          } else {
+                            await addAccountOrganizationTeamMember(organizationId, team.id, member.userId)
+                          }
+                        },
+                        { invalidate: [accountQueryKeys.organizationTeamMembers(team.id)] },
+                      )
+                    }}
+                    size="sm"
+                    variant={included ? 'outline' : 'secondary'}
+                  >
+                    {included ? tt('Remove') : tt('Add')}
+                  </Button>
+                </div>
+              )
+            })}
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setManagedTeam(null)} variant="outline">
+              {tt('Done')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <DestructiveConfirmation
+        confirmLabel={tt('Delete Team')}
+        description={tt('New Tokens will stop containing this group. Update downstream RBAC mappings if needed.')}
+        onClose={() => setDeleteTeam(null)}
+        onConfirm={async () => {
+          if (!deleteTeam) return
+          let failed = false
+          await mutate('Team deleted.', () => deleteAccountOrganizationTeam(organizationId, deleteTeam.id), {
+            invalidate: [...invalidateTeams],
+            onError: () => {
+              failed = true
+            },
+          })
+          if (!failed) setDeleteTeam(null)
+        }}
+        open={deleteTeam !== null}
+        title={tt('Delete {{name}}?', { name: deleteTeam?.name ?? '' })}
+      />
+    </AccountSectionContent>
+  )
+}
+
+function TeamNameDialog({
+  onClose,
+  onSave,
+  team,
+}: {
+  onClose: () => void
+  onSave: (name: string) => void
+  team: AccountOrganizationTeam | 'create' | null
+}) {
+  const [error, setError] = useState<string | null>(null)
+  const existing = team && team !== 'create' ? team : null
+  return (
+    <Dialog onOpenChange={(open) => !open && onClose()} open={team !== null}>
+      <DialogContent>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault()
+            const name = String(new FormData(event.currentTarget).get('name') ?? '').trim()
+            if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(name)) {
+              setError(tt('Use lowercase letters, numbers, and single hyphens.'))
+              return
+            }
+            setError(null)
+            onSave(name)
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>{existing ? tt('Rename Team') : tt('Create Team')}</DialogTitle>
+            <DialogDescription>
+              {existing
+                ? tt('Renaming changes the OIDC group in newly issued Tokens; synchronize downstream RBAC first.')
+                : tt('The Team name is issued verbatim as the OIDC group identifier.')}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="p-4">
+            <Field help={tt('Lowercase kebab-case, for example platform-admins.')} label={tt('Team name')}>
+              <TextInput defaultValue={existing?.name ?? ''} name="name" pattern="[a-z0-9]+(?:-[a-z0-9]+)*" required />
+            </Field>
+            {error ? (
+              <p className="mt-2 text-sm text-destructive" role="alert">
+                {error}
+              </p>
+            ) : null}
+          </div>
+          <DialogFooter>
+            <Button onClick={onClose} type="button" variant="outline">
+              {tt('Cancel')}
+            </Button>
+            <Button type="submit">{existing ? tt('Rename Team') : tt('Create Team')}</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   )
 }
 

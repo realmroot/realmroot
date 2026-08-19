@@ -8,8 +8,65 @@ const ownershipMigration = migration('20260801123349_next_tattoo.sql')
 const organizationRbacMigration = migration('20260805160616_round_wither.sql')
 const rfc9728ScopeRegistryMigration = migration('20260806214840_rfc9728_scope_registry.sql')
 const platformAuthorityMigration = migration('20260807000000_platform_authority.sql')
+const groupAwareOidcMigration = migration('20260819015324_damp_exiles.sql')
 
 describe('D1 migration upgrades', () => {
+  it('migrates Applications and installs Better Auth Team storage [spec: platform-onboarding/existing-d1-upgrade]', () => {
+    const database = new DatabaseSync(':memory:')
+    try {
+      database.exec(`
+        PRAGMA foreign_keys = ON;
+        CREATE TABLE organization (id TEXT PRIMARY KEY NOT NULL);
+        CREATE TABLE user (id TEXT PRIMARY KEY NOT NULL);
+        CREATE TABLE oauth_client (client_id TEXT PRIMARY KEY NOT NULL, type TEXT);
+        CREATE TABLE application (
+          id TEXT PRIMARY KEY NOT NULL,
+          oauth_client_id TEXT NOT NULL,
+          oidc_scopes TEXT NOT NULL
+        );
+        CREATE TABLE session (id TEXT PRIMARY KEY NOT NULL);
+        CREATE TABLE invitation (id TEXT PRIMARY KEY NOT NULL);
+        INSERT INTO organization VALUES ('org-1'), ('org-2');
+        INSERT INTO user VALUES ('user-1');
+        INSERT INTO oauth_client VALUES ('web-client', 'confidential_web'), ('machine-client', 'machine');
+        INSERT INTO application VALUES
+          ('web-app', 'web-client', '["openid","profile","email"]'),
+          ('machine-app', 'machine-client', '["offline_access"]');
+      `)
+
+      applyMigration(database, groupAwareOidcMigration)
+
+      expect(database.prepare('SELECT id, visibility, oidc_scopes FROM application ORDER BY id').all()).toEqual([
+        { id: 'machine-app', visibility: 'public', oidc_scopes: '["offline_access"]' },
+        { id: 'web-app', visibility: 'public', oidc_scopes: '["openid","profile","email","groups"]' },
+      ])
+      database.exec(`
+        INSERT INTO oauth_client VALUES ('new-client', 'public_native');
+        INSERT INTO application (id, oauth_client_id, oidc_scopes) VALUES ('new-app', 'new-client', '["openid"]');
+      `)
+      expect(database.prepare("SELECT visibility FROM application WHERE id = 'new-app'").get()).toEqual({
+        visibility: 'private',
+      })
+      database.exec(`
+        INSERT INTO team (id, name, organization_id) VALUES ('team-1', 'platform-admins', 'org-1');
+        INSERT INTO team (id, name, organization_id) VALUES ('team-2', 'platform-admins', 'org-2');
+        INSERT INTO team_member (id, team_id, user_id) VALUES ('tm-1', 'team-1', 'user-1');
+      `)
+      expect(() =>
+        database.exec("INSERT INTO team (id, name, organization_id) VALUES ('team-3', 'platform-admins', 'org-1')"),
+      ).toThrow()
+      expect(() =>
+        database.exec("INSERT INTO team_member (id, team_id, user_id) VALUES ('tm-2', 'team-1', 'user-1')"),
+      ).toThrow()
+      expect(database.prepare("SELECT count(*) AS count FROM team WHERE name = 'platform-admins'").get()).toEqual({
+        count: 2,
+      })
+      expect(database.prepare('PRAGMA foreign_key_check').all()).toEqual([])
+    } finally {
+      database.close()
+    }
+  })
+
   it('preserves populated Application and Resource server dependents [spec: platform-onboarding/existing-d1-upgrade]', () => {
     const database = new DatabaseSync(':memory:')
 

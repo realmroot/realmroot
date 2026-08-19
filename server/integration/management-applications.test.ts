@@ -1,5 +1,13 @@
 import { applyD1Migrations, env, reset } from 'cloudflare:test'
-import { oauthClient, session } from '@server/db/schema'
+import {
+  applicationConsent,
+  oauthClient,
+  oauthConsent,
+  oauthRefreshToken,
+  session,
+  verification,
+} from '@server/db/schema'
+import { eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createHarness, createUser, type Harness, platformOrganizationId, signIn, signInAdmin } from './harness'
 
@@ -143,6 +151,79 @@ describe('applications management over real D1', () => {
     expect(rejected.status).toBe(400)
   })
 
+  it('invalidates active grants and consent when an Application changes Organization', async () => {
+    const cookie = await signInAdmin(harness)
+    const created = await createApplication(harness, cookie)
+    const admin = await env.DB.prepare('SELECT user_id AS userId FROM member WHERE organization_id = ? LIMIT 1')
+      .bind(platformOrganizationId)
+      .first<{ userId: string }>()
+    expect(admin?.userId).toBeTruthy()
+    const now = Date.now()
+    await env.DB.prepare(
+      'INSERT INTO organization (id, slug, name, disabled, created_at, updated_at) VALUES (?, ?, ?, 0, ?, ?)',
+    )
+      .bind('org-transfer-target', 'transfer-target', 'Transfer target', now, now)
+      .run()
+    await env.DB.prepare(
+      'INSERT INTO member (id, organization_id, user_id, role, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+    )
+      .bind('member-transfer-owner', 'org-transfer-target', admin!.userId, 'owner', now, now)
+      .run()
+    await harness.db.insert(oauthRefreshToken).values({
+      id: 'refresh-before-transfer',
+      token: 'hashed-refresh-before-transfer',
+      clientId: created.clientId,
+      userId: admin!.userId,
+      expiresAt: new Date(now + 60_000),
+      scopes: 'openid offline_access',
+    })
+    await harness.db.insert(verification).values({
+      id: 'authorization-code-before-transfer',
+      identifier: 'hashed-authorization-code',
+      value: JSON.stringify({
+        type: 'authorization_code',
+        query: { client_id: created.clientId, redirect_uri: 'http://localhost/callback' },
+        userId: admin!.userId,
+      }),
+      expiresAt: new Date(now + 60_000),
+    })
+    await harness.db.insert(oauthConsent).values({
+      id: 'oauth-consent-before-transfer',
+      clientId: created.clientId,
+      userId: admin!.userId,
+      scopes: 'openid',
+    })
+    await harness.db.insert(applicationConsent).values({
+      id: 'application-consent-before-transfer',
+      applicationId: created.id,
+      userId: admin!.userId,
+      scopes: ['openid'],
+    })
+
+    const transferred = await harness.request(`/api/applications/${created.id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ ownerOrganizationId: 'org-transfer-target' }),
+    })
+    expect(transferred.status, await transferred.clone().text()).toBe(200)
+    const [refresh] = await harness.db
+      .select({ revoked: oauthRefreshToken.revoked })
+      .from(oauthRefreshToken)
+      .where(eq(oauthRefreshToken.id, 'refresh-before-transfer'))
+    expect(refresh?.revoked).toBeInstanceOf(Date)
+    const [authorizationCode, oauthGrant, applicationGrant] = await Promise.all([
+      harness.db.select().from(verification).where(eq(verification.id, 'authorization-code-before-transfer')),
+      harness.db.select().from(oauthConsent).where(eq(oauthConsent.id, 'oauth-consent-before-transfer')),
+      harness.db
+        .select({ revokedAt: applicationConsent.revokedAt })
+        .from(applicationConsent)
+        .where(eq(applicationConsent.id, 'application-consent-before-transfer')),
+    ])
+    expect(authorizationCode).toEqual([])
+    expect(oauthGrant).toEqual([])
+    expect(applicationGrant[0]?.revokedAt).toBeInstanceOf(Date)
+  })
+
   it('configures Native device login through the Management API [spec: admin-console/admin-create-application]', async () => {
     const cookie = await signInAdmin(harness)
     const created = await createApplication(harness, cookie, {
@@ -194,7 +275,7 @@ describe('applications management over real D1', () => {
     ])
   })
 
-  it('lists, replaces, and re-reads redirect URIs', async () => {
+  it('lists, replaces, and re-reads redirect URIs [spec: admin-console/oidc-group-application-boundary]', async () => {
     const cookie = await signInAdmin(harness)
     const created = await createApplication(harness, cookie)
 

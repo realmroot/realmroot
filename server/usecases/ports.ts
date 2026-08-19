@@ -1196,6 +1196,7 @@ export interface ApplicationAggregate {
   clientId: string
   clientType: ApplicationResponse['clientType']
   public: boolean
+  visibility: ApplicationResponse['visibility']
   consentRequired: boolean
   disabled: boolean
   disabledReason: string | null
@@ -1337,6 +1338,7 @@ export interface AuthorizationRepository {
   findMember(id: string): Promise<MemberResponse | null>
   findMemberByOrganizationUser(organizationId: string, userId: string): Promise<MemberResponse | null>
   listUserMemberships(userId: string): Promise<MemberResponse[]>
+  listTeamNamesForUser(organizationId: string, userId: string): Promise<string[]>
   listMemberUserIds(organizationIds: string[]): Promise<string[]>
   countMembersByRole(organizationId: string, role: string): Promise<number>
   hasPendingInvitation(email: string, now: Date): Promise<boolean>

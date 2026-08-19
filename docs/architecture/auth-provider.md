@@ -64,13 +64,15 @@ Common JWT claims include:
 - `scope`: the granted scope string;
 - `sid`: the user session when applicable.
 
-Resource-aware authorization adds top-level `groups` and `roles`, plus
-`urn:realmroot:params:oauth:tenant` with the selected user or Organization
-tenant. The access token does not duplicate these values under an
+For a private Application, Realmroot adds the owner Organization ID as the
+string claim `urn:realmroot:params:oauth:org`. When `groups` is granted,
+`groups` contains only the user's Team names in that Organization. Access
+tokens retain effective Resource `roles` and approved scopes; ID tokens never
+contain Resource roles or scopes. A public Application does not inherit its
+owner's Organization or Teams for an external user. The access token does not duplicate these values under an
 `authorization` object and does not emit `azp`, `application_id`, or a
-top-level `organization_id`. ID tokens and UserInfo remain identity-only OIDC
-surfaces. Stored legacy per-Application claim selections no longer alter
-issuance.
+top-level `organization_id`. Stored legacy per-Application claim selections no
+longer alter issuance.
 
 Better Auth Organization Roles map human memberships to scopes within exactly
 one Organization. Agents, Applications, and workloads do not receive Roles;

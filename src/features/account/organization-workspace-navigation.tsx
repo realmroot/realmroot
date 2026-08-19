@@ -33,6 +33,7 @@ const workspaceNavigation = [
     items: [
       { segment: 'overview', label: 'Overview', icon: Building2 },
       { segment: 'members', label: 'Members', icon: UsersRound },
+      { segment: 'teams', label: 'Teams', icon: Network },
       { segment: 'activity', label: 'Activity', icon: Activity },
     ],
   },

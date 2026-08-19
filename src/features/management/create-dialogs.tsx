@@ -22,6 +22,7 @@ import {
   LinkButton,
   managementCreateUserRequestSchema,
   type ReactNode,
+  SelectInput,
   SettingRow,
   TextArea,
   TextInput,
@@ -62,6 +63,7 @@ export function CreateApplicationDialog({
     redirectUris: '',
   })
   const [deviceLoginEnabled, setDeviceLoginEnabled] = useState(false)
+  const [visibility, setVisibility] = useState<'public' | 'private'>('private')
   const [ownerOrganizationId, setOwnerOrganizationId] = useState('')
   const [validationError, setValidationError] = useState<string | null>(null)
   useEffect(() => {
@@ -155,6 +157,7 @@ export function CreateApplicationDialog({
                 parseForm(createApplicationRequestSchema, {
                   ...form,
                   ownerOrganizationId,
+                  visibility,
                   ...(form.clientType === 'public_native' ? { deviceLoginEnabled } : {}),
                   redirectUris: form.clientType === 'machine' ? [] : form.redirectUris.split('\n').filter(Boolean),
                 }),
@@ -183,6 +186,19 @@ export function CreateApplicationDialog({
               value={ownerOrganizationId}
             />
           )}
+          <Field
+            help={tt('Private applications allow only members of the owner Organization to sign in.')}
+            label={tt('Visibility')}
+          >
+            <SelectInput
+              name="visibility"
+              onChange={(event) => setVisibility(event.target.value as 'public' | 'private')}
+              value={visibility}
+            >
+              <option value="private">{tt('Private')}</option>
+              <option value="public">{tt('Public')}</option>
+            </SelectInput>
+          </Field>
           <ApplicationTypeCards
             onChange={(clientType) => {
               setValue(setForm, 'clientType', clientType)

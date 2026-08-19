@@ -269,6 +269,38 @@ describe('account self-service over real D1', () => {
     expect(created.status, await created.clone().text()).toBe(200)
     const organizationId = ((await created.json()) as { id: string }).id
 
+    const initialTeams = await harness.request(
+      `/api/auth/organization/list-teams?organizationId=${encodeURIComponent(organizationId)}`,
+      { headers },
+    )
+    expect(initialTeams.status, await initialTeams.clone().text()).toBe(200)
+    await expect(initialTeams.json()).resolves.toEqual([])
+    const invalidTeam = await harness.request('/api/auth/organization/create-team', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ organizationId, name: 'Platform Admins' }),
+    })
+    expect(invalidTeam.status).toBe(400)
+    const createdTeam = await harness.request('/api/auth/organization/create-team', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ organizationId, name: 'platform-admins' }),
+    })
+    expect(createdTeam.status, await createdTeam.clone().text()).toBe(200)
+    const teamId = ((await createdTeam.json()) as { id: string }).id
+    const invalidRename = await harness.request('/api/auth/organization/update-team', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ teamId, data: { name: 'Platform Owners' } }),
+    })
+    expect(invalidRename.status).toBe(400)
+    const duplicateTeam = await harness.request('/api/auth/organization/create-team', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ organizationId, name: 'platform-admins' }),
+    })
+    expect(duplicateTeam.status).toBe(409)
+
     const clearActive = await harness.request('/api/auth/organization/set-active', {
       method: 'POST',
       headers,

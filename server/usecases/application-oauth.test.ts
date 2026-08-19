@@ -2,7 +2,7 @@ import { realmrootResourceServer } from '@server/domain/realmroot-resource-serve
 import { createTestDeps } from '@server/http/test-deps'
 import { issueApplicationAccessToken } from '@server/usecases/application-oauth'
 import { hashProviderSecret } from '@server/usecases/applications-utils'
-import { realmrootTenantClaim } from '@shared/oauth-token-profile'
+import { realmrootOrganizationClaim } from '@shared/oauth-token-profile'
 import { exportJWK, generateKeyPair, SignJWT } from 'jose'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -39,7 +39,7 @@ describe('Application OAuth token issuance', () => {
       expect.objectContaining({
         sub: 'app_adapter',
         client_id: 'client_adapter',
-        [realmrootTenantClaim]: { type: 'organization', id: 'org_platform' },
+        [realmrootOrganizationClaim]: 'org_platform',
         aud: audience,
         scope: 'connection-events:write',
         cnf: { jkt: expect.any(String) },
@@ -83,6 +83,9 @@ describe('Application OAuth token issuance', () => {
     await expect(
       issueApplicationAccessToken(await fixture({ clientDisabled: true }), input, signer),
     ).rejects.toMatchObject({ error: 'invalid_client' })
+    await expect(
+      issueApplicationAccessToken(await fixture({ organizationDisabled: true }), input, signer),
+    ).rejects.toMatchObject({ error: 'invalid_client' })
   })
 
   it('rejects unauthorized clients, unavailable Resources, empty scopes, and invalid DPoP proofs', async () => {
@@ -125,6 +128,7 @@ async function fixture(
     resource?: object | null
     configureResource?: boolean
     clientDisabled?: boolean
+    organizationDisabled?: boolean
   } = {},
 ) {
   const configuredScopes = options.configuredScopes ?? ['connection-events:write']
@@ -160,6 +164,9 @@ async function fixture(
       }),
     },
     authorization: {
+      findOrganization: vi
+        .fn()
+        .mockResolvedValue({ id: 'org_platform', disabled: options.organizationDisabled ?? false }),
       listResources: vi.fn().mockResolvedValue({
         items: options.resource === null ? [] : [options.resource === undefined ? resource : options.resource],
         pagination: {

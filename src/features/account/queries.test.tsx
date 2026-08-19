@@ -2,12 +2,14 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { renderHook, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
-import { createAccountServer, createAccountStore } from './account.test-utils'
+import { base, createAccountServer, createAccountStore, http, json } from './account.test-utils'
 import {
   useAccountAgents,
   useAccountApplicationAuthorizations,
   useAccountConfig,
   useAccountMutation,
+  useAccountOrganizationTeamMembers,
+  useAccountOrganizationTeams,
   useAccountPasskeys,
   useAccountProfile,
   useAccountSecurity,
@@ -80,6 +82,25 @@ describe('account query hooks', () => {
     await waitFor(() => expect(linked.result.current.isSuccess).toBe(true))
     await waitFor(() => expect(apps.result.current.isSuccess).toBe(true))
     await waitFor(() => expect(agents.result.current.isSuccess).toBe(true))
+  })
+
+  it('loads Organization Teams and gates Team members until a Team is selected', async () => {
+    server.use(
+      http.get(`${base}/api/auth/organization/list-teams`, () =>
+        json([{ id: 'team-1', name: 'platform-admins', organizationId: 'org-1' }]),
+      ),
+      http.get(`${base}/api/auth/organization/list-team-members`, () =>
+        json([{ id: 'membership-1', teamId: 'team-1', userId: 'user-1', createdAt: '2026-08-01T00:00:00Z' }]),
+      ),
+    )
+    const client = newClient()
+    const teams = renderHook(() => useAccountOrganizationTeams('org-1'), { wrapper: wrapper(client) })
+    const disabledMembers = renderHook(() => useAccountOrganizationTeamMembers(null), { wrapper: wrapper(client) })
+    expect(disabledMembers.result.current.fetchStatus).toBe('idle')
+    await waitFor(() => expect(teams.result.current.data?.[0]?.name).toBe('platform-admins'))
+
+    const members = renderHook(() => useAccountOrganizationTeamMembers('team-1'), { wrapper: wrapper(client) })
+    await waitFor(() => expect(members.result.current.data?.[0]?.userId).toBe('user-1'))
   })
 })
 

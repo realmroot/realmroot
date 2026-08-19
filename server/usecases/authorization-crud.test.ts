@@ -602,7 +602,7 @@ describe('authorization CRUD and assignment policy', () => {
       }),
     ).resolves.toMatchObject({
       roles: ['member', 'operator'],
-      groups: [organization.id],
+      groups: ['platform-readers'],
       scope: 'projects:read',
       organization_id: organization.id,
       organization_name: organization.displayName,
@@ -1401,6 +1401,7 @@ function repository() {
     findMember: vi.fn().mockResolvedValue(null),
     findMemberByOrganizationUser: vi.fn().mockResolvedValue(null),
     listUserMemberships: vi.fn().mockResolvedValue([]),
+    listTeamNamesForUser: vi.fn().mockResolvedValue(['platform-readers']),
     listMemberUserIds: vi.fn().mockResolvedValue([]),
     countMembersByRole: vi.fn().mockResolvedValue(1),
     hasPendingInvitation: vi.fn().mockResolvedValue(false),

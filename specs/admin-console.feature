@@ -70,6 +70,7 @@ Feature: Admin Console
     And it records Resource-server-qualified scope allowlists separately from granted Permissions
     And Resource Server and scope allowlists are bounded at the request boundary
     And Public Native Applications can enable or disable device login
+    And new Applications are private by default while migrated Applications remain public
 
   @entrypoint:product-ui @journey:admin-application-detail
   Scenario: Application detail manages lifecycle, redirects, integration details, and secret rotation
@@ -85,6 +86,7 @@ Feature: Admin Console
     And enabling refresh tokens keeps the required offline access scope selected
     And saving authorization silently removes allowlist references to deleted Resource Servers
     And deleting it returns to inventory without refetching the removed client
+    And visibility can be changed between public and private independently from OAuth client authentication
 
   @entrypoint:product-ui @journey:admin-create-user
   Scenario: Users page creates a user
@@ -366,12 +368,23 @@ Feature: Admin Console
   Scenario: Applications receive standard identity and access token claims
     Given a user has organization membership, optional resource roles, and approved resource scopes
     When the Application completes an OIDC authorization flow for a Resource Server
-    Then the ID token contains only standard identity and authentication claims allowed by the requested OIDC scopes
+    Then a private Application ID token identifies exactly one owner Organization in the string claim urn:realmroot:params:oauth:org
+    And an authorized groups scope adds only the User's Team names from that Organization to the ID token
+    And the ID token contains no Realmroot roles, permission rules, or Resource scopes
     And the access token is an RFC 9068 JWT containing client_id, audience, subject, lifetime, token identifier, and approved scope
-    And the access token identifies relevant organizations in groups
+    And the access token identifies Team names from the current Organization in groups
     And identifies effective resource roles in roles
-    And carries tenant context in the Realmroot tenant claim
+    And carries the same string Organization context in urn:realmroot:params:oauth:org
+    And no token carries the legacy object claim urn:realmroot:params:oauth:tenant
     But the access token contains no duplicate authorization object, azp, application_id, or top-level organization_id
+
+  @entrypoint:product-ui @journey:oidc-group-application-boundary
+  Scenario: One group-aware Application can serve multiple relying-party instances
+    Given an Organization owns one public native Kubernetes Application and one confidential web Argo CD Application
+    When multiple Kubernetes clusters use the native client and multiple Argo CD instances register callbacks on the web client
+    Then every instance receives the same Organization-scoped Team groups for the same User
+    And each relying party maps those groups to its own local authorization roles
+    But Kubernetes and Argo CD do not share an Application or client secret boundary
 
   @entrypoint:product-ui @journey:agent-discovery
   Scenario: AgentAuth discovery exposes a narrow delegated protocol surface

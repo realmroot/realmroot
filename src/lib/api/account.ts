@@ -33,6 +33,21 @@ import type {
 import { ApiRequestError, apiClient, readJsonResponse, readRpcResponse, uploadApiFile } from '@/lib/api'
 import { authClient, nativeAuth } from '@/lib/auth-client'
 
+export interface AccountOrganizationTeam {
+  id: string
+  name: string
+  organizationId: string
+  createdAt: Date
+  updatedAt?: Date
+}
+
+export interface AccountOrganizationTeamMember {
+  id: string
+  teamId: string
+  userId: string
+  createdAt: Date
+}
+
 export function getAccountProfile() {
   return readRpcResponse(apiClient.api.account.profile.$get())
 }
@@ -120,6 +135,38 @@ export async function updateAccountOrganizationMemberRole(organizationId: string
       },
     ),
   )
+}
+
+export async function listAccountOrganizationTeams(organizationId: string) {
+  return readAuthClientResult(
+    await authClient.organization.listTeams({ query: { organizationId } }),
+  ) as AccountOrganizationTeam[]
+}
+
+export async function createAccountOrganizationTeam(organizationId: string, name: string) {
+  return readAuthClientResult(await authClient.organization.createTeam({ organizationId, name }))
+}
+
+export async function updateAccountOrganizationTeam(teamId: string, name: string) {
+  return readAuthClientResult(await authClient.organization.updateTeam({ teamId, data: { name } }))
+}
+
+export async function deleteAccountOrganizationTeam(organizationId: string, teamId: string) {
+  return readAuthClientResult(await authClient.organization.removeTeam({ organizationId, teamId }))
+}
+
+export async function listAccountOrganizationTeamMembers(teamId: string) {
+  return readAuthClientResult(
+    await authClient.organization.listTeamMembers({ query: { teamId } }),
+  ) as AccountOrganizationTeamMember[]
+}
+
+export async function addAccountOrganizationTeamMember(organizationId: string, teamId: string, userId: string) {
+  return readAuthClientResult(await authClient.organization.addTeamMember({ organizationId, teamId, userId }))
+}
+
+export async function removeAccountOrganizationTeamMember(organizationId: string, teamId: string, userId: string) {
+  return readAuthClientResult(await authClient.organization.removeTeamMember({ organizationId, teamId, userId }))
 }
 
 export function updateAccountProfile(input: AccountProfileUpdateInput) {

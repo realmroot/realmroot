@@ -610,6 +610,7 @@ async function fixture(options: { grantTypes?: string[]; scopes?: string[] } = {
           : null,
     },
     authorization: {
+      findOrganization: async (id: string) => (id === 'org_1' ? ({ id, disabled: false } as never) : null),
       findResourceByResourceUrl: async (resourceUrl: string) =>
         resourceUrl === defaultAudience
           ? {

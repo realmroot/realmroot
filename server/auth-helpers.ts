@@ -7,7 +7,7 @@ import {
 } from '@server/usecases/resource-scope-entitlements'
 import { resourceVisibleToOrganization } from '@server/usecases/resource-visibility'
 import { userConfigurableApplicationScopes } from '@shared/api/applications'
-import { realmrootTenantClaim } from '@shared/oauth-token-profile'
+import { realmrootOrganizationClaim } from '@shared/oauth-token-profile'
 import { APIError } from 'better-auth'
 import type { ManagementSignInSettingsResponse } from '../shared/api/management'
 
@@ -127,24 +127,48 @@ export async function buildOAuthAccessTokenClaims(
   const scopes = [...input.scopes]
   const identityScopes = new Set<string>(userConfigurableApplicationScopes)
   const applicationId = readString(input.metadata, 'applicationId')
-  const application = !input.user && applicationId ? await deps.applications.findById(applicationId) : null
-  const tenantOrganizationId = await resolveOAuthTenantOrganizationId(deps, input)
-  const { authorization: _authorization, ...claims } = await buildTokenClaims(deps, {
+  const application = applicationId ? await deps.applications.findById(applicationId) : null
+  const tenantOrganizationId = await resolveOAuthOrganizationId(deps, input, application)
+  const {
+    authorization: _authorization,
+    groups,
+    ...claims
+  } = await buildTokenClaims(deps, {
     userId: input.user?.id,
     applicationId,
-    organizationId: tenantOrganizationId ?? application?.ownerOrganizationId,
+    organizationId: tenantOrganizationId ?? (!input.user ? application?.ownerOrganizationId : undefined),
     resource: input.resource,
     scopes,
     authorizedScopes: scopes.filter((scope) => !identityScopes.has(scope)),
   } satisfies AuthorizationTokenClaimInput)
-  const tenant = tenantOrganizationId
-    ? { type: 'organization' as const, id: tenantOrganizationId }
-    : input.user?.id
-      ? { type: 'user' as const, id: input.user.id }
-      : application
-        ? { type: 'organization' as const, id: application.ownerOrganizationId }
-        : null
-  return { ...claims, ...(tenant ? { [realmrootTenantClaim]: tenant } : {}) }
+  const organizationId = tenantOrganizationId ?? (!input.user && application ? application.ownerOrganizationId : null)
+  return {
+    ...claims,
+    ...(tenantOrganizationId && input.user?.id ? { groups } : {}),
+    ...(organizationId ? { [realmrootOrganizationClaim]: organizationId } : {}),
+  }
+}
+
+export async function buildOAuthIdTokenClaims(
+  deps: Deps,
+  input: {
+    user: { id?: string } & Record<string, unknown>
+    scopes: Iterable<string>
+    metadata?: Record<string, unknown>
+  },
+): Promise<Record<string, unknown>> {
+  const applicationId = readString(input.metadata, 'applicationId')
+  const application = applicationId ? await deps.applications.findById(applicationId) : null
+  if (!application || application.visibility !== 'private' || !input.user.id) return {}
+  await requireApplicationUserAccess(deps, application, input.user.id, 'access_denied')
+  const scopes = new Set(input.scopes)
+  const groups = scopes.has('groups')
+    ? await deps.authorization.listTeamNamesForUser(application.ownerOrganizationId, input.user.id)
+    : undefined
+  return {
+    [realmrootOrganizationClaim]: application.ownerOrganizationId,
+    ...(groups ? { groups } : {}),
+  }
 }
 
 export async function filterOAuthAccessTokenScopes(
@@ -162,6 +186,14 @@ export async function filterOAuthAccessTokenScopes(
   const applicationId = readString(input.metadata, 'applicationId')
   const application = applicationId ? await deps.applications.findById(applicationId) : null
   if (!application || application.disabled) return []
+  if (input.user?.id && application.visibility === 'private') {
+    await requireApplicationUserAccess(
+      deps,
+      application,
+      input.user.id,
+      input.grantType === 'refresh_token' ? 'invalid_grant' : 'access_denied',
+    )
+  }
   const oidcScopeSet = new Set<string>(userConfigurableApplicationScopes)
   const requestedOidcScopes = requestedScopes.filter((scope) => oidcScopeSet.has(scope))
   if (requestedOidcScopes.some((scope) => !application.oidcScopes.includes(scope as never))) {
@@ -188,7 +220,7 @@ export async function filterOAuthAccessTokenScopes(
   if (!resource?.enabled || !resource.scopeRegistry) {
     throw oauthProviderError('invalid_target', 'Requested Resource Server is not active.')
   }
-  const tenantOrganizationId = await resolveOAuthTenantOrganizationId(deps, input)
+  const tenantOrganizationId = await resolveOAuthOrganizationId(deps, input, application)
   const visible = input.user?.id
     ? resource.visibility === 'public' || tenantOrganizationId === resource.ownerOrganizationId
     : resourceVisibleToOrganization(resource, application.ownerOrganizationId)
@@ -235,10 +267,12 @@ export async function filterOAuthAccessTokenScopes(
   return authorizedScopes
 }
 
-async function resolveOAuthTenantOrganizationId(
+async function resolveOAuthOrganizationId(
   deps: Deps,
   input: { user?: ({ id?: string } & Record<string, unknown>) | null; resource?: string; referenceId?: string },
+  application: Awaited<ReturnType<Deps['applications']['findById']>>,
 ) {
+  if (application?.visibility === 'private') return application.ownerOrganizationId
   if (input.referenceId) return input.referenceId
   if (!input.user?.id || !input.resource) return null
   const resource = await deps.authorization.findResourceByResourceUrl(input.resource)
@@ -247,6 +281,30 @@ async function resolveOAuthTenantOrganizationId(
   return memberships.some((membership) => membership.organizationId === resource.ownerOrganizationId)
     ? resource.ownerOrganizationId
     : null
+}
+
+export async function requireApplicationUserAccess(
+  deps: Deps,
+  application: NonNullable<Awaited<ReturnType<Deps['applications']['findById']>>>,
+  userId: string,
+  oauthError: 'access_denied' | 'invalid_grant' = 'access_denied',
+) {
+  if (!(await applicationUserHasAccess(deps, application, userId))) {
+    throw oauthProviderError(oauthError, 'The user is not an active member of the Application Organization.')
+  }
+}
+
+export async function applicationUserHasAccess(
+  deps: Deps,
+  application: NonNullable<Awaited<ReturnType<Deps['applications']['findById']>>>,
+  userId: string,
+) {
+  if (application.visibility === 'public') return true
+  const [organization, membership] = await Promise.all([
+    deps.authorization.findOrganization(application.ownerOrganizationId),
+    deps.authorization.findMemberByOrganizationUser(application.ownerOrganizationId, userId),
+  ])
+  return Boolean(organization && !organization.disabled && membership)
 }
 
 function oauthProviderError(error: string, description: string) {

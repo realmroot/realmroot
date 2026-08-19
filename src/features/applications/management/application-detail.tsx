@@ -51,7 +51,7 @@ import {
 import { tt } from '@/lib/i18n'
 import { ApplicationFederatedCredentialsPanel } from './application-federated-credentials'
 
-type Editor = 'details' | 'redirects' | 'authorization' | 'ownership' | 'consent' | null
+type Editor = 'details' | 'redirects' | 'authorization' | 'ownership' | 'visibility' | 'consent' | null
 
 export function ApplicationDetailPage({
   applicationId,
@@ -230,6 +230,7 @@ export function ApplicationDetailPage({
               organizations={organizations}
               onDelete={() => setDeleteOpen(true)}
               onEditOwnership={() => setEditor('ownership')}
+              onEditVisibility={() => setEditor('visibility')}
               onEditConsent={() => setEditor('consent')}
               onEditDetails={() => setEditor('details')}
               onToggle={() =>
@@ -541,6 +542,7 @@ function ApplicationSettings({
   organizations,
   onDelete,
   onEditOwnership,
+  onEditVisibility,
   onEditConsent,
   onEditDetails,
   onToggle,
@@ -550,6 +552,7 @@ function ApplicationSettings({
   organizations: OrganizationResponse[]
   onDelete: () => void
   onEditOwnership: () => void
+  onEditVisibility: () => void
   onEditConsent: () => void
   onEditDetails: () => void
   onToggle: () => void
@@ -583,6 +586,25 @@ function ApplicationSettings({
         title="Ownership"
       >
         <DetailRow label="Owner" value={ownerLabel(application.ownerOrganizationId, organizations)} />
+      </DetailSection>
+      <DetailSection
+        action={
+          <Button onClick={onEditVisibility} variant="outline">
+            {tt('Edit')}
+          </Button>
+        }
+        description="Control who may authenticate through this client. This is independent from client-secret handling."
+        title="Visibility"
+      >
+        <DetailRow
+          description={
+            application.visibility === 'private'
+              ? tt('Only active members of the owner Organization may sign in.')
+              : tt('Any Realmroot user may sign in without inheriting the owner Organization or Teams.')
+          }
+          label="Application visibility"
+          value={application.visibility === 'private' ? tt('Private') : tt('Public')}
+        />
       </DetailSection>
       {isPlatformApplication(application, organizations) ? (
         <DetailSection
@@ -739,6 +761,7 @@ function ApplicationEditor({
               organizations={organizations}
             />
           ) : null}
+          {editor === 'visibility' ? <VisibilityEditor application={application} onSave={onSave} /> : null}
           {editor === 'consent' && isPlatformApplication(application, organizations) ? (
             <ConsentEditor application={application} onSave={onSave} />
           ) : null}
@@ -846,6 +869,48 @@ function OwnershipEditor({
           value={ownerOrganizationId}
         />
       )}
+    </form>
+  )
+}
+
+function VisibilityEditor({
+  application,
+  onSave,
+}: {
+  application: ApplicationResponse
+  onSave: (input: Parameters<typeof updateApplication>[1]) => void
+}) {
+  const [visibility, setVisibility] = useState(application.visibility)
+  const visibilityId = useId()
+  return (
+    <form
+      className="grid gap-4 px-4 py-5"
+      id="application-visibility"
+      onSubmit={(event) => {
+        event.preventDefault()
+        onSave({ visibility })
+      }}
+    >
+      <RadioGroup onValueChange={(value) => setVisibility(value as 'public' | 'private')} value={visibility}>
+        <label className="flex items-start gap-3 rounded-lg border p-3" htmlFor={`${visibilityId}-private`}>
+          <RadioGroupItem id={`${visibilityId}-private`} value="private" />
+          <span>
+            <strong className="block text-sm">{tt('Private')}</strong>
+            <small className="text-muted-foreground">
+              {tt('Only active members of the owner Organization may authenticate.')}
+            </small>
+          </span>
+        </label>
+        <label className="flex items-start gap-3 rounded-lg border p-3" htmlFor={`${visibilityId}-public`}>
+          <RadioGroupItem id={`${visibilityId}-public`} value="public" />
+          <span>
+            <strong className="block text-sm">{tt('Public')}</strong>
+            <small className="text-muted-foreground">
+              {tt('Any Realmroot user may authenticate; owner Organization and Team claims are not inherited.')}
+            </small>
+          </span>
+        </label>
+      </RadioGroup>
     </form>
   )
 }
@@ -1028,6 +1093,7 @@ function editorTitle(editor: Editor) {
       redirects: 'Edit redirects and origins',
       authorization: 'Edit Resource Server scope allowlists',
       ownership: 'Edit ownership',
+      visibility: 'Edit visibility',
       consent: 'Edit consent policy',
     } as Record<Exclude<Editor, null>, string>
   )[editor ?? 'details']
@@ -1040,6 +1106,7 @@ function editorDescription(editor: Editor) {
       redirects: 'Set the exact callbacks and browser origins accepted by Realmroot.',
       authorization: 'Choose the Resource Server scopes this application may request.',
       ownership: 'Set the Organization responsible for this client.',
+      visibility: 'Choose whether all Realmroot users or only owner Organization members may authenticate.',
       consent: 'Decide whether users approve access on first use and when requested scopes expand.',
     } as Record<Exclude<Editor, null>, string>
   )[editor ?? 'details']

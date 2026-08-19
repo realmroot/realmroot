@@ -1,5 +1,5 @@
 import type { AccessRequestApproval } from '@shared/api/agent-api'
-import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { delay } from 'msw'
 import type { ReactNode } from 'react'
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
@@ -640,9 +640,98 @@ describe('planned Account Center journeys', () => {
     renderWithClient(<AccountOrganizationDetailPage organizationId="org-family" />)
     expect((await screen.findByRole('alert')).textContent).toContain('Organization unavailable')
   })
+
+  it('[spec: account-center/account-organization-teams] creates explicit kebab-case Teams', async () => {
+    let created: unknown = null
+    server.use(
+      ...organizationDetailHandlers('owner'),
+      http.get(`${base}/api/auth/organization/list-teams`, () => json([])),
+      http.post(`${base}/api/auth/organization/create-team`, async ({ request }) => {
+        created = await request.json()
+        return json({ id: 'team-1', name: 'platform-admins', organizationId: 'org-family' })
+      }),
+    )
+    await openOrganizationSection('teams')
+    expect(await screen.findByText('No Teams')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Create Team' }))
+    fireEvent.change(screen.getByLabelText('Team name'), { target: { value: 'Platform Admins' } })
+    fireEvent.submit(screen.getByRole('button', { name: 'Create Team' }).closest('form')!)
+    expect((await screen.findByRole('alert')).textContent).toContain('Use lowercase letters')
+    fireEvent.change(screen.getByLabelText('Team name'), { target: { value: 'platform-admins' } })
+    fireEvent.submit(screen.getByRole('button', { name: 'Create Team' }).closest('form')!)
+    await waitFor(() => expect(created).toEqual({ organizationId: 'org-family', name: 'platform-admins' }))
+  })
+
+  it('[spec: account-center/account-organization-teams] renames, deletes, and manages Team members', async () => {
+    const actions: Array<{ action: string; body: unknown }> = []
+    server.use(
+      ...organizationDetailHandlers('owner'),
+      http.get(`${base}/api/auth/organization/list-teams`, () =>
+        json([{ id: 'team-1', name: 'platform-admins', organizationId: 'org-family' }]),
+      ),
+      http.get(`${base}/api/auth/organization/list-team-members`, () =>
+        json([
+          {
+            id: 'team-member-1',
+            teamId: 'team-1',
+            userId: store.profile.id,
+            createdAt: '2026-08-01T00:00:00.000Z',
+          },
+        ]),
+      ),
+      http.post(`${base}/api/auth/organization/:action`, async ({ params, request }) => {
+        actions.push({ action: String(params.action), body: await request.json() })
+        return json({ success: true })
+      }),
+    )
+    await openOrganizationSection('teams')
+    expect((await screen.findAllByText('platform-admins')).length).toBeGreaterThan(0)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Rename' }))
+    expect(await screen.findByText(/synchronize downstream RBAC first/)).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Team name'), { target: { value: 'cluster-admins' } })
+    fireEvent.submit(screen.getByRole('button', { name: 'Rename Team' }).closest('form')!)
+    await waitFor(() => expect(actions.some(({ action }) => action === 'update-team')).toBe(true))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Members' }))
+    expect(await screen.findByRole('heading', { name: 'Manage platform-admins members' })).toBeTruthy()
+    fireEvent.click(await screen.findByRole('button', { name: 'Add' }))
+    await waitFor(() => expect(actions.some(({ action }) => action === 'add-team-member')).toBe(true))
+    fireEvent.click(screen.getByRole('button', { name: 'Remove' }))
+    await waitFor(() => expect(actions.some(({ action }) => action === 'remove-team-member')).toBe(true))
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    const confirmation = await screen.findByRole('alertdialog')
+    expect(within(confirmation).getByText(/Update downstream RBAC mappings/)).toBeTruthy()
+    fireEvent.click(within(confirmation).getByRole('button', { name: 'Delete Team' }))
+    await waitFor(() => expect(actions.some(({ action }) => action === 'remove-team')).toBe(true))
+  })
+
+  it('[spec: account-center/account-organization-teams] keeps Team management read-only for members and surfaces errors', async () => {
+    server.use(
+      ...organizationDetailHandlers('member'),
+      http.get(`${base}/api/auth/organization/list-teams`, () =>
+        json({ message: 'Teams unavailable.' }, { status: 500 }),
+      ),
+    )
+    await openOrganizationSection('teams')
+    expect((await screen.findByRole('alert')).textContent).toContain('Teams unavailable.')
+    expect(screen.queryByRole('button', { name: 'Create Team' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Rename' })).toBeNull()
+
+    server.use(
+      http.get(`${base}/api/auth/organization/list-teams`, () =>
+        json([{ id: 'team-1', name: 'read-only-team', organizationId: 'org-family' }]),
+      ),
+    )
+    await openOrganizationSection('teams')
+    expect((await screen.findAllByText('read-only-team')).length).toBeGreaterThan(0)
+    expect(screen.queryByRole('button', { name: 'Rename' })).toBeNull()
+  })
 })
 
-async function openOrganizationSection(section: 'members' | 'roles' | 'agents' | 'settings') {
+async function openOrganizationSection(section: 'members' | 'teams' | 'roles' | 'agents' | 'settings') {
   cleanup()
   renderWithClient(<AccountOrganizationDetailPage organizationId="org-family" section={section} />)
   await screen.findByRole('heading', { name: 'Family' })

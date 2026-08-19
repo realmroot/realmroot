@@ -194,6 +194,7 @@ describe('console authorization dashboard', () => {
             deviceLoginEnabled: true,
             ownerOrganizationId: 'org-1',
             redirectUris: ['com.example.runner:/callback'],
+            visibility: 'private',
           },
         },
       ]),

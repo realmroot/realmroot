@@ -15,6 +15,20 @@ Feature: Hosted authentication
     Then authentication and OIDC authorization continue
     And the inaccessible Resource Server contributes no scopes to the access token
 
+  @entrypoint:product-ui @journey:application-visibility-admission
+  Scenario: Application visibility controls Organization admission
+    Given a public Application and a private Organization-owned Application exist
+    When a Realmroot User authorizes the public Application
+    Then authorization can continue without inheriting the owner's Organization or Teams
+    When a User outside the owner Organization uses authorization code or device approval for the private Application
+    Then Realmroot rejects the flow before issuing a code or Token
+    When a workload credential from another Organization uses token exchange for the private Application
+    Then Realmroot rejects the exchange before issuing a Token
+    When an active member uses the private Application
+    Then authorization can continue with that one Organization as tenant context
+    When that member is removed before refreshing
+    Then the Refresh Token exchange fails with invalid_grant
+
   @entrypoint:product-ui @journey:resource-scope-consent-boundary
   Scenario: Consent delegates only scopes the user already holds
     Given an application requests one automatic scope and one assigned scope from a visible Resource Server

@@ -14,6 +14,8 @@ import {
   listAccountOrganizationInvitations,
   listAccountOrganizationRoles,
   listAccountOrganizations,
+  listAccountOrganizationTeamMembers,
+  listAccountOrganizationTeams,
   listAccountProviderConnections,
   listAccountProviderConnectors,
   listAccountSessions,
@@ -79,6 +81,24 @@ export function useAccountOrganizationRoles(organizationId: string, enabled = tr
     queryKey: accountQueryKeys.organizationRoles(organizationId),
     queryFn: () => listAccountOrganizationRoles(organizationId),
     enabled,
+    ...accountQueryOptions,
+  })
+}
+
+export function useAccountOrganizationTeams(organizationId: string, enabled = true) {
+  return useQuery({
+    queryKey: accountQueryKeys.organizationTeams(organizationId),
+    queryFn: () => listAccountOrganizationTeams(organizationId),
+    enabled,
+    ...accountQueryOptions,
+  })
+}
+
+export function useAccountOrganizationTeamMembers(teamId: string | null) {
+  return useQuery({
+    queryKey: accountQueryKeys.organizationTeamMembers(teamId ?? 'none'),
+    queryFn: () => listAccountOrganizationTeamMembers(teamId!),
+    enabled: Boolean(teamId),
     ...accountQueryOptions,
   })
 }

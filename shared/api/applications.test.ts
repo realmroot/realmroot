@@ -88,6 +88,7 @@ describe('application API pagination contracts', () => {
       clientId: 'client-1',
       clientType: 'confidential_web',
       public: false,
+      visibility: 'private',
       consentRequired: true,
       disabled: false,
       disabledReason: null,

@@ -172,6 +172,7 @@ function applicationWebhookData(application: ApplicationResponse) {
     iconUrl: application.iconUrl,
     clientId: application.clientId,
     clientType: application.clientType,
+    visibility: application.visibility,
     consentRequired: application.consentRequired,
     disabled: application.disabled,
     ownerOrganizationId: application.ownerOrganizationId,

@@ -440,7 +440,7 @@ describe('service.test 1', () => {
     ).resolves.toMatchObject({
       redirectUris: ['http://localhost:4173/oidc/callback'],
       allowedGrantTypes: ['authorization_code', 'refresh_token'],
-      oidcScopes: ['openid', 'profile', 'email', 'offline_access'],
+      oidcScopes: ['openid', 'profile', 'email', 'groups', 'offline_access'],
     })
     await expect(
       updateApplication(deps, issuer, created.id, {

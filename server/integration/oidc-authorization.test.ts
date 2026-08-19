@@ -3,9 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   baseURL,
   createHarness,
+  createUser,
   type Harness,
   platformOrganizationId,
   resourceOpenApiFetch,
+  signIn,
   signInAdmin,
 } from './harness'
 
@@ -60,6 +62,297 @@ describe('OIDC authorization over real D1', () => {
     harness = await createHarness()
   })
 
+  it('enforces private Application membership at authorization and refresh [spec: hosted-auth/application-visibility-admission]', async () => {
+    const adminCookie = await signInAdmin(harness)
+    const outsiderUserId = await createUser(harness, adminCookie, {
+      email: 'oidc-outsider@example.com',
+      username: 'oidc-outsider',
+      displayName: 'OIDC Outsider',
+      password: 'oidc-outsider-password-2026',
+    })
+    const outsiderCookie = await signIn(harness, 'oidc-outsider@example.com', 'oidc-outsider-password-2026')
+    const redirectUri = 'http://localhost/private-callback'
+    const createNativeApp = await harness.request('/api/applications', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie: adminCookie },
+      body: JSON.stringify({
+        name: 'Private Native Membership App',
+        clientType: 'public_native',
+        redirectUris: ['com.example.private:/callback'],
+        ownerOrganizationId: platformOrganizationId,
+        visibility: 'private',
+        deviceLoginEnabled: true,
+      }),
+    })
+    expect(createNativeApp.status, await createNativeApp.clone().text()).toBe(201)
+    const nativeApplication = (await createNativeApp.json()) as { clientId: string }
+    const deviceCode = await harness.request('/api/auth/device/code', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ client_id: nativeApplication.clientId, scope: 'openid groups' }),
+    })
+    expect(deviceCode.status, await deviceCode.clone().text()).toBe(200)
+    const { user_code: userCode } = (await deviceCode.json()) as { user_code: string }
+    const deviceApproval = await harness.request('/api/auth/device/approve', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie: outsiderCookie },
+      body: JSON.stringify({ userCode }),
+    })
+    expect(deviceApproval.status).toBe(403)
+    await expect(deviceApproval.json()).resolves.toMatchObject({ error: 'access_denied' })
+
+    const createApp = await harness.request('/api/applications', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie: adminCookie },
+      body: JSON.stringify({
+        name: 'Private Membership App',
+        clientType: 'confidential_web',
+        redirectUris: [redirectUri],
+        ownerOrganizationId: platformOrganizationId,
+        visibility: 'private',
+        consentRequired: false,
+      }),
+    })
+    expect(createApp.status, await createApp.clone().text()).toBe(201)
+    const application = (await createApp.json()) as { clientId: string; clientSecret: string }
+    const verifier = 'private-membership-pkce-verifier-0123456789abcdefghijklmnop'
+    const authorizeParams = new URLSearchParams({
+      response_type: 'code',
+      client_id: application.clientId,
+      redirect_uri: redirectUri,
+      scope: 'openid offline_access',
+      code_challenge: await pkceChallenge(verifier),
+      code_challenge_method: 'S256',
+    })
+
+    const denied = await harness.request(`/api/auth/oauth2/authorize?${authorizeParams}`, {
+      headers: { cookie: outsiderCookie },
+      redirect: 'manual',
+    })
+    expect(denied.status).not.toBe(302)
+
+    const addOutsider = await harness.request(`/api/organizations/${platformOrganizationId}/members`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie: adminCookie },
+      body: JSON.stringify({ userId: outsiderUserId, roles: ['member'] }),
+    })
+    expect(addOutsider.status, await addOutsider.clone().text()).toBe(201)
+    const outsiderMember = (await addOutsider.json()) as { id: string }
+
+    const authorized = await harness.request(`/api/auth/oauth2/authorize?${authorizeParams}`, {
+      headers: { cookie: outsiderCookie },
+      redirect: 'manual',
+    })
+    expect(authorized.status, await authorized.clone().text()).toBe(302)
+    const code = new URL(authorized.headers.get('location') ?? '', redirectUri).searchParams.get('code')
+    expect(code).toBeTruthy()
+    const token = await harness.request('/api/auth/oauth2/token', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+        authorization: `Basic ${btoa(`${application.clientId}:${application.clientSecret}`)}`,
+      },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        redirect_uri: redirectUri,
+        code: code ?? '',
+        code_verifier: verifier,
+      }),
+    })
+    expect(token.status, await token.clone().text()).toBe(200)
+    const tokenBody = (await token.json()) as { refresh_token: string }
+    const removeOutsider = await harness.request(
+      `/api/organizations/${platformOrganizationId}/members/${outsiderMember.id}`,
+      { method: 'DELETE', headers: { cookie: adminCookie } },
+    )
+    expect(removeOutsider.status, await removeOutsider.clone().text()).toBe(204)
+
+    const refresh = await harness.request('/api/auth/oauth2/token', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+        authorization: `Basic ${btoa(`${application.clientId}:${application.clientSecret}`)}`,
+      },
+      body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: tokenBody.refresh_token }),
+    })
+    expect(refresh.status).toBe(400)
+    await expect(refresh.json()).resolves.toMatchObject({ error: 'invalid_grant' })
+
+    const readdOutsider = await harness.request(`/api/organizations/${platformOrganizationId}/members`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie: adminCookie },
+      body: JSON.stringify({ userId: outsiderUserId, roles: ['member'] }),
+    })
+    expect(readdOutsider.status, await readdOutsider.clone().text()).toBe(201)
+    const staleRefresh = await harness.request('/api/auth/oauth2/token', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+        authorization: `Basic ${btoa(`${application.clientId}:${application.clientSecret}`)}`,
+      },
+      body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: tokenBody.refresh_token }),
+    })
+    expect(staleRefresh.status).toBe(400)
+    await expect(staleRefresh.json()).resolves.toMatchObject({ error: 'invalid_grant' })
+  })
+
+  it('issues public Application tokens to an external user without owner Organization claims', async () => {
+    const adminCookie = await signInAdmin(harness)
+    await createUser(harness, adminCookie, {
+      email: 'public-oidc-user@example.com',
+      username: 'public-oidc-user',
+      displayName: 'Public OIDC User',
+      password: 'public-oidc-user-password-2026',
+    })
+    const userCookie = await signIn(harness, 'public-oidc-user@example.com', 'public-oidc-user-password-2026')
+    const redirectUri = 'http://localhost/public-callback'
+    const createApp = await harness.request('/api/applications', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie: adminCookie },
+      body: JSON.stringify({
+        name: 'Public Membership App',
+        clientType: 'confidential_web',
+        redirectUris: [redirectUri],
+        ownerOrganizationId: platformOrganizationId,
+        visibility: 'public',
+        consentRequired: false,
+      }),
+    })
+    expect(createApp.status, await createApp.clone().text()).toBe(201)
+    const application = (await createApp.json()) as { clientId: string; clientSecret: string }
+    const verifier = 'public-membership-pkce-verifier-0123456789abcdefghijklmnop'
+    const authorizeParams = new URLSearchParams({
+      response_type: 'code',
+      client_id: application.clientId,
+      redirect_uri: redirectUri,
+      scope: 'openid profile email groups',
+      code_challenge: await pkceChallenge(verifier),
+      code_challenge_method: 'S256',
+    })
+    const authorized = await harness.request(`/api/auth/oauth2/authorize?${authorizeParams}`, {
+      headers: { cookie: userCookie },
+      redirect: 'manual',
+    })
+    expect(authorized.status, await authorized.clone().text()).toBe(302)
+    const code = new URL(authorized.headers.get('location') ?? '', redirectUri).searchParams.get('code')
+    const token = await harness.request('/api/auth/oauth2/token', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+        authorization: `Basic ${btoa(`${application.clientId}:${application.clientSecret}`)}`,
+      },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        redirect_uri: redirectUri,
+        code: code ?? '',
+        code_verifier: verifier,
+      }),
+    })
+    expect(token.status, await token.clone().text()).toBe(200)
+    const body = (await token.json()) as { access_token: string; id_token: string }
+    for (const claims of [decodeJwtPayload(body.access_token), decodeJwtPayload(body.id_token)]) {
+      expect(claims).not.toHaveProperty('urn:realmroot:params:oauth:org')
+      expect(claims).not.toHaveProperty('groups')
+    }
+  })
+
+  it('emits consistent Team groups for shared Kubernetes and Argo CD Applications', async () => {
+    const cookie = await signInAdmin(harness)
+    const admin = await env.DB.prepare('SELECT user_id AS userId FROM member WHERE organization_id = ? LIMIT 1')
+      .bind(platformOrganizationId)
+      .first<{ userId: string }>()
+    expect(admin?.userId).toBeTruthy()
+    await env.DB.prepare('INSERT INTO team (id, name, organization_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)')
+      .bind('team-platform-operators', 'platform-operators', platformOrganizationId, Date.now(), Date.now())
+      .run()
+    await env.DB.prepare('INSERT INTO team_member (id, team_id, user_id, created_at) VALUES (?, ?, ?, ?)')
+      .bind('team-member-platform-operator', 'team-platform-operators', admin!.userId, Date.now())
+      .run()
+
+    const applications = [] as Array<{
+      clientId: string
+      clientSecret?: string
+      redirectUri: string
+    }>
+    for (const input of [
+      {
+        name: 'Shared Kubernetes',
+        clientType: 'public_native',
+        redirectUris: ['com.example.kubectl:/callback'],
+      },
+      {
+        name: 'Shared Argo CD',
+        clientType: 'confidential_web',
+        redirectUris: ['https://argo-a.example.com/auth/callback', 'https://argo-b.example.com/auth/callback'],
+      },
+    ]) {
+      const response = await harness.request('/api/applications', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', cookie },
+        body: JSON.stringify({
+          ...input,
+          ownerOrganizationId: platformOrganizationId,
+          visibility: 'private',
+          consentRequired: false,
+        }),
+      })
+      expect(response.status, await response.clone().text()).toBe(201)
+      const application = (await response.json()) as {
+        clientId: string
+        clientSecret?: string
+        redirectUris: string[]
+      }
+      expect(application.redirectUris).toEqual(input.redirectUris)
+      for (const redirectUri of application.redirectUris) {
+        applications.push({
+          clientId: application.clientId,
+          clientSecret: application.clientSecret,
+          redirectUri,
+        })
+      }
+    }
+
+    const identityClaims: Record<string, unknown>[] = []
+    for (const [index, application] of applications.entries()) {
+      const verifier = `shared-application-verifier-${index}-0123456789abcdefghijklmnop`
+      const authorizeParams = new URLSearchParams({
+        response_type: 'code',
+        client_id: application.clientId,
+        redirect_uri: application.redirectUri,
+        scope: 'openid profile email groups',
+        code_challenge: await pkceChallenge(verifier),
+        code_challenge_method: 'S256',
+      })
+      const authorized = await harness.request(`/api/auth/oauth2/authorize?${authorizeParams}`, {
+        headers: { cookie },
+        redirect: 'manual',
+      })
+      expect(authorized.status, await authorized.clone().text()).toBe(302)
+      const code = new URL(authorized.headers.get('location') ?? '', application.redirectUri).searchParams.get('code')
+      const headers: Record<string, string> = { 'content-type': 'application/x-www-form-urlencoded' }
+      if (application.clientSecret) {
+        headers.authorization = `Basic ${btoa(`${application.clientId}:${application.clientSecret}`)}`
+      }
+      const token = await harness.request('/api/auth/oauth2/token', {
+        method: 'POST',
+        headers,
+        body: new URLSearchParams({
+          grant_type: 'authorization_code',
+          client_id: application.clientId,
+          redirect_uri: application.redirectUri,
+          code: code ?? '',
+          code_verifier: verifier,
+        }),
+      })
+      expect(token.status, await token.clone().text()).toBe(200)
+      identityClaims.push(decodeJwtPayload(((await token.json()) as { id_token: string }).id_token))
+    }
+    for (const claims of identityClaims) {
+      expect(claims['urn:realmroot:params:oauth:org']).toBe(platformOrganizationId)
+      expect(claims.groups).toEqual(['platform-operators'])
+    }
+  })
+
   it('preserves resource and issues a verifiable RS256 identity token [spec: hosted-auth/oidc-resource-authorization] [spec: hosted-auth/oidc-native-token-verification]', async () => {
     await env.DB.prepare(
       `INSERT INTO jwks (id, public_key, private_key, alg, crv, created_at, expires_at)
@@ -100,6 +393,7 @@ describe('OIDC authorization over real D1', () => {
         clientType: 'public_spa',
         redirectUris: [redirectUri],
         ownerOrganizationId: platformOrganizationId,
+        visibility: 'public',
         consentRequired: false,
       }),
     })
@@ -155,6 +449,7 @@ describe('OIDC authorization over real D1', () => {
 
     const header = decodeJwtHeader(tokenBody.id_token)
     expect(header).toMatchObject({ alg: 'RS256', kid: expect.any(String) })
+    expect(decodeJwtPayload(tokenBody.id_token)).not.toHaveProperty('urn:realmroot:params:oauth:org')
 
     const jwksResponse = await harness.request('/api/auth/jwks')
     expect(jwksResponse.status, await jwksResponse.clone().text()).toBe(200)
@@ -347,6 +642,16 @@ describe('OIDC authorization over real D1', () => {
 
   it('expires the provider browser session during RP-initiated logout [spec: hosted-auth/oidc-provider-logout]', async () => {
     const cookie = await signInAdmin(harness)
+    const admin = await env.DB.prepare('SELECT user_id AS userId FROM member WHERE organization_id = ? LIMIT 1')
+      .bind(platformOrganizationId)
+      .first<{ userId: string }>()
+    expect(admin?.userId).toBeTruthy()
+    await env.DB.prepare('INSERT INTO team (id, name, organization_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)')
+      .bind('team-platform-admins', 'platform-admins', platformOrganizationId, Date.now(), Date.now())
+      .run()
+    await env.DB.prepare('INSERT INTO team_member (id, team_id, user_id, created_at) VALUES (?, ?, ?, ?)')
+      .bind('team-member-platform-admin', 'team-platform-admins', admin!.userId, Date.now())
+      .run()
     const redirectUri = 'http://localhost/callback'
     const postLogoutRedirectUri = 'http://localhost/signed-out'
     const verifier = 'logout-flow-pkce-verifier-0123456789abcdefghijklmnop'
@@ -369,7 +674,7 @@ describe('OIDC authorization over real D1', () => {
       response_type: 'code',
       client_id: application.clientId,
       redirect_uri: redirectUri,
-      scope: 'openid profile email',
+      scope: 'openid profile email groups',
       state: 'logout-state',
       code_challenge: await pkceChallenge(verifier),
       code_challenge_method: 'S256',
@@ -406,9 +711,12 @@ describe('OIDC authorization over real D1', () => {
       client_id: application.clientId,
       jti: expect.any(String),
     })
-    const identityOnlyClaims = ['authorization', 'roles', 'groups', 'application_id', 'organization_id']
+    const identityOnlyClaims = ['authorization', 'roles', 'application_id', 'organization_id']
     const idPayload = decodeJwtPayload(idToken)
     for (const claim of identityOnlyClaims) expect(idPayload).not.toHaveProperty(claim)
+    expect(idPayload['urn:realmroot:params:oauth:org']).toBe(platformOrganizationId)
+    expect(idPayload.groups).toEqual(['platform-admins'])
+    expect(Number(idPayload.exp) - Number(idPayload.iat)).toBe(10 * 60)
     expect(idPayload).not.toHaveProperty('urn:realmroot:params:oauth:tenant')
 
     const userInfo = await harness.request('/api/auth/oauth2/userinfo', {
@@ -417,7 +725,7 @@ describe('OIDC authorization over real D1', () => {
     expect(userInfo.status, await userInfo.clone().text()).toBe(200)
     const userInfoBody = (await userInfo.json()) as Record<string, unknown>
     expect(userInfoBody).toMatchObject({ sub: idPayload.sub })
-    for (const claim of identityOnlyClaims) expect(userInfoBody).not.toHaveProperty(claim)
+    for (const claim of [...identityOnlyClaims, 'groups']) expect(userInfoBody).not.toHaveProperty(claim)
     expect(userInfoBody).not.toHaveProperty('urn:realmroot:params:oauth:tenant')
 
     const introspection = await harness.request('/api/auth/oauth2/introspect', {

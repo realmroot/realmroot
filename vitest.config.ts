@@ -34,6 +34,7 @@ export default defineConfig({
         'src/lib/**',
       ],
       exclude: [
+        '**/.DS_Store',
         '**/*.test.{ts,tsx}',
         '**/*.test-utils.{ts,tsx}', // co-located test helpers
         '**/*.test-fixtures.{ts,tsx}',
