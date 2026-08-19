@@ -1252,9 +1252,22 @@ function OrganizationTeamsPanel({
   const [editingTeam, setEditingTeam] = useState<AccountOrganizationTeam | 'create' | null>(null)
   const [managedTeam, setManagedTeam] = useState<AccountOrganizationTeam | null>(null)
   const [deleteTeam, setDeleteTeam] = useState<AccountOrganizationTeam | null>(null)
-  const teamMembersQuery = useAccountOrganizationTeamMembers(organizationId, managedTeam?.id ?? null)
-  const teamMemberIds = new Set((teamMembersQuery.data ?? []).map((member) => member.userId))
+  const [memberToAdd, setMemberToAdd] = useState('')
+  const [teamMembersOffset, setTeamMembersOffset] = useState(0)
+  const teamMembersPageSize = 20
+  const teamMembersQuery = useAccountOrganizationTeamMembers(organizationId, managedTeam?.id ?? null, {
+    limit: teamMembersPageSize,
+    offset: teamMembersOffset,
+  })
+  const memberByUserId = new Map(members.map((member) => [member.userId, member]))
+  const teamMemberships = teamMembersQuery.data?.items ?? []
+  const teamMembersPagination = teamMembersQuery.data?.pagination
   const invalidateTeams = [accountQueryKeys.organizationTeams(organizationId)] as const
+  const closeMemberManagement = () => {
+    setManagedTeam(null)
+    setMemberToAdd('')
+    setTeamMembersOffset(0)
+  }
 
   return (
     <AccountSectionContent surface>
@@ -1279,7 +1292,15 @@ function OrganizationTeamsPanel({
               action={
                 canManage ? (
                   <div className="flex flex-wrap gap-2">
-                    <Button onClick={() => setManagedTeam(team)} size="sm" variant="outline">
+                    <Button
+                      onClick={() => {
+                        setManagedTeam(team)
+                        setMemberToAdd('')
+                        setTeamMembersOffset(0)
+                      }}
+                      size="sm"
+                      variant="outline"
+                    >
                       {tt('Members')}
                     </Button>
                     <Button onClick={() => setEditingTeam(team)} size="sm" variant="outline">
@@ -1329,49 +1350,149 @@ function OrganizationTeamsPanel({
         }}
         team={editingTeam}
       />
-      <Dialog onOpenChange={(open) => !open && setManagedTeam(null)} open={managedTeam !== null}>
+      <Dialog onOpenChange={(open) => !open && closeMemberManagement()} open={managedTeam !== null}>
         <DialogContent className="sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>{tt('Manage {{name}} members', { name: managedTeam?.name ?? '' })}</DialogTitle>
             <DialogDescription>{tt('Only Organization members can be added to this OIDC group.')}</DialogDescription>
           </DialogHeader>
-          <div className="grid max-h-[55vh] gap-2 overflow-y-auto p-4">
-            {members.map((member) => {
-              const included = teamMemberIds.has(member.userId)
+          <form
+            className="grid gap-3 p-4 pb-0 sm:grid-cols-[1fr_auto] sm:items-end"
+            onSubmit={(event) => {
+              event.preventDefault()
+              const team = managedTeam
+              if (!team || !memberToAdd) return
+              let failed = false
+              void mutate(
+                'Team member added.',
+                () => addAccountOrganizationTeamMember(organizationId, team.id, memberToAdd),
+                {
+                  invalidate: [accountQueryKeys.organizationTeamMembers(team.id)],
+                  onError: () => {
+                    failed = true
+                  },
+                },
+              ).then(() => {
+                if (!failed) {
+                  setMemberToAdd('')
+                  setTeamMembersOffset(0)
+                }
+              })
+            }}
+          >
+            <Field label={tt('Organization member')}>
+              <SelectInput
+                disabled={members.length === 0}
+                onChange={(event) => setMemberToAdd(event.target.value)}
+                value={memberToAdd}
+              >
+                <option disabled value="">
+                  {tt('Select a member')}
+                </option>
+                {members.map((member) => (
+                  <option key={member.userId} value={member.userId}>
+                    {member.user.name} ({member.user.email})
+                  </option>
+                ))}
+              </SelectInput>
+            </Field>
+            <Button disabled={!memberToAdd} type="submit">
+              {tt('Add member')}
+            </Button>
+          </form>
+          <div className="grid max-h-[42vh] gap-2 overflow-y-auto p-4">
+            {teamMembersQuery.isLoading ? (
+              <p className="text-sm text-muted-foreground">{tt('Loading Team members…')}</p>
+            ) : null}
+            {teamMembersQuery.error ? (
+              <p className="text-sm text-destructive" role="alert">
+                {teamMembersQuery.error.message}
+              </p>
+            ) : null}
+            {!teamMembersQuery.isLoading && !teamMembersQuery.error && teamMemberships.length === 0 ? (
+              <p className="text-sm text-muted-foreground">{tt('This Team has no members.')}</p>
+            ) : null}
+            {teamMemberships.map((membership) => {
+              const member = memberByUserId.get(membership.userId)
               return (
-                <div className="flex items-center justify-between gap-3 rounded-lg border p-3" key={member.userId}>
+                <div className="flex items-center justify-between gap-3 rounded-lg border p-3" key={membership.id}>
                   <span className="min-w-0">
-                    <strong className="block truncate text-sm">{member.user.name}</strong>
-                    <small className="text-muted-foreground">{member.user.email}</small>
+                    <strong className="block truncate text-sm">{member?.user.name ?? membership.userId}</strong>
+                    {member ? <small className="text-muted-foreground">{member.user.email}</small> : null}
                   </span>
                   <Button
-                    disabled={teamMembersQuery.isLoading}
+                    disabled={teamMembersQuery.isPlaceholderData}
                     onClick={() => {
                       const team = managedTeam
                       if (!team) return
+                      const moveToPreviousPage = teamMemberships.length === 1 && teamMembersOffset > 0
+                      let failed = false
                       void mutate(
-                        included ? 'Team member removed.' : 'Team member added.',
-                        async () => {
-                          if (included) {
-                            await removeAccountOrganizationTeamMember(organizationId, team.id, member.userId)
-                          } else {
-                            await addAccountOrganizationTeamMember(organizationId, team.id, member.userId)
-                          }
+                        'Team member removed.',
+                        () => removeAccountOrganizationTeamMember(organizationId, team.id, membership.userId),
+                        {
+                          invalidate: [accountQueryKeys.organizationTeamMembers(team.id)],
+                          onError: () => {
+                            failed = true
+                          },
                         },
-                        { invalidate: [accountQueryKeys.organizationTeamMembers(team.id)] },
-                      )
+                      ).then(() => {
+                        if (!failed && moveToPreviousPage) {
+                          setTeamMembersOffset(Math.max(0, teamMembersOffset - teamMembersPageSize))
+                        }
+                      })
                     }}
                     size="sm"
-                    variant={included ? 'outline' : 'secondary'}
+                    variant="outline"
                   >
-                    {included ? tt('Remove') : tt('Add')}
+                    {tt('Remove')}
                   </Button>
                 </div>
               )
             })}
+            {teamMembersPagination && teamMembersPagination.total > teamMembersPagination.limit ? (
+              <div className="flex items-center justify-between gap-3 pt-2">
+                <p className="text-xs text-muted-foreground">
+                  {tt('{{start}}–{{end}} of {{total}}', {
+                    start: teamMembersPagination.offset + 1,
+                    end: Math.min(
+                      teamMembersPagination.offset + teamMembersPagination.limit,
+                      teamMembersPagination.total,
+                    ),
+                    total: teamMembersPagination.total,
+                  })}
+                </p>
+                <div className="flex gap-2">
+                  <Button
+                    disabled={teamMembersQuery.isPlaceholderData || teamMembersPagination.offset === 0}
+                    onClick={() =>
+                      setTeamMembersOffset(Math.max(0, teamMembersPagination.offset - teamMembersPagination.limit))
+                    }
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    {tt('Previous')}
+                  </Button>
+                  <Button
+                    disabled={
+                      teamMembersQuery.isPlaceholderData ||
+                      !teamMembersPagination.hasMore ||
+                      teamMembersPagination.nextOffset === null
+                    }
+                    onClick={() => setTeamMembersOffset(teamMembersPagination.offset + teamMembersPagination.limit)}
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    {tt('Next')}
+                  </Button>
+                </div>
+              </div>
+            ) : null}
           </div>
           <DialogFooter>
-            <Button onClick={() => setManagedTeam(null)} variant="outline">
+            <Button onClick={closeMemberManagement} variant="outline">
               {tt('Done')}
             </Button>
           </DialogFooter>

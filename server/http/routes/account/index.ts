@@ -44,6 +44,7 @@ import type { ConfigzAccountCenter } from '@server/usecases/ports'
 import {
   accountEmailChangeConfirmSchema,
   accountEmailChangeSchema,
+  accountOrganizationTeamMembersResponseSchema,
   accountPasswordChangeSchema,
   accountProfileUpdateSchema,
   accountProviderConnectionsResponseSchema,
@@ -443,12 +444,14 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
 
   app.get('/organizations/:organizationId/teams/:teamId/members', async (c) => {
     return c.json(
-      await listAccountOrganizationTeamMembers(
-        getDeps(c),
-        c.req.param('organizationId'),
-        c.req.param('teamId'),
-        getPrincipal(c).user!.id,
-        readQuery(c, paginationQuerySchema),
+      accountOrganizationTeamMembersResponseSchema.parse(
+        await listAccountOrganizationTeamMembers(
+          getDeps(c),
+          c.req.param('organizationId'),
+          c.req.param('teamId'),
+          getPrincipal(c).user!.id,
+          readQuery(c, paginationQuerySchema),
+        ),
       ),
     )
   })

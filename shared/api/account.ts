@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import type { Agent } from './agent-api'
-import type { PaginationMetadata } from './pagination'
+import { type PaginationMetadata, paginationMetadataSchema } from './pagination'
 import { accountProfileLinkSchema } from './public-profiles'
 import { usernameSchema } from './users'
 
@@ -143,17 +143,20 @@ export type AccountOrganizationAgentsResponse = {
   pagination: PaginationMetadata
 }
 
-export type AccountOrganizationTeamMember = {
-  id: string
-  teamId: string
-  userId: string
-  createdAt: string
-}
+export const accountOrganizationTeamMemberSchema = z.object({
+  id: z.string(),
+  teamId: z.string(),
+  userId: z.string(),
+  createdAt: z.iso.datetime(),
+})
 
-export type AccountOrganizationTeamMembersResponse = {
-  items: AccountOrganizationTeamMember[]
-  pagination: PaginationMetadata
-}
+export const accountOrganizationTeamMembersResponseSchema = z.object({
+  items: z.array(accountOrganizationTeamMemberSchema),
+  pagination: paginationMetadataSchema,
+})
+
+export type AccountOrganizationTeamMember = z.infer<typeof accountOrganizationTeamMemberSchema>
+export type AccountOrganizationTeamMembersResponse = z.infer<typeof accountOrganizationTeamMembersResponseSchema>
 
 export type LinkedAccountsResponse = {
   items: Array<{

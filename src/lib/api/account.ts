@@ -2,12 +2,12 @@ import type {
   AccountEmailChangeConfirmInput,
   AccountEmailChangeInput,
   AccountOrganizationAgentsResponse,
-  AccountOrganizationTeamMembersResponse,
   AccountPasswordChangeInput,
   AccountProfileUpdateInput,
   AccountWalletAddressLinkInput,
 } from '@shared/api/account'
 import {
+  accountOrganizationTeamMembersResponseSchema,
   accountProviderConnectionsResponseSchema,
   accountProviderConnectorsResponseSchema,
   providerConnectionIntentSchema,
@@ -25,6 +25,7 @@ import type {
 } from '@shared/api/agent-api'
 import type { AgentApprovalPreview } from '@shared/api/agents'
 import type { CreateInvitationRequest, InvitationResponse, ListRolesResponse } from '@shared/api/authorization'
+import type { PaginationInput } from '@shared/api/pagination'
 import type {
   SecurityPasskeyRegistrationOptionsInput,
   SecurityTotpDisableInput,
@@ -149,20 +150,19 @@ export async function deleteAccountOrganizationTeam(organizationId: string, team
   return readAuthClientResult(await authClient.organization.removeTeam({ organizationId, teamId }))
 }
 
-export async function listAccountOrganizationTeamMembers(organizationId: string, teamId: string) {
-  const members: AccountOrganizationTeamMembersResponse['items'] = []
-  let nextOffset: number | null = 0
-  while (nextOffset !== null) {
-    const response: AccountOrganizationTeamMembersResponse = await readRpcResponse(
+export async function listAccountOrganizationTeamMembers(
+  organizationId: string,
+  teamId: string,
+  pagination: PaginationInput,
+) {
+  return accountOrganizationTeamMembersResponseSchema.parse(
+    await readRpcResponse(
       apiClient.api.account.organizations[':organizationId'].teams[':teamId'].members.$get({
         param: { organizationId, teamId },
-        query: { limit: '100', offset: String(nextOffset) },
+        query: { limit: String(pagination.limit), offset: String(pagination.offset) },
       }),
-    )
-    members.push(...response.items)
-    nextOffset = response.pagination.nextOffset
-  }
-  return members
+    ),
+  )
 }
 
 export async function addAccountOrganizationTeamMember(organizationId: string, teamId: string, userId: string) {

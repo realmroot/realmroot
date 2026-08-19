@@ -698,7 +698,8 @@ describe('planned Account Center journeys', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Members' }))
     expect(await screen.findByRole('heading', { name: 'Manage platform-admins members' })).toBeTruthy()
-    fireEvent.click(await screen.findByRole('button', { name: 'Add' }))
+    fireEvent.change(await screen.findByLabelText('Organization member'), { target: { value: 'user-2' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add member' }))
     await waitFor(() => expect(actions.some(({ action }) => action === 'add-team-member')).toBe(true))
     fireEvent.click(screen.getByRole('button', { name: 'Remove' }))
     await waitFor(() => expect(actions.some(({ action }) => action === 'remove-team-member')).toBe(true))
@@ -709,6 +710,93 @@ describe('planned Account Center journeys', () => {
     expect(within(confirmation).getByText(/Update downstream RBAC mappings/)).toBeTruthy()
     fireEvent.click(within(confirmation).getByRole('button', { name: 'Delete Team' }))
     await waitFor(() => expect(actions.some(({ action }) => action === 'remove-team')).toBe(true))
+  })
+
+  it('[spec: account-center/account-organization-teams] navigates Team members one server page at a time', async () => {
+    const requestedOffsets: number[] = []
+    server.use(
+      ...organizationDetailHandlers('owner'),
+      http.get(`${base}/api/auth/organization/list-teams`, () =>
+        json([{ id: 'team-1', name: 'platform-admins', organizationId: 'org-family' }]),
+      ),
+      http.get(`${base}/api/account/organizations/org-family/teams/team-1/members`, ({ request }) => {
+        const offset = Number(new URL(request.url).searchParams.get('offset'))
+        requestedOffsets.push(offset)
+        const count = offset === 0 ? 20 : 1
+        return json({
+          items: Array.from({ length: count }, (_, index) => ({
+            id: `team-member-${offset + index + 1}`,
+            teamId: 'team-1',
+            userId: `team-user-${offset + index + 1}`,
+            createdAt: '2026-08-01T00:00:00.000Z',
+          })),
+          pagination: {
+            limit: 20,
+            offset,
+            total: 21,
+            hasMore: offset === 0,
+            nextOffset: offset === 0 ? 20 : null,
+          },
+        })
+      }),
+      http.post(`${base}/api/auth/organization/remove-team-member`, () => json({ success: true })),
+    )
+
+    await openOrganizationSection('teams')
+    fireEvent.click(await screen.findByRole('button', { name: 'Members' }))
+    expect(await screen.findByText('1–20 of 21')).toBeTruthy()
+    expect(requestedOffsets).toEqual([0])
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }))
+    expect(await screen.findByText('21–21 of 21')).toBeTruthy()
+    expect(requestedOffsets).toEqual([0, 20])
+
+    fireEvent.click(screen.getByRole('button', { name: 'Previous' }))
+    expect(await screen.findByText('1–20 of 21')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }))
+    expect(await screen.findByText('21–21 of 21')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remove' }))
+    expect(await screen.findByText('1–20 of 21')).toBeTruthy()
+  })
+
+  it('[spec: account-center/account-organization-teams] renders an empty Team membership page', async () => {
+    server.use(
+      ...organizationDetailHandlers('owner'),
+      http.get(`${base}/api/auth/organization/list-teams`, () =>
+        json([{ id: 'team-1', name: 'platform-admins', organizationId: 'org-family' }]),
+      ),
+      http.get(`${base}/api/account/organizations/org-family/teams/team-1/members`, () =>
+        json({
+          items: [],
+          pagination: { limit: 20, offset: 0, total: 0, hasMore: false, nextOffset: null },
+        }),
+      ),
+    )
+
+    await openOrganizationSection('teams')
+    fireEvent.click(await screen.findByRole('button', { name: 'Members' }))
+    expect(await screen.findByText('This Team has no members.')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Previous' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Next' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Manage platform-admins members' })).toBeNull())
+  })
+
+  it('[spec: account-center/account-organization-teams] surfaces Team membership page failures', async () => {
+    server.use(
+      ...organizationDetailHandlers('owner'),
+      http.get(`${base}/api/auth/organization/list-teams`, () =>
+        json([{ id: 'team-1', name: 'platform-admins', organizationId: 'org-family' }]),
+      ),
+      http.get(`${base}/api/account/organizations/org-family/teams/team-1/members`, () =>
+        json({ message: 'Team members unavailable.' }, { status: 500 }),
+      ),
+    )
+
+    await openOrganizationSection('teams')
+    fireEvent.click(await screen.findByRole('button', { name: 'Members' }))
+    expect((await screen.findByRole('alert')).textContent).toContain('Team members unavailable.')
   })
 
   it('[spec: account-center/account-organization-teams] keeps Team management read-only for members and surfaces errors', async () => {

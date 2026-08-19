@@ -206,6 +206,7 @@ Feature: Account Center
     Then the Team name must use lowercase kebab-case and be unique within that Organization
     And the administrator manages Team membership from a dialog or drawer
     And the administrator can inspect Team membership without joining that Team
+    And Team membership is loaded and navigated one bounded page at a time
     And a rename warns that downstream RBAC mappings must be updated
     And another Organization may use the same Team name
 
