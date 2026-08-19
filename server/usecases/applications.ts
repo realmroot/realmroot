@@ -147,8 +147,7 @@ export async function updateApplication(
       ? normalizePostLogoutRedirectUris(application.clientType, input.postLogoutRedirectUris)
       : undefined
   const corsOrigins = input.corsOrigins !== undefined ? normalizeCorsOrigins(input.corsOrigins) : undefined
-  if (input.ownerOrganizationId) await requireActiveOrganization(deps, input.ownerOrganizationId)
-  const ownerOrganizationId = input.ownerOrganizationId ?? application.ownerOrganizationId
+  const ownerOrganizationId = application.ownerOrganizationId
   const platformOrganization = await requirePlatformOrganization(deps)
   const platformOwned = ownerOrganizationId === platformOrganization.id
   if (input.consentRequired !== undefined && !platformOwned) {
@@ -172,7 +171,6 @@ export async function updateApplication(
     consentRequired: platformOwned ? input.consentRequired : application.consentRequired ? undefined : true,
     disabled: input.disabled,
     disabledReason: input.disabledReason,
-    ownerOrganizationId: input.ownerOrganizationId,
     visibility: input.visibility,
     redirectUris: settings?.redirectUris,
     postLogoutRedirectUris,

@@ -22,7 +22,7 @@ import { deviceAuthorization, genericOAuth, jwt, oneTap, phoneNumber, siwe, twoF
 import { emailOTP } from 'better-auth/plugins/email-otp'
 import { organization } from 'better-auth/plugins/organization'
 import { username } from 'better-auth/plugins/username'
-import { and, eq, inArray, isNull, ne } from 'drizzle-orm'
+import { and, eq, ne } from 'drizzle-orm'
 import { verifyMessage } from 'viem'
 import { parseSiweMessage, validateSiweMessage } from 'viem/siwe'
 import { deviceCodeGrantType, userConfigurableApplicationScopes } from '../shared/api/applications'
@@ -446,42 +446,6 @@ export function createAuth(
           },
         },
         organizationHooks: {
-          beforeRemoveMember: async ({ member, organization }) => {
-            const now = new Date()
-            const privateApplicationClientIds = db
-              .select({ clientId: schema.application.oauthClientId })
-              .from(schema.application)
-              .where(
-                and(
-                  eq(schema.application.ownerOrganizationId, organization.id),
-                  eq(schema.application.visibility, 'private'),
-                ),
-              )
-            const organizationTeamIds = db
-              .select({ teamId: schema.team.id })
-              .from(schema.team)
-              .where(eq(schema.team.organizationId, organization.id))
-            await db.batch([
-              db
-                .delete(schema.teamMember)
-                .where(
-                  and(
-                    eq(schema.teamMember.userId, member.userId),
-                    inArray(schema.teamMember.teamId, organizationTeamIds),
-                  ),
-                ),
-              db
-                .update(schema.oauthRefreshToken)
-                .set({ revoked: now })
-                .where(
-                  and(
-                    eq(schema.oauthRefreshToken.userId, member.userId),
-                    inArray(schema.oauthRefreshToken.clientId, privateApplicationClientIds),
-                    isNull(schema.oauthRefreshToken.revoked),
-                  ),
-                ),
-            ])
-          },
           beforeCreateTeam: async ({ team }) => {
             await validateTeamName(db, team.organizationId, team.name)
           },
@@ -525,7 +489,7 @@ export function createAuth(
             if (!(await applicationUserHasAccess(deps, application, user.id))) {
               throw new APIError('FORBIDDEN', {
                 error: 'access_denied',
-                error_description: 'The user is not an active member of the Application Organization.',
+                error_description: 'The Application is unavailable to this user.',
               })
             }
             if (!application.consentRequired) return false
@@ -597,14 +561,14 @@ async function enforceDeviceApprovalAccess(
     .limit(1)
   if (!record?.clientId) return null
   const application = await applications.findByClientId(record.clientId)
-  if (!application || application.visibility === 'public') return null
+  if (!application) return null
   const session = await getSession(request.headers)
   if (!session?.user.id) return null
   if (await applicationUserHasAccess(deps, application, session.user.id)) return null
   return Response.json(
     {
       error: 'access_denied',
-      error_description: 'The user is not an active member of the Application Organization.',
+      error_description: 'The Application is unavailable to this user.',
     },
     { status: 403 },
   )

@@ -1,0 +1,8 @@
+[
+  {
+    "method": "PATCH",
+    "path": "/applications/{applicationId}",
+    "operationId": "updateApplication",
+    "semanticHash": "cb6b2903a931fc6359e340ddad8db50dfb6e5cbdc3b867b4b550aeb54112791e"
+  }
+]

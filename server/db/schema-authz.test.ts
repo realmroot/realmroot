@@ -234,8 +234,8 @@ describe('schema.test 2', () => {
       expect.arrayContaining(['logoAsset', 'members', 'invitations', 'applications', 'teams']),
     )
     expect(relationKeys(organizationMemberRelations)).toEqual(expect.arrayContaining(['organization', 'user']))
-    expect(relationKeys(organizationInvitationRelations)).toEqual(['organization', 'inviter', 'team'])
-    expect(relationKeys(organizationTeamRelations)).toEqual(['organization', 'members', 'invitations'])
+    expect(relationKeys(organizationInvitationRelations)).toEqual(['organization', 'inviter'])
+    expect(relationKeys(organizationTeamRelations)).toEqual(['organization', 'members'])
     expect(relationKeys(organizationTeamMemberRelations)).toEqual(['team', 'user'])
     expect(relationKeys(applicationRelations)).toEqual(
       expect.arrayContaining([

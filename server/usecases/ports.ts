@@ -1271,7 +1271,7 @@ export interface ApplicationRepository {
   findByClientId(clientId: string): Promise<ApplicationAggregate | null>
   update(
     id: string,
-    patch: Partial<Omit<ApplicationAggregate, 'id' | 'clientId' | 'createdAt' | 'updatedAt'>>,
+    patch: Partial<Omit<ApplicationAggregate, 'id' | 'clientId' | 'ownerOrganizationId' | 'createdAt' | 'updatedAt'>>,
   ): Promise<ApplicationUpdateResult>
   delete(id: string): Promise<void>
   listSecrets(

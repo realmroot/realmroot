@@ -27,4 +27,28 @@ UPDATE `application`
 SET `oidc_scopes` = json_insert(`oidc_scopes`, '$[#]', 'groups')
 WHERE `oauth_client_id` IN (SELECT `client_id` FROM `oauth_client` WHERE `type` <> 'machine')
   AND NOT EXISTS (SELECT 1 FROM json_each(`application`.`oidc_scopes`) WHERE value = 'groups');--> statement-breakpoint
-ALTER TABLE `invitation` ADD `team_id` text REFERENCES team(id) ON DELETE SET NULL;
+UPDATE `oauth_client`
+SET `scopes` = json_insert(coalesce(`scopes`, '[]'), '$[#]', 'groups')
+WHERE `type` <> 'machine'
+  AND NOT EXISTS (SELECT 1 FROM json_each(coalesce(`oauth_client`.`scopes`, '[]')) WHERE value = 'groups');--> statement-breakpoint
+ALTER TABLE `invitation` ADD `team_id` text;--> statement-breakpoint
+CREATE TRIGGER `member_organization_access_cleanup`
+AFTER DELETE ON `member`
+FOR EACH ROW
+BEGIN
+	DELETE FROM `team_member`
+	WHERE `user_id` = OLD.`user_id`
+	  AND `team_id` IN (SELECT `id` FROM `team` WHERE `organization_id` = OLD.`organization_id`);
+	UPDATE `oauth_refresh_token`
+	SET `revoked` = cast(unixepoch('subsecond') * 1000 as integer)
+	WHERE `user_id` = OLD.`user_id`
+	  AND `revoked` IS NULL
+	  AND `client_id` IN (
+		SELECT `oauth_client_id`
+		FROM `application`
+		WHERE `owner_organization_id` = OLD.`organization_id` AND `visibility` = 'private'
+	  );
+	UPDATE `session`
+	SET `active_organization_id` = NULL, `active_team_id` = NULL
+	WHERE `user_id` = OLD.`user_id` AND `active_organization_id` = OLD.`organization_id`;
+END;

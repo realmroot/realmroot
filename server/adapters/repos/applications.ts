@@ -13,9 +13,7 @@ import {
   oauthClient,
   oauthConsent,
   oauthRefreshToken,
-  tokenExchangeRefreshToken,
   user,
-  verification,
 } from '../../db/schema'
 import {
   serializeList,
@@ -120,7 +118,6 @@ export function createDrizzleApplicationRepository(db: Database, ids: Identifier
         ...(patch.name !== undefined ? { name: patch.name } : {}),
         ...(patch.description !== undefined ? { description: patch.description } : {}),
         ...(patch.homepageUrl !== undefined ? { homepageUrl: patch.homepageUrl } : {}),
-        ...(patch.ownerOrganizationId !== undefined ? { ownerOrganizationId: patch.ownerOrganizationId } : {}),
         ...(patch.visibility !== undefined ? { visibility: patch.visibility } : {}),
         ...(patch.oidcScopes !== undefined ? { oidcScopes: patch.oidcScopes } : {}),
         ...(patch.resourceScopes !== undefined ? { resourceScopes: patch.resourceScopes } : {}),
@@ -189,36 +186,6 @@ export function createDrizzleApplicationRepository(db: Database, ids: Identifier
           .set(oauthPatch)
           .where(and(eq(oauthClient.clientId, current.oauthClientId), activeResourceCondition)),
       ]
-      if (patch.ownerOrganizationId !== undefined && patch.ownerOrganizationId !== current.ownerOrganizationId) {
-        statements.push(
-          db
-            .update(oauthRefreshToken)
-            .set({ revoked: now })
-            .where(and(eq(oauthRefreshToken.clientId, current.oauthClientId), isNull(oauthRefreshToken.revoked))),
-          db
-            .update(tokenExchangeRefreshToken)
-            .set({ revokedAt: now })
-            .where(
-              and(
-                eq(tokenExchangeRefreshToken.clientId, current.oauthClientId),
-                isNull(tokenExchangeRefreshToken.revokedAt),
-              ),
-            ),
-          db
-            .delete(verification)
-            .where(
-              and(
-                sql`json_extract(${verification.value}, '$.type') = 'authorization_code'`,
-                sql`json_extract(${verification.value}, '$.query.client_id') = ${current.oauthClientId}`,
-              ),
-            ),
-          db.delete(oauthConsent).where(eq(oauthConsent.clientId, current.oauthClientId)),
-          db
-            .update(applicationConsent)
-            .set({ revokedAt: now })
-            .where(and(eq(applicationConsent.applicationId, id), isNull(applicationConsent.revokedAt))),
-        )
-      }
       const [updated] = await db.batch(statements)
       if (updated.length > 0) return 'updated'
       const [remaining] = await db

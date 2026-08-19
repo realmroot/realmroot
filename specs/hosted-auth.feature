@@ -20,6 +20,8 @@ Feature: Hosted authentication
     Given a public Application and a private Organization-owned Application exist
     When a Realmroot User authorizes the public Application
     Then authorization can continue without inheriting the owner's Organization or Teams
+    And a stale active Organization session context is ignored after membership removal
+    But disabling the owner Organization makes both public and private Applications unavailable
     When a User outside the owner Organization uses authorization code or device approval for the private Application
     Then Realmroot rejects the flow before issuing a code or Token
     When a workload credential from another Organization uses token exchange for the private Application

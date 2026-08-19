@@ -4510,19 +4510,6 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "invitation_team_id_team_id_fk": {
-          "name": "invitation_team_id_team_id_fk",
-          "tableFrom": "invitation",
-          "tableTo": "team",
-          "columnsFrom": [
-            "team_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
         "invitation_inviter_id_user_id_fk": {
           "name": "invitation_inviter_id_user_id_fk",
           "tableFrom": "invitation",

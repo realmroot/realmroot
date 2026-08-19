@@ -2,7 +2,9 @@
 
 Realmroot uses Organizations as strict tenant boundaries and Better Auth Teams
 as external OIDC groups. An Application is an OAuth client and trust boundary;
-it does not represent one Kubernetes cluster or one Argo CD instance.
+it does not represent one Kubernetes cluster or one Argo CD instance. Select
+the owner Organization when the Application is created; ownership cannot be
+transferred across Organizations.
 
 ## Claims
 

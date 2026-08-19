@@ -6,10 +6,13 @@ import {
   apiResource,
   account as authAccount,
   identityProviderConnector,
+  invitation,
+  oauthRefreshToken,
   providerConnection,
   providerResourceAuthorization,
   resourceConnectionIntent,
   resourceScopeEntitlement,
+  session,
   verification,
 } from '@server/db/schema'
 import { eq } from 'drizzle-orm'
@@ -68,6 +71,90 @@ describe('account self-service over real D1', () => {
 
   beforeEach(async () => {
     harness = await createHarness()
+  })
+
+  it('clears session context and revokes private refresh tokens when Better Auth removes a member [spec: hosted-auth/application-visibility-admission]', async () => {
+    const { adminCookie, cookie: ownerCookie, userId: ownerUserId } = await signedInUser(harness)
+    const removedUserId = await createUser(harness, adminCookie, {
+      email: 'removed-member@example.com',
+      username: 'removed-member',
+      displayName: 'Removed Member',
+      password: 'removed-member-password-2026',
+    })
+    let removedCookie = await signIn(harness, 'removed-member@example.com', 'removed-member-password-2026')
+    const now = Date.now()
+    await env.DB.prepare(
+      'INSERT INTO organization (id, slug, name, disabled, created_at, updated_at) VALUES (?, ?, ?, 0, ?, ?)',
+    )
+      .bind('org-member-removal', 'member-removal', 'Member removal', now, now)
+      .run()
+    await env.DB.prepare(
+      'INSERT INTO member (id, organization_id, user_id, role, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?), (?, ?, ?, ?, ?, ?)',
+    )
+      .bind(
+        'member-removal-owner',
+        'org-member-removal',
+        ownerUserId,
+        'owner',
+        now,
+        now,
+        'member-removal-target',
+        'org-member-removal',
+        removedUserId,
+        'member',
+        now,
+        now,
+      )
+      .run()
+    const setActive = await harness.request('/api/auth/organization/set-active', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie: removedCookie, origin: baseURL },
+      body: JSON.stringify({ organizationId: 'org-member-removal' }),
+    })
+    expect(setActive.status, await setActive.clone().text()).toBe(200)
+    removedCookie = mergeResponseCookies(removedCookie, setActive)
+
+    const createApplication = await harness.request('/api/applications', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie: adminCookie },
+      body: JSON.stringify({
+        name: 'Member Removal App',
+        clientType: 'public_spa',
+        redirectUris: ['http://localhost/member-removal-callback'],
+        ownerOrganizationId: 'org-member-removal',
+        visibility: 'private',
+      }),
+    })
+    expect(createApplication.status, await createApplication.clone().text()).toBe(201)
+    const application = (await createApplication.json()) as { clientId: string }
+    await harness.db.insert(oauthRefreshToken).values({
+      id: 'member-removal-refresh',
+      token: 'member-removal-refresh-hash',
+      clientId: application.clientId,
+      userId: removedUserId,
+      expiresAt: new Date(now + 60_000),
+      scopes: 'openid offline_access',
+    })
+
+    const remove = await harness.request('/api/auth/organization/remove-member', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie: ownerCookie, origin: baseURL },
+      body: JSON.stringify({ organizationId: 'org-member-removal', memberIdOrEmail: 'member-removal-target' }),
+    })
+    expect(remove.status, await remove.clone().text()).toBe(200)
+    await expect(
+      harness.db
+        .select({ revoked: oauthRefreshToken.revoked })
+        .from(oauthRefreshToken)
+        .where(eq(oauthRefreshToken.id, 'member-removal-refresh')),
+    ).resolves.toEqual([{ revoked: expect.any(Date) }])
+    await expect(
+      harness.db
+        .select({ activeOrganizationId: session.activeOrganizationId })
+        .from(session)
+        .where(eq(session.userId, removedUserId)),
+    ).resolves.toEqual([expect.objectContaining({ activeOrganizationId: null })])
+    expect(removedCookie).toContain('better-auth.session_token=')
   })
 
   it('rejects anonymous profile reads with 401', async () => {
@@ -288,6 +375,13 @@ describe('account self-service over real D1', () => {
     })
     expect(createdTeam.status, await createdTeam.clone().text()).toBe(200)
     const teamId = ((await createdTeam.json()) as { id: string }).id
+    const secondTeam = await harness.request('/api/auth/organization/create-team', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ organizationId, name: 'release-engineers' }),
+    })
+    expect(secondTeam.status, await secondTeam.clone().text()).toBe(200)
+    const secondTeamId = ((await secondTeam.json()) as { id: string }).id
     const invalidRename = await harness.request('/api/auth/organization/update-team', {
       method: 'POST',
       headers,
@@ -380,9 +474,18 @@ describe('account self-service over real D1', () => {
     const invited = await harness.request('/api/auth/organization/invite-member', {
       method: 'POST',
       headers,
-      body: JSON.stringify({ organizationId, email: 'developer@example.com', role: 'developer' }),
+      body: JSON.stringify({
+        organizationId,
+        email: 'developer@example.com',
+        role: 'developer',
+        teamId: [teamId, secondTeamId],
+      }),
     })
     expect(invited.status, await invited.clone().text()).toBe(200)
+    const invitationId = ((await invited.json()) as { id: string }).id
+    await expect(
+      harness.db.select({ teamId: invitation.teamId }).from(invitation).where(eq(invitation.id, invitationId)),
+    ).resolves.toEqual([{ teamId: `${teamId},${secondTeamId}` }])
 
     const detail = await harness.request(
       `/api/auth/organization/get-full-organization?organizationId=${organizationId}`,

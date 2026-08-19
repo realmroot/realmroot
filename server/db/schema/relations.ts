@@ -161,10 +161,6 @@ export const organizationInvitationRelations = relations(invitation, ({ one }) =
     fields: [invitation.inviterId],
     references: [user.id],
   }),
-  team: one(team, {
-    fields: [invitation.teamId],
-    references: [team.id],
-  }),
 }))
 
 export const organizationTeamRelations = relations(team, ({ many, one }) => ({
@@ -173,7 +169,6 @@ export const organizationTeamRelations = relations(team, ({ many, one }) => ({
     references: [organization.id],
   }),
   members: many(teamMember),
-  invitations: many(invitation),
 }))
 
 export const organizationTeamMemberRelations = relations(teamMember, ({ one }) => ({

@@ -22,6 +22,7 @@ import {
   providerResourceAuthorization,
   resourceConnectionIntent,
   resourceScopeEntitlement,
+  session,
   team,
   teamMember,
   tokenExchangeAccessToken,
@@ -238,7 +239,7 @@ export function createDrizzleAuthorizationRepository(db: Database, ids: Identifi
         .from(team)
         .where(eq(team.organizationId, organizationId))
       const now = new Date()
-      const [, , , removed] = await db.batch([
+      const [, , , , removed] = await db.batch([
         db
           .insert(agentAuditEvent)
           .select(db.select(auditSelect(audit, { organizationId, memberId })).from(member).where(condition)),
@@ -255,6 +256,10 @@ export function createDrizzleAuthorizationRepository(db: Database, ids: Identifi
               isNull(oauthRefreshToken.revoked),
             ),
           ),
+        db
+          .update(session)
+          .set({ activeOrganizationId: null, activeTeamId: null })
+          .where(and(inArray(session.userId, targetUserIds), eq(session.activeOrganizationId, organizationId))),
         db.delete(member).where(condition).returning({ id: member.id }),
       ])
       return removed.length > 0

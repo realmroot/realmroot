@@ -165,8 +165,7 @@ Native Agent tokens may also contain:
 - `act`: the stable Agent's exact `iss` and `sub`;
 - `roles`: effective roles for this API Resource;
 - `groups`: the Agent's organization home space.
-- `urn:realmroot:params:oauth:org`: the controlling Organization ID as a string, when Organization context applies
-  tenant.
+- `urn:realmroot:params:oauth:org`: the controlling Organization ID as a string when Organization context applies.
 
 `realmroot-cli` does not identify an Application or a dynamically registered
 OAuth client. Reject other `client_id` values for Realmroot-native Agent

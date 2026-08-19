@@ -40,6 +40,20 @@ function jwtAudiences(token: string) {
   return Array.isArray(audience) ? audience : [audience]
 }
 
+function mergeResponseCookies(currentCookie: string, response: Response) {
+  const cookies = new Map<string, string>()
+  for (const pair of currentCookie.split(';')) {
+    const separator = pair.indexOf('=')
+    if (separator > 0) cookies.set(pair.slice(0, separator).trim(), pair.slice(separator + 1).trim())
+  }
+  for (const part of (response.headers.get('set-cookie') ?? '').split(',')) {
+    const pair = part.trim().split(';')[0]
+    const separator = pair.indexOf('=')
+    if (separator > 0) cookies.set(pair.slice(0, separator), pair.slice(separator + 1))
+  }
+  return [...cookies].map(([name, value]) => `${name}=${value}`).join('; ')
+}
+
 function decodeJwtHeader(token: string): Record<string, unknown> {
   const header = token.split('.')[0]
   expect(header).toBeTruthy()
@@ -198,13 +212,32 @@ describe('OIDC authorization over real D1', () => {
 
   it('issues public Application tokens to an external user without owner Organization claims', async () => {
     const adminCookie = await signInAdmin(harness)
-    await createUser(harness, adminCookie, {
+    const publicUserId = await createUser(harness, adminCookie, {
       email: 'public-oidc-user@example.com',
       username: 'public-oidc-user',
       displayName: 'Public OIDC User',
       password: 'public-oidc-user-password-2026',
     })
-    const userCookie = await signIn(harness, 'public-oidc-user@example.com', 'public-oidc-user-password-2026')
+    let userCookie = await signIn(harness, 'public-oidc-user@example.com', 'public-oidc-user-password-2026')
+    const now = Date.now()
+    await env.DB.prepare(
+      'INSERT INTO organization (id, slug, name, disabled, created_at, updated_at) VALUES (?, ?, ?, 0, ?, ?)',
+    )
+      .bind('org-stale-session', 'stale-session', 'Stale session', now, now)
+      .run()
+    await env.DB.prepare(
+      'INSERT INTO member (id, organization_id, user_id, role, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+    )
+      .bind('member-stale-session', 'org-stale-session', publicUserId, 'member', now, now)
+      .run()
+    const activeOrganization = await harness.request('/api/auth/organization/set-active', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie: userCookie, origin: baseURL },
+      body: JSON.stringify({ organizationId: 'org-stale-session' }),
+    })
+    expect(activeOrganization.status, await activeOrganization.clone().text()).toBe(200)
+    userCookie = mergeResponseCookies(userCookie, activeOrganization)
+    await env.DB.prepare('DELETE FROM member WHERE id = ?').bind('member-stale-session').run()
     const redirectUri = 'http://localhost/public-callback'
     const createApp = await harness.request('/api/applications', {
       method: 'POST',
@@ -254,6 +287,45 @@ describe('OIDC authorization over real D1', () => {
       expect(claims).not.toHaveProperty('urn:realmroot:params:oauth:org')
       expect(claims).not.toHaveProperty('groups')
     }
+  })
+
+  it('rejects public Application authorization after its owner Organization is disabled [spec: hosted-auth/application-visibility-admission]', async () => {
+    const cookie = await signInAdmin(harness)
+    const now = Date.now()
+    await env.DB.prepare(
+      'INSERT INTO organization (id, slug, name, disabled, created_at, updated_at) VALUES (?, ?, ?, 0, ?, ?)',
+    )
+      .bind('org-disabled-client', 'disabled-client', 'Disabled client owner', now, now)
+      .run()
+    const redirectUri = 'http://localhost/disabled-owner-callback'
+    const createApplication = await harness.request('/api/applications', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({
+        name: 'Disabled Owner Public App',
+        clientType: 'public_spa',
+        redirectUris: [redirectUri],
+        ownerOrganizationId: 'org-disabled-client',
+        visibility: 'public',
+      }),
+    })
+    expect(createApplication.status, await createApplication.clone().text()).toBe(201)
+    const application = (await createApplication.json()) as { clientId: string }
+    await env.DB.prepare('UPDATE organization SET disabled = 1 WHERE id = ?').bind('org-disabled-client').run()
+
+    const authorize = await harness.request(
+      `/api/auth/oauth2/authorize?${new URLSearchParams({
+        response_type: 'code',
+        client_id: application.clientId,
+        redirect_uri: redirectUri,
+        scope: 'openid',
+        code_challenge: await pkceChallenge('disabled-owner-verifier-0123456789abcdefghijklmnop'),
+        code_challenge_method: 'S256',
+      })}`,
+      { headers: { cookie }, redirect: 'manual' },
+    )
+    expect(authorize.status).toBe(403)
+    await expect(authorize.json()).resolves.toMatchObject({ error: 'access_denied' })
   })
 
   it('emits consistent Team groups for shared Kubernetes and Argo CD Applications', async () => {
@@ -351,6 +423,73 @@ describe('OIDC authorization over real D1', () => {
       expect(claims['urn:realmroot:params:oauth:org']).toBe(platformOrganizationId)
       expect(claims.groups).toEqual(['platform-operators'])
     }
+  })
+
+  it('issues Organization and Team claims through the Kubernetes Device flow [spec: admin-console/oidc-group-application-boundary]', async () => {
+    const cookie = await signInAdmin(harness)
+    const admin = await env.DB.prepare('SELECT user_id AS userId FROM member WHERE organization_id = ? LIMIT 1')
+      .bind(platformOrganizationId)
+      .first<{ userId: string }>()
+    expect(admin?.userId).toBeTruthy()
+    await env.DB.prepare('INSERT INTO team (id, name, organization_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)')
+      .bind('team-device-operators', 'device-operators', platformOrganizationId, Date.now(), Date.now())
+      .run()
+    await env.DB.prepare('INSERT INTO team_member (id, team_id, user_id, created_at) VALUES (?, ?, ?, ?)')
+      .bind('team-member-device-operator', 'team-device-operators', admin!.userId, Date.now())
+      .run()
+
+    const createApplication = await harness.request('/api/applications', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({
+        name: 'Kubernetes Device Client',
+        clientType: 'public_native',
+        redirectUris: ['com.example.kubernetes:/callback'],
+        ownerOrganizationId: platformOrganizationId,
+        visibility: 'private',
+        deviceLoginEnabled: true,
+      }),
+    })
+    expect(createApplication.status, await createApplication.clone().text()).toBe(201)
+    const application = (await createApplication.json()) as { clientId: string }
+    const deviceAuthorization = await harness.request('/api/auth/device/code', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ client_id: application.clientId, scope: 'openid profile email groups' }),
+    })
+    expect(deviceAuthorization.status, await deviceAuthorization.clone().text()).toBe(200)
+    const device = (await deviceAuthorization.json()) as { device_code: string; user_code: string }
+    const verification = await harness.request(`/api/auth/device?user_code=${encodeURIComponent(device.user_code)}`, {
+      headers: { cookie },
+    })
+    expect(verification.status, await verification.clone().text()).toBe(200)
+
+    const approval = await harness.request('/api/auth/device/approve', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie, origin: baseURL },
+      body: JSON.stringify({ userCode: device.user_code }),
+    })
+    expect(approval.status, await approval.clone().text()).toBe(200)
+
+    const token = await harness.request('/api/auth/oauth2/token', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+        client_id: application.clientId,
+        device_code: device.device_code,
+      }),
+    })
+    expect(token.status, await token.clone().text()).toBe(200)
+    const tokenBody = (await token.json()) as { access_token: string; id_token: string }
+    const accessClaims = decodeJwtPayload(tokenBody.access_token)
+    expect(accessClaims['urn:realmroot:params:oauth:org']).toBe(platformOrganizationId)
+    expect(accessClaims.groups).toEqual(['device-operators'])
+    const idClaims = decodeJwtPayload(tokenBody.id_token)
+    expect(idClaims['urn:realmroot:params:oauth:org']).toBe(platformOrganizationId)
+    expect(idClaims.groups).toEqual(['device-operators'])
+    expect(idClaims).not.toHaveProperty('roles')
+    expect(Number(idClaims.exp) - Number(idClaims.iat)).toBe(10 * 60)
   })
 
   it('preserves resource and issues a verifiable RS256 identity token [spec: hosted-auth/oidc-resource-authorization] [spec: hosted-auth/oidc-native-token-verification]', async () => {

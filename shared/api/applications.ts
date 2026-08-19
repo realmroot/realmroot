@@ -203,7 +203,6 @@ export const updateApplicationRequestSchema = z
     consentRequired: z.boolean().optional(),
     disabled: z.boolean().optional(),
     disabledReason: z.string().trim().max(500).nullable().optional(),
-    ownerOrganizationId: nonEmptyString.optional(),
     visibility: applicationVisibilitySchema.optional(),
     deviceLoginEnabled: z.boolean().optional(),
     /** @deprecated Accepted for migration compatibility and ignored. */

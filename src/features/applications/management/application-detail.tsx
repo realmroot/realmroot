@@ -32,7 +32,7 @@ import {
   SecretDisclosureDialog,
   SwitchRow,
 } from '@/features/management/dialogs'
-import { OrganizationOwnerField, ownerLabel } from '@/features/management/ownership-controls'
+import { ownerLabel } from '@/features/management/ownership-controls'
 import { navigateConsoleTab } from '@/features/management/resource-components'
 import type { ApplicationDetailSection } from '@/features/management/shared'
 import { formatDate, nullableString, parseForm, parseLineList, useAdminMutation } from '@/features/management/utils'
@@ -51,7 +51,7 @@ import {
 import { tt } from '@/lib/i18n'
 import { ApplicationFederatedCredentialsPanel } from './application-federated-credentials'
 
-type Editor = 'details' | 'redirects' | 'authorization' | 'ownership' | 'visibility' | 'consent' | null
+type Editor = 'details' | 'redirects' | 'authorization' | 'visibility' | 'consent' | null
 
 export function ApplicationDetailPage({
   applicationId,
@@ -229,7 +229,6 @@ export function ApplicationDetailPage({
               application={application}
               organizations={organizations}
               onDelete={() => setDeleteOpen(true)}
-              onEditOwnership={() => setEditor('ownership')}
               onEditVisibility={() => setEditor('visibility')}
               onEditConsent={() => setEditor('consent')}
               onEditDetails={() => setEditor('details')}
@@ -248,7 +247,6 @@ export function ApplicationDetailPage({
         application={application}
         editor={editor}
         error={updateMutation.errorMessage}
-        fixedOwnerOrganizationId={organizationId}
         onClose={() => setEditor(null)}
         onSave={(input) => updateMutation.mutate(input)}
         organizations={organizations}
@@ -541,7 +539,6 @@ function ApplicationSettings({
   application,
   organizations,
   onDelete,
-  onEditOwnership,
   onEditVisibility,
   onEditConsent,
   onEditDetails,
@@ -551,7 +548,6 @@ function ApplicationSettings({
   application: ApplicationResponse
   organizations: OrganizationResponse[]
   onDelete: () => void
-  onEditOwnership: () => void
   onEditVisibility: () => void
   onEditConsent: () => void
   onEditDetails: () => void
@@ -576,15 +572,7 @@ function ApplicationSettings({
           value={application.homepageUrl ? <code>{application.homepageUrl}</code> : tt('Not configured')}
         />
       </DetailSection>
-      <DetailSection
-        action={
-          <Button onClick={onEditOwnership} variant="outline">
-            {tt('Edit')}
-          </Button>
-        }
-        description="Choose the Organization responsible for this client."
-        title="Ownership"
-      >
+      <DetailSection description="The owner Organization is fixed when this client is created." title="Ownership">
         <DetailRow label="Owner" value={ownerLabel(application.ownerOrganizationId, organizations)} />
       </DetailSection>
       <DetailSection
@@ -662,7 +650,6 @@ function ApplicationEditor({
   application,
   editor,
   error,
-  fixedOwnerOrganizationId,
   onClose,
   onSave,
   organizations,
@@ -672,7 +659,6 @@ function ApplicationEditor({
   application: ApplicationResponse
   editor: Editor
   error?: string | null
-  fixedOwnerOrganizationId?: string
   onClose: () => void
   onSave: (input: Parameters<typeof updateApplication>[1]) => void
   organizations: OrganizationResponse[]
@@ -753,14 +739,6 @@ function ApplicationEditor({
           {editor === 'authorization' ? (
             <AuthorizationEditor application={application} onSave={onSave} resources={resources} />
           ) : null}
-          {editor === 'ownership' ? (
-            <OwnershipEditor
-              application={application}
-              fixedOwnerOrganizationId={fixedOwnerOrganizationId}
-              onSave={onSave}
-              organizations={organizations}
-            />
-          ) : null}
           {editor === 'visibility' ? <VisibilityEditor application={application} onSave={onSave} /> : null}
           {editor === 'consent' && isPlatformApplication(application, organizations) ? (
             <ConsentEditor application={application} onSave={onSave} />
@@ -837,38 +815,6 @@ function AuthorizationEditor({
           />
         )
       })}
-    </form>
-  )
-}
-
-function OwnershipEditor({
-  application,
-  fixedOwnerOrganizationId,
-  onSave,
-  organizations,
-}: {
-  application: ApplicationResponse
-  fixedOwnerOrganizationId?: string
-  onSave: (input: Parameters<typeof updateApplication>[1]) => void
-  organizations: OrganizationResponse[]
-}) {
-  const [ownerOrganizationId, setOwnerOrganizationId] = useState(application.ownerOrganizationId)
-  return (
-    <form
-      className="grid gap-4 px-4 py-5"
-      id="application-ownership"
-      onSubmit={(event) => {
-        event.preventDefault()
-        onSave({ ownerOrganizationId })
-      }}
-    >
-      {fixedOwnerOrganizationId ? null : (
-        <OrganizationOwnerField
-          onChange={setOwnerOrganizationId}
-          organizations={organizations}
-          value={ownerOrganizationId}
-        />
-      )}
     </form>
   )
 }
@@ -1092,7 +1038,6 @@ function editorTitle(editor: Editor) {
       details: 'Edit application details',
       redirects: 'Edit redirects and origins',
       authorization: 'Edit Resource Server scope allowlists',
-      ownership: 'Edit ownership',
       visibility: 'Edit visibility',
       consent: 'Edit consent policy',
     } as Record<Exclude<Editor, null>, string>
@@ -1105,7 +1050,6 @@ function editorDescription(editor: Editor) {
       details: 'Change the name and metadata used to recognize this client.',
       redirects: 'Set the exact callbacks and browser origins accepted by Realmroot.',
       authorization: 'Choose the Resource Server scopes this application may request.',
-      ownership: 'Set the Organization responsible for this client.',
       visibility: 'Choose whether all Realmroot users or only owner Organization members may authenticate.',
       consent: 'Decide whether users approve access on first use and when requested scopes expand.',
     } as Record<Exclude<Editor, null>, string>

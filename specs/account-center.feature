@@ -196,7 +196,7 @@ Feature: Account Center
     And its Agent identities, my Better Auth membership Roles, and active Agent Permissions come from canonical resource collections
     And the Organization collection opens a Workspace without a separate Current badge or Switch action
     And the Workspace URL is the current Organization while the authenticated session is synchronized for protocol context
-    When I update its profile or invite a member with one or more Roles
+    When I update its profile or invite a member with one or more Roles and Teams
     Then the Organization detail reflects the change
 
   @entrypoint:product-ui @journey:account-organization-teams

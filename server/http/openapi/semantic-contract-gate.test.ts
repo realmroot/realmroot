@@ -56,6 +56,12 @@ describe('OpenAPI semantic contract gate', () => {
     const tokenProfileContract = JSON.parse(
       readFileSync(new URL('./approved-token-profile-semantic-baseline.json', import.meta.url), 'utf8'),
     ) as typeof unchanged
+    const applicationOwnerImmutabilityContract = JSON.parse(
+      readFileSync(
+        new URL('./approved-application-owner-immutability-semantic-baseline.json', import.meta.url),
+        'utf8',
+      ),
+    ) as typeof unchanged
     const brokeredNativeChanges = new Set(brokeredNativeContract.map(({ method, path }) => `${method}:${path}`))
     const resourceDiscoveryChanges = new Set(resourceDiscoveryContract.map(({ method, path }) => `${method}:${path}`))
     const approvedChanges = new Set(
@@ -159,7 +165,7 @@ describe('OpenAPI semantic contract gate', () => {
       resourceAuthorizationModelContract.map(({ method, path }) => `${method}:${path}`),
     )
     const tokenProfileChanges = new Set(tokenProfileContract.map(({ method, path }) => `${method}:${path}`))
-    const baseline = [
+    const preApplicationOwnerImmutabilityBaseline = [
       ...preResourceAuthorizationModelBaseline.filter(
         ({ method, path }) =>
           !resourceAuthorizationModelChanges.has(`${method}:${path}`) &&
@@ -168,6 +174,15 @@ describe('OpenAPI semantic contract gate', () => {
       ),
       ...resourceAuthorizationModelContract.filter(({ method, path }) => !tokenProfileChanges.has(`${method}:${path}`)),
       ...tokenProfileContract,
+    ].sort((left, right) => `${left.path}:${left.method}`.localeCompare(`${right.path}:${right.method}`))
+    const applicationOwnerImmutabilityChanges = new Set(
+      applicationOwnerImmutabilityContract.map(({ method, path }) => `${method}:${path}`),
+    )
+    const baseline = [
+      ...preApplicationOwnerImmutabilityBaseline.filter(
+        ({ method, path }) => !applicationOwnerImmutabilityChanges.has(`${method}:${path}`),
+      ),
+      ...applicationOwnerImmutabilityContract,
     ].sort((left, right) => `${left.path}:${left.method}`.localeCompare(`${right.path}:${right.method}`))
 
     expect(openApiSemanticSnapshot(unifiedOpenApi as unknown as Record<string, unknown>, () => true)).toEqual(baseline)

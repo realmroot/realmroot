@@ -186,7 +186,7 @@ export async function filterOAuthAccessTokenScopes(
   const applicationId = readString(input.metadata, 'applicationId')
   const application = applicationId ? await deps.applications.findById(applicationId) : null
   if (!application || application.disabled) return []
-  if (input.user?.id && application.visibility === 'private') {
+  if (input.user?.id) {
     await requireApplicationUserAccess(
       deps,
       application,
@@ -273,12 +273,23 @@ async function resolveOAuthOrganizationId(
   application: Awaited<ReturnType<Deps['applications']['findById']>>,
 ) {
   if (application?.visibility === 'private') return application.ownerOrganizationId
-  if (input.referenceId) return input.referenceId
+  if (input.referenceId && input.user?.id) {
+    const [organization, membership] = await Promise.all([
+      deps.authorization.findOrganization(input.referenceId),
+      deps.authorization.findMemberByOrganizationUser(input.referenceId, input.user.id),
+    ])
+    if (organization && !organization.disabled && membership) return input.referenceId
+  }
   if (!input.user?.id || !input.resource) return null
   const resource = await deps.authorization.findResourceByResourceUrl(input.resource)
   if (resource?.visibility !== 'private') return null
-  const memberships = await deps.authorization.listUserMemberships(input.user.id)
-  return memberships.some((membership) => membership.organizationId === resource.ownerOrganizationId)
+  const [organization, memberships] = await Promise.all([
+    deps.authorization.findOrganization(resource.ownerOrganizationId),
+    deps.authorization.listUserMemberships(input.user.id),
+  ])
+  return organization &&
+    !organization.disabled &&
+    memberships.some((membership) => membership.organizationId === resource.ownerOrganizationId)
     ? resource.ownerOrganizationId
     : null
 }
@@ -290,7 +301,7 @@ export async function requireApplicationUserAccess(
   oauthError: 'access_denied' | 'invalid_grant' = 'access_denied',
 ) {
   if (!(await applicationUserHasAccess(deps, application, userId))) {
-    throw oauthProviderError(oauthError, 'The user is not an active member of the Application Organization.')
+    throw oauthProviderError(oauthError, 'The Application is unavailable to this user.')
   }
 }
 
@@ -299,12 +310,10 @@ export async function applicationUserHasAccess(
   application: NonNullable<Awaited<ReturnType<Deps['applications']['findById']>>>,
   userId: string,
 ) {
+  const organization = await deps.authorization.findOrganization(application.ownerOrganizationId)
+  if (!organization || organization.disabled) return false
   if (application.visibility === 'public') return true
-  const [organization, membership] = await Promise.all([
-    deps.authorization.findOrganization(application.ownerOrganizationId),
-    deps.authorization.findMemberByOrganizationUser(application.ownerOrganizationId, userId),
-  ])
-  return Boolean(organization && !organization.disabled && membership)
+  return Boolean(await deps.authorization.findMemberByOrganizationUser(application.ownerOrganizationId, userId))
 }
 
 function oauthProviderError(error: string, description: string) {
