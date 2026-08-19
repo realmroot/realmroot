@@ -185,7 +185,7 @@ jobs:
           restore-keys: playwright-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Install Playwright browser
-        run: pnpm exec playwright install --with-deps chromium
+        run: pnpm exec playwright install chromium
 
       - name: Playwright E2E
         run: pnpm exec playwright test --shard=${{ matrix.shard }}/2
