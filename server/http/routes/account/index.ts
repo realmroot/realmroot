@@ -1,6 +1,9 @@
 import { badRequest, forbidden, notFound } from '@server/domain/errors'
 import { validateEmailPolicy, validatePasswordPolicy } from '@server/domain/security/policy'
-import { listAccountOrganizationAgents } from '@server/usecases/account-organizations'
+import {
+  listAccountOrganizationAgents,
+  listAccountOrganizationTeamMembers,
+} from '@server/usecases/account-organizations'
 import {
   activateAgentIdentity,
   approveAgentEnrollment,
@@ -41,6 +44,7 @@ import type { ConfigzAccountCenter } from '@server/usecases/ports'
 import {
   accountEmailChangeConfirmSchema,
   accountEmailChangeSchema,
+  accountOrganizationTeamMembersResponseSchema,
   accountPasswordChangeSchema,
   accountProfileUpdateSchema,
   accountProviderConnectionsResponseSchema,
@@ -434,6 +438,20 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
         c.req.param('organizationId'),
         getPrincipal(c).user!.id,
         readQuery(c, paginationQuerySchema),
+      ),
+    )
+  })
+
+  app.get('/organizations/:organizationId/teams/:teamId/members', async (c) => {
+    return c.json(
+      accountOrganizationTeamMembersResponseSchema.parse(
+        await listAccountOrganizationTeamMembers(
+          getDeps(c),
+          c.req.param('organizationId'),
+          c.req.param('teamId'),
+          getPrincipal(c).user!.id,
+          readQuery(c, paginationQuerySchema),
+        ),
       ),
     )
   })

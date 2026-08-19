@@ -44,7 +44,7 @@ import type {
 } from '@shared/api/external-resources'
 import { type PaginationInput, paginationMetadata } from '@shared/api/pagination'
 import { agentBootstrapScopes, realmrootOAuthScopes } from '@shared/authz'
-import { realmrootCliClientId, realmrootTenantClaim } from '@shared/oauth-token-profile'
+import { realmrootCliClientId, realmrootOrganizationClaim } from '@shared/oauth-token-profile'
 import { realmrootManagementScopes } from '@shared/scope-registry'
 import { authorizationCodeRequest, generateCodeChallenge, refreshAccessTokenRequest } from 'better-auth/oauth2'
 import { refreshResourceScopeRegistry } from './authorization'
@@ -1724,6 +1724,14 @@ async function issueNativeAccessToken(
   if (realmroot) assertRealmrootAuthoritySelection(request.authorizationDetails)
   const issuedScopes = realmroot ? [...new Set([...agentBootstrapScopes, ...request.scopes])].sort() : request.scopes
   const issuedAuthorizationDetails = request.authorizationDetails
+  const tokenOrganizationId =
+    realmrootAuthority?.authority === 'organization' && typeof realmrootAuthority.id === 'string'
+      ? realmrootAuthority.id
+      : identity.identity.ownerOrganizationId
+  const groups =
+    tokenOrganizationId && identity.identity.ownerUserId
+      ? await deps.authorization.listTeamNamesForUser(tokenOrganizationId, identity.identity.ownerUserId)
+      : []
   const accessToken = await signer.sign(
     {
       iss: signer.issuer,
@@ -1733,16 +1741,9 @@ async function issueNativeAccessToken(
       iat: Math.floor(now.getTime() / 1000),
       exp: Math.floor(expiresAt.getTime() / 1000),
       scope: issuedScopes.join(' '),
-      groups:
-        realmrootAuthority?.authority === 'organization' && typeof realmrootAuthority.id === 'string'
-          ? [realmrootAuthority.id]
-          : identity.identity.ownerOrganizationId
-            ? [identity.identity.ownerOrganizationId]
-            : [],
+      groups,
       client_id: realmrootCliClientId,
-      [realmrootTenantClaim]: identity.identity.ownerOrganizationId
-        ? { type: 'organization', id: identity.identity.ownerOrganizationId }
-        : { type: 'user', id: subject },
+      ...(tokenOrganizationId ? { [realmrootOrganizationClaim]: tokenOrganizationId } : {}),
       ...(request.authorizationDetails.length > 0 ? { authorization_details: request.authorizationDetails } : {}),
       ...(realmroot ? { realmroot_authority: realmrootAuthority } : {}),
       cnf: { jkt: confirmationJkt },

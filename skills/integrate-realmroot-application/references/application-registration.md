@@ -179,9 +179,12 @@ GET, POST, PATCH, and DELETE contracts.
 
 Do not send `oidcClaims` in new integrations. During the compatibility window,
 create and update accept the legacy field but ignore it. Application responses
-return the fixed profile: authorization data (`scope`, `roles`, `groups`, and the
-namespaced tenant claim) belongs only in access tokens; ID Token and UserInfo
-remain identity-only.
+return the fixed profile. Access tokens retain approved Resource scopes and
+effective Resource roles. A private Application ID Token contains the string
+`urn:realmroot:params:oauth:org` claim and, when `groups` is granted, the user's
+Team names in that Organization. ID Tokens never contain Resource roles or
+Resource scopes, and UserInfo remains identity-only. Public Applications do not
+inherit their owner Organization or Teams for external users.
 
 Use `deviceLoginEnabled` on a `public_native` Application to enable or disable
 the device-code grant.

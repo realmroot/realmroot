@@ -2,12 +2,14 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { renderHook, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
-import { createAccountServer, createAccountStore } from './account.test-utils'
+import { base, createAccountServer, createAccountStore, http, json } from './account.test-utils'
 import {
   useAccountAgents,
   useAccountApplicationAuthorizations,
   useAccountConfig,
   useAccountMutation,
+  useAccountOrganizationTeamMembers,
+  useAccountOrganizationTeams,
   useAccountPasskeys,
   useAccountProfile,
   useAccountSecurity,
@@ -80,6 +82,67 @@ describe('account query hooks', () => {
     await waitFor(() => expect(linked.result.current.isSuccess).toBe(true))
     await waitFor(() => expect(apps.result.current.isSuccess).toBe(true))
     await waitFor(() => expect(agents.result.current.isSuccess).toBe(true))
+  })
+
+  it('loads one requested Team member page and gates the query until a Team is selected', async () => {
+    const requestedOffsets: number[] = []
+    server.use(
+      http.get(`${base}/api/auth/organization/list-teams`, () =>
+        json([{ id: 'team-1', name: 'platform-admins', organizationId: 'org-1' }]),
+      ),
+      http.get(`${base}/api/account/organizations/org-1/teams/team-1/members`, ({ request }) => {
+        const offset = Number(new URL(request.url).searchParams.get('offset'))
+        requestedOffsets.push(offset)
+        const items = Array.from({ length: offset === 0 ? 20 : 1 }, (_, index) => ({
+          id: `membership-${offset + index + 1}`,
+          teamId: 'team-1',
+          userId: `user-${offset + index + 1}`,
+          createdAt: '2026-08-01T00:00:00Z',
+        }))
+        return json({
+          items,
+          pagination: {
+            limit: 20,
+            offset,
+            total: 21,
+            hasMore: offset === 0,
+            nextOffset: offset === 0 ? 20 : null,
+          },
+        })
+      }),
+    )
+    const client = newClient()
+    const teams = renderHook(() => useAccountOrganizationTeams('org-1'), { wrapper: wrapper(client) })
+    const disabledMembers = renderHook(() => useAccountOrganizationTeamMembers('org-1', null), {
+      wrapper: wrapper(client),
+    })
+    expect(disabledMembers.result.current.fetchStatus).toBe('idle')
+    await waitFor(() => expect(teams.result.current.data?.[0]?.name).toBe('platform-admins'))
+
+    const members = renderHook(
+      ({ offset }) => useAccountOrganizationTeamMembers('org-1', 'team-1', { limit: 20, offset }),
+      {
+        initialProps: { offset: 0 },
+        wrapper: wrapper(client),
+      },
+    )
+    await waitFor(() => expect(members.result.current.data?.items).toHaveLength(20))
+    expect(requestedOffsets).toEqual([0])
+
+    members.rerender({ offset: 20 })
+    await waitFor(() => expect(members.result.current.data?.pagination.offset).toBe(20))
+    expect(members.result.current.data?.items).toHaveLength(1)
+    expect(members.result.current.data?.items[0]?.userId).toBe('user-21')
+    expect(requestedOffsets).toEqual([0, 20])
+  })
+
+  it('rejects an invalid Team member page at the client boundary', async () => {
+    server.use(http.get(`${base}/api/account/organizations/org-1/teams/team-1/members`, () => json({ items: [] })))
+    const members = renderHook(() => useAccountOrganizationTeamMembers('org-1', 'team-1', { limit: 20, offset: 0 }), {
+      wrapper: wrapper(newClient()),
+    })
+
+    await waitFor(() => expect(members.result.current.isError).toBe(true))
   })
 })
 

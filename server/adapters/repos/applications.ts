@@ -118,7 +118,7 @@ export function createDrizzleApplicationRepository(db: Database, ids: Identifier
         ...(patch.name !== undefined ? { name: patch.name } : {}),
         ...(patch.description !== undefined ? { description: patch.description } : {}),
         ...(patch.homepageUrl !== undefined ? { homepageUrl: patch.homepageUrl } : {}),
-        ...(patch.ownerOrganizationId !== undefined ? { ownerOrganizationId: patch.ownerOrganizationId } : {}),
+        ...(patch.visibility !== undefined ? { visibility: patch.visibility } : {}),
         ...(patch.oidcScopes !== undefined ? { oidcScopes: patch.oidcScopes } : {}),
         ...(patch.resourceScopes !== undefined ? { resourceScopes: patch.resourceScopes } : {}),
         ...(patch.iconUrl !== undefined ||

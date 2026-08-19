@@ -187,7 +187,7 @@ Feature: Account Center
   Scenario: Organization members manage their shared context
     When I create an Organization from Account Center
     Then I become its Owner
-    And I can open its route-backed Organization Workspace with members, Roles, Applications, Resource Servers, Agents, Webhooks, activity, and settings
+    And I can open its route-backed Organization Workspace with members, Teams, Roles, Applications, Resource Servers, Agents, Webhooks, activity, and settings
     And the Organization Workspace identifies its product layout as Developer Center rather than Account Center
     And the Workspace presents an Organization switcher and section navigation beside its content on wide screens
     And the same navigation is available from an accessible drawer on narrow screens
@@ -196,8 +196,19 @@ Feature: Account Center
     And its Agent identities, my Better Auth membership Roles, and active Agent Permissions come from canonical resource collections
     And the Organization collection opens a Workspace without a separate Current badge or Switch action
     And the Workspace URL is the current Organization while the authenticated session is synchronized for protocol context
-    When I update its profile or invite a member with one or more Roles
+    When I update its profile or invite a member with one or more Roles and Teams
     Then the Organization detail reflects the change
+
+  @entrypoint:product-ui @journey:account-organization-teams
+  Scenario: Organization administrators manage OIDC groups as Teams
+    Given an Organization is created without an automatic default Team
+    When an Organization administrator creates or renames a Team from the Teams Workspace page
+    Then the Team name must use lowercase kebab-case and be unique within that Organization
+    And the administrator manages Team membership from a dialog or drawer
+    And the administrator can inspect Team membership without joining that Team
+    And Team membership is loaded and navigated one bounded page at a time
+    And a rename warns that downstream RBAC mappings must be updated
+    And another Organization may use the same Team name
 
   @entrypoint:product-ui @journey:consumer-organization-boundary
   Scenario: A consumer Organization does not imply Developer Console access

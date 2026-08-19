@@ -32,7 +32,7 @@ import {
   SecretDisclosureDialog,
   SwitchRow,
 } from '@/features/management/dialogs'
-import { OrganizationOwnerField, ownerLabel } from '@/features/management/ownership-controls'
+import { ownerLabel } from '@/features/management/ownership-controls'
 import { navigateConsoleTab } from '@/features/management/resource-components'
 import type { ApplicationDetailSection } from '@/features/management/shared'
 import { formatDate, nullableString, parseForm, parseLineList, useAdminMutation } from '@/features/management/utils'
@@ -51,7 +51,7 @@ import {
 import { tt } from '@/lib/i18n'
 import { ApplicationFederatedCredentialsPanel } from './application-federated-credentials'
 
-type Editor = 'details' | 'redirects' | 'authorization' | 'ownership' | 'consent' | null
+type Editor = 'details' | 'redirects' | 'authorization' | 'visibility' | 'consent' | null
 
 export function ApplicationDetailPage({
   applicationId,
@@ -229,7 +229,7 @@ export function ApplicationDetailPage({
               application={application}
               organizations={organizations}
               onDelete={() => setDeleteOpen(true)}
-              onEditOwnership={() => setEditor('ownership')}
+              onEditVisibility={() => setEditor('visibility')}
               onEditConsent={() => setEditor('consent')}
               onEditDetails={() => setEditor('details')}
               onToggle={() =>
@@ -247,7 +247,6 @@ export function ApplicationDetailPage({
         application={application}
         editor={editor}
         error={updateMutation.errorMessage}
-        fixedOwnerOrganizationId={organizationId}
         onClose={() => setEditor(null)}
         onSave={(input) => updateMutation.mutate(input)}
         organizations={organizations}
@@ -540,7 +539,7 @@ function ApplicationSettings({
   application,
   organizations,
   onDelete,
-  onEditOwnership,
+  onEditVisibility,
   onEditConsent,
   onEditDetails,
   onToggle,
@@ -549,7 +548,7 @@ function ApplicationSettings({
   application: ApplicationResponse
   organizations: OrganizationResponse[]
   onDelete: () => void
-  onEditOwnership: () => void
+  onEditVisibility: () => void
   onEditConsent: () => void
   onEditDetails: () => void
   onToggle: () => void
@@ -573,16 +572,27 @@ function ApplicationSettings({
           value={application.homepageUrl ? <code>{application.homepageUrl}</code> : tt('Not configured')}
         />
       </DetailSection>
+      <DetailSection description="The owner Organization is fixed when this client is created." title="Ownership">
+        <DetailRow label="Owner" value={ownerLabel(application.ownerOrganizationId, organizations)} />
+      </DetailSection>
       <DetailSection
         action={
-          <Button onClick={onEditOwnership} variant="outline">
+          <Button onClick={onEditVisibility} variant="outline">
             {tt('Edit')}
           </Button>
         }
-        description="Choose the Organization responsible for this client."
-        title="Ownership"
+        description="Control who may authenticate through this client. This is independent from client-secret handling."
+        title="Visibility"
       >
-        <DetailRow label="Owner" value={ownerLabel(application.ownerOrganizationId, organizations)} />
+        <DetailRow
+          description={
+            application.visibility === 'private'
+              ? tt('Only active members of the owner Organization may sign in.')
+              : tt('Any Realmroot user may sign in without inheriting the owner Organization or Teams.')
+          }
+          label="Application visibility"
+          value={application.visibility === 'private' ? tt('Private') : tt('Public')}
+        />
       </DetailSection>
       {isPlatformApplication(application, organizations) ? (
         <DetailSection
@@ -640,7 +650,6 @@ function ApplicationEditor({
   application,
   editor,
   error,
-  fixedOwnerOrganizationId,
   onClose,
   onSave,
   organizations,
@@ -650,7 +659,6 @@ function ApplicationEditor({
   application: ApplicationResponse
   editor: Editor
   error?: string | null
-  fixedOwnerOrganizationId?: string
   onClose: () => void
   onSave: (input: Parameters<typeof updateApplication>[1]) => void
   organizations: OrganizationResponse[]
@@ -731,14 +739,7 @@ function ApplicationEditor({
           {editor === 'authorization' ? (
             <AuthorizationEditor application={application} onSave={onSave} resources={resources} />
           ) : null}
-          {editor === 'ownership' ? (
-            <OwnershipEditor
-              application={application}
-              fixedOwnerOrganizationId={fixedOwnerOrganizationId}
-              onSave={onSave}
-              organizations={organizations}
-            />
-          ) : null}
+          {editor === 'visibility' ? <VisibilityEditor application={application} onSave={onSave} /> : null}
           {editor === 'consent' && isPlatformApplication(application, organizations) ? (
             <ConsentEditor application={application} onSave={onSave} />
           ) : null}
@@ -818,34 +819,44 @@ function AuthorizationEditor({
   )
 }
 
-function OwnershipEditor({
+function VisibilityEditor({
   application,
-  fixedOwnerOrganizationId,
   onSave,
-  organizations,
 }: {
   application: ApplicationResponse
-  fixedOwnerOrganizationId?: string
   onSave: (input: Parameters<typeof updateApplication>[1]) => void
-  organizations: OrganizationResponse[]
 }) {
-  const [ownerOrganizationId, setOwnerOrganizationId] = useState(application.ownerOrganizationId)
+  const [visibility, setVisibility] = useState(application.visibility)
+  const visibilityId = useId()
   return (
     <form
       className="grid gap-4 px-4 py-5"
-      id="application-ownership"
+      id="application-visibility"
       onSubmit={(event) => {
         event.preventDefault()
-        onSave({ ownerOrganizationId })
+        onSave({ visibility })
       }}
     >
-      {fixedOwnerOrganizationId ? null : (
-        <OrganizationOwnerField
-          onChange={setOwnerOrganizationId}
-          organizations={organizations}
-          value={ownerOrganizationId}
-        />
-      )}
+      <RadioGroup onValueChange={(value) => setVisibility(value as 'public' | 'private')} value={visibility}>
+        <label className="flex items-start gap-3 rounded-lg border p-3" htmlFor={`${visibilityId}-private`}>
+          <RadioGroupItem id={`${visibilityId}-private`} value="private" />
+          <span>
+            <strong className="block text-sm">{tt('Private')}</strong>
+            <small className="text-muted-foreground">
+              {tt('Only active members of the owner Organization may authenticate.')}
+            </small>
+          </span>
+        </label>
+        <label className="flex items-start gap-3 rounded-lg border p-3" htmlFor={`${visibilityId}-public`}>
+          <RadioGroupItem id={`${visibilityId}-public`} value="public" />
+          <span>
+            <strong className="block text-sm">{tt('Public')}</strong>
+            <small className="text-muted-foreground">
+              {tt('Any Realmroot user may authenticate; owner Organization and Team claims are not inherited.')}
+            </small>
+          </span>
+        </label>
+      </RadioGroup>
     </form>
   )
 }
@@ -1027,7 +1038,7 @@ function editorTitle(editor: Editor) {
       details: 'Edit application details',
       redirects: 'Edit redirects and origins',
       authorization: 'Edit Resource Server scope allowlists',
-      ownership: 'Edit ownership',
+      visibility: 'Edit visibility',
       consent: 'Edit consent policy',
     } as Record<Exclude<Editor, null>, string>
   )[editor ?? 'details']
@@ -1039,7 +1050,7 @@ function editorDescription(editor: Editor) {
       details: 'Change the name and metadata used to recognize this client.',
       redirects: 'Set the exact callbacks and browser origins accepted by Realmroot.',
       authorization: 'Choose the Resource Server scopes this application may request.',
-      ownership: 'Set the Organization responsible for this client.',
+      visibility: 'Choose whether all Realmroot users or only owner Organization members may authenticate.',
       consent: 'Decide whether users approve access on first use and when requested scopes expand.',
     } as Record<Exclude<Editor, null>, string>
   )[editor ?? 'details']

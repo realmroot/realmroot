@@ -192,15 +192,31 @@ describe('admin console applications-detail-b', () => {
     fireEvent.click(within(consent).getByRole('button', { name: 'Edit' }))
     expect(await screen.findByText('Require user consent')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    const visibility = screen.getByRole('heading', { name: 'Visibility' }).closest('section') as HTMLElement
+    fireEvent.click(within(visibility).getByRole('button', { name: 'Edit' }))
+    fireEvent.click(await screen.findByText('Private'))
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    await waitFor(() => expect(updateRequests).toContainEqual({ visibility: 'private' }))
+    updateRequests.length = 0
+    fireEvent.click(within(visibility).getByRole('button', { name: 'Edit' }))
+    fireEvent.click(await screen.findByRole('radio', { name: /Public/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    await waitFor(() => expect(updateRequests).toContainEqual({ visibility: 'public' }))
+    updateRequests.length = 0
 
     cleanup()
     queryClient.clear()
     currentApplication = {
       ...currentApplication,
+      visibility: 'private',
       clientType: 'public_native',
       allowedGrantTypes: ['authorization_code', 'refresh_token', deviceCodeGrantType],
       oidcScopes: ['openid', 'profile', 'email', 'offline_access'],
     }
+    renderWithQuery(<ApplicationDetailPage applicationId="app-1" section="settings" />)
+    expect(await screen.findByText('Only active members of the owner Organization may sign in.')).toBeTruthy()
+    cleanup()
+    queryClient.clear()
     renderWithQuery(<ApplicationDetailPage applicationId="app-1" section="oauth" />)
     const authorization = (await screen.findByRole('heading', { name: 'Authorization' })).closest(
       'section',

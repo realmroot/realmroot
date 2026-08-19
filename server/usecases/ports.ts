@@ -1196,6 +1196,7 @@ export interface ApplicationAggregate {
   clientId: string
   clientType: ApplicationResponse['clientType']
   public: boolean
+  visibility: ApplicationResponse['visibility']
   consentRequired: boolean
   disabled: boolean
   disabledReason: string | null
@@ -1270,7 +1271,7 @@ export interface ApplicationRepository {
   findByClientId(clientId: string): Promise<ApplicationAggregate | null>
   update(
     id: string,
-    patch: Partial<Omit<ApplicationAggregate, 'id' | 'clientId' | 'createdAt' | 'updatedAt'>>,
+    patch: Partial<Omit<ApplicationAggregate, 'id' | 'clientId' | 'ownerOrganizationId' | 'createdAt' | 'updatedAt'>>,
   ): Promise<ApplicationUpdateResult>
   delete(id: string): Promise<void>
   listSecrets(
@@ -1316,6 +1317,19 @@ export type MemberRecordInput = Omit<MemberResponse, 'createdAt' | 'updatedAt'>
 export type InvitationRecordInput = Omit<InvitationResponse, 'createdAt' | 'acceptedAt' | 'revokedAt'>
 export type ApiResourceRecordInput = Omit<ApiResourceResponse, 'createdAt' | 'updatedAt'>
 export type OrganizationRoleRecordInput = Omit<RoleResponse, 'predefined' | 'createdAt' | 'updatedAt'>
+export type TeamRecord = {
+  id: string
+  name: string
+  organizationId: string
+  createdAt: string
+  updatedAt: string
+}
+export type TeamMemberRecord = {
+  id: string
+  teamId: string
+  userId: string
+  createdAt: string
+}
 
 export interface AuthorizationRepository {
   createOrganization(
@@ -1337,6 +1351,9 @@ export interface AuthorizationRepository {
   findMember(id: string): Promise<MemberResponse | null>
   findMemberByOrganizationUser(organizationId: string, userId: string): Promise<MemberResponse | null>
   listUserMemberships(userId: string): Promise<MemberResponse[]>
+  findTeam(id: string): Promise<TeamRecord | null>
+  listTeamMembers(teamId: string, pagination: PaginationQuery): Promise<AuthorizationPaginatedResult<TeamMemberRecord>>
+  listTeamNamesForUser(organizationId: string, userId: string): Promise<string[]>
   listMemberUserIds(organizationIds: string[]): Promise<string[]>
   countMembersByRole(organizationId: string, role: string): Promise<number>
   hasPendingInvitation(email: string, now: Date): Promise<boolean>

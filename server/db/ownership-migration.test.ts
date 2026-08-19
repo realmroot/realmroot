@@ -37,6 +37,7 @@ const appleProviderConnectionBackfillMigrationName = '20260817163500_backfill_ap
 const providerConnectionLifecycleMigrationName = '20260817185000_provider_connection_before_account.sql'
 const machineExchangeRefreshMigrationName = '20260818040000_enable_machine_exchange_refresh.sql'
 const atomicExchangeRefreshRotationMigrationName = '20260818050000_atomic_exchange_refresh_rotation.sql'
+const groupAwareOidcMigrationName = '20260819015324_damp_exiles.sql'
 
 describe('tenant ownership migration', () => {
   it('backfills authority constraints for existing brokered connections', () => {
@@ -119,6 +120,7 @@ describe('tenant ownership migration', () => {
             providerConnectionLifecycleMigrationName,
             machineExchangeRefreshMigrationName,
             atomicExchangeRefreshRotationMigrationName,
+            groupAwareOidcMigrationName,
           ].includes(name),
       )) {
         database.exec(readFileSync(new URL(`../../migrations/${name}`, import.meta.url), 'utf8'))

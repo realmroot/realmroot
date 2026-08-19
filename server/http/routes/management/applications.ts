@@ -112,13 +112,7 @@ managementApplicationsRoute.get('/:applicationId', async (c) => {
 managementApplicationsRoute.patch('/:applicationId', async (c) => {
   await requireApplicationAccess(c)
   const body = await readJson(c, updateApplicationRequestSchema)
-  const owner = body.ownerOrganizationId
-    ? await authorizeOrganizationOwner(c, body.ownerOrganizationId, 'applications:write')
-    : null
-  const application = await updateApplication(getDeps(c), issuerFor(c), c.req.param('applicationId'), {
-    ...body,
-    ...(owner ? { ownerOrganizationId: authorizedOrganizationOwnerId(owner) } : {}),
-  })
+  const application = await updateApplication(getDeps(c), issuerFor(c), c.req.param('applicationId'), body)
   await publishWebhookEvent(getDeps(c), 'application.updated', { application: applicationWebhookData(application) })
   return c.json(application)
 })
@@ -172,6 +166,7 @@ function applicationWebhookData(application: ApplicationResponse) {
     iconUrl: application.iconUrl,
     clientId: application.clientId,
     clientType: application.clientType,
+    visibility: application.visibility,
     consentRequired: application.consentRequired,
     disabled: application.disabled,
     ownerOrganizationId: application.ownerOrganizationId,

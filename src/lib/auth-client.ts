@@ -19,7 +19,7 @@ export const authClient = createAuthClient({
     organizationClient({
       ac: organizationAccessControl,
       roles: organizationRoles,
-      teams: { enabled: false },
+      teams: { enabled: true },
     }),
     passkeyClient(),
     usernameClient(),

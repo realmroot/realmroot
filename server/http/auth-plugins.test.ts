@@ -54,7 +54,7 @@ describe('auth.test 2', () => {
     expect(capabilitiesResponse.status).toBe(404)
   })
 
-  it('configures organization access control with teams disabled', () => {
+  it('configures organization access control with explicit Teams and no default Team', () => {
     const auth = createAuth(
       {} as Database,
       createIdentifierGeneratorFake(),
@@ -69,7 +69,8 @@ describe('auth.test 2', () => {
 
     expect(organizationPlugin?.options).toMatchObject({
       teams: {
-        enabled: false,
+        enabled: true,
+        defaultTeam: { enabled: false },
       },
     })
   })
@@ -85,12 +86,20 @@ describe('auth.test 2', () => {
       createSecurityPolicy(),
     )
     const oauth = findPlugin<OAuthProviderPluginOptions>(auth, 'oauth-provider').options
-    expect(oauth.clientRegistrationAllowedScopes).toEqual(['openid', 'profile', 'email', 'offline_access'])
+    expect(oauth.clientRegistrationAllowedScopes).toEqual(['openid', 'profile', 'email', 'groups', 'offline_access'])
     expect(oauth.customUserInfoClaims).toBeUndefined()
   })
 
   it('maps OAuth provider context into authorization token claims', async () => {
-    const deps = {} as Deps
+    const deps = {
+      applications: {
+        findById: vi.fn().mockResolvedValue({ visibility: 'public' }),
+      },
+      authorization: {
+        findOrganization: vi.fn().mockResolvedValue({ id: 'org-1', disabled: false }),
+        findMemberByOrganizationUser: vi.fn().mockResolvedValue({ id: 'member-1' }),
+      },
+    } as unknown as Deps
     const buildTokenClaims = vi.spyOn(authorizationUsecase, 'buildTokenClaims').mockResolvedValue({
       authorization: { roles: ['contacts-reader'] },
       roles: ['contacts-reader'],
@@ -111,7 +120,7 @@ describe('auth.test 2', () => {
     ).resolves.toEqual({
       roles: ['contacts-reader'],
       groups: ['org-1'],
-      'urn:realmroot:params:oauth:tenant': { type: 'organization', id: 'org-1' },
+      'urn:realmroot:params:oauth:org': 'org-1',
     })
 
     expect(buildTokenClaims).toHaveBeenCalledWith(deps, {
@@ -122,6 +131,37 @@ describe('auth.test 2', () => {
       scopes: ['openid', 'contacts:read'],
       authorizedScopes: ['contacts:read'],
     })
+  })
+
+  it('drops a stale public Application Organization context after membership removal', async () => {
+    const deps = {
+      applications: {
+        findById: vi.fn().mockResolvedValue({ visibility: 'public' }),
+      },
+      authorization: {
+        findOrganization: vi.fn().mockResolvedValue({ id: 'org-1', disabled: false }),
+        findMemberByOrganizationUser: vi.fn().mockResolvedValue(null),
+      },
+    } as unknown as Deps
+    const buildTokenClaims = vi.spyOn(authorizationUsecase, 'buildTokenClaims').mockResolvedValue({
+      authorization: { roles: [] },
+      roles: [],
+      groups: [],
+    })
+
+    await expect(
+      buildOAuthAccessTokenClaims(deps, {
+        user: { id: 'user-1' },
+        scopes: new Set(['openid']),
+        referenceId: 'org-1',
+        metadata: { applicationId: 'app-1' },
+      }),
+    ).resolves.toEqual({ roles: [] })
+
+    expect(buildTokenClaims).toHaveBeenCalledWith(
+      deps,
+      expect.objectContaining({ organizationId: undefined, userId: 'user-1' }),
+    )
   })
 })
 

@@ -7,6 +7,7 @@ import type {
   AccountWalletAddressLinkInput,
 } from '@shared/api/account'
 import {
+  accountOrganizationTeamMembersResponseSchema,
   accountProviderConnectionsResponseSchema,
   accountProviderConnectorsResponseSchema,
   providerConnectionIntentSchema,
@@ -24,6 +25,7 @@ import type {
 } from '@shared/api/agent-api'
 import type { AgentApprovalPreview } from '@shared/api/agents'
 import type { CreateInvitationRequest, InvitationResponse, ListRolesResponse } from '@shared/api/authorization'
+import type { PaginationInput } from '@shared/api/pagination'
 import type {
   SecurityPasskeyRegistrationOptionsInput,
   SecurityTotpDisableInput,
@@ -32,6 +34,14 @@ import type {
 } from '@shared/api/security'
 import { ApiRequestError, apiClient, readJsonResponse, readRpcResponse, uploadApiFile } from '@/lib/api'
 import { authClient, nativeAuth } from '@/lib/auth-client'
+
+export interface AccountOrganizationTeam {
+  id: string
+  name: string
+  organizationId: string
+  createdAt: Date
+  updatedAt?: Date
+}
 
 export function getAccountProfile() {
   return readRpcResponse(apiClient.api.account.profile.$get())
@@ -120,6 +130,47 @@ export async function updateAccountOrganizationMemberRole(organizationId: string
       },
     ),
   )
+}
+
+export async function listAccountOrganizationTeams(organizationId: string) {
+  return readAuthClientResult(
+    await authClient.organization.listTeams({ query: { organizationId } }),
+  ) as AccountOrganizationTeam[]
+}
+
+export async function createAccountOrganizationTeam(organizationId: string, name: string) {
+  return readAuthClientResult(await authClient.organization.createTeam({ organizationId, name }))
+}
+
+export async function updateAccountOrganizationTeam(teamId: string, name: string) {
+  return readAuthClientResult(await authClient.organization.updateTeam({ teamId, data: { name } }))
+}
+
+export async function deleteAccountOrganizationTeam(organizationId: string, teamId: string) {
+  return readAuthClientResult(await authClient.organization.removeTeam({ organizationId, teamId }))
+}
+
+export async function listAccountOrganizationTeamMembers(
+  organizationId: string,
+  teamId: string,
+  pagination: PaginationInput,
+) {
+  return accountOrganizationTeamMembersResponseSchema.parse(
+    await readRpcResponse(
+      apiClient.api.account.organizations[':organizationId'].teams[':teamId'].members.$get({
+        param: { organizationId, teamId },
+        query: { limit: String(pagination.limit), offset: String(pagination.offset) },
+      }),
+    ),
+  )
+}
+
+export async function addAccountOrganizationTeamMember(organizationId: string, teamId: string, userId: string) {
+  return readAuthClientResult(await authClient.organization.addTeamMember({ organizationId, teamId, userId }))
+}
+
+export async function removeAccountOrganizationTeamMember(organizationId: string, teamId: string, userId: string) {
+  return readAuthClientResult(await authClient.organization.removeTeamMember({ organizationId, teamId, userId }))
 }
 
 export function updateAccountProfile(input: AccountProfileUpdateInput) {

@@ -309,8 +309,10 @@ describe('ConsentPage error and fallback paths', () => {
     render(<ConsentPage />)
 
     expect(await screen.findByRole('heading', { name: 'Client App' })).toBeTruthy()
-    expect(document.querySelector<HTMLLinkElement>('link[rel="icon"]')?.href).toBe(
-      'https://realmroot.example/favicon.svg',
+    await waitFor(() =>
+      expect(document.querySelector<HTMLLinkElement>('link[rel="icon"]')?.href).toBe(
+        'https://realmroot.example/favicon.svg',
+      ),
     )
     expect(screen.getByRole('link', { name: 'Privacy' }).getAttribute('href')).toBe('https://realmroot.example/privacy')
     expect(screen.getByRole('link', { name: 'Terms' }).getAttribute('href')).toBe('/terms')

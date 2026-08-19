@@ -16,6 +16,8 @@ export const accountQueryKeys = {
   organizationInvitations: ['account', 'organization-invitations'] as const,
   organizationAgents: (organizationId: string) => ['account', 'organizations', organizationId, 'agents'] as const,
   organizationRoles: (organizationId: string) => ['account', 'organizations', organizationId, 'roles'] as const,
+  organizationTeams: (organizationId: string) => ['account', 'organizations', organizationId, 'teams'] as const,
+  organizationTeamMembers: (teamId: string) => ['account', 'teams', teamId, 'members'] as const,
   security: ['account', 'security'] as const,
   sessions: ['account', 'sessions'] as const,
 }

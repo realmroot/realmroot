@@ -11,13 +11,15 @@ export const applicationGrantTypes = [
   deviceCodeGrantType,
   tokenExchangeGrantType,
 ] as const
-export const userConfigurableApplicationScopes = ['openid', 'profile', 'email', 'offline_access'] as const
+export const userConfigurableApplicationScopes = ['openid', 'profile', 'email', 'groups', 'offline_access'] as const
 export const applicationScopes = userConfigurableApplicationScopes
+export const applicationVisibilities = ['public', 'private'] as const
 
 export const applicationClientTypeSchema = z.enum(applicationClientTypes)
 export const applicationGrantTypeSchema = z.enum(applicationGrantTypes)
 export const applicationScopeSchema = z.enum(applicationScopes)
 export const userConfigurableApplicationScopeSchema = applicationScopeSchema
+export const applicationVisibilitySchema = z.enum(applicationVisibilities)
 
 const nonEmptyString = z.string().trim().min(1)
 const managedAssetUrlSchema = z.union([z.url(), z.string().regex(/^\/api\/assets\/[A-Za-z0-9_-]+$/)])
@@ -105,6 +107,7 @@ export const applicationResponseSchema = z
     clientId: z.string(),
     clientType: applicationClientTypeSchema,
     public: z.boolean(),
+    visibility: applicationVisibilitySchema,
     consentRequired: z.boolean(),
     disabled: z.boolean(),
     disabledReason: z.string().nullable(),
@@ -144,6 +147,7 @@ export const createApplicationRequestSchema = z
     homepageUrl: optionalUrl,
     iconUrl: optionalUrl,
     clientType: applicationClientTypeSchema,
+    visibility: applicationVisibilitySchema.optional(),
     redirectUris: z.array(nonEmptyString).default([]),
     postLogoutRedirectUris: z.array(nonEmptyString).optional(),
     corsOrigins: z.array(nonEmptyString).optional(),
@@ -199,7 +203,7 @@ export const updateApplicationRequestSchema = z
     consentRequired: z.boolean().optional(),
     disabled: z.boolean().optional(),
     disabledReason: z.string().trim().max(500).nullable().optional(),
-    ownerOrganizationId: nonEmptyString.optional(),
+    visibility: applicationVisibilitySchema.optional(),
     deviceLoginEnabled: z.boolean().optional(),
     /** @deprecated Accepted for migration compatibility and ignored. */
     oidcClaims: applicationOidcClaimsSchema.optional(),

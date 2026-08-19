@@ -132,6 +132,65 @@ describe('token exchange service', () => {
     ).resolves.toMatchObject({ token_type: 'Bearer' })
   })
 
+  it('rejects a credential from a different Organization for private and public Applications', async () => {
+    const { deps, repository, clientSecret } = await tokenExchangeFixture({ seedCredential: false })
+    await repository.seedCredential({
+      issuer: 'https://platform.example.com',
+      subject: 'org_2:runner_1',
+      ownerOrganizationId: 'org_2',
+    })
+    const subjectToken = await signEs256TestJwt(
+      {
+        iss: 'https://platform.example.com',
+        sub: 'org_2:runner_1',
+        aud: defaultAudience,
+        exp: Math.floor(Date.now() / 1000) + 60,
+      },
+      'external-platform-secret',
+    )
+
+    const input = {
+      grantType: tokenExchangeGrantType,
+      subjectToken,
+      subjectTokenType: jwtTokenType,
+      requestedTokenType: accessTokenType,
+      audience: defaultAudience,
+      scope: 'runner:connect',
+    } as const
+    await expect(exchangeToken(deps, input, { clientId: applicationClientId, clientSecret })).rejects.toMatchObject({
+      status: 400,
+    })
+
+    const findApplication = deps.applications.findByClientId
+    deps.applications.findByClientId = async (clientId) => {
+      const application = await findApplication(clientId)
+      return application ? { ...application, visibility: 'public' } : null
+    }
+    await expect(exchangeToken(deps, input, { clientId: applicationClientId, clientSecret })).rejects.toMatchObject({
+      status: 400,
+    })
+  })
+
+  it('rejects client authentication when the Application Organization is disabled', async () => {
+    const { deps, clientSecret } = await tokenExchangeFixture()
+    deps.authorization.findOrganization = async () => ({ id: 'org_1', disabled: true }) as never
+
+    await expect(
+      exchangeToken(
+        deps,
+        {
+          grantType: tokenExchangeGrantType,
+          subjectToken: 'unused',
+          subjectTokenType: jwtTokenType,
+          requestedTokenType: accessTokenType,
+          audience: defaultAudience,
+          scope: 'runner:connect',
+        },
+        { clientId: applicationClientId, clientSecret },
+      ),
+    ).rejects.toMatchObject({ error: 'invalid_client', status: 401 })
+  })
+
   it('exchanges a trusted external JWT assertion for an introspectable access token [spec: agent-identity/workload-token-exchange-claims]', async () => {
     const { deps, repository, clientSecret } = await tokenExchangeFixture()
 
@@ -180,7 +239,7 @@ describe('token exchange service', () => {
       aud: defaultAudience,
       client_id: applicationClientId,
       scope: 'runner:connect',
-      'urn:realmroot:params:oauth:tenant': { type: 'organization', id: 'org_1' },
+      'urn:realmroot:params:oauth:org': 'org_1',
       jti: expect.any(String),
     })
     expect(accessPayload).not.toHaveProperty('ama_project_id')
@@ -199,7 +258,7 @@ describe('token exchange service', () => {
       aud: defaultAudience,
       client_id: applicationClientId,
       scope: 'runner:connect',
-      'urn:realmroot:params:oauth:tenant': { type: 'organization', id: 'org_1' },
+      'urn:realmroot:params:oauth:org': 'org_1',
     })
 
     repository.client = {
@@ -331,7 +390,7 @@ describe('token exchange service', () => {
       aud: defaultAudience,
       client_id: applicationClientId,
       scope: 'runner:connect',
-      'urn:realmroot:params:oauth:tenant': { type: 'organization', id: 'org_1' },
+      'urn:realmroot:params:oauth:org': 'org_1',
     })
   })
 
@@ -1167,6 +1226,7 @@ interface SeedCredentialInput {
   issuer: string
   subject?: string
   audience?: string
+  ownerOrganizationId?: string
   jwksUrl?: string | null
   publicKeys?: Record<string, unknown>[] | null
 }
@@ -1275,7 +1335,7 @@ class InMemoryTokenExchangeRepository implements TokenExchangeRepository {
       id,
       applicationId,
       applicationClientId,
-      ownerOrganizationId: 'org_1',
+      ownerOrganizationId: input.ownerOrganizationId ?? 'org_1',
       name: 'External Platform',
       issuer: input.issuer,
       subject: input.subject ?? 'org_1:*',
@@ -1412,6 +1472,7 @@ function credentialDeps(repository: InMemoryTokenExchangeRepository): Deps {
               id: applicationId,
               clientId,
               ownerOrganizationId: 'org_1',
+              visibility: 'private',
               disabled: false,
               oidcScopes: clientScopes(repository).filter((scope) => scope === 'offline_access'),
               resourceScopes: [
@@ -1424,6 +1485,7 @@ function credentialDeps(repository: InMemoryTokenExchangeRepository): Deps {
           : null,
     },
     authorization: {
+      findOrganization: async (id: string) => (id === 'org_1' ? ({ id, disabled: false } as never) : null),
       findResource: async (id: string) => (id === audienceResourceId ? eligibleAudienceResource() : null),
       findResourceByResourceUrl: async (resourceUrl: string) =>
         resourceUrl === defaultAudience ? eligibleAudienceResource(clientScopes(repository)) : null,

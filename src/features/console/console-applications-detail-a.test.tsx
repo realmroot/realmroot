@@ -331,18 +331,8 @@ describe('admin console applications-detail-a', () => {
     )
 
     const ownership = screen.getByRole('heading', { name: 'Ownership' }).closest('section') as HTMLElement
-    fireEvent.click(within(ownership).getByRole('button', { name: 'Edit' }))
-    fireEvent.change(await screen.findByLabelText('Owner'), { target: { value: 'org-1' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
-    await waitFor(() =>
-      expect(requests).toContainEqual({
-        url: '/api/applications/app-1',
-        method: 'PATCH',
-        body: {
-          ownerOrganizationId: 'org-1',
-        },
-      }),
-    )
+    expect(within(ownership).queryByRole('button', { name: 'Edit' })).toBeNull()
+    expect(within(ownership).getByText('The owner Organization is fixed when this client is created.')).toBeTruthy()
 
     const consent = screen.getByRole('heading', { name: 'User consent' }).closest('section') as HTMLElement
     fireEvent.click(within(consent).getByRole('button', { name: 'Edit' }))

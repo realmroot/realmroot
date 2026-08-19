@@ -907,6 +907,7 @@ export async function buildTokenClaims(deps: Deps, input: AuthorizationTokenClai
       ? await deps.authorization.findOrganization(input.organizationId)
       : null
   let roleAuthorization: { roles: string[]; scopes: string[] } | null = null
+  let groups: string[] = []
   if (input.userId && input.organizationId) {
     const membership = await deps.authorization.findMemberByOrganizationUser(input.organizationId, input.userId)
     if (!membership) throw forbidden('User is not a member of the active Organization context.')
@@ -917,11 +918,12 @@ export async function buildTokenClaims(deps: Deps, input: AuthorizationTokenClai
           (await resolveOrganizationMembershipScopes(deps, input.organizationId, membership.roles, resource.id)))
         : [],
     }
+    groups = await deps.authorization.listTeamNamesForUser(input.organizationId, input.userId)
   }
   if (resource && input.organizationId && !activeResourceVisibleToOrganization(resource, input.organizationId)) {
-    return toTokenClaims({ ...input, scopes: [] }, roleAuthorization, resource, organization)
+    return toTokenClaims({ ...input, scopes: [], groups }, roleAuthorization, resource, organization)
   }
-  return toTokenClaims(input, roleAuthorization, resource, organization)
+  return toTokenClaims({ ...input, groups }, roleAuthorization, resource, organization)
 }
 
 function updateScopeGrantModes(

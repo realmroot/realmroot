@@ -2,7 +2,7 @@ import type { Deps } from '@server/usecases/deps'
 import type { ApplicationAggregate } from '@server/usecases/ports'
 import type { ApiResourceResponse } from '@shared/api/authorization'
 import { describe, expect, it, vi } from 'vitest'
-import { filterOAuthAccessTokenScopes } from './auth-helpers'
+import { applicationUserHasAccess, filterOAuthAccessTokenScopes } from './auth-helpers'
 
 const resource: ApiResourceResponse = {
   id: 'res_orders',
@@ -39,6 +39,7 @@ const application = {
   disabled: false,
   consentRequired: true,
   ownerOrganizationId: 'org_client',
+  visibility: 'public',
   oidcScopes: ['openid'],
   resourceScopes: [{ resourceServerId: resource.id, scopes: ['orders:admin', 'orders:read'] }],
 } as ApplicationAggregate
@@ -60,6 +61,7 @@ function createDeps(input?: {
       recordPolicyAuthorization: vi.fn(),
     },
     authorization: {
+      findOrganization: vi.fn().mockImplementation(async (id: string) => ({ id, disabled: false })),
       findResourceByResourceUrl: vi.fn().mockResolvedValue(resource),
       listUserMemberships: vi.fn().mockResolvedValue(
         (input?.memberships ?? []).map((membership, index) => ({
@@ -83,6 +85,20 @@ function createDeps(input?: {
 }
 
 describe('filterOAuthAccessTokenScopes', () => {
+  it('rejects public Applications owned by a disabled Organization', async () => {
+    const deps = {
+      authorization: {
+        findOrganization: vi.fn().mockResolvedValue({ id: 'org_client', disabled: true }),
+        findMemberByOrganizationUser: vi.fn(),
+      },
+    } as unknown as Deps
+
+    await expect(applicationUserHasAccess(deps, { ...application, visibility: 'public' }, 'user_1')).resolves.toBe(
+      false,
+    )
+    expect(deps.authorization.findMemberByOrganizationUser).not.toHaveBeenCalled()
+  })
+
   it('issues a consented automatic scope to any eligible authenticated user [spec: hosted-auth/resource-scope-consent-boundary]', async () => {
     await expect(
       filterOAuthAccessTokenScopes(createDeps(), {
@@ -136,6 +152,32 @@ describe('filterOAuthAccessTokenScopes', () => {
       filterOAuthAccessTokenScopes(deps, {
         user: { id: 'user_1' },
         scopes: ['openid', 'orders:admin', 'orders:read'],
+        resource: resource.resourceUrl,
+        metadata: { applicationId: application.id },
+      }),
+    ).rejects.toMatchObject({ body: { error: 'invalid_target' } })
+  })
+
+  it('rejects a private Resource Server owned by a disabled Organization', async () => {
+    const privateResource = { ...resource, visibility: 'private' as const }
+    const deps = createDeps({ memberships: [{ organizationId: 'org_owner', roles: [] }] })
+    vi.mocked(deps.authorization.findResourceByResourceUrl).mockResolvedValue(privateResource)
+    vi.mocked(deps.authorization.findOrganization).mockImplementation(async (id) => ({
+      id,
+      slug: id,
+      name: id,
+      displayName: null,
+      logo: null,
+      disabled: id === 'org_owner',
+      disabledReason: id === 'org_owner' ? 'suspended' : null,
+      createdAt: '2026-08-01T00:00:00.000Z',
+      updatedAt: '2026-08-01T00:00:00.000Z',
+    }))
+
+    await expect(
+      filterOAuthAccessTokenScopes(deps, {
+        user: { id: 'user_1' },
+        scopes: ['openid', 'orders:read'],
         resource: resource.resourceUrl,
         metadata: { applicationId: application.id },
       }),

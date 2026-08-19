@@ -21,6 +21,8 @@ import {
   member,
   organization,
   organizationRole,
+  team,
+  teamMember,
 } from './authorization-tables'
 import { resourceScopeEntitlement } from './resource-scope-entitlement-tables'
 
@@ -35,6 +37,7 @@ export const userRelations = relations(user, ({ many }) => ({
   oauthConsents: many(oauthConsent),
   ownedApplications: many(application),
   organizationMemberships: many(member),
+  teamMemberships: many(teamMember),
   agentHosts: many(agentHost),
   agents: many(agent),
   grantedAgentCapabilities: many(agentCapabilityGrant, { relationName: 'grantedAgentCapabilities' }),
@@ -135,6 +138,7 @@ export const organizationRelations = relations(organization, ({ many, one }) => 
   invitations: many(invitation),
   applications: many(application),
   roles: many(organizationRole),
+  teams: many(team),
 }))
 
 export const organizationMemberRelations = relations(member, ({ one }) => ({
@@ -155,6 +159,25 @@ export const organizationInvitationRelations = relations(invitation, ({ one }) =
   }),
   inviter: one(user, {
     fields: [invitation.inviterId],
+    references: [user.id],
+  }),
+}))
+
+export const organizationTeamRelations = relations(team, ({ many, one }) => ({
+  organization: one(organization, {
+    fields: [team.organizationId],
+    references: [organization.id],
+  }),
+  members: many(teamMember),
+}))
+
+export const organizationTeamMemberRelations = relations(teamMember, ({ one }) => ({
+  team: one(team, {
+    fields: [teamMember.teamId],
+    references: [team.id],
+  }),
+  user: one(user, {
+    fields: [teamMember.userId],
     references: [user.id],
   }),
 }))

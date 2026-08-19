@@ -9,7 +9,7 @@ const realmrootOrigin = process.env.REALMROOT_ORIGIN ?? 'http://localhost:4189'
 const realmrootIssuer = process.env.REALMROOT_ISSUER ?? `${realmrootOrigin}/api/auth`
 const realmrootJwksUrl = process.env.REALMROOT_JWKS_URL ?? `${realmrootOrigin}/api/auth/jwks`
 const realmrootCliClientId = 'realmroot-cli'
-const realmrootTenantClaim = 'urn:realmroot:params:oauth:tenant'
+const realmrootOrganizationClaim = 'urn:realmroot:params:oauth:org'
 const realmrootJwks = createRemoteJWKSet(new URL(realmrootJwksUrl))
 const usedDpopProofs = new Map<string, number>()
 
@@ -126,7 +126,7 @@ async function requireRealmrootDpopAccess(request: Request, response: Response, 
       scope: verified.payload.scope,
       roles: verified.payload.roles,
       groups: verified.payload.groups,
-      tenant: verified.payload[realmrootTenantClaim],
+      organization: verified.payload[realmrootOrganizationClaim],
     }
     next()
   } catch (error) {

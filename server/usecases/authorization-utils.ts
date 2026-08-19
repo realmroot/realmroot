@@ -10,6 +10,7 @@ export interface AuthorizationTokenClaimInput {
   authorizedScopes?: string[]
   destination?: 'access_token' | 'id_token' | 'userinfo'
   claimSelection?: ApplicationOidcClaims['accessToken']
+  groups?: string[]
 }
 
 export function toTokenClaims(
@@ -21,7 +22,7 @@ export function toTokenClaims(
   const roles = dedupe(roleAuthorization?.roles ?? [])
   const assignedScopes = new Set(roleAuthorization?.scopes ?? [])
   const scopes = roleAuthorization ? input.scopes.filter((scope) => assignedScopes.has(scope)) : input.scopes
-  const groups = input.organizationId ? [input.organizationId] : []
+  const groups = dedupe(input.groups ?? [])
   const authorization = {
     scopes,
     groups,

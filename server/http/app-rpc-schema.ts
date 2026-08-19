@@ -3,6 +3,7 @@ import type {
   AccountEmailChangeInput,
   AccountOrganizationAgentsResponse,
   AccountOrganizationContextResponse,
+  AccountOrganizationTeamMembersResponse,
   AccountPasswordChangeInput,
   AccountProfileResponse,
   AccountProfileUpdateInput,
@@ -227,6 +228,15 @@ export type RpcSchema = {
     $get: RpcEndpoint<
       { param: { organizationId: string }; query?: Partial<Record<keyof PaginationQuery, string>> },
       AccountOrganizationAgentsResponse
+    >
+  }
+  '/api/account/organizations/:organizationId/teams/:teamId/members': {
+    $get: RpcEndpoint<
+      {
+        param: { organizationId: string; teamId: string }
+        query?: Partial<Record<keyof PaginationQuery, string>>
+      },
+      AccountOrganizationTeamMembersResponse
     >
   }
   '/api/account/security': {

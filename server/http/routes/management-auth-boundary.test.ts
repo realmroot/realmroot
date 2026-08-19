@@ -265,11 +265,18 @@ describe('management routes 1', () => {
     const createApplication = openApiOperationObjects().find((operation) => operation.key === 'POST /applications')
     const createApplicationSchema = openApiSchemaObject(requestBodyContent(createApplication?.requestBody).schema)
     const createApplicationProperties = openApiRecord(createApplicationSchema.properties)
+    const updateApplication = openApiOperationObjects().find(
+      (operation) => operation.key === 'PATCH /applications/{param}',
+    )
+    const updateApplicationSchema = openApiSchemaObject(requestBodyContent(updateApplication?.requestBody).schema)
+    const updateApplicationProperties = openApiRecord(updateApplicationSchema.properties)
 
+    expect(createApplicationProperties).toHaveProperty('ownerOrganizationId')
     expect(createApplicationProperties).toHaveProperty('postLogoutRedirectUris')
     expect(createApplicationProperties).toHaveProperty('corsOrigins')
     expect(createApplicationProperties).not.toHaveProperty('clientId')
     expect(createApplicationProperties).not.toHaveProperty('clientSecret')
+    expect(updateApplicationProperties).not.toHaveProperty('ownerOrganizationId')
 
     const createRole = openApiOperationObjects().find(
       (operation) => operation.key === 'POST /organizations/{param}/roles',

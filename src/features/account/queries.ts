@@ -1,4 +1,5 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import type { PaginationInput } from '@shared/api/pagination'
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { accountQueryKeys, accountQueryOptions } from '@/lib/account-query'
 import { getConfigz } from '@/lib/api'
@@ -14,6 +15,8 @@ import {
   listAccountOrganizationInvitations,
   listAccountOrganizationRoles,
   listAccountOrganizations,
+  listAccountOrganizationTeamMembers,
+  listAccountOrganizationTeams,
   listAccountProviderConnections,
   listAccountProviderConnectors,
   listAccountSessions,
@@ -79,6 +82,29 @@ export function useAccountOrganizationRoles(organizationId: string, enabled = tr
     queryKey: accountQueryKeys.organizationRoles(organizationId),
     queryFn: () => listAccountOrganizationRoles(organizationId),
     enabled,
+    ...accountQueryOptions,
+  })
+}
+
+export function useAccountOrganizationTeams(organizationId: string, enabled = true) {
+  return useQuery({
+    queryKey: accountQueryKeys.organizationTeams(organizationId),
+    queryFn: () => listAccountOrganizationTeams(organizationId),
+    enabled,
+    ...accountQueryOptions,
+  })
+}
+
+export function useAccountOrganizationTeamMembers(
+  organizationId: string,
+  teamId: string | null,
+  pagination: PaginationInput = { limit: 20, offset: 0 },
+) {
+  return useQuery({
+    queryKey: [...accountQueryKeys.organizationTeamMembers(teamId ?? 'none'), pagination],
+    queryFn: () => listAccountOrganizationTeamMembers(organizationId, teamId!, pagination),
+    enabled: Boolean(teamId),
+    placeholderData: keepPreviousData,
     ...accountQueryOptions,
   })
 }

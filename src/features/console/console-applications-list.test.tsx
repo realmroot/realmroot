@@ -47,6 +47,7 @@ describe('admin console applications-list', () => {
     expect(requests).toContain('/api/applications?ownerOrganizationId=org-1')
     expect(requests).not.toContain('/api/users?limit=100&organizationId=org-1')
     fireEvent.click(screen.getByRole('button', { name: 'New application' }))
+    expect(screen.getByLabelText('Visibility').textContent).toContain('Private')
     expect(screen.queryByLabelText('Owner Organization')).toBeNull()
   })
 
@@ -100,6 +101,7 @@ describe('admin console applications-list', () => {
             name: 'Admin console',
             slug: 'admin-console',
             clientType: 'confidential_web',
+            visibility: 'private',
             ownerOrganizationId: 'org-1',
             redirectUris: ['https://app.example.com/callback'],
           },
@@ -220,6 +222,7 @@ describe('admin console applications-list', () => {
           name: 'Server app',
           slug: 'server-app',
           clientType: 'confidential_web',
+          visibility: 'private',
           ownerOrganizationId: 'org-1',
           redirectUris: ['https://server.example.com/callback'],
         },
@@ -280,6 +283,7 @@ describe('admin console applications-list', () => {
           name: 'Event publisher',
           slug: 'event-publisher',
           clientType: 'machine',
+          visibility: 'private',
           ownerOrganizationId: 'org-1',
           redirectUris: [],
         },

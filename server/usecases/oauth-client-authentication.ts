@@ -11,6 +11,8 @@ export async function authenticateApplicationClient(deps: Deps, clientId: string
   if (!client || client.disabled || !application || application.disabled) {
     throw invalidClient('Invalid client credentials.')
   }
+  const organization = await deps.authorization.findOrganization(application.ownerOrganizationId)
+  if (!organization || organization.disabled) throw invalidClient('Invalid client credentials.')
   if (!client.clientSecret || client.clientSecret !== (await hashProviderSecret(clientSecret))) {
     throw invalidClient('Invalid client credentials.')
   }

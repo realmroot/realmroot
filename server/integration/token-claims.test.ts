@@ -1,7 +1,7 @@
 import { applyD1Migrations, env, reset } from 'cloudflare:test'
 import { filterOAuthAccessTokenScopes } from '@server/auth'
 import { buildTokenClaims, ensureRealmrootResourceServer } from '@server/usecases/authorization'
-import { realmrootTenantClaim } from '@shared/oauth-token-profile'
+import { realmrootOrganizationClaim } from '@shared/oauth-token-profile'
 import { calculateJwkThumbprint, decodeProtectedHeader, exportJWK, generateKeyPair, SignJWT } from 'jose'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
@@ -89,6 +89,7 @@ describe('OAuth token claim building over real D1', () => {
         clientType: 'confidential_web',
         redirectUris: ['https://app.example.com/callback'],
         ownerOrganizationId: platformOrganizationId,
+        visibility: 'public',
         consentRequired: false,
       })
     ).json()) as { id: string; clientId: string; clientSecret: string }
@@ -130,6 +131,12 @@ describe('OAuth token claim building over real D1', () => {
       200,
       'PUT',
     )
+    await env.DB.prepare('INSERT INTO team (id, name, organization_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)')
+      .bind('team-platform-admins', 'platform-admins', organization.id, Date.now(), Date.now())
+      .run()
+    await env.DB.prepare('INSERT INTO team_member (id, team_id, user_id, created_at) VALUES (?, ?, ?, ?)')
+      .bind('team-member-claims-user', 'team-platform-admins', userId, Date.now())
+      .run()
     const tenantApplication = (await (
       await postJson(harness, cookie, '/api/applications', {
         name: 'Tenant Claims App',
@@ -154,7 +161,7 @@ describe('OAuth token claim building over real D1', () => {
         referenceId: foreignOrganization.id,
         metadata: { applicationId: tenantApplication.id },
       }),
-    ).rejects.toMatchObject({ body: { error: 'invalid_target' } })
+    ).resolves.toEqual(['openid'])
     await expect(
       filterOAuthAccessTokenScopes(harness.deps, {
         user: { id: userId },
@@ -271,8 +278,8 @@ describe('OAuth token claim building over real D1', () => {
       scope: 'openid',
       client_id: application.clientId,
       roles: ['contacts-reader', 'member'],
-      groups: [organization.id],
-      [realmrootTenantClaim]: { type: 'organization', id: organization.id },
+      groups: ['platform-admins'],
+      [realmrootOrganizationClaim]: organization.id,
     })
     expect(accessPayload).not.toHaveProperty('authorization')
     expect(accessPayload).not.toHaveProperty('azp')
@@ -358,7 +365,7 @@ describe('OAuth token claim building over real D1', () => {
       scope: 'contacts:read',
       sub: application.id,
       client_id: application.clientId,
-      [realmrootTenantClaim]: { type: 'organization', id: ownerOrganization.id },
+      [realmrootOrganizationClaim]: ownerOrganization.id,
     })
     expect(ownerPayload).not.toHaveProperty('authorization')
 
@@ -430,7 +437,7 @@ describe('OAuth token claim building over real D1', () => {
       aud: `${baseURL}/api`,
       scope: 'applications:read',
       cnf: { jkt: await calculateJwkThumbprint(publicJwk) },
-      [realmrootTenantClaim]: { type: 'organization', id: platformOrganizationId },
+      [realmrootOrganizationClaim]: platformOrganizationId,
     })
   })
 })

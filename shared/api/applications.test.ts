@@ -88,6 +88,7 @@ describe('application API pagination contracts', () => {
       clientId: 'client-1',
       clientType: 'confidential_web',
       public: false,
+      visibility: 'private',
       consentRequired: true,
       disabled: false,
       disabledReason: null,
@@ -168,6 +169,7 @@ describe('application API pagination contracts', () => {
         oidcScopes: ['openid', 'applications:write'],
       }),
     ).toThrow()
+    expect(() => updateApplicationRequestSchema.parse({ ownerOrganizationId: 'org-other' })).toThrow()
   })
 
   it('rejects caller-controlled grants, OIDC scopes, and the discarded applicationType field', () => {

@@ -8,8 +8,109 @@ const ownershipMigration = migration('20260801123349_next_tattoo.sql')
 const organizationRbacMigration = migration('20260805160616_round_wither.sql')
 const rfc9728ScopeRegistryMigration = migration('20260806214840_rfc9728_scope_registry.sql')
 const platformAuthorityMigration = migration('20260807000000_platform_authority.sql')
+const groupAwareOidcMigration = migration('20260819015324_damp_exiles.sql')
 
 describe('D1 migration upgrades', () => {
+  it('migrates Applications and installs Better Auth Team storage [spec: platform-onboarding/existing-d1-upgrade]', () => {
+    const database = new DatabaseSync(':memory:')
+    try {
+      database.exec(`
+        PRAGMA foreign_keys = ON;
+        CREATE TABLE organization (id TEXT PRIMARY KEY NOT NULL);
+        CREATE TABLE user (id TEXT PRIMARY KEY NOT NULL);
+        CREATE TABLE oauth_client (client_id TEXT PRIMARY KEY NOT NULL, type TEXT, scopes TEXT);
+        CREATE TABLE application (
+          id TEXT PRIMARY KEY NOT NULL,
+          oauth_client_id TEXT NOT NULL,
+          owner_organization_id TEXT,
+          oidc_scopes TEXT NOT NULL
+        );
+        CREATE TABLE session (
+          id TEXT PRIMARY KEY NOT NULL,
+          user_id TEXT,
+          active_organization_id TEXT
+        );
+        CREATE TABLE member (
+          id TEXT PRIMARY KEY NOT NULL,
+          organization_id TEXT NOT NULL,
+          user_id TEXT NOT NULL
+        );
+        CREATE TABLE oauth_refresh_token (
+          id TEXT PRIMARY KEY NOT NULL,
+          client_id TEXT NOT NULL,
+          user_id TEXT NOT NULL,
+          revoked INTEGER
+        );
+        CREATE TABLE invitation (id TEXT PRIMARY KEY NOT NULL);
+        INSERT INTO organization VALUES ('org-1'), ('org-2');
+        INSERT INTO user VALUES ('user-1');
+        INSERT INTO oauth_client VALUES
+          ('web-client', 'confidential_web', '["openid","profile","email"]'),
+          ('machine-client', 'machine', '["offline_access"]');
+        INSERT INTO application VALUES
+          ('web-app', 'web-client', 'org-1', '["openid","profile","email"]'),
+          ('machine-app', 'machine-client', 'org-1', '["offline_access"]');
+      `)
+
+      applyMigration(database, groupAwareOidcMigration)
+
+      expect(database.prepare('SELECT id, visibility, oidc_scopes FROM application ORDER BY id').all()).toEqual([
+        { id: 'machine-app', visibility: 'public', oidc_scopes: '["offline_access"]' },
+        { id: 'web-app', visibility: 'public', oidc_scopes: '["openid","profile","email","groups"]' },
+      ])
+      expect(database.prepare('SELECT client_id, scopes FROM oauth_client ORDER BY client_id').all()).toEqual([
+        { client_id: 'machine-client', scopes: '["offline_access"]' },
+        { client_id: 'web-client', scopes: '["openid","profile","email","groups"]' },
+      ])
+      database.exec(`
+        INSERT INTO oauth_client VALUES ('new-client', 'public_native', '["openid"]');
+        INSERT INTO application (id, oauth_client_id, owner_organization_id, oidc_scopes)
+        VALUES ('new-app', 'new-client', 'org-1', '["openid"]');
+      `)
+      expect(database.prepare("SELECT visibility FROM application WHERE id = 'new-app'").get()).toEqual({
+        visibility: 'private',
+      })
+      database.exec(`
+        INSERT INTO team (id, name, organization_id) VALUES ('team-1', 'platform-admins', 'org-1');
+        INSERT INTO team (id, name, organization_id) VALUES ('team-2', 'platform-admins', 'org-2');
+        INSERT INTO team_member (id, team_id, user_id) VALUES ('tm-1', 'team-1', 'user-1');
+        INSERT INTO invitation (id, team_id) VALUES ('invite-1', 'team-1,team-2');
+        INSERT INTO member (id, organization_id, user_id) VALUES ('member-1', 'org-1', 'user-1');
+        INSERT INTO session (id, user_id, active_organization_id, active_team_id)
+        VALUES ('session-1', 'user-1', 'org-1', 'team-1');
+        INSERT INTO oauth_refresh_token (id, client_id, user_id)
+        VALUES ('refresh-1', 'new-client', 'user-1');
+      `)
+      expect(() =>
+        database.exec("INSERT INTO team (id, name, organization_id) VALUES ('team-3', 'platform-admins', 'org-1')"),
+      ).toThrow()
+      expect(() =>
+        database.exec("INSERT INTO team_member (id, team_id, user_id) VALUES ('tm-2', 'team-1', 'user-1')"),
+      ).toThrow()
+      expect(database.prepare("SELECT count(*) AS count FROM team WHERE name = 'platform-admins'").get()).toEqual({
+        count: 2,
+      })
+      expect(database.prepare("SELECT team_id FROM invitation WHERE id = 'invite-1'").get()).toEqual({
+        team_id: 'team-1,team-2',
+      })
+      database.exec("DELETE FROM member WHERE id = 'member-1'")
+      expect(database.prepare("SELECT count(*) AS count FROM team_member WHERE user_id = 'user-1'").get()).toEqual({
+        count: 0,
+      })
+      expect(
+        database.prepare("SELECT revoked IS NOT NULL AS revoked FROM oauth_refresh_token WHERE id = 'refresh-1'").get(),
+      ).toEqual({
+        revoked: 1,
+      })
+      expect(
+        database.prepare("SELECT active_organization_id, active_team_id FROM session WHERE id = 'session-1'").get(),
+      ).toEqual({ active_organization_id: null, active_team_id: null })
+      expect(database.prepare('PRAGMA foreign_key_check').all()).toEqual([])
+    } finally {
+      database.close()
+    }
+  })
+
   it('preserves populated Application and Resource server dependents [spec: platform-onboarding/existing-d1-upgrade]', () => {
     const database = new DatabaseSync(':memory:')
 

@@ -83,8 +83,18 @@ describe('schema.test 1', () => {
 
     expect(getTableConfig(invitation).name).toBe('invitation')
     expect(columnNames(invitation)).toEqual(
-      expect.arrayContaining(['organization_id', 'email', 'role', 'status', 'expires_at', 'inviter_id', 'created_at']),
+      expect.arrayContaining([
+        'organization_id',
+        'email',
+        'role',
+        'status',
+        'expires_at',
+        'inviter_id',
+        'team_id',
+        'created_at',
+      ]),
     )
+    expect(foreignKeyReferences(invitation).map((reference) => reference.foreignTable)).not.toContain('team')
   })
 
   it('anchors Realmroot applications to Better Auth OAuth clients without changing provider tables', () => {

@@ -16,11 +16,15 @@ import {
   federatedCredential,
   invitation,
   member,
+  oauthRefreshToken,
   organization,
   organizationRole,
   providerResourceAuthorization,
   resourceConnectionIntent,
   resourceScopeEntitlement,
+  session,
+  team,
+  teamMember,
   tokenExchangeAccessToken,
   tokenExchangeRefreshToken,
 } from '../../db/schema'
@@ -131,6 +135,43 @@ export function createDrizzleAuthorizationRepository(db: Database, ids: Identifi
       return rows.map(toMember)
     },
 
+    async findTeam(id) {
+      const rows = await db.select().from(team).where(eq(team.id, id)).limit(1)
+      const row = rows[0]
+      return row
+        ? {
+            ...row,
+            createdAt: row.createdAt.toISOString(),
+            updatedAt: row.updatedAt.toISOString(),
+          }
+        : null
+    },
+
+    async listTeamMembers(teamId, pagination) {
+      const rows = await db
+        .select()
+        .from(teamMember)
+        .where(eq(teamMember.teamId, teamId))
+        .orderBy(desc(teamMember.createdAt), desc(teamMember.id))
+        .limit(pagination.limit)
+        .offset(pagination.offset)
+      const total = await totalRows(db, teamMember, eq(teamMember.teamId, teamId))
+      return {
+        items: rows.map((row) => ({ ...row, createdAt: row.createdAt.toISOString() })),
+        pagination: toPagination(pagination, total),
+      }
+    },
+
+    async listTeamNamesForUser(organizationId, userId) {
+      const rows = await db
+        .select({ name: team.name })
+        .from(teamMember)
+        .innerJoin(team, eq(team.id, teamMember.teamId))
+        .where(and(eq(team.organizationId, organizationId), eq(teamMember.userId, userId)))
+        .orderBy(asc(team.name))
+      return rows.map((row) => row.name)
+    },
+
     async listMemberUserIds(organizationIds) {
       if (organizationIds.length === 0) return []
       const rows = await db
@@ -215,10 +256,37 @@ export function createDrizzleAuthorizationRepository(db: Database, ids: Identifi
           )
         )`,
       )
-      const [, removed] = await db.batch([
+      const targetUserIds = db.select({ userId: member.userId }).from(member).where(condition)
+      const privateApplicationClientIds = db
+        .select({ clientId: application.oauthClientId })
+        .from(application)
+        .where(and(eq(application.ownerOrganizationId, organizationId), eq(application.visibility, 'private')))
+      const organizationTeamIds = db
+        .select({ teamId: team.id })
+        .from(team)
+        .where(eq(team.organizationId, organizationId))
+      const now = new Date()
+      const [, , , , removed] = await db.batch([
         db
           .insert(agentAuditEvent)
           .select(db.select(auditSelect(audit, { organizationId, memberId })).from(member).where(condition)),
+        db
+          .delete(teamMember)
+          .where(and(inArray(teamMember.userId, targetUserIds), inArray(teamMember.teamId, organizationTeamIds))),
+        db
+          .update(oauthRefreshToken)
+          .set({ revoked: now })
+          .where(
+            and(
+              inArray(oauthRefreshToken.userId, targetUserIds),
+              inArray(oauthRefreshToken.clientId, privateApplicationClientIds),
+              isNull(oauthRefreshToken.revoked),
+            ),
+          ),
+        db
+          .update(session)
+          .set({ activeOrganizationId: null, activeTeamId: null })
+          .where(and(inArray(session.userId, targetUserIds), eq(session.activeOrganizationId, organizationId))),
         db.delete(member).where(condition).returning({ id: member.id }),
       ])
       return removed.length > 0

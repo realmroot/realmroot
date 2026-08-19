@@ -41,7 +41,7 @@ describe('authorization claim helpers', () => {
   it('emits fixed claims with optional organization and resource metadata', () => {
     expect(
       toTokenClaims(
-        { organizationId: organization.id, scopes: ['projects:read'] },
+        { organizationId: organization.id, groups: ['platform-readers'], scopes: ['projects:read'] },
         roleAuthorization,
         resource,
         organization,
@@ -49,14 +49,14 @@ describe('authorization claim helpers', () => {
     ).toEqual({
       authorization: {
         scopes: ['projects:read'],
-        groups: [organization.id],
+        groups: ['platform-readers'],
         roles: ['reader'],
         organization_id: organization.id,
         organization_name: organization.name,
         resource: resource.identifier,
         audience: resource.resourceUrl,
       },
-      groups: [organization.id],
+      groups: ['platform-readers'],
       roles: ['reader'],
     })
     expect(toTokenClaims({ scopes: [] }, null, null)).toEqual({
@@ -70,6 +70,7 @@ describe('authorization claim helpers', () => {
     const claims = toTokenClaims(
       {
         organizationId: organization.id,
+        groups: ['platform-readers'],
         scopes: ['projects:read'],
         claimSelection: {
           authorization: true,
@@ -86,7 +87,7 @@ describe('authorization claim helpers', () => {
     )
     expect(claims).toEqual({
       authorization: expect.any(Object),
-      groups: [organization.id],
+      groups: ['platform-readers'],
       roles: ['reader'],
       scope: 'projects:read',
       organization_id: organization.id,

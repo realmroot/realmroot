@@ -1,6 +1,6 @@
 import { applyD1Migrations, env, reset } from 'cloudflare:test'
 import { hashProviderSecret } from '@server/usecases/applications-utils'
-import { realmrootTenantClaim } from '@shared/oauth-token-profile'
+import { realmrootOrganizationClaim } from '@shared/oauth-token-profile'
 import { decodeJwt, decodeProtectedHeader } from 'jose'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createHarness, type Harness, platformOrganizationId, resourceOpenApiFetch, signInAdmin } from './harness'
@@ -158,7 +158,7 @@ describe('OAuth token exchange over real D1', () => {
       sub: 'partner-user-1',
       aud: audience,
       client_id: application.clientId,
-      [realmrootTenantClaim]: { type: 'organization', id: platformOrganizationId },
+      [realmrootOrganizationClaim]: platformOrganizationId,
     })
 
     // Introspection reads the stored token by hash (storeAccessToken + findAccessTokenByHash).

@@ -14,6 +14,7 @@ import { createIdentifierGeneratorFake } from '@server/usecases/identifier-gener
 import type {
   ApplicationAggregate,
   ApplicationRepository,
+  ApplicationUpdateResult,
   ClientSecretRecord,
   ConsentRecord,
 } from '@server/usecases/ports'
@@ -55,7 +56,7 @@ function createApplication(
 }
 
 describe('service.test 1', () => {
-  it('requires an explicitly selected owner Organization to be active', async () => {
+  it('requires the explicitly selected owner Organization to be active at creation', async () => {
     const repository = new InMemoryApplicationRepository()
     const findOrganization = vi.fn().mockResolvedValue(null)
     const deps = {
@@ -78,10 +79,9 @@ describe('service.test 1', () => {
       status: 400,
     })
     findOrganization.mockResolvedValue({ id: 'org-1', disabled: false })
-    const created = await createApplication(deps, 'https://auth.example.com', input, 'admin-1')
-    await expect(
-      updateApplication(deps, 'https://auth.example.com', created.id, { ownerOrganizationId: 'org-1' }),
-    ).resolves.toMatchObject({ ownerOrganizationId: 'org-1' })
+    await expect(createApplication(deps, 'https://auth.example.com', input, 'admin-1')).resolves.toMatchObject({
+      ownerOrganizationId: 'org-1',
+    })
   })
 
   it('restricts User consent policy configuration to platform-owned Applications', async () => {
@@ -113,35 +113,6 @@ describe('service.test 1', () => {
     ).rejects.toMatchObject({
       status: 400,
       message: 'User consent policy can be configured only for Applications owned by the platform Organization.',
-    })
-  })
-
-  it('restores User consent when an Application leaves the platform Organization', async () => {
-    const repository = new InMemoryApplicationRepository()
-    const deps = {
-      ids: createIdentifierGeneratorFake(),
-      applications: repository,
-      authorization: {
-        findOrganization: vi.fn().mockResolvedValue({ id: 'org-1', disabled: false }),
-      },
-    } as unknown as Deps
-    const created = await createApplication(
-      deps,
-      'https://auth.example.com',
-      {
-        name: 'Platform App',
-        clientType: 'public_spa',
-        redirectUris: ['https://spa.example.com/callback'],
-        consentRequired: false,
-      },
-      'admin-1',
-    )
-
-    await expect(
-      updateApplication(deps, 'https://auth.example.com', created.id, { ownerOrganizationId: 'org-1' }),
-    ).resolves.toMatchObject({
-      ownerOrganizationId: 'org-1',
-      consentRequired: true,
     })
   })
 
@@ -206,6 +177,33 @@ describe('service.test 1', () => {
 
     await deleteApplication(deps, created.id)
     await expect(getApplication(deps, issuer, created.id)).rejects.toMatchObject({ status: 404 })
+  })
+
+  it('reports repository update races without returning stale Application state', async () => {
+    const repository = new InMemoryApplicationRepository()
+    const deps = { ids: createIdentifierGeneratorFake(), applications: repository } as unknown as Deps
+    const issuer = 'https://auth.example.com'
+    const created = await createApplication(
+      deps,
+      issuer,
+      {
+        name: 'Concurrent Update App',
+        clientType: 'public_spa',
+        redirectUris: ['https://spa.example.com/callback'],
+      },
+      'admin-1',
+    )
+
+    vi.spyOn(repository, 'update').mockResolvedValueOnce('application_not_found')
+    await expect(updateApplication(deps, issuer, created.id, { name: 'Renamed' })).rejects.toMatchObject({
+      status: 404,
+    })
+
+    vi.spyOn(repository, 'update').mockResolvedValueOnce('resource_inactive')
+    await expect(updateApplication(deps, issuer, created.id, { name: 'Renamed' })).rejects.toMatchObject({
+      status: 400,
+      message: 'Resource Server is not active.',
+    })
   })
 
   it('derives machine credentials and rejects missing redirects for interactive types', async () => {
@@ -440,7 +438,7 @@ describe('service.test 1', () => {
     ).resolves.toMatchObject({
       redirectUris: ['http://localhost:4173/oidc/callback'],
       allowedGrantTypes: ['authorization_code', 'refresh_token'],
-      oidcScopes: ['openid', 'profile', 'email', 'offline_access'],
+      oidcScopes: ['openid', 'profile', 'email', 'groups', 'offline_access'],
     })
     await expect(
       updateApplication(deps, issuer, created.id, {
@@ -556,7 +554,10 @@ class InMemoryApplicationRepository implements ApplicationRepository {
     return [...this.applications.values()].find((application) => application.clientId === clientId) ?? null
   }
 
-  async update(id: string, patch: Partial<Omit<ApplicationAggregate, 'id' | 'clientId' | 'createdAt' | 'updatedAt'>>) {
+  async update(
+    id: string,
+    patch: Partial<Omit<ApplicationAggregate, 'id' | 'clientId' | 'createdAt' | 'updatedAt'>>,
+  ): Promise<ApplicationUpdateResult> {
     const application = this.applications.get(id)
     if (application) {
       this.applications.set(id, {

@@ -65,6 +65,7 @@ export const invitation = sqliteTable(
       .references(() => organization.id, { onDelete: 'cascade' }),
     email: text('email').notNull(),
     role: text('role').notNull().default('member'),
+    teamId: text('team_id'),
     inviterId: text('inviter_id').references(() => user.id, { onDelete: 'set null' }),
     status: text('status').notNull().default('pending'),
     tokenHash: text('token_hash').unique(),
@@ -79,6 +80,48 @@ export const invitation = sqliteTable(
     index('invitation_organizationId_idx').on(table.organizationId),
     index('invitation_email_idx').on(table.email),
     index('invitation_inviterId_idx').on(table.inviterId),
+  ],
+)
+
+export const team = sqliteTable(
+  'team',
+  {
+    id: text('id').primaryKey(),
+    name: text('name').notNull(),
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' })
+      .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+      .notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
+      .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex('team_organizationId_name_unique').on(table.organizationId, table.name),
+    index('team_organizationId_idx').on(table.organizationId),
+  ],
+)
+
+export const teamMember = sqliteTable(
+  'team_member',
+  {
+    id: text('id').primaryKey(),
+    teamId: text('team_id')
+      .notNull()
+      .references(() => team.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' })
+      .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex('teamMember_teamId_userId_unique').on(table.teamId, table.userId),
+    index('teamMember_userId_idx').on(table.userId),
   ],
 )
 
@@ -97,8 +140,11 @@ export const application = sqliteTable(
     ownerOrganizationId: text('owner_organization_id')
       .notNull()
       .references(() => organization.id, { onDelete: 'restrict' }),
+    visibility: text('visibility', { enum: ['public', 'private'] })
+      .notNull()
+      .default('private'),
     oidcScopes: text('oidc_scopes', { mode: 'json' })
-      .$type<Array<'openid' | 'profile' | 'email' | 'offline_access'>>()
+      .$type<Array<'openid' | 'profile' | 'email' | 'groups' | 'offline_access'>>()
       .notNull()
       .default(sql`'["openid","profile","email"]'`),
     resourceScopes: text('resource_scopes', { mode: 'json' })

@@ -143,6 +143,28 @@ describe('applications management over real D1', () => {
     expect(rejected.status).toBe(400)
   })
 
+  it('keeps the owner Organization immutable after Application creation [spec: admin-console/admin-application-detail]', async () => {
+    const cookie = await signInAdmin(harness)
+    const created = await createApplication(harness, cookie)
+    const now = Date.now()
+    await env.DB.prepare(
+      'INSERT INTO organization (id, slug, name, disabled, created_at, updated_at) VALUES (?, ?, ?, 0, ?, ?)',
+    )
+      .bind('org-transfer-target', 'transfer-target', 'Transfer target', now, now)
+      .run()
+
+    const transfer = await harness.request(`/api/applications/${created.id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ ownerOrganizationId: 'org-transfer-target' }),
+    })
+    expect(transfer.status).toBe(400)
+
+    const unchanged = await harness.request(`/api/applications/${created.id}`, { headers: { cookie } })
+    expect(unchanged.status, await unchanged.clone().text()).toBe(200)
+    await expect(unchanged.json()).resolves.toMatchObject({ ownerOrganizationId: platformOrganizationId })
+  })
+
   it('configures Native device login through the Management API [spec: admin-console/admin-create-application]', async () => {
     const cookie = await signInAdmin(harness)
     const created = await createApplication(harness, cookie, {
@@ -194,7 +216,7 @@ describe('applications management over real D1', () => {
     ])
   })
 
-  it('lists, replaces, and re-reads redirect URIs', async () => {
+  it('lists, replaces, and re-reads redirect URIs [spec: admin-console/oidc-group-application-boundary]', async () => {
     const cookie = await signInAdmin(harness)
     const created = await createApplication(harness, cookie)
 

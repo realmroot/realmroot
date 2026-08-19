@@ -61,7 +61,7 @@ export function clientTypeConfiguration(
     return {
       public: false,
       allowedGrantTypes: ['authorization_code', 'refresh_token'],
-      oidcScopes: ['openid', 'profile', 'email', 'offline_access'],
+      oidcScopes: ['openid', 'profile', 'email', 'groups', 'offline_access'],
       requirePkce: false,
       tokenEndpointAuthMethod: 'client_secret_basic',
     }
@@ -72,7 +72,7 @@ export function clientTypeConfiguration(
       clientType === 'public_native' && deviceLoginEnabled
         ? ['authorization_code', 'refresh_token', deviceCodeGrantType]
         : ['authorization_code', 'refresh_token'],
-    oidcScopes: ['openid', 'profile', 'email', 'offline_access'],
+    oidcScopes: ['openid', 'profile', 'email', 'groups', 'offline_access'],
     requirePkce: true,
     tokenEndpointAuthMethod: 'none',
   }

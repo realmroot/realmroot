@@ -71,7 +71,7 @@ describe('auth.test 1', () => {
         'urn:ietf:params:oauth:grant-type:jwt-bearer',
       ],
       code_challenge_methods_supported: ['S256'],
-      scopes_supported: ['openid', 'profile', 'email', 'offline_access'],
+      scopes_supported: ['openid', 'profile', 'email', 'groups', 'offline_access'],
       token_endpoint_auth_methods_supported: ['client_secret_basic', 'client_secret_post'],
       id_token_signing_alg_values_supported: ['RS256'],
     })
@@ -303,7 +303,7 @@ describe('auth.test 1', () => {
         'executeCapability',
       ]),
     )
-    expect(Object.keys(auth.api)).not.toEqual(
+    expect(Object.keys(auth.api)).toEqual(
       expect.arrayContaining(['createTeam', 'listOrganizationTeams', 'setActiveTeam', 'addTeamMember']),
     )
   })

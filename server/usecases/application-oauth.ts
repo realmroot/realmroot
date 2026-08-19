@@ -5,7 +5,7 @@ import type { AgentAssertionSigner } from '@server/usecases/external-resources'
 import { authenticateApplicationClient } from '@server/usecases/oauth-client-authentication'
 import { applicationEffectiveResourceScopes } from '@server/usecases/resource-scope-entitlements'
 import { findRealmrootResourceServer } from '@server/usecases/system-resources'
-import { realmrootTenantClaim } from '@shared/oauth-token-profile'
+import { realmrootOrganizationClaim } from '@shared/oauth-token-profile'
 
 const accessTokenLifetimeSeconds = 5 * 60
 
@@ -51,7 +51,7 @@ export async function issueApplicationAccessToken(
       sub: application.id,
       aud: input.resource,
       client_id: application.clientId,
-      [realmrootTenantClaim]: { type: 'organization', id: application.ownerOrganizationId },
+      [realmrootOrganizationClaim]: application.ownerOrganizationId,
       scope: scopes.join(' '),
       cnf: { jkt: confirmationJkt },
       iat: now,
