@@ -94,10 +94,10 @@ export function useAccountOrganizationTeams(organizationId: string, enabled = tr
   })
 }
 
-export function useAccountOrganizationTeamMembers(teamId: string | null) {
+export function useAccountOrganizationTeamMembers(organizationId: string, teamId: string | null) {
   return useQuery({
     queryKey: accountQueryKeys.organizationTeamMembers(teamId ?? 'none'),
-    queryFn: () => listAccountOrganizationTeamMembers(teamId!),
+    queryFn: () => listAccountOrganizationTeamMembers(organizationId, teamId!),
     enabled: Boolean(teamId),
     ...accountQueryOptions,
   })

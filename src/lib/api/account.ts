@@ -2,6 +2,7 @@ import type {
   AccountEmailChangeConfirmInput,
   AccountEmailChangeInput,
   AccountOrganizationAgentsResponse,
+  AccountOrganizationTeamMembersResponse,
   AccountPasswordChangeInput,
   AccountProfileUpdateInput,
   AccountWalletAddressLinkInput,
@@ -39,13 +40,6 @@ export interface AccountOrganizationTeam {
   organizationId: string
   createdAt: Date
   updatedAt?: Date
-}
-
-export interface AccountOrganizationTeamMember {
-  id: string
-  teamId: string
-  userId: string
-  createdAt: Date
 }
 
 export function getAccountProfile() {
@@ -155,10 +149,14 @@ export async function deleteAccountOrganizationTeam(organizationId: string, team
   return readAuthClientResult(await authClient.organization.removeTeam({ organizationId, teamId }))
 }
 
-export async function listAccountOrganizationTeamMembers(teamId: string) {
-  return readAuthClientResult(
-    await authClient.organization.listTeamMembers({ query: { teamId } }),
-  ) as AccountOrganizationTeamMember[]
+export async function listAccountOrganizationTeamMembers(organizationId: string, teamId: string) {
+  const response: AccountOrganizationTeamMembersResponse = await readRpcResponse(
+    apiClient.api.account.organizations[':organizationId'].teams[':teamId'].members.$get({
+      param: { organizationId, teamId },
+      query: {},
+    }),
+  )
+  return response.items
 }
 
 export async function addAccountOrganizationTeamMember(organizationId: string, teamId: string, userId: string) {

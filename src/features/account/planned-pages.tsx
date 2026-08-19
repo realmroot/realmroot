@@ -1252,7 +1252,7 @@ function OrganizationTeamsPanel({
   const [editingTeam, setEditingTeam] = useState<AccountOrganizationTeam | 'create' | null>(null)
   const [managedTeam, setManagedTeam] = useState<AccountOrganizationTeam | null>(null)
   const [deleteTeam, setDeleteTeam] = useState<AccountOrganizationTeam | null>(null)
-  const teamMembersQuery = useAccountOrganizationTeamMembers(managedTeam?.id ?? null)
+  const teamMembersQuery = useAccountOrganizationTeamMembers(organizationId, managedTeam?.id ?? null)
   const teamMemberIds = new Set((teamMembersQuery.data ?? []).map((member) => member.userId))
   const invalidateTeams = [accountQueryKeys.organizationTeams(organizationId)] as const
 

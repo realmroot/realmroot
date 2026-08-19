@@ -202,6 +202,11 @@ export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> =
         .mockImplementation(async (userId) =>
           userId === platformOwnerMembership.userId ? [platformOwnerMembership] : [],
         ),
+      findTeam: vi.fn().mockResolvedValue(null),
+      listTeamMembers: vi.fn().mockResolvedValue({
+        items: [],
+        pagination: { limit: 20, offset: 0, total: 0, hasMore: false, nextOffset: null },
+      }),
       listMemberUserIds: vi.fn().mockResolvedValue([]),
       listOrganizationRoles: vi.fn().mockResolvedValue([]),
       listOrganizationRoleScopes: vi.fn().mockResolvedValue(new Map()),

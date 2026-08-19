@@ -143,6 +143,18 @@ export type AccountOrganizationAgentsResponse = {
   pagination: PaginationMetadata
 }
 
+export type AccountOrganizationTeamMember = {
+  id: string
+  teamId: string
+  userId: string
+  createdAt: string
+}
+
+export type AccountOrganizationTeamMembersResponse = {
+  items: AccountOrganizationTeamMember[]
+  pagination: PaginationMetadata
+}
+
 export type LinkedAccountsResponse = {
   items: Array<{
     id: string

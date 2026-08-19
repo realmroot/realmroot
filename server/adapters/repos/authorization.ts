@@ -135,6 +135,33 @@ export function createDrizzleAuthorizationRepository(db: Database, ids: Identifi
       return rows.map(toMember)
     },
 
+    async findTeam(id) {
+      const rows = await db.select().from(team).where(eq(team.id, id)).limit(1)
+      const row = rows[0]
+      return row
+        ? {
+            ...row,
+            createdAt: row.createdAt.toISOString(),
+            updatedAt: row.updatedAt.toISOString(),
+          }
+        : null
+    },
+
+    async listTeamMembers(teamId, pagination) {
+      const rows = await db
+        .select()
+        .from(teamMember)
+        .where(eq(teamMember.teamId, teamId))
+        .orderBy(desc(teamMember.createdAt), desc(teamMember.id))
+        .limit(pagination.limit)
+        .offset(pagination.offset)
+      const total = await totalRows(db, teamMember, eq(teamMember.teamId, teamId))
+      return {
+        items: rows.map((row) => ({ ...row, createdAt: row.createdAt.toISOString() })),
+        pagination: toPagination(pagination, total),
+      }
+    },
+
     async listTeamNamesForUser(organizationId, userId) {
       const rows = await db
         .select({ name: team.name })

@@ -1,6 +1,9 @@
 import { badRequest, forbidden, notFound } from '@server/domain/errors'
 import { validateEmailPolicy, validatePasswordPolicy } from '@server/domain/security/policy'
-import { listAccountOrganizationAgents } from '@server/usecases/account-organizations'
+import {
+  listAccountOrganizationAgents,
+  listAccountOrganizationTeamMembers,
+} from '@server/usecases/account-organizations'
 import {
   activateAgentIdentity,
   approveAgentEnrollment,
@@ -432,6 +435,18 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
       await listAccountOrganizationAgents(
         getDeps(c),
         c.req.param('organizationId'),
+        getPrincipal(c).user!.id,
+        readQuery(c, paginationQuerySchema),
+      ),
+    )
+  })
+
+  app.get('/organizations/:organizationId/teams/:teamId/members', async (c) => {
+    return c.json(
+      await listAccountOrganizationTeamMembers(
+        getDeps(c),
+        c.req.param('organizationId'),
+        c.req.param('teamId'),
         getPrincipal(c).user!.id,
         readQuery(c, paginationQuerySchema),
       ),

@@ -669,15 +669,18 @@ describe('planned Account Center journeys', () => {
       http.get(`${base}/api/auth/organization/list-teams`, () =>
         json([{ id: 'team-1', name: 'platform-admins', organizationId: 'org-family' }]),
       ),
-      http.get(`${base}/api/auth/organization/list-team-members`, () =>
-        json([
-          {
-            id: 'team-member-1',
-            teamId: 'team-1',
-            userId: store.profile.id,
-            createdAt: '2026-08-01T00:00:00.000Z',
-          },
-        ]),
+      http.get(`${base}/api/account/organizations/org-family/teams/team-1/members`, () =>
+        json({
+          items: [
+            {
+              id: 'team-member-1',
+              teamId: 'team-1',
+              userId: store.profile.id,
+              createdAt: '2026-08-01T00:00:00.000Z',
+            },
+          ],
+          pagination: { limit: 20, offset: 0, total: 1, hasMore: false, nextOffset: null },
+        }),
       ),
       http.post(`${base}/api/auth/organization/:action`, async ({ params, request }) => {
         actions.push({ action: String(params.action), body: await request.json() })

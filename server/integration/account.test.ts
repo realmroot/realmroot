@@ -13,6 +13,7 @@ import {
   resourceConnectionIntent,
   resourceScopeEntitlement,
   session,
+  teamMember,
   verification,
 } from '@server/db/schema'
 import { eq } from 'drizzle-orm'
@@ -382,6 +383,13 @@ describe('account self-service over real D1', () => {
     })
     expect(secondTeam.status, await secondTeam.clone().text()).toBe(200)
     const secondTeamId = ((await secondTeam.json()) as { id: string }).id
+    await expect(harness.db.select().from(teamMember).where(eq(teamMember.teamId, teamId))).resolves.toEqual([])
+    const emptyTeamMembers = await harness.request(
+      `/api/account/organizations/${organizationId}/teams/${teamId}/members`,
+      { headers: { cookie } },
+    )
+    expect(emptyTeamMembers.status, await emptyTeamMembers.clone().text()).toBe(200)
+    await expect(emptyTeamMembers.json()).resolves.toMatchObject({ items: [], pagination: { total: 0 } })
     const invalidRename = await harness.request('/api/auth/organization/update-team', {
       method: 'POST',
       headers,

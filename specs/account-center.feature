@@ -205,6 +205,7 @@ Feature: Account Center
     When an Organization administrator creates or renames a Team from the Teams Workspace page
     Then the Team name must use lowercase kebab-case and be unique within that Organization
     And the administrator manages Team membership from a dialog or drawer
+    And the administrator can inspect Team membership without joining that Team
     And a rename warns that downstream RBAC mappings must be updated
     And another Organization may use the same Team name
 
