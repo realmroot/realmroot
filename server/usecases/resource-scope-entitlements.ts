@@ -32,13 +32,15 @@ export async function userEffectiveResourceScopes(
         ? []
         : memberships.filter((membership) => membership.organizationId === tenantOrganizationId)
   const visibleMemberships =
-    resource.visibility === 'private'
+    tenantOrganizationId === undefined && resource.visibility === 'private'
       ? tenantMemberships.filter((membership) => membership.organizationId === resource.ownerOrganizationId)
       : tenantMemberships
-  if (resource.visibility === 'private' && visibleMemberships.length === 0) return []
+  if (tenantOrganizationId === undefined && resource.visibility === 'private' && visibleMemberships.length === 0)
+    return []
 
   const scopes = automaticScopes(resource)
   for (const entitlement of await deps.authorization.listActiveUserScopeEntitlements(userId, resource.id, now)) {
+    if (!userEntitlementMatchesOrganization(entitlement, tenantOrganizationId)) continue
     scopes.add(entitlement.scope)
   }
   for (const membership of visibleMemberships) {
@@ -52,6 +54,14 @@ export async function userEffectiveResourceScopes(
     }
   }
   return currentRegistryScopes(resource, scopes)
+}
+
+function userEntitlementMatchesOrganization(
+  entitlement: Pick<ResourceScopeEntitlementRecord, 'organizationId'>,
+  tenantOrganizationId: string | null | undefined,
+) {
+  if (tenantOrganizationId === undefined) return true
+  return tenantOrganizationId === entitlement.organizationId
 }
 
 export async function applicationEffectiveResourceScopes(

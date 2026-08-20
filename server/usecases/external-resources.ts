@@ -50,7 +50,7 @@ import { authorizationCodeRequest, generateCodeChallenge, refreshAccessTokenRequ
 import { refreshResourceScopeRegistry } from './authorization'
 import { ensureDynamicConnectorScopes, refreshDynamicConnectorMetadata } from './connectors'
 import { validateDpopTokenProof } from './dpop'
-import { organizationUserHasScope, resolveOrganizationMembershipScopes } from './organization-membership-scopes'
+import { organizationUserHasScope } from './organization-membership-scopes'
 import { validateRequestedScopes } from './resource-openapi'
 import { resourceScopeEntitlementLifecycle, userEffectiveResourceScopes } from './resource-scope-entitlements'
 import { activePublicResource, activeResourceVisibleToOrganization } from './resource-visibility'
@@ -880,15 +880,12 @@ export async function listAgentResourceServerAuthorizationDetails(
   const identity = await requireActiveIdentityAndBinding(principal)
   const { resource, authorization } = await requireEnabledResourceConfiguration(deps, resourceServerId)
   await requireAgentResourceVisibility(deps, resource, identity.identity)
-  if (isRealmrootResourceServer(resource)) {
-    const items = await realmrootAuthorityDetailsCatalog(deps, identity, principal.identityId, resource)
+  if (!requiresAccountConnection(resource)) {
+    const items = await nativeAuthorityDetailsCatalog(deps, identity, principal.identityId, resource)
     return {
       items: items.slice(pagination.offset, pagination.offset + pagination.limit),
       pagination: paginationMetadata({ ...pagination, total: items.length }),
     }
-  }
-  if (!requiresAccountConnection(resource)) {
-    return { items: [], pagination: paginationMetadata({ ...pagination, total: 0 }) }
   }
   const connection = await deps.externalResources.findConnectionByOwnerResource({
     resourceId: resourceServerId,
@@ -946,6 +943,7 @@ export async function createAgentAccessRequest(
 ) {
   const identity = await requireActiveIdentityAndBinding(principal)
   let resource = await requireEnabledResource(deps, input.resourceId)
+  await requireAgentResourceVisibility(deps, resource, identity.identity)
   const connection = requiresAccountConnection(resource)
     ? await deps.externalResources.findConnectionByOwnerResource({
         resourceId: resource.id,
@@ -967,7 +965,6 @@ export async function createAgentAccessRequest(
       identity,
     )
   }
-  await requireAgentResourceVisibility(deps, resource, identity.identity)
   const scopes = [...new Set(input.scopes)].sort()
   const now = new Date()
   const reusableAccountScopes = requiresAccountConnection(resource)
@@ -1204,8 +1201,8 @@ async function resolveApprovalAuthorizationDetail(
 ) {
   const detail = request.authorizationDetails[0]
   if (!detail) return null
-  if (isRealmrootResourceServer(resourceServer)) {
-    const display = await realmrootAuthorityDisplay(deps, detail)
+  if (!requiresAccountConnection(resourceServer)) {
+    const display = await nativeAuthorityDisplay(deps, detail)
     return {
       name: display.label,
       description: display.description,
@@ -1296,8 +1293,11 @@ export async function decideAgentAccessRequest(
   const requestIdentity = await deps.agentIdentities.findIdentity(request.agentIdentityId)
   if (!requestIdentity) throw notFound('Active Agent identity was not found.')
   await requireAgentResourceVisibility(deps, resource, requestIdentity.identity)
-  const grantorScopes = isRealmrootResourceServer(resource)
-    ? await realmrootAuthorityEffectiveScopes(deps, actorUserId, resource, authorizationDetails[0]!)
+  if (!requiresAccountConnection(resource)) {
+    await requireCurrentNativeAuthorityContext(deps, requestIdentity, authorizationDetails)
+  }
+  const grantorScopes = !requiresAccountConnection(resource)
+    ? await nativeAuthorityEffectiveScopes(deps, actorUserId, resource, authorizationDetails[0]!)
     : await userEffectiveResourceScopes(deps, actorUserId, resource)
   assertScopeSubset(request.scopes, grantorScopes, 'controller effective scope')
   let connectionId = request.connectionId
@@ -1711,6 +1711,7 @@ async function issueNativeAccessToken(
   if (signer.issuer !== principal.issuer) {
     throw forbidden('Agent identity does not belong to the active OAuth issuer.')
   }
+  await requireCurrentNativeAuthorityContext(deps, identity, request.authorizationDetails)
   const confirmationJkt = await validateDpopTokenProof(deps, dpopProof, tokenRequestUrl)
   const now = new Date()
   const maximumExpiresAt = new Date(now.getTime() + 5 * 60 * 1000)
@@ -1719,16 +1720,15 @@ async function issueNativeAccessToken(
     entitlementExpiry && entitlementExpiry.getTime() < maximumExpiresAt.getTime() ? entitlementExpiry : maximumExpiresAt
   const subject = identity.identity.ownerUserId ?? identity.identity.ownerOrganizationId
   if (!subject) throw forbidden('Agent home-space controller is unavailable.')
-  const realmroot = isRealmrootResourceServer(resource)
-  const realmrootAuthority = realmroot ? request.authorizationDetails[0] : undefined
-  if (realmroot) assertRealmrootAuthoritySelection(request.authorizationDetails)
-  const issuedScopes = realmroot ? [...new Set([...agentBootstrapScopes, ...request.scopes])].sort() : request.scopes
+  const platformResource = isRealmrootResourceServer(resource)
+  const authority = request.authorizationDetails[0]
+  assertNativeAuthoritySelection(request.authorizationDetails)
+  const issuedScopes = platformResource
+    ? [...new Set([...agentBootstrapScopes, ...request.scopes])].sort()
+    : request.scopes
   const issuedAuthorizationDetails = request.authorizationDetails
   const tokenOrganizationId =
-    realmrootAuthority?.authority === 'organization' && typeof realmrootAuthority.id === 'string'
-      ? realmrootAuthority.id
-      : (identity.identity.ownerOrganizationId ??
-        (resource.visibility === 'private' ? resource.ownerOrganizationId : null))
+    authority?.authority === 'organization' && typeof authority.id === 'string' ? authority.id : null
   const groups =
     tokenOrganizationId && identity.identity.ownerUserId
       ? await deps.authorization.listTeamNamesForUser(tokenOrganizationId, identity.identity.ownerUserId)
@@ -1746,7 +1746,7 @@ async function issueNativeAccessToken(
       client_id: realmrootCliClientId,
       ...(tokenOrganizationId ? { [realmrootOrganizationClaim]: tokenOrganizationId } : {}),
       ...(request.authorizationDetails.length > 0 ? { authorization_details: request.authorizationDetails } : {}),
-      ...(realmroot ? { realmroot_authority: realmrootAuthority } : {}),
+      ...(platformResource ? { realmroot_authority: authority } : {}),
       cnf: { jkt: confirmationJkt },
       act: {
         iss: principal.issuer,
@@ -2138,17 +2138,17 @@ async function activeContextEntitlements(
     .sort((left, right) => left.scope.localeCompare(right.scope))
 }
 
-async function realmrootAuthorityDetailsCatalog(
+async function nativeAuthorityDetailsCatalog(
   deps: Deps,
   identity: Awaited<ReturnType<typeof requireActiveIdentityAndBinding>>,
   agentIdentityId: string,
   resource: NonNullable<Awaited<ReturnType<Deps['authorization']['findResource']>>>,
 ) {
-  const details = await realmrootAuthorityDetails(deps, identity)
+  const details = await nativeAuthorityDetails(deps, identity)
   return Promise.all(
     details.map(async (detail) => {
-      const display = await realmrootAuthorityDisplay(deps, detail)
-      const requestableScopes = await realmrootAuthorityEffectiveScopes(
+      const display = await nativeAuthorityDisplay(deps, detail)
+      const requestableScopes = await nativeAuthorityEffectiveScopes(
         deps,
         identity.identity.ownerUserId,
         resource,
@@ -2165,9 +2165,9 @@ async function realmrootAuthorityDetailsCatalog(
   )
 }
 
-async function realmrootAuthorityDetails(
+async function nativeAuthorityDetails(
   deps: Deps,
-  identity: Awaited<ReturnType<typeof requireActiveIdentityAndBinding>>,
+  identity: { identity: { ownerUserId: string | null; ownerOrganizationId: string | null } },
 ): Promise<AuthorizationDetail[]> {
   const details: AuthorizationDetail[] = []
   const ownerUserId = identity.identity.ownerUserId
@@ -2184,7 +2184,7 @@ async function realmrootAuthorityDetails(
   return details
 }
 
-async function realmrootAuthorityDisplay(
+async function nativeAuthorityDisplay(
   deps: Deps,
   detail: AuthorizationDetail,
 ): Promise<{ label: string; description: string | null; metadata: Record<string, string> }> {
@@ -2207,10 +2207,10 @@ async function realmrootAuthorityDisplay(
       metadata: { authority: 'user', userId: id },
     }
   }
-  throw badRequest('Realmroot authority Resource is invalid.')
+  throw badRequest('Native Resource authority is invalid.')
 }
 
-async function realmrootAuthorityEffectiveScopes(
+async function nativeAuthorityEffectiveScopes(
   deps: Deps,
   controllerUserId: string | null,
   resource: ApiResourceResponse,
@@ -2219,24 +2219,33 @@ async function realmrootAuthorityEffectiveScopes(
   const declared = new Set(discoverAgentResourceScopes(resource)?.map((scope) => scope.value) ?? [])
   const current = (scopes: Iterable<string>) => [...new Set(scopes)].filter((scope) => declared.has(scope)).sort()
 
+  if (!isRealmrootResourceServer(resource)) {
+    if (!controllerUserId) return detail.authority === 'organization' ? current(declared) : []
+    if (detail.authority === 'organization' && typeof detail.id === 'string') {
+      return current(await userEffectiveResourceScopes(deps, controllerUserId, resource, new Date(), detail.id))
+    }
+    if (detail.authority === 'user' && detail.id === controllerUserId) {
+      return current(await userEffectiveResourceScopes(deps, controllerUserId, resource, new Date(), null))
+    }
+    return []
+  }
+
   if (detail.authority === 'organization' && typeof detail.id === 'string') {
     if (!controllerUserId) return current(realmrootManagementScopes)
     const membership = (await deps.authorization.listUserMemberships(controllerUserId)).find(
       (item) => item.organizationId === detail.id,
     )
     return membership
-      ? current(await resolveOrganizationMembershipScopes(deps, detail.id, membership.roles, resource.id))
+      ? current(await userEffectiveResourceScopes(deps, controllerUserId, resource, new Date(), detail.id))
       : []
   }
   if (controllerUserId && detail.authority === 'user' && detail.id === controllerUserId) {
-    const scopes = new Set(['agents:read', 'agents:write', 'audit-events:read'])
-    for (const entitlement of await deps.authorization.listActiveUserScopeEntitlements(
-      controllerUserId,
-      resource.id,
-      new Date(),
-    )) {
-      scopes.add(entitlement.scope)
-    }
+    const scopes = new Set([
+      'agents:read',
+      'agents:write',
+      'audit-events:read',
+      ...(await userEffectiveResourceScopes(deps, controllerUserId, resource, new Date(), null)),
+    ])
     return current(scopes)
   }
   return []
@@ -2303,14 +2312,14 @@ async function resolveRequestedAuthorizationDetails(
   if (hasDuplicateAuthorizationDetails(authorizationDetails)) {
     throw invalidAuthorizationDetails('Authorization details contain duplicate entries.')
   }
-  if (isRealmrootResourceServer(resourceServer)) {
-    const available = await realmrootAuthorityDetails(deps, identity)
+  if (!requiresAccountConnection(resourceServer)) {
+    const available = await nativeAuthorityDetails(deps, identity)
     if (
       !authorizationDetails.every((detail) =>
         available.some((candidate) => exactAuthorizationDetails([candidate], [detail])),
       )
     ) {
-      throw invalidAuthorizationDetails('Realmroot authority is not available to this Agent owner.')
+      throw invalidAuthorizationDetails('Realmroot authority Context is not available to this Agent owner.')
     }
     return authorizationDetails
   }
@@ -2849,13 +2858,7 @@ function assertAuthorizationDetailsSelection(
   authorizationDetails: AuthorizationDetail[],
 ) {
   if (!requiresAccountConnection(resource)) {
-    if (isRealmrootResourceServer(resource)) {
-      assertRealmrootAuthoritySelection(authorizationDetails)
-      return
-    }
-    if (authorizationDetails.length > 0) {
-      throw invalidAuthorizationDetails('Native API resources do not accept authorization details.')
-    }
+    assertNativeAuthoritySelection(authorizationDetails)
     return
   }
   const required = resource.authorizationDetails.length > 0
@@ -2880,13 +2883,7 @@ function assertAccessRequestAuthorizationDetails(
   authorizationDetails: AuthorizationDetail[],
 ) {
   if (!requiresAccountConnection(resource)) {
-    if (isRealmrootResourceServer(resource)) {
-      assertRealmrootAuthoritySelection(authorizationDetails)
-      return
-    }
-    if (authorizationDetails.length > 0) {
-      throw invalidAuthorizationDetails('Native API resources do not accept authorization details.')
-    }
+    assertNativeAuthoritySelection(authorizationDetails)
     return
   }
   const supportedTypes = new Set(resource.authorizationDetails.map((detail) => detail.type))
@@ -2933,7 +2930,7 @@ function accessRequestAuthorizationDetails(
   return authorizationDetails
 }
 
-function assertRealmrootAuthoritySelection(authorizationDetails: AuthorizationDetail[]) {
+function assertNativeAuthoritySelection(authorizationDetails: AuthorizationDetail[]) {
   const detail = authorizationDetails[0]
   if (
     authorizationDetails.length !== 1 ||
@@ -2941,7 +2938,20 @@ function assertRealmrootAuthoritySelection(authorizationDetails: AuthorizationDe
     !['organization', 'user'].includes(String(detail.authority)) ||
     typeof detail.id !== 'string'
   ) {
-    throw invalidAuthorizationDetails('Select exactly one Realmroot authority detail.')
+    throw invalidAuthorizationDetails('Select exactly one Realmroot authority Context.')
+  }
+}
+
+async function requireCurrentNativeAuthorityContext(
+  deps: Deps,
+  identity: { identity: { ownerUserId: string | null; ownerOrganizationId: string | null } },
+  authorizationDetails: AuthorizationDetail[],
+) {
+  assertNativeAuthoritySelection(authorizationDetails)
+  const selected = authorizationDetails[0]!
+  const available = await nativeAuthorityDetails(deps, identity)
+  if (!available.some((candidate) => exactAuthorizationDetails([candidate], [selected]))) {
+    throw forbidden('Selected Realmroot authority Context is no longer available.')
   }
 }
 
