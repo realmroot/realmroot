@@ -1727,7 +1727,8 @@ async function issueNativeAccessToken(
   const tokenOrganizationId =
     realmrootAuthority?.authority === 'organization' && typeof realmrootAuthority.id === 'string'
       ? realmrootAuthority.id
-      : identity.identity.ownerOrganizationId
+      : (identity.identity.ownerOrganizationId ??
+        (resource.visibility === 'private' ? resource.ownerOrganizationId : null))
   const groups =
     tokenOrganizationId && identity.identity.ownerUserId
       ? await deps.authorization.listTeamNamesForUser(tokenOrganizationId, identity.identity.ownerUserId)
