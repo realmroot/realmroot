@@ -154,19 +154,22 @@ export async function buildOAuthIdTokenClaims(
   input: {
     user: { id?: string } & Record<string, unknown>
     scopes: Iterable<string>
+    referenceId?: string
     metadata?: Record<string, unknown>
   },
 ): Promise<Record<string, unknown>> {
   const applicationId = readString(input.metadata, 'applicationId')
   const application = applicationId ? await deps.applications.findById(applicationId) : null
-  if (!application || application.visibility !== 'private' || !input.user.id) return {}
+  if (!application || !input.user.id) return {}
   await requireApplicationUserAccess(deps, application, input.user.id, 'access_denied')
+  const organizationId = await resolveOAuthOrganizationId(deps, input, application)
+  if (!organizationId) return {}
   const scopes = new Set(input.scopes)
   const groups = scopes.has('groups')
-    ? await deps.authorization.listTeamNamesForUser(application.ownerOrganizationId, input.user.id)
+    ? await deps.authorization.listTeamNamesForUser(organizationId, input.user.id)
     : undefined
   return {
-    [realmrootOrganizationClaim]: application.ownerOrganizationId,
+    [realmrootOrganizationClaim]: organizationId,
     ...(groups ? { groups } : {}),
   }
 }
@@ -220,7 +223,12 @@ export async function filterOAuthAccessTokenScopes(
   if (!resource?.enabled || !resource.scopeRegistry) {
     throw oauthProviderError('invalid_target', 'Requested Resource Server is not active.')
   }
-  const tenantOrganizationId = await resolveOAuthOrganizationId(deps, input, application)
+  const tenantOrganizationId = await resolveOAuthOrganizationId(
+    deps,
+    input,
+    application,
+    input.grantType === 'refresh_token' ? 'invalid_grant' : 'access_denied',
+  )
   const visible = input.user?.id
     ? resource.visibility === 'public' || tenantOrganizationId === resource.ownerOrganizationId
     : resourceVisibleToOrganization(resource, application.ownerOrganizationId)
@@ -271,27 +279,53 @@ async function resolveOAuthOrganizationId(
   deps: Deps,
   input: { user?: ({ id?: string } & Record<string, unknown>) | null; resource?: string; referenceId?: string },
   application: Awaited<ReturnType<Deps['applications']['findById']>>,
+  oauthError: 'access_denied' | 'invalid_grant' = 'access_denied',
 ) {
-  if (application?.visibility === 'private') return application.ownerOrganizationId
-  if (input.referenceId && input.user?.id) {
-    const [organization, membership] = await Promise.all([
-      deps.authorization.findOrganization(input.referenceId),
-      deps.authorization.findMemberByOrganizationUser(input.referenceId, input.user.id),
-    ])
-    if (organization && !organization.disabled && membership) return input.referenceId
+  const userId = input.user?.id
+  if (!userId) return null
+  if (input.referenceId?.startsWith('user:')) {
+    if (input.referenceId !== `user:${userId}` || application?.visibility === 'private') {
+      throw oauthProviderError(oauthError, 'The selected authorization Context is invalid.')
+    }
+    return null
   }
-  if (!input.user?.id || !input.resource) return null
+  const selectedOrganizationId = input.referenceId?.startsWith('organization:')
+    ? input.referenceId.slice('organization:'.length)
+    : input.referenceId
+  if (selectedOrganizationId) {
+    if (application?.visibility === 'private' && selectedOrganizationId !== application.ownerOrganizationId) {
+      throw oauthProviderError(oauthError, 'The selected authorization Context is unavailable.')
+    }
+    const [organization, membership] = await Promise.all([
+      deps.authorization.findOrganization(selectedOrganizationId),
+      deps.authorization.findMemberByOrganizationUser(selectedOrganizationId, userId),
+    ])
+    if (!organization || organization.disabled || !membership) {
+      throw oauthProviderError(oauthError, 'The selected authorization Context is no longer available.')
+    }
+    return selectedOrganizationId
+  }
+  if (application?.visibility === 'private') {
+    const [organization, membership] = await Promise.all([
+      deps.authorization.findOrganization(application.ownerOrganizationId),
+      deps.authorization.findMemberByOrganizationUser(application.ownerOrganizationId, userId),
+    ])
+    if (!organization || organization.disabled || !membership) {
+      throw oauthProviderError(oauthError, 'The Application authorization Context is no longer available.')
+    }
+    return application.ownerOrganizationId
+  }
+  if (!input.resource) return null
   const resource = await deps.authorization.findResourceByResourceUrl(input.resource)
   if (resource?.visibility !== 'private') return null
-  const [organization, memberships] = await Promise.all([
+  const [organization, membership] = await Promise.all([
     deps.authorization.findOrganization(resource.ownerOrganizationId),
-    deps.authorization.listUserMemberships(input.user.id),
+    deps.authorization.findMemberByOrganizationUser(resource.ownerOrganizationId, userId),
   ])
-  return organization &&
-    !organization.disabled &&
-    memberships.some((membership) => membership.organizationId === resource.ownerOrganizationId)
-    ? resource.ownerOrganizationId
-    : null
+  if (!organization || organization.disabled || !membership) {
+    throw oauthProviderError(oauthError, 'The Resource Server authorization Context is no longer available.')
+  }
+  return resource.ownerOrganizationId
 }
 
 export async function requireApplicationUserAccess(

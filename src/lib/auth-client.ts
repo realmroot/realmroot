@@ -44,6 +44,14 @@ export function completeOAuthConsent(input: { accept: boolean; scope?: string; o
   })
 }
 
+export function completeOAuthPostLogin(oauthQuery: string, consentReferenceId: string) {
+  return nativeAuth('/oauth2/continue', {
+    postLogin: true,
+    consentReferenceId,
+    oauth_query: oauthQuery,
+  })
+}
+
 export function signInWithPassword(input: {
   email: string
   password: string

@@ -1,3 +1,5 @@
+import * as applicationRepositories from '@server/adapters/repos/applications'
+import * as authorizationRepositories from '@server/adapters/repos/authorization'
 import { buildOAuthAccessTokenClaims, createAuth } from '@server/auth'
 import type { OAuthProviderPluginOptions } from '@server/auth-test-plugin-types'
 import type { Database } from '@server/db/client'
@@ -90,6 +92,84 @@ describe('auth.test 2', () => {
     expect(oauth.customUserInfoClaims).toBeUndefined()
   })
 
+  it('[spec: hosted-auth/oauth-authorization-context-selection] redirects post-login to Context selection and revalidates membership', async () => {
+    const findOrganization = vi.fn().mockResolvedValue({ id: 'org-1', disabled: false })
+    const findMemberByOrganizationUser = vi.fn().mockResolvedValue({ id: 'member-1' })
+    vi.spyOn(authorizationRepositories, 'createDrizzleAuthorizationRepository').mockReturnValue({
+      findOrganization,
+      findMemberByOrganizationUser,
+    } as never)
+    vi.spyOn(applicationRepositories, 'createDrizzleApplicationRepository').mockReturnValue({
+      findByClientId: vi.fn().mockResolvedValue({ visibility: 'public' }),
+    } as never)
+    const auth = createAuth(
+      {} as Database,
+      createIdentifierGeneratorFake(),
+      '01234567890123456789012345678901',
+      'https://auth.example.com',
+      ['https://auth.example.com'],
+      createEmailSenderMock(),
+      createSecurityPolicy(),
+    )
+    const postLogin = findPlugin<OAuthProviderPluginOptions>(auth, 'oauth-provider').options.postLogin
+
+    expect(postLogin.page).toBe('/auth/context')
+    await expect(postLogin.shouldRedirect({ headers: new Headers(), user: { id: 'user-1' } })).resolves.toBe(false)
+    await expect(
+      postLogin.shouldRedirect({
+        headers: new Headers({
+          'x-realmroot-oauth-client-id': 'client-1',
+          'x-realmroot-oauth-resources': JSON.stringify(['https://api.example.com/']),
+        }),
+        user: { id: 'user-1' },
+      }),
+    ).resolves.toBe(true)
+    await expect(
+      postLogin.consentReferenceId({
+        session: { activeOrganizationId: 'org-1' },
+        user: { id: 'user-1' },
+      }),
+    ).resolves.toBeUndefined()
+    await expect(
+      postLogin.consentReferenceId({
+        session: { activeOrganizationId: null },
+        user: { id: 'user-1' },
+        referenceId: 'user:user-1',
+      }),
+    ).resolves.toBe('user:user-1')
+    await expect(
+      postLogin.consentReferenceId({
+        session: { activeOrganizationId: null },
+        user: { id: 'user-1' },
+        referenceId: 'organization:org-1',
+      }),
+    ).resolves.toBe('organization:org-1')
+    expect(findMemberByOrganizationUser).toHaveBeenCalledWith('org-1', 'user-1')
+
+    findMemberByOrganizationUser.mockResolvedValueOnce(null)
+    await expect(
+      postLogin.consentReferenceId({
+        session: { activeOrganizationId: null },
+        user: { id: 'user-1' },
+        referenceId: 'organization:org-1',
+      }),
+    ).rejects.toMatchObject({
+      status: 'FORBIDDEN',
+      body: { error: 'access_denied' },
+    })
+    findOrganization.mockResolvedValueOnce({ id: 'org-1', disabled: true })
+    await expect(
+      postLogin.consentReferenceId({
+        session: { activeOrganizationId: null },
+        user: { id: 'user-1' },
+        referenceId: 'organization:org-1',
+      }),
+    ).rejects.toMatchObject({
+      status: 'FORBIDDEN',
+      body: { error: 'access_denied' },
+    })
+  })
+
   it('maps OAuth provider context into authorization token claims', async () => {
     const deps = {
       applications: {
@@ -111,7 +191,7 @@ describe('auth.test 2', () => {
         user: { id: 'user-1' },
         scopes: new Set(['openid', 'contacts:read']),
         resource: 'https://api.example.com/contacts',
-        referenceId: 'org-1',
+        referenceId: 'organization:org-1',
         metadata: {
           applicationId: 'app-1',
           ignored: 'value',
@@ -133,7 +213,7 @@ describe('auth.test 2', () => {
     })
   })
 
-  it('drops a stale public Application Organization context after membership removal', async () => {
+  it('rejects a stale public Application Organization Context after membership removal', async () => {
     const deps = {
       applications: {
         findById: vi.fn().mockResolvedValue({ visibility: 'public' }),
@@ -143,25 +223,17 @@ describe('auth.test 2', () => {
         findMemberByOrganizationUser: vi.fn().mockResolvedValue(null),
       },
     } as unknown as Deps
-    const buildTokenClaims = vi.spyOn(authorizationUsecase, 'buildTokenClaims').mockResolvedValue({
-      authorization: { roles: [] },
-      roles: [],
-      groups: [],
-    })
+    const buildTokenClaims = vi.spyOn(authorizationUsecase, 'buildTokenClaims')
 
     await expect(
       buildOAuthAccessTokenClaims(deps, {
         user: { id: 'user-1' },
         scopes: new Set(['openid']),
-        referenceId: 'org-1',
+        referenceId: 'organization:org-1',
         metadata: { applicationId: 'app-1' },
       }),
-    ).resolves.toEqual({ roles: [] })
-
-    expect(buildTokenClaims).toHaveBeenCalledWith(
-      deps,
-      expect.objectContaining({ organizationId: undefined, userId: 'user-1' }),
-    )
+    ).rejects.toMatchObject({ body: { error: 'access_denied' } })
+    expect(buildTokenClaims).not.toHaveBeenCalled()
   })
 })
 

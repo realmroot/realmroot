@@ -62,6 +62,13 @@ function createDeps(input?: {
     },
     authorization: {
       findOrganization: vi.fn().mockImplementation(async (id: string) => ({ id, disabled: false })),
+      findMemberByOrganizationUser: vi
+        .fn()
+        .mockImplementation(async (organizationId: string) =>
+          (input?.memberships ?? []).some((membership) => membership.organizationId === organizationId)
+            ? { id: `mem_${organizationId}` }
+            : null,
+        ),
       findResourceByResourceUrl: vi.fn().mockResolvedValue(resource),
       listUserMemberships: vi.fn().mockResolvedValue(
         (input?.memberships ?? []).map((membership, index) => ({
@@ -146,6 +153,76 @@ describe('filterOAuthAccessTokenScopes', () => {
     ).resolves.toEqual(['openid', 'orders:admin', 'orders:read'])
   })
 
+  it('keeps User and Organization Context scope authorization isolated', async () => {
+    const deps = createDeps({ memberships: [{ organizationId: 'org-a', roles: [] }] })
+    vi.mocked(deps.authorization.listActiveUserScopeEntitlements).mockResolvedValue([
+      { id: 'ent-user', scope: 'orders:admin', organizationId: null },
+      { id: 'ent-org', scope: 'orders:read', organizationId: 'org-a' },
+    ] as never)
+    const input = {
+      user: { id: 'user_1' },
+      scopes: ['openid', 'orders:admin', 'orders:read'],
+      resource: resource.resourceUrl,
+      metadata: { applicationId: application.id },
+      grantType: 'authorization_code',
+    }
+
+    await expect(filterOAuthAccessTokenScopes(deps, { ...input, referenceId: 'user:user_1' })).resolves.toEqual([
+      'openid',
+      'orders:admin',
+      'orders:read',
+    ])
+    await expect(filterOAuthAccessTokenScopes(deps, { ...input, referenceId: 'organization:org-a' })).resolves.toEqual([
+      'openid',
+      'orders:read',
+    ])
+  })
+
+  it('fails closed for stale Organization Contexts in authorization-code and refresh grants', async () => {
+    const deps = createDeps({ memberships: [{ organizationId: 'org-a', roles: [] }] })
+    vi.mocked(deps.authorization.findMemberByOrganizationUser).mockResolvedValue(null)
+    const input = {
+      user: { id: 'user_1' },
+      scopes: ['openid', 'orders:read'],
+      resource: resource.resourceUrl,
+      referenceId: 'organization:org-a',
+      metadata: { applicationId: application.id },
+    }
+
+    await expect(
+      filterOAuthAccessTokenScopes(deps, { ...input, grantType: 'authorization_code' }),
+    ).rejects.toMatchObject({ body: { error: 'access_denied' } })
+    await expect(filterOAuthAccessTokenScopes(deps, { ...input, grantType: 'refresh_token' })).rejects.toMatchObject({
+      body: { error: 'invalid_grant' },
+    })
+
+    vi.mocked(deps.authorization.findMemberByOrganizationUser).mockResolvedValue({ id: 'member-a' } as never)
+    vi.mocked(deps.authorization.findOrganization).mockResolvedValue({ id: 'org-a', disabled: true } as never)
+    await expect(
+      filterOAuthAccessTokenScopes(deps, { ...input, grantType: 'authorization_code' }),
+    ).rejects.toMatchObject({ body: { error: 'access_denied' } })
+    await expect(filterOAuthAccessTokenScopes(deps, { ...input, grantType: 'refresh_token' })).rejects.toMatchObject({
+      body: { error: 'invalid_grant' },
+    })
+  })
+
+  it('revalidates private Application owner membership for authorization-code and refresh grants', async () => {
+    const deps = createDeps()
+    vi.mocked(deps.applications.findById).mockResolvedValue({ ...application, visibility: 'private' })
+    const input = {
+      user: { id: 'user_1' },
+      scopes: ['openid'],
+      metadata: { applicationId: application.id },
+    }
+
+    await expect(
+      filterOAuthAccessTokenScopes(deps, { ...input, grantType: 'authorization_code' }),
+    ).rejects.toMatchObject({ body: { error: 'access_denied' } })
+    await expect(filterOAuthAccessTokenScopes(deps, { ...input, grantType: 'refresh_token' })).rejects.toMatchObject({
+      body: { error: 'invalid_grant' },
+    })
+  })
+
   it('rejects a private Resource Server target for a non-member', async () => {
     const privateResource = { ...resource, visibility: 'private' as const }
     const deps = createDeps({ directScopes: ['orders:admin'] })
@@ -157,7 +234,7 @@ describe('filterOAuthAccessTokenScopes', () => {
         resource: resource.resourceUrl,
         metadata: { applicationId: application.id },
       }),
-    ).rejects.toMatchObject({ body: { error: 'invalid_target' } })
+    ).rejects.toMatchObject({ body: { error: 'access_denied' } })
   })
 
   it('rejects a private Resource Server owned by a disabled Organization', async () => {
@@ -183,6 +260,6 @@ describe('filterOAuthAccessTokenScopes', () => {
         resource: resource.resourceUrl,
         metadata: { applicationId: application.id },
       }),
-    ).rejects.toMatchObject({ body: { error: 'invalid_target' } })
+    ).rejects.toMatchObject({ body: { error: 'access_denied' } })
   })
 })

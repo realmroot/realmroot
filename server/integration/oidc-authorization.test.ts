@@ -6,10 +6,13 @@ import {
   createUser,
   type Harness,
   platformOrganizationId,
+  resignOAuthQuery,
   resourceOpenApiFetch,
   signIn,
   signInAdmin,
 } from './harness'
+
+const organizationClaim = 'urn:realmroot:params:oauth:org'
 
 afterEach(async () => {
   vi.unstubAllGlobals()
@@ -52,6 +55,28 @@ function mergeResponseCookies(currentCookie: string, response: Response) {
     if (separator > 0) cookies.set(pair.slice(0, separator), pair.slice(separator + 1))
   }
   return [...cookies].map(([name, value]) => `${name}=${value}`).join('; ')
+}
+
+async function continueOAuthContext(
+  harness: Harness,
+  cookie: string,
+  contextRedirect: Response,
+  consentReferenceId: string,
+) {
+  const contextUrl = new URL(contextRedirect.headers.get('location') ?? '', baseURL)
+  expect(contextUrl.pathname).toBe('/auth/context')
+  const continued = await harness.request('/api/auth/oauth2/continue', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', cookie, origin: baseURL },
+    body: JSON.stringify({
+      postLogin: true,
+      consentReferenceId,
+      oauth_query: contextUrl.search.slice(1),
+    }),
+  })
+  expect(continued.status, await continued.clone().text()).toBe(200)
+  const result = (await continued.json()) as { url: string }
+  return new URL(result.url, baseURL)
 }
 
 function decodeJwtHeader(token: string): Record<string, unknown> {
@@ -519,6 +544,7 @@ describe('OIDC authorization over real D1', () => {
         resourceUrl: resource,
         authorizationModel: 'native',
         ownerOrganizationId: platformOrganizationId,
+        visibility: 'public',
       }),
     })
     expect(createResource.status, await createResource.clone().text()).toBe(201)
@@ -556,12 +582,15 @@ describe('OIDC authorization over real D1', () => {
     expect(signInUrl.pathname).toBe('/auth/sign-in')
     expect(signInUrl.searchParams.get('resource')).toBe(resource)
 
-    const authorized = await harness.request(`/api/auth/oauth2/authorize?${authorizeParams}`, {
+    const contextRedirect = await harness.request(`/api/auth/oauth2/authorize?${authorizeParams}`, {
       headers: { cookie },
       redirect: 'manual',
     })
-    expect(authorized.status, await authorized.clone().text()).toBe(302)
-    const callbackUrl = new URL(authorized.headers.get('location') ?? '', redirectUri)
+    const admin = await env.DB.prepare('SELECT user_id AS userId FROM member WHERE organization_id = ? LIMIT 1')
+      .bind(platformOrganizationId)
+      .first<{ userId: string }>()
+    expect(admin?.userId).toBeTruthy()
+    const callbackUrl = await continueOAuthContext(harness, cookie, contextRedirect, `user:${admin!.userId}`)
     const code = callbackUrl.searchParams.get('code')
     expect(code).toBeTruthy()
 
@@ -629,6 +658,362 @@ describe('OIDC authorization over real D1', () => {
       new TextEncoder().encode(`${encodedHeader}.${encodedPayload}`),
     )
     expect(verified).toBe(true)
+  })
+
+  it('[spec: hosted-auth/oauth-authorization-context-selection] isolates concurrent authorization Context selections by signed query', async () => {
+    const resource = 'https://context-resource.example.com'
+    harness = await createHarness({ validAudiences: [baseURL, resource] })
+    harness.deps.externalHttp.fetch = resourceOpenApiFetch
+    const cookie = await signInAdmin(harness)
+    const admin = await env.DB.prepare('SELECT user_id AS userId FROM member WHERE organization_id = ? LIMIT 1')
+      .bind(platformOrganizationId)
+      .first<{ userId: string }>()
+    expect(admin?.userId).toBeTruthy()
+    const now = Date.now()
+    for (const organizationId of ['org-context-a', 'org-context-b']) {
+      await env.DB.prepare(
+        'INSERT INTO organization (id, slug, name, disabled, created_at, updated_at) VALUES (?, ?, ?, 0, ?, ?)',
+      )
+        .bind(organizationId, organizationId, organizationId, now, now)
+        .run()
+      await env.DB.prepare(
+        'INSERT INTO member (id, organization_id, user_id, role, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+      )
+        .bind(`member-${organizationId}`, organizationId, admin!.userId, 'member', now, now)
+        .run()
+    }
+    const createResource = await harness.request('/api/resource-servers', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({
+        identifier: 'context-selection-resource',
+        resourceUrl: resource,
+        authorizationModel: 'native',
+        ownerOrganizationId: platformOrganizationId,
+        visibility: 'public',
+      }),
+    })
+    expect(createResource.status, await createResource.clone().text()).toBe(201)
+    const redirectUri = 'http://localhost/context-callback'
+    const createApplication = await harness.request('/api/applications', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({
+        name: 'Concurrent Context App',
+        clientType: 'public_spa',
+        redirectUris: [redirectUri],
+        ownerOrganizationId: platformOrganizationId,
+        visibility: 'public',
+        consentRequired: false,
+      }),
+    })
+    expect(createApplication.status, await createApplication.clone().text()).toBe(201)
+    const application = (await createApplication.json()) as { clientId: string }
+    const attempts = await Promise.all(
+      ['a', 'b'].map(async (suffix) => {
+        const verifier = `context-${suffix}-verifier-0123456789abcdefghijklmnop`
+        const params = new URLSearchParams({
+          response_type: 'code',
+          client_id: application.clientId,
+          redirect_uri: redirectUri,
+          scope: 'openid',
+          state: `state-${suffix}`,
+          code_challenge: await pkceChallenge(verifier),
+          code_challenge_method: 'S256',
+          resource,
+        })
+        const redirect = await harness.request(`/api/auth/oauth2/authorize?${params}`, {
+          headers: { cookie },
+          redirect: 'manual',
+        })
+        return { suffix, verifier, redirect }
+      }),
+    )
+    const firstContextUrl = new URL(attempts[0]!.redirect.headers.get('location') ?? '', baseURL)
+    const missingReference = await harness.request('/api/auth/oauth2/continue', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie, origin: baseURL },
+      body: JSON.stringify({ postLogin: true, oauth_query: firstContextUrl.search.slice(1) }),
+    })
+    expect(missingReference.status).toBe(400)
+    await expect(missingReference.json()).resolves.toMatchObject({ error: 'invalid_request' })
+
+    const tokens = [] as Array<{ organizationId: string; accessToken: string; idToken: string }>
+    for (const [index, attempt] of attempts.entries()) {
+      const organizationId = `org-context-${index === 0 ? 'a' : 'b'}`
+      const callback = await continueOAuthContext(harness, cookie, attempt.redirect, `organization:${organizationId}`)
+      expect(callback.searchParams.get('state')).toBe(`state-${attempt.suffix}`)
+      const token = await harness.request('/api/auth/oauth2/token', {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          grant_type: 'authorization_code',
+          client_id: application.clientId,
+          redirect_uri: redirectUri,
+          code: callback.searchParams.get('code') ?? '',
+          code_verifier: attempt.verifier,
+          resource,
+        }),
+      })
+      expect(token.status, await token.clone().text()).toBe(200)
+      const tokenBody = (await token.json()) as { access_token: string; id_token: string }
+      tokens.push({ organizationId, accessToken: tokenBody.access_token, idToken: tokenBody.id_token })
+    }
+    for (const { organizationId, accessToken, idToken } of tokens) {
+      expect(decodeJwtPayload(accessToken)[organizationClaim]).toBe(organizationId)
+      expect(decodeJwtPayload(idToken)[organizationClaim]).toBe(organizationId)
+    }
+  })
+
+  it('[spec: hosted-auth/oauth-authorization-context-selection] binds and atomically consumes each post-login authorization attempt', async () => {
+    const resource = 'https://attempt-resource.example.com'
+    harness = await createHarness({ validAudiences: [baseURL, resource] })
+    harness.deps.externalHttp.fetch = resourceOpenApiFetch
+    const ownerCookie = await signInAdmin(harness)
+    const owner = await env.DB.prepare('SELECT user_id AS userId FROM member WHERE organization_id = ? LIMIT 1')
+      .bind(platformOrganizationId)
+      .first<{ userId: string }>()
+    expect(owner?.userId).toBeTruthy()
+    const otherPassword = 'other-session-password-2026'
+    await createUser(harness, ownerCookie, {
+      email: 'other-attempt-user@example.com',
+      username: 'other-attempt-user',
+      displayName: 'Other Attempt User',
+      password: otherPassword,
+    })
+    const otherCookie = await signIn(harness, 'other-attempt-user@example.com', otherPassword)
+
+    const staleOrganizationId = 'org-attempt-stale'
+    const now = Date.now()
+    await env.DB.prepare(
+      'INSERT INTO organization (id, slug, name, disabled, created_at, updated_at) VALUES (?, ?, ?, 0, ?, ?)',
+    )
+      .bind(staleOrganizationId, staleOrganizationId, 'Stale attempt Organization', now, now)
+      .run()
+    await env.DB.prepare(
+      'INSERT INTO member (id, organization_id, user_id, role, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+    )
+      .bind('member-attempt-stale', staleOrganizationId, owner!.userId, 'member', now, now)
+      .run()
+
+    const createResource = await harness.request('/api/resource-servers', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie: ownerCookie },
+      body: JSON.stringify({
+        identifier: 'attempt-resource',
+        resourceUrl: resource,
+        authorizationModel: 'native',
+        ownerOrganizationId: platformOrganizationId,
+        visibility: 'public',
+      }),
+    })
+    expect(createResource.status, await createResource.clone().text()).toBe(201)
+    const redirectUri = 'http://localhost/attempt-callback'
+    const createApplication = async (consentRequired: boolean) => {
+      const response = await harness.request('/api/applications', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', cookie: ownerCookie },
+        body: JSON.stringify({
+          name: consentRequired ? 'Attempt Consent App' : 'Attempt App',
+          clientType: 'public_spa',
+          redirectUris: [redirectUri],
+          ownerOrganizationId: platformOrganizationId,
+          visibility: 'public',
+          consentRequired,
+        }),
+      })
+      expect(response.status, await response.clone().text()).toBe(201)
+      return (await response.json()) as { clientId: string }
+    }
+    const application = await createApplication(false)
+    let attemptSequence = 0
+    const startAttempt = async (clientId = application.clientId) => {
+      attemptSequence += 1
+      const verifier = `attempt-${attemptSequence}-verifier-0123456789abcdefghijklmnop`
+      const params = new URLSearchParams({
+        response_type: 'code',
+        client_id: clientId,
+        redirect_uri: redirectUri,
+        scope: 'openid',
+        state: `attempt-${attemptSequence}`,
+        code_challenge: await pkceChallenge(verifier),
+        code_challenge_method: 'S256',
+        resource,
+      })
+      const response = await harness.request(`/api/auth/oauth2/authorize?${params}`, {
+        headers: { cookie: ownerCookie },
+        redirect: 'manual',
+      })
+      expect(response.status).toBe(302)
+      const location = new URL(response.headers.get('location') ?? '', baseURL)
+      expect(location.pathname).toBe('/auth/context')
+      return { oauthQuery: location.search.slice(1), verifier }
+    }
+    const postContinue = (cookie: string, oauthQuery: string, consentReferenceId: string) =>
+      harness.request('/api/auth/oauth2/continue', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', cookie, origin: baseURL },
+        body: JSON.stringify({ postLogin: true, consentReferenceId, oauth_query: oauthQuery }),
+      })
+
+    const { oauthQuery: sessionBoundQuery } = await startAttempt()
+    const wrongSession = await postContinue(otherCookie, sessionBoundQuery, `user:${owner!.userId}`)
+    expect(wrongSession.status).toBe(403)
+    await expect(wrongSession.json()).resolves.toMatchObject({ error: 'access_denied' })
+    const originalSession = await postContinue(ownerCookie, sessionBoundQuery, `user:${owner!.userId}`)
+    expect(originalSession.status, await originalSession.clone().text()).toBe(200)
+
+    const { oauthQuery: contextBoundQuery } = await startAttempt()
+    await env.DB.prepare('UPDATE organization SET disabled = 1 WHERE id = ?').bind(staleOrganizationId).run()
+    const unavailableContext = await postContinue(ownerCookie, contextBoundQuery, `organization:${staleOrganizationId}`)
+    expect(unavailableContext.status).toBe(403)
+    await expect(unavailableContext.json()).resolves.toMatchObject({ error: 'access_denied' })
+    const fallbackToUser = await postContinue(ownerCookie, contextBoundQuery, `user:${owner!.userId}`)
+    expect(fallbackToUser.status, await fallbackToUser.clone().text()).toBe(200)
+    const replay = await postContinue(ownerCookie, contextBoundQuery, `user:${owner!.userId}`)
+    expect(replay.status).toBe(400)
+    await expect(replay.json()).resolves.toMatchObject({ error: 'invalid_request' })
+
+    const consentApplication = await createApplication(true)
+    const consentAttempt = await startAttempt(consentApplication.clientId)
+    const continueToConsent = await postContinue(
+      ownerCookie,
+      consentAttempt.oauthQuery,
+      `organization:${platformOrganizationId}`,
+    )
+    expect(continueToConsent.status, await continueToConsent.clone().text()).toBe(200)
+    const consentLocation = new URL(((await continueToConsent.json()) as { url: string }).url, baseURL)
+    expect(consentLocation.pathname).toBe('/auth/consent')
+    expect(consentLocation.searchParams.get('ba_ctx')).toBe('1')
+    expect(consentLocation.searchParams.get('ba_ref')).toBe(`organization:${platformOrganizationId}`)
+    expect(consentLocation.searchParams.has('ba_pl')).toBe(true)
+
+    const tamperedQuery = new URLSearchParams(consentLocation.search.slice(1))
+    tamperedQuery.set('ba_ref', `organization:${staleOrganizationId}`)
+    const tamperedReference = await harness.request('/api/auth/oauth2/consent', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie: ownerCookie, origin: baseURL },
+      body: JSON.stringify({ accept: true, oauth_query: tamperedQuery.toString() }),
+    })
+    expect(tamperedReference.status).toBe(400)
+    await expect(tamperedReference.json()).resolves.toMatchObject({ error: 'invalid_signature' })
+
+    const noReferenceParams = new URLSearchParams(consentLocation.search.slice(1))
+    noReferenceParams.delete('ba_ref')
+    const noReferenceQuery = await resignOAuthQuery(noReferenceParams.toString())
+    const missingReference = await harness.request('/api/auth/oauth2/consent', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie: ownerCookie, origin: baseURL },
+      body: JSON.stringify({ accept: true, oauth_query: noReferenceQuery }),
+    })
+    expect(missingReference.status).toBe(400)
+    await expect(missingReference.json()).resolves.toMatchObject({ error: 'invalid_request' })
+
+    const approveConsent = async (location: URL) => {
+      const response = await harness.request('/api/auth/oauth2/consent', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', cookie: ownerCookie, origin: baseURL },
+        body: JSON.stringify({ accept: true, scope: 'openid', oauth_query: location.search.slice(1) }),
+      })
+      expect(response.status, await response.clone().text()).toBe(200)
+      return new URL(((await response.json()) as { url: string }).url, baseURL)
+    }
+    const exchangeCode = async (callback: URL, verifier: string) => {
+      const response = await harness.request('/api/auth/oauth2/token', {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          grant_type: 'authorization_code',
+          client_id: consentApplication.clientId,
+          redirect_uri: redirectUri,
+          code: callback.searchParams.get('code') ?? '',
+          code_verifier: verifier,
+          resource,
+        }),
+      })
+      expect(response.status, await response.clone().text()).toBe(200)
+      return (await response.json()) as { access_token: string; id_token: string }
+    }
+
+    const organizationTokens = await exchangeCode(await approveConsent(consentLocation), consentAttempt.verifier)
+    expect(decodeJwtPayload(organizationTokens.access_token)[organizationClaim]).toBe(platformOrganizationId)
+    expect(decodeJwtPayload(organizationTokens.id_token)[organizationClaim]).toBe(platformOrganizationId)
+
+    const userConsentAttempt = await startAttempt(consentApplication.clientId)
+    const continueUserConsent = await postContinue(ownerCookie, userConsentAttempt.oauthQuery, `user:${owner!.userId}`)
+    expect(continueUserConsent.status, await continueUserConsent.clone().text()).toBe(200)
+    const userConsentLocation = new URL(((await continueUserConsent.json()) as { url: string }).url, baseURL)
+    expect(userConsentLocation.pathname).toBe('/auth/consent')
+    expect(userConsentLocation.searchParams.get('ba_ref')).toBe(`user:${owner!.userId}`)
+    const userTokens = await exchangeCode(await approveConsent(userConsentLocation), userConsentAttempt.verifier)
+    expect(decodeJwtPayload(userTokens.access_token)).not.toHaveProperty(organizationClaim)
+    expect(decodeJwtPayload(userTokens.id_token)).not.toHaveProperty(organizationClaim)
+  })
+
+  it('completes ordinary consent without a Realmroot Context marker when no Resource is requested', async () => {
+    const cookie = await signInAdmin(harness)
+    const redirectUri = 'http://localhost/ordinary-consent-callback'
+    const createApplication = await harness.request('/api/applications', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({
+        name: 'Ordinary OIDC Consent App',
+        clientType: 'public_spa',
+        redirectUris: [redirectUri],
+        ownerOrganizationId: platformOrganizationId,
+        visibility: 'public',
+        consentRequired: true,
+      }),
+    })
+    expect(createApplication.status, await createApplication.clone().text()).toBe(201)
+    const application = (await createApplication.json()) as { clientId: string }
+
+    const verifier = 'ordinary-consent-verifier-0123456789abcdefghijklmnop'
+    const params = new URLSearchParams({
+      response_type: 'code',
+      client_id: application.clientId,
+      redirect_uri: redirectUri,
+      scope: 'openid',
+      state: 'ordinary-consent-state',
+      code_challenge: await pkceChallenge(verifier),
+      code_challenge_method: 'S256',
+    })
+    const authorize = await harness.request(`/api/auth/oauth2/authorize?${params}`, {
+      headers: { cookie },
+      redirect: 'manual',
+    })
+    expect(authorize.status).toBe(302)
+    const consentLocation = new URL(authorize.headers.get('location') ?? '', baseURL)
+    expect(consentLocation.pathname).toBe('/auth/consent')
+    expect(consentLocation.searchParams.has('ba_pl')).toBe(true)
+    expect(consentLocation.searchParams.has('ba_ctx')).toBe(false)
+    expect(consentLocation.searchParams.has('ba_ref')).toBe(false)
+
+    const approve = await harness.request('/api/auth/oauth2/consent', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie, origin: baseURL },
+      body: JSON.stringify({ accept: true, scope: 'openid', oauth_query: consentLocation.search.slice(1) }),
+    })
+    expect(approve.status, await approve.clone().text()).toBe(200)
+    const callback = new URL(((await approve.json()) as { url: string }).url, baseURL)
+    expect(callback.pathname).toBe('/ordinary-consent-callback')
+    expect(callback.searchParams.get('state')).toBe('ordinary-consent-state')
+
+    const token = await harness.request('/api/auth/oauth2/token', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        client_id: application.clientId,
+        redirect_uri: redirectUri,
+        code: callback.searchParams.get('code') ?? '',
+        code_verifier: verifier,
+      }),
+    })
+    expect(token.status, await token.clone().text()).toBe(200)
+    const tokens = (await token.json()) as { access_token: string; id_token: string }
+    expect(decodeJwtPayload(tokens.access_token)).not.toHaveProperty(organizationClaim)
+    expect(decodeJwtPayload(tokens.id_token)).not.toHaveProperty(organizationClaim)
   })
 
   it('binds a refresh token to the complete multi-resource grant [spec: hosted-auth/oauth-multi-resource-grant]', async () => {
@@ -712,12 +1097,17 @@ describe('OIDC authorization over real D1', () => {
     authorizeParams.append('resource', resources[0].url)
     authorizeParams.append('resource', resources[1].url)
 
-    const authorized = await harness.request(`/api/auth/oauth2/authorize?${authorizeParams}`, {
+    const contextRedirect = await harness.request(`/api/auth/oauth2/authorize?${authorizeParams}`, {
       headers: { cookie },
       redirect: 'manual',
     })
-    expect(authorized.status, await authorized.clone().text()).toBe(302)
-    const code = new URL(authorized.headers.get('location') ?? '', redirectUri).searchParams.get('code')
+    const callback = await continueOAuthContext(
+      harness,
+      cookie,
+      contextRedirect,
+      `organization:${platformOrganizationId}`,
+    )
+    const code = callback.searchParams.get('code')
     expect(code).toBeTruthy()
 
     const initialToken = await harness.request('/api/auth/oauth2/token', {

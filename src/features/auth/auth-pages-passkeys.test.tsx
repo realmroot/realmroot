@@ -131,6 +131,9 @@ const consentResponse = {
   previouslyApprovedScopes: [],
   consentReason: 'initial',
   existingConsent: null,
+  authorizationContexts: [
+    { id: 'user:user-1', type: 'user', displayName: 'Jane Stone', description: 'User Context', organizationId: null },
+  ],
   state: 'state-1',
 }
 

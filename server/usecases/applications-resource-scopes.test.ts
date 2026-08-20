@@ -45,6 +45,7 @@ function setup() {
     findResource: vi.fn().mockResolvedValue(resource),
     findResourceByResourceUrl: vi.fn().mockResolvedValue(resource),
     findMemberByOrganizationUser: vi.fn().mockResolvedValue({ id: 'member-1' }),
+    listUserMemberships: vi.fn().mockResolvedValue([{ organizationId: 'org-1' }]),
   }
   return {
     deps: { ids: createIdentifierGeneratorFake(), applications, authorization } as unknown as Deps,

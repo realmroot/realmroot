@@ -478,12 +478,38 @@ export function createAuth(
         scopes: oauthScopes,
         validAudiences: options.validAudiences,
         postLogin: {
-          page: '/auth/consent',
-          consentReferenceId: async ({ session }) =>
-            typeof session.activeOrganizationId === 'string' ? session.activeOrganizationId : undefined,
-          shouldRedirect: async ({ headers, user, scopes }) => {
+          page: '/auth/context',
+          consentReferenceId: async ({ referenceId, user }) => {
+            if (!referenceId) return undefined
+            if (referenceId === `user:${user.id}`) return referenceId
+            if (!referenceId.startsWith('organization:')) {
+              throw new APIError('FORBIDDEN', {
+                error: 'access_denied',
+                error_description: 'The selected authorization Context is invalid.',
+              })
+            }
+            const organizationId = referenceId.slice('organization:'.length)
+            if (!organizationId) {
+              throw new APIError('FORBIDDEN', {
+                error: 'access_denied',
+                error_description: 'The selected authorization Context is invalid.',
+              })
+            }
+            const [organization, membership] = await Promise.all([
+              deps.authorization.findOrganization(organizationId),
+              deps.authorization.findMemberByOrganizationUser(organizationId, user.id),
+            ])
+            if (!organization || organization.disabled || !membership) {
+              throw new APIError('FORBIDDEN', {
+                error: 'access_denied',
+                error_description: 'The selected Organization Context is no longer available.',
+              })
+            }
+            return referenceId
+          },
+          shouldRedirect: async ({ headers, user }) => {
             const clientId = headers.get('x-realmroot-oauth-client-id')
-            if (!clientId) throw new Error('OAuth consent context is missing the client ID.')
+            if (!clientId) return false
             const application = await applications.findByClientId(clientId)
             if (!application) throw new Error('OAuth consent context does not reference an Application.')
             if (!(await applicationUserHasAccess(deps, application, user.id))) {
@@ -492,22 +518,7 @@ export function createAuth(
                 error_description: 'The Application is unavailable to this user.',
               })
             }
-            if (!application.consentRequired) return false
-
-            const resourceUrls = oauthResourceUrlsFromHeader(headers)
-            const targets = resourceUrls.length ? resourceUrls : [null]
-            for (const resourceUrl of targets) {
-              const resource = resourceUrl ? await deps.authorization.findResourceByResourceUrl(resourceUrl) : null
-              if (resourceUrl && !resource) return true
-              const configuredResourceScopes = resource
-                ? (application.resourceScopes.find((item) => item.resourceServerId === resource.id)?.scopes ?? [])
-                : []
-              const allowedScopes = new Set([...application.oidcScopes, ...configuredResourceScopes])
-              const targetScopes = scopes.filter((scope) => allowedScopes.has(scope))
-              const consent = await applications.findConsent(application.id, user.id, resource?.id ?? null)
-              if (!consent || targetScopes.some((scope) => !consent.scopes.includes(scope))) return true
-            }
-            return false
+            return oauthResourceUrlsFromHeader(headers).length > 0
           },
         },
         filterAccessTokenScopes: (input) => filterOAuthAccessTokenScopes(deps, input),

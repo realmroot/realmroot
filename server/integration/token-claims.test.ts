@@ -158,16 +158,16 @@ describe('OAuth token claim building over real D1', () => {
         user: { id: userId },
         scopes: ['openid', 'contacts:read'],
         resource: audience,
-        referenceId: foreignOrganization.id,
+        referenceId: `organization:${foreignOrganization.id}`,
         metadata: { applicationId: tenantApplication.id },
       }),
-    ).resolves.toEqual(['openid'])
+    ).rejects.toMatchObject({ body: { error: 'access_denied' } })
     await expect(
       filterOAuthAccessTokenScopes(harness.deps, {
         user: { id: userId },
         scopes: ['openid', 'contacts:read'],
         resource: audience,
-        referenceId: organization.id,
+        referenceId: `organization:${organization.id}`,
         metadata: { applicationId: tenantApplication.id },
       }),
     ).resolves.toEqual(['openid'])
@@ -229,14 +229,7 @@ describe('OAuth token claim building over real D1', () => {
 
     harness = await createHarness({ validAudiences: [baseURL, audience] })
     harness.deps.externalHttp.fetch = removedScopeOpenApiFetch
-    let memberCookie = await signIn(harness, 'claims-user@example.com', 'claims-user-password-2026')
-    const activeOrganization = await harness.request('/api/auth/organization/set-active', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', cookie: memberCookie, origin: baseURL },
-      body: JSON.stringify({ organizationId: organization.id }),
-    })
-    expect(activeOrganization.status, await activeOrganization.clone().text()).toBe(200)
-    memberCookie = mergeResponseCookies(memberCookie, activeOrganization)
+    const memberCookie = await signIn(harness, 'claims-user@example.com', 'claims-user-password-2026')
 
     const verifier = 'scope-removal-pkce-verifier-0123456789abcdefghijklmnop'
     const authorize = await harness.request(
@@ -252,7 +245,20 @@ describe('OAuth token claim building over real D1', () => {
       { headers: { cookie: memberCookie }, redirect: 'manual' },
     )
     expect(authorize.status, await authorize.clone().text()).toBe(302)
-    const code = new URL(authorize.headers.get('location') ?? '').searchParams.get('code')
+    const contextLocation = new URL(authorize.headers.get('location') ?? '', baseURL)
+    expect(contextLocation.pathname).toBe('/auth/context')
+    const continueAuthorization = await harness.request('/api/auth/oauth2/continue', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie: memberCookie, origin: baseURL },
+      body: JSON.stringify({
+        postLogin: true,
+        consentReferenceId: `organization:${organization.id}`,
+        oauth_query: contextLocation.search.slice(1),
+      }),
+    })
+    expect(continueAuthorization.status, await continueAuthorization.clone().text()).toBe(200)
+    const callback = new URL(((await continueAuthorization.json()) as { url: string }).url, baseURL)
+    const code = callback.searchParams.get('code')
     expect(code).toBeTruthy()
 
     const token = await harness.request('/api/auth/oauth2/token', {
@@ -513,16 +519,6 @@ function clientCredentialsResponse(
       resource,
     }),
   })
-}
-
-function mergeResponseCookies(currentCookie: string, response: Response) {
-  const values = new Map(currentCookie.split('; ').map((pair) => pair.split('=', 2) as [string, string]))
-  for (const part of (response.headers.get('set-cookie') ?? '').split(',')) {
-    const pair = part.trim().split(';')[0]
-    const separator = pair.indexOf('=')
-    if (separator > 0) values.set(pair.slice(0, separator), pair.slice(separator + 1))
-  }
-  return [...values].map(([name, value]) => `${name}=${value}`).join('; ')
 }
 
 async function pkceChallenge(verifier: string) {
