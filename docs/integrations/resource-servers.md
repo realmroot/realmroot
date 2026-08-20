@@ -164,8 +164,9 @@ Native Agent tokens may also contain:
 - `client_id`: the reserved protocol value `realmroot-cli`;
 - `act`: the stable Agent's exact `iss` and `sub`;
 - `roles`: effective roles for this API Resource;
-- `groups`: the Agent's organization home space.
-- `urn:realmroot:params:oauth:org`: the controlling Organization ID as a string when Organization context applies.
+- `groups`: the controlling user's teams in the selected Organization Context;
+- `urn:realmroot:params:oauth:org`: the selected Organization Context ID as a string. It is absent for a personal User Context;
+- `authorization_details`: exactly one `realmroot_authority` entry identifying the selected User or Organization Context.
 
 `realmroot-cli` does not identify an Application or a dynamically registered
 OAuth client. Reject other `client_id` values for Realmroot-native Agent
@@ -174,6 +175,15 @@ to Realmroot.
 
 Treat `scope` as the granted API authority. `roles`, `groups`, `sub`, and `act`
 provide policy and audit context; they do not expand the token's scopes.
+
+Every native Resource uses the same Context selection model as Realmroot's
+built-in platform Resource. Realmroot exposes the controlling user's personal
+Context and active Organization memberships through the Resource's
+authorization-details catalog. The Agent selects one Context and the controller
+approves that exact selection;
+Realmroot then evaluates permissions and issues the tenant claim only for that
+selection. Resource ownership, the browser's active Organization, and the
+Agent's home Organization never provide a fallback tenant.
 
 ### Resolve Optional Agent Display Information
 

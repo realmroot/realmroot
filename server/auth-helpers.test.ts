@@ -76,7 +76,9 @@ function createDeps(input?: {
       listActiveUserScopeEntitlements: vi
         .fn()
         .mockResolvedValue(
-          input?.directScopes ? input.directScopes.map((scope) => ({ id: `ent_${scope}`, scope })) : [],
+          input?.directScopes
+            ? input.directScopes.map((scope) => ({ id: `ent_${scope}`, scope, organizationId: null }))
+            : [],
         ),
       listOrganizationRoleScopes: vi.fn().mockResolvedValue(new Map()),
       findResource: vi.fn().mockResolvedValue(resource),

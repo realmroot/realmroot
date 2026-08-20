@@ -33,6 +33,8 @@ Feature: Platform bootstrap and route access
     And existing Applications become public and existing user-facing Applications allow the groups scope
     And Better Auth Team storage is available without creating a default Team for any Organization
     And legacy Resource server scope registries are cleared before RFC 9728 metadata replaces them
+    And active native Agent Permissions without an authority Context are revoked together with their active Token Leases
+    And contextful native, external, User, and Application Permissions and historical Agent access requests are preserved
     And the migrated database satisfies all foreign key constraints
 
   @e2e @entrypoint:product-ui @journey:first-admin-gate

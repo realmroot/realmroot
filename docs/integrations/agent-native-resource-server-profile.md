@@ -1,8 +1,8 @@
 # Agent-native Resource Server Profile
 
-Status: **Realmroot Profile 0.1 — implementation baseline**
+Status: **Realmroot Profile 0.2 — implementation baseline**
 
-Last reviewed: **2026-08-08**
+Last reviewed: **2026-08-20**
 
 This document is the canonical integration profile for an external service that
 wants to accept Realmroot Agents directly. It inventories the open standards
@@ -26,7 +26,7 @@ temporary compatibility for platforms that do not yet satisfy the profile.
 | Extension | A Realmroot-defined wire field, endpoint, representation, or convention that is not currently defined by an adopted external standard. |
 
 The key words **MUST**, **MUST NOT**, **SHOULD**, **SHOULD NOT**, and **MAY**
-express Realmroot Profile 0.1 requirements. They do not change the conformance
+express Realmroot Profile 0.2 requirements. They do not change the conformance
 language of the referenced specifications.
 
 ## Conformance classes
@@ -56,13 +56,13 @@ Requirement values in the inventory are:
 Stable capability IDs let provider reports and future conformance tests refer
 to requirements without copying their meaning.
 
-`Realmroot 0.1 status` says whether the current Realmroot implementation
+`Realmroot 0.2 status` says whether the current Realmroot implementation
 produces or consumes that capability. It is not a claim about external-provider
 support.
 
 ### Resource and API discovery
 
-| ID | Requirement | Specification | Native Resource Server | Federated Platform | Realmroot 0.1 status |
+| ID | Requirement | Specification | Native Resource Server | Federated Platform | Realmroot 0.2 status |
 | --- | --- | --- | --- | --- | --- |
 | `RESOURCE-HTTPS` | Use an exact HTTPS Resource identifier as the API base URL and token audience. Loopback HTTP is development-only. | Realmroot profile constraint | MUST | MUST | Implemented |
 | `RESOURCE-METADATA` | Publish protected-resource metadata for the exact Resource, including `resource` and `scopes_supported`; federated platforms publish exactly one `authorization_servers` issuer. | [RFC 9728](https://www.rfc-editor.org/rfc/rfc9728.html) | MUST | MUST | Implemented |
@@ -71,7 +71,7 @@ support.
 
 ### Authorization-server discovery and user connection
 
-| ID | Requirement | Specification | Native Resource Server | Federated Platform | Realmroot 0.1 status |
+| ID | Requirement | Specification | Native Resource Server | Federated Platform | Realmroot 0.2 status |
 | --- | --- | --- | --- | --- | --- |
 | `AS-METADATA` | Publish authorization-server metadata and signing-key information for the exact issuer. | [RFC 8414](https://www.rfc-editor.org/rfc/rfc8414.html) | — | MUST | Implemented |
 | `OIDC-CONNECTION` | Publish OpenID Provider metadata and support UserInfo for the connected controlling user. | [OpenID Connect Discovery 1.0](https://openid.net/specs/openid-connect-discovery-1_0.html) and [OpenID Connect Core 1.0](https://openid.net/specs/openid-connect-core-1_0.html) | — | MUST | Implemented |
@@ -84,7 +84,7 @@ support.
 
 ### Stable Agent actor and delegated authority
 
-| ID | Requirement | Specification | Native Resource Server | Federated Platform | Realmroot 0.1 status |
+| ID | Requirement | Specification | Native Resource Server | Federated Platform | Realmroot 0.2 status |
 | --- | --- | --- | --- | --- | --- |
 | `ACTOR-CHAIN` | Preserve the controlling subject in `sub` and the stable Agent in the JWT `act` claim with exact `iss` and `sub` values. | [RFC 8693](https://www.rfc-editor.org/rfc/rfc8693.html) plus Realmroot profile constraint | MUST | MUST | Implemented |
 | `ACTOR-NATIVE` | Represent the stable Agent as a distinct non-human actor in the provider's own authorization or identity model and preserve it in provider audit records. A shared App actor or content footer does not satisfy this capability. | Realmroot profile requirement; tracked by [AI Agent Authentication and Authorization draft-02](https://datatracker.ietf.org/doc/draft-klrc-aiagent-auth/02/) | MUST | MUST | Implemented by Realmroot-native Resources; provider-dependent |
@@ -94,7 +94,7 @@ support.
 
 ### Access-token and proof-of-possession security
 
-| ID | Requirement | Specification | Native Resource Server | Federated Platform | Realmroot 0.1 status |
+| ID | Requirement | Specification | Native Resource Server | Federated Platform | Realmroot 0.2 status |
 | --- | --- | --- | --- | --- | --- |
 | `JWT-ACCESS-TOKEN` | Issue a signed JWT access token with protected-header `typ: at+jwt`, an exact issuer and audience, expiry, client identity, scopes, and confirmation data. | [RFC 9068](https://www.rfc-editor.org/rfc/rfc9068.html) | MUST | MUST | Implemented |
 | `DPOP` | Bind access tokens to the Agent key, require `Authorization: DPoP`, validate a proof for every request, and provide no Bearer fallback. | [RFC 9449](https://www.rfc-editor.org/rfc/rfc9449.html) | MUST | MUST | Implemented |
@@ -107,13 +107,24 @@ separate product capabilities.
 
 ### Rich authorization and lifecycle
 
-| ID | Requirement | Specification | Native Resource Server | Federated Platform | Realmroot 0.1 status |
+| ID | Requirement | Specification | Native Resource Server | Federated Platform | Realmroot 0.2 status |
 | --- | --- | --- | --- | --- | --- |
-| `RICH-AUTHORIZATION` | Accept Resource-specific authorization details when the Resource requires structured authority beyond scopes. | [RFC 9396](https://www.rfc-editor.org/rfc/rfc9396.html) | — | COND | Implemented |
+| `RICH-AUTHORIZATION` | Preserve the selected `realmroot_authority` User or Organization Context in `authorization_details`; federated Resources also accept their own structured authority when required. | [RFC 9396](https://www.rfc-editor.org/rfc/rfc9396.html) | MUST | COND | Implemented |
 | `PUSHED-AUTHORIZATION` | Receive rich authorization details through a pushed authorization request. Realmroot requires PAR whenever RFC 9396 is enabled. | [RFC 9126](https://www.rfc-editor.org/rfc/rfc9126.html) plus Realmroot profile constraint | — | COND | Implemented |
 | `AUTHORIZATION-CATALOG` | Let Realmroot enumerate provider-owned authorization-detail templates before consent. | [Realmroot authorization-details catalog extension](#authorization-details-catalog-extension) | — | COND | Implemented extension |
 | `TOKEN-REVOCATION` | Accept authenticated access-token and refresh-token revocation and fail subsequent use closed. | [RFC 7009](https://www.rfc-editor.org/rfc/rfc7009.html) | — | MUST | Implemented |
 | `LIFECYCLE-SIGNALS` | Expose installation, permission-change, Resource-removal, and revocation signals so cached authority and provider credentials can be invalidated. | Realmroot profile requirement | SHOULD | MUST | Provider-dependent |
+
+## Native authority Context
+
+All native Resources use the same explicit Context selection as Realmroot's
+built-in platform Resource. The authorization-details catalog exposes one
+personal User Context and the controlling user's active Organization Contexts.
+Exactly one `realmroot_authority` detail is required for access requests and
+token issuance. Organization-scoped tokens carry
+`urn:realmroot:params:oauth:org`; personal tokens do not. Realmroot does not
+infer this tenant from Resource ownership, Agent ownership, or browser session
+state.
 
 ## Compatibility Adapter boundary
 

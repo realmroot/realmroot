@@ -477,12 +477,16 @@ describe('Agent identity enrollment over real D1', () => {
       {
         resourceServerId: resource.id,
         scopes: ['repo:read'],
+        authorizationDetails: [{ type: 'realmroot_authority', authority: 'organization', id: platformOrganizationId }],
         reason: 'Read repositories',
       },
       principal,
       'http://localhost',
     )
-    expect(accessRequest).toMatchObject({ resourceServerId: resource.id, authorizationDetails: [] })
+    expect(accessRequest).toMatchObject({
+      resourceServerId: resource.id,
+      authorizationDetails: [{ type: 'realmroot_authority', authority: 'organization', id: platformOrganizationId }],
+    })
     expect(accessRequest).not.toHaveProperty('grantId')
 
     const invalidApproval = await harness.request(`/api/account/access-requests/${accessRequest.id}/decision`, {
@@ -495,7 +499,11 @@ describe('Agent identity enrollment over real D1', () => {
     const approval = await harness.request(`/api/account/access-requests/${accessRequest.id}/decision`, {
       method: 'PUT',
       headers: jsonHeaders(ownerCookie),
-      body: JSON.stringify({ decision: 'approve', mode: 'persistent' }),
+      body: JSON.stringify({
+        decision: 'approve',
+        mode: 'persistent',
+        authorizationDetails: [{ type: 'realmroot_authority', authority: 'organization', id: platformOrganizationId }],
+      }),
     })
     expect(approval.status, await approval.clone().text()).toBe(200)
     expect(await approval.json()).not.toHaveProperty('grantId')

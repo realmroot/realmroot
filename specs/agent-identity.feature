@@ -222,8 +222,16 @@ Feature: Agent identity and delegated API authorization
       Then Realmroot returns that resource and its protected resource URL without requiring an account connection
       When Restish reads the target OpenAPI operation and the Agent requests its Resource Server and exact scope set
       Then Realmroot validates that scope set against the local target scope registry
-      And concrete authorization details are optional constraints rather than a required Resource reference
-      And Realmroot verifies the controller currently holds every requested scope
+      And the request selects exactly one realmroot_authority Context for a User or Organization visible to the Agent
+      And every visible native Resource lists a personal Agent's User Context and every active Organization Context
+      And private Resource visibility is checked before that Context catalog is exposed
+      And an Organization-owned Agent lists only its home Organization Context
+      And missing, multiple, malformed, or unavailable Contexts fail closed
+      And Realmroot verifies the controller currently holds every requested scope inside only the selected Context
+      And User Context scopes include only automatic scopes and direct Permissions with no Organization
+      And Organization Context scopes include only automatic scopes, matching Organization direct Permissions, and matching membership Roles
+      And NULL direct Permissions never fall back to the Resource owner Organization
+      And direct and Role scopes from another Organization do not cross that Context boundary
       And Realmroot creates the same pending access-request resource used for external APIs
       And it does not require a user-created authority grant or grant identifier
       When an authorized controller approves the request
@@ -263,8 +271,9 @@ Feature: Agent identity and delegated API authorization
       And the token carries every currently active Permission for the same Agent, Resource Server, Account Connection, and authorization details
       And a later expansion replaces the client's Context credential instead of creating a selectable historical offer
       And revoking one Permission removes only that scope from subsequently issued tokens
-      And a private Resource Server token identifies its owner Organization even when the Agent is personal
-      And groups identifies the token's Organization context
+      And an Organization Context token carries only that selected Organization claim and groups
+      And the same personal Agent receives different Organization claims when it selects different Organization Contexts
+      And a User Context token has no Organization claim, regardless of the Agent home Organization or Resource owner
       And the token does not contain Agent roles
       And the token is bound to the Agent's DPoP key
       And Restish stores but does not print the raw access token
