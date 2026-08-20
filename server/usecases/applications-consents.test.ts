@@ -30,6 +30,7 @@ function createApplication(
   deps.authorization = {
     ...deps.authorization,
     findOrganization: deps.authorization?.findOrganization ?? (async () => ({ disabled: false })),
+    listUserMemberships: deps.authorization?.listUserMemberships ?? (async () => []),
     listOrganizations:
       deps.authorization?.listOrganizations ??
       (async () => ({
@@ -49,7 +50,12 @@ function createApplication(
         pagination: { limit: 100, offset: 0, total: 1, hasMore: false, nextOffset: null },
       })),
   } as Deps['authorization']
-  return createApplicationUsecase(deps, issuer, { ...input, ownerOrganizationId }, actorUserId)
+  return createApplicationUsecase(
+    deps,
+    issuer,
+    { visibility: input.visibility ?? 'public', ...input, ownerOrganizationId },
+    actorUserId,
+  )
 }
 
 describe('service.test 3', () => {
@@ -309,10 +315,11 @@ describe('service.test 3', () => {
       scopeRegistry: { scopes: [{ value: 'items:read', description: null, grantMode: 'assigned' }] },
     }
     const authorization = {
-      findOrganization: async () => ({ disabled: false }),
+      findOrganization: async (id: string) => ({ id, name: 'Organization', displayName: null, disabled: false }),
       findResources: async () => [resource],
       findResource: async () => resource,
       findResourceByResourceUrl: async () => resource,
+      listUserMemberships: async (userId: string) => (userId === 'member-1' ? [{ organizationId: 'org-1' }] : []),
       findMemberByOrganizationUser: async (_organizationId: string, userId: string) =>
         userId === 'member-1' ? { id: 'membership-1' } : null,
     }
@@ -487,6 +494,136 @@ describe('service.test 3', () => {
     })
     await expect(repository.findConsent(application.id, 'user-1', resources[1].id)).resolves.toMatchObject({
       scopes: ['contacts:read', 'openid'],
+    })
+  })
+
+  it('[spec: hosted-auth/oauth-authorization-context-selection] lists and validates explicit OAuth Contexts', async () => {
+    const repository = new InMemoryApplicationRepository()
+    const resources = {
+      public: {
+        id: 'public-resource',
+        identifier: 'public-resource',
+        name: 'Public Resource',
+        resourceUrl: 'https://public.example.com/',
+        enabled: true,
+        visibility: 'public',
+        ownerOrganizationId: 'org-a',
+        scopeRegistry: {
+          scopes: [{ value: 'items:read', description: null, grantMode: 'automatic' }],
+        },
+      },
+      private: {
+        id: 'private-resource',
+        identifier: 'private-resource',
+        name: 'Private Resource',
+        resourceUrl: 'https://private.example.com/',
+        enabled: true,
+        visibility: 'private',
+        ownerOrganizationId: 'org-a',
+        scopeRegistry: {
+          scopes: [{ value: 'items:read', description: null, grantMode: 'automatic' }],
+        },
+      },
+    }
+    let memberships = [{ organizationId: 'org-a' }, { organizationId: 'org-disabled' }, { organizationId: 'org-b' }]
+    let requestedResource = resources.public
+    const organizations = new Map([
+      ['org-a', { id: 'org-a', name: 'Organization A', displayName: 'Alpha', disabled: false }],
+      ['org-b', { id: 'org-b', name: 'Organization B', displayName: null, disabled: false }],
+      ['org-disabled', { id: 'org-disabled', name: 'Disabled', displayName: null, disabled: true }],
+    ])
+    const authorization = {
+      findOrganization: async (id: string) => organizations.get(id) ?? null,
+      listOrganizations: async () => ({
+        items: [{ id: 'org_platform', slug: 'realmroot' }],
+        pagination: { limit: 100, offset: 0, total: 1, hasMore: false, nextOffset: null },
+      }),
+      listUserMemberships: async () => memberships,
+      findResources: async () => Object.values(resources),
+      findResource: async (id: string) => Object.values(resources).find((resource) => resource.id === id) ?? null,
+      findResourceByResourceUrl: async () => requestedResource,
+      findMemberByOrganizationUser: async (organizationId: string) =>
+        memberships.some((membership) => membership.organizationId === organizationId) ? { id: 'member-1' } : null,
+    }
+    const deps = {
+      ids: createIdentifierGeneratorFake(),
+      applications: repository,
+      authorization,
+    } as unknown as Deps
+    const issuer = 'https://auth.example.com'
+    const publicApplication = await createApplication(
+      deps,
+      issuer,
+      {
+        name: 'Public Context App',
+        clientType: 'public_spa',
+        visibility: 'public',
+        redirectUris: ['https://public-app.example.com/callback'],
+        ownerOrganizationId: 'org-a',
+        resourceScopes: [{ resourceServerId: resources.public.id, scopes: ['items:read'] }],
+      },
+      'admin-1',
+    )
+
+    await expect(
+      loadConsentRequest(
+        deps,
+        issuer,
+        {
+          clientId: publicApplication.clientId,
+          redirectUri: publicApplication.redirectUris[0],
+          scope: 'items:read',
+          authorizationParams: { resource: resources.public.resourceUrl },
+        },
+        { id: 'user-1', email: 'user@example.com', name: 'Example User' },
+      ),
+    ).resolves.toMatchObject({
+      authorizationContexts: [
+        { id: 'user:user-1', type: 'user', organizationId: null },
+        { id: 'organization:org-a', type: 'organization', displayName: 'Alpha', organizationId: 'org-a' },
+        { id: 'organization:org-b', type: 'organization', displayName: 'Organization B', organizationId: 'org-b' },
+      ],
+    })
+
+    requestedResource = resources.private
+    const privateApplication = await createApplication(
+      deps,
+      issuer,
+      {
+        name: 'Private Context App',
+        clientType: 'public_native',
+        visibility: 'private',
+        redirectUris: ['com.example.private:/callback'],
+        ownerOrganizationId: 'org-a',
+        resourceScopes: [{ resourceServerId: resources.private.id, scopes: ['items:read'] }],
+      },
+      'admin-1',
+    )
+    const privateRequest = {
+      clientId: privateApplication.clientId,
+      redirectUri: privateApplication.redirectUris[0],
+      scope: 'items:read',
+      authorizationParams: { resource: resources.private.resourceUrl },
+    }
+    await expect(loadConsentRequest(deps, issuer, privateRequest, { id: 'user-1' })).resolves.toMatchObject({
+      authorizationContexts: [{ id: 'organization:org-a', type: 'organization', organizationId: 'org-a' }],
+    })
+
+    const privateApplicationRequest = {
+      clientId: privateApplication.clientId,
+      redirectUri: privateApplication.redirectUris[0],
+      scope: 'openid',
+    }
+    memberships = []
+    await expect(loadConsentRequest(deps, issuer, privateApplicationRequest, { id: 'user-1' })).rejects.toMatchObject({
+      status: 400,
+      message: 'No active authorization Context is available for this request.',
+    })
+    memberships = [{ organizationId: 'org-a' }]
+    organizations.set('org-a', { ...organizations.get('org-a')!, disabled: true })
+    await expect(loadConsentRequest(deps, issuer, privateApplicationRequest, { id: 'user-1' })).rejects.toMatchObject({
+      status: 400,
+      message: 'No active authorization Context is available for this request.',
     })
   })
 })

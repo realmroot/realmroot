@@ -87,6 +87,7 @@ export function resetLocalData() {
     DELETE FROM agent_access_request;
     DELETE FROM resource_connection_intent;
     DELETE FROM provider_resource_authorization;
+    DELETE FROM provider_credential;
     DELETE FROM provider_connection;
     DELETE FROM approval_request;
     DELETE FROM agent_identity_binding;
@@ -100,12 +101,14 @@ export function resetLocalData() {
     DELETE FROM webhook_endpoint;
     DELETE FROM organization_role;
     DELETE FROM invitation;
+    DELETE FROM team_member;
+    DELETE FROM team;
     DELETE FROM member;
     DELETE FROM token_exchange_access_token;
     DELETE FROM token_exchange_refresh_token;
     DELETE FROM federated_credential;
-    DELETE FROM api_resource;
     DELETE FROM application_consent;
+    DELETE FROM api_resource;
     DELETE FROM application_client_secret;
     DELETE FROM application_client_metadata;
     DELETE FROM application;
@@ -122,6 +125,7 @@ export function resetLocalData() {
     DELETE FROM jwks;
     DELETE FROM session;
     DELETE FROM account;
+    DELETE FROM user_profile;
     DELETE FROM user;
     DELETE FROM identity_provider_connector;
     DELETE FROM email_service_config;

@@ -145,7 +145,7 @@ export function createDrizzleApplicationRepository(db: Database, ids: Identifier
         ...(patch.homepageUrl !== undefined ? { uri: patch.homepageUrl } : {}),
         ...(patch.iconUrl !== undefined ? { icon: patch.iconUrl } : {}),
         ...(patch.disabled !== undefined ? { disabled: patch.disabled } : {}),
-        ...(patch.consentRequired !== undefined ? { skipConsent: true } : {}),
+        ...(patch.consentRequired !== undefined ? { skipConsent: !patch.consentRequired } : {}),
         ...(patch.redirectUris !== undefined ? { redirectUris: serializeList(patch.redirectUris) } : {}),
         ...(patch.postLogoutRedirectUris !== undefined
           ? { postLogoutRedirectUris: serializeList(patch.postLogoutRedirectUris), enableEndSession: true }

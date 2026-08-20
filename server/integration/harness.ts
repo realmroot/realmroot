@@ -8,11 +8,28 @@ import { createApp } from '@server/http/app'
 import type { AgentAssertionSigner } from '@server/usecases/external-resources'
 import { publishWebhookEvent } from '@server/usecases/webhooks'
 import type { SecurityPolicy } from '@shared/api/security'
+import { makeSignature } from 'better-auth/crypto'
 
 export const baseURL = 'http://localhost'
 export let platformOrganizationId = ''
 export let realmrootResourceServerId = ''
 const authSecret = 'integration-secret-with-enough-entropy-2026-realmroot'
+
+export async function resignOAuthQuery(oauthQuery: string): Promise<string> {
+  const params = new URLSearchParams(oauthQuery)
+  params.delete('sig')
+  params.delete('ba_param')
+  for (const parameterName of [...new Set([...params.keys(), 'ba_param'])].sort()) {
+    params.append('ba_param', parameterName)
+  }
+  const canonical = new URLSearchParams(
+    [...params.entries()].sort(([keyA, valueA], [keyB, valueB]) =>
+      keyA === keyB ? valueA.localeCompare(valueB) : keyA.localeCompare(keyB),
+    ),
+  )
+  params.set('sig', await makeSignature(canonical.toString(), authSecret))
+  return params.toString()
+}
 
 /**
  * The crown wires the real composition root over the pool's real D1. Only the

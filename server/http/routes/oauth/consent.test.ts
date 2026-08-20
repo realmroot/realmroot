@@ -43,6 +43,7 @@ describe('OAuth consent routes', () => {
       scope: 'openid profile',
       state: 'state-1',
     })
+    expect(input).not.toHaveProperty('activeOrganizationId')
     expect(Object.fromEntries((input.authorizationParams as URLSearchParams).entries())).toEqual({
       client_id: 'client-1',
       redirect_uri: 'https://client.example.com/callback',
@@ -126,7 +127,9 @@ function createTestApp(service: ReturnType<typeof createConsentServiceMock>) {
   app.use('/api/*', async (c, next) => {
     const userId = c.req.header('x-user-id')
     c.set('principal', {
-      session: userId ? { session: { id: 'session-1' }, user: { id: userId } } : null,
+      session: userId
+        ? { session: { id: 'session-1', activeOrganizationId: 'org-active' }, user: { id: userId } }
+        : null,
       user: userId
         ? { id: userId, email: 'jane@example.com', name: 'Jane Stone', image: 'https://auth.example.com/avatar.png' }
         : null,
@@ -148,6 +151,15 @@ function createConsentServiceMock() {
         denyUrl: 'https://client.example.com/callback?error=access_denied',
       },
       requestedScopes: ['openid', 'profile'],
+      authorizationContexts: [
+        {
+          id: 'user:user-1',
+          type: 'user',
+          displayName: 'Jane Stone',
+          description: 'User Context · jane@example.com',
+          organizationId: null,
+        },
+      ],
       existingConsent: null,
       state: 'state-1',
     }),

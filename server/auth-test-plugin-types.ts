@@ -54,6 +54,15 @@ export type TwoFactorPluginOptions = {
 
 export type OAuthProviderPluginOptions = {
   clientRegistrationAllowedScopes: readonly string[]
+  postLogin: {
+    page: string
+    consentReferenceId: (input: {
+      session: { activeOrganizationId?: string | null }
+      user: { id: string }
+      referenceId?: string
+    }) => Promise<string | undefined>
+    shouldRedirect: (input: { headers: Headers; user: { id: string } }) => Promise<boolean>
+  }
   filterAccessTokenScopes: (input: {
     user?: ({ id?: string } & Record<string, unknown>) | null
     scopes: string[]

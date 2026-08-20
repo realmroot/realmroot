@@ -27,6 +27,7 @@ function createApplication(
   deps.authorization = {
     ...deps.authorization,
     findOrganization: deps.authorization?.findOrganization ?? (async () => ({ disabled: false })),
+    listUserMemberships: deps.authorization?.listUserMemberships ?? (async () => []),
     listOrganizations:
       deps.authorization?.listOrganizations ??
       (async () => ({
@@ -46,7 +47,12 @@ function createApplication(
         pagination: { limit: 100, offset: 0, total: 1, hasMore: false, nextOffset: null },
       })),
   } as Deps['authorization']
-  return createApplicationUsecase(deps, issuer, { ...input, ownerOrganizationId }, actorUserId)
+  return createApplicationUsecase(
+    deps,
+    issuer,
+    { visibility: input.visibility ?? 'public', ...input, ownerOrganizationId },
+    actorUserId,
+  )
 }
 
 describe('service.test 2', () => {

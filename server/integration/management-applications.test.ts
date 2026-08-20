@@ -1,5 +1,6 @@
 import { applyD1Migrations, env, reset } from 'cloudflare:test'
 import { oauthClient, session } from '@server/db/schema'
+import { eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createHarness, createUser, type Harness, platformOrganizationId, signIn, signInAdmin } from './harness'
 
@@ -75,6 +76,40 @@ describe('applications management over real D1', () => {
       body: JSON.stringify({ slug: 'no-name' }),
     })
     expect(response.status).toBe(400)
+  })
+
+  it('keeps the OAuth client skip-consent flag synchronized when consent policy is created and toggled', async () => {
+    const cookie = await signInAdmin(harness)
+    const created = await createApplication(harness, cookie, {
+      name: 'Consent Policy App',
+      slug: 'consent-policy-app',
+      consentRequired: true,
+    })
+    const readSkipConsent = async () => {
+      const [row] = await harness.db
+        .select({ skipConsent: oauthClient.skipConsent })
+        .from(oauthClient)
+        .where(eq(oauthClient.clientId, created.clientId))
+        .limit(1)
+      return row?.skipConsent
+    }
+
+    await expect(readSkipConsent()).resolves.toBe(false)
+    const disableConsent = await harness.request(`/api/applications/${created.id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ consentRequired: false }),
+    })
+    expect(disableConsent.status, await disableConsent.clone().text()).toBe(200)
+    await expect(readSkipConsent()).resolves.toBe(true)
+
+    const requireConsent = await harness.request(`/api/applications/${created.id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ consentRequired: true }),
+    })
+    expect(requireConsent.status, await requireConsent.clone().text()).toBe(200)
+    await expect(readSkipConsent()).resolves.toBe(false)
   })
 
   it(`creates, reads, updates, and deletes an application through real SQL

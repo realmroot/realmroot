@@ -332,6 +332,7 @@ export async function loadConsentRequest(
   const resources = await Promise.all(
     resourceUrls.map((resourceUrl) => resolveRequestedResource(deps, resourceUrl, user.id)),
   )
+  const authorizationContexts = await listOAuthAuthorizationContexts(deps, application, resources, user)
   const targets = resources.length ? resources : [null]
   const allowedScopes = [
     ...application.oidcScopes,
@@ -411,8 +412,54 @@ export async function loadConsentRequest(
         : 'reauthorization',
     existingConsent: firstAuthorization.existingConsent,
     resourceAuthorizations,
+    authorizationContexts,
     state: input.state ?? null,
   }
+}
+
+async function listOAuthAuthorizationContexts(
+  deps: Deps,
+  application: ApplicationAggregate,
+  resources: Array<Awaited<ReturnType<typeof resolveRequestedResource>>>,
+  user: { id: string; email?: string | null; name?: string | null; username?: string | null },
+) {
+  const requiredOrganizationIds = new Set<string>()
+  if (application.visibility === 'private') requiredOrganizationIds.add(application.ownerOrganizationId)
+  for (const resource of resources) {
+    if (resource?.visibility === 'private') requiredOrganizationIds.add(resource.ownerOrganizationId)
+  }
+  if (requiredOrganizationIds.size > 1) {
+    throw badRequest('The requested Application and Resource Servers do not share one authorization Context.')
+  }
+
+  const memberships = await deps.authorization.listUserMemberships(user.id)
+  const organizations = await Promise.all(
+    memberships.map((membership) => deps.authorization.findOrganization(membership.organizationId)),
+  )
+  const activeOrganizations = organizations.filter(
+    (organization): organization is NonNullable<(typeof organizations)[number]> =>
+      organization !== null && !organization.disabled,
+  )
+  const requiredOrganizationId = [...requiredOrganizationIds][0]
+  const organizationContexts = activeOrganizations
+    .filter((organization) => !requiredOrganizationId || organization.id === requiredOrganizationId)
+    .map((organization) => ({
+      id: `organization:${organization.id}`,
+      type: 'organization' as const,
+      displayName: organization.displayName ?? organization.name,
+      description: 'Organization Context',
+      organizationId: organization.id,
+    }))
+  const userContext = {
+    id: `user:${user.id}`,
+    type: 'user' as const,
+    displayName: user.name ?? user.username ?? user.email ?? 'Personal account',
+    description: user.email ? `User Context · ${user.email}` : 'User Context',
+    organizationId: null,
+  }
+  const contexts = requiredOrganizationId ? organizationContexts : [userContext, ...organizationContexts]
+  if (contexts.length === 0) throw badRequest('No active authorization Context is available for this request.')
+  return contexts
 }
 
 export async function createConsent(deps: Deps, input: CreateConsentRequest, userId: string) {

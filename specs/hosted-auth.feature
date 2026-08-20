@@ -143,6 +143,18 @@ Feature: Hosted authentication
     When I arrive at hosted sign-in
     Then the application context is visible
 
+  @e2e @entrypoint:product-ui @journey:oauth-authorization-context-selection
+  Scenario: OAuth authorization selects an explicit tenant Context
+    Given a public OIDC Application requests a public native Resource Server
+    And the signed-in User belongs to multiple active Organizations
+    When authorization continues after sign-in
+    Then Realmroot offers the User Context and every active Organization Context
+    And it does not infer the OAuth Context from the session's active Organization
+    When I select one Context and continue authorization
+    Then the selected Context is validated against current membership
+    And the authorization code and access token retain only that Context
+    And selecting the User Context issues no Organization claim
+
   @entrypoint:product-ui @journey:oidc-resource-authorization
   Scenario: Hosted OIDC authorization preserves the requested resource identifier
     Given an OIDC client starts authorization with a protected resource URL

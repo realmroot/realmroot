@@ -304,6 +304,23 @@ export const consentResourceAuthorizationSchema = z.object({
   existingConsent: existingConsentSchema,
 })
 
+export const oauthAuthorizationContextSchema = z.discriminatedUnion('type', [
+  z.object({
+    id: z.string(),
+    type: z.literal('user'),
+    displayName: z.string(),
+    description: z.string(),
+    organizationId: z.null(),
+  }),
+  z.object({
+    id: z.string(),
+    type: z.literal('organization'),
+    displayName: z.string(),
+    description: z.string(),
+    organizationId: z.string(),
+  }),
+])
+
 export const consentRequestResponseSchema = z.object({
   application: applicationResponseSchema.omit({ secretMetadata: true }),
   user: z.object({
@@ -323,6 +340,7 @@ export const consentRequestResponseSchema = z.object({
   consentReason: z.enum(['initial', 'expanded', 'reauthorization']),
   existingConsent: existingConsentSchema,
   resourceAuthorizations: z.array(consentResourceAuthorizationSchema).min(1).optional(),
+  authorizationContexts: z.array(oauthAuthorizationContextSchema).min(1),
   state: z.string().nullable(),
 })
 

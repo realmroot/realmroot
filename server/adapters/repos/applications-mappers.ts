@@ -51,7 +51,7 @@ export function toOAuthClientInsert(
     clientId: input.clientId,
     clientSecret,
     disabled: input.disabled,
-    skipConsent: true,
+    skipConsent: !input.consentRequired,
     enableEndSession: true,
     name: input.name,
     uri: input.homepageUrl,

@@ -1180,6 +1180,125 @@ textarea {
   padding: 28px;
 }
 
+.oauthContextForm {
+  display: grid;
+  gap: 18px;
+}
+
+.oauthContextChoices {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.oauthContextChoices legend {
+  margin-bottom: 8px;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.oauthContextChoice {
+  display: grid;
+  grid-template-columns: auto 40px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  min-height: 64px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  cursor: pointer;
+}
+
+.oauthContextChoice:has(input:checked) {
+  border-color: var(--brand-primary);
+  background: color-mix(in srgb, var(--brand-primary) 7%, var(--panel));
+}
+
+.oauthContextChoice:focus-within {
+  outline: 3px solid color-mix(in srgb, var(--brand-primary) 28%, transparent);
+  outline-offset: 2px;
+}
+
+.oauthContextChoice input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--brand-primary);
+}
+
+.oauthContextChoiceIcon {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--soft);
+  color: var(--brand-primary);
+}
+
+.oauthContextChoiceIcon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.oauthContextChoiceText {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.oauthContextChoiceText strong,
+.oauthContextChoiceText small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.oauthContextChoiceText strong {
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.oauthContextChoiceText small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.oauthContextActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.oauthContextSwitchAccount {
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--brand-primary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.oauthContextSwitchAccount:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--brand-primary) 28%, transparent);
+  outline-offset: 2px;
+}
+
+.oauthContextSwitchAccount:disabled,
+.oauthContextChoice:has(input:disabled) {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
 .authContent {
   display: grid;
   width: 100%;
