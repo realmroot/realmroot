@@ -5753,6 +5753,75 @@ describe('external API resource authorization', () => {
     expect(signedScope).toContain('users:read')
   })
 
+  it('[spec: agent-identity/native-api-resource-token] binds a personal Agent token to the private Resource owner Organization', async () => {
+    const deps = createTestDeps()
+    const native = { ...nativeResource(), visibility: 'private' as const }
+    const personalIdentity = identityAggregate()
+    personalIdentity.identity = {
+      ...personalIdentity.identity,
+      ownerUserId: 'user-1',
+      ownerOrganizationId: null,
+    }
+    const personalPrincipal = {
+      ...principal(),
+      identity: personalIdentity.identity,
+      binding: personalIdentity.bindings[0]!,
+    }
+    authorizationDeps(deps)
+    vi.mocked(deps.authorization.findResource).mockResolvedValue(native)
+    vi.mocked(deps.authorization.findOrganization).mockResolvedValue({ id: 'org-1', disabled: false } as never)
+    Object.assign(deps.authorization, { listTeamNamesForUser: vi.fn().mockResolvedValue([]) })
+    vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(personalIdentity)
+    const nativeEntitlement = {
+      ...grantRecord(),
+      connectionId: null,
+      mode: 'persistent',
+    } as ResourceScopeEntitlementRecord
+    vi.mocked(deps.externalResources.findEntitlement).mockResolvedValue(nativeEntitlement)
+    vi.mocked(deps.externalResources.listActiveEntitlementsByAgent).mockResolvedValue([nativeEntitlement])
+    vi.mocked(deps.externalResources.findAccessRequest).mockResolvedValue({
+      ...requestRecord(),
+      connectionId: null,
+      status: 'approved',
+      approvedEntitlements: [{ scope: 'projects:read', entitlementId: 'ent_1' }],
+    })
+    const signer = { issuer: personalPrincipal.issuer, sign: vi.fn().mockResolvedValue('native-token') }
+    const tokenUrl = 'https://auth.example.com/api/agent/access-requests/request-1/credentials'
+
+    await issueTargetAccessToken(
+      deps,
+      'request-1',
+      await createDpopProof(tokenUrl),
+      tokenUrl,
+      personalPrincipal,
+      signer,
+    )
+
+    expect(signer.sign).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sub: 'user-1',
+        aud: native.resourceUrl,
+        client_id: realmrootCliClientId,
+        act: { iss: personalPrincipal.issuer, sub: personalPrincipal.subject },
+        [realmrootOrganizationClaim]: 'org-1',
+        groups: [],
+      }),
+      'at+jwt',
+    )
+
+    vi.mocked(deps.authorization.findResource).mockResolvedValue({ ...native, visibility: 'public' })
+    signer.sign.mockClear()
+    await issueTargetAccessToken(
+      deps,
+      'request-1',
+      await createDpopProof(tokenUrl),
+      tokenUrl,
+      personalPrincipal,
+      signer,
+    )
+    expect(signer.sign.mock.calls[0]![0]).not.toHaveProperty(realmrootOrganizationClaim)
+  })
+
   it('enforces organization controllers and handles revocation error paths', async () => {
     const deps = createTestDeps()
     authorizationDeps(deps)
