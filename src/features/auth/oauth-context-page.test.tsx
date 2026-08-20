@@ -170,6 +170,84 @@ describe('OAuthContextPage', () => {
     expect(screen.getByRole('button', { name: 'Continue' })).toHaveProperty('disabled', false)
     expect(assign).not.toHaveBeenCalled()
   })
+
+  it('ignores submission without a selection and recovers when the next authorization step is missing', async () => {
+    let continuationRequests = 0
+    vi.spyOn(window, 'fetch').mockImplementation(async (input) => {
+      const url = String(input)
+      if (url.startsWith('/api/configz')) return jsonResponse(configz)
+      if (url.startsWith('/api/account/application-authorization-request')) return jsonResponse(request)
+      if (url.endsWith('/api/auth/oauth2/continue')) {
+        continuationRequests += 1
+        return jsonResponse({})
+      }
+      throw new Error(`Unexpected request: ${url}`)
+    })
+
+    render(<OAuthContextPage />)
+    const userContext = await screen.findByRole('radio', { name: /Jane Stone/ })
+    fireEvent.submit(screen.getByRole('group', { name: 'Continue with' }).closest('form')!)
+    expect(continuationRequests).toBe(0)
+
+    fireEvent.click(userContext)
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    expect(await screen.findByText(/did not return the next authorization step/i)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Continue' })).toHaveProperty('disabled', false)
+    expect(assign).not.toHaveBeenCalled()
+  })
+
+  it('recovers when cancellation has no callback and when account switching fails unexpectedly', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation(async (input) => {
+      const url = String(input)
+      if (url.startsWith('/api/configz')) return jsonResponse(configz)
+      if (url.startsWith('/api/account/application-authorization-request')) return jsonResponse(request)
+      if (url.endsWith('/api/auth/oauth2/consent')) return jsonResponse({})
+      if (url.endsWith('/api/auth/sign-out')) throw 'unexpected sign-out failure'
+      throw new Error(`Unexpected request: ${url}`)
+    })
+
+    const view = render(<OAuthContextPage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }))
+    expect(await screen.findByText(/did not return a callback URL/i)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Cancel' })).toHaveProperty('disabled', false)
+
+    view.unmount()
+    render(<OAuthContextPage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Use a different account' }))
+    expect(await screen.findByText('Unable to switch accounts.')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Use a different account' })).toHaveProperty('disabled', false)
+  })
+
+  it('shows safe fallback messages for unexpected non-Error failures', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation(async (input) => {
+      const url = String(input)
+      if (url.startsWith('/api/configz')) return jsonResponse(configz)
+      if (url.startsWith('/api/account/application-authorization-request')) throw 'unexpected load failure'
+      throw new Error(`Unexpected request: ${url}`)
+    })
+    const loadView = render(<OAuthContextPage />)
+    expect(await screen.findByText('Unable to load authorization Contexts.')).toBeTruthy()
+    loadView.unmount()
+
+    vi.restoreAllMocks()
+    vi.spyOn(window, 'fetch').mockImplementation(async (input) => {
+      const url = String(input)
+      if (url.startsWith('/api/configz')) return jsonResponse(configz)
+      if (url.startsWith('/api/account/application-authorization-request')) return jsonResponse(request)
+      if (url.endsWith('/api/auth/oauth2/continue')) throw 'unexpected continuation failure'
+      if (url.endsWith('/api/auth/oauth2/consent')) throw 'unexpected cancellation failure'
+      throw new Error(`Unexpected request: ${url}`)
+    })
+    const continuationView = render(<OAuthContextPage />)
+    fireEvent.click(await screen.findByRole('radio', { name: /Jane Stone/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    expect(await screen.findByText('Unable to select this Context.')).toBeTruthy()
+    continuationView.unmount()
+
+    render(<OAuthContextPage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }))
+    expect(await screen.findByText('Unable to cancel authorization.')).toBeTruthy()
+  })
 })
 
 function jsonResponse(body: unknown, status = 200) {
