@@ -3,6 +3,7 @@ import { i18n } from '@better-auth/i18n'
 import { oauthProvider } from '@better-auth/oauth-provider'
 import { passkey } from '@better-auth/passkey'
 import type { TransactionalEmailSender } from '@server/adapters/gateways/email/sender'
+import { verifyStoredPassword } from '@server/adapters/gateways/migrated-password'
 import { createDrizzleAgentTokenRepository } from '@server/adapters/repos/agent-tokens'
 import { createDrizzleAgentRepository } from '@server/adapters/repos/agents'
 import { createDrizzleApplicationRepository } from '@server/adapters/repos/applications'
@@ -41,7 +42,7 @@ import {
 import { betterAuthTranslations } from './auth-i18n'
 import type { Database } from './db/client'
 import * as schema from './db/schema'
-import { hashPassword, verifyPassword } from './domain/password'
+import { hashPassword } from './domain/password'
 
 export {
   buildOAuthAccessTokenClaims,
@@ -267,7 +268,7 @@ export function createAuth(
       },
       password: {
         hash: hashPassword,
-        verify: ({ hash, password }) => verifyPassword(hash, password),
+        verify: ({ hash, password }) => verifyStoredPassword(hash, password),
       },
     },
     session: {
