@@ -124,6 +124,13 @@ export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> =
       findBindingByProtocolAgent: vi.fn().mockResolvedValue(null),
       findActiveBindingByProtocolAgent: vi.fn().mockResolvedValue(null),
       findActiveByProtocolAgent: vi.fn().mockResolvedValue(null),
+      createAgentWithInstallation: vi.fn().mockImplementation(async (input) => ({
+        identity: {
+          identity: input.identity,
+          bindings: [{ ...input.binding, hostId: input.host.id }],
+        },
+        created: true,
+      })),
       createIdentity: vi.fn(),
       claimIdentityProfile: vi.fn().mockResolvedValue(null),
       createIntent: vi.fn(),

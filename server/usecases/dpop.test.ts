@@ -32,6 +32,40 @@ describe('DPoP proof validation', () => {
     expect(deps.agentTokens.consumeDpopJti).toHaveBeenCalledTimes(2)
   })
 
+  it('normalizes query and fragment from the token endpoint htu comparison', async () => {
+    const deps = createTestDeps()
+    const key = await proofKey()
+    const proof = await signProof(key, { htm: 'POST', htu: endpoint })
+
+    await expect(validateDpopTokenProof(deps, proof, `${endpoint}?attempt=1#fragment`)).resolves.toBe(
+      await calculateJwkThumbprint(key.publicJwk),
+    )
+    await expect(
+      validateDpopTokenProof(
+        deps,
+        await signProof(key, { htm: 'POST', htu: `${endpoint}?attempt=1` }),
+        `${endpoint}?attempt=1`,
+      ),
+    ).rejects.toThrow('not bound to the target token endpoint')
+  })
+
+  it('propagates an unknown token-endpoint replay-store failure while keeping a known proof failure at 400', async () => {
+    const key = await proofKey()
+    const storageFailure = new Error('D1 replay store unavailable')
+    const unavailable = createTestDeps()
+    vi.mocked(unavailable.agentTokens.consumeDpopJti).mockRejectedValue(storageFailure)
+
+    await expect(
+      validateDpopTokenProof(unavailable, await signProof(key, { htm: 'POST', htu: endpoint }), endpoint),
+    ).rejects.toBe(storageFailure)
+
+    const replayed = createTestDeps()
+    vi.mocked(replayed.agentTokens.consumeDpopJti).mockResolvedValue(false)
+    await expect(
+      validateDpopTokenProof(replayed, await signProof(key, { htm: 'POST', htu: endpoint }), endpoint),
+    ).rejects.toMatchObject({ status: 400 })
+  })
+
   it('rejects malformed, private-key, unsupported, and invalid-signature proofs', async () => {
     const deps = createTestDeps()
     await expect(validateDpopTokenProof(deps, 'not-a-jwt', endpoint)).rejects.toThrow('malformed')

@@ -2,7 +2,7 @@ import { applyD1Migrations, env, reset } from 'cloudflare:test'
 import { filterOAuthAccessTokenScopes } from '@server/auth'
 import { buildTokenClaims, ensureRealmrootResourceServer } from '@server/usecases/authorization'
 import { realmrootOrganizationClaim } from '@shared/oauth-token-profile'
-import { calculateJwkThumbprint, decodeProtectedHeader, exportJWK, generateKeyPair, SignJWT } from 'jose'
+import { decodeProtectedHeader } from 'jose'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   baseURL,
@@ -380,7 +380,7 @@ describe('OAuth token claim building over real D1', () => {
     await expect(token.json()).resolves.toMatchObject({ error: 'invalid_target' })
   })
 
-  it('issues a signed DPoP-bound Realmroot resource token to a machine Application', async () => {
+  it('issues a signed Bearer Realmroot resource token to a machine Application', async () => {
     const cookie = await signInAdmin(harness)
     const realmrootResource = await ensureRealmrootResourceServer(harness.deps, baseURL)
     const application = (await (
@@ -412,20 +412,11 @@ describe('OAuth token claim building over real D1', () => {
       )
       .run()
 
-    const keys = await generateKeyPair('ES256', { extractable: true })
-    const publicJwk = await exportJWK(keys.publicKey)
-    const tokenEndpoint = `${baseURL}/api/auth/oauth2/token`
-    const proof = await new SignJWT({ htm: 'POST', htu: tokenEndpoint })
-      .setProtectedHeader({ alg: 'ES256', typ: 'dpop+jwt', jwk: publicJwk })
-      .setIssuedAt()
-      .setJti(crypto.randomUUID())
-      .sign(keys.privateKey)
     const token = await harness.request('/api/auth/oauth2/token', {
       method: 'POST',
       headers: {
         'content-type': 'application/x-www-form-urlencoded',
         authorization: `Basic ${btoa(`${application.clientId}:${application.clientSecret}`)}`,
-        dpop: proof,
       },
       body: new URLSearchParams({
         grant_type: 'client_credentials',
@@ -435,16 +426,16 @@ describe('OAuth token claim building over real D1', () => {
     })
     expect(token.status, await token.clone().text()).toBe(200)
     const body = (await token.json()) as { access_token: string; token_type: string }
-    expect(body.token_type).toBe('DPoP')
+    expect(body.token_type).toBe('Bearer')
     expect(decodeProtectedHeader(body.access_token).typ).toBe('at+jwt')
     expect(decodeJwtPayload(body.access_token)).toMatchObject({
       sub: application.id,
       client_id: application.clientId,
       aud: `${baseURL}/api`,
       scope: 'applications:read',
-      cnf: { jkt: await calculateJwkThumbprint(publicJwk) },
       [realmrootOrganizationClaim]: platformOrganizationId,
     })
+    expect(decodeJwtPayload(body.access_token)).not.toHaveProperty('cnf')
   })
 })
 

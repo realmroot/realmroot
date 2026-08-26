@@ -60,6 +60,7 @@ describe('app.test 1', () => {
     expect(response.headers.get('access-control-allow-credentials')).toBeNull()
     await expect(response.json()).resolves.toMatchObject({
       issuer: 'https://auth.example.com/api/auth',
+      dpop_signing_alg_values_supported: ['ES256', 'EdDSA'],
       agent_profile_uri_template: 'https://auth.example.com/api/public/agents/{subject}',
       grant_types_supported: [
         'authorization_code',

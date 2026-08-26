@@ -125,7 +125,7 @@ Feature: Unified Realmroot resource API
   @entrypoint:restish @journey:management-machine-application-crud
   Scenario: A Machine Application manages resources within its owner Organization
     Given a Machine Application has a direct Permission and matching configured Resource scope
-    When it presents a client-credentials access token and fresh DPoP proof to the unified API
+    When it presents a client-credentials Bearer access token to the unified API
     Then Realmroot authenticates the Application principal
     And the required OAuth scope is enforced for each operation
     And the Application can operate only within its persisted owner Organization

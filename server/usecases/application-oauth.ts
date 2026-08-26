@@ -1,6 +1,5 @@
 import { oauthError } from '@server/domain/errors'
 import type { Deps } from '@server/usecases/deps'
-import { validateDpopTokenProof } from '@server/usecases/dpop'
 import type { AgentAssertionSigner } from '@server/usecases/external-resources'
 import { authenticateApplicationClient } from '@server/usecases/oauth-client-authentication'
 import { applicationEffectiveResourceScopes } from '@server/usecases/resource-scope-entitlements'
@@ -17,8 +16,6 @@ export async function issueApplicationAccessToken(
     scope?: string
     resource: string
     expectedResource: string
-    dpopProof: string
-    tokenEndpoint: string
   },
   signer: AgentAssertionSigner,
 ) {
@@ -39,11 +36,6 @@ export async function issueApplicationAccessToken(
   if (scopes.some((scope) => !configuredScopes.has(scope) || !effectiveScopes.has(scope))) {
     throw oauthError('invalid_scope', 'Requested scope is not allowed for this Application.')
   }
-  const confirmationJkt = await validateDpopTokenProof(deps, input.dpopProof, input.tokenEndpoint).catch(
-    (error: Error) => {
-      throw oauthError('invalid_dpop_proof', error.message)
-    },
-  )
   const now = Math.floor(Date.now() / 1000)
   const accessToken = await signer.sign(
     {
@@ -53,7 +45,6 @@ export async function issueApplicationAccessToken(
       client_id: application.clientId,
       [realmrootOrganizationClaim]: application.ownerOrganizationId,
       scope: scopes.join(' '),
-      cnf: { jkt: confirmationJkt },
       iat: now,
       exp: now + accessTokenLifetimeSeconds,
       jti: crypto.randomUUID(),
@@ -62,7 +53,7 @@ export async function issueApplicationAccessToken(
   )
   return {
     access_token: accessToken,
-    token_type: 'DPoP' as const,
+    token_type: 'Bearer' as const,
     expires_in: accessTokenLifetimeSeconds,
     scope: scopes.join(' '),
   }

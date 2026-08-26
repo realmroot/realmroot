@@ -4,7 +4,10 @@ import { calculateJwkThumbprint, compactVerify, decodeProtectedHeader, importJWK
 
 export async function validateDpopTokenProof(deps: Deps, proof: string, tokenEndpoint: string) {
   const { header, payload } = await verifyDpopProof(proof)
-  if (payload.htm !== 'POST' || payload.htu !== tokenEndpoint || typeof payload.jti !== 'string') {
+  const target = new URL(tokenEndpoint)
+  target.hash = ''
+  target.search = ''
+  if (payload.htm !== 'POST' || payload.htu !== target.toString() || typeof payload.jti !== 'string') {
     throw badRequest('DPoP proof is not bound to the target token endpoint.')
   }
   const thumbprint = await calculateJwkThumbprint(header.jwk as JWK)

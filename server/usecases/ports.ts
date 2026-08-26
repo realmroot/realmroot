@@ -1083,6 +1083,13 @@ export interface AgentIdentityRepository {
     identity: AgentIdentityRecord
     binding: Omit<AgentIdentityBindingRecord, 'hostId'>
   }): Promise<AgentIdentityAggregate>
+  createAgentWithInstallation(input: {
+    host: AgentHostRecord
+    protocolAgent: AgentRecord
+    identity: AgentIdentityRecord
+    binding: Omit<AgentIdentityBindingRecord, 'hostId'>
+    audit: AgentAuditEventRecord
+  }): Promise<{ identity: AgentIdentityAggregate; created: boolean }>
   claimIdentityProfile(
     identityId: string,
     input: { username: string; name: string; runtime: string; updatedAt: Date },

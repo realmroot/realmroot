@@ -138,14 +138,17 @@ export async function resolveAuthorizationContext(
           scopes.add(scope)
         }
       }
-      return {
+      return restrictUserContextToApplicationScopes(principal, {
         subject: { type: 'user', id: principal.user.id },
         tenant: platformContext.scopes.size > 0 ? targetTenant : { type: 'user', id: principal.user.id },
         scopes,
-      }
+      })
     }
     if (platformContext.scopes.size > 0) return { ...platformContext, tenant: targetTenant }
-    return resolveOrganizationUserAuthorizationContext(getDeps(c), targetTenant.id, principal.user.id)
+    return restrictUserContextToApplicationScopes(
+      principal,
+      await resolveOrganizationUserAuthorizationContext(getDeps(c), targetTenant.id, principal.user.id),
+    )
   }
   if (principal.application) {
     return {
@@ -196,7 +199,10 @@ async function resolvePlatformOrganizationContext(
   const platformId = platformOrganizationId ?? (await requirePlatformOrganization(getDeps(c))).id
   const principal = getPrincipal(c)
   if (principal.user) {
-    return resolveOrganizationUserAuthorizationContext(getDeps(c), platformId, principal.user.id)
+    return restrictUserContextToApplicationScopes(
+      principal,
+      await resolveOrganizationUserAuthorizationContext(getDeps(c), platformId, principal.user.id),
+    )
   }
   if (principal.application) {
     return {
@@ -222,6 +228,18 @@ async function resolvePlatformOrganizationContext(
     subject: { type: 'agent', id: agent.identityId },
     tenant: platformBoundary(platformId),
     scopes: new Set(),
+  }
+}
+
+function restrictUserContextToApplicationScopes(
+  principal: ReturnType<typeof getPrincipal>,
+  context: AuthorizationContext,
+): AuthorizationContext {
+  if (!principal.application) return context
+  const applicationScopes = new Set(principal.application.scopes)
+  return {
+    ...context,
+    scopes: new Set([...context.scopes].filter((scope) => applicationScopes.has(scope))),
   }
 }
 

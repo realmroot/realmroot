@@ -226,7 +226,6 @@ function createManagementOpenApiApp() {
   })
   app.openAPIRegistry.registerComponent('securitySchemes', 'oauth2', {
     type: 'oauth2',
-    'x-dpop-required': true,
     flows: {
       authorizationCode: {
         authorizationUrl: '/api/auth/oauth2/authorize',
@@ -238,7 +237,7 @@ function createManagementOpenApiApp() {
         scopes: Object.fromEntries(realmrootManagementScopes.map((scope) => [scope, oauthScopeDescription(scope)])),
       },
     },
-    description: 'Resource-bound Realmroot OAuth 2.0 management credential with an RFC 9449 DPoP proof.',
+    description: 'Realmroot OAuth 2.0 Bearer credential for User or Application access; Agent tokens use DPoP.',
   })
   for (const routeConfig of managementRoutes) app.openAPIRegistry.registerPath(createManagementRoute(routeConfig))
   return app
@@ -338,8 +337,8 @@ function routeResponses(routeConfig: ManagementRouteConfig) {
   return {
     ...responses,
     ...additionalResponses,
-    ...expectedErrors,
     401: errorResponse('Authentication is required.'),
     403: errorResponse('Administrator access is required.'),
+    ...expectedErrors,
   }
 }
