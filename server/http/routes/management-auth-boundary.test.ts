@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs'
+import { notFound } from '@server/domain/errors'
 import { createApp } from '@server/http/app'
 import { unifiedOpenApi } from '@server/http/openapi/management'
+import * as agentIdentitiesUsecase from '@server/usecases/agent-identities'
 import { protectedResourceCollectionRoutes } from '@shared/api/management'
 import { requiredProtectedScope } from '@shared/authz'
 import { realmrootCliClientId } from '@shared/oauth-token-profile'
@@ -75,8 +77,8 @@ describe('management routes 1', () => {
     })
     expect(unifiedOpenApi.components.securitySchemes.oauth2).toMatchObject({
       type: 'oauth2',
-      'x-dpop-required': true,
     })
+    expect(unifiedOpenApi.components.securitySchemes.oauth2).not.toHaveProperty('x-dpop-required')
     expect(unifiedOpenApi.components.securitySchemes.sessionCookie).toMatchObject({ type: 'apiKey', in: 'cookie' })
     expect(unifiedOpenApi.components.securitySchemes).not.toHaveProperty('dpop')
     expect(unifiedOpenApi['x-cli-config']).toEqual({ command_layout: 'tags' })
@@ -302,6 +304,16 @@ describe('management routes 1', () => {
     expect(openApiOperationObjects().some((operation) => operation.key.includes('/archival'))).toBe(false)
   })
 
+  it('preserves the POST /agents route-specific authorization error over generic defaults', () => {
+    const createAgent = openApiOperationObjects().find((operation) => operation.key === 'POST /agents')
+    const forbiddenResponse = openApiRecord(openApiRecord(createAgent?.responses)['403'])
+
+    expect(forbiddenResponse.description).toBe(
+      'The Application is not acting as a User or lacks agents:write authority.',
+    )
+    expect(forbiddenResponse.description).not.toBe('Administrator access is required.')
+  })
+
   it('mounts the documented management collections behind the admin boundary', async () => {
     const app = createApp(createAuthMock(), createTestDeps({ users: createUserRepositoryMock() }))
 
@@ -328,7 +340,7 @@ describe('management routes 1', () => {
     await expect(response.json()).resolves.toMatchObject({ items: [] })
   })
 
-  it('uses one Agent principal for permission-gated management operations [spec: agent-identity/agent-single-cli-principal] [spec: agent-identity/agent-management-authority] [spec: management-api/management-restish-agent-auth] [spec: management-api/management-restish-user-crud] [spec: agent-identity/agent-public-resource-model]', async () => {
+  it('accepts DPoP Agent tokens, rejects Bearer Agent tokens, and uses one Agent principal for management [spec: agent-identity/agent-single-cli-principal] [spec: agent-identity/agent-management-authority] [spec: management-api/management-restish-agent-auth] [spec: management-api/management-restish-user-crud] [spec: agent-identity/agent-public-resource-model]', async () => {
     const auth = createAuthMock()
     const dpop = await createTestDpopKey()
     let scopes = ['agent:read']
@@ -412,6 +424,10 @@ describe('management routes 1', () => {
     await expect(agent.json()).resolves.toMatchObject({
       agent: { issuer: 'http://localhost/api/auth', subject: 'agt_1' },
     })
+    const bearerAgent = await app.request('/api/agent', {
+      headers: { authorization: 'Bearer test-oauth-access-token' },
+    })
+    expect(bearerAgent.status).toBe(401)
     legacyAgentToken = true
     const legacyAgent = await app.request('/api/agent', {
       headers: await headers('GET', '/api/agent'),
@@ -472,10 +488,11 @@ describe('management routes 1', () => {
     expect(users.deleteManagedUser).toHaveBeenCalledWith('user-1')
   })
 
-  it('limits a Machine Application to its scopes and owner Organization [spec: management-api/management-machine-application-crud]', async () => {
+  it('accepts Bearer Applications, rejects DPoP Applications, and limits Machine authority [spec: management-api/management-machine-application-crud]', async () => {
     const auth = createAuthMock()
     const dpop = await createTestDpopKey()
     let scopes = ['applications:read']
+    let confirmation: { jkt: string } | undefined
     Object.assign(auth.api, {
       verifyJWT: vi.fn().mockImplementation(async () => ({
         payload: {
@@ -483,7 +500,7 @@ describe('management routes 1', () => {
           sub: 'application-1',
           client_id: 'client-1',
           scope: scopes.join(' '),
-          cnf: { jkt: dpop.thumbprint },
+          ...(confirmation ? { cnf: confirmation } : {}),
         },
       })),
     })
@@ -498,16 +515,28 @@ describe('management routes 1', () => {
 
     const ownUrl = 'http://localhost/api/applications?ownerOrganizationId=organization-1'
     const own = await app.request(ownUrl, {
-      headers: await dpop.headers('GET', ownUrl),
+      headers: { authorization: 'Bearer application-access-token' },
     })
     expect(own.status).toBe(200)
+
+    confirmation = { jkt: dpop.thumbprint }
+    const boundBearerApplication = await app.request(ownUrl, {
+      headers: { authorization: 'Bearer application-access-token' },
+    })
+    expect(boundBearerApplication.status).toBe(401)
+    confirmation = undefined
+
+    const dpopApplication = await app.request(ownUrl, {
+      headers: await dpop.headers('GET', ownUrl),
+    })
+    expect(dpopApplication.status).toBe(401)
 
     scopes = ['applications:write']
     const otherUrl = 'http://localhost/api/applications'
     const other = await app.request(otherUrl, {
       method: 'POST',
       headers: {
-        ...(await dpop.headers('POST', otherUrl)),
+        authorization: 'Bearer application-access-token',
         'content-type': 'application/json',
       },
       body: JSON.stringify({
@@ -521,9 +550,154 @@ describe('management routes 1', () => {
 
     scopes = []
     const missingScope = await app.request(ownUrl, {
-      headers: await dpop.headers('GET', ownUrl),
+      headers: { authorization: 'Bearer application-access-token' },
     })
     expect(missingScope.status).toBe(403)
+  })
+
+  it('preserves the represented User on authorization-code Application tokens and rejects Application-only Agent creation [spec: agent-identity/application-agent-creation]', async () => {
+    const auth = createAuthMock()
+    let tokenSubject = 'user-1'
+    Object.assign(auth.api, {
+      verifyJWT: vi.fn().mockImplementation(async () => ({
+        payload: {
+          iss: 'http://localhost/api/auth',
+          sub: tokenSubject,
+          client_id: 'ama-client',
+          scope: 'agents:write',
+        },
+      })),
+    })
+    const deps = createTestDeps({ users: createUserRepositoryMock() })
+    vi.mocked(deps.applications.findByClientId).mockResolvedValue({
+      id: 'application-1',
+      clientId: 'ama-client',
+      ownerOrganizationId: 'org-platform',
+      disabled: false,
+    } as never)
+    vi.spyOn(agentIdentitiesUsecase, 'createAgentWithInstallation').mockResolvedValue({
+      replayed: false,
+      agent: {
+        id: 'agent-1',
+        issuer: 'http://localhost/api/auth',
+        subject: 'agt_1',
+        username: 'ama-worker',
+        name: 'AMA Worker',
+        runtime: 'ama',
+        homeSpace: { type: 'personal', userId: 'user-1' },
+        status: 'active',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+    })
+    const app = createApp(auth, deps)
+    const request = async () =>
+      app.request('/api/agents', {
+        method: 'POST',
+        headers: {
+          authorization: 'Bearer application-access-token',
+          'content-type': 'application/json',
+          'idempotency-key': 'ama-agent-1',
+        },
+        body: JSON.stringify({
+          username: 'ama-worker',
+          name: 'AMA Worker',
+          runtime: 'ama',
+          installation: {
+            agentId: 'ama-protocol-agent-1',
+            hostId: 'ama-host-1',
+            name: 'AMA Runner',
+            kid: 'ama-key-1',
+            publicKey: { kty: 'OKP', crv: 'Ed25519', x: 'public', kid: 'ama-key-1' },
+          },
+        }),
+      })
+
+    const delegated = await request()
+    expect(delegated.status, await delegated.clone().text()).toBe(201)
+    expect(agentIdentitiesUsecase.createAgentWithInstallation).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.not.objectContaining({ organizationId: expect.anything() }),
+      expect.objectContaining({ applicationId: 'application-1', actorUserId: 'user-1' }),
+    )
+
+    tokenSubject = 'application-1'
+    const applicationOnly = await request()
+    expect(applicationOnly.status, await applicationOnly.clone().text()).toBe(403)
+    expect(agentIdentitiesUsecase.createAgentWithInstallation).toHaveBeenCalledTimes(1)
+  })
+
+  it('denies an unavailable authorization-code User and preserves repository failures', async () => {
+    const auth = createAuthMock()
+    const tokenSubject = 'user-1'
+    Object.assign(auth.api, {
+      verifyJWT: vi.fn().mockImplementation(async () => ({
+        payload: {
+          iss: 'http://localhost/api/auth',
+          sub: tokenSubject,
+          client_id: 'ama-client',
+          scope: 'agents:write',
+        },
+      })),
+    })
+    const users = createUserRepositoryMock()
+    const deps = createTestDeps({ users })
+    vi.mocked(deps.applications.findByClientId).mockResolvedValue({
+      id: 'application-1',
+      clientId: 'ama-client',
+      ownerOrganizationId: 'org-platform',
+      disabled: false,
+    } as never)
+    const app = createApp(auth, deps)
+    const request = async (path = '/api/agents') =>
+      app.request(path, {
+        headers: { authorization: 'Bearer application-access-token' },
+      })
+
+    vi.mocked(users.getUser).mockRejectedValueOnce(notFound('User was not found.'))
+    const missingUser = await request()
+    expect(missingUser.status, await missingUser.clone().text()).toBe(403)
+
+    vi.mocked(users.getUser).mockRejectedValueOnce(new Error('repository unavailable'))
+    const repositoryFailure = await request()
+    expect(repositoryFailure.status, await repositoryFailure.clone().text()).toBe(500)
+  })
+
+  it('intersects authorization-code User authority with the Application token scopes', async () => {
+    const auth = createAuthMock()
+    Object.assign(auth.api, {
+      verifyJWT: vi.fn().mockResolvedValue({
+        payload: {
+          iss: 'http://localhost/api/auth',
+          sub: 'user-1',
+          client_id: 'ama-client',
+          scope: 'agents:write',
+        },
+      }),
+    })
+    const deps = createTestDeps({ users: createUserRepositoryMock() })
+    vi.mocked(deps.applications.findByClientId).mockResolvedValue({
+      id: 'application-1',
+      clientId: 'ama-client',
+      ownerOrganizationId: 'org-platform',
+      disabled: false,
+    } as never)
+    const app = createApp(auth, deps)
+    const url = 'http://localhost/api/users'
+
+    const response = await app.request(url, {
+      method: 'POST',
+      headers: { authorization: 'Bearer application-access-token', 'content-type': 'application/json' },
+      body: JSON.stringify({
+        email: 'scope-denied@example.com',
+        displayName: 'Scope Denied',
+        password: 'Sup3rSecurePass!',
+        role: 'user',
+      }),
+    })
+
+    expect(response.status, await response.clone().text()).toBe(403)
+    expect(deps.users.listManagedUsers).not.toHaveBeenCalled()
   })
 
   it('does not expose the removed capability request resource', async () => {

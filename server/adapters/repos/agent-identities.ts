@@ -8,8 +8,10 @@ import type { BatchItem } from 'drizzle-orm/batch'
 import type { Database } from '../../db/client'
 import {
   agent,
+  agentAuditEvent,
   agentCapabilityGrant,
   agentEnrollmentIntent,
+  agentHost,
   agentIdentity,
   agentIdentityBinding,
   approvalRequest,
@@ -221,6 +223,27 @@ export function createDrizzleAgentIdentityRepository(db: Database): AgentIdentit
       const result = await this.findIdentity(input.identity.id)
       if (!result) throw new Error('Agent identity was not persisted.')
       return result
+    },
+
+    async createAgentWithInstallation(input) {
+      const existing = await this.findIdentity(input.identity.id)
+      if (existing) return { identity: existing, created: false }
+      try {
+        await db.batch([
+          db.insert(agentHost).values(input.host),
+          db.insert(agent).values(input.protocolAgent),
+          db.insert(agentIdentity).values(input.identity),
+          db.insert(agentIdentityBinding).values(input.binding),
+          db.insert(agentAuditEvent).values(input.audit),
+        ])
+      } catch (error) {
+        const raced = await this.findIdentity(input.identity.id)
+        if (raced) return { identity: raced, created: false }
+        throw error
+      }
+      const identity = await this.findIdentity(input.identity.id)
+      if (!identity) throw new Error('Agent identity and installation were not persisted.')
+      return { identity, created: true }
     },
 
     async claimIdentityProfile(identityId, input) {

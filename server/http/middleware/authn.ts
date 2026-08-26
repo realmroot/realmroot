@@ -1,4 +1,4 @@
-import { forbidden, unauthorized } from '@server/domain/errors'
+import { ApiError, forbidden, unauthorized } from '@server/domain/errors'
 import type { MutationActor } from '@server/domain/mutation-actor'
 import type { ProtocolAgentSession } from '@server/usecases/agent-session'
 import type { Deps } from '@server/usecases/deps'
@@ -86,10 +86,7 @@ export function authn(auth: SessionReader, options: AuthnOptions = {}): Middlewa
       return
     }
     if (explicitAuthorization && options.oauth) {
-      if (!explicitAuthorization.startsWith('DPoP ')) {
-        throw unauthorized('OAuth Resource API requests require a DPoP access token.')
-      }
-      if (options.allowAgent) {
+      if (explicitAuthorization.startsWith('DPoP ') && options.allowAgent) {
         const agent = current?.agent ?? (await authenticateOAuthAgent(auth, c, options.oauth))
         if (agent) {
           c.set('principal', { session: null, user: null, application: null, agent })
@@ -97,10 +94,17 @@ export function authn(auth: SessionReader, options: AuthnOptions = {}): Middlewa
           return
         }
       }
-      if (options.allowApplication) {
-        const application = current?.application ?? (await authenticateOAuthApplication(auth, c, options.oauth))
-        if (application) {
-          c.set('principal', { session: null, user: null, application, agent: null })
+      if (explicitAuthorization.startsWith('Bearer ') && options.allowApplication) {
+        const applicationPrincipal = current?.application
+          ? { application: current.application, user: current.user ?? null }
+          : await authenticateOAuthApplication(auth, c, options.oauth)
+        if (applicationPrincipal) {
+          c.set('principal', {
+            session: null,
+            user: applicationPrincipal.user,
+            application: applicationPrincipal.application,
+            agent: null,
+          })
           await next()
           return
         }
@@ -131,9 +135,16 @@ export function authn(auth: SessionReader, options: AuthnOptions = {}): Middlewa
     }
 
     if (options.allowApplication && options.oauth) {
-      const application = current?.application ?? (await authenticateOAuthApplication(auth, c, options.oauth))
-      if (application) {
-        c.set('principal', { session: null, user: null, application, agent: null })
+      const applicationPrincipal = current?.application
+        ? { application: current.application, user: current.user ?? null }
+        : await authenticateOAuthApplication(auth, c, options.oauth)
+      if (applicationPrincipal) {
+        c.set('principal', {
+          session: null,
+          user: applicationPrincipal.user,
+          application: applicationPrincipal.application,
+          agent: null,
+        })
         await next()
         return
       }
@@ -149,11 +160,14 @@ async function authenticateOAuthApplication(
   auth: SessionReader,
   c: Context,
   oauth: NonNullable<AuthnOptions['oauth']>,
-): Promise<NonNullable<PrincipalContext['application']> | null> {
+): Promise<{
+  application: NonNullable<PrincipalContext['application']>
+  user: AuthUser | null
+} | null> {
   const authorization = c.req.header('Authorization')
-  if (!authorization?.startsWith('DPoP ')) return null
+  if (!authorization?.startsWith('Bearer ')) return null
   if (!auth.api.verifyJWT) throw unauthorized('OAuth access-token verification is unavailable.')
-  const accessToken = authorization.slice('DPoP '.length).trim()
+  const accessToken = authorization.slice('Bearer '.length).trim()
   const issuer = oauth.issuer(c.req.url)
   const audience = oauth.audience(c.req.url)
   const verified = await auth.api
@@ -161,35 +175,48 @@ async function authenticateOAuthApplication(
     .catch(() => null)
   const payload = verified?.payload
   if (!payload) throw unauthorized('OAuth access token is invalid.')
-  const applicationId = stringClaim(payload, 'sub')
+  const tokenSubject = stringClaim(payload, 'sub')
   const clientId = stringClaim(payload, 'client_id')
   if (clientId === realmrootCliClientId) return null
-  const confirmationJkt = objectStringClaim(payload, 'cnf', 'jkt')
-  const proof = c.req.header('DPoP')
-  if (!applicationId || !clientId || !confirmationJkt || !proof) {
-    throw unauthorized('OAuth access token is missing its Application or DPoP binding.')
+  if (!tokenSubject || !clientId) throw unauthorized('OAuth access token is missing its Application binding.')
+  if (Object.hasOwn(payload, 'cnf')) {
+    throw unauthorized('OAuth Application access tokens must be unbound Bearer tokens.')
   }
   const deps = c.get('deps') as Deps
-  const [, application] = await Promise.all([
-    validateDpopResourceProof(deps, {
-      proof,
-      accessToken,
-      method: c.req.method,
-      url: oauth.resourceRequestUrl(c.req.url),
-      confirmationJkt,
-    }).catch((error: unknown) => {
-      throw unauthorized(error instanceof Error ? error.message : 'DPoP proof is invalid.')
-    }),
-    deps.applications.findByClientId(clientId),
-  ])
-  if (!application || application.disabled || application.id !== applicationId) {
+  const application = await deps.applications.findByClientId(clientId)
+  if (!application || application.disabled) {
     throw forbidden('The OAuth token does not belong to an active Application.')
   }
+  const representedUser = tokenSubject === application.id ? null : await findRepresentedUser(deps, tokenSubject)
+  if (representedUser?.banned) throw forbidden('The OAuth token does not represent an active User.')
   return {
-    id: application.id,
-    clientId: application.clientId,
-    ownerOrganizationId: application.ownerOrganizationId,
-    scopes: scopeClaim(payload),
+    application: {
+      id: application.id,
+      clientId: application.clientId,
+      ownerOrganizationId: application.ownerOrganizationId,
+      scopes: scopeClaim(payload),
+    },
+    user: representedUser
+      ? {
+          id: representedUser.id,
+          email: representedUser.email,
+          name: representedUser.displayName,
+          username: representedUser.username,
+          image: representedUser.image,
+          role: representedUser.role,
+        }
+      : null,
+  }
+}
+
+async function findRepresentedUser(deps: Deps, userId: string) {
+  try {
+    return await deps.users.getUser(userId)
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) {
+      throw forbidden('The OAuth token does not represent an active User.')
+    }
+    throw error
   }
 }
 

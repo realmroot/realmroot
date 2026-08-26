@@ -22,6 +22,17 @@ import { agentUsernameSchema } from './identifiers'
 import { paginationMetadataSchema, paginationQuerySchema } from './pagination'
 
 const nonEmptyString = z.string().trim().min(1)
+const publicAgentJwkSchema = z
+  .object({
+    kty: z.literal('OKP'),
+    crv: z.literal('Ed25519'),
+    x: nonEmptyString,
+    use: z.literal('sig').optional(),
+    key_ops: z.tuple([z.literal('verify')]).optional(),
+    alg: z.literal('EdDSA').optional(),
+    kid: nonEmptyString.optional(),
+  })
+  .strict()
 export const agentEnrollmentProfile = 'https://realmroot.dev/profiles/agent-enrollment'
 const scopeListSchema = z
   .array(nonEmptyString)
@@ -69,6 +80,22 @@ export const createAgentSelfEnrollmentSchema = z.discriminatedUnion('kind', [
     agentId: nonEmptyString,
   }),
 ])
+export const createAgentSchema = z
+  .object({
+    username: agentUsernameSchema,
+    name: z.string().trim().min(1).max(100),
+    runtime: z.string().trim().min(1).max(100),
+    installation: z
+      .object({
+        agentId: nonEmptyString,
+        hostId: nonEmptyString,
+        name: z.string().trim().min(1).max(100),
+        kid: nonEmptyString,
+        publicKey: publicAgentJwkSchema,
+      })
+      .strict(),
+  })
+  .strict()
 export const managementAgentSchema = agentSchema.extend({
   owner: z.object({
     id: z.string(),
@@ -462,6 +489,7 @@ export const targetTokenSchema = z.object({
 
 export type Agent = z.infer<typeof agentSchema>
 export type ManagementAgent = z.infer<typeof managementAgentSchema>
+export type CreateAgent = z.infer<typeof createAgentSchema>
 export type ManagementAgentInstallation = z.infer<typeof managementAgentInstallationSchema>
 export type ManagementAgentAuditEvent = z.infer<typeof managementAgentAuditEventSchema>
 export type ListAgentPermissionsQuery = z.infer<typeof listAgentPermissionsQuerySchema>

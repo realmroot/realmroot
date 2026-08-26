@@ -1,5 +1,5 @@
 import type { SecurityPolicy } from '@shared/api/security'
-import { Hono } from 'hono'
+import { Hono, type MiddlewareHandler } from 'hono'
 import type { ManagementAuthApi } from '../auth-api'
 import { managementAgentsRoute } from './agents'
 import { createManagementApiResourcesRoute } from './api-resources'
@@ -22,6 +22,10 @@ interface ProtectedResourceRoutesOptions {
 
 export function createProtectedResourceRoutes(options: ProtectedResourceRoutesOptions) {
   const app = new Hono()
+  const agentsCanonicalOrigin: MiddlewareHandler = async (c, next) => {
+    if (options.canonicalOrigin) c.set('realmrootCanonicalOrigin', options.canonicalOrigin)
+    await next()
+  }
 
   app.route('/applications', managementApplicationsRoute)
   app.route(
@@ -29,6 +33,8 @@ export function createProtectedResourceRoutes(options: ProtectedResourceRoutesOp
     createManagementApiResourcesRoute({ baseURL: options.canonicalOrigin, trustedOrigins: options.trustedOrigins }),
   )
   app.route('/', managementPermissionsRoute)
+  app.use('/agents', agentsCanonicalOrigin)
+  app.use('/agents/*', agentsCanonicalOrigin)
   app.route('/', managementAgentsRoute)
   app.route('/organizations', managementOrganizationsRoute)
   app.route('/users', managementUserRoutes(options.authApi, { normalizeListResponse: true }))

@@ -47,6 +47,18 @@ Feature: Agent identity and delegated API authorization
       And enrollment alone grants no management or external API resource access
       And an unbound protocol registration cannot exercise Agent identity capabilities
 
+    @entrypoint:restish @journey:application-agent-creation
+    Scenario: An authorized Application creates a User-owned Agent directly
+      Given an Application acts on behalf of a User and has agents:write authority
+      When the Application creates an Agent with its public installation credential
+      Then Realmroot creates one active stable Agent and its initial installation
+      And the represented User owns and controls the stable Agent and installation
+      And Realmroot returns the stable issuer and subject
+      And no account approval or enrollment decision resource is created
+      And retrying the same request with the same idempotency key returns the same Agent
+      And reusing the idempotency key with different Agent data is rejected
+      And the original self-enrollment interface and approval behavior are unchanged
+
     @entrypoint:restish @journey:agent-whoami-requires-enrollment
     Scenario: Agent identity inspection never creates an identity implicitly
       Given Restish has no local Realmroot Agent registration

@@ -9,18 +9,24 @@ import {
   approvalRequest,
 } from '@server/db/schema'
 import { agentGovernanceAuditRecord } from '@server/usecases/agent-audit'
-import { createAdditionalAgentEnrollmentIntent, createAgentEnrollmentIntent } from '@server/usecases/agent-identities'
+import {
+  createAdditionalAgentEnrollmentIntent,
+  createAgentEnrollmentIntent,
+  createAgentWithInstallation,
+} from '@server/usecases/agent-identities'
 import { createResource } from '@server/usecases/authorization'
 import {
   createAccessRequest,
   createAccessRequestCredential,
   listAgentResourceServers,
 } from '@server/usecases/external-resources'
+import type { CreateAgent } from '@shared/api/agent-api'
 import { realmrootCliClientId, realmrootOrganizationClaim } from '@shared/oauth-token-profile'
 import { eq } from 'drizzle-orm'
 import { decodeProtectedHeader, exportJWK, generateKeyPair, importJWK, type JWK, jwtVerify, SignJWT } from 'jose'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
+  baseURL,
   createHarness,
   createUser,
   type Harness,
@@ -43,7 +49,7 @@ describe('Agent identity enrollment over real D1', () => {
   let userId: string
 
   beforeEach(async () => {
-    harness = await createHarness()
+    harness = await createHarness({ validAudiences: [baseURL, `${baseURL}/api`] })
     adminCookie = await signInAdmin(harness)
     userId = await createUser(harness, adminCookie, {
       email: 'identity-owner@example.com',
@@ -58,6 +64,293 @@ describe('Agent identity enrollment over real D1', () => {
     })
     expect(membership.status, await membership.clone().text()).toBe(201)
     ownerCookie = await signIn(harness, 'identity-owner@example.com', 'identity-owner-password-2026')
+  })
+
+  it('creates an active User-owned Agent without an approval resource [spec: agent-identity/application-agent-creation]', async () => {
+    const { publicKey } = await generateKeyPair('Ed25519')
+    const publicJwk = { ...(await exportJWK(publicKey)), kid: 'ama-key-1' } as CreateAgent['installation']['publicKey']
+    const input: CreateAgent = {
+      username: 'ama-worker',
+      name: 'AMA Worker',
+      runtime: 'ama',
+      installation: {
+        agentId: 'ama-protocol-agent-1',
+        hostId: 'ama-host-1',
+        name: 'AMA Runner',
+        kid: 'ama-key-1',
+        publicKey: publicJwk,
+      },
+    }
+
+    const created = await createAgentWithInstallation(harness.deps, input, {
+      applicationId: 'ama-application',
+      actorUserId: userId,
+      issuer: 'http://localhost/api/auth',
+      idempotencyKey: 'ama-agent-1',
+    })
+    const replay = await createAgentWithInstallation(harness.deps, input, {
+      applicationId: 'ama-application',
+      actorUserId: userId,
+      issuer: 'http://localhost/api/auth',
+      idempotencyKey: 'ama-agent-1',
+    })
+
+    expect(created).toMatchObject({ replayed: false, agent: { status: 'active', subject: expect.any(String) } })
+    expect(replay).toEqual({ replayed: true, agent: created.agent })
+    await expect(
+      createAgentWithInstallation(
+        harness.deps,
+        { ...input, name: 'Changed' },
+        {
+          applicationId: 'ama-application',
+          actorUserId: userId,
+          issuer: 'http://localhost/api/auth',
+          idempotencyKey: 'ama-agent-1',
+        },
+      ),
+    ).rejects.toMatchObject({ status: 409 })
+    await expect(
+      createAgentWithInstallation(harness.deps, input, {
+        applicationId: 'ama-application',
+        actorUserId: userId,
+        issuer: 'http://localhost/api/auth',
+        idempotencyKey: 'different-key-same-installation',
+      }),
+    ).rejects.toMatchObject({ status: 409 })
+    const [protocolAgents, hosts, identities, bindings, audits, approvals] = await Promise.all([
+      harness.db.select().from(agent),
+      harness.db.select().from(agentHost),
+      harness.db.select().from(agentIdentity),
+      harness.db.select().from(agentIdentityBinding).where(eq(agentIdentityBinding.agentIdentityId, created.agent.id)),
+      harness.db.select().from(agentAuditEvent).where(eq(agentAuditEvent.agentIdentityId, created.agent.id)),
+      harness.db.select().from(approvalRequest),
+    ])
+    expect(protocolAgents.filter((item) => item.name === 'AMA Worker')).toHaveLength(1)
+    expect(hosts.filter((item) => item.name === 'AMA Runner')).toHaveLength(1)
+    expect(identities).toEqual([expect.objectContaining({ ownerUserId: userId, ownerOrganizationId: null })])
+    expect(protocolAgents).toContainEqual(expect.objectContaining({ name: 'AMA Worker', userId }))
+    expect(hosts).toContainEqual(expect.objectContaining({ name: 'AMA Runner', userId }))
+    expect(bindings).toHaveLength(1)
+    expect(audits).toEqual([
+      expect.objectContaining({
+        action: 'agent.identity_enrolled',
+        result: 'allowed',
+        controllerUserId: userId,
+        agentIdentityId: created.agent.id,
+        hostId: 'ama-host-1',
+      }),
+    ])
+    expect(approvals).toHaveLength(0)
+  })
+
+  it('rolls back Agent, Host, Identity, Binding, and Audit when the atomic installation commit fails', async () => {
+    await env.DB.prepare(`
+      CREATE TRIGGER fail_agent_installation_audit
+      BEFORE INSERT ON agent_audit_event
+      WHEN NEW.action = 'agent.identity_enrolled'
+      BEGIN
+        SELECT RAISE(ABORT, 'forced audit failure');
+      END
+    `).run()
+    const { publicKey } = await generateKeyPair('Ed25519')
+    const publicJwk = {
+      ...(await exportJWK(publicKey)),
+      kid: 'atomic-key-1',
+    } as CreateAgent['installation']['publicKey']
+
+    await expect(
+      createAgentWithInstallation(
+        harness.deps,
+        {
+          username: 'atomic-worker',
+          name: 'Atomic Worker',
+          runtime: 'ama',
+          installation: {
+            agentId: 'atomic-protocol-agent',
+            hostId: 'atomic-host',
+            name: 'Atomic Runner',
+            kid: 'atomic-key-1',
+            publicKey: publicJwk,
+          },
+        },
+        {
+          applicationId: 'ama-application',
+          actorUserId: userId,
+          issuer: 'http://localhost/api/auth',
+          idempotencyKey: 'atomic-agent-1',
+        },
+      ),
+    ).rejects.toThrow()
+
+    const [protocolAgents, hosts, identities, bindings, audits] = await Promise.all([
+      harness.db.select().from(agent).where(eq(agent.id, 'atomic-protocol-agent')),
+      harness.db.select().from(agentHost).where(eq(agentHost.id, 'atomic-host')),
+      harness.db.select().from(agentIdentity),
+      harness.db.select().from(agentIdentityBinding),
+      harness.db.select().from(agentAuditEvent).where(eq(agentAuditEvent.action, 'agent.identity_enrolled')),
+    ])
+    expect(protocolAgents).toHaveLength(0)
+    expect(hosts).toHaveLength(0)
+    expect(identities).toHaveLength(0)
+    expect(bindings).toHaveLength(0)
+    expect(audits).toHaveLength(0)
+  })
+
+  it('creates and idempotently replays one complete installation through real OAuth, HTTP, and D1', async () => {
+    const applicationResponse = await harness.request('/api/applications', {
+      method: 'POST',
+      headers: jsonHeaders(adminCookie),
+      body: JSON.stringify({
+        name: 'AMA Control Plane',
+        clientType: 'confidential_web',
+        redirectUris: ['https://ama.example.com/callback'],
+        ownerOrganizationId: platformOrganizationId,
+        resourceScopes: [{ resourceServerId: realmrootResourceServerId, scopes: ['agents:write'] }],
+        consentRequired: false,
+      }),
+    })
+    expect(applicationResponse.status, await applicationResponse.clone().text()).toBe(201)
+    const application = (await applicationResponse.json()) as {
+      id: string
+      clientId: string
+      clientSecret: string
+    }
+    const authorizeCode = async (verifier: string) => {
+      const parameters = new URLSearchParams({
+        response_type: 'code',
+        client_id: application.clientId,
+        redirect_uri: 'https://ama.example.com/callback',
+        scope: 'openid offline_access agents:write',
+        resource: `${baseURL}/api`,
+        code_challenge: await pkceChallenge(verifier),
+        code_challenge_method: 'S256',
+      })
+      const authorize = await harness.request(`/api/auth/oauth2/authorize?${parameters}`, {
+        headers: { cookie: ownerCookie },
+        redirect: 'manual',
+      })
+      expect(authorize.status, await authorize.clone().text()).toBe(302)
+      const contextLocation = new URL(authorize.headers.get('location') ?? '', baseURL)
+      expect(contextLocation.pathname).toBe('/auth/context')
+      const continued = await harness.request('/api/auth/oauth2/continue', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', cookie: ownerCookie, origin: baseURL },
+        body: JSON.stringify({
+          postLogin: true,
+          consentReferenceId: `organization:${platformOrganizationId}`,
+          oauth_query: contextLocation.search.slice(1),
+        }),
+      })
+      expect(continued.status, await continued.clone().text()).toBe(200)
+      const callback = new URL(((await continued.json()) as { url: string }).url, baseURL)
+      const code = callback.searchParams.get('code')
+      expect(code, callback.toString()).toBeTruthy()
+      return code ?? ''
+    }
+    const tokenRequestBody = (code: string, verifier: string) =>
+      new URLSearchParams({
+        grant_type: 'authorization_code',
+        redirect_uri: 'https://ama.example.com/callback',
+        code,
+        code_verifier: verifier,
+      })
+    const tokenAuthorization = `Basic ${btoa(`${encodeURIComponent(application.clientId)}:${encodeURIComponent(application.clientSecret)}`)}`
+
+    const verifier = 'agent-create-pkce-verifier-0123456789abcdefghijklmnop'
+    const code = await authorizeCode(verifier)
+    const token = await harness.request('/api/auth/oauth2/token', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+        authorization: tokenAuthorization,
+      },
+      body: tokenRequestBody(code, verifier),
+    })
+    expect(token.status, await token.clone().text()).toBe(200)
+    const tokenBody = (await token.json()) as {
+      access_token: string
+      refresh_token: string
+      token_type: string
+      scope: string
+    }
+    expect(tokenBody.token_type).toBe('Bearer')
+    expect(tokenBody.scope.split(' ').sort()).toEqual(['agents:write', 'offline_access', 'openid'])
+    const accessToken = tokenBody.access_token
+
+    const { publicKey } = await generateKeyPair('Ed25519')
+    const body = {
+      username: 'http-worker',
+      name: 'HTTP Worker',
+      runtime: 'ama',
+      installation: {
+        agentId: 'http-protocol-agent',
+        hostId: 'http-host',
+        name: 'HTTP Runner',
+        kid: 'http-key-1',
+        publicKey: { ...(await exportJWK(publicKey)), kid: 'http-key-1' },
+      },
+    }
+    const create = (bearer = accessToken) => {
+      return harness.request('/api/agents', {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${bearer}`,
+          'content-type': 'application/json',
+          'idempotency-key': 'http-agent-1',
+        },
+        body: JSON.stringify(body),
+      })
+    }
+    const created = await create()
+    expect(created.status, await created.clone().text()).toBe(201)
+    const representation = (await created.json()) as { id: string; subject: string }
+    const refresh = await harness.request('/api/auth/oauth2/token', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+        authorization: tokenAuthorization,
+      },
+      body: new URLSearchParams({
+        grant_type: 'refresh_token',
+        refresh_token: tokenBody.refresh_token,
+        scope: tokenBody.scope,
+        resource: `${baseURL}/api`,
+      }),
+    })
+    expect(refresh.status, await refresh.clone().text()).toBe(200)
+    const refreshed = (await refresh.json()) as {
+      access_token: string
+      refresh_token: string
+      token_type: string
+      scope: string
+    }
+    expect(refreshed.token_type).toBe('Bearer')
+    const refreshedClaims = decodeJwtPayload(refreshed.access_token)
+    expect(refreshedClaims).toMatchObject({
+      sub: userId,
+      client_id: application.clientId,
+      scope: expect.stringContaining('agents:write'),
+    })
+    expect(refreshedClaims).not.toHaveProperty('cnf')
+
+    const replay = await create(refreshed.access_token)
+    expect(replay.status, await replay.clone().text()).toBe(201)
+    expect(replay.headers.get('idempotency-replayed')).toBe('true')
+    await expect(replay.json()).resolves.toMatchObject(representation)
+
+    const [protocolAgents, hosts, identities, bindings, audits] = await Promise.all([
+      harness.db.select().from(agent).where(eq(agent.id, body.installation.agentId)),
+      harness.db.select().from(agentHost).where(eq(agentHost.id, body.installation.hostId)),
+      harness.db.select().from(agentIdentity).where(eq(agentIdentity.id, representation.id)),
+      harness.db.select().from(agentIdentityBinding).where(eq(agentIdentityBinding.agentIdentityId, representation.id)),
+      harness.db.select().from(agentAuditEvent).where(eq(agentAuditEvent.agentIdentityId, representation.id)),
+    ])
+    expect(protocolAgents).toHaveLength(1)
+    expect(hosts).toHaveLength(1)
+    expect(identities).toHaveLength(1)
+    expect(identities[0]?.issuer).toBe(`${baseURL}/api/auth`)
+    expect(bindings).toHaveLength(1)
+    expect(audits).toHaveLength(1)
   })
 
   it('commits controller approval decisions through the Realmroot account boundary [spec: agent-identity/agent-identity-enrollment] [spec: agent-identity/agent-management-authority]', async () => {
@@ -664,6 +957,10 @@ function hashApprovalCode(code: string) {
   return sha256(normalized)
 }
 
+async function pkceChallenge(verifier: string) {
+  return sha256(verifier)
+}
+
 async function createDpopProof(
   method: string,
   url: string,
@@ -702,4 +999,10 @@ async function sha256(value: string) {
     .replaceAll('+', '-')
     .replaceAll('/', '_')
     .replace(/=+$/, '')
+}
+
+function decodeJwtPayload(token: string): Record<string, unknown> {
+  const payload = token.split('.')[1] ?? ''
+  const padded = payload.padEnd(Math.ceil(payload.length / 4) * 4, '=')
+  return JSON.parse(atob(padded.replaceAll('-', '+').replaceAll('_', '/'))) as Record<string, unknown>
 }

@@ -5,6 +5,7 @@ import {
   createAdditionalAgentEnrollmentIntent,
   createAgentEnrollmentIntent,
   createAgentLoginIdentity,
+  createAgentWithInstallation,
   deactivateAgentIdentity,
   deleteAgentIdentity,
   emergencyActivateAgentIdentity,
@@ -38,6 +39,8 @@ import type {
   AgentIdentityRecord,
   AgentRecord,
 } from '@server/usecases/ports'
+import type { CreateAgent } from '@shared/api/agent-api'
+import { exportJWK, generateKeyPair } from 'jose'
 import { describe, expect, it, vi } from 'vitest'
 
 describe('Agent login identity', () => {
@@ -182,6 +185,144 @@ describe('Agent login identity', () => {
     await expect(
       createAgentLoginIdentity(raced, loginInput(), 'https://auth.example.com', 'user-1'),
     ).rejects.toMatchObject({ status: 409 })
+  })
+})
+
+describe('Application-created Agent installation', () => {
+  it('passes all five records to the atomic repository and replays the persisted aggregate', async () => {
+    const fixture = await applicationAgentFixture()
+
+    expect(fixture.deps.agentIdentities.createAgentWithInstallation).toHaveBeenCalledWith({
+      host: expect.objectContaining({ id: 'ama-host-1', status: 'active', userId: 'user-1' }),
+      protocolAgent: expect.objectContaining({ id: 'ama-agent-1', hostId: 'ama-host-1', status: 'active' }),
+      identity: expect.objectContaining({ ownerUserId: 'user-1', ownerOrganizationId: null, status: 'active' }),
+      binding: expect.objectContaining({ protocolAgentId: 'ama-agent-1', status: 'active' }),
+      audit: expect.objectContaining({
+        action: 'agent.identity_enrolled',
+        result: 'allowed',
+        controllerUserId: 'user-1',
+        hostId: 'ama-host-1',
+      }),
+    })
+    vi.mocked(fixture.deps.agentIdentities.findIdentity).mockResolvedValue(fixture.persisted)
+
+    await expect(createAgentWithInstallation(fixture.deps, fixture.input, fixture.context)).resolves.toMatchObject({
+      replayed: true,
+      agent: { id: fixture.persisted.identity.id },
+    })
+    expect(fixture.deps.agentIdentities.createAgentWithInstallation).toHaveBeenCalledTimes(1)
+  })
+
+  it('reports a concurrent identical repository commit as an idempotent replay', async () => {
+    const fixture = await applicationAgentFixture(false)
+    expect(fixture.result.replayed).toBe(true)
+  })
+
+  it('rejects invalid installation keys, occupied installation identifiers, and duplicate usernames', async () => {
+    const { publicKey } = await generateKeyPair('Ed25519')
+    const publicJwk = await exportedAgentPublicJwk(publicKey, 'different-kid')
+    const deps = createTestDeps()
+    const input = applicationAgentInput(publicJwk)
+    await expect(createAgentWithInstallation(deps, input, applicationAgentContext())).rejects.toMatchObject({
+      status: 400,
+    })
+
+    const occupied = createTestDeps()
+    vi.mocked(occupied.agentIdentities.findProtocolAgent).mockResolvedValue({ id: 'ama-agent-1' } as AgentRecord)
+    await expect(
+      createAgentWithInstallation(
+        occupied,
+        { ...input, installation: { ...input.installation, kid: 'different-kid' } },
+        applicationAgentContext(),
+      ),
+    ).rejects.toMatchObject({ status: 409 })
+
+    const duplicate = createTestDeps()
+    vi.mocked(duplicate.agentIdentities.findByUsername).mockResolvedValue(identity())
+    await expect(
+      createAgentWithInstallation(
+        duplicate,
+        { ...input, installation: { ...input.installation, kid: 'different-kid' } },
+        applicationAgentContext(),
+      ),
+    ).rejects.toMatchObject({ status: 409 })
+  })
+
+  it('rejects a malformed public JWK and a mismatched idempotent representation', async () => {
+    const malformed = createTestDeps()
+    await expect(
+      createAgentWithInstallation(
+        malformed,
+        applicationAgentInput({
+          kty: 'OKP',
+          crv: 'Ed25519',
+          x: 'AA',
+          kid: 'ama-key-1',
+          alg: 'EdDSA',
+          use: 'sig',
+          key_ops: ['verify'],
+        } satisfies CreateAgent['installation']['publicKey']),
+        applicationAgentContext(),
+      ),
+    ).rejects.toMatchObject({ status: 400 })
+
+    const fixture = await applicationAgentFixture()
+    vi.mocked(fixture.deps.agentIdentities.findIdentity).mockResolvedValue({
+      ...fixture.persisted,
+      identity: { ...fixture.persisted.identity, name: 'Different Agent' },
+    })
+    await expect(createAgentWithInstallation(fixture.deps, fixture.input, fixture.context)).rejects.toMatchObject({
+      status: 409,
+    })
+  })
+
+  it('maps a concurrent username claim after a failed atomic create to conflict', async () => {
+    const { publicKey } = await generateKeyPair('Ed25519')
+    const input = applicationAgentInput(await exportedAgentPublicJwk(publicKey, 'ama-key-1'))
+    const deps = createTestDeps()
+    vi.mocked(deps.agentIdentities.findByUsername)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValue(identity({ username: input.username }))
+    vi.mocked(deps.agentIdentities.createAgentWithInstallation).mockRejectedValue(new Error('unique constraint'))
+
+    await expect(createAgentWithInstallation(deps, input, applicationAgentContext())).rejects.toMatchObject({
+      status: 409,
+      message: expect.stringContaining('username'),
+    })
+  })
+
+  it.each([
+    'protocolAgentId',
+    'hostId',
+  ] as const)('maps a concurrent %s claim after a failed atomic create to conflict', async (occupiedIdentifier) => {
+    const { publicKey } = await generateKeyPair('Ed25519')
+    const input = applicationAgentInput(await exportedAgentPublicJwk(publicKey, 'ama-key-1'))
+    const deps = createTestDeps()
+    if (occupiedIdentifier === 'protocolAgentId') {
+      vi.mocked(deps.agentIdentities.findProtocolAgent)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValue({ id: input.installation.agentId } as AgentRecord)
+    } else {
+      vi.mocked(deps.agents.listHostsForAgents)
+        .mockResolvedValueOnce([])
+        .mockResolvedValue([{ id: input.installation.hostId }] as never)
+    }
+    vi.mocked(deps.agentIdentities.createAgentWithInstallation).mockRejectedValue(new Error('unique constraint'))
+
+    await expect(createAgentWithInstallation(deps, input, applicationAgentContext())).rejects.toMatchObject({
+      status: 409,
+      message: 'The Agent installation identifiers are already in use.',
+    })
+  })
+
+  it('propagates an unknown atomic create failure when all race rechecks remain available', async () => {
+    const { publicKey } = await generateKeyPair('Ed25519')
+    const input = applicationAgentInput(await exportedAgentPublicJwk(publicKey, 'ama-key-1'))
+    const deps = createTestDeps()
+    const storageFailure = new Error('D1 unavailable')
+    vi.mocked(deps.agentIdentities.createAgentWithInstallation).mockRejectedValue(storageFailure)
+
+    await expect(createAgentWithInstallation(deps, input, applicationAgentContext())).rejects.toBe(storageFailure)
   })
 })
 
@@ -955,6 +1096,54 @@ function enrollmentDeps() {
   } as AgentRecord)
   vi.mocked(deps.agentIdentities.findBindingByProtocolAgent).mockResolvedValue(null)
   return deps
+}
+
+async function applicationAgentFixture(created = true) {
+  const deps = createTestDeps()
+  const { publicKey } = await generateKeyPair('Ed25519')
+  const input = applicationAgentInput(await exportedAgentPublicJwk(publicKey, 'ama-key-1'))
+  const context = applicationAgentContext()
+  let persisted: AgentIdentityAggregate | undefined
+  vi.mocked(deps.agentIdentities.createAgentWithInstallation).mockImplementation(async (records) => {
+    persisted = {
+      identity: records.identity,
+      bindings: [{ ...records.binding, hostId: records.host.id }],
+    }
+    vi.mocked(deps.agentIdentities.findProtocolAgent).mockResolvedValue(records.protocolAgent)
+    vi.mocked(deps.agents.listHostsForAgents).mockResolvedValue([records.host])
+    return { identity: persisted, created }
+  })
+  const result = await createAgentWithInstallation(deps, input, context)
+  if (!persisted) throw new Error('The Agent installation repository was not called.')
+  return { deps, input, context, persisted, result }
+}
+
+function applicationAgentInput(publicKey: CreateAgent['installation']['publicKey']): CreateAgent {
+  return {
+    username: 'ama-worker',
+    name: 'AMA Worker',
+    runtime: 'ama',
+    installation: {
+      agentId: 'ama-agent-1',
+      hostId: 'ama-host-1',
+      name: 'AMA Runner',
+      kid: 'ama-key-1',
+      publicKey,
+    },
+  }
+}
+
+async function exportedAgentPublicJwk(publicKey: CryptoKey, kid: string) {
+  return { ...(await exportJWK(publicKey)), kid } as CreateAgent['installation']['publicKey']
+}
+
+function applicationAgentContext() {
+  return {
+    applicationId: 'ama-application',
+    actorUserId: 'user-1',
+    issuer: 'https://auth.example.com/api/auth',
+    idempotencyKey: 'ama-create-1',
+  }
 }
 
 function identityDeps() {

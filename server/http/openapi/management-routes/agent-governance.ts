@@ -2,7 +2,9 @@ import {
   agentAuthorizedResourceServersResponseSchema,
   agentPermissionSchema,
   agentPermissionsResponseSchema,
+  agentSchema,
   auditEventsResponseSchema,
+  createAgentSchema,
   dpopNonceErrorResponseSchema,
   listAgentAuditEventsQuerySchema,
   listAgentAuthorizedResourceServersQuerySchema,
@@ -16,9 +18,37 @@ import {
 } from '@shared/api/agent-api'
 import { managementErrorResponseSchema } from '@shared/api/management'
 import { paginationQuerySchema } from '@shared/api/pagination'
-import { jsonBody, type ManagementRouteConfig, z } from './helpers'
+import {
+  idempotencyKeyHeader,
+  idempotencyReplayResponseHeader,
+  jsonBody,
+  type ManagementRouteConfig,
+  z,
+} from './helpers'
 
 export const agentGovernanceRoutes: ManagementRouteConfig[] = [
+  {
+    method: 'post',
+    path: '/agents',
+    operationId: 'createAgent',
+    summary: 'Create a User-owned Agent and its initial installation',
+    security: [{ oauth2: ['agents:write'] }],
+    request: {
+      headers: idempotencyKeyHeader,
+      body: jsonBody(createAgentSchema),
+    },
+    response: agentSchema,
+    responseHeaders: {
+      Location: { description: 'Canonical URI of the created Agent.', schema: { type: 'string' } },
+      ...idempotencyReplayResponseHeader,
+    },
+    status: 201,
+    errors: {
+      400: 'The Agent representation, public key, or Idempotency-Key is invalid.',
+      403: 'The Application is not acting as a User or lacks agents:write authority.',
+      409: 'The username is unavailable or the Idempotency-Key was reused with different Agent data.',
+    },
+  },
   {
     method: 'get',
     path: '/agents',

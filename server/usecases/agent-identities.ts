@@ -1,16 +1,19 @@
 import { badRequest, conflict, forbidden, notFound } from '@server/domain/errors'
-import { appendAgentGovernanceAudit } from '@server/usecases/agent-audit'
+import { agentGovernanceAuditRecord, appendAgentGovernanceAudit } from '@server/usecases/agent-audit'
 import type { Deps } from '@server/usecases/deps'
 import { revokeAgentResourceAccess, revokeAgentResourceLeasesForBinding } from '@server/usecases/external-resources'
 import { organizationUserHasScope } from '@server/usecases/organization-membership-scopes'
 import type {
   AgentAuthorityInventoryScope,
   AgentEnrollmentIntentRecord,
+  AgentHostRecord,
   AgentIdentityAggregate,
+  AgentIdentityBindingRecord,
   AgentIdentityRecord,
+  AgentRecord,
 } from '@server/usecases/ports'
 import { resourceScopeEntitlementLifecycle } from '@server/usecases/resource-scope-entitlements'
-import type { Agent, AgentEnrollment, ListAgentPermissionsQuery } from '@shared/api/agent-api'
+import type { Agent, AgentEnrollment, CreateAgent, ListAgentPermissionsQuery } from '@shared/api/agent-api'
 import type {
   AgentEnrollmentIntent,
   AgentHomeSpace,
@@ -19,6 +22,7 @@ import type {
 } from '@shared/api/agents'
 import type { ListAuthorizedResourceServersQuery } from '@shared/api/authorization'
 import { type PaginationInput, paginationMetadata } from '@shared/api/pagination'
+import { importJWK } from 'jose'
 
 const enrollmentLifetimeMs = 10 * 60 * 1000
 
@@ -69,6 +73,113 @@ export async function getManagementAgent(deps: Deps, agentId: string) {
   const aggregate = await requireIdentity(deps, agentId)
   const summaries = await loadManagementSummaries(deps, [aggregate])
   return { agent: toManagementAgent(aggregate, summaries) }
+}
+
+export async function createAgentWithInstallation(
+  deps: Deps,
+  input: CreateAgent,
+  context: { applicationId: string; actorUserId: string; issuer: string; idempotencyKey: string },
+): Promise<{ agent: Agent; replayed: boolean }> {
+  if (input.installation.publicKey.kid !== undefined && input.installation.publicKey.kid !== input.installation.kid) {
+    throw badRequest('The installation kid must match the public JWK kid.')
+  }
+  await importJWK(input.installation.publicKey as JsonWebKey, 'EdDSA').catch(() => {
+    throw badRequest('The installation publicKey must be a valid Ed25519 verification JWK.')
+  })
+  const ids = await managedAgentIds(context.applicationId, context.actorUserId, context.idempotencyKey)
+  const existing = await deps.agentIdentities.findIdentity(ids.identityId)
+  if (existing) {
+    await requireMatchingApplicationAgent(deps, existing, input, ids, context.actorUserId)
+    return { agent: toAgent(existing), replayed: true }
+  }
+  await requireAvailableAgentInstallation(deps, input)
+  await requireAvailableAgentUsername(deps, input.username)
+  const now = new Date()
+  const publicKey = canonicalJson(input.installation.publicKey)
+  const identity = newAgentIdentityRecord({
+    id: ids.identityId,
+    subject: ids.subject,
+    issuer: context.issuer,
+    username: input.username,
+    name: input.name,
+    runtime: input.runtime,
+    homeSpace: { type: 'personal', userId: context.actorUserId },
+    now,
+  })
+  const host: AgentHostRecord = {
+    id: input.installation.hostId,
+    name: input.installation.name,
+    userId: context.actorUserId,
+    defaultCapabilities: JSON.stringify([]),
+    publicKey,
+    kid: input.installation.kid,
+    jwksUrl: null,
+    enrollmentTokenHash: null,
+    enrollmentTokenExpiresAt: null,
+    status: 'active',
+    activatedAt: now,
+    expiresAt: null,
+    lastUsedAt: null,
+    createdAt: now,
+    updatedAt: now,
+  }
+  const protocolAgent: AgentRecord = {
+    id: input.installation.agentId,
+    name: input.name,
+    userId: context.actorUserId,
+    hostId: host.id,
+    status: 'active',
+    mode: 'delegated',
+    publicKey,
+    kid: input.installation.kid,
+    jwksUrl: null,
+    lastUsedAt: null,
+    activatedAt: now,
+    expiresAt: null,
+    metadata: null,
+    createdAt: now,
+    updatedAt: now,
+  }
+  const created = await deps.agentIdentities
+    .createAgentWithInstallation({
+      host,
+      protocolAgent,
+      identity,
+      binding: newAgentIdentityBinding({
+        id: ids.bindingId,
+        identityId: identity.id,
+        protocolAgentId: protocolAgent.id,
+        now,
+      }),
+      audit: agentGovernanceAuditRecord(ids.auditId, {
+        action: 'agent.identity_enrolled',
+        result: 'allowed',
+        tenant: { type: 'user', id: context.actorUserId },
+        controllerUserId: context.actorUserId,
+        issuer: identity.issuer,
+        subject: identity.subject,
+        agentIdentityId: identity.id,
+        hostId: host.id,
+        metadata: { source: 'application', applicationId: context.applicationId },
+      }),
+    })
+    .catch(async (error: unknown) => {
+      await requireAvailableAgentInstallation(deps, input)
+      await requireAvailableAgentUsername(deps, input.username)
+      throw error
+    })
+  await requireMatchingApplicationAgent(deps, created.identity, input, ids, context.actorUserId)
+  return { agent: toAgent(created.identity), replayed: !created.created }
+}
+
+async function requireAvailableAgentInstallation(deps: Deps, input: CreateAgent) {
+  const [existingProtocolAgent, existingHosts] = await Promise.all([
+    deps.agentIdentities.findProtocolAgent(input.installation.agentId),
+    deps.agents.listHostsForAgents([input.installation.hostId]),
+  ])
+  if (existingProtocolAgent || existingHosts.length > 0) {
+    throw conflict('The Agent installation identifiers are already in use.')
+  }
 }
 
 export async function listManagementAgentInstallations(deps: Deps, agentId: string, page: PaginationInput) {
@@ -177,30 +288,22 @@ export async function createAgentLoginIdentity(
   const identityId = deps.ids.generate()
   const nickname = input.nickname ?? input.runtime
   const aggregate = await deps.agentIdentities.createIdentity({
-    identity: {
+    identity: newAgentIdentityRecord({
       id: identityId,
-      issuer,
       subject: deps.ids.generate(),
+      issuer,
       username: input.username,
       name: nickname,
       runtime: input.runtime,
-      ownerUserId: controllerUserId,
-      ownerOrganizationId: null,
-      status: 'active',
-      deletedAt: null,
-      createdAt: now,
-      updatedAt: now,
-    },
-    binding: {
+      homeSpace: { type: 'personal', userId: controllerUserId },
+      now,
+    }),
+    binding: newAgentIdentityBinding({
       id: deps.ids.generate(),
-      agentIdentityId: identityId,
+      identityId,
       protocolAgentId: input.protocolAgentId,
-      status: 'active',
-      boundAt: now,
-      revokedAt: null,
-      createdAt: now,
-      updatedAt: now,
-    },
+      now,
+    }),
   })
   await appendIdentityAudit(deps, 'agent.identity_enrolled', aggregate, controllerUserId)
   return toIdentity(aggregate)
@@ -460,34 +563,27 @@ export async function approveAgentEnrollment(
     assertSameHomeSpace(homeSpace, homeSpaceOf(existing.identity))
   } else {
     identityId = deps.ids.generate()
-    identity = {
+    identity = newAgentIdentityRecord({
       id: identityId,
-      issuer,
       subject: deps.ids.generate(),
+      issuer,
       username: intent.requestedUsername!,
       name: intent.requestedName!,
       runtime: intent.requestedRuntime!,
-      ...ownerColumns(homeSpace),
-      status: 'active',
-      deletedAt: null,
-      createdAt: now,
-      updatedAt: now,
-    }
+      homeSpace,
+      now,
+    })
   }
 
   const aggregate = await deps.agentIdentities.approveIntent({
     intentId,
     identity,
-    binding: {
+    binding: newAgentIdentityBinding({
       id: deps.ids.generate(),
-      agentIdentityId: identityId,
+      identityId,
       protocolAgentId: intent.protocolAgentId,
-      status: 'active',
-      boundAt: now,
-      revokedAt: null,
-      createdAt: now,
-      updatedAt: now,
-    },
+      now,
+    }),
     approvedByUserId: actorUserId,
     approvedAt: now,
   })
@@ -601,6 +697,111 @@ function ownerColumns(homeSpace: AgentHomeSpace) {
   return homeSpace.type === 'personal'
     ? { ownerUserId: homeSpace.userId, ownerOrganizationId: null }
     : { ownerUserId: null, ownerOrganizationId: homeSpace.organizationId }
+}
+
+function newAgentIdentityRecord(input: {
+  id: string
+  subject: string
+  issuer: string
+  username: string
+  name: string
+  runtime: string
+  homeSpace: AgentHomeSpace
+  now: Date
+}): AgentIdentityRecord {
+  return {
+    id: input.id,
+    issuer: input.issuer,
+    subject: input.subject,
+    username: input.username,
+    name: input.name,
+    runtime: input.runtime,
+    ...ownerColumns(input.homeSpace),
+    status: 'active',
+    deletedAt: null,
+    createdAt: input.now,
+    updatedAt: input.now,
+  }
+}
+
+function newAgentIdentityBinding(input: {
+  id: string
+  identityId: string
+  protocolAgentId: string
+  now: Date
+}): Omit<AgentIdentityBindingRecord, 'hostId'> {
+  return {
+    id: input.id,
+    agentIdentityId: input.identityId,
+    protocolAgentId: input.protocolAgentId,
+    status: 'active',
+    boundAt: input.now,
+    revokedAt: null,
+    createdAt: input.now,
+    updatedAt: input.now,
+  }
+}
+
+type ManagedAgentIds = Awaited<ReturnType<typeof managedAgentIds>>
+
+async function managedAgentIds(applicationId: string, actorUserId: string, idempotencyKey: string) {
+  const bytes = new TextEncoder().encode(`${applicationId}\u0000${actorUserId}\u0000${idempotencyKey}`)
+  const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), (byte) =>
+    byte.toString(16).padStart(2, '0'),
+  ).join('')
+  return {
+    identityId: `agi_${hash}`,
+    subject: `agt_${hash}`,
+    bindingId: `agb_${hash}`,
+    auditId: `aga_${hash}`,
+  }
+}
+
+async function requireMatchingApplicationAgent(
+  deps: Deps,
+  aggregate: AgentIdentityAggregate,
+  input: CreateAgent,
+  ids: ManagedAgentIds,
+  actorUserId: string,
+) {
+  const binding = aggregate.bindings.find((candidate) => candidate.id === ids.bindingId)
+  const protocolAgent = await deps.agentIdentities.findProtocolAgent(input.installation.agentId)
+  const [host] = await deps.agents.listHostsForAgents([input.installation.hostId])
+  const matches =
+    aggregate.identity.id === ids.identityId &&
+    aggregate.identity.subject === ids.subject &&
+    aggregate.identity.username === input.username &&
+    aggregate.identity.name === input.name &&
+    aggregate.identity.runtime === input.runtime &&
+    aggregate.identity.ownerUserId === actorUserId &&
+    aggregate.identity.ownerOrganizationId === null &&
+    aggregate.identity.status === 'active' &&
+    binding?.protocolAgentId === input.installation.agentId &&
+    binding.hostId === input.installation.hostId &&
+    binding.status === 'active' &&
+    protocolAgent?.name === input.name &&
+    protocolAgent.userId === actorUserId &&
+    protocolAgent.hostId === input.installation.hostId &&
+    protocolAgent.status === 'active' &&
+    protocolAgent.kid === input.installation.kid &&
+    protocolAgent.publicKey === canonicalJson(input.installation.publicKey) &&
+    host?.name === input.installation.name &&
+    host.userId === actorUserId &&
+    host.status === 'active' &&
+    host.kid === input.installation.kid &&
+    host.publicKey === canonicalJson(input.installation.publicKey)
+  if (!matches) throw conflict('Idempotency-Key was already used for a different Agent.')
+}
+
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`
+  if (value && typeof value === 'object') {
+    return `{${Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, member]) => `${JSON.stringify(key)}:${canonicalJson(member)}`)
+      .join(',')}}`
+  }
+  return JSON.stringify(value)
 }
 
 async function appendIdentityAudit(

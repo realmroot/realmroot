@@ -1,4 +1,6 @@
+import { badRequest, forbidden } from '@server/domain/errors'
 import {
+  createAgentWithInstallation,
   emergencyActivateAgentIdentity,
   emergencyDeactivateAgentIdentity,
   emergencyDeleteAgentIdentity,
@@ -15,6 +17,8 @@ import {
   agentAuthorizedResourceServersResponseSchema,
   agentPermissionSchema,
   agentPermissionsResponseSchema,
+  agentSchema,
+  createAgentSchema,
   listAgentAuditEventsQuerySchema,
   listAgentAuthorizedResourceServersQuerySchema,
   listAgentPermissionsQuerySchema,
@@ -24,6 +28,7 @@ import {
   managementAgentResponseSchema,
   managementAgentsResponseSchema,
 } from '@shared/api/agent-api'
+import { idempotencyKeySchema } from '@shared/api/idempotency'
 import { paginationMetadata, paginationQuerySchema } from '@shared/api/pagination'
 import { Hono } from 'hono'
 import { getActorUserId, getPrincipal } from '../../middleware/authn'
@@ -34,9 +39,37 @@ import {
   requireAgentScope,
 } from '../../middleware/authz'
 import { getDeps } from '../../middleware/deps'
-import { readQuery } from '../validation'
+import { readJson, readQuery } from '../validation'
 
 export const managementAgentsRoute = new Hono()
+
+declare module 'hono' {
+  interface ContextVariableMap {
+    realmrootCanonicalOrigin?: string
+  }
+}
+
+managementAgentsRoute.post('/agents', async (c) => {
+  const principal = getPrincipal(c)
+  const application = principal.application
+  if (!application) throw forbidden('An OAuth-authenticated Application is required to create an Agent.')
+  const actorUserId = getActorUserId(c)
+  if (!actorUserId) throw forbidden('The Application must act on behalf of a User to create an Agent.')
+  if (!application.scopes.includes('agents:write')) throw forbidden('OAuth scope "agents:write" is required.')
+  await authorizeUser(c, actorUserId, 'agents:write')
+  const input = await readJson(c, createAgentSchema)
+  const parsedKey = idempotencyKeySchema.safeParse(c.req.header('Idempotency-Key'))
+  if (!parsedKey.success) throw badRequest('Idempotency-Key header is required and must contain 1 to 200 characters.')
+  const result = await createAgentWithInstallation(getDeps(c), input, {
+    applicationId: application.id,
+    actorUserId,
+    issuer: new URL('/api/auth', c.get('realmrootCanonicalOrigin') ?? c.req.url).toString(),
+    idempotencyKey: parsedKey.data,
+  })
+  c.header('Location', `/api/agents/${encodeURIComponent(result.agent.id)}`)
+  if (result.replayed) c.header('Idempotency-Replayed', 'true')
+  return c.json(agentSchema.parse(result.agent), 201)
+})
 
 managementAgentsRoute.get('/agents', async (c) => {
   const query = readQuery(c, listAgentsQuerySchema)

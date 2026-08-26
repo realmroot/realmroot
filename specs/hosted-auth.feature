@@ -60,6 +60,13 @@ Feature: Hosted authentication
     Then I am authenticated
     And I land in Account Center
 
+  @entrypoint:product-ui @journey:better-auth-password-migration
+  Scenario: A directly imported Better Auth password remains usable
+    Given a user credential was imported from Better Auth
+    When I submit the existing password on /auth/sign-in
+    Then Realmroot verifies the Better Auth scrypt credential
+    And a pre-existing Realmroot password remains valid when both credentials were merged
+
   @entrypoint:product-ui @journey:passwordless-linkage
   Scenario: Passwordless mode removes password UI and blocks native password endpoints
     Given password sign-in is disabled by tenant policy

@@ -3,15 +3,13 @@ import { createTestDeps } from '@server/http/test-deps'
 import { issueApplicationAccessToken } from '@server/usecases/application-oauth'
 import { hashProviderSecret } from '@server/usecases/applications-utils'
 import { realmrootOrganizationClaim } from '@shared/oauth-token-profile'
-import { exportJWK, generateKeyPair, SignJWT } from 'jose'
 import { describe, expect, it, vi } from 'vitest'
 
 const audience = 'https://auth.example.com/api'
-const endpoint = 'https://auth.example.com/api/auth/oauth2/token'
 const realmrootResourceServerId = 'resource-realmroot'
 
 describe('Application OAuth token issuance', () => {
-  it('issues a short-lived DPoP token from client credentials and effective Application Permissions', async () => {
+  it('issues a short-lived Bearer token from client credentials and effective Application Permissions', async () => {
     const deps = await fixture()
     const sign = vi.fn().mockResolvedValue('application-access-token')
 
@@ -24,14 +22,12 @@ describe('Application OAuth token issuance', () => {
           scope: 'connection-events:write',
           resource: audience,
           expectedResource: audience,
-          dpopProof: await dpopProof(endpoint),
-          tokenEndpoint: endpoint,
         },
         { issuer: 'https://auth.example.com/api/auth', sign },
       ),
     ).resolves.toEqual({
       access_token: 'application-access-token',
-      token_type: 'DPoP',
+      token_type: 'Bearer',
       expires_in: 300,
       scope: 'connection-events:write',
     })
@@ -42,7 +38,6 @@ describe('Application OAuth token issuance', () => {
         [realmrootOrganizationClaim]: 'org_platform',
         aud: audience,
         scope: 'connection-events:write',
-        cnf: { jkt: expect.any(String) },
       }),
       'at+jwt',
     )
@@ -56,8 +51,6 @@ describe('Application OAuth token issuance', () => {
       scope: 'connection-events:write',
       resource: audience,
       expectedResource: audience,
-      dpopProof: await dpopProof(endpoint),
-      tokenEndpoint: endpoint,
     }
     const unconfigured = await fixture({ configuredScopes: [] })
     await expect(issueApplicationAccessToken(unconfigured, input, signer)).rejects.toMatchObject({
@@ -88,7 +81,7 @@ describe('Application OAuth token issuance', () => {
     ).rejects.toMatchObject({ error: 'invalid_client' })
   })
 
-  it('rejects unauthorized clients, unavailable Resources, empty scopes, and invalid DPoP proofs', async () => {
+  it('rejects unauthorized clients, unavailable Resources, and empty scopes', async () => {
     const signer = { issuer: 'https://auth.example.com/api/auth', sign: vi.fn() }
     const input = {
       clientId: 'client_adapter',
@@ -96,8 +89,6 @@ describe('Application OAuth token issuance', () => {
       scope: 'connection-events:write',
       resource: audience,
       expectedResource: audience,
-      dpopProof: await dpopProof(endpoint),
-      tokenEndpoint: endpoint,
     }
     await expect(
       issueApplicationAccessToken(await fixture({ allowedGrantTypes: [] }), input, signer),
@@ -114,9 +105,6 @@ describe('Application OAuth token issuance', () => {
     await expect(
       issueApplicationAccessToken(await fixture({ configureResource: false }), input, signer),
     ).rejects.toMatchObject({ error: 'invalid_scope' })
-    await expect(
-      issueApplicationAccessToken(await fixture(), { ...input, dpopProof: 'invalid' }, signer),
-    ).rejects.toMatchObject({ error: 'invalid_dpop_proof' })
   })
 })
 
@@ -182,11 +170,4 @@ async function fixture(
         .mockResolvedValue(effectiveScopes.map((scope) => ({ scope, endedAt: null, expiresAt: null }))),
     },
   })
-}
-
-async function dpopProof(htu: string) {
-  const { privateKey, publicKey } = await generateKeyPair('ES256', { extractable: true })
-  return new SignJWT({ htm: 'POST', htu, iat: Math.floor(Date.now() / 1000), jti: crypto.randomUUID() })
-    .setProtectedHeader({ typ: 'dpop+jwt', alg: 'ES256', jwk: await exportJWK(publicKey) })
-    .sign(privateKey)
 }

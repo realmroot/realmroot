@@ -43,6 +43,9 @@ importers:
       '@hono/zod-validator':
         specifier: ^0.8.0
         version: 0.8.0(hono@4.12.18)(zod@4.4.3)
+      '@noble/hashes':
+        specifier: ^2.0.1
+        version: 2.2.0
       '@scalar/hono-api-reference':
         specifier: 0.11.12
         version: 0.11.12(hono@4.12.18)

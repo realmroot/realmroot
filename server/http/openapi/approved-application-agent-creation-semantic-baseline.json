@@ -1,0 +1,8 @@
+[
+  {
+    "method": "POST",
+    "path": "/agents",
+    "operationId": "createAgent",
+    "semanticHash": "f00f320098197830ac4edc3dc1a2680805f94e9d6ffd67f8e8939f69641af454"
+  }
+]

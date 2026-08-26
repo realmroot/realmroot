@@ -99,7 +99,8 @@ export function createApp(auth: AuthHandler, deps: Deps, config: AppConfig = {})
 
   app.onError((error, c) => {
     if (error instanceof ApiError && error.status === 401 && c.req.path.startsWith('/api/')) {
-      c.header('WWW-Authenticate', `DPoP resource_metadata="${protectedResourceMetadataUrl(config, c.req.url)}"`)
+      const scheme = c.req.header('Authorization')?.startsWith('DPoP ') ? 'DPoP' : 'Bearer'
+      c.header('WWW-Authenticate', `${scheme} resource_metadata="${protectedResourceMetadataUrl(config, c.req.url)}"`)
     }
     return handleApiError(error, c)
   })
@@ -464,8 +465,6 @@ async function issueApplicationToken(
       { 'WWW-Authenticate': 'Basic realm="Realmroot token endpoint"' },
     )
   }
-  const dpopProof = c.req.header('DPoP')
-  if (!dpopProof) throw oauthError('invalid_dpop_proof', 'A DPoP proof is required.')
   if (!realmrootResourceReconciled) await ensureRealmrootResourceServer(c.get('deps'), new URL(issuer).origin)
   const response = await issueApplicationAccessToken(
     c.get('deps'),
@@ -474,8 +473,6 @@ async function issueApplicationToken(
       scope: formString(form, 'scope') ?? undefined,
       resource: formString(form, 'resource') ?? '',
       expectedResource: `${new URL(issuer).origin}/api`,
-      dpopProof,
-      tokenEndpoint: `${issuer.replace(/\/$/, '')}/oauth2/token`,
     },
     {
       issuer,
@@ -582,9 +579,9 @@ function protectedResourceMetadata(config: AppConfig, requestUrl: string) {
     resource: `${origin}/api`,
     authorization_servers: [`${origin}/api/auth`],
     scopes_supported: realmrootOAuthScopes,
-    bearer_methods_supported: [],
+    bearer_methods_supported: ['header'],
     dpop_signing_alg_values_supported: ['ES256', 'EdDSA'],
-    dpop_bound_access_tokens_required: true,
+    dpop_bound_access_tokens_required: false,
   }
 }
 

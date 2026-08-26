@@ -87,6 +87,11 @@ describe('schema.test 2', () => {
         'oauthRefreshToken_userId_idx',
       ]),
     )
+    const refreshTokenColumns = columnNames(oauthRefreshToken)
+    expect(refreshTokenColumns).toEqual(expect.arrayContaining(['token', 'scopes', 'resources']))
+    expect(refreshTokenColumns).not.toContain('dpop_jkt')
+    expect(refreshTokenColumns).not.toContain('family_id')
+    expect(refreshTokenColumns).not.toContain('family_compromised_at')
     expect(indexNames(oauthAccessToken)).toEqual(
       expect.arrayContaining([
         'oauthAccessToken_clientId_idx',

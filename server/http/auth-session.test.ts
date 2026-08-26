@@ -12,7 +12,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { createTestDeps } from './test-deps'
 
 describe('auth.test 1', () => {
-  it('publishes RFC 9728 metadata for the DPoP-protected Realmroot API', async () => {
+  it('publishes RFC 9728 metadata for Bearer Applications and DPoP-capable Agent grants', async () => {
     const auth = createAuth(
       {} as Database,
       createIdentifierGeneratorFake(),
@@ -32,7 +32,8 @@ describe('auth.test 1', () => {
       resource: 'https://auth.example.com/api',
       authorization_servers: ['https://auth.example.com/api/auth'],
       dpop_signing_alg_values_supported: ['ES256', 'EdDSA'],
-      dpop_bound_access_tokens_required: true,
+      bearer_methods_supported: ['header'],
+      dpop_bound_access_tokens_required: false,
       scopes_supported: expect.arrayContaining(['agent:read', 'users:read', 'resource-servers:write']),
     })
   })
