@@ -91,6 +91,46 @@ describe('Application Resource Server scopes', () => {
     ).rejects.toThrow('undeclared')
   })
 
+  it('allows only unique, active, tenant-visible source Resource Servers for Machine token exchange', async () => {
+    const { deps, authorization } = setup()
+    const machineInput = {
+      ...input,
+      clientType: 'machine' as const,
+      redirectUris: [],
+      resourceScopes: [],
+      tokenExchangeSourceResourceServerIds: [resource.id],
+    }
+
+    await expect(createApplication(deps, 'https://auth.example', machineInput, 'admin-1')).resolves.toMatchObject({
+      tokenExchangeSourceResourceServerIds: [resource.id],
+    })
+    await expect(
+      createApplication(
+        deps,
+        'https://auth.example',
+        { ...machineInput, tokenExchangeSourceResourceServerIds: [resource.id, resource.id] },
+        'admin-1',
+      ),
+    ).rejects.toThrow('must be unique')
+    await expect(
+      createApplication(
+        deps,
+        'https://auth.example',
+        { ...input, tokenExchangeSourceResourceServerIds: [resource.id] },
+        'admin-1',
+      ),
+    ).rejects.toThrow('Only Machine Applications')
+
+    authorization.findResources.mockResolvedValueOnce([])
+    await expect(createApplication(deps, 'https://auth.example', machineInput, 'admin-1')).rejects.toThrow('not active')
+    authorization.findResources.mockResolvedValueOnce([{ ...resource, enabled: false }])
+    await expect(createApplication(deps, 'https://auth.example', machineInput, 'admin-1')).rejects.toThrow('not active')
+    authorization.findResources.mockResolvedValueOnce([{ ...resource, ownerOrganizationId: 'org-2' }])
+    await expect(createApplication(deps, 'https://auth.example', machineInput, 'admin-1')).rejects.toThrow(
+      'not visible',
+    )
+  })
+
   it('removes an existing deleted Resource Server allowlist when the Application is saved [spec: admin-console/admin-application-detail]', async () => {
     const { deps, authorization } = setup()
     const created = await createApplication(deps, 'https://auth.example', input, 'admin-1')

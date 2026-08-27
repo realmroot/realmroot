@@ -307,7 +307,7 @@ Feature: Agent identity and delegated API authorization
 
   Rule: Workload token exchange preserves authorization boundaries
 
-    @entrypoint:resource-server @journey:user-resource-token-delegation
+    @entrypoint:agent-protocol @journey:user-resource-token-delegation
     Scenario: A Resource Server exchanges an inbound User token for a narrower downstream token
       Given a confidential Application is explicitly configured to exchange User tokens received by one source Resource Server
       And the Application is entitled to the requested scopes on a downstream Resource Server
