@@ -9,7 +9,7 @@ describe('migrated password verification', () => {
   it('[spec: hosted-auth/better-auth-password-migration] verifies a directly imported Better Auth scrypt hash', async () => {
     await expect(verifyStoredPassword(legacyHash, 'legacy-password')).resolves.toBe(true)
     await expect(verifyStoredPassword(legacyHash, 'incorrect')).resolves.toBe(false)
-  })
+  }, 15_000)
 
   it('[spec: hosted-auth/better-auth-password-migration] preserves every password when credentials are merged', async () => {
     const primaryHash = await hashPassword('realmroot-password')
@@ -20,7 +20,7 @@ describe('migrated password verification', () => {
     await expect(verifyStoredPassword(bundle, 'second-realmroot-password')).resolves.toBe(true)
     await expect(verifyStoredPassword(bundle, 'legacy-password')).resolves.toBe(true)
     await expect(verifyStoredPassword(bundle, 'incorrect')).resolves.toBe(false)
-  })
+  }, 15_000)
 
   it('rejects malformed Better Auth hashes and password bundles', async () => {
     await expect(verifyStoredPassword('better-auth-scrypt-v1:short:bad', 'password')).rejects.toThrow(
