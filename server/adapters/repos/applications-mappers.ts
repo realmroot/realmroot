@@ -13,6 +13,7 @@ const corsOriginsMetadataKey = 'corsOrigins'
 const customDataMetadataKey = 'customData'
 const iconUrlMetadataKey = 'iconUrl'
 const oidcClaimsMetadataKey = 'oidcClaims'
+const tokenExchangeSourceResourceServerIdsMetadataKey = 'tokenExchangeSourceResourceServerIds'
 
 export function toApplicationInsert(input: Omit<ApplicationAggregate, 'createdAt' | 'updatedAt'>, now: Date) {
   return {
@@ -34,6 +35,10 @@ export function toApplicationInsert(input: Omit<ApplicationAggregate, 'createdAt
       corsOrigins: input.corsOrigins.length > 0 ? input.corsOrigins : undefined,
       customData: Object.keys(input.customData).length > 0 ? input.customData : undefined,
       oidcClaims: input.oidcClaims,
+      tokenExchangeSourceResourceServerIds:
+        input.tokenExchangeSourceResourceServerIds && input.tokenExchangeSourceResourceServerIds.length > 0
+          ? input.tokenExchangeSourceResourceServerIds
+          : undefined,
     }),
     createdAt: now,
     updatedAt: now,
@@ -98,6 +103,7 @@ export function toAggregate(app: ApplicationRow, client: OAuthClientRow): Applic
     allowedGrantTypes: parseList(client.grantTypes).filter(isGrantType),
     oidcScopes: app.oidcScopes,
     resourceScopes: app.resourceScopes,
+    tokenExchangeSourceResourceServerIds: readTokenExchangeSourceResourceServerIds(app.metadata),
     requirePkce: client.requirePKCE ?? false,
     tokenEndpointAuthMethod: toTokenEndpointAuthMethod(client.tokenEndpointAuthMethod),
     createdAt: app.createdAt,
@@ -113,6 +119,12 @@ export function toConsent(row: typeof applicationConsent.$inferSelect): ConsentR
     authorizationSource: row.authorizationSource,
     grantedAt: row.grantedAt,
   }
+}
+
+function readTokenExchangeSourceResourceServerIds(metadata: unknown): string[] {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return []
+  const value = (metadata as Record<string, unknown>)[tokenExchangeSourceResourceServerIdsMetadataKey]
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
 }
 
 export function toPaginationMetadata(pagination: { limit: number; offset: number }, total: number) {
@@ -209,6 +221,7 @@ export function writeApplicationMetadata(
     corsOrigins?: string[]
     customData?: Record<string, unknown>
     oidcClaims?: ApplicationOidcClaims
+    tokenExchangeSourceResourceServerIds?: string[]
   },
 ) {
   const next = { ...(current ?? {}) }
@@ -219,6 +232,9 @@ export function writeApplicationMetadata(
   if (patch.corsOrigins !== undefined) next[corsOriginsMetadataKey] = patch.corsOrigins
   if (patch.customData !== undefined) next[customDataMetadataKey] = patch.customData
   if (patch.oidcClaims !== undefined) next[oidcClaimsMetadataKey] = patch.oidcClaims
+  if (patch.tokenExchangeSourceResourceServerIds !== undefined) {
+    next[tokenExchangeSourceResourceServerIdsMetadataKey] = patch.tokenExchangeSourceResourceServerIds
+  }
   return Object.keys(next).length ? next : null
 }
 

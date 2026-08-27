@@ -80,6 +80,95 @@ afterEach(() => {
 })
 
 describe('token exchange service', () => {
+  it('delegates a Realmroot User access token only from a configured source to an entitled target', async () => {
+    const { deps, clientSecret } = await tokenExchangeFixture({ scopes: ['agents:write'] })
+    const sourceResource = eligibleAudienceResource(['agents:write'])
+    const targetResource = {
+      ...eligibleAudienceResource(['agents:write']),
+      id: 'res_realmroot',
+      resourceUrl: 'https://auth.example.com/api',
+    }
+    const findApplication = deps.applications.findByClientId
+    deps.applications.findByClientId = async (clientId) => {
+      const application = await findApplication(clientId)
+      return application
+        ? {
+            ...application,
+            tokenExchangeSourceResourceServerIds: [sourceResource.id],
+            resourceScopes: [{ resourceServerId: targetResource.id, scopes: ['agents:write'] }],
+          }
+        : null
+    }
+    deps.authorization.findResourceByResourceUrl = async (resourceUrl) =>
+      (resourceUrl === sourceResource.resourceUrl
+        ? sourceResource
+        : resourceUrl === targetResource.resourceUrl
+          ? targetResource
+          : null) as never
+
+    const response = await exchangeToken(
+      deps,
+      {
+        grantType: tokenExchangeGrantType,
+        subjectToken: 'verified-by-http-adapter',
+        subjectTokenType: accessTokenType,
+        audience: targetResource.resourceUrl,
+        scope: 'agents:write',
+        verifiedSubjectClaims: {
+          iss: realmrootIssuer,
+          sub: 'user_1',
+          aud: sourceResource.resourceUrl,
+          client_id: 'browser-client',
+          scope: 'agents:write',
+          exp: Math.floor(Date.now() / 1000) + 600,
+        },
+      },
+      { clientId: applicationClientId, clientSecret },
+    )
+
+    expect(response).not.toHaveProperty('refresh_token')
+    expect(decodeTestAccessToken(response.access_token)).toMatchObject({
+      sub: 'user_1',
+      aud: targetResource.resourceUrl,
+      client_id: applicationClientId,
+      scope: 'agents:write',
+    })
+    expect(decodeTestAccessToken(response.access_token)).not.toHaveProperty('act')
+  })
+
+  it('rejects Agent actors and scope escalation during User token delegation', async () => {
+    const { deps, clientSecret } = await tokenExchangeFixture({ scopes: ['agents:write'] })
+    const findApplication = deps.applications.findByClientId
+    deps.applications.findByClientId = async (clientId) => {
+      const application = await findApplication(clientId)
+      return application ? { ...application, tokenExchangeSourceResourceServerIds: [audienceResourceId] } : null
+    }
+    const input = {
+      grantType: tokenExchangeGrantType,
+      subjectToken: 'verified-by-http-adapter',
+      subjectTokenType: accessTokenType,
+      audience: defaultAudience,
+      scope: 'agents:write',
+      verifiedSubjectClaims: {
+        iss: realmrootIssuer,
+        sub: 'user_1',
+        aud: defaultAudience,
+        scope: 'agents:read',
+        exp: Math.floor(Date.now() / 1000) + 600,
+      },
+    }
+    await expect(exchangeToken(deps, input, { clientId: applicationClientId, clientSecret })).rejects.toMatchObject({
+      error: 'invalid_scope',
+    })
+    await expect(
+      exchangeToken(
+        deps,
+        { ...input, verifiedSubjectClaims: { ...input.verifiedSubjectClaims, act: { sub: 'agent_1' } } },
+        { clientId: applicationClientId, clientSecret },
+      ),
+    ).rejects.toMatchObject({ error: 'invalid_grant' })
+  })
+
   it('rejects an audience outside the Application Organization tenant', async () => {
     const repository = new InMemoryTokenExchangeRepository()
     const deps = credentialDeps(repository)
@@ -1463,6 +1552,9 @@ function credentialDeps(repository: InMemoryTokenExchangeRepository): Deps {
     ids: createIdentifierGeneratorFake(),
     tokenExchange: repository,
     jwks: createJwksGateway(),
+    users: {
+      getUser: async (id: string) => ({ id, banned: false }),
+    },
     applications: {
       findById: async (id: string) =>
         id === applicationId ? { id: applicationId, ownerOrganizationId: 'org_1' } : null,

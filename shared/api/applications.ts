@@ -119,6 +119,7 @@ export const applicationResponseSchema = z
     allowedGrantTypes: z.array(applicationGrantTypeSchema),
     oidcScopes: z.array(applicationScopeSchema),
     resourceScopes: applicationResourceScopesSchema,
+    tokenExchangeSourceResourceServerIds: z.array(nonEmptyString.max(200)).max(100).optional(),
     /** @deprecated Realmroot uses one platform token profile. This value is fixed and input is ignored. */
     oidcClaims: applicationOidcClaimsSchema.optional(),
     requirePkce: z.boolean(),
@@ -152,6 +153,7 @@ export const createApplicationRequestSchema = z
     postLogoutRedirectUris: z.array(nonEmptyString).optional(),
     corsOrigins: z.array(nonEmptyString).optional(),
     resourceScopes: applicationResourceScopesSchema.optional(),
+    tokenExchangeSourceResourceServerIds: z.array(nonEmptyString.max(200)).max(100).optional(),
     consentRequired: z.boolean().optional(),
     ownerOrganizationId: nonEmptyString,
     deviceLoginEnabled: z.boolean().optional(),
@@ -200,6 +202,7 @@ export const updateApplicationRequestSchema = z
     corsOrigins: z.array(nonEmptyString).optional(),
     customData: customDataSchema.optional(),
     resourceScopes: applicationResourceScopesSchema.optional(),
+    tokenExchangeSourceResourceServerIds: z.array(nonEmptyString.max(200)).max(100).optional(),
     consentRequired: z.boolean().optional(),
     disabled: z.boolean().optional(),
     disabledReason: z.string().trim().max(500).nullable().optional(),

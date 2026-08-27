@@ -307,6 +307,16 @@ Feature: Agent identity and delegated API authorization
 
   Rule: Workload token exchange preserves authorization boundaries
 
+    @entrypoint:resource-server @journey:user-resource-token-delegation
+    Scenario: A Resource Server exchanges an inbound User token for a narrower downstream token
+      Given a confidential Application is explicitly configured to exchange User tokens received by one source Resource Server
+      And the Application is entitled to the requested scopes on a downstream Resource Server
+      When the Application exchanges a valid Realmroot access token whose audience is the configured source Resource Server
+      Then Realmroot issues a short-lived access token for the downstream Resource Server
+      And the downstream token preserves the User subject and identifies the authenticated Application as client_id
+      And the downstream token contains no act claim and no refresh token is issued
+      But an Agent subject token, an unconfigured source audience, a different Application, a wider scope, or an unavailable target is rejected
+
     @entrypoint:product-ui @journey:connector-backed-connection-revocation
     Scenario: Revoking a connector-backed account connection revokes provider authority first
       Given an active connector-backed account connection has provider access and refresh tokens

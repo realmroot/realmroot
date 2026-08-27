@@ -54,6 +54,12 @@ export async function createApplication(
     throw badRequest('User consent policy can be configured only for Applications owned by the platform Organization.')
   }
   const resourceScopes = await validateApplicationResourceScopes(deps, ownerOrganizationId, input.resourceScopes ?? [])
+  const tokenExchangeSourceResourceServerIds = await validateTokenExchangeSourceResourceServerIds(
+    deps,
+    ownerOrganizationId,
+    input.clientType,
+    input.tokenExchangeSourceResourceServerIds ?? [],
+  )
 
   const application = await deps.applications.create({
     application: {
@@ -78,6 +84,7 @@ export async function createApplication(
       allowedGrantTypes: settings.allowedGrantTypes,
       oidcScopes: settings.oidcScopes,
       resourceScopes,
+      tokenExchangeSourceResourceServerIds,
       requirePkce: settings.requirePkce,
       tokenEndpointAuthMethod: settings.tokenEndpointAuthMethod,
       oidcClaims: defaultApplicationOidcClaims,
@@ -161,6 +168,14 @@ export async function updateApplication(
         new Set(application.resourceScopes.map((configuration) => configuration.resourceServerId)),
       )
     : undefined
+  const tokenExchangeSourceResourceServerIds = input.tokenExchangeSourceResourceServerIds
+    ? await validateTokenExchangeSourceResourceServerIds(
+        deps,
+        ownerOrganizationId,
+        application.clientType,
+        input.tokenExchangeSourceResourceServerIds,
+      )
+    : undefined
 
   const updated = await deps.applications.update(id, {
     slug: input.slug,
@@ -179,6 +194,7 @@ export async function updateApplication(
     allowedGrantTypes: settings?.allowedGrantTypes,
     oidcScopes: settings?.oidcScopes,
     resourceScopes,
+    tokenExchangeSourceResourceServerIds,
   })
   if (updated === 'application_not_found') throw notFound('Application was not found.')
   if (updated === 'resource_inactive') throw badRequest('Resource Server is not active.')
@@ -536,6 +552,7 @@ function toResponse(
     allowedGrantTypes: application.allowedGrantTypes,
     oidcScopes: application.oidcScopes,
     resourceScopes: application.resourceScopes,
+    tokenExchangeSourceResourceServerIds: application.tokenExchangeSourceResourceServerIds ?? [],
     oidcClaims: defaultApplicationOidcClaims,
     requirePkce: application.requirePkce,
     tokenEndpointAuthMethod: application.tokenEndpointAuthMethod,
@@ -597,6 +614,31 @@ async function validateApplicationResourceScopes(
     activeConfigurations.push(configuration)
   }
   return activeConfigurations
+}
+
+async function validateTokenExchangeSourceResourceServerIds(
+  deps: Deps,
+  ownerOrganizationId: string,
+  clientType: ApplicationResponse['clientType'],
+  ids: string[],
+) {
+  const normalized = [...new Set(ids)]
+  if (normalized.length !== ids.length) throw badRequest('Token exchange source Resource Servers must be unique.')
+  if (normalized.length > 0 && clientType !== 'machine') {
+    throw badRequest('Only Machine Applications can exchange inbound Resource Server tokens.')
+  }
+  if (normalized.length === 0) return normalized
+  const resources = new Map(
+    (await deps.authorization.findResources(normalized)).map((resource) => [resource.id, resource]),
+  )
+  for (const id of normalized) {
+    const resource = resources.get(id)
+    if (!resource?.enabled) throw badRequest('Token exchange source Resource Server is not active.')
+    if (resource.visibility === 'private' && resource.ownerOrganizationId !== ownerOrganizationId) {
+      throw badRequest('Token exchange source Resource Server is not visible to the Application tenant.')
+    }
+  }
+  return normalized
 }
 
 async function resolveRequestedResource(deps: Deps, resourceUrl: string | undefined, userId: string) {
