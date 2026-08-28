@@ -489,6 +489,18 @@ async function listOAuthAuthorizationContexts(
   return contexts
 }
 
+export async function resolveOAuthAuthorizationContexts(
+  deps: Deps,
+  application: ApplicationAggregate,
+  resourceUrls: string[],
+  user: { id: string; email?: string | null; name?: string | null; username?: string | null },
+) {
+  const resources = await Promise.all(
+    resourceUrls.map((resourceUrl) => resolveRequestedResource(deps, resourceUrl, user.id)),
+  )
+  return listOAuthAuthorizationContexts(deps, application, resources, user)
+}
+
 export async function createConsent(deps: Deps, input: CreateConsentRequest, userId: string) {
   const application = await deps.applications.findByClientId(input.clientId)
   if (!application || application.disabled) {

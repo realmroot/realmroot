@@ -245,19 +245,8 @@ describe('OAuth token claim building over real D1', () => {
       { headers: { cookie: memberCookie }, redirect: 'manual' },
     )
     expect(authorize.status, await authorize.clone().text()).toBe(302)
-    const contextLocation = new URL(authorize.headers.get('location') ?? '', baseURL)
-    expect(contextLocation.pathname).toBe('/auth/context')
-    const continueAuthorization = await harness.request('/api/auth/oauth2/continue', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', cookie: memberCookie, origin: baseURL },
-      body: JSON.stringify({
-        postLogin: true,
-        consentReferenceId: `organization:${organization.id}`,
-        oauth_query: contextLocation.search.slice(1),
-      }),
-    })
-    expect(continueAuthorization.status, await continueAuthorization.clone().text()).toBe(200)
-    const callback = new URL(((await continueAuthorization.json()) as { url: string }).url, baseURL)
+    const callback = new URL(authorize.headers.get('location') ?? '', baseURL)
+    expect(callback.pathname).toBe('/callback')
     const code = callback.searchParams.get('code')
     expect(code).toBeTruthy()
 

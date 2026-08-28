@@ -61,7 +61,7 @@ export type OAuthProviderPluginOptions = {
       user: { id: string }
       referenceId?: string
     }) => Promise<string | undefined>
-    shouldRedirect: (input: { headers: Headers; user: { id: string } }) => Promise<boolean>
+    shouldRedirect: (input: { headers: Headers; user: { id: string } }) => Promise<boolean | string>
   }
   filterAccessTokenScopes: (input: {
     user?: ({ id?: string } & Record<string, unknown>) | null
