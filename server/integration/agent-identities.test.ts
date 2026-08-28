@@ -230,19 +230,8 @@ describe('Agent identity enrollment over real D1', () => {
         redirect: 'manual',
       })
       expect(authorize.status, await authorize.clone().text()).toBe(302)
-      const contextLocation = new URL(authorize.headers.get('location') ?? '', baseURL)
-      expect(contextLocation.pathname).toBe('/auth/context')
-      const continued = await harness.request('/api/auth/oauth2/continue', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', cookie: ownerCookie, origin: baseURL },
-        body: JSON.stringify({
-          postLogin: true,
-          consentReferenceId: `organization:${platformOrganizationId}`,
-          oauth_query: contextLocation.search.slice(1),
-        }),
-      })
-      expect(continued.status, await continued.clone().text()).toBe(200)
-      const callback = new URL(((await continued.json()) as { url: string }).url, baseURL)
+      const callback = new URL(authorize.headers.get('location') ?? '', baseURL)
+      expect(callback.pathname).toBe('/callback')
       const code = callback.searchParams.get('code')
       expect(code, callback.toString()).toBeTruthy()
       return code ?? ''

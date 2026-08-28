@@ -235,7 +235,10 @@ describe('OIDC authorization over real D1', () => {
     await expect(staleRefresh.json()).resolves.toMatchObject({ error: 'invalid_grant' })
   })
 
-  it('issues public Application tokens to an external user without owner Organization claims', async () => {
+  it('[spec: hosted-auth/oauth-authorization-context-selection] automatically uses the sole User Context', async () => {
+    const resource = 'https://single-context-resource.example.com'
+    harness = await createHarness({ validAudiences: [baseURL, resource] })
+    harness.deps.externalHttp.fetch = resourceOpenApiFetch
     const adminCookie = await signInAdmin(harness)
     const publicUserId = await createUser(harness, adminCookie, {
       email: 'public-oidc-user@example.com',
@@ -263,6 +266,18 @@ describe('OIDC authorization over real D1', () => {
     expect(activeOrganization.status, await activeOrganization.clone().text()).toBe(200)
     userCookie = mergeResponseCookies(userCookie, activeOrganization)
     await env.DB.prepare('DELETE FROM member WHERE id = ?').bind('member-stale-session').run()
+    const createResource = await harness.request('/api/resource-servers', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie: adminCookie },
+      body: JSON.stringify({
+        identifier: 'single-context-resource',
+        resourceUrl: resource,
+        authorizationModel: 'native',
+        ownerOrganizationId: platformOrganizationId,
+        visibility: 'public',
+      }),
+    })
+    expect(createResource.status, await createResource.clone().text()).toBe(201)
     const redirectUri = 'http://localhost/public-callback'
     const createApp = await harness.request('/api/applications', {
       method: 'POST',
@@ -273,7 +288,7 @@ describe('OIDC authorization over real D1', () => {
         redirectUris: [redirectUri],
         ownerOrganizationId: platformOrganizationId,
         visibility: 'public',
-        consentRequired: false,
+        consentRequired: true,
       }),
     })
     expect(createApp.status, await createApp.clone().text()).toBe(201)
@@ -286,13 +301,30 @@ describe('OIDC authorization over real D1', () => {
       scope: 'openid profile email groups',
       code_challenge: await pkceChallenge(verifier),
       code_challenge_method: 'S256',
+      resource,
     })
     const authorized = await harness.request(`/api/auth/oauth2/authorize?${authorizeParams}`, {
       headers: { cookie: userCookie },
       redirect: 'manual',
     })
     expect(authorized.status, await authorized.clone().text()).toBe(302)
-    const code = new URL(authorized.headers.get('location') ?? '', redirectUri).searchParams.get('code')
+    const consent = new URL(authorized.headers.get('location') ?? '', baseURL)
+    expect(consent.pathname).toBe('/auth/consent')
+    expect(consent.searchParams.get('ba_ctx')).toBe('1')
+    expect(consent.searchParams.get('ba_ref')).toBe(`user:${publicUserId}`)
+    const approval = await harness.request('/api/auth/oauth2/consent', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie: userCookie, origin: baseURL },
+      body: JSON.stringify({
+        accept: true,
+        scope: 'openid profile email groups',
+        oauth_query: consent.search.slice(1),
+      }),
+    })
+    expect(approval.status, await approval.clone().text()).toBe(200)
+    const callback = new URL(((await approval.json()) as { url: string }).url, redirectUri)
+    expect(callback.pathname).toBe('/public-callback')
+    const code = callback.searchParams.get('code')
     const token = await harness.request('/api/auth/oauth2/token', {
       method: 'POST',
       headers: {
@@ -304,6 +336,7 @@ describe('OIDC authorization over real D1', () => {
         redirect_uri: redirectUri,
         code: code ?? '',
         code_verifier: verifier,
+        resource,
       }),
     })
     expect(token.status, await token.clone().text()).toBe(200)
@@ -1097,16 +1130,12 @@ describe('OIDC authorization over real D1', () => {
     authorizeParams.append('resource', resources[0].url)
     authorizeParams.append('resource', resources[1].url)
 
-    const contextRedirect = await harness.request(`/api/auth/oauth2/authorize?${authorizeParams}`, {
+    const authorized = await harness.request(`/api/auth/oauth2/authorize?${authorizeParams}`, {
       headers: { cookie },
       redirect: 'manual',
     })
-    const callback = await continueOAuthContext(
-      harness,
-      cookie,
-      contextRedirect,
-      `organization:${platformOrganizationId}`,
-    )
+    const callback = new URL(authorized.headers.get('location') ?? '', redirectUri)
+    expect(callback.pathname).toBe('/multi-resource-callback')
     const code = callback.searchParams.get('code')
     expect(code).toBeTruthy()
 

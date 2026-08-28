@@ -43,6 +43,7 @@ import { betterAuthTranslations } from './auth-i18n'
 import type { Database } from './db/client'
 import * as schema from './db/schema'
 import { hashPassword } from './domain/password'
+import { resolveOAuthAuthorizationContexts } from './usecases/applications'
 
 export {
   buildOAuthAccessTokenClaims,
@@ -519,7 +520,10 @@ export function createAuth(
                 error_description: 'The Application is unavailable to this user.',
               })
             }
-            return oauthResourceUrlsFromHeader(headers).length > 0
+            const resourceUrls = oauthResourceUrlsFromHeader(headers)
+            if (resourceUrls.length === 0) return false
+            const contexts = await resolveOAuthAuthorizationContexts(deps, application, resourceUrls, user)
+            return contexts.length === 1 ? contexts[0]!.id : true
           },
         },
         filterAccessTokenScopes: (input) => filterOAuthAccessTokenScopes(deps, input),

@@ -1,5 +1,5 @@
 diff --git a/dist/index.mjs b/dist/index.mjs
-index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..64dbb641392eebdc39046c137506ce935c7aaf12 100644
+index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..a5ac3f996c7a7dc477ae7f4e7387fbb983ee9389 100644
 --- a/dist/index.mjs
 +++ b/dist/index.mjs
 @@ -9,7 +9,7 @@ import { generateRandomString, makeSignature } from "better-auth/crypto";
@@ -238,11 +238,11 @@ index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..64dbb641392eebdc39046c137506ce93
 +		for (const resource of requestedResources) if (!granted.has(resource)) throw new APIError("BAD_REQUEST", {
 +			error_description: "requested resource is outside the original authorization grant",
 +			error: "invalid_target"
- 		});
++		});
 +		if (!requestedResources.length && grantedResources.length > 1) throw new APIError("BAD_REQUEST", {
 +			error_description: "resource is required for a multi-resource authorization grant",
 +			error: "invalid_target"
-+		});
+ 		});
 +		if (!requestedResources.length && grantedResources.length === 1) requestedResources.push(grantedResources[0]);
  	}
 -	return audience?.length === 1 ? audience.at(0) : audience;
@@ -615,17 +615,30 @@ index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..64dbb641392eebdc39046c137506ce93
  					])).default(["authorization_code"]).optional(),
  					response_types: z.array(z.enum(["code"])).default(["code"]).optional(),
  					type: z.enum([
-@@ -3962,14 +4203,24 @@ async function authorizeEndpoint(ctx, opts, settings) {
- 			scopes: requestedScopes
- 		})) {
- 			if (promptNone) return redirectWithPromptNoneError(ctx, opts, query, "interaction_required", "End-User interaction is required");
--			return redirectWithPromptCode(ctx, opts, "post_login");
-+			return redirectWithPromptCode(ctx, opts, "post_login", { sessionId: session.session.id });
+@@ -3954,22 +4195,34 @@ async function authorizeEndpoint(ctx, opts, settings) {
+ 			return redirectWithPromptCode(ctx, opts, "create", { page: typeof signupRedirect === "string" ? signupRedirect : void 0 });
  		}
  	}
++	let postLoginReferenceId;
+ 	if (!settings?.postLogin && opts.postLogin) {
+-		if (await opts.postLogin.shouldRedirect({
++		const postLoginResult = await opts.postLogin.shouldRedirect({
+ 			headers: ctx.request.headers,
+ 			user: session.user,
+ 			session: session.session,
+ 			scopes: requestedScopes
+-		})) {
++		});
++		if (postLoginResult === true) {
+ 			if (promptNone) return redirectWithPromptNoneError(ctx, opts, query, "interaction_required", "End-User interaction is required");
+-			return redirectWithPromptCode(ctx, opts, "post_login");
+-		}
++			return redirectWithPromptCode(ctx, opts, "post_login", { sessionId: session.session.id });
++		} else if (typeof postLoginResult === "string") postLoginReferenceId = postLoginResult;
+ 	}
 -	if (promptSet?.has("consent")) return redirectWithPromptCode(ctx, opts, "consent", { sessionId: session.session.id });
-+	const contextSelected = settings?.contextSelected === true || settings?.postLogin && query.ba_ctx === "1";
-+	const selectedReferenceId = contextSelected ? settings.referenceId ?? (typeof query.ba_ref === "string" ? query.ba_ref : void 0) : void 0;
++	const contextSelected = postLoginReferenceId !== void 0 || settings?.contextSelected === true || settings?.postLogin && query.ba_ctx === "1";
++	const selectedReferenceId = postLoginReferenceId ?? (contextSelected ? settings?.referenceId ?? (typeof query.ba_ref === "string" ? query.ba_ref : void 0) : void 0);
 +	if (contextSelected && !selectedReferenceId) throw new APIError$1("BAD_REQUEST", {
 +		error_description: "missing post-login consent reference id",
 +		error: "invalid_request"
@@ -643,7 +656,7 @@ index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..64dbb641392eebdc39046c137506ce93
  	});
  	if (client.skipConsent) return redirectWithAuthorizationCode(ctx, opts, {
  		query,
-@@ -3998,7 +4249,10 @@ async function authorizeEndpoint(ctx, opts, settings) {
+@@ -3998,7 +4251,10 @@ async function authorizeEndpoint(ctx, opts, settings) {
  	});
  	if (!consent || !requestedScopes.every((val) => consent.scopes.includes(val))) {
  		if (promptNone) return redirectWithPromptNoneError(ctx, opts, query, "consent_required", "End-User consent is required");
@@ -655,7 +668,7 @@ index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..64dbb641392eebdc39046c137506ce93
  	}
  	return redirectWithAuthorizationCode(ctx, opts, {
  		query,
-@@ -4046,7 +4300,24 @@ async function redirectWithAuthorizationCode(ctx, opts, verificationValue) {
+@@ -4046,7 +4302,24 @@ async function redirectWithAuthorizationCode(ctx, opts, verificationValue) {
  	return handleRedirect(ctx, redirectUriWithCode.toString());
  }
  async function redirectWithPromptCode(ctx, opts, type, options) {
@@ -681,7 +694,7 @@ index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..64dbb641392eebdc39046c137506ce93
  	let path = opts.loginPage;
  	if (type === "select_account") path = opts.selectAccount?.page ?? opts.loginPage;
  	else if (type === "post_login") {
-@@ -4064,7 +4335,13 @@ async function signParams(ctx, opts, flags) {
+@@ -4064,7 +4337,13 @@ async function signParams(ctx, opts, flags) {
  	params.set(signedQueryIssuedAtParam, String(issuedAt));
  	params.delete("sig");
  	params.delete(postLoginClearedParam);
@@ -695,7 +708,7 @@ index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..64dbb641392eebdc39046c137506ce93
  	setSignedOAuthQueryParameterNames(params);
  	const signature = await makeSignature(canonicalizeOAuthQueryParams(params).toString(), ctx.context.secret);
  	params.set("sig", signature);
-@@ -4083,12 +4360,14 @@ function authServerMetadata(ctx, opts, overrides) {
+@@ -4083,12 +4362,14 @@ function authServerMetadata(ctx, opts, overrides) {
  		registration_endpoint: overrides?.dynamic_client_registration_supported ? `${baseURL}/oauth2/register` : void 0,
  		introspection_endpoint: `${baseURL}/oauth2/introspect`,
  		revocation_endpoint: `${baseURL}/oauth2/revoke`,
@@ -712,7 +725,7 @@ index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..64dbb641392eebdc39046c137506ce93
  		token_endpoint_auth_methods_supported: [
  			...overrides?.public_client_supported ? ["none"] : [],
 diff --git a/dist/oauth-BFBataE_.d.mts b/dist/oauth-BFBataE_.d.mts
-index 21db9f619b24c6ddf16a2b7e805bab38426672d1..cf1b098379e389f0c01ea98cd08642dc4b7f8158 100644
+index 21db9f619b24c6ddf16a2b7e805bab38426672d1..2f92f34437968fb82ca9d5ad4622ba1b6e72036e 100644
 --- a/dist/oauth-BFBataE_.d.mts
 +++ b/dist/oauth-BFBataE_.d.mts
 @@ -622,6 +622,7 @@ interface OAuthOptions<Scopes extends readonly Scope[] = InternallySupportedScop
@@ -723,7 +736,23 @@ index 21db9f619b24c6ddf16a2b7e805bab38426672d1..cf1b098379e389f0c01ea98cd08642dc
      }) => Awaitable<string | undefined>;
      /**
       * After login and before consent, request the user to
-@@ -744,6 +745,8 @@ interface OAuthOptions<Scopes extends readonly Scope[] = InternallySupportedScop
+@@ -634,13 +635,14 @@ interface OAuthOptions<Scopes extends readonly Scope[] = InternallySupportedScop
+      * @returns
+      * - `true`: account is not selected and needs selection
+      * - `false`: intended user or account selected
++     * - `string`: the sole consent reference ID selected without interaction
+      */
+     shouldRedirect: (context: {
+       headers: Headers;
+       user: User & Record<string, unknown>;
+       session: Session & Record<string, unknown>;
+       scopes: Scopes;
+-    }) => Awaitable<boolean>;
++    }) => Awaitable<boolean | string>;
+   };
+   /**
+    * Format your refresh tokens the returned to oauth clients.
+@@ -744,6 +746,8 @@ interface OAuthOptions<Scopes extends readonly Scope[] = InternallySupportedScop
      user: User & Record<string, unknown>;
      /** Scopes granted for this token */
      scopes: Scopes;
@@ -732,7 +761,7 @@ index 21db9f619b24c6ddf16a2b7e805bab38426672d1..cf1b098379e389f0c01ea98cd08642dc
      /** oAuthClient metadata */
      metadata?: Record<string, any>;
    }) => Awaitable<Record<string, any>>;
-@@ -772,6 +775,25 @@ interface OAuthOptions<Scopes extends readonly Scope[] = InternallySupportedScop
+@@ -772,6 +776,25 @@ interface OAuthOptions<Scopes extends readonly Scope[] = InternallySupportedScop
      /** oAuthClient metadata */
      metadata?: Record<string, any>;
    }) => Awaitable<Record<string, any>>;
@@ -758,7 +787,7 @@ index 21db9f619b24c6ddf16a2b7e805bab38426672d1..cf1b098379e389f0c01ea98cd08642dc
    /**
     * Custom fields to include in the token response body.
     *
-@@ -1325,6 +1347,8 @@ interface OAuthRefreshToken<Scopes extends readonly Scope[] = InternallySupporte
+@@ -1325,6 +1348,8 @@ interface OAuthRefreshToken<Scopes extends readonly Scope[] = InternallySupporte
     * Persisted so refreshed ID tokens can include a correct `auth_time` claim.
     */
    authTime?: Date;
@@ -767,7 +796,7 @@ index 21db9f619b24c6ddf16a2b7e805bab38426672d1..cf1b098379e389f0c01ea98cd08642dc
    /**
     * Scopes granted for this refresh token.
     *
-@@ -1349,7 +1373,7 @@ type OAuthConsent<Scopes extends readonly Scope[] = InternallySupportedScopes[]>
+@@ -1349,7 +1374,7 @@ type OAuthConsent<Scopes extends readonly Scope[] = InternallySupportedScopes[]>
  /**
   * Supported grant types of the token endpoint
   */
@@ -776,7 +805,7 @@ index 21db9f619b24c6ddf16a2b7e805bab38426672d1..cf1b098379e389f0c01ea98cd08642dc
  type AuthMethod = "client_secret_basic" | "client_secret_post";
  type TokenEndpointAuthMethod = AuthMethod | "none";
  type BearerMethodsSupported = "header" | "body";
-@@ -1379,6 +1403,12 @@ interface AuthServerMetadata {
+@@ -1379,6 +1404,12 @@ interface AuthServerMetadata {
     * @default `/oauth2/token`
     */
    token_endpoint: string;
@@ -790,7 +819,7 @@ index 21db9f619b24c6ddf16a2b7e805bab38426672d1..cf1b098379e389f0c01ea98cd08642dc
     * The URL of the jwks_uri endpoint.
     *
 diff --git a/dist/oauth-dQVivAXR.d.mts b/dist/oauth-dQVivAXR.d.mts
-index fc11b1760aff1376a20c518a867bad1b73c4225c..de02aba843c047972da589748d68919b5b387205 100644
+index fc11b1760aff1376a20c518a867bad1b73c4225c..b54df815545e3ec7d78ac1912e8f19b0f46abb7c 100644
 --- a/dist/oauth-dQVivAXR.d.mts
 +++ b/dist/oauth-dQVivAXR.d.mts
 @@ -239,6 +239,7 @@ declare const oauthProvider: <O extends OAuthOptions<Scope[]>>(options: O) => {

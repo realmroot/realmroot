@@ -95,9 +95,17 @@ describe('auth.test 2', () => {
   it('[spec: hosted-auth/oauth-authorization-context-selection] redirects post-login to Context selection and revalidates membership', async () => {
     const findOrganization = vi.fn().mockResolvedValue({ id: 'org-1', disabled: false })
     const findMemberByOrganizationUser = vi.fn().mockResolvedValue({ id: 'member-1' })
+    const listUserMemberships = vi.fn().mockResolvedValue([{ organizationId: 'org-1' }])
     vi.spyOn(authorizationRepositories, 'createDrizzleAuthorizationRepository').mockReturnValue({
       findOrganization,
       findMemberByOrganizationUser,
+      findResource: vi.fn().mockResolvedValue({
+        id: 'resource-1',
+        enabled: true,
+        visibility: 'public',
+      }),
+      findResourceByResourceUrl: vi.fn().mockResolvedValue({ id: 'resource-1' }),
+      listUserMemberships,
     } as never)
     vi.spyOn(applicationRepositories, 'createDrizzleApplicationRepository').mockReturnValue({
       findByClientId: vi.fn().mockResolvedValue({ visibility: 'public' }),
@@ -124,6 +132,16 @@ describe('auth.test 2', () => {
         user: { id: 'user-1' },
       }),
     ).resolves.toBe(true)
+    listUserMemberships.mockResolvedValueOnce([])
+    await expect(
+      postLogin.shouldRedirect({
+        headers: new Headers({
+          'x-realmroot-oauth-client-id': 'client-1',
+          'x-realmroot-oauth-resources': JSON.stringify(['https://api.example.com/']),
+        }),
+        user: { id: 'user-1' },
+      }),
+    ).resolves.toBe('user:user-1')
     await expect(
       postLogin.consentReferenceId({
         session: { activeOrganizationId: 'org-1' },
