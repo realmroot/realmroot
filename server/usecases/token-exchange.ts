@@ -215,9 +215,10 @@ async function exchangeDelegatedUserToken(
   )
   if (!policy) throw oauthError('invalid_target', 'No token exchange policy allows the requested source and target.')
   const subjectScopes = new Set(parseSpaceSeparatedClaim(claims.scope))
+  const declaredSourceScopes = new Set(sourceResource.scopeRegistry?.scopes.map((scope) => scope.value) ?? [])
   const mappedTargetScopes = new Set(
     policy.scopeMappings
-      .filter((mapping) => subjectScopes.has(mapping.sourceScope))
+      .filter((mapping) => subjectScopes.has(mapping.sourceScope) && declaredSourceScopes.has(mapping.sourceScope))
       .map((mapping) => mapping.targetScope),
   )
   const applicationScopes = await resolveApplicationTokenScopesForResource(
@@ -226,9 +227,13 @@ async function exchangeDelegatedUserToken(
     targetResource,
     input.scope,
   )
-  const organizationId = readString(claims[realmrootOrganizationClaim])
+  const organizationClaim = claims[realmrootOrganizationClaim]
+  const organizationId = organizationClaim === undefined ? null : readString(organizationClaim)
+  if (organizationClaim !== undefined && organizationId === null) {
+    throw oauthError('invalid_grant', 'Subject access token Organization claim is invalid.')
+  }
   const userScopes = new Set(
-    await userEffectiveResourceScopes(deps, subject, targetResource, new Date(), organizationId ?? undefined),
+    await userEffectiveResourceScopes(deps, subject, targetResource, new Date(), organizationId),
   )
   const scopes = applicationScopes.filter((scope) => mappedTargetScopes.has(scope) && userScopes.has(scope))
   if (scopes.length === 0 || scopes.includes('offline_access')) {

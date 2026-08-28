@@ -314,9 +314,10 @@ Feature: Agent identity and delegated API authorization
       And the User is entitled to the mapped scopes on that downstream Resource Server
       When the Application exchanges a valid Realmroot access token whose audience is the configured source Resource Server
       Then Realmroot issues a short-lived access token for the downstream Resource Server
+      And its scopes are the intersection of the request, current source mapping, Application Permissions, and User Context Permissions
       And the downstream token preserves the User subject and identifies the authenticated Application as client_id
       And the downstream token contains no act claim and no refresh token is issued
-      But an Agent subject token, an unmapped source or target, a missing Application or User entitlement, a wider scope, or an unavailable target is rejected
+      But an Agent subject token, an unmapped source or target, an empty scope intersection, or an unavailable target is rejected
 
     @entrypoint:product-ui @journey:connector-backed-connection-revocation
     Scenario: Revoking a connector-backed account connection revokes provider authority first

@@ -135,7 +135,9 @@ returned `clientSecret` or file contents.
 A confidential Web Application that exchanges an inbound User token must also
 declare each allowed source-to-target scope mapping. The mapped target scopes
 must appear in the Application's `resourceScopes`, and Realmroot still requires
-both the Application and the User to hold those target permissions:
+both the Application and the User Context to hold those target permissions.
+The issued scope set is narrowed to the intersection of the request, mappings,
+current Resource Server registries, and both principals' effective Permissions:
 
 ```json
 {

@@ -29,6 +29,7 @@ import {
   unverifiedSubjectTokenAudience,
   updateFederatedCredential,
 } from '@server/usecases/token-exchange'
+import { realmrootOrganizationClaim } from '@shared/oauth-token-profile'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const applicationId = 'app_1'
@@ -84,15 +85,19 @@ afterEach(() => {
 describe('token exchange service', () => {
   it('delegates a Realmroot User access token only from a configured source to an entitled target [spec: agent-identity/user-resource-token-delegation]', async () => {
     const { deps, clientSecret } = await tokenExchangeFixture({ scopes: ['agents:write'] })
-    const sourceResource = eligibleAudienceResource(['ama:agents:create'])
+    const sourceResource = eligibleAudienceResource(['ama:agents:create', 'ama:agents:read'])
     const targetResource = {
-      ...eligibleAudienceResource(['agents:write']),
+      ...eligibleAudienceResource(['agents:read', 'agents:write']),
       id: 'res_realmroot',
       resourceUrl: 'https://auth.example.com/api',
       visibility: 'public' as const,
       scopeRegistry: {
-        ...eligibleAudienceResource(['agents:write']).scopeRegistry,
-        scopes: [{ value: 'agents:write', description: null, grantMode: 'assigned' as const }],
+        ...eligibleAudienceResource(['agents:read', 'agents:write']).scopeRegistry,
+        scopes: ['agents:read', 'agents:write'].map((value) => ({
+          value,
+          description: null,
+          grantMode: 'assigned' as const,
+        })),
       },
     }
     const findApplication = deps.applications.findByClientId
@@ -105,10 +110,13 @@ describe('token exchange service', () => {
               {
                 sourceResourceServerId: sourceResource.id,
                 targetResourceServerId: targetResource.id,
-                scopeMappings: [{ sourceScope: 'ama:agents:create', targetScope: 'agents:write' }],
+                scopeMappings: [
+                  { sourceScope: 'ama:agents:create', targetScope: 'agents:write' },
+                  { sourceScope: 'ama:agents:read', targetScope: 'agents:read' },
+                ],
               },
             ],
-            resourceScopes: [{ resourceServerId: targetResource.id, scopes: ['agents:write'] }],
+            resourceScopes: [{ resourceServerId: targetResource.id, scopes: ['agents:read', 'agents:write'] }],
           }
         : null
     }
@@ -118,15 +126,20 @@ describe('token exchange service', () => {
         : resourceUrl === targetResource.resourceUrl
           ? targetResource
           : null) as never
-    deps.authorization.listActiveApplicationScopeEntitlements = async () => [{ scope: 'agents:write' }] as never
-    deps.authorization.listActiveUserScopeEntitlements = async () => [{ scope: 'agents:write' }] as never
+    deps.authorization.listActiveApplicationScopeEntitlements = async () =>
+      [{ scope: 'agents:read' }, { scope: 'agents:write' }] as never
+    deps.authorization.listActiveUserScopeEntitlements = async () =>
+      [
+        { scope: 'agents:read', organizationId: null },
+        { scope: 'agents:write', organizationId: null },
+      ] as never
 
     const input = {
       grantType: tokenExchangeGrantType,
       subjectToken: 'verified-by-http-adapter',
       subjectTokenType: accessTokenType,
       audience: targetResource.resourceUrl,
-      scope: 'agents:write',
+      scope: 'agents:read agents:write',
       verifiedSubjectClaims: {
         iss: realmrootIssuer,
         sub: 'user_1',
@@ -147,7 +160,31 @@ describe('token exchange service', () => {
     })
     expect(decodeTestAccessToken(response.access_token)).not.toHaveProperty('act')
 
-    deps.authorization.listActiveUserScopeEntitlements = async () => []
+    const sourceWithoutMappedScope = {
+      ...sourceResource,
+      scopeRegistry: {
+        ...sourceResource.scopeRegistry!,
+        scopes: sourceResource.scopeRegistry!.scopes.filter((scope) => scope.value !== 'ama:agents:create'),
+      },
+    }
+    deps.authorization.findResourceByResourceUrl = async (resourceUrl) =>
+      (resourceUrl === sourceResource.resourceUrl
+        ? sourceWithoutMappedScope
+        : resourceUrl === targetResource.resourceUrl
+          ? targetResource
+          : null) as never
+    await expect(exchangeToken(deps, input, { clientId: applicationClientId, clientSecret })).rejects.toMatchObject({
+      error: 'invalid_scope',
+    })
+
+    deps.authorization.findResourceByResourceUrl = async (resourceUrl) =>
+      (resourceUrl === sourceResource.resourceUrl
+        ? sourceResource
+        : resourceUrl === targetResource.resourceUrl
+          ? targetResource
+          : null) as never
+    deps.authorization.listActiveUserScopeEntitlements = async () =>
+      [{ scope: 'agents:write', organizationId: 'org-other' }] as never
     await expect(exchangeToken(deps, input, { clientId: applicationClientId, clientSecret })).rejects.toMatchObject({
       error: 'invalid_scope',
     })
@@ -248,6 +285,7 @@ describe('token exchange service', () => {
       { ...validClaims, iss: 'https://other.example/api/auth' },
       { ...validClaims, aud: [sourceResource.resourceUrl, 'https://other.example/api'] },
       { ...validClaims, exp: Math.floor(Date.now() / 1000) - 1 },
+      { ...validClaims, [realmrootOrganizationClaim]: ['org_1'] },
     ]) {
       await expect(
         exchangeToken(deps, { ...input, verifiedSubjectClaims }, { clientId: applicationClientId, clientSecret }),

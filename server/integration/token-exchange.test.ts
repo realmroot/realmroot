@@ -164,7 +164,12 @@ describe('OAuth token exchange over real D1', () => {
     const userPermission = await harness.request(`/api/users/${delegatedUser!.id}/permissions`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', cookie },
-      body: JSON.stringify({ resourceServerId: target.id, scope: 'resource:read', mode: 'persistent' }),
+      body: JSON.stringify({
+        organizationId: platformOrganizationId,
+        resourceServerId: target.id,
+        scope: 'resource:read',
+        mode: 'persistent',
+      }),
     })
     expect(userPermission.status, await userPermission.clone().text()).toBe(201)
     const now = Math.floor(Date.now() / 1000)

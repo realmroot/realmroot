@@ -6,7 +6,7 @@
       "type": "archive",
       "description": "Integrate a browser, mobile, desktop, CLI, or server-side application with Realmroot as its OAuth 2.1 and OpenID Connect provider. Use when building or changing product sign-in, callback, session, refresh, logout, device authorization, PKCE, client-secret handling, or end-to-end authentication against a Realmroot deployment.",
       "url": "/.well-known/agent-skills/integrate-realmroot-application.tar.gz",
-      "digest": "sha256:b56ee925a16913b4aaa791a9e7e88003b3f4bad4d7741b47de3d10e2bdf67032"
+      "digest": "sha256:863204051ef7c518398e67a39b4ed118830977f5f1918712e89758e28163e349"
     },
     {
       "name": "integrate-realmroot-resource-server",
