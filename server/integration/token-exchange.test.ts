@@ -111,10 +111,16 @@ describe('OAuth token exchange over real D1', () => {
       body: JSON.stringify({
         name: 'Delegating Resource Server',
         slug: 'delegating-resource-server',
-        clientType: 'machine',
-        redirectUris: [],
+        clientType: 'confidential_web',
+        redirectUris: ['https://ama.example.com/auth/callback'],
         ownerOrganizationId: platformOrganizationId,
-        tokenExchangeSourceResourceServerIds: [source.id],
+        tokenExchangePolicies: [
+          {
+            sourceResourceServerId: source.id,
+            targetResourceServerId: target.id,
+            scopeMappings: [{ sourceScope: 'resource:read', targetScope: 'resource:read' }],
+          },
+        ],
         resourceScopes: [{ resourceServerId: target.id, scopes: ['resource:read'] }],
       }),
     })
@@ -124,24 +130,52 @@ describe('OAuth token exchange over real D1', () => {
       clientId: string
       clientSecret: string
       resourceScopes: Array<{ resourceServerId: string; scopes: string[] }>
-      tokenExchangeSourceResourceServerIds: string[]
+      tokenExchangePolicies: Array<{
+        sourceResourceServerId: string
+        targetResourceServerId: string
+        scopeMappings: Array<{ sourceScope: string; targetScope: string }>
+      }>
+      allowedGrantTypes: string[]
     }
+    expect(application.allowedGrantTypes).toEqual([
+      'authorization_code',
+      'refresh_token',
+      'urn:ietf:params:oauth:grant-type:token-exchange',
+    ])
     expect(application.resourceScopes).toEqual([{ resourceServerId: target.id, scopes: ['resource:read'] }])
-    expect(application.tokenExchangeSourceResourceServerIds).toEqual([source.id])
+    expect(application.tokenExchangePolicies).toEqual([
+      {
+        sourceResourceServerId: source.id,
+        targetResourceServerId: target.id,
+        scopeMappings: [{ sourceScope: 'resource:read', targetScope: 'resource:read' }],
+      },
+    ])
     const permission = await harness.request(`/api/applications/${application.id}/permissions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({
+        organizationId: platformOrganizationId,
+        resourceServerId: target.id,
+        scope: 'resource:read',
+        mode: 'persistent',
+      }),
+    })
+    expect(permission.status, await permission.clone().text()).toBe(201)
+    const userPermission = await harness.request(`/api/users/${delegatedUser!.id}/permissions`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({ resourceServerId: target.id, scope: 'resource:read', mode: 'persistent' }),
     })
-    expect(permission.status, await permission.clone().text()).toBe(201)
+    expect(userPermission.status, await userPermission.clone().text()).toBe(201)
     const now = Math.floor(Date.now() / 1000)
     const subjectToken = await harness.agentTokenSigner.sign(
       {
         iss: `${baseURL}/api/auth`,
         sub: delegatedUser!.id,
         aud: sourceAudience,
-        client_id: 'browser-client',
+        client_id: application.clientId,
         scope: 'resource:read',
+        [realmrootOrganizationClaim]: platformOrganizationId,
         iat: now,
         exp: now + 600,
       },

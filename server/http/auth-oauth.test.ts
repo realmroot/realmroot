@@ -416,6 +416,7 @@ function deviceApplication(overrides: Partial<ApplicationAggregate> = {}): Appli
     allowedGrantTypes: ['authorization_code', deviceCodeGrantType],
     oidcScopes: ['openid', 'profile', 'email'],
     resourceScopes: [],
+    tokenExchangePolicies: [],
     requirePkce: true,
     tokenEndpointAuthMethod: 'none',
     oidcClaims: {

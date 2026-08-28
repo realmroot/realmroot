@@ -100,6 +100,7 @@ describe('application API pagination contracts', () => {
       allowedGrantTypes: ['authorization_code'],
       oidcScopes: ['openid', 'profile'],
       resourceScopes: [],
+      tokenExchangePolicies: [],
       requirePkce: false,
       tokenEndpointAuthMethod: 'client_secret_basic',
       secretMetadata: [],
@@ -151,6 +152,36 @@ describe('application API pagination contracts', () => {
         ...base,
         clientType: 'machine',
         redirectUris: ['https://app.example.com/callback'],
+      }).success,
+    ).toBe(false)
+  })
+
+  it('validates explicit source-to-target token exchange scope mappings', () => {
+    const base = {
+      name: 'Delegating web app',
+      ownerOrganizationId: 'org-1',
+      clientType: 'confidential_web' as const,
+      redirectUris: ['https://app.example.com/callback'],
+    }
+    const policy = {
+      sourceResourceServerId: 'source-resource',
+      targetResourceServerId: 'target-resource',
+      scopeMappings: [{ sourceScope: 'agents:create', targetScope: 'agents:write' }],
+    }
+
+    expect(createApplicationRequestSchema.parse({ ...base, tokenExchangePolicies: [policy] })).toMatchObject({
+      tokenExchangePolicies: [policy],
+    })
+    expect(
+      createApplicationRequestSchema.safeParse({
+        ...base,
+        tokenExchangePolicies: [{ ...policy, scopeMappings: [] }],
+      }).success,
+    ).toBe(false)
+    expect(
+      createApplicationRequestSchema.safeParse({
+        ...base,
+        tokenExchangePolicies: [{ ...policy, unexpected: true }],
       }).success,
     ).toBe(false)
   })

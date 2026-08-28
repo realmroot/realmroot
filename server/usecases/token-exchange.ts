@@ -9,8 +9,12 @@ import type {
   ResolvedFederatedCredential,
   UpdateFederatedCredentialInput,
 } from '@server/usecases/ports'
-import { applicationEffectiveResourceScopes } from '@server/usecases/resource-scope-entitlements'
+import {
+  applicationEffectiveResourceScopes,
+  userEffectiveResourceScopes,
+} from '@server/usecases/resource-scope-entitlements'
 import { activeResourceVisibleToOrganization } from '@server/usecases/resource-visibility'
+import type { ApiResourceResponse } from '@shared/api/authorization'
 import { realmrootOrganizationClaim } from '@shared/oauth-token-profile'
 
 export const tokenExchangeGrantType = 'urn:ietf:params:oauth:grant-type:token-exchange'
@@ -195,28 +199,44 @@ async function exchangeDelegatedUserToken(
     throw oauthError('invalid_grant', 'Agent access tokens cannot be delegated by an Application.')
   await requireActiveDelegatedUser(deps, subject)
 
-  const sourceResource = await deps.authorization.findResourceByResourceUrl(sourceAudience)
-  if (
-    !sourceResource ||
-    !activeResourceVisibleToOrganization(sourceResource, application.ownerOrganizationId) ||
-    !(application.tokenExchangeSourceResourceServerIds ?? []).includes(sourceResource.id)
-  ) {
-    throw oauthError('invalid_grant', 'Subject access token audience is not configured for this Application.')
+  const [sourceResource, targetResource] = await Promise.all([
+    deps.authorization.findResourceByResourceUrl(sourceAudience),
+    deps.authorization.findResourceByResourceUrl(input.audience),
+  ])
+  if (!sourceResource || !activeResourceVisibleToOrganization(sourceResource, application.ownerOrganizationId)) {
+    throw oauthError('invalid_grant', 'Subject access token audience is not eligible for this Application.')
   }
-
+  if (!targetResource || !activeResourceVisibleToOrganization(targetResource, application.ownerOrganizationId)) {
+    throw oauthError('invalid_target', 'Requested audience is not visible to the Application tenant.')
+  }
+  const policy = application.tokenExchangePolicies.find(
+    (candidate) =>
+      candidate.sourceResourceServerId === sourceResource.id && candidate.targetResourceServerId === targetResource.id,
+  )
+  if (!policy) throw oauthError('invalid_target', 'No token exchange policy allows the requested source and target.')
   const subjectScopes = new Set(parseSpaceSeparatedClaim(claims.scope))
-  const scopes = await resolveApplicationTokenScopes(deps, application, input.audience, input.scope)
+  const mappedTargetScopes = new Set(
+    policy.scopeMappings
+      .filter((mapping) => subjectScopes.has(mapping.sourceScope))
+      .map((mapping) => mapping.targetScope),
+  )
+  const applicationScopes = await resolveApplicationTokenScopesForResource(
+    deps,
+    application,
+    targetResource,
+    input.scope,
+  )
+  const organizationId = readString(claims[realmrootOrganizationClaim])
+  const userScopes = new Set(
+    await userEffectiveResourceScopes(deps, subject, targetResource, new Date(), organizationId ?? undefined),
+  )
+  const scopes = applicationScopes.filter((scope) => mappedTargetScopes.has(scope) && userScopes.has(scope))
   if (scopes.length === 0 || scopes.includes('offline_access')) {
     throw oauthError('invalid_scope', 'Requested delegated scope is unavailable for the target Resource Server.')
   }
-  if (scopes.some((scope) => !subjectScopes.has(scope))) {
-    throw oauthError('invalid_scope', 'Requested scope exceeds the subject token delegation authority.')
-  }
-  await requireEligibleAudience(deps, input.audience, application.ownerOrganizationId)
 
   const now = new Date()
   const expiresAt = new Date(Math.min(now.getTime() + delegatedUserExpiresInSeconds * 1000, expiresAtClaim * 1000))
-  const organizationId = readString(claims[realmrootOrganizationClaim])
   const accessToken = await issueJwtAccessToken(signer, {
     clientId,
     subject,
@@ -515,6 +535,15 @@ async function resolveApplicationTokenScopes(
   if (!resource || !activeResourceVisibleToOrganization(resource, application.ownerOrganizationId)) {
     throw oauthError('invalid_target', 'Requested audience is not visible to the Application tenant.')
   }
+  return resolveApplicationTokenScopesForResource(deps, application, resource, requestedScope)
+}
+
+async function resolveApplicationTokenScopesForResource(
+  deps: Deps,
+  application: ApplicationAggregate,
+  resource: ApiResourceResponse,
+  requestedScope: string | undefined,
+) {
   const configuredScopes =
     application.resourceScopes.find((configuration) => configuration.resourceServerId === resource.id)?.scopes ?? []
   const allowedScopes = [...application.oidcScopes, ...configuredScopes]

@@ -41,6 +41,23 @@ export const applicationResourceScopesSchema = z
   )
   .max(100)
 
+export const tokenExchangeScopeMappingSchema = z
+  .object({
+    sourceScope: nonEmptyString.max(200),
+    targetScope: nonEmptyString.max(200),
+  })
+  .strict()
+
+export const tokenExchangePolicySchema = z
+  .object({
+    sourceResourceServerId: nonEmptyString.max(200),
+    targetResourceServerId: nonEmptyString.max(200),
+    scopeMappings: z.array(tokenExchangeScopeMappingSchema).min(1).max(1_000),
+  })
+  .strict()
+
+export const tokenExchangePoliciesSchema = z.array(tokenExchangePolicySchema).max(100)
+
 // Re-exported from the canonical pagination module so existing
 // `@shared/api/applications` import sites keep working.
 export { paginationMetadataSchema, paginationQuerySchema }
@@ -119,7 +136,7 @@ export const applicationResponseSchema = z
     allowedGrantTypes: z.array(applicationGrantTypeSchema),
     oidcScopes: z.array(applicationScopeSchema),
     resourceScopes: applicationResourceScopesSchema,
-    tokenExchangeSourceResourceServerIds: z.array(nonEmptyString.max(200)).max(100).optional(),
+    tokenExchangePolicies: tokenExchangePoliciesSchema,
     /** @deprecated Realmroot uses one platform token profile. This value is fixed and input is ignored. */
     oidcClaims: applicationOidcClaimsSchema.optional(),
     requirePkce: z.boolean(),
@@ -153,7 +170,7 @@ export const createApplicationRequestSchema = z
     postLogoutRedirectUris: z.array(nonEmptyString).optional(),
     corsOrigins: z.array(nonEmptyString).optional(),
     resourceScopes: applicationResourceScopesSchema.optional(),
-    tokenExchangeSourceResourceServerIds: z.array(nonEmptyString.max(200)).max(100).optional(),
+    tokenExchangePolicies: tokenExchangePoliciesSchema.optional(),
     consentRequired: z.boolean().optional(),
     ownerOrganizationId: nonEmptyString,
     deviceLoginEnabled: z.boolean().optional(),
@@ -202,7 +219,7 @@ export const updateApplicationRequestSchema = z
     corsOrigins: z.array(nonEmptyString).optional(),
     customData: customDataSchema.optional(),
     resourceScopes: applicationResourceScopesSchema.optional(),
-    tokenExchangeSourceResourceServerIds: z.array(nonEmptyString.max(200)).max(100).optional(),
+    tokenExchangePolicies: tokenExchangePoliciesSchema.optional(),
     consentRequired: z.boolean().optional(),
     disabled: z.boolean().optional(),
     disabledReason: z.string().trim().max(500).nullable().optional(),

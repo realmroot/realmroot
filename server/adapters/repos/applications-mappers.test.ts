@@ -1,4 +1,4 @@
-import { toOAuthClientInsert } from '@server/adapters/repos/applications-mappers'
+import { toOAuthClientInsert, writeApplicationMetadata } from '@server/adapters/repos/applications-mappers'
 import type { ApplicationAggregate } from '@server/usecases/ports'
 import { defaultApplicationOidcClaims } from '@shared/api/applications'
 import { describe, expect, it } from 'vitest'
@@ -25,6 +25,7 @@ const application = {
   allowedGrantTypes: ['authorization_code'],
   oidcScopes: ['openid'],
   resourceScopes: [],
+  tokenExchangePolicies: [],
   requirePkce: true,
   tokenEndpointAuthMethod: 'none',
   oidcClaims: defaultApplicationOidcClaims,
@@ -38,5 +39,17 @@ describe('Application repository mappers', () => {
     expect(
       toOAuthClientInsert({ ...application, consentRequired: false }, null, now, 'oauth-client-2').skipConsent,
     ).toBe(true)
+  })
+
+  it('stores and removes token exchange policies as Application metadata', () => {
+    const policy = {
+      sourceResourceServerId: 'source-resource',
+      targetResourceServerId: 'target-resource',
+      scopeMappings: [{ sourceScope: 'agents:create', targetScope: 'agents:write' }],
+    }
+    const metadata = writeApplicationMetadata(null, { tokenExchangePolicies: [policy] })
+
+    expect(metadata).toEqual({ tokenExchangePolicies: [policy] })
+    expect(writeApplicationMetadata(metadata, { tokenExchangePolicies: [] })).toBeNull()
   })
 })

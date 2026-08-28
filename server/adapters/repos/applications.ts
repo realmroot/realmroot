@@ -29,7 +29,7 @@ const _corsOriginsMetadataKey = 'corsOrigins'
 const _customDataMetadataKey = 'customData'
 const _iconUrlMetadataKey = 'iconUrl'
 const _oidcClaimsMetadataKey = 'oidcClaims'
-const _tokenExchangeSourceResourceServerIdsMetadataKey = 'tokenExchangeSourceResourceServerIds'
+const _tokenExchangePoliciesMetadataKey = 'tokenExchangePolicies'
 
 export function createDrizzleApplicationRepository(db: Database, ids: IdentifierGenerator): ApplicationRepository {
   return {
@@ -126,14 +126,14 @@ export function createDrizzleApplicationRepository(db: Database, ids: Identifier
         patch.corsOrigins !== undefined ||
         patch.customData !== undefined ||
         patch.oidcClaims !== undefined ||
-        patch.tokenExchangeSourceResourceServerIds !== undefined
+        patch.tokenExchangePolicies !== undefined
           ? {
               metadata: writeApplicationMetadata(current.metadata, {
                 iconUrl: patch.iconUrl,
                 corsOrigins: patch.corsOrigins,
                 customData: patch.customData,
                 oidcClaims: patch.oidcClaims,
-                tokenExchangeSourceResourceServerIds: patch.tokenExchangeSourceResourceServerIds,
+                tokenExchangePolicies: patch.tokenExchangePolicies,
               }),
             }
           : {}),

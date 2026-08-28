@@ -1215,7 +1215,7 @@ export interface ApplicationAggregate {
   allowedGrantTypes: ApplicationResponse['allowedGrantTypes']
   oidcScopes: ApplicationResponse['oidcScopes']
   resourceScopes: ApplicationResponse['resourceScopes']
-  tokenExchangeSourceResourceServerIds?: string[]
+  tokenExchangePolicies: ApplicationResponse['tokenExchangePolicies']
   requirePkce: boolean
   tokenEndpointAuthMethod: ApplicationResponse['tokenEndpointAuthMethod']
   oidcClaims: ApplicationOidcClaims

@@ -3,24 +3,24 @@
     "method": "GET",
     "path": "/applications",
     "operationId": "listApplications",
-    "semanticHash": "0630365766e0385d0e5b9bcc3757deca7e8db1a2385d032e6986bacefb60745f"
+    "semanticHash": "f91b62e5b7b5a2585bb4d2dc913d1c5f70c9d9243c09334291edd24a937c62c7"
   },
   {
     "method": "POST",
     "path": "/applications",
     "operationId": "createApplication",
-    "semanticHash": "03304ae79433998475ef3563ee359ca1d603eecdd499f9226cded019d0f5e04e"
+    "semanticHash": "83bca19ad7687bcdbcbd1a386733fdf8aa2f56dada54f18c046e14b5db30169d"
   },
   {
     "method": "GET",
     "path": "/applications/{applicationId}",
     "operationId": "getApplication",
-    "semanticHash": "9985dd7d1a663c463f8f5549f4c5525157ad175ad9639d258f8758bbd2b3acd5"
+    "semanticHash": "cc7b4caf88591e43b02e3cd6926959245d214ab23baf78736c01f2bafaf49f7a"
   },
   {
     "method": "PATCH",
     "path": "/applications/{applicationId}",
     "operationId": "updateApplication",
-    "semanticHash": "a22f3d4c40ce779bd626d05e60565bd0c93cfdbc52857a9fb1f9985f337ceeda"
+    "semanticHash": "6b66918e5283e7940672a7aaca711669b59cc2b2042cc12be73cb47ca81e1ade"
   }
 ]

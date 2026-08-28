@@ -29,7 +29,7 @@ then choose the client by runtime:
 | --- | --- | --- | --- |
 | `public_spa` | Browser apps | No | `authorization_code`, `refresh_token` |
 | `public_native` | Mobile, desktop, CLI, runners | No | `authorization_code`, `refresh_token`; optional device code |
-| `confidential_web` | Server-side user sign-in | Yes | `authorization_code`, `refresh_token` |
+| `confidential_web` | Server-side user sign-in and delegated downstream calls | Yes | `authorization_code`, `refresh_token`; token exchange when a source Resource Server policy is configured |
 | `machine` | Backend service or Worker without a user | Yes | `client_credentials`, token exchange |
 
 The type derives grants, OIDC scopes, PKCE, client authentication, and whether a
@@ -131,6 +131,28 @@ test -s "$CLIENT_OUTPUT_FILE"
 The `noclobber` guard requires a new path and the `umask` creates it
 owner-readable only. Report the protected file path and its lifecycle, not the
 returned `clientSecret` or file contents.
+
+A confidential Web Application that exchanges an inbound User token must also
+declare each allowed source-to-target scope mapping. The mapped target scopes
+must appear in the Application's `resourceScopes`, and Realmroot still requires
+both the Application and the User to hold those target permissions:
+
+```json
+{
+  "resourceScopes": [
+    { "resourceServerId": "realmroot-resource", "scopes": ["agents:write"] }
+  ],
+  "tokenExchangePolicies": [
+    {
+      "sourceResourceServerId": "ama-resource",
+      "targetResourceServerId": "realmroot-resource",
+      "scopeMappings": [
+        { "sourceScope": "agents:create", "targetScope": "agents:write" }
+      ]
+    }
+  ]
+}
+```
 
 ## Create A Machine Client
 

@@ -19,6 +19,7 @@ export function normalizeClientSettings(
   clientType: ApplicationResponse['clientType'],
   redirectUris: string[],
   deviceLoginEnabled = false,
+  tokenExchangeEnabled = false,
 ) {
   const normalizedRedirectUris = dedupe(redirectUris)
   if (deviceLoginEnabled && clientType !== 'public_native') {
@@ -34,7 +35,7 @@ export function normalizeClientSettings(
     validateRedirectUri(clientType, redirectUri)
   }
 
-  const configuration = clientTypeConfiguration(clientType, deviceLoginEnabled)
+  const configuration = clientTypeConfiguration(clientType, deviceLoginEnabled, tokenExchangeEnabled)
   return {
     redirectUris: normalizedRedirectUris,
     ...configuration,
@@ -44,6 +45,7 @@ export function normalizeClientSettings(
 export function clientTypeConfiguration(
   clientType: ApplicationResponse['clientType'],
   deviceLoginEnabled = false,
+  tokenExchangeEnabled = false,
 ): Pick<
   ApplicationResponse,
   'public' | 'allowedGrantTypes' | 'oidcScopes' | 'requirePkce' | 'tokenEndpointAuthMethod'
@@ -60,7 +62,9 @@ export function clientTypeConfiguration(
   if (clientType === 'confidential_web') {
     return {
       public: false,
-      allowedGrantTypes: ['authorization_code', 'refresh_token'],
+      allowedGrantTypes: tokenExchangeEnabled
+        ? ['authorization_code', 'refresh_token', tokenExchangeGrantType]
+        : ['authorization_code', 'refresh_token'],
       oidcScopes: ['openid', 'profile', 'email', 'groups', 'offline_access'],
       requirePkce: false,
       tokenEndpointAuthMethod: 'client_secret_basic',

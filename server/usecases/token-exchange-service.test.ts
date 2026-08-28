@@ -84,11 +84,16 @@ afterEach(() => {
 describe('token exchange service', () => {
   it('delegates a Realmroot User access token only from a configured source to an entitled target [spec: agent-identity/user-resource-token-delegation]', async () => {
     const { deps, clientSecret } = await tokenExchangeFixture({ scopes: ['agents:write'] })
-    const sourceResource = eligibleAudienceResource(['agents:write'])
+    const sourceResource = eligibleAudienceResource(['ama:agents:create'])
     const targetResource = {
       ...eligibleAudienceResource(['agents:write']),
       id: 'res_realmroot',
       resourceUrl: 'https://auth.example.com/api',
+      visibility: 'public' as const,
+      scopeRegistry: {
+        ...eligibleAudienceResource(['agents:write']).scopeRegistry,
+        scopes: [{ value: 'agents:write', description: null, grantMode: 'assigned' as const }],
+      },
     }
     const findApplication = deps.applications.findByClientId
     deps.applications.findByClientId = async (clientId) => {
@@ -96,7 +101,13 @@ describe('token exchange service', () => {
       return application
         ? {
             ...application,
-            tokenExchangeSourceResourceServerIds: [sourceResource.id],
+            tokenExchangePolicies: [
+              {
+                sourceResourceServerId: sourceResource.id,
+                targetResourceServerId: targetResource.id,
+                scopeMappings: [{ sourceScope: 'ama:agents:create', targetScope: 'agents:write' }],
+              },
+            ],
             resourceScopes: [{ resourceServerId: targetResource.id, scopes: ['agents:write'] }],
           }
         : null
@@ -107,26 +118,25 @@ describe('token exchange service', () => {
         : resourceUrl === targetResource.resourceUrl
           ? targetResource
           : null) as never
+    deps.authorization.listActiveApplicationScopeEntitlements = async () => [{ scope: 'agents:write' }] as never
+    deps.authorization.listActiveUserScopeEntitlements = async () => [{ scope: 'agents:write' }] as never
 
-    const response = await exchangeToken(
-      deps,
-      {
-        grantType: tokenExchangeGrantType,
-        subjectToken: 'verified-by-http-adapter',
-        subjectTokenType: accessTokenType,
-        audience: targetResource.resourceUrl,
-        scope: 'agents:write',
-        verifiedSubjectClaims: {
-          iss: realmrootIssuer,
-          sub: 'user_1',
-          aud: sourceResource.resourceUrl,
-          client_id: 'browser-client',
-          scope: 'agents:write',
-          exp: Math.floor(Date.now() / 1000) + 600,
-        },
+    const input = {
+      grantType: tokenExchangeGrantType,
+      subjectToken: 'verified-by-http-adapter',
+      subjectTokenType: accessTokenType,
+      audience: targetResource.resourceUrl,
+      scope: 'agents:write',
+      verifiedSubjectClaims: {
+        iss: realmrootIssuer,
+        sub: 'user_1',
+        aud: sourceResource.resourceUrl,
+        client_id: 'browser-client',
+        scope: 'ama:agents:create',
+        exp: Math.floor(Date.now() / 1000) + 600,
       },
-      { clientId: applicationClientId, clientSecret },
-    )
+    }
+    const response = await exchangeToken(deps, input, { clientId: applicationClientId, clientSecret })
 
     expect(response).not.toHaveProperty('refresh_token')
     expect(decodeTestAccessToken(response.access_token)).toMatchObject({
@@ -136,6 +146,11 @@ describe('token exchange service', () => {
       scope: 'agents:write',
     })
     expect(decodeTestAccessToken(response.access_token)).not.toHaveProperty('act')
+
+    deps.authorization.listActiveUserScopeEntitlements = async () => []
+    await expect(exchangeToken(deps, input, { clientId: applicationClientId, clientSecret })).rejects.toMatchObject({
+      error: 'invalid_scope',
+    })
   })
 
   it('rejects Agent actors and scope escalation during User token delegation', async () => {
@@ -143,7 +158,18 @@ describe('token exchange service', () => {
     const findApplication = deps.applications.findByClientId
     deps.applications.findByClientId = async (clientId) => {
       const application = await findApplication(clientId)
-      return application ? { ...application, tokenExchangeSourceResourceServerIds: [audienceResourceId] } : null
+      return application
+        ? {
+            ...application,
+            tokenExchangePolicies: [
+              {
+                sourceResourceServerId: audienceResourceId,
+                targetResourceServerId: audienceResourceId,
+                scopeMappings: [{ sourceScope: 'agents:write', targetScope: 'agents:write' }],
+              },
+            ],
+          }
+        : null
     }
     const input = {
       grantType: tokenExchangeGrantType,
@@ -185,7 +211,13 @@ describe('token exchange service', () => {
       return application
         ? {
             ...application,
-            tokenExchangeSourceResourceServerIds: [sourceResource.id],
+            tokenExchangePolicies: [
+              {
+                sourceResourceServerId: sourceResource.id,
+                targetResourceServerId: targetResource.id,
+                scopeMappings: [{ sourceScope: 'agents:write', targetScope: 'agents:write' }],
+              },
+            ],
             resourceScopes: [{ resourceServerId: targetResource.id, scopes: ['agents:write'] }],
           }
         : null
@@ -255,7 +287,13 @@ describe('token exchange service', () => {
       return application
         ? {
             ...application,
-            tokenExchangeSourceResourceServerIds: [sourceResource.id],
+            tokenExchangePolicies: [
+              {
+                sourceResourceServerId: sourceResource.id,
+                targetResourceServerId: targetResource.id,
+                scopeMappings: [{ sourceScope: 'offline_access', targetScope: 'offline_access' }],
+              },
+            ],
             oidcScopes: ['offline_access'],
             resourceScopes: [],
           }
@@ -1738,6 +1776,7 @@ function credentialDeps(repository: InMemoryTokenExchangeRepository): Deps {
                   scopes: clientScopes(repository).filter((scope) => scope !== 'offline_access'),
                 },
               ],
+              tokenExchangePolicies: [],
             }
           : null,
     },
@@ -1746,6 +1785,8 @@ function credentialDeps(repository: InMemoryTokenExchangeRepository): Deps {
       findResource: async (id: string) => (id === audienceResourceId ? eligibleAudienceResource() : null),
       findResourceByResourceUrl: async (resourceUrl: string) =>
         resourceUrl === defaultAudience ? eligibleAudienceResource(clientScopes(repository)) : null,
+      listUserMemberships: async () => [],
+      listActiveUserScopeEntitlements: async () => [],
       listActiveApplicationScopeEntitlements: async () => [],
     },
   } as unknown as Deps

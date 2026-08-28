@@ -28,6 +28,7 @@ import {
   type PaginationQuery,
   type ReplaceRedirectUrisRequest,
   type RotateClientSecretResponse,
+  tokenExchangeGrantType,
   type UpdateApplicationRequest,
 } from '@shared/api/applications'
 
@@ -41,7 +42,12 @@ export async function createApplication(
   input: CreateApplicationRequest,
   actorUserId: string | null,
 ): Promise<CreateApplicationResponse> {
-  const settings = normalizeClientSettings(input.clientType, input.redirectUris, input.deviceLoginEnabled ?? false)
+  const settings = normalizeClientSettings(
+    input.clientType,
+    input.redirectUris,
+    input.deviceLoginEnabled ?? false,
+    (input.tokenExchangePolicies?.length ?? 0) > 0,
+  )
   const postLogoutRedirectUris = normalizePostLogoutRedirectUris(input.clientType, input.postLogoutRedirectUris ?? [])
   const corsOrigins = normalizeCorsOrigins(input.corsOrigins ?? [])
   const clientSecret = settings.public ? null : createClientSecret()
@@ -54,11 +60,12 @@ export async function createApplication(
     throw badRequest('User consent policy can be configured only for Applications owned by the platform Organization.')
   }
   const resourceScopes = await validateApplicationResourceScopes(deps, ownerOrganizationId, input.resourceScopes ?? [])
-  const tokenExchangeSourceResourceServerIds = await validateTokenExchangeSourceResourceServerIds(
+  const tokenExchangePolicies = await validateTokenExchangePolicies(
     deps,
     ownerOrganizationId,
-    input.clientType,
-    input.tokenExchangeSourceResourceServerIds ?? [],
+    settings.allowedGrantTypes,
+    input.tokenExchangePolicies ?? [],
+    resourceScopes,
   )
 
   const application = await deps.applications.create({
@@ -84,7 +91,7 @@ export async function createApplication(
       allowedGrantTypes: settings.allowedGrantTypes,
       oidcScopes: settings.oidcScopes,
       resourceScopes,
-      tokenExchangeSourceResourceServerIds,
+      tokenExchangePolicies,
       requirePkce: settings.requirePkce,
       tokenEndpointAuthMethod: settings.tokenEndpointAuthMethod,
       oidcClaims: defaultApplicationOidcClaims,
@@ -141,12 +148,14 @@ export async function updateApplication(
   input: UpdateApplicationRequest,
 ): Promise<ApplicationResponse> {
   const application = await requireApplication(deps, id)
+  const nextTokenExchangePolicies = input.tokenExchangePolicies ?? application.tokenExchangePolicies
   const settings =
-    input.redirectUris || input.deviceLoginEnabled !== undefined
+    input.redirectUris || input.deviceLoginEnabled !== undefined || input.tokenExchangePolicies !== undefined
       ? normalizeClientSettings(
           application.clientType,
           input.redirectUris ?? application.redirectUris,
           input.deviceLoginEnabled ?? application.allowedGrantTypes.includes(deviceCodeGrantType),
+          nextTokenExchangePolicies.length > 0,
         )
       : null
   const postLogoutRedirectUris =
@@ -168,14 +177,16 @@ export async function updateApplication(
         new Set(application.resourceScopes.map((configuration) => configuration.resourceServerId)),
       )
     : undefined
-  const tokenExchangeSourceResourceServerIds = input.tokenExchangeSourceResourceServerIds
-    ? await validateTokenExchangeSourceResourceServerIds(
-        deps,
-        ownerOrganizationId,
-        application.clientType,
-        input.tokenExchangeSourceResourceServerIds,
-      )
-    : undefined
+  const tokenExchangePolicies =
+    input.tokenExchangePolicies !== undefined || resourceScopes !== undefined
+      ? await validateTokenExchangePolicies(
+          deps,
+          ownerOrganizationId,
+          settings?.allowedGrantTypes ?? application.allowedGrantTypes,
+          nextTokenExchangePolicies,
+          resourceScopes ?? application.resourceScopes,
+        )
+      : undefined
 
   const updated = await deps.applications.update(id, {
     slug: input.slug,
@@ -194,7 +205,7 @@ export async function updateApplication(
     allowedGrantTypes: settings?.allowedGrantTypes,
     oidcScopes: settings?.oidcScopes,
     resourceScopes,
-    tokenExchangeSourceResourceServerIds,
+    tokenExchangePolicies,
   })
   if (updated === 'application_not_found') throw notFound('Application was not found.')
   if (updated === 'resource_inactive') throw badRequest('Resource Server is not active.')
@@ -552,7 +563,7 @@ function toResponse(
     allowedGrantTypes: application.allowedGrantTypes,
     oidcScopes: application.oidcScopes,
     resourceScopes: application.resourceScopes,
-    tokenExchangeSourceResourceServerIds: application.tokenExchangeSourceResourceServerIds ?? [],
+    tokenExchangePolicies: application.tokenExchangePolicies,
     oidcClaims: defaultApplicationOidcClaims,
     requirePkce: application.requirePkce,
     tokenEndpointAuthMethod: application.tokenEndpointAuthMethod,
@@ -616,29 +627,62 @@ async function validateApplicationResourceScopes(
   return activeConfigurations
 }
 
-async function validateTokenExchangeSourceResourceServerIds(
+async function validateTokenExchangePolicies(
   deps: Deps,
   ownerOrganizationId: string,
-  clientType: ApplicationResponse['clientType'],
-  ids: string[],
+  allowedGrantTypes: ApplicationResponse['allowedGrantTypes'],
+  policies: ApplicationResponse['tokenExchangePolicies'],
+  resourceScopes: ApplicationResponse['resourceScopes'],
 ) {
-  const normalized = [...new Set(ids)]
-  if (normalized.length !== ids.length) throw badRequest('Token exchange source Resource Servers must be unique.')
-  if (normalized.length > 0 && clientType !== 'machine') {
-    throw badRequest('Only Machine Applications can exchange inbound Resource Server tokens.')
+  if (policies.length > 0 && !allowedGrantTypes.includes(tokenExchangeGrantType)) {
+    throw badRequest('Only confidential Applications can configure token exchange policies.')
   }
-  if (normalized.length === 0) return normalized
+  if (policies.length === 0) return policies
+  const resourceIds = [
+    ...new Set(policies.flatMap((policy) => [policy.sourceResourceServerId, policy.targetResourceServerId])),
+  ]
   const resources = new Map(
-    (await deps.authorization.findResources(normalized)).map((resource) => [resource.id, resource]),
+    (await deps.authorization.findResources(resourceIds)).map((resource) => [resource.id, resource]),
   )
-  for (const id of normalized) {
-    const resource = resources.get(id)
-    if (!resource?.enabled) throw badRequest('Token exchange source Resource Server is not active.')
-    if (resource.visibility === 'private' && resource.ownerOrganizationId !== ownerOrganizationId) {
-      throw badRequest('Token exchange source Resource Server is not visible to the Application tenant.')
+  const configuredTargetScopes = new Map(
+    resourceScopes.map((configuration) => [configuration.resourceServerId, new Set(configuration.scopes)]),
+  )
+  const policyPairs = new Set<string>()
+  for (const policy of policies) {
+    const pair = `${policy.sourceResourceServerId}\u0000${policy.targetResourceServerId}`
+    if (policyPairs.has(pair)) {
+      throw badRequest('Each token exchange source and target Resource Server pair must appear only once.')
+    }
+    policyPairs.add(pair)
+    const source = resources.get(policy.sourceResourceServerId)
+    const target = resources.get(policy.targetResourceServerId)
+    if (!source?.enabled || !target?.enabled) throw badRequest('Token exchange policy Resource Servers must be active.')
+    if (
+      (source.visibility === 'private' && source.ownerOrganizationId !== ownerOrganizationId) ||
+      (target.visibility === 'private' && target.ownerOrganizationId !== ownerOrganizationId)
+    ) {
+      throw badRequest('Token exchange policy Resource Servers must be visible to the Application tenant.')
+    }
+    const sourceScopes = new Set(source.scopeRegistry?.scopes.map((scope) => scope.value) ?? [])
+    const targetScopes = new Set(target.scopeRegistry?.scopes.map((scope) => scope.value) ?? [])
+    const configuredScopes = configuredTargetScopes.get(target.id) ?? new Set<string>()
+    const mappings = new Set<string>()
+    for (const mapping of policy.scopeMappings) {
+      const mappingPair = `${mapping.sourceScope}\u0000${mapping.targetScope}`
+      if (mappings.has(mappingPair)) throw badRequest('Token exchange scope mappings must be unique within a policy.')
+      mappings.add(mappingPair)
+      if (!sourceScopes.has(mapping.sourceScope)) {
+        throw badRequest('Token exchange policy contains an undeclared source Resource Server scope.')
+      }
+      if (!targetScopes.has(mapping.targetScope)) {
+        throw badRequest('Token exchange policy contains an undeclared target Resource Server scope.')
+      }
+      if (!configuredScopes.has(mapping.targetScope)) {
+        throw badRequest('Token exchange policy target scopes must be configured on the Application.')
+      }
     }
   }
-  return normalized
+  return policies
 }
 
 async function resolveRequestedResource(deps: Deps, resourceUrl: string | undefined, userId: string) {
