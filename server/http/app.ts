@@ -15,6 +15,7 @@ import {
   refreshToken,
   refreshTokenGrantType,
   tokenExchangeGrantType,
+  unverifiedSubjectTokenAudience,
 } from '@server/usecases/token-exchange'
 import { agentBootstrapScopes, realmrootOAuthScopes, resourceByRoutePrefix } from '@shared/authz'
 import type { Context } from 'hono'
@@ -399,21 +400,23 @@ async function maybeHandleTokenExchange(c: Context, issuer: string, auth: AuthHa
     let verifiedSubjectClaims: Record<string, unknown> | undefined
     if (subjectTokenType === 'urn:ietf:params:oauth:token-type:access_token') {
       if (!auth.api.verifyJWT)
-        throw oauthError('temporarily_unavailable', 'Agent token verification is unavailable.', 503)
+        throw oauthError('temporarily_unavailable', 'Access token verification is unavailable.', 503)
+      const sourceAudience = unverifiedSubjectTokenAudience(subjectToken)
+      if (!sourceAudience) throw oauthError('invalid_grant', 'Subject access token audience is invalid.')
       try {
         const verified = await auth.api.verifyJWT({
           body: {
             token: subjectToken,
             issuer,
-            audience: formString(form, 'audience') ?? '',
+            audience: sourceAudience,
           },
           asResponse: false,
         })
         verifiedSubjectClaims = verified.payload ?? undefined
       } catch {
-        throw oauthError('invalid_grant', 'Agent subject token is invalid.')
+        throw oauthError('invalid_grant', 'Subject access token is invalid.')
       }
-      if (!verifiedSubjectClaims) throw oauthError('invalid_grant', 'Agent subject token is invalid.')
+      if (!verifiedSubjectClaims) throw oauthError('invalid_grant', 'Subject access token is invalid.')
     }
     const response = await exchangeToken(
       deps,

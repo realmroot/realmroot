@@ -173,6 +173,7 @@ function applicationWebhookData(application: ApplicationResponse) {
     allowedGrantTypes: application.allowedGrantTypes,
     oidcScopes: application.oidcScopes,
     resourceScopes: application.resourceScopes,
+    tokenExchangePolicies: application.tokenExchangePolicies,
     createdAt: application.createdAt,
     updatedAt: application.updatedAt,
   }

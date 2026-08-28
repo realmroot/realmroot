@@ -3,7 +3,14 @@ import { hashProviderSecret } from '@server/usecases/applications-utils'
 import { realmrootOrganizationClaim } from '@shared/oauth-token-profile'
 import { decodeJwt, decodeProtectedHeader } from 'jose'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { createHarness, type Harness, platformOrganizationId, resourceOpenApiFetch, signInAdmin } from './harness'
+import {
+  baseURL,
+  createHarness,
+  type Harness,
+  platformOrganizationId,
+  resourceOpenApiFetch,
+  signInAdmin,
+} from './harness'
 
 afterEach(async () => {
   await reset()
@@ -64,6 +71,147 @@ describe('OAuth token exchange over real D1', () => {
   beforeEach(async () => {
     harness = await createHarness()
     harness.deps.externalHttp.fetch = resourceOpenApiFetch
+  })
+
+  it('exchanges a configured inbound User Resource token for a narrower downstream token', async () => {
+    const cookie = await signInAdmin(harness)
+    const delegatedUser = (
+      await harness.deps.users.listManagedUsers({ limit: 50, offset: 0, search: 'admin@example.com' })
+    ).items[0]
+    expect(delegatedUser).toBeDefined()
+    const sourceAudience = 'https://ama.example.com'
+    const targetAudience = 'https://downstream.example.com'
+    const createResource = async (identifier: string, resourceUrl: string) => {
+      const response = await harness.request('/api/resource-servers', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', cookie },
+        body: JSON.stringify({
+          identifier,
+          resourceUrl,
+          authorizationModel: 'native',
+          ownerOrganizationId: platformOrganizationId,
+        }),
+      })
+      expect(response.status, await response.clone().text()).toBe(201)
+      return (await response.json()) as {
+        id: string
+        scopeRegistry: { scopes: Array<{ value: string; grantMode: string }> } | null
+      }
+    }
+    const source = await createResource('ama-delegation-source', sourceAudience)
+    const target = await createResource('delegation-target', targetAudience)
+    expect(target.scopeRegistry?.scopes).toContainEqual({
+      value: 'resource:read',
+      description: null,
+      grantMode: 'assigned',
+    })
+    const createApp = await harness.request('/api/applications', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({
+        name: 'Delegating Resource Server',
+        slug: 'delegating-resource-server',
+        clientType: 'confidential_web',
+        redirectUris: ['https://ama.example.com/auth/callback'],
+        ownerOrganizationId: platformOrganizationId,
+        tokenExchangePolicies: [
+          {
+            sourceResourceServerId: source.id,
+            targetResourceServerId: target.id,
+            scopeMappings: [{ sourceScope: 'resource:read', targetScope: 'resource:read' }],
+          },
+        ],
+        resourceScopes: [{ resourceServerId: target.id, scopes: ['resource:read'] }],
+      }),
+    })
+    expect(createApp.status, await createApp.clone().text()).toBe(201)
+    const application = (await createApp.json()) as {
+      id: string
+      clientId: string
+      clientSecret: string
+      resourceScopes: Array<{ resourceServerId: string; scopes: string[] }>
+      tokenExchangePolicies: Array<{
+        sourceResourceServerId: string
+        targetResourceServerId: string
+        scopeMappings: Array<{ sourceScope: string; targetScope: string }>
+      }>
+      allowedGrantTypes: string[]
+    }
+    expect(application.allowedGrantTypes).toEqual([
+      'authorization_code',
+      'refresh_token',
+      'urn:ietf:params:oauth:grant-type:token-exchange',
+    ])
+    expect(application.resourceScopes).toEqual([{ resourceServerId: target.id, scopes: ['resource:read'] }])
+    expect(application.tokenExchangePolicies).toEqual([
+      {
+        sourceResourceServerId: source.id,
+        targetResourceServerId: target.id,
+        scopeMappings: [{ sourceScope: 'resource:read', targetScope: 'resource:read' }],
+      },
+    ])
+    const permission = await harness.request(`/api/applications/${application.id}/permissions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({
+        organizationId: platformOrganizationId,
+        resourceServerId: target.id,
+        scope: 'resource:read',
+        mode: 'persistent',
+      }),
+    })
+    expect(permission.status, await permission.clone().text()).toBe(201)
+    const userPermission = await harness.request(`/api/users/${delegatedUser!.id}/permissions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({
+        organizationId: platformOrganizationId,
+        resourceServerId: target.id,
+        scope: 'resource:read',
+        mode: 'persistent',
+      }),
+    })
+    expect(userPermission.status, await userPermission.clone().text()).toBe(201)
+    const now = Math.floor(Date.now() / 1000)
+    const subjectToken = await harness.agentTokenSigner.sign(
+      {
+        iss: `${baseURL}/api/auth`,
+        sub: delegatedUser!.id,
+        aud: sourceAudience,
+        client_id: application.clientId,
+        scope: 'resource:read',
+        [realmrootOrganizationClaim]: platformOrganizationId,
+        iat: now,
+        exp: now + 600,
+      },
+      'at+jwt',
+    )
+    const exchange = await harness.request('/api/auth/oauth2/token', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+        authorization: `Basic ${btoa(`${application.clientId}:${application.clientSecret}`)}`,
+        origin: baseURL,
+      },
+      body: new URLSearchParams({
+        grant_type: 'urn:ietf:params:oauth:grant-type:token-exchange',
+        subject_token: subjectToken,
+        subject_token_type: 'urn:ietf:params:oauth:token-type:access_token',
+        requested_token_type: 'urn:ietf:params:oauth:token-type:access_token',
+        audience: targetAudience,
+        scope: 'resource:read',
+      }).toString(),
+    })
+    expect(exchange.status, await exchange.clone().text()).toBe(200)
+    const body = (await exchange.json()) as { access_token: string; refresh_token?: string }
+    expect(body.refresh_token).toBeUndefined()
+    expect(decodeJwt(body.access_token)).toMatchObject({
+      sub: delegatedUser!.id,
+      aud: targetAudience,
+      client_id: application.clientId,
+      scope: 'resource:read',
+    })
+    expect(decodeJwt(body.access_token)).not.toHaveProperty('act')
   })
 
   it('exchanges an ES256 subject token via a federated credential, then introspects it (real SQL)', async () => {

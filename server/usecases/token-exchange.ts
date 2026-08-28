@@ -1,4 +1,4 @@
-import { badRequest, notFound, OAuthError, oauthError } from '@server/domain/errors'
+import { ApiError, badRequest, notFound, OAuthError, oauthError } from '@server/domain/errors'
 import { hashProviderSecret } from '@server/usecases/applications-utils'
 import type { Deps } from '@server/usecases/deps'
 import { authenticateApplicationClient } from '@server/usecases/oauth-client-authentication'
@@ -9,8 +9,12 @@ import type {
   ResolvedFederatedCredential,
   UpdateFederatedCredentialInput,
 } from '@server/usecases/ports'
-import { applicationEffectiveResourceScopes } from '@server/usecases/resource-scope-entitlements'
+import {
+  applicationEffectiveResourceScopes,
+  userEffectiveResourceScopes,
+} from '@server/usecases/resource-scope-entitlements'
 import { activeResourceVisibleToOrganization } from '@server/usecases/resource-visibility'
+import type { ApiResourceResponse } from '@shared/api/authorization'
 import { realmrootOrganizationClaim } from '@shared/oauth-token-profile'
 
 export const tokenExchangeGrantType = 'urn:ietf:params:oauth:grant-type:token-exchange'
@@ -19,6 +23,7 @@ export const accessTokenType = 'urn:ietf:params:oauth:token-type:access_token'
 export const jwtTokenType = 'urn:ietf:params:oauth:token-type:jwt'
 
 const defaultExpiresInSeconds = 60 * 60
+const delegatedUserExpiresInSeconds = 5 * 60
 const defaultRefreshExpiresInSeconds = 30 * 24 * 60 * 60
 const refreshTokenPrefix = 'fatr_'
 const subjectClaimsMember = 'urn:realmroot:params:oauth:token-exchange:subject-claims'
@@ -92,6 +97,9 @@ export async function exchangeToken(
   const allowedGrantTypes = parseList(oauthClient.grantTypes)
   if (!allowedGrantTypes.includes(tokenExchangeGrantType)) {
     throw oauthError('unauthorized_client', 'Client is not allowed to use token exchange.')
+  }
+  if (input.subjectTokenType === accessTokenType) {
+    return exchangeDelegatedUserToken(deps, input, oauthClient.clientId, application, signer)
   }
   if (input.subjectTokenType !== jwtTokenType) {
     throw oauthError('invalid_request', 'Unsupported subject_token_type.')
@@ -167,6 +175,102 @@ export async function exchangeToken(
     })
   }
   return response
+}
+
+async function exchangeDelegatedUserToken(
+  deps: Deps,
+  input: TokenExchangeRequest,
+  clientId: string,
+  application: ApplicationAggregate,
+  signer: TokenExchangeJwtSigner,
+): Promise<TokenExchangeResponse> {
+  const claims = input.verifiedSubjectClaims
+  if (!claims) throw oauthError('invalid_grant', 'Subject access token is invalid.')
+  const subject = readString(claims.sub)
+  const issuer = readString(claims.iss)
+  const sourceAudience = readSingleAudience(claims.aud)
+  const expiresAtClaim = readNumber(claims.exp)
+  if (!subject || issuer !== signer.issuer || !sourceAudience || !expiresAtClaim) {
+    throw oauthError('invalid_grant', 'Subject access token is missing required claims.')
+  }
+  if (expiresAtClaim <= Math.floor(Date.now() / 1000))
+    throw oauthError('invalid_grant', 'Subject access token is expired.')
+  if (claims.act !== undefined)
+    throw oauthError('invalid_grant', 'Agent access tokens cannot be delegated by an Application.')
+  await requireActiveDelegatedUser(deps, subject)
+
+  const [sourceResource, targetResource] = await Promise.all([
+    deps.authorization.findResourceByResourceUrl(sourceAudience),
+    deps.authorization.findResourceByResourceUrl(input.audience),
+  ])
+  if (!sourceResource || !activeResourceVisibleToOrganization(sourceResource, application.ownerOrganizationId)) {
+    throw oauthError('invalid_grant', 'Subject access token audience is not eligible for this Application.')
+  }
+  if (!targetResource || !activeResourceVisibleToOrganization(targetResource, application.ownerOrganizationId)) {
+    throw oauthError('invalid_target', 'Requested audience is not visible to the Application tenant.')
+  }
+  const policy = application.tokenExchangePolicies.find(
+    (candidate) =>
+      candidate.sourceResourceServerId === sourceResource.id && candidate.targetResourceServerId === targetResource.id,
+  )
+  if (!policy) throw oauthError('invalid_target', 'No token exchange policy allows the requested source and target.')
+  const subjectScopes = new Set(parseSpaceSeparatedClaim(claims.scope))
+  const declaredSourceScopes = new Set(sourceResource.scopeRegistry?.scopes.map((scope) => scope.value) ?? [])
+  const mappedTargetScopes = new Set(
+    policy.scopeMappings
+      .filter((mapping) => subjectScopes.has(mapping.sourceScope) && declaredSourceScopes.has(mapping.sourceScope))
+      .map((mapping) => mapping.targetScope),
+  )
+  const applicationScopes = await resolveApplicationTokenScopesForResource(
+    deps,
+    application,
+    targetResource,
+    input.scope,
+  )
+  const organizationClaim = claims[realmrootOrganizationClaim]
+  const organizationId = organizationClaim === undefined ? null : readString(organizationClaim)
+  if (organizationClaim !== undefined && organizationId === null) {
+    throw oauthError('invalid_grant', 'Subject access token Organization claim is invalid.')
+  }
+  const userScopes = new Set(
+    await userEffectiveResourceScopes(deps, subject, targetResource, new Date(), organizationId),
+  )
+  const scopes = applicationScopes.filter((scope) => mappedTargetScopes.has(scope) && userScopes.has(scope))
+  if (scopes.length === 0 || scopes.includes('offline_access')) {
+    throw oauthError('invalid_scope', 'Requested delegated scope is unavailable for the target Resource Server.')
+  }
+
+  const now = new Date()
+  const expiresAt = new Date(Math.min(now.getTime() + delegatedUserExpiresInSeconds * 1000, expiresAtClaim * 1000))
+  const accessToken = await issueJwtAccessToken(signer, {
+    clientId,
+    subject,
+    audience: input.audience,
+    scopes,
+    claims: organizationId ? { [realmrootOrganizationClaim]: organizationId } : {},
+    issuedAt: now,
+    expiresAt,
+  })
+  return {
+    access_token: accessToken,
+    issued_token_type: accessTokenType,
+    token_type: 'Bearer',
+    expires_in: Math.max(0, Math.floor((expiresAt.getTime() - now.getTime()) / 1000)),
+    scope: scopes.join(' '),
+  }
+}
+
+async function requireActiveDelegatedUser(deps: Deps, subject: string) {
+  try {
+    const user = await deps.users.getUser(subject)
+    if (user.banned) throw oauthError('invalid_grant', 'Subject access token does not represent an active User.')
+  } catch (error) {
+    if (error instanceof OAuthError) throw error
+    if (error instanceof ApiError && error.status === 404) {
+      throw oauthError('invalid_grant', 'Subject access token does not represent a User.')
+    }
+    throw error
+  }
 }
 
 async function resolveCredential(deps: Deps, applicationClientId: string, issuer: string, subject: string) {
@@ -436,6 +540,15 @@ async function resolveApplicationTokenScopes(
   if (!resource || !activeResourceVisibleToOrganization(resource, application.ownerOrganizationId)) {
     throw oauthError('invalid_target', 'Requested audience is not visible to the Application tenant.')
   }
+  return resolveApplicationTokenScopesForResource(deps, application, resource, requestedScope)
+}
+
+async function resolveApplicationTokenScopesForResource(
+  deps: Deps,
+  application: ApplicationAggregate,
+  resource: ApiResourceResponse,
+  requestedScope: string | undefined,
+) {
   const configuredScopes =
     application.resourceScopes.find((configuration) => configuration.resourceServerId === resource.id)?.scopes ?? []
   const allowedScopes = [...application.oidcScopes, ...configuredScopes]
@@ -555,6 +668,10 @@ function parseJwt(token: string) {
     if (error instanceof OAuthError) throw error
     throw oauthError('invalid_grant', 'Invalid subject token.')
   }
+}
+
+export function unverifiedSubjectTokenAudience(token: string) {
+  return readSingleAudience(parseJwt(token).payload.aud)
 }
 
 async function verifySubjectToken(
@@ -711,6 +828,16 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function readString(value: unknown) {
   return typeof value === 'string' && value.length > 0 ? value : null
+}
+
+function readSingleAudience(value: unknown) {
+  if (typeof value === 'string' && value.length > 0) return value
+  if (Array.isArray(value) && value.length === 1 && typeof value[0] === 'string' && value[0].length > 0) return value[0]
+  return null
+}
+
+function parseSpaceSeparatedClaim(value: unknown) {
+  return typeof value === 'string' ? [...new Set(value.split(/\s+/).filter(Boolean))] : []
 }
 
 function readNumber(value: unknown) {

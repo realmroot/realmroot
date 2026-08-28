@@ -27,7 +27,7 @@ consume discovery metadata.
 | --- | --- | --- | --- |
 | `public_spa` | Browser-only application | No | Authorization code with PKCE S256 |
 | `public_native` | Mobile, desktop, CLI, runner | No | Authorization code with PKCE S256; optional device authorization |
-| `confidential_web` | Server-side callback and session owner | Yes | Authorization code; authenticate only from the protected server |
+| `confidential_web` | Server-side callback and session owner | Yes | Authorization code and policy-enabled delegated token exchange; authenticate only from the protected server |
 | `machine` | Backend service or Worker | Yes | Client credentials or federated token exchange; no user sign-in |
 
 Request `openid profile email` for a normal sign-in. Add `offline_access` only

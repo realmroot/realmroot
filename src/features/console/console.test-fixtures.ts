@@ -61,6 +61,7 @@ export const application = {
   allowedGrantTypes: ['authorization_code', 'refresh_token'],
   oidcScopes: ['openid', 'profile', 'email', 'groups', 'offline_access'],
   resourceScopes: [],
+  tokenExchangePolicies: [],
   requirePkce: true,
   tokenEndpointAuthMethod: 'none',
   secretMetadata: [],

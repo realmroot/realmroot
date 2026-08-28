@@ -19,14 +19,17 @@ import {
   exchangeToken as exchangeTokenVerified,
   getFederatedCredential,
   introspectToken as introspectTokenVerified,
+  isTokenExchangeAccessToken,
   jwtTokenType,
   listFederatedCredentials,
   parseBasicClientAuthorization,
   refreshTokenGrantType,
   refreshToken as refreshTokenVerified,
   tokenExchangeGrantType,
+  unverifiedSubjectTokenAudience,
   updateFederatedCredential,
 } from '@server/usecases/token-exchange'
+import { realmrootOrganizationClaim } from '@shared/oauth-token-profile'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const applicationId = 'app_1'
@@ -80,6 +83,303 @@ afterEach(() => {
 })
 
 describe('token exchange service', () => {
+  it('delegates a Realmroot User access token only from a configured source to an entitled target [spec: agent-identity/user-resource-token-delegation]', async () => {
+    const { deps, clientSecret } = await tokenExchangeFixture({ scopes: ['agents:write'] })
+    const sourceResource = eligibleAudienceResource(['ama:agents:create', 'ama:agents:read'])
+    const targetResource = {
+      ...eligibleAudienceResource(['agents:read', 'agents:write']),
+      id: 'res_realmroot',
+      resourceUrl: 'https://auth.example.com/api',
+      visibility: 'public' as const,
+      scopeRegistry: {
+        ...eligibleAudienceResource(['agents:read', 'agents:write']).scopeRegistry,
+        scopes: ['agents:read', 'agents:write'].map((value) => ({
+          value,
+          description: null,
+          grantMode: 'assigned' as const,
+        })),
+      },
+    }
+    const findApplication = deps.applications.findByClientId
+    deps.applications.findByClientId = async (clientId) => {
+      const application = await findApplication(clientId)
+      return application
+        ? {
+            ...application,
+            tokenExchangePolicies: [
+              {
+                sourceResourceServerId: sourceResource.id,
+                targetResourceServerId: targetResource.id,
+                scopeMappings: [
+                  { sourceScope: 'ama:agents:create', targetScope: 'agents:write' },
+                  { sourceScope: 'ama:agents:read', targetScope: 'agents:read' },
+                ],
+              },
+            ],
+            resourceScopes: [{ resourceServerId: targetResource.id, scopes: ['agents:read', 'agents:write'] }],
+          }
+        : null
+    }
+    deps.authorization.findResourceByResourceUrl = async (resourceUrl) =>
+      (resourceUrl === sourceResource.resourceUrl
+        ? sourceResource
+        : resourceUrl === targetResource.resourceUrl
+          ? targetResource
+          : null) as never
+    deps.authorization.listActiveApplicationScopeEntitlements = async () =>
+      [{ scope: 'agents:read' }, { scope: 'agents:write' }] as never
+    deps.authorization.listActiveUserScopeEntitlements = async () =>
+      [
+        { scope: 'agents:read', organizationId: null },
+        { scope: 'agents:write', organizationId: null },
+      ] as never
+
+    const input = {
+      grantType: tokenExchangeGrantType,
+      subjectToken: 'verified-by-http-adapter',
+      subjectTokenType: accessTokenType,
+      audience: targetResource.resourceUrl,
+      scope: 'agents:read agents:write',
+      verifiedSubjectClaims: {
+        iss: realmrootIssuer,
+        sub: 'user_1',
+        aud: sourceResource.resourceUrl,
+        client_id: 'browser-client',
+        scope: 'ama:agents:create',
+        exp: Math.floor(Date.now() / 1000) + 600,
+      },
+    }
+    const response = await exchangeToken(deps, input, { clientId: applicationClientId, clientSecret })
+
+    expect(response).not.toHaveProperty('refresh_token')
+    expect(decodeTestAccessToken(response.access_token)).toMatchObject({
+      sub: 'user_1',
+      aud: targetResource.resourceUrl,
+      client_id: applicationClientId,
+      scope: 'agents:write',
+    })
+    expect(decodeTestAccessToken(response.access_token)).not.toHaveProperty('act')
+
+    const sourceWithoutMappedScope = {
+      ...sourceResource,
+      scopeRegistry: {
+        ...sourceResource.scopeRegistry!,
+        scopes: sourceResource.scopeRegistry!.scopes.filter((scope) => scope.value !== 'ama:agents:create'),
+      },
+    }
+    deps.authorization.findResourceByResourceUrl = async (resourceUrl) =>
+      (resourceUrl === sourceResource.resourceUrl
+        ? sourceWithoutMappedScope
+        : resourceUrl === targetResource.resourceUrl
+          ? targetResource
+          : null) as never
+    await expect(exchangeToken(deps, input, { clientId: applicationClientId, clientSecret })).rejects.toMatchObject({
+      error: 'invalid_scope',
+    })
+
+    deps.authorization.findResourceByResourceUrl = async (resourceUrl) =>
+      (resourceUrl === sourceResource.resourceUrl
+        ? sourceResource
+        : resourceUrl === targetResource.resourceUrl
+          ? targetResource
+          : null) as never
+    deps.authorization.listActiveUserScopeEntitlements = async () =>
+      [{ scope: 'agents:write', organizationId: 'org-other' }] as never
+    await expect(exchangeToken(deps, input, { clientId: applicationClientId, clientSecret })).rejects.toMatchObject({
+      error: 'invalid_scope',
+    })
+  })
+
+  it('rejects Agent actors and scope escalation during User token delegation', async () => {
+    const { deps, clientSecret } = await tokenExchangeFixture({ scopes: ['agents:write'] })
+    const findApplication = deps.applications.findByClientId
+    deps.applications.findByClientId = async (clientId) => {
+      const application = await findApplication(clientId)
+      return application
+        ? {
+            ...application,
+            tokenExchangePolicies: [
+              {
+                sourceResourceServerId: audienceResourceId,
+                targetResourceServerId: audienceResourceId,
+                scopeMappings: [{ sourceScope: 'agents:write', targetScope: 'agents:write' }],
+              },
+            ],
+          }
+        : null
+    }
+    const input = {
+      grantType: tokenExchangeGrantType,
+      subjectToken: 'verified-by-http-adapter',
+      subjectTokenType: accessTokenType,
+      audience: defaultAudience,
+      scope: 'agents:write',
+      verifiedSubjectClaims: {
+        iss: realmrootIssuer,
+        sub: 'user_1',
+        aud: defaultAudience,
+        scope: 'agents:read',
+        exp: Math.floor(Date.now() / 1000) + 600,
+      },
+    }
+    await expect(exchangeToken(deps, input, { clientId: applicationClientId, clientSecret })).rejects.toMatchObject({
+      error: 'invalid_scope',
+    })
+    await expect(
+      exchangeToken(
+        deps,
+        { ...input, verifiedSubjectClaims: { ...input.verifiedSubjectClaims, act: { sub: 'agent_1' } } },
+        { clientId: applicationClientId, clientSecret },
+      ),
+    ).rejects.toMatchObject({ error: 'invalid_grant' })
+  })
+
+  it('rejects invalid, expired, inactive, and unconfigured User token delegation subjects', async () => {
+    const { deps, clientSecret } = await tokenExchangeFixture({ scopes: ['agents:write'] })
+    const sourceResource = eligibleAudienceResource(['agents:write'])
+    const targetResource = {
+      ...eligibleAudienceResource(['agents:write']),
+      id: 'res_realmroot',
+      resourceUrl: 'https://auth.example.com/api',
+    }
+    const findApplication = deps.applications.findByClientId
+    deps.applications.findByClientId = async (clientId) => {
+      const application = await findApplication(clientId)
+      return application
+        ? {
+            ...application,
+            tokenExchangePolicies: [
+              {
+                sourceResourceServerId: sourceResource.id,
+                targetResourceServerId: targetResource.id,
+                scopeMappings: [{ sourceScope: 'agents:write', targetScope: 'agents:write' }],
+              },
+            ],
+            resourceScopes: [{ resourceServerId: targetResource.id, scopes: ['agents:write'] }],
+          }
+        : null
+    }
+    deps.authorization.findResourceByResourceUrl = async (resourceUrl) =>
+      (resourceUrl === sourceResource.resourceUrl
+        ? sourceResource
+        : resourceUrl === targetResource.resourceUrl
+          ? targetResource
+          : null) as never
+    const validClaims = {
+      iss: realmrootIssuer,
+      sub: 'user_1',
+      aud: sourceResource.resourceUrl,
+      scope: 'agents:write',
+      exp: Math.floor(Date.now() / 1000) + 600,
+    }
+    const input = {
+      grantType: tokenExchangeGrantType,
+      subjectToken: 'verified-by-http-adapter',
+      subjectTokenType: accessTokenType,
+      audience: targetResource.resourceUrl,
+      scope: 'agents:write',
+      verifiedSubjectClaims: validClaims,
+    } as const
+
+    for (const verifiedSubjectClaims of [
+      { ...validClaims, iss: 'https://other.example/api/auth' },
+      { ...validClaims, aud: [sourceResource.resourceUrl, 'https://other.example/api'] },
+      { ...validClaims, exp: Math.floor(Date.now() / 1000) - 1 },
+      { ...validClaims, [realmrootOrganizationClaim]: ['org_1'] },
+    ]) {
+      await expect(
+        exchangeToken(deps, { ...input, verifiedSubjectClaims }, { clientId: applicationClientId, clientSecret }),
+      ).rejects.toMatchObject({ error: 'invalid_grant' })
+    }
+
+    deps.users.getUser = async (id) => ({ id, banned: true }) as never
+    await expect(exchangeToken(deps, input, { clientId: applicationClientId, clientSecret })).rejects.toMatchObject({
+      error: 'invalid_grant',
+    })
+
+    deps.users.getUser = async (id) => ({ id, banned: false }) as never
+    deps.authorization.findResourceByResourceUrl = async (resourceUrl) =>
+      (resourceUrl === sourceResource.resourceUrl ? sourceResource : null) as never
+    await expect(exchangeToken(deps, input, { clientId: applicationClientId, clientSecret })).rejects.toMatchObject({
+      error: 'invalid_target',
+    })
+
+    deps.authorization.findResourceByResourceUrl = async (resourceUrl) =>
+      (resourceUrl === targetResource.resourceUrl ? targetResource : null) as never
+    await expect(exchangeToken(deps, input, { clientId: applicationClientId, clientSecret })).rejects.toMatchObject({
+      error: 'invalid_grant',
+    })
+  })
+
+  it('rejects delegated target scopes that are unavailable or refresh-capable', async () => {
+    const { deps, clientSecret } = await tokenExchangeFixture({ scopes: ['offline_access'] })
+    const sourceResource = eligibleAudienceResource(['offline_access'])
+    const targetResource = {
+      ...eligibleAudienceResource(['offline_access']),
+      id: 'res_realmroot',
+      resourceUrl: 'https://auth.example.com/api',
+    }
+    const findApplication = deps.applications.findByClientId
+    deps.applications.findByClientId = async (clientId) => {
+      const application = await findApplication(clientId)
+      return application
+        ? {
+            ...application,
+            tokenExchangePolicies: [
+              {
+                sourceResourceServerId: sourceResource.id,
+                targetResourceServerId: targetResource.id,
+                scopeMappings: [{ sourceScope: 'offline_access', targetScope: 'offline_access' }],
+              },
+            ],
+            oidcScopes: ['offline_access'],
+            resourceScopes: [],
+          }
+        : null
+    }
+    deps.authorization.findResourceByResourceUrl = async (resourceUrl) =>
+      (resourceUrl === sourceResource.resourceUrl
+        ? sourceResource
+        : resourceUrl === targetResource.resourceUrl
+          ? targetResource
+          : null) as never
+    const baseInput = {
+      grantType: tokenExchangeGrantType,
+      subjectToken: 'verified-by-http-adapter',
+      subjectTokenType: accessTokenType,
+      audience: targetResource.resourceUrl,
+      verifiedSubjectClaims: {
+        iss: realmrootIssuer,
+        sub: 'user_1',
+        aud: sourceResource.resourceUrl,
+        scope: 'offline_access',
+        exp: Math.floor(Date.now() / 1000) + 600,
+      },
+    } as const
+
+    await expect(
+      exchangeToken(deps, { ...baseInput, scope: 'offline_access' }, { clientId: applicationClientId, clientSecret }),
+    ).rejects.toMatchObject({ error: 'invalid_scope' })
+    await expect(
+      exchangeToken(deps, { ...baseInput, scope: '' }, { clientId: applicationClientId, clientSecret }),
+    ).rejects.toMatchObject({ error: 'invalid_scope' })
+  })
+
+  it('recognizes opaque and stored token-exchange access tokens', async () => {
+    const { deps } = await tokenExchangeFixture()
+
+    await expect(isTokenExchangeAccessToken(deps, 'fatx_opaque')).resolves.toBe(true)
+    await expect(isTokenExchangeAccessToken(deps, 'not-stored')).resolves.toBe(false)
+  })
+
+  it('reads only one unverified subject-token audience for HTTP boundary routing', () => {
+    const token = (aud: string[]) =>
+      `${base64UrlString('{"alg":"RS256"}')}.${base64UrlString(JSON.stringify({ aud }))}.c2ln`
+
+    expect(unverifiedSubjectTokenAudience(token(['https://api.example']))).toBe('https://api.example')
+    expect(unverifiedSubjectTokenAudience(token(['https://one.example', 'https://two.example']))).toBe(null)
+  })
+
   it('rejects an audience outside the Application Organization tenant', async () => {
     const repository = new InMemoryTokenExchangeRepository()
     const deps = credentialDeps(repository)
@@ -260,6 +560,24 @@ describe('token exchange service', () => {
       scope: 'runner:connect',
       'urn:realmroot:params:oauth:org': 'org_1',
     })
+    await expect(
+      introspectTokenVerified(
+        deps,
+        exchanged.access_token,
+        { clientId: applicationClientId, clientSecret },
+        realmrootIssuer,
+        { verify: async () => ({ ...accessPayload, scope: 'tampered' }) },
+      ),
+    ).resolves.toEqual({ active: false })
+    await expect(
+      introspectTokenVerified(
+        deps,
+        exchanged.access_token,
+        { clientId: applicationClientId, clientSecret },
+        realmrootIssuer,
+        { verify: async () => Promise.reject(new Error('invalid signature')) },
+      ),
+    ).resolves.toEqual({ active: false })
 
     repository.client = {
       ...repository.client!,
@@ -419,6 +737,18 @@ describe('token exchange service', () => {
         { clientId: applicationClientId, clientSecret },
       ),
     ).rejects.toMatchObject({ status: 400 })
+    await expect(
+      exchangeToken(
+        deps,
+        {
+          grantType: tokenExchangeGrantType,
+          subjectToken,
+          subjectTokenType: 'urn:example:unsupported',
+          audience: defaultAudience,
+        },
+        { clientId: applicationClientId, clientSecret },
+      ),
+    ).rejects.toMatchObject({ status: 400, error: 'invalid_request' })
 
     await expect(
       introspectToken(deps, 'missing-token', { clientId: applicationClientId, clientSecret }, realmrootIssuer),
@@ -1463,6 +1793,9 @@ function credentialDeps(repository: InMemoryTokenExchangeRepository): Deps {
     ids: createIdentifierGeneratorFake(),
     tokenExchange: repository,
     jwks: createJwksGateway(),
+    users: {
+      getUser: async (id: string) => ({ id, banned: false }),
+    },
     applications: {
       findById: async (id: string) =>
         id === applicationId ? { id: applicationId, ownerOrganizationId: 'org_1' } : null,
@@ -1481,6 +1814,7 @@ function credentialDeps(repository: InMemoryTokenExchangeRepository): Deps {
                   scopes: clientScopes(repository).filter((scope) => scope !== 'offline_access'),
                 },
               ],
+              tokenExchangePolicies: [],
             }
           : null,
     },
@@ -1489,6 +1823,8 @@ function credentialDeps(repository: InMemoryTokenExchangeRepository): Deps {
       findResource: async (id: string) => (id === audienceResourceId ? eligibleAudienceResource() : null),
       findResourceByResourceUrl: async (resourceUrl: string) =>
         resourceUrl === defaultAudience ? eligibleAudienceResource(clientScopes(repository)) : null,
+      listUserMemberships: async () => [],
+      listActiveUserScopeEntitlements: async () => [],
       listActiveApplicationScopeEntitlements: async () => [],
     },
   } as unknown as Deps

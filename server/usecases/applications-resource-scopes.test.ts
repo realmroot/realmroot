@@ -14,6 +14,17 @@ const resource = {
   ownerOrganizationId: 'org-1',
   scopeRegistry: { scopes: [{ value: 'items:read', description: null, grantMode: 'assigned' }] },
 }
+const targetResource = {
+  ...resource,
+  id: 'resource-2',
+  resourceUrl: 'https://target.example.com',
+  scopeRegistry: { scopes: [{ value: 'agents:create', description: null, grantMode: 'assigned' }] },
+}
+const tokenExchangePolicy = {
+  sourceResourceServerId: resource.id,
+  targetResourceServerId: targetResource.id,
+  scopeMappings: [{ sourceScope: 'items:read', targetScope: 'agents:create' }],
+}
 
 function setup() {
   let application: ApplicationAggregate | undefined
@@ -41,7 +52,9 @@ function setup() {
       items: [{ id: 'org-platform', slug: 'realmroot' }],
       pagination: { limit: 100, offset: 0, total: 1, hasMore: false, nextOffset: null },
     }),
-    findResources: vi.fn().mockResolvedValue([resource]),
+    findResources: vi
+      .fn()
+      .mockImplementation(async (ids: string[]) => [resource, targetResource].filter((item) => ids.includes(item.id))),
     findResource: vi.fn().mockResolvedValue(resource),
     findResourceByResourceUrl: vi.fn().mockResolvedValue(resource),
     findMemberByOrganizationUser: vi.fn().mockResolvedValue({ id: 'member-1' }),
@@ -89,6 +102,151 @@ describe('Application Resource Server scopes', () => {
         'admin-1',
       ),
     ).rejects.toThrow('undeclared')
+  })
+
+  it('allows only confidential token-exchange clients to configure unique, active, tenant-visible sources', async () => {
+    const { deps, authorization } = setup()
+    const confidentialInput = {
+      ...input,
+      clientType: 'confidential_web' as const,
+      resourceScopes: [{ resourceServerId: targetResource.id, scopes: ['agents:create'] }],
+      tokenExchangePolicies: [tokenExchangePolicy],
+    }
+
+    await expect(createApplication(deps, 'https://auth.example', confidentialInput, 'admin-1')).resolves.toMatchObject({
+      allowedGrantTypes: ['authorization_code', 'refresh_token', 'urn:ietf:params:oauth:grant-type:token-exchange'],
+      tokenExchangePolicies: [tokenExchangePolicy],
+    })
+    await expect(
+      createApplication(
+        deps,
+        'https://auth.example',
+        { ...confidentialInput, clientType: 'machine', redirectUris: [] },
+        'admin-1',
+      ),
+    ).resolves.toMatchObject({ tokenExchangePolicies: [tokenExchangePolicy] })
+    await expect(
+      createApplication(
+        deps,
+        'https://auth.example',
+        { ...confidentialInput, tokenExchangePolicies: [tokenExchangePolicy, tokenExchangePolicy] },
+        'admin-1',
+      ),
+    ).rejects.toThrow('pair must appear only once')
+    await expect(
+      createApplication(
+        deps,
+        'https://auth.example',
+        {
+          ...confidentialInput,
+          tokenExchangePolicies: [
+            {
+              ...tokenExchangePolicy,
+              scopeMappings: [...tokenExchangePolicy.scopeMappings, ...tokenExchangePolicy.scopeMappings],
+            },
+          ],
+        },
+        'admin-1',
+      ),
+    ).rejects.toThrow('scope mappings must be unique')
+    await expect(
+      createApplication(
+        deps,
+        'https://auth.example',
+        {
+          ...confidentialInput,
+          tokenExchangePolicies: [
+            { ...tokenExchangePolicy, scopeMappings: [{ sourceScope: 'unknown', targetScope: 'agents:create' }] },
+          ],
+        },
+        'admin-1',
+      ),
+    ).rejects.toThrow('undeclared source')
+    await expect(
+      createApplication(
+        deps,
+        'https://auth.example',
+        {
+          ...confidentialInput,
+          tokenExchangePolicies: [
+            { ...tokenExchangePolicy, scopeMappings: [{ sourceScope: 'items:read', targetScope: 'unknown' }] },
+          ],
+        },
+        'admin-1',
+      ),
+    ).rejects.toThrow('undeclared target')
+    await expect(
+      createApplication(deps, 'https://auth.example', { ...confidentialInput, resourceScopes: [] }, 'admin-1'),
+    ).rejects.toThrow('target scopes must be configured')
+    await expect(
+      createApplication(
+        deps,
+        'https://auth.example',
+        {
+          ...input,
+          resourceScopes: confidentialInput.resourceScopes,
+          tokenExchangePolicies: [tokenExchangePolicy],
+        },
+        'admin-1',
+      ),
+    ).rejects.toThrow('Only confidential Applications')
+
+    authorization.findResources.mockResolvedValueOnce([targetResource]).mockResolvedValueOnce([targetResource])
+    await expect(createApplication(deps, 'https://auth.example', confidentialInput, 'admin-1')).rejects.toThrow(
+      'must be active',
+    )
+    authorization.findResources
+      .mockResolvedValueOnce([targetResource])
+      .mockResolvedValueOnce([{ ...resource, enabled: false }, targetResource])
+    await expect(createApplication(deps, 'https://auth.example', confidentialInput, 'admin-1')).rejects.toThrow(
+      'must be active',
+    )
+    authorization.findResources
+      .mockResolvedValueOnce([targetResource])
+      .mockResolvedValueOnce([{ ...resource, ownerOrganizationId: 'org-2' }, targetResource])
+    await expect(createApplication(deps, 'https://auth.example', confidentialInput, 'admin-1')).rejects.toThrow(
+      'must be visible',
+    )
+  })
+
+  it('enables token exchange when an existing confidential web Application adds a source policy', async () => {
+    const { deps } = setup()
+    const created = await createApplication(
+      deps,
+      'https://auth.example',
+      {
+        ...input,
+        clientType: 'confidential_web',
+        resourceScopes: [{ resourceServerId: targetResource.id, scopes: ['agents:create'] }],
+      },
+      'admin-1',
+    )
+    const existing = await deps.applications.findById(created.id)
+    if (!existing) throw new Error('Application fixture was not created.')
+    existing.allowedGrantTypes = ['authorization_code', 'refresh_token']
+
+    await expect(
+      updateApplication(deps, 'https://auth.example', created.id, {
+        tokenExchangePolicies: [tokenExchangePolicy],
+      }),
+    ).resolves.toMatchObject({
+      allowedGrantTypes: ['authorization_code', 'refresh_token', 'urn:ietf:params:oauth:grant-type:token-exchange'],
+      tokenExchangePolicies: [tokenExchangePolicy],
+    })
+
+    await expect(
+      updateApplication(deps, 'https://auth.example', created.id, { tokenExchangePolicies: [] }),
+    ).resolves.toMatchObject({
+      allowedGrantTypes: ['authorization_code', 'refresh_token'],
+      tokenExchangePolicies: [],
+    })
+
+    await expect(
+      updateApplication(deps, 'https://auth.example', created.id, { name: 'Renamed web app' }),
+    ).resolves.toMatchObject({
+      name: 'Renamed web app',
+      tokenExchangePolicies: [],
+    })
   })
 
   it('removes an existing deleted Resource Server allowlist when the Application is saved [spec: admin-console/admin-application-detail]', async () => {

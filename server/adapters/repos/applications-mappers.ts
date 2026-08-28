@@ -4,6 +4,7 @@ import {
   defaultApplicationOidcClaims,
   deviceCodeGrantType,
   tokenExchangeGrantType,
+  tokenExchangePoliciesSchema,
 } from '../../../shared/api/applications'
 import type { application, applicationConsent, oauthClient } from '../../db/schema'
 
@@ -13,6 +14,7 @@ const corsOriginsMetadataKey = 'corsOrigins'
 const customDataMetadataKey = 'customData'
 const iconUrlMetadataKey = 'iconUrl'
 const oidcClaimsMetadataKey = 'oidcClaims'
+const tokenExchangePoliciesMetadataKey = 'tokenExchangePolicies'
 
 export function toApplicationInsert(input: Omit<ApplicationAggregate, 'createdAt' | 'updatedAt'>, now: Date) {
   return {
@@ -34,6 +36,7 @@ export function toApplicationInsert(input: Omit<ApplicationAggregate, 'createdAt
       corsOrigins: input.corsOrigins.length > 0 ? input.corsOrigins : undefined,
       customData: Object.keys(input.customData).length > 0 ? input.customData : undefined,
       oidcClaims: input.oidcClaims,
+      tokenExchangePolicies: input.tokenExchangePolicies.length > 0 ? input.tokenExchangePolicies : undefined,
     }),
     createdAt: now,
     updatedAt: now,
@@ -98,6 +101,7 @@ export function toAggregate(app: ApplicationRow, client: OAuthClientRow): Applic
     allowedGrantTypes: parseList(client.grantTypes).filter(isGrantType),
     oidcScopes: app.oidcScopes,
     resourceScopes: app.resourceScopes,
+    tokenExchangePolicies: readTokenExchangePolicies(app.metadata),
     requirePkce: client.requirePKCE ?? false,
     tokenEndpointAuthMethod: toTokenEndpointAuthMethod(client.tokenEndpointAuthMethod),
     createdAt: app.createdAt,
@@ -113,6 +117,12 @@ export function toConsent(row: typeof applicationConsent.$inferSelect): ConsentR
     authorizationSource: row.authorizationSource,
     grantedAt: row.grantedAt,
   }
+}
+
+function readTokenExchangePolicies(metadata: unknown): ApplicationAggregate['tokenExchangePolicies'] {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return []
+  const value = (metadata as Record<string, unknown>)[tokenExchangePoliciesMetadataKey]
+  return value === undefined ? [] : tokenExchangePoliciesSchema.parse(value)
 }
 
 export function toPaginationMetadata(pagination: { limit: number; offset: number }, total: number) {
@@ -209,6 +219,7 @@ export function writeApplicationMetadata(
     corsOrigins?: string[]
     customData?: Record<string, unknown>
     oidcClaims?: ApplicationOidcClaims
+    tokenExchangePolicies?: ApplicationAggregate['tokenExchangePolicies']
   },
 ) {
   const next = { ...(current ?? {}) }
@@ -219,6 +230,10 @@ export function writeApplicationMetadata(
   if (patch.corsOrigins !== undefined) next[corsOriginsMetadataKey] = patch.corsOrigins
   if (patch.customData !== undefined) next[customDataMetadataKey] = patch.customData
   if (patch.oidcClaims !== undefined) next[oidcClaimsMetadataKey] = patch.oidcClaims
+  if (patch.tokenExchangePolicies !== undefined) {
+    if (patch.tokenExchangePolicies.length > 0) next[tokenExchangePoliciesMetadataKey] = patch.tokenExchangePolicies
+    else delete next[tokenExchangePoliciesMetadataKey]
+  }
   return Object.keys(next).length ? next : null
 }
 
