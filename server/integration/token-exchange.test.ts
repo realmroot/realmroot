@@ -4,7 +4,16 @@ import { hashProviderSecret } from '@server/usecases/applications-utils'
 import { createAccessRequest, createAccessRequestCredential } from '@server/usecases/external-resources'
 import type { CreateAgent } from '@shared/api/agent-api'
 import { realmrootCliClientId, realmrootOrganizationClaim } from '@shared/oauth-token-profile'
-import { decodeJwt, decodeProtectedHeader, exportJWK, generateKeyPair, SignJWT } from 'jose'
+import {
+  decodeJwt,
+  decodeProtectedHeader,
+  exportJWK,
+  generateKeyPair,
+  importJWK,
+  type JWK,
+  jwtVerify,
+  SignJWT,
+} from 'jose'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   baseURL,
@@ -250,8 +259,19 @@ describe('OAuth token exchange over real D1', () => {
     }
     expect(body.issued_token_type).toBe('urn:ietf:params:oauth:token-type:id_token')
     expect(body.refresh_token).toBeUndefined()
-    expect(decodeProtectedHeader(body.access_token)).toMatchObject({ typ: 'JWT' })
-    expect(decodeJwt(body.access_token)).toMatchObject({
+    const header = decodeProtectedHeader(body.access_token)
+    expect(header).toMatchObject({ alg: expect.any(String), kid: expect.any(String), typ: 'JWT' })
+    const jwksResponse = await harness.request('/api/auth/jwks')
+    expect(jwksResponse.status, await jwksResponse.clone().text()).toBe(200)
+    const jwks = (await jwksResponse.json()) as { keys: Array<JWK & { alg: string }> }
+    const signingKey = jwks.keys.find((key) => key.kid === header.kid)
+    expect(signingKey).toBeDefined()
+    const verified = await jwtVerify(body.access_token, await importJWK(signingKey!, signingKey!.alg), {
+      issuer: `${baseURL}/api/auth`,
+      audience: target.clientId,
+      typ: 'JWT',
+    })
+    expect(verified.payload).toMatchObject({
       sub: controllerId,
       aud: target.clientId,
       azp: exchangeClient.clientId,
@@ -259,7 +279,7 @@ describe('OAuth token exchange over real D1', () => {
       groups: ['kubernetes-operators'],
       [realmrootOrganizationClaim]: platformOrganizationId,
     })
-    expect(decodeJwt(body.access_token)).not.toHaveProperty('scope')
+    expect(verified.payload).not.toHaveProperty('scope')
     expect(decodeJwt(credential.accessToken)).toMatchObject({ client_id: realmrootCliClientId })
     const audit = await env.DB.prepare(
       "SELECT result, metadata FROM agent_audit_event WHERE action = 'oauth.agent_identity_token_exchanged' ORDER BY occurred_at DESC LIMIT 1",

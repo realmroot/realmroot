@@ -15,7 +15,6 @@ import {
   refreshToken,
   refreshTokenGrantType,
   tokenExchangeGrantType,
-  unverifiedSubjectTokenAudience,
 } from '@server/usecases/token-exchange'
 import { agentBootstrapScopes, realmrootOAuthScopes, resourceByRoutePrefix } from '@shared/authz'
 import type { Context } from 'hono'
@@ -397,27 +396,6 @@ async function maybeHandleTokenExchange(c: Context, issuer: string, auth: AuthHa
     }
     const subjectToken = formString(form, 'subject_token') ?? ''
     const subjectTokenType = formString(form, 'subject_token_type') ?? ''
-    let verifiedSubjectClaims: Record<string, unknown> | undefined
-    if (subjectTokenType === 'urn:ietf:params:oauth:token-type:access_token') {
-      if (!auth.api.verifyJWT)
-        throw oauthError('temporarily_unavailable', 'Access token verification is unavailable.', 503)
-      const sourceAudience = unverifiedSubjectTokenAudience(subjectToken)
-      if (!sourceAudience) throw oauthError('invalid_grant', 'Subject access token audience is invalid.')
-      try {
-        const verified = await auth.api.verifyJWT({
-          body: {
-            token: subjectToken,
-            issuer,
-            audience: sourceAudience,
-          },
-          asResponse: false,
-        })
-        verifiedSubjectClaims = verified.payload ?? undefined
-      } catch {
-        throw oauthError('invalid_grant', 'Subject access token is invalid.')
-      }
-      if (!verifiedSubjectClaims) throw oauthError('invalid_grant', 'Subject access token is invalid.')
-    }
     const response = await exchangeToken(
       deps,
       {
@@ -427,10 +405,21 @@ async function maybeHandleTokenExchange(c: Context, issuer: string, auth: AuthHa
         audience: formString(form, 'audience') ?? '',
         scope: formString(form, 'scope') ?? undefined,
         requestedTokenType: formString(form, 'requested_token_type') ?? undefined,
-        verifiedSubjectClaims,
       },
       client,
       signer,
+      auth.api.verifyJWT
+        ? {
+            verify: (token, expectedIssuer, audience) =>
+              auth.api.verifyJWT!({
+                body: { token, issuer: expectedIssuer, audience },
+                asResponse: false,
+              }).then(({ payload }) => {
+                if (!payload) throw new Error('JWT payload is unavailable.')
+                return payload
+              }),
+          }
+        : undefined,
     )
     c.header('Cache-Control', 'no-store')
     c.header('Pragma', 'no-cache')

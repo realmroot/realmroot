@@ -82,9 +82,13 @@ export async function exchangeToken(
   input: TokenExchangeRequest,
   client: { clientId: string; clientSecret: string | null },
   signer: TokenExchangeJwtSigner,
+  verifier?: TokenExchangeJwtVerifier,
 ) {
   if (input.grantType !== tokenExchangeGrantType) {
     throw oauthError('unsupported_grant_type', 'Unsupported grant_type.')
+  }
+  if (input.requestedTokenType === idTokenType) {
+    return exchangeAgentIdentityToken(deps, input, client, signer, verifier)
   }
   const { client: oauthClient, application } = await authenticateApplicationClient(
     deps,
@@ -95,17 +99,17 @@ export async function exchangeToken(
   if (!allowedGrantTypes.includes(tokenExchangeGrantType)) {
     throw oauthError('unauthorized_client', 'Client is not allowed to use token exchange.')
   }
-  if (input.requestedTokenType === idTokenType) {
-    if (input.subjectTokenType !== accessTokenType) {
-      throw oauthError('invalid_request', 'ID tokens require an access_token subject token.')
-    }
-    return exchangeAgentIdentityToken(deps, input, oauthClient.clientId, application, signer)
-  }
   if (input.requestedTokenType && input.requestedTokenType !== accessTokenType) {
     throw oauthError('invalid_request', 'Unsupported requested_token_type.')
   }
   if (input.subjectTokenType === accessTokenType) {
-    return exchangeDelegatedUserToken(deps, input, oauthClient.clientId, application, signer)
+    return exchangeDelegatedUserToken(
+      deps,
+      { ...input, verifiedSubjectClaims: await verifyRealmrootAccessToken(input, signer.issuer, verifier) },
+      oauthClient.clientId,
+      application,
+      signer,
+    )
   }
   if (input.subjectTokenType !== jwtTokenType) {
     throw oauthError('invalid_request', 'Unsupported subject_token_type.')
@@ -186,34 +190,81 @@ export async function exchangeToken(
 async function exchangeAgentIdentityToken(
   deps: Deps,
   input: TokenExchangeRequest,
-  clientId: string,
-  application: ApplicationAggregate,
+  client: { clientId: string; clientSecret: string | null },
   signer: TokenExchangeJwtSigner,
+  verifier?: TokenExchangeJwtVerifier,
 ): Promise<TokenExchangeResponse> {
-  const claims = input.verifiedSubjectClaims
-  const actor = claims && isRecord(claims.act) ? claims.act : null
-  const auditContext = {
-    clientId,
-    controllerUserId: claims ? readString(claims.sub) : null,
-    actorIssuer: actor ? readString(actor.iss) : null,
-    actorSubject: actor ? readString(actor.sub) : null,
-    sourceTokenId: claims ? readString(claims.jti) : null,
-    organizationId: claims ? readString(claims[realmrootOrganizationClaim]) : null,
-    targetAudience: input.audience,
-  }
+  let claims: Record<string, unknown> | undefined
+  let application: ApplicationAggregate | null = null
   try {
-    const response = await exchangeAgentIdentityTokenVerified(deps, input, clientId, application, signer)
-    await appendIdentityTokenExchangeAudit(deps, auditContext, 'allowed', null, null)
+    const authenticated = await authenticateApplicationClient(deps, client.clientId, client.clientSecret)
+    application = authenticated.application
+    if (!parseList(authenticated.client.grantTypes).includes(tokenExchangeGrantType)) {
+      throw oauthError('unauthorized_client', 'Client is not allowed to use token exchange.')
+    }
+    if (input.subjectTokenType !== accessTokenType) {
+      throw oauthError('invalid_request', 'ID tokens require an access_token subject token.')
+    }
+    claims = await verifyRealmrootAccessToken(input, signer.issuer, verifier)
+    const response = await exchangeAgentIdentityTokenVerified(
+      deps,
+      { ...input, verifiedSubjectClaims: claims },
+      authenticated.client.clientId,
+      application,
+      signer,
+    )
+    await appendIdentityTokenExchangeAudit(
+      deps,
+      identityTokenExchangeAuditContext(input, client.clientId, application, claims),
+      'allowed',
+      null,
+      null,
+    )
     return response
   } catch (error) {
     await appendIdentityTokenExchangeAudit(
       deps,
-      auditContext,
+      identityTokenExchangeAuditContext(input, client.clientId, application, claims),
       'denied',
       error instanceof OAuthError ? error.error : 'internal_error',
       error instanceof OAuthError ? error.errorDescription : 'ID token exchange failed unexpectedly.',
     )
     throw error
+  }
+}
+
+function identityTokenExchangeAuditContext(
+  input: TokenExchangeRequest,
+  clientId: string,
+  application: ApplicationAggregate | null,
+  claims: Record<string, unknown> | undefined,
+) {
+  const actor = claims && isRecord(claims.act) ? claims.act : null
+  return {
+    clientId,
+    ownerOrganizationId: application?.ownerOrganizationId ?? null,
+    controllerUserId: claims ? readString(claims.sub) : null,
+    actorIssuer: actor ? readString(actor.iss) : null,
+    actorSubject: actor ? readString(actor.sub) : null,
+    sourceTokenId: claims ? readString(claims.jti) : null,
+    tokenOrganizationId: claims ? readString(claims[realmrootOrganizationClaim]) : null,
+    targetAudience: input.audience,
+  }
+}
+
+async function verifyRealmrootAccessToken(
+  input: TokenExchangeRequest,
+  issuer: string,
+  verifier: TokenExchangeJwtVerifier | undefined,
+) {
+  if (input.verifiedSubjectClaims) return input.verifiedSubjectClaims
+  if (!verifier) throw oauthError('temporarily_unavailable', 'Access token verification is unavailable.', 503)
+  const sourceAudience = unverifiedSubjectTokenAudience(input.subjectToken)
+  if (!sourceAudience) throw oauthError('invalid_grant', 'Subject access token audience is invalid.')
+  try {
+    return await verifier.verify(input.subjectToken, issuer, sourceAudience)
+  } catch {
+    throw oauthError('invalid_grant', 'Subject access token is invalid.')
   }
 }
 
@@ -353,7 +404,8 @@ async function appendIdentityTokenExchangeAudit(
     actorIssuer: string | null
     actorSubject: string | null
     sourceTokenId: string | null
-    organizationId: string | null
+    ownerOrganizationId: string | null
+    tokenOrganizationId: string | null
     targetAudience: string
   },
   result: 'allowed' | 'denied',
@@ -369,9 +421,9 @@ async function appendIdentityTokenExchangeAudit(
     id: deps.ids.generate(),
     action: 'oauth.agent_identity_token_exchanged',
     result,
-    realmOwned: false,
-    ownerUserId: context.organizationId ? null : context.controllerUserId,
-    ownerOrganizationId: context.organizationId,
+    realmOwned: context.ownerOrganizationId === null,
+    ownerUserId: null,
+    ownerOrganizationId: context.ownerOrganizationId,
     controllerUserId: context.controllerUserId,
     subjectIssuer: context.actorIssuer,
     subject: context.actorSubject,
@@ -385,6 +437,7 @@ async function appendIdentityTokenExchangeAudit(
     metadata: {
       exchangeClientId: context.clientId,
       sourceTokenId: context.sourceTokenId,
+      tokenOrganizationId: context.tokenOrganizationId,
       targetApplicationId: targetApplication?.id ?? null,
       targetApplicationClientId: context.targetAudience,
       failureReason,

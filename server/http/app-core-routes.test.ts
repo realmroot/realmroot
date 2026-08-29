@@ -111,6 +111,41 @@ describe('app.test 1', () => {
     expect(auth.handler).toHaveBeenCalledOnce()
   })
 
+  it('authenticates an ID-token exchange client before verifying its subject token', async () => {
+    const auth = createAuthMock()
+    const verifyJWT = vi.fn().mockRejectedValue(new Error('subject token must not be inspected'))
+    Object.assign(auth.api, { verifyJWT })
+    const deps = createTestDeps()
+
+    const response = await createApp(auth, deps).request('/api/auth/oauth2/token', {
+      method: 'POST',
+      headers: {
+        authorization: `Basic ${btoa('unknown-client:wrong-secret')}`,
+        'content-type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        grant_type: 'urn:ietf:params:oauth:grant-type:token-exchange',
+        subject_token: 'malformed-subject-token',
+        subject_token_type: 'urn:ietf:params:oauth:token-type:access_token',
+        requested_token_type: 'urn:ietf:params:oauth:token-type:id_token',
+        audience: 'oidc-client',
+        scope: 'openid groups',
+      }),
+    })
+
+    expect(response.status).toBe(401)
+    await expect(response.json()).resolves.toMatchObject({ error: 'invalid_client' })
+    expect(verifyJWT).not.toHaveBeenCalled()
+    expect(deps.agentAudit.append).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'oauth.agent_identity_token_exchanged',
+        result: 'denied',
+        realmOwned: true,
+        reasonCode: 'invalid_client',
+      }),
+    )
+  })
+
   it('rejects Agent token exchange until explicit enrollment creates a binding [spec: agent-identity/agent-whoami-requires-enrollment]', async () => {
     const auth = createAuthMock()
     auth.api.getAgentSession.mockResolvedValue({

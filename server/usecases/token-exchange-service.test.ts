@@ -236,7 +236,7 @@ describe('token exchange service', () => {
   })
 
   it('exchanges an active policy-bound Agent token for an OIDC ID token and audits revocation [spec: agent-identity/agent-oidc-id-token-exchange]', async () => {
-    const { deps, clientSecret } = await tokenExchangeFixture({ scopes: [] })
+    const { repository, deps, clientSecret } = await tokenExchangeFixture({ scopes: [] })
     const sourceResource = eligibleAudienceResource(['workload:read'])
     const targetApplication = {
       id: 'app_oidc',
@@ -339,8 +339,33 @@ describe('token exchange service', () => {
     expect(decodeTestAccessToken(response.access_token)).not.toHaveProperty('scope')
     expect(signer.sign).toHaveBeenCalledWith(expect.any(Object), 'JWT')
     expect(deps.agentAudit.append).toHaveBeenLastCalledWith(
-      expect.objectContaining({ action: 'oauth.agent_identity_token_exchanged', result: 'allowed' }),
+      expect.objectContaining({
+        action: 'oauth.agent_identity_token_exchanged',
+        result: 'allowed',
+        realmOwned: false,
+        ownerOrganizationId: 'org_1',
+      }),
     )
+
+    repository.client = {
+      ...repository.client!,
+      grantTypes: JSON.stringify(['client_credentials']),
+    }
+    await expect(
+      exchangeTokenVerified(deps, input, { clientId: applicationClientId, clientSecret }, signer),
+    ).rejects.toMatchObject({ error: 'unauthorized_client' })
+    expect(deps.agentAudit.append).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        action: 'oauth.agent_identity_token_exchanged',
+        result: 'denied',
+        ownerOrganizationId: 'org_1',
+        reasonCode: 'unauthorized_client',
+      }),
+    )
+    repository.client = {
+      ...repository.client!,
+      grantTypes: JSON.stringify([tokenExchangeGrantType]),
+    }
 
     vi.mocked(deps.externalResources.findActiveTokenLeaseByTokenHash).mockResolvedValueOnce(null)
     await expect(
@@ -423,6 +448,72 @@ describe('token exchange service', () => {
         signer,
       ),
     ).rejects.toMatchObject({ error: 'invalid_scope' })
+
+    const verifier = { verify: vi.fn().mockRejectedValue(new Error('invalid signature')) }
+    const unverifiedSubjectToken = await signEs256TestJwt(
+      { aud: sourceResource.resourceUrl },
+      'untrusted-subject-token',
+    )
+    await expect(
+      exchangeTokenVerified(
+        deps,
+        {
+          ...input,
+          subjectToken: unverifiedSubjectToken,
+          verifiedSubjectClaims: undefined,
+        },
+        { clientId: applicationClientId, clientSecret },
+        signer,
+        verifier,
+      ),
+    ).rejects.toMatchObject({ error: 'invalid_grant' })
+    expect(verifier.verify).toHaveBeenCalledOnce()
+    expect(deps.agentAudit.append).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        action: 'oauth.agent_identity_token_exchanged',
+        result: 'denied',
+        ownerOrganizationId: 'org_1',
+        reasonCode: 'invalid_grant',
+      }),
+    )
+
+    verifier.verify.mockClear()
+    await expect(
+      exchangeTokenVerified(
+        deps,
+        { ...input, verifiedSubjectClaims: undefined },
+        { clientId: applicationClientId, clientSecret: 'wrong-secret' },
+        signer,
+        verifier,
+      ),
+    ).rejects.toMatchObject({ error: 'invalid_client' })
+    expect(verifier.verify).not.toHaveBeenCalled()
+    expect(deps.agentAudit.append).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        action: 'oauth.agent_identity_token_exchanged',
+        result: 'denied',
+        realmOwned: true,
+        ownerOrganizationId: null,
+        reasonCode: 'invalid_client',
+      }),
+    )
+
+    await expect(
+      exchangeTokenVerified(
+        deps,
+        { ...input, subjectTokenType: jwtTokenType },
+        { clientId: applicationClientId, clientSecret },
+        signer,
+      ),
+    ).rejects.toMatchObject({ error: 'invalid_request' })
+    expect(deps.agentAudit.append).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        action: 'oauth.agent_identity_token_exchanged',
+        result: 'denied',
+        ownerOrganizationId: 'org_1',
+        reasonCode: 'invalid_request',
+      }),
+    )
   })
 
   it('rejects invalid, expired, inactive, and unconfigured User token delegation subjects', async () => {
@@ -1332,6 +1423,7 @@ describe('token exchange service', () => {
           subjectToken,
           subjectTokenType: accessTokenType,
           audience: defaultAudience,
+          verifiedSubjectClaims: {},
         },
         { clientId: applicationClientId, clientSecret },
       ),
