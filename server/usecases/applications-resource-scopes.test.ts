@@ -25,13 +25,24 @@ const tokenExchangePolicy = {
   targetResourceServerId: targetResource.id,
   scopeMappings: [{ sourceScope: 'items:read', targetScope: 'agents:create' }],
 }
+const kubernetesApplication = {
+  id: 'kubernetes-application',
+  clientId: 'kubernetes-client',
+  clientType: 'public_native',
+  visibility: 'private',
+  disabled: false,
+  ownerOrganizationId: 'org-1',
+  oidcScopes: ['openid', 'profile', 'email', 'groups', 'offline_access'],
+}
 
 function setup() {
   let application: ApplicationAggregate | undefined
   const applications = {
     create: vi.fn(async ({ application: input }) => (application = { ...input, createdAt: now, updatedAt: now })),
     listSecrets: vi.fn().mockResolvedValue({ items: [], pagination: {} }),
-    findById: vi.fn(async () => application),
+    findById: vi.fn(async (id) =>
+      id === kubernetesApplication.id ? (kubernetesApplication as ApplicationAggregate) : application,
+    ),
     findByClientId: vi.fn(async () => application),
     update: vi.fn(async (_id, patch) => {
       if (!application) throw new Error('Application fixture was not created.')
@@ -207,6 +218,60 @@ describe('Application Resource Server scopes', () => {
     await expect(createApplication(deps, 'https://auth.example', confidentialInput, 'admin-1')).rejects.toThrow(
       'must be visible',
     )
+  })
+
+  it('reuses token exchange policies for a same-Organization Kubernetes Application target', async () => {
+    const { deps } = setup()
+    const identityPolicy = {
+      sourceResourceServerId: resource.id,
+      targetApplicationId: kubernetesApplication.id,
+    }
+    await expect(
+      createApplication(
+        deps,
+        'https://auth.example',
+        {
+          ...input,
+          clientType: 'machine',
+          redirectUris: [],
+          tokenExchangePolicies: [identityPolicy],
+        },
+        'admin-1',
+      ),
+    ).resolves.toMatchObject({ tokenExchangePolicies: [identityPolicy] })
+
+    vi.mocked(deps.applications.findById).mockResolvedValueOnce({
+      ...kubernetesApplication,
+      ownerOrganizationId: 'org-2',
+    } as ApplicationAggregate)
+    await expect(
+      createApplication(
+        deps,
+        'https://auth.example',
+        {
+          ...input,
+          clientType: 'machine',
+          redirectUris: [],
+          tokenExchangePolicies: [identityPolicy],
+        },
+        'admin-1',
+      ),
+    ).rejects.toThrow('active private native Application in the same Organization')
+
+    vi.mocked(deps.applications.findById).mockResolvedValueOnce(null)
+    await expect(
+      createApplication(
+        deps,
+        'https://auth.example',
+        {
+          ...input,
+          clientType: 'machine',
+          redirectUris: [],
+          tokenExchangePolicies: [identityPolicy],
+        },
+        'admin-1',
+      ),
+    ).rejects.toThrow('active private native Application in the same Organization')
   })
 
   it('enables token exchange when an existing confidential web Application adds a source policy', async () => {

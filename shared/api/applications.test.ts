@@ -184,6 +184,20 @@ describe('application API pagination contracts', () => {
         tokenExchangePolicies: [{ ...policy, unexpected: true }],
       }).success,
     ).toBe(false)
+
+    const identityPolicy = {
+      sourceResourceServerId: 'hub-resource',
+      targetApplicationId: 'kubernetes-application',
+    }
+    expect(createApplicationRequestSchema.parse({ ...base, tokenExchangePolicies: [identityPolicy] })).toMatchObject({
+      tokenExchangePolicies: [identityPolicy],
+    })
+    expect(
+      createApplicationRequestSchema.safeParse({
+        ...base,
+        tokenExchangePolicies: [{ ...identityPolicy, targetResourceServerId: 'resource' }],
+      }).success,
+    ).toBe(false)
   })
 
   it('keeps Realmroot resource capabilities out of user-configurable application requests', () => {

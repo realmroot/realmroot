@@ -1,14 +1,19 @@
 import { applyD1Migrations, env, reset } from 'cloudflare:test'
+import { createAgentWithInstallation } from '@server/usecases/agent-identities'
 import { hashProviderSecret } from '@server/usecases/applications-utils'
-import { realmrootOrganizationClaim } from '@shared/oauth-token-profile'
-import { decodeJwt, decodeProtectedHeader } from 'jose'
+import { createAccessRequest, createAccessRequestCredential } from '@server/usecases/external-resources'
+import type { CreateAgent } from '@shared/api/agent-api'
+import { realmrootCliClientId, realmrootOrganizationClaim } from '@shared/oauth-token-profile'
+import { decodeJwt, decodeProtectedHeader, exportJWK, generateKeyPair, SignJWT } from 'jose'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   baseURL,
   createHarness,
+  createUser,
   type Harness,
   platformOrganizationId,
   resourceOpenApiFetch,
+  signIn,
   signInAdmin,
 } from './harness'
 
@@ -65,12 +70,205 @@ async function es256Jwt(privateKey: CryptoKey, payload: Record<string, unknown>)
   return `${signingInput}.${base64Url(new Uint8Array(signature))}`
 }
 
+async function dpopProof(url: string) {
+  const { privateKey, publicKey } = await generateKeyPair('ES256')
+  const jwk = await exportJWK(publicKey)
+  return new SignJWT({
+    htm: 'POST',
+    htu: url,
+    jti: crypto.randomUUID(),
+    iat: Math.floor(Date.now() / 1000),
+  })
+    .setProtectedHeader({ alg: 'ES256', typ: 'dpop+jwt', jwk })
+    .sign(privateKey)
+}
+
 describe('OAuth token exchange over real D1', () => {
   let harness: Harness
 
   beforeEach(async () => {
     harness = await createHarness()
     harness.deps.externalHttp.fetch = resourceOpenApiFetch
+  })
+
+  it('exchanges an active Hub Agent lease for a Kubernetes ID token over the real token endpoint [spec: agent-identity/agent-kubernetes-id-token-exchange]', async () => {
+    const adminCookie = await signInAdmin(harness)
+    const controllerId = await createUser(harness, adminCookie, {
+      email: 'kubernetes-controller@example.com',
+      username: 'kubernetes-controller',
+      displayName: 'Kubernetes Controller',
+      password: 'kubernetes-controller-password-2026',
+    })
+    const membership = await harness.request(`/api/organizations/${platformOrganizationId}/members`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie: adminCookie },
+      body: JSON.stringify({ userId: controllerId, roles: ['owner'] }),
+    })
+    expect(membership.status, await membership.clone().text()).toBe(201)
+    const controllerCookie = await signIn(
+      harness,
+      'kubernetes-controller@example.com',
+      'kubernetes-controller-password-2026',
+    )
+    const now = Date.now()
+    await env.DB.prepare('INSERT INTO team (id, name, organization_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)')
+      .bind('team-kubernetes-operators', 'kubernetes-operators', platformOrganizationId, now, now)
+      .run()
+    await env.DB.prepare('INSERT INTO team_member (id, team_id, user_id, created_at) VALUES (?, ?, ?, ?)')
+      .bind('team-member-kubernetes-controller', 'team-kubernetes-operators', controllerId, now)
+      .run()
+
+    const sourceAudience = 'https://hub.example.com'
+    const sourceResponse = await harness.request('/api/resource-servers', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie: adminCookie },
+      body: JSON.stringify({
+        identifier: 'kubernetes-cluster-hub',
+        resourceUrl: sourceAudience,
+        authorizationModel: 'native',
+        ownerOrganizationId: platformOrganizationId,
+      }),
+    })
+    expect(sourceResponse.status, await sourceResponse.clone().text()).toBe(201)
+    const source = (await sourceResponse.json()) as { id: string }
+
+    const targetResponse = await harness.request('/api/applications', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie: adminCookie },
+      body: JSON.stringify({
+        name: 'Shared Kubernetes',
+        slug: 'shared-kubernetes',
+        clientType: 'public_native',
+        redirectUris: ['com.example.kubernetes:/callback'],
+        ownerOrganizationId: platformOrganizationId,
+        visibility: 'private',
+      }),
+    })
+    expect(targetResponse.status, await targetResponse.clone().text()).toBe(201)
+    const target = (await targetResponse.json()) as { id: string; clientId: string }
+
+    const hubResponse = await harness.request('/api/applications', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie: adminCookie },
+      body: JSON.stringify({
+        name: 'Kubernetes Cluster Hub',
+        slug: 'kubernetes-cluster-hub',
+        clientType: 'machine',
+        redirectUris: [],
+        ownerOrganizationId: platformOrganizationId,
+        tokenExchangePolicies: [{ sourceResourceServerId: source.id, targetApplicationId: target.id }],
+      }),
+    })
+    expect(hubResponse.status, await hubResponse.clone().text()).toBe(201)
+    const hub = (await hubResponse.json()) as { clientId: string; clientSecret: string }
+
+    const { publicKey } = await generateKeyPair('Ed25519')
+    const publicJwk = {
+      ...(await exportJWK(publicKey)),
+      kid: 'kubernetes-agent-key',
+    } as CreateAgent['installation']['publicKey']
+    const agentInput: CreateAgent = {
+      username: 'kubernetes-agent',
+      name: 'Kubernetes Agent',
+      runtime: 'cluster-hub',
+      installation: {
+        agentId: 'kubernetes-protocol-agent',
+        hostId: 'kubernetes-agent-host',
+        name: 'Cluster Hub',
+        kid: 'kubernetes-agent-key',
+        publicKey: publicJwk,
+      },
+    }
+    const createdAgent = await createAgentWithInstallation(harness.deps, agentInput, {
+      applicationId: 'kubernetes-cluster-hub',
+      actorUserId: controllerId,
+      issuer: `${baseURL}/api/auth`,
+      idempotencyKey: 'kubernetes-agent',
+    })
+    const active = await harness.deps.agentIdentities.findActiveBindingByProtocolAgent(agentInput.installation.agentId)
+    if (!active) throw new Error('Agent binding was not persisted.')
+    const principal = {
+      issuer: createdAgent.agent.issuer,
+      subject: createdAgent.agent.subject,
+      identityId: createdAgent.agent.id,
+      protocolAgentId: agentInput.installation.agentId,
+      hostId: agentInput.installation.hostId,
+      identity: active.identity,
+      binding: active.binding,
+    }
+    const accessRequest = await createAccessRequest(
+      harness.deps,
+      {
+        resourceServerId: source.id,
+        scopes: ['resource:read'],
+        authorizationDetails: [{ type: 'realmroot_authority', authority: 'organization', id: platformOrganizationId }],
+        reason: 'Authenticate to Kubernetes',
+      },
+      principal,
+      baseURL,
+    )
+    const approval = await harness.request(`/api/account/access-requests/${accessRequest.id}/decision`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json', cookie: controllerCookie },
+      body: JSON.stringify({
+        decision: 'approve',
+        mode: 'persistent',
+        authorizationDetails: [{ type: 'realmroot_authority', authority: 'organization', id: platformOrganizationId }],
+      }),
+    })
+    expect(approval.status, await approval.clone().text()).toBe(200)
+    const credentialUrl = `${baseURL}/api/access-requests/${accessRequest.id}/credentials`
+    const credential = await createAccessRequestCredential(
+      harness.deps,
+      accessRequest.id,
+      await dpopProof(credentialUrl),
+      credentialUrl,
+      principal,
+      harness.agentTokenSigner,
+    )
+
+    const exchange = await harness.request('/api/auth/oauth2/token', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+        authorization: `Basic ${btoa(`${hub.clientId}:${hub.clientSecret}`)}`,
+      },
+      body: new URLSearchParams({
+        grant_type: 'urn:ietf:params:oauth:grant-type:token-exchange',
+        subject_token: credential.accessToken,
+        subject_token_type: 'urn:ietf:params:oauth:token-type:access_token',
+        requested_token_type: 'urn:ietf:params:oauth:token-type:id_token',
+        audience: target.clientId,
+        scope: 'openid groups',
+      }),
+    })
+    expect(exchange.status, await exchange.clone().text()).toBe(200)
+    const body = (await exchange.json()) as {
+      access_token: string
+      issued_token_type: string
+      refresh_token?: string
+    }
+    expect(body.issued_token_type).toBe('urn:ietf:params:oauth:token-type:id_token')
+    expect(body.refresh_token).toBeUndefined()
+    expect(decodeProtectedHeader(body.access_token)).toMatchObject({ typ: 'JWT' })
+    expect(decodeJwt(body.access_token)).toMatchObject({
+      sub: controllerId,
+      aud: target.clientId,
+      azp: hub.clientId,
+      act: { iss: `${baseURL}/api/auth`, sub: createdAgent.agent.subject },
+      groups: ['kubernetes-operators'],
+      [realmrootOrganizationClaim]: platformOrganizationId,
+    })
+    expect(decodeJwt(body.access_token)).not.toHaveProperty('scope')
+    expect(decodeJwt(credential.accessToken)).toMatchObject({ client_id: realmrootCliClientId })
+    const audit = await env.DB.prepare(
+      "SELECT result, metadata FROM agent_audit_event WHERE action = 'oauth.agent_identity_token_exchanged' ORDER BY occurred_at DESC LIMIT 1",
+    ).first<{ result: string; metadata: string }>()
+    expect(audit?.result).toBe('allowed')
+    expect(JSON.parse(audit?.metadata ?? '{}')).toMatchObject({
+      exchangeClientId: hub.clientId,
+      targetApplicationId: target.id,
+    })
   })
 
   it('exchanges a configured inbound User Resource token for a narrower downstream token', async () => {

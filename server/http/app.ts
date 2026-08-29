@@ -377,7 +377,7 @@ async function maybeHandleTokenExchange(c: Context, issuer: string, auth: AuthHa
     if (!auth.api.signJWT) throw oauthError('temporarily_unavailable', 'OAuth token issuance is unavailable.', 503)
     const signer = {
       issuer,
-      sign: (payload: Record<string, unknown>, type: 'at+jwt') =>
+      sign: (payload: Record<string, unknown>, type: 'at+jwt' | 'JWT') =>
         auth.api.signJWT!({ body: { payload, overrideOptions: { jwt: { type } } }, asResponse: false }).then(
           ({ token }) => token,
         ),

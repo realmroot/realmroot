@@ -15,11 +15,12 @@ import {
 } from '@server/usecases/resource-scope-entitlements'
 import { activeResourceVisibleToOrganization } from '@server/usecases/resource-visibility'
 import type { ApiResourceResponse } from '@shared/api/authorization'
-import { realmrootOrganizationClaim } from '@shared/oauth-token-profile'
+import { realmrootCliClientId, realmrootOrganizationClaim } from '@shared/oauth-token-profile'
 
 export const tokenExchangeGrantType = 'urn:ietf:params:oauth:grant-type:token-exchange'
 export const refreshTokenGrantType = 'refresh_token'
 export const accessTokenType = 'urn:ietf:params:oauth:token-type:access_token'
+export const idTokenType = 'urn:ietf:params:oauth:token-type:id_token'
 export const jwtTokenType = 'urn:ietf:params:oauth:token-type:jwt'
 
 const defaultExpiresInSeconds = 60 * 60
@@ -31,7 +32,7 @@ const opaqueAccessTokenPrefix = 'fatx_'
 
 export interface TokenExchangeJwtSigner {
   issuer: string
-  sign(payload: Record<string, unknown>, type: 'at+jwt'): Promise<string>
+  sign(payload: Record<string, unknown>, type: 'at+jwt' | 'JWT'): Promise<string>
 }
 
 export interface TokenExchangeJwtVerifier {
@@ -50,7 +51,7 @@ export interface TokenExchangeRequest {
 
 export interface TokenExchangeResponse {
   access_token: string
-  issued_token_type: typeof accessTokenType
+  issued_token_type: typeof accessTokenType | typeof idTokenType
   token_type: 'Bearer'
   expires_in: number
   scope: string
@@ -85,10 +86,6 @@ export async function exchangeToken(
   if (input.grantType !== tokenExchangeGrantType) {
     throw oauthError('unsupported_grant_type', 'Unsupported grant_type.')
   }
-  if (input.requestedTokenType && input.requestedTokenType !== accessTokenType) {
-    throw oauthError('invalid_request', 'Only access_token requested_token_type is supported.')
-  }
-
   const { client: oauthClient, application } = await authenticateApplicationClient(
     deps,
     client.clientId,
@@ -97,6 +94,15 @@ export async function exchangeToken(
   const allowedGrantTypes = parseList(oauthClient.grantTypes)
   if (!allowedGrantTypes.includes(tokenExchangeGrantType)) {
     throw oauthError('unauthorized_client', 'Client is not allowed to use token exchange.')
+  }
+  if (input.requestedTokenType === idTokenType) {
+    if (input.subjectTokenType !== accessTokenType) {
+      throw oauthError('invalid_request', 'ID tokens require an access_token subject token.')
+    }
+    return exchangeAgentIdentityToken(deps, input, oauthClient.clientId, application, signer)
+  }
+  if (input.requestedTokenType && input.requestedTokenType !== accessTokenType) {
+    throw oauthError('invalid_request', 'Unsupported requested_token_type.')
   }
   if (input.subjectTokenType === accessTokenType) {
     return exchangeDelegatedUserToken(deps, input, oauthClient.clientId, application, signer)
@@ -177,6 +183,217 @@ export async function exchangeToken(
   return response
 }
 
+async function exchangeAgentIdentityToken(
+  deps: Deps,
+  input: TokenExchangeRequest,
+  clientId: string,
+  application: ApplicationAggregate,
+  signer: TokenExchangeJwtSigner,
+): Promise<TokenExchangeResponse> {
+  const claims = input.verifiedSubjectClaims
+  const actor = claims && isRecord(claims.act) ? claims.act : null
+  const auditContext = {
+    clientId,
+    controllerUserId: claims ? readString(claims.sub) : null,
+    actorIssuer: actor ? readString(actor.iss) : null,
+    actorSubject: actor ? readString(actor.sub) : null,
+    sourceTokenId: claims ? readString(claims.jti) : null,
+    organizationId: claims ? readString(claims[realmrootOrganizationClaim]) : null,
+    targetAudience: input.audience,
+  }
+  try {
+    const response = await exchangeAgentIdentityTokenVerified(deps, input, clientId, application, signer)
+    await appendIdentityTokenExchangeAudit(deps, auditContext, 'allowed', null, null)
+    return response
+  } catch (error) {
+    await appendIdentityTokenExchangeAudit(
+      deps,
+      auditContext,
+      'denied',
+      error instanceof OAuthError ? error.error : 'internal_error',
+      error instanceof OAuthError ? error.errorDescription : 'ID token exchange failed unexpectedly.',
+    )
+    throw error
+  }
+}
+
+async function exchangeAgentIdentityTokenVerified(
+  deps: Deps,
+  input: TokenExchangeRequest,
+  clientId: string,
+  application: ApplicationAggregate,
+  signer: TokenExchangeJwtSigner,
+): Promise<TokenExchangeResponse> {
+  const claims = input.verifiedSubjectClaims
+  if (!claims) throw oauthError('invalid_grant', 'Subject access token is invalid.')
+  const subject = readString(claims.sub)
+  const issuer = readString(claims.iss)
+  const sourceAudience = readSingleAudience(claims.aud)
+  const sourceTokenId = readString(claims.jti)
+  const sourceClientId = readString(claims.client_id)
+  const expiresAtClaim = readNumber(claims.exp)
+  const actor = isRecord(claims.act) ? claims.act : null
+  const actorIssuer = actor ? readString(actor.iss) : null
+  const actorSubject = actor ? readString(actor.sub) : null
+  if (
+    !subject ||
+    issuer !== signer.issuer ||
+    !sourceAudience ||
+    !sourceTokenId ||
+    sourceClientId !== realmrootCliClientId ||
+    !expiresAtClaim ||
+    !actorIssuer ||
+    !actorSubject
+  ) {
+    throw oauthError('invalid_grant', 'Agent subject token is missing required claims.')
+  }
+  if (expiresAtClaim <= Math.floor(Date.now() / 1000)) {
+    throw oauthError('invalid_grant', 'Agent subject token is expired.')
+  }
+  const organizationId = readString(claims[realmrootOrganizationClaim])
+  if (!organizationId) throw oauthError('invalid_grant', 'Agent subject token has no Organization context.')
+
+  const [sourceResource, targetApplication, identity, lease] = await Promise.all([
+    deps.authorization.findResourceByResourceUrl(sourceAudience),
+    deps.applications.findByClientId(input.audience),
+    deps.agentIdentities.findByIssuerSubject(actorIssuer, actorSubject),
+    deps.externalResources.findActiveTokenLeaseByTokenHash(await sha256(input.subjectToken), new Date()),
+  ])
+  if (!sourceResource || !activeResourceVisibleToOrganization(sourceResource, application.ownerOrganizationId)) {
+    throw oauthError('invalid_grant', 'Agent subject token audience is not eligible for this Application.')
+  }
+  const policy = application.tokenExchangePolicies.find(
+    (candidate) =>
+      'targetApplicationId' in candidate &&
+      candidate.sourceResourceServerId === sourceResource.id &&
+      candidate.targetApplicationId === targetApplication?.id,
+  )
+  if (!policy) throw oauthError('invalid_target', 'No token exchange policy allows the requested source and target.')
+  if (
+    !targetApplication ||
+    targetApplication.disabled ||
+    targetApplication.clientType !== 'public_native' ||
+    targetApplication.visibility !== 'private' ||
+    targetApplication.ownerOrganizationId !== application.ownerOrganizationId ||
+    targetApplication.ownerOrganizationId !== organizationId
+  ) {
+    throw oauthError('invalid_target', 'Target OIDC Application is not eligible for this exchange.')
+  }
+  if (!lease) throw oauthError('invalid_grant', 'Agent subject token is inactive or revoked.')
+  const sourceRequest = await deps.externalResources.findAccessRequest(lease.requestId)
+  if (
+    !sourceRequest ||
+    sourceRequest.resourceId !== sourceResource.id ||
+    sourceRequest.agentIdentityId !== identity?.id
+  ) {
+    throw oauthError('invalid_grant', 'Agent subject token authority does not match its claims.')
+  }
+  const identityAggregate = identity ? await deps.agentIdentities.findIdentity(identity.id) : null
+  if (
+    !identityAggregate ||
+    identityAggregate.identity.status !== 'active' ||
+    identityAggregate.identity.deletedAt ||
+    identityAggregate.identity.ownerUserId !== subject ||
+    !identityAggregate.bindings.some(
+      (binding) => binding.id === lease.bindingId && binding.status === 'active' && !binding.revokedAt,
+    )
+  ) {
+    throw oauthError('invalid_grant', 'Agent identity or binding is inactive.')
+  }
+  await requireActiveDelegatedUser(deps, subject)
+  const [organization, membership, groups] = await Promise.all([
+    deps.authorization.findOrganization(organizationId),
+    deps.authorization.findMemberByOrganizationUser(organizationId, subject),
+    deps.authorization.listTeamNamesForUser(organizationId, subject),
+  ])
+  if (!organization || organization.disabled || !membership) {
+    throw oauthError('invalid_grant', 'Controller Organization membership is inactive.')
+  }
+  const requestedScopes = normalizeScopes(input.scope, ['openid', 'groups'])
+  const targetOidcScopes = new Set<string>(targetApplication.oidcScopes)
+  if (
+    requestedScopes.length !== 2 ||
+    !requestedScopes.includes('openid') ||
+    !requestedScopes.includes('groups') ||
+    requestedScopes.some((scope) => !targetOidcScopes.has(scope))
+  ) {
+    throw oauthError('invalid_scope', 'Requested identity scope is unavailable for the target Application.')
+  }
+
+  const now = new Date()
+  const expiresAt = new Date(Math.min(now.getTime() + delegatedUserExpiresInSeconds * 1000, expiresAtClaim * 1000))
+  const idToken = await signer.sign(
+    {
+      iss: signer.issuer,
+      sub: subject,
+      aud: targetApplication.clientId,
+      azp: clientId,
+      act: { iss: actorIssuer, sub: actorSubject },
+      groups,
+      [realmrootOrganizationClaim]: organizationId,
+      iat: Math.floor(now.getTime() / 1000),
+      exp: Math.floor(expiresAt.getTime() / 1000),
+      jti: crypto.randomUUID(),
+    },
+    'JWT',
+  )
+  return {
+    access_token: idToken,
+    issued_token_type: idTokenType,
+    token_type: 'Bearer',
+    expires_in: Math.max(0, Math.floor((expiresAt.getTime() - now.getTime()) / 1000)),
+    scope: requestedScopes.join(' '),
+  }
+}
+
+async function appendIdentityTokenExchangeAudit(
+  deps: Deps,
+  context: {
+    clientId: string
+    controllerUserId: string | null
+    actorIssuer: string | null
+    actorSubject: string | null
+    sourceTokenId: string | null
+    organizationId: string | null
+    targetAudience: string
+  },
+  result: 'allowed' | 'denied',
+  reasonCode: string | null,
+  failureReason: string | null,
+) {
+  const identity =
+    context.actorIssuer && context.actorSubject
+      ? await deps.agentIdentities.findByIssuerSubject(context.actorIssuer, context.actorSubject)
+      : null
+  const targetApplication = await deps.applications.findByClientId(context.targetAudience)
+  await deps.agentAudit.append({
+    id: deps.ids.generate(),
+    action: 'oauth.agent_identity_token_exchanged',
+    result,
+    realmOwned: false,
+    ownerUserId: context.organizationId ? null : context.controllerUserId,
+    ownerOrganizationId: context.organizationId,
+    controllerUserId: context.controllerUserId,
+    subjectIssuer: context.actorIssuer,
+    subject: context.actorSubject,
+    agentIdentityId: identity?.id ?? null,
+    hostId: null,
+    resourceId: null,
+    resourceConnectionId: null,
+    accessRequestId: null,
+    scopes: ['openid', 'groups'],
+    reasonCode,
+    metadata: {
+      exchangeClientId: context.clientId,
+      sourceTokenId: context.sourceTokenId,
+      targetApplicationId: targetApplication?.id ?? null,
+      targetApplicationClientId: context.targetAudience,
+      failureReason,
+    },
+    occurredAt: new Date(),
+  })
+}
+
 async function exchangeDelegatedUserToken(
   deps: Deps,
   input: TokenExchangeRequest,
@@ -211,9 +428,13 @@ async function exchangeDelegatedUserToken(
   }
   const policy = application.tokenExchangePolicies.find(
     (candidate) =>
-      candidate.sourceResourceServerId === sourceResource.id && candidate.targetResourceServerId === targetResource.id,
+      'targetResourceServerId' in candidate &&
+      candidate.sourceResourceServerId === sourceResource.id &&
+      candidate.targetResourceServerId === targetResource.id,
   )
-  if (!policy) throw oauthError('invalid_target', 'No token exchange policy allows the requested source and target.')
+  if (!policy || !('targetResourceServerId' in policy)) {
+    throw oauthError('invalid_target', 'No token exchange policy allows the requested source and target.')
+  }
   const subjectScopes = new Set(parseSpaceSeparatedClaim(claims.scope))
   const declaredSourceScopes = new Set(sourceResource.scopeRegistry?.scopes.map((scope) => scope.value) ?? [])
   const mappedTargetScopes = new Set(
@@ -601,6 +822,14 @@ function normalizeScopes(scope: string | undefined, allowedScopes: string[]) {
     if (!allowedScopes.includes(item)) throw oauthError('invalid_scope', `Scope is not allowed: ${item}`)
   }
   return scopes
+}
+
+async function sha256(value: string) {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))
+  return btoa(String.fromCharCode(...new Uint8Array(digest)))
+    .replaceAll('+', '-')
+    .replaceAll('/', '_')
+    .replace(/=+$/, '')
 }
 
 async function issueRefreshToken(

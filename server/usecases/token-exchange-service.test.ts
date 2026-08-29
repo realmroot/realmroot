@@ -18,6 +18,7 @@ import {
   deleteFederatedCredential,
   exchangeToken as exchangeTokenVerified,
   getFederatedCredential,
+  idTokenType,
   introspectToken as introspectTokenVerified,
   isTokenExchangeAccessToken,
   jwtTokenType,
@@ -232,6 +233,196 @@ describe('token exchange service', () => {
         { clientId: applicationClientId, clientSecret },
       ),
     ).rejects.toMatchObject({ error: 'invalid_grant' })
+  })
+
+  it('exchanges an active policy-bound Agent token for a Kubernetes ID token and audits revocation [spec: agent-identity/agent-kubernetes-id-token-exchange]', async () => {
+    const { deps, clientSecret } = await tokenExchangeFixture({ scopes: [] })
+    const sourceResource = eligibleAudienceResource(['hub:read'])
+    const targetApplication = {
+      id: 'app_kubernetes',
+      clientId: 'kubernetes-client',
+      clientType: 'public_native',
+      visibility: 'private',
+      disabled: false,
+      ownerOrganizationId: 'org_1',
+      oidcScopes: ['openid', 'profile', 'email', 'groups', 'offline_access'],
+    }
+    const findApplication = deps.applications.findByClientId
+    let policyEnabled = true
+    deps.applications.findByClientId = async (clientId) => {
+      if (clientId === targetApplication.clientId) return targetApplication as never
+      const application = await findApplication(clientId)
+      return application
+        ? {
+            ...application,
+            tokenExchangePolicies: policyEnabled
+              ? [
+                  {
+                    sourceResourceServerId: sourceResource.id,
+                    targetApplicationId: targetApplication.id,
+                  },
+                ]
+              : [],
+          }
+        : null
+    }
+    deps.authorization.findResourceByResourceUrl = async (audience) =>
+      (audience === sourceResource.resourceUrl ? sourceResource : null) as never
+    deps.authorization.findOrganization = async () => ({ id: 'org_1', disabled: false }) as never
+    deps.authorization.findMemberByOrganizationUser = async () => ({ id: 'member_1' }) as never
+    deps.authorization.listTeamNamesForUser = async () => ['platform-operators']
+    const identity = {
+      id: 'agent_identity_1',
+      issuer: realmrootIssuer,
+      subject: 'agent_1',
+      ownerUserId: 'user_1',
+      ownerOrganizationId: null,
+      status: 'active',
+      deletedAt: null,
+    }
+    deps.agentIdentities = {
+      findByIssuerSubject: vi.fn().mockResolvedValue(identity),
+      findIdentity: vi.fn().mockResolvedValue({
+        identity,
+        bindings: [{ id: 'binding_1', status: 'active', revokedAt: null }],
+      }),
+    } as never
+    const activeLease = { id: 'lease_1', requestId: 'request_1', bindingId: 'binding_1' }
+    deps.externalResources = {
+      findActiveTokenLeaseByTokenHash: vi.fn().mockResolvedValue(activeLease),
+      findAccessRequest: vi.fn().mockResolvedValue({
+        id: 'request_1',
+        resourceId: sourceResource.id,
+        agentIdentityId: identity.id,
+      }),
+    } as never
+    deps.agentAudit = { append: vi.fn().mockResolvedValue(undefined) } as never
+    const signer = {
+      issuer: realmrootIssuer,
+      sign: vi.fn(async (payload: Record<string, unknown>) => testAccessToken(payload)),
+    }
+    const input = {
+      grantType: tokenExchangeGrantType,
+      subjectToken: 'active-agent-token',
+      subjectTokenType: accessTokenType,
+      requestedTokenType: idTokenType,
+      audience: targetApplication.clientId,
+      scope: 'openid groups',
+      verifiedSubjectClaims: {
+        iss: realmrootIssuer,
+        sub: 'user_1',
+        aud: sourceResource.resourceUrl,
+        jti: 'resat_1',
+        client_id: 'realmroot-cli',
+        exp: Math.floor(Date.now() / 1000) + 600,
+        [realmrootOrganizationClaim]: 'org_1',
+        act: { iss: realmrootIssuer, sub: 'agent_1' },
+      },
+    }
+
+    const response = await exchangeTokenVerified(deps, input, { clientId: applicationClientId, clientSecret }, signer)
+
+    expect(response).toMatchObject({
+      issued_token_type: idTokenType,
+      token_type: 'Bearer',
+      scope: 'openid groups',
+    })
+    expect(response).not.toHaveProperty('refresh_token')
+    expect(decodeTestAccessToken(response.access_token)).toMatchObject({
+      sub: 'user_1',
+      aud: targetApplication.clientId,
+      azp: applicationClientId,
+      act: { iss: realmrootIssuer, sub: 'agent_1' },
+      groups: ['platform-operators'],
+      [realmrootOrganizationClaim]: 'org_1',
+    })
+    expect(decodeTestAccessToken(response.access_token)).not.toHaveProperty('scope')
+    expect(signer.sign).toHaveBeenCalledWith(expect.any(Object), 'JWT')
+    expect(deps.agentAudit.append).toHaveBeenLastCalledWith(
+      expect.objectContaining({ action: 'oauth.agent_identity_token_exchanged', result: 'allowed' }),
+    )
+
+    vi.mocked(deps.externalResources.findActiveTokenLeaseByTokenHash).mockResolvedValueOnce(null)
+    await expect(
+      exchangeTokenVerified(deps, input, { clientId: applicationClientId, clientSecret }, signer),
+    ).rejects.toMatchObject({ error: 'invalid_grant' })
+    expect(deps.agentAudit.append).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        action: 'oauth.agent_identity_token_exchanged',
+        result: 'denied',
+        reasonCode: 'invalid_grant',
+        metadata: expect.objectContaining({ failureReason: 'Agent subject token is inactive or revoked.' }),
+      }),
+    )
+
+    vi.mocked(deps.externalResources.findActiveTokenLeaseByTokenHash).mockResolvedValue(activeLease as never)
+    for (const verifiedSubjectClaims of [
+      undefined,
+      { ...input.verifiedSubjectClaims, client_id: 'wrong-client' },
+      { ...input.verifiedSubjectClaims, act: undefined },
+      { ...input.verifiedSubjectClaims, exp: 1 },
+      { ...input.verifiedSubjectClaims, [realmrootOrganizationClaim]: undefined },
+      { ...input.verifiedSubjectClaims, [realmrootOrganizationClaim]: 'org_other' },
+      { ...input.verifiedSubjectClaims, aud: 'https://wrong-source.example.com' },
+    ]) {
+      await expect(
+        exchangeTokenVerified(
+          deps,
+          { ...input, verifiedSubjectClaims },
+          { clientId: applicationClientId, clientSecret },
+          signer,
+        ),
+      ).rejects.toBeInstanceOf(Error)
+    }
+
+    await expect(
+      exchangeTokenVerified(
+        deps,
+        { ...input, audience: 'unknown-kubernetes-client' },
+        { clientId: applicationClientId, clientSecret },
+        signer,
+      ),
+    ).rejects.toMatchObject({ error: 'invalid_target' })
+
+    vi.mocked(deps.agentIdentities.findByIssuerSubject).mockResolvedValueOnce(null)
+    await expect(
+      exchangeTokenVerified(deps, input, { clientId: applicationClientId, clientSecret }, signer),
+    ).rejects.toMatchObject({ error: 'invalid_grant' })
+
+    policyEnabled = false
+    await expect(
+      exchangeTokenVerified(deps, input, { clientId: applicationClientId, clientSecret }, signer),
+    ).rejects.toMatchObject({ error: 'invalid_target' })
+    policyEnabled = true
+
+    targetApplication.disabled = true
+    await expect(
+      exchangeTokenVerified(deps, input, { clientId: applicationClientId, clientSecret }, signer),
+    ).rejects.toMatchObject({ error: 'invalid_target' })
+    targetApplication.disabled = false
+
+    vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValueOnce({
+      identity: { ...identity, status: 'inactive' },
+      bindings: [{ id: 'binding_1', status: 'active', revokedAt: null }],
+    } as never)
+    await expect(
+      exchangeTokenVerified(deps, input, { clientId: applicationClientId, clientSecret }, signer),
+    ).rejects.toMatchObject({ error: 'invalid_grant' })
+
+    deps.authorization.findMemberByOrganizationUser = async () => null
+    await expect(
+      exchangeTokenVerified(deps, input, { clientId: applicationClientId, clientSecret }, signer),
+    ).rejects.toMatchObject({ error: 'invalid_grant' })
+
+    deps.authorization.findMemberByOrganizationUser = async () => ({ id: 'member_1' }) as never
+    await expect(
+      exchangeTokenVerified(
+        deps,
+        { ...input, scope: 'openid' },
+        { clientId: applicationClientId, clientSecret },
+        signer,
+      ),
+    ).rejects.toMatchObject({ error: 'invalid_scope' })
   })
 
   it('rejects invalid, expired, inactive, and unconfigured User token delegation subjects', async () => {

@@ -68,6 +68,9 @@ describe('OpenAPI semantic contract gate', () => {
     const resourceTokenDelegationContract = JSON.parse(
       readFileSync(new URL('./approved-resource-token-delegation-semantic-baseline.json', import.meta.url), 'utf8'),
     ) as typeof unchanged
+    const agentIdTokenExchangeContract = JSON.parse(
+      readFileSync(new URL('./approved-agent-id-token-exchange-semantic-baseline.json', import.meta.url), 'utf8'),
+    ) as typeof unchanged
     const brokeredNativeChanges = new Set(brokeredNativeContract.map(({ method, path }) => `${method}:${path}`))
     const resourceDiscoveryChanges = new Set(resourceDiscoveryContract.map(({ method, path }) => `${method}:${path}`))
     const approvedChanges = new Set(
@@ -187,6 +190,9 @@ describe('OpenAPI semantic contract gate', () => {
     const resourceTokenDelegationChanges = new Set(
       resourceTokenDelegationContract.map(({ method, path }) => `${method}:${path}`),
     )
+    const agentIdTokenExchangeChanges = new Set(
+      agentIdTokenExchangeContract.map(({ method, path }) => `${method}:${path}`),
+    )
     const baseline = [
       ...preApplicationOwnerImmutabilityBaseline.filter(
         ({ method, path }) =>
@@ -197,7 +203,10 @@ describe('OpenAPI semantic contract gate', () => {
         ({ method, path }) => !resourceTokenDelegationChanges.has(`${method}:${path}`),
       ),
       ...applicationAgentCreationContract,
-      ...resourceTokenDelegationContract,
+      ...resourceTokenDelegationContract.filter(
+        ({ method, path }) => !agentIdTokenExchangeChanges.has(`${method}:${path}`),
+      ),
+      ...agentIdTokenExchangeContract,
     ].sort((left, right) => `${left.path}:${left.method}`.localeCompare(`${right.path}:${right.method}`))
 
     expect(openApiSemanticSnapshot(unifiedOpenApi as unknown as Record<string, unknown>, () => true)).toEqual(baseline)
