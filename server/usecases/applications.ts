@@ -651,29 +651,63 @@ async function validateTokenExchangePolicies(
   }
   if (policies.length === 0) return policies
   const resourceIds = [
-    ...new Set(policies.flatMap((policy) => [policy.sourceResourceServerId, policy.targetResourceServerId])),
+    ...new Set(
+      policies.flatMap((policy) => [
+        policy.sourceResourceServerId,
+        ...('targetResourceServerId' in policy ? [policy.targetResourceServerId] : []),
+      ]),
+    ),
   ]
-  const resources = new Map(
-    (await deps.authorization.findResources(resourceIds)).map((resource) => [resource.id, resource]),
+  const targetApplicationIds = [
+    ...new Set(policies.flatMap((policy) => ('targetApplicationId' in policy ? [policy.targetApplicationId] : []))),
+  ]
+  const [resourceRows, targetApplicationRows] = await Promise.all([
+    deps.authorization.findResources(resourceIds),
+    Promise.all(targetApplicationIds.map((id) => deps.applications.findById(id))),
+  ])
+  const resources = new Map(resourceRows.map((resource) => [resource.id, resource]))
+  const targetApplications = new Map(
+    targetApplicationRows.flatMap((application) => (application ? [[application.id, application] as const] : [])),
   )
   const configuredTargetScopes = new Map(
     resourceScopes.map((configuration) => [configuration.resourceServerId, new Set(configuration.scopes)]),
   )
   const policyPairs = new Set<string>()
   for (const policy of policies) {
-    const pair = `${policy.sourceResourceServerId}\u0000${policy.targetResourceServerId}`
+    const targetKey =
+      'targetResourceServerId' in policy
+        ? `resource:${policy.targetResourceServerId}`
+        : `application:${policy.targetApplicationId}`
+    const pair = `${policy.sourceResourceServerId}\u0000${targetKey}`
     if (policyPairs.has(pair)) {
-      throw badRequest('Each token exchange source and target Resource Server pair must appear only once.')
+      throw badRequest('Each token exchange source and target pair must appear only once.')
     }
     policyPairs.add(pair)
     const source = resources.get(policy.sourceResourceServerId)
+    if (!source?.enabled) throw badRequest('Token exchange policy source Resource Server must be active.')
+    if (source.visibility === 'private' && source.ownerOrganizationId !== ownerOrganizationId) {
+      throw badRequest('Token exchange policy source Resource Server must be visible to the Application tenant.')
+    }
+    if ('targetApplicationId' in policy) {
+      const target = targetApplications.get(policy.targetApplicationId)
+      if (
+        !target ||
+        target.disabled ||
+        target.visibility !== 'private' ||
+        target.ownerOrganizationId !== ownerOrganizationId ||
+        !target.oidcScopes.includes('openid') ||
+        !target.oidcScopes.includes('groups')
+      ) {
+        throw badRequest(
+          'Token exchange target Application must be an active private OIDC Application in the same Organization with openid and groups scopes.',
+        )
+      }
+      continue
+    }
     const target = resources.get(policy.targetResourceServerId)
-    if (!source?.enabled || !target?.enabled) throw badRequest('Token exchange policy Resource Servers must be active.')
-    if (
-      (source.visibility === 'private' && source.ownerOrganizationId !== ownerOrganizationId) ||
-      (target.visibility === 'private' && target.ownerOrganizationId !== ownerOrganizationId)
-    ) {
-      throw badRequest('Token exchange policy Resource Servers must be visible to the Application tenant.')
+    if (!target?.enabled) throw badRequest('Token exchange policy target Resource Server must be active.')
+    if (target.visibility === 'private' && target.ownerOrganizationId !== ownerOrganizationId) {
+      throw badRequest('Token exchange policy target Resource Server must be visible to the Application tenant.')
     }
     const sourceScopes = new Set(source.scopeRegistry?.scopes.map((scope) => scope.value) ?? [])
     const targetScopes = new Set(target.scopeRegistry?.scopes.map((scope) => scope.value) ?? [])

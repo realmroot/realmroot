@@ -1,0 +1,26 @@
+[
+  {
+    "method": "GET",
+    "path": "/applications",
+    "operationId": "listApplications",
+    "semanticHash": "beb6e2e2fde7a29c80d8372121764190bc322a933833f5b62d52fd059fc133c2"
+  },
+  {
+    "method": "POST",
+    "path": "/applications",
+    "operationId": "createApplication",
+    "semanticHash": "32de87e90521d9648bb23cab6a46e00674045dc284cc380033151c4980ee3b57"
+  },
+  {
+    "method": "GET",
+    "path": "/applications/{applicationId}",
+    "operationId": "getApplication",
+    "semanticHash": "39805dfd2e01a2a741c3c638043a2f693640fd57770bf21a89b8fe575f275611"
+  },
+  {
+    "method": "PATCH",
+    "path": "/applications/{applicationId}",
+    "operationId": "updateApplication",
+    "semanticHash": "2fa8a61dc551d6f83335f25c50efae126c7ef370cf4ebf55217c2874de0ccb68"
+  }
+]
