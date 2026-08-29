@@ -155,7 +155,10 @@ describe('authorization CRUD and assignment policy', () => {
       expect.objectContaining({
         scopeRegistry: expect.objectContaining({
           discovery: expect.objectContaining({ documentHash: 'system-managed' }),
-          scopes: expect.arrayContaining([expect.objectContaining({ value: 'resource-servers:write' })]),
+          scopes: expect.arrayContaining([
+            expect.objectContaining({ value: 'resource-servers:write', grantMode: 'assigned' }),
+            expect.objectContaining({ value: 'agents:write', grantMode: 'automatic' }),
+          ]),
         }),
       }),
     )
@@ -1080,7 +1083,10 @@ describe('authorization CRUD and assignment policy', () => {
       expect.objectContaining({
         scopeRegistry: expect.objectContaining({
           discovery: expect.objectContaining({ documentHash: 'system-managed' }),
-          scopes: expect.arrayContaining([expect.objectContaining({ value: 'resource-servers:write' })]),
+          scopes: expect.arrayContaining([
+            expect.objectContaining({ value: 'resource-servers:write', grantMode: 'assigned' }),
+            expect.objectContaining({ value: 'agents:write', grantMode: 'automatic' }),
+          ]),
         }),
       }),
     )
