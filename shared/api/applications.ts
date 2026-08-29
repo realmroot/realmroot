@@ -48,13 +48,22 @@ export const tokenExchangeScopeMappingSchema = z
   })
   .strict()
 
-export const tokenExchangePolicySchema = z
+export const resourceTokenExchangePolicySchema = z
   .object({
     sourceResourceServerId: nonEmptyString.max(200),
     targetResourceServerId: nonEmptyString.max(200),
     scopeMappings: z.array(tokenExchangeScopeMappingSchema).min(1).max(1_000),
   })
   .strict()
+
+export const identityTokenExchangePolicySchema = z
+  .object({
+    sourceResourceServerId: nonEmptyString.max(200),
+    targetApplicationId: nonEmptyString.max(200),
+  })
+  .strict()
+
+export const tokenExchangePolicySchema = z.union([resourceTokenExchangePolicySchema, identityTokenExchangePolicySchema])
 
 export const tokenExchangePoliciesSchema = z.array(tokenExchangePolicySchema).max(100)
 

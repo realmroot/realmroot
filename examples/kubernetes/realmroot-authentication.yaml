@@ -1,0 +1,27 @@
+apiVersion: apiserver.config.k8s.io/v1
+kind: AuthenticationConfiguration
+jwt:
+  - issuer:
+      url: https://realmroot.example/api/auth
+      audiences:
+        - KUBERNETES_APPLICATION_CLIENT_ID
+      audienceMatchPolicy: MatchAny
+    claimValidationRules:
+      - expression: "claims['urn:realmroot:params:oauth:org'] == 'REALMROOT_ORGANIZATION_ID'"
+        message: token is not issued for this Realmroot Organization
+      - expression: "has(claims.act) && has(claims.act.iss) && has(claims.act.sub)"
+        message: token has no Realmroot Agent actor
+    claimMappings:
+      username:
+        claim: sub
+        prefix: ""
+      groups:
+        claim: groups
+        prefix: ""
+      uid:
+        claim: sub
+    userValidationRules:
+      - expression: "!user.username.startsWith('system:')"
+        message: username must not use the Kubernetes system prefix
+      - expression: "user.groups.all(group, !group.startsWith('system:'))"
+        message: groups must not use the Kubernetes system prefix

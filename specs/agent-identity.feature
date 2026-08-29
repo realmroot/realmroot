@@ -308,6 +308,16 @@ Feature: Agent identity and delegated API authorization
 
   Rule: Workload token exchange preserves authorization boundaries
 
+    @entrypoint:agent-protocol @journey:agent-oidc-id-token-exchange
+    Scenario: A native Resource Server exchanges an Agent token for an OIDC ID token
+      Given a confidential Application has an explicit source Resource Server to target OIDC Application policy
+      And the target is an active private OIDC Application in the same Organization
+      When the Application exchanges an active Agent access token issued for the configured source Resource Server
+      Then Realmroot issues a short-lived ID token for the target Application client ID
+      And the token preserves the controller User in sub and the stable Agent in act
+      And current Organization Team names are emitted as groups without source Resource scopes or a refresh token
+      But an inactive source token, Agent, controller, membership, source, target, or missing policy is rejected and audited
+
     @entrypoint:agent-protocol @journey:user-resource-token-delegation
     Scenario: A Resource Server exchanges an inbound User token for a narrower downstream token
       Given a confidential Application has an explicit source-to-target Resource Server scope mapping
