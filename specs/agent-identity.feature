@@ -157,6 +157,7 @@ Feature: Agent identity and delegated API authorization
       Then exactly one enabled native Resource Server represents that deployment's Realmroot API
       And its service URL and OAuth resource indicator use the deployment's canonical API URL
       And Realmroot reconciles its persisted scope registry to the current system-managed catalog
+      And agents:write is granted automatically so authorized Applications may create a User's Agent without a direct User permission
       And refreshing that registry returns the same current catalog without an external network dependency
       And its account connection status is not-required
       And it cannot be disabled, soft-deleted, or reassigned through tenant management

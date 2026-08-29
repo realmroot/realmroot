@@ -950,7 +950,11 @@ function realmrootRegistry(apiOrigin: string): NonNullable<ApiResourceResponse['
       syncedAt: new Date().toISOString(),
       lastError: null,
     },
-    scopes: Object.keys(realmrootScopeRegistry).map((value) => ({ value, description: null, grantMode: 'assigned' })),
+    scopes: Object.keys(realmrootScopeRegistry).map((value) => ({
+      value,
+      description: null,
+      grantMode: value === 'agents:write' ? 'automatic' : 'assigned',
+    })),
   }
 }
 
