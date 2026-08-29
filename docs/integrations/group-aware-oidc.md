@@ -74,31 +74,33 @@ RoleBindings and ClusterRoleBindings decide what it may do in each cluster.
 
 ### Server-side Agent exchange
 
-A native cluster Hub can exchange a Realmroot Agent access token for the same
-Kubernetes Application audience without creating another interactive client.
-Register the Hub as a machine Application and add this entry to its existing
-`tokenExchangePolicies` metadata:
+An authenticated confidential or machine Application can exchange a Realmroot
+Agent access token for the Kubernetes Application audience without creating
+another interactive client. Add this entry to the exchanging Application's
+existing `tokenExchangePolicies` metadata:
 
 ```json
 {
-  "sourceResourceServerId": "HUB_RESOURCE_SERVER_ID",
+  "sourceResourceServerId": "SOURCE_RESOURCE_SERVER_ID",
   "targetApplicationId": "KUBERNETES_APPLICATION_ID"
 }
 ```
 
-The target must be an active private `public_native` Application owned by the
-same Organization. The Hub authenticates at the token endpoint and requests
+The target must be an active private OIDC Application owned by the same
+Organization with the `openid` and `groups` scopes enabled. The exchanging
+Application authenticates at the token endpoint and requests
 `requested_token_type=urn:ietf:params:oauth:token-type:id_token`, the target
 Application client ID as `audience`, and `scope=openid groups`. Realmroot
-accepts only an active Hub-issued Agent token lease, resolves current Team
-membership, limits the result to five minutes and the source token lifetime,
-and issues no refresh token. The Hub must validate the source token and its
-DPoP proof at the Hub boundary before requesting this server-side exchange.
+accepts only an active Agent token lease issued for the configured source
+Resource Server, resolves current Team membership, limits the result to five
+minutes and the source token lifetime, and issues no refresh token. Before
+initiating the exchange, the exchanging service must validate the access token
+and its DPoP proof at its own Resource Server boundary.
 
-Rotate the Hub secret through the normal Application secret rotation flow.
-Revoking the Hub secret, disabling either Application, revoking the Agent
-binding or source token lease, or removing the policy prevents new exchanges.
-Successful and denied attempts use the
+Rotate the exchanging Application's secret through the normal Application
+secret rotation flow. Revoking that secret, disabling either Application,
+revoking the Agent binding or source token lease, or removing the policy
+prevents new exchanges. Successful and denied attempts use the
 `oauth.agent_identity_token_exchanged` audit action. The example structured
 Kubernetes verifier is in
 [`examples/kubernetes/realmroot-authentication.yaml`](../../examples/kubernetes/realmroot-authentication.yaml).

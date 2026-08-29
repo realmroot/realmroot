@@ -235,13 +235,13 @@ describe('token exchange service', () => {
     ).rejects.toMatchObject({ error: 'invalid_grant' })
   })
 
-  it('exchanges an active policy-bound Agent token for a Kubernetes ID token and audits revocation [spec: agent-identity/agent-kubernetes-id-token-exchange]', async () => {
+  it('exchanges an active policy-bound Agent token for an OIDC ID token and audits revocation [spec: agent-identity/agent-oidc-id-token-exchange]', async () => {
     const { deps, clientSecret } = await tokenExchangeFixture({ scopes: [] })
-    const sourceResource = eligibleAudienceResource(['hub:read'])
+    const sourceResource = eligibleAudienceResource(['workload:read'])
     const targetApplication = {
-      id: 'app_kubernetes',
-      clientId: 'kubernetes-client',
-      clientType: 'public_native',
+      id: 'app_oidc',
+      clientId: 'oidc-client',
+      clientType: 'confidential_web',
       visibility: 'private',
       disabled: false,
       ownerOrganizationId: 'org_1',
@@ -378,7 +378,7 @@ describe('token exchange service', () => {
     await expect(
       exchangeTokenVerified(
         deps,
-        { ...input, audience: 'unknown-kubernetes-client' },
+        { ...input, audience: 'unknown-oidc-client' },
         { clientId: applicationClientId, clientSecret },
         signer,
       ),

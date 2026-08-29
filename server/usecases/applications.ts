@@ -693,14 +693,13 @@ async function validateTokenExchangePolicies(
       if (
         !target ||
         target.disabled ||
-        target.clientType !== 'public_native' ||
         target.visibility !== 'private' ||
         target.ownerOrganizationId !== ownerOrganizationId ||
         !target.oidcScopes.includes('openid') ||
         !target.oidcScopes.includes('groups')
       ) {
         throw badRequest(
-          'Token exchange target Application must be an active private native Application in the same Organization with openid and groups scopes.',
+          'Token exchange target Application must be an active private OIDC Application in the same Organization with openid and groups scopes.',
         )
       }
       continue

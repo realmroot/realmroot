@@ -25,10 +25,10 @@ const tokenExchangePolicy = {
   targetResourceServerId: targetResource.id,
   scopeMappings: [{ sourceScope: 'items:read', targetScope: 'agents:create' }],
 }
-const kubernetesApplication = {
-  id: 'kubernetes-application',
-  clientId: 'kubernetes-client',
-  clientType: 'public_native',
+const oidcApplication = {
+  id: 'oidc-application',
+  clientId: 'oidc-client',
+  clientType: 'confidential_web',
   visibility: 'private',
   disabled: false,
   ownerOrganizationId: 'org-1',
@@ -41,7 +41,7 @@ function setup() {
     create: vi.fn(async ({ application: input }) => (application = { ...input, createdAt: now, updatedAt: now })),
     listSecrets: vi.fn().mockResolvedValue({ items: [], pagination: {} }),
     findById: vi.fn(async (id) =>
-      id === kubernetesApplication.id ? (kubernetesApplication as ApplicationAggregate) : application,
+      id === oidcApplication.id ? (oidcApplication as ApplicationAggregate) : application,
     ),
     findByClientId: vi.fn(async () => application),
     update: vi.fn(async (_id, patch) => {
@@ -220,11 +220,11 @@ describe('Application Resource Server scopes', () => {
     )
   })
 
-  it('reuses token exchange policies for a same-Organization Kubernetes Application target', async () => {
+  it('reuses token exchange policies for a same-Organization OIDC Application target', async () => {
     const { deps } = setup()
     const identityPolicy = {
       sourceResourceServerId: resource.id,
-      targetApplicationId: kubernetesApplication.id,
+      targetApplicationId: oidcApplication.id,
     }
     await expect(
       createApplication(
@@ -241,7 +241,7 @@ describe('Application Resource Server scopes', () => {
     ).resolves.toMatchObject({ tokenExchangePolicies: [identityPolicy] })
 
     vi.mocked(deps.applications.findById).mockResolvedValueOnce({
-      ...kubernetesApplication,
+      ...oidcApplication,
       ownerOrganizationId: 'org-2',
     } as ApplicationAggregate)
     await expect(
@@ -256,7 +256,7 @@ describe('Application Resource Server scopes', () => {
         },
         'admin-1',
       ),
-    ).rejects.toThrow('active private native Application in the same Organization')
+    ).rejects.toThrow('active private OIDC Application in the same Organization')
 
     vi.mocked(deps.applications.findById).mockResolvedValueOnce(null)
     await expect(
@@ -271,7 +271,7 @@ describe('Application Resource Server scopes', () => {
         },
         'admin-1',
       ),
-    ).rejects.toThrow('active private native Application in the same Organization')
+    ).rejects.toThrow('active private OIDC Application in the same Organization')
   })
 
   it('enables token exchange when an existing confidential web Application adds a source policy', async () => {

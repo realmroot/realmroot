@@ -91,7 +91,7 @@ describe('OAuth token exchange over real D1', () => {
     harness.deps.externalHttp.fetch = resourceOpenApiFetch
   })
 
-  it('exchanges an active Hub Agent lease for a Kubernetes ID token over the real token endpoint [spec: agent-identity/agent-kubernetes-id-token-exchange]', async () => {
+  it('exchanges an active policy-bound Agent lease for a Kubernetes ID token over the real token endpoint [spec: agent-identity/agent-oidc-id-token-exchange]', async () => {
     const adminCookie = await signInAdmin(harness)
     const controllerId = await createUser(harness, adminCookie, {
       email: 'kubernetes-controller@example.com',
@@ -118,12 +118,12 @@ describe('OAuth token exchange over real D1', () => {
       .bind('team-member-kubernetes-controller', 'team-kubernetes-operators', controllerId, now)
       .run()
 
-    const sourceAudience = 'https://hub.example.com'
+    const sourceAudience = 'https://workload-api.example.com'
     const sourceResponse = await harness.request('/api/resource-servers', {
       method: 'POST',
       headers: { 'content-type': 'application/json', cookie: adminCookie },
       body: JSON.stringify({
-        identifier: 'kubernetes-cluster-hub',
+        identifier: 'agent-workload-api',
         resourceUrl: sourceAudience,
         authorizationModel: 'native',
         ownerOrganizationId: platformOrganizationId,
@@ -147,20 +147,20 @@ describe('OAuth token exchange over real D1', () => {
     expect(targetResponse.status, await targetResponse.clone().text()).toBe(201)
     const target = (await targetResponse.json()) as { id: string; clientId: string }
 
-    const hubResponse = await harness.request('/api/applications', {
+    const exchangeClientResponse = await harness.request('/api/applications', {
       method: 'POST',
       headers: { 'content-type': 'application/json', cookie: adminCookie },
       body: JSON.stringify({
-        name: 'Kubernetes Cluster Hub',
-        slug: 'kubernetes-cluster-hub',
+        name: 'Agent Token Exchanger',
+        slug: 'agent-token-exchanger',
         clientType: 'machine',
         redirectUris: [],
         ownerOrganizationId: platformOrganizationId,
         tokenExchangePolicies: [{ sourceResourceServerId: source.id, targetApplicationId: target.id }],
       }),
     })
-    expect(hubResponse.status, await hubResponse.clone().text()).toBe(201)
-    const hub = (await hubResponse.json()) as { clientId: string; clientSecret: string }
+    expect(exchangeClientResponse.status, await exchangeClientResponse.clone().text()).toBe(201)
+    const exchangeClient = (await exchangeClientResponse.json()) as { clientId: string; clientSecret: string }
 
     const { publicKey } = await generateKeyPair('Ed25519')
     const publicJwk = {
@@ -170,17 +170,17 @@ describe('OAuth token exchange over real D1', () => {
     const agentInput: CreateAgent = {
       username: 'kubernetes-agent',
       name: 'Kubernetes Agent',
-      runtime: 'cluster-hub',
+      runtime: 'workload-runtime',
       installation: {
         agentId: 'kubernetes-protocol-agent',
         hostId: 'kubernetes-agent-host',
-        name: 'Cluster Hub',
+        name: 'Token Exchange Runtime',
         kid: 'kubernetes-agent-key',
         publicKey: publicJwk,
       },
     }
     const createdAgent = await createAgentWithInstallation(harness.deps, agentInput, {
-      applicationId: 'kubernetes-cluster-hub',
+      applicationId: 'agent-token-exchanger',
       actorUserId: controllerId,
       issuer: `${baseURL}/api/auth`,
       idempotencyKey: 'kubernetes-agent',
@@ -231,7 +231,7 @@ describe('OAuth token exchange over real D1', () => {
       method: 'POST',
       headers: {
         'content-type': 'application/x-www-form-urlencoded',
-        authorization: `Basic ${btoa(`${hub.clientId}:${hub.clientSecret}`)}`,
+        authorization: `Basic ${btoa(`${exchangeClient.clientId}:${exchangeClient.clientSecret}`)}`,
       },
       body: new URLSearchParams({
         grant_type: 'urn:ietf:params:oauth:grant-type:token-exchange',
@@ -254,7 +254,7 @@ describe('OAuth token exchange over real D1', () => {
     expect(decodeJwt(body.access_token)).toMatchObject({
       sub: controllerId,
       aud: target.clientId,
-      azp: hub.clientId,
+      azp: exchangeClient.clientId,
       act: { iss: `${baseURL}/api/auth`, sub: createdAgent.agent.subject },
       groups: ['kubernetes-operators'],
       [realmrootOrganizationClaim]: platformOrganizationId,
@@ -266,7 +266,7 @@ describe('OAuth token exchange over real D1', () => {
     ).first<{ result: string; metadata: string }>()
     expect(audit?.result).toBe('allowed')
     expect(JSON.parse(audit?.metadata ?? '{}')).toMatchObject({
-      exchangeClientId: hub.clientId,
+      exchangeClientId: exchangeClient.clientId,
       targetApplicationId: target.id,
     })
   })

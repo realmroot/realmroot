@@ -272,7 +272,6 @@ async function exchangeAgentIdentityTokenVerified(
   if (
     !targetApplication ||
     targetApplication.disabled ||
-    targetApplication.clientType !== 'public_native' ||
     targetApplication.visibility !== 'private' ||
     targetApplication.ownerOrganizationId !== application.ownerOrganizationId ||
     targetApplication.ownerOrganizationId !== organizationId

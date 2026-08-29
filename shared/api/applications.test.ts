@@ -186,7 +186,7 @@ describe('application API pagination contracts', () => {
     ).toBe(false)
 
     const identityPolicy = {
-      sourceResourceServerId: 'hub-resource',
+      sourceResourceServerId: 'source-resource',
       targetApplicationId: 'kubernetes-application',
     }
     expect(createApplicationRequestSchema.parse({ ...base, tokenExchangePolicies: [identityPolicy] })).toMatchObject({
