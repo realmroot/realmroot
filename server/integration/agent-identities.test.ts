@@ -13,6 +13,7 @@ import {
   createAdditionalAgentEnrollmentIntent,
   createAgentEnrollmentIntent,
   createAgentWithInstallation,
+  deleteAgentIdentity,
 } from '@server/usecases/agent-identities'
 import { createResource } from '@server/usecases/authorization'
 import {
@@ -141,6 +142,65 @@ describe('Agent identity enrollment over real D1', () => {
       }),
     ])
     expect(approvals).toHaveLength(0)
+  })
+
+  it('[spec: agent-identity/agent-identity-deletion] keeps deleted Agent identity keys permanently reserved', async () => {
+    const { publicKey } = await generateKeyPair('Ed25519')
+    const publicJwk = {
+      ...(await exportJWK(publicKey)),
+      kid: 'reserved-key-1',
+    } as CreateAgent['installation']['publicKey']
+    const input: CreateAgent = {
+      username: 'reserved-agent',
+      name: 'Reserved Agent',
+      runtime: 'codex',
+      installation: {
+        agentId: 'reserved-protocol-agent-1',
+        hostId: 'reserved-host-1',
+        name: 'Reserved Runner',
+        kid: 'reserved-key-1',
+        publicKey: publicJwk,
+      },
+    }
+    const context = {
+      applicationId: 'reserved-application',
+      actorUserId: userId,
+      issuer: 'http://localhost/api/auth',
+      idempotencyKey: 'reserved-agent-1',
+    }
+    const created = await createAgentWithInstallation(harness.deps, input, context)
+    await deleteAgentIdentity(harness.deps, created.agent.id, userId)
+
+    await expect(
+      createAgentWithInstallation(
+        harness.deps,
+        {
+          ...input,
+          username: 'different-reserved-agent',
+          installation: {
+            ...input.installation,
+            agentId: 'reserved-protocol-agent-2',
+            hostId: 'reserved-host-2',
+          },
+        },
+        context,
+      ),
+    ).rejects.toMatchObject({ status: 409, code: 'conflict' })
+
+    await expect(
+      createAgentWithInstallation(
+        harness.deps,
+        {
+          ...input,
+          installation: {
+            ...input.installation,
+            agentId: 'reserved-protocol-agent-3',
+            hostId: 'reserved-host-3',
+          },
+        },
+        { ...context, idempotencyKey: 'reserved-agent-2' },
+      ),
+    ).rejects.toMatchObject({ status: 409, code: 'conflict' })
   })
 
   it('rolls back Agent, Host, Identity, Binding, and Audit when the atomic installation commit fails', async () => {

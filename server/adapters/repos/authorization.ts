@@ -328,16 +328,18 @@ export function createDrizzleAuthorizationRepository(db: Database, ids: Identifi
     },
 
     async createResource(input) {
-      const now = new Date()
-      const rows = await db
-        .insert(apiResource)
-        .values({
-          ...input,
-          createdAt: now,
-          updatedAt: now,
-        })
-        .returning()
-      return toResource(rows[0]!)
+      return resourceKeyWrite(async () => {
+        const now = new Date()
+        const rows = await db
+          .insert(apiResource)
+          .values({
+            ...input,
+            createdAt: now,
+            updatedAt: now,
+          })
+          .returning()
+        return toResource(rows[0]!)
+      })
     },
 
     async listResources(pagination, ownerOrganizationIds) {
@@ -409,79 +411,81 @@ export function createDrizzleAuthorizationRepository(db: Database, ids: Identifi
     },
 
     async updateResource(id, patch) {
-      const { scopeGrantModes: _, ...storedPatch } = patch
-      const now = new Date()
-      const update = db
-        .update(apiResource)
-        .set({
-          ...withoutUndefined(storedPatch),
-          updatedAt: now,
-        })
-        .where(and(eq(apiResource.id, id), isNull(apiResource.deletedAt)))
-        .returning({ id: apiResource.id })
-      if (patch.visibility !== 'private') return (await update).length > 0
+      return resourceKeyWrite(async () => {
+        const { scopeGrantModes: _, ...storedPatch } = patch
+        const now = new Date()
+        const update = db
+          .update(apiResource)
+          .set({
+            ...withoutUndefined(storedPatch),
+            updatedAt: now,
+          })
+          .where(and(eq(apiResource.id, id), isNull(apiResource.deletedAt)))
+          .returning({ id: apiResource.id })
+        if (patch.visibility !== 'private') return (await update).length > 0
 
-      const [resource] = await db.select().from(apiResource).where(eq(apiResource.id, id)).limit(1)
-      if (!resource) return false
-      const ownerOrganizationId = patch.ownerOrganizationId ?? resource.ownerOrganizationId
-      const [members, applications, entitlements, roles, consents, identities] = await Promise.all([
-        db.select().from(member).where(eq(member.organizationId, ownerOrganizationId)),
-        db.select().from(application),
-        db.select().from(resourceScopeEntitlement).where(eq(resourceScopeEntitlement.resourceServerId, id)),
-        db.select().from(organizationRole),
-        db.select().from(applicationConsent).where(eq(applicationConsent.resourceServerId, id)),
-        db.select().from(agentIdentity),
-      ])
-      const ownerUsers = new Set(members.map((membership) => membership.userId))
-      const applicationOwners = new Map(applications.map((app) => [app.id, app.ownerOrganizationId]))
-      const identityOwners = new Map(identities.map((identity) => [identity.id, identity.ownerOrganizationId]))
-      const statements: [BatchItem<'sqlite'>, ...BatchItem<'sqlite'>[]] = [update]
-      for (const app of applications) {
-        if (app.ownerOrganizationId === ownerOrganizationId) continue
-        const resourceScopes = app.resourceScopes.filter((configuration) => configuration.resourceServerId !== id)
-        if (resourceScopes.length !== app.resourceScopes.length) {
-          statements.push(
-            db.update(application).set({ resourceScopes, updatedAt: now }).where(eq(application.id, app.id)),
-          )
+        const [resource] = await db.select().from(apiResource).where(eq(apiResource.id, id)).limit(1)
+        if (!resource) return false
+        const ownerOrganizationId = patch.ownerOrganizationId ?? resource.ownerOrganizationId
+        const [members, applications, entitlements, roles, consents, identities] = await Promise.all([
+          db.select().from(member).where(eq(member.organizationId, ownerOrganizationId)),
+          db.select().from(application),
+          db.select().from(resourceScopeEntitlement).where(eq(resourceScopeEntitlement.resourceServerId, id)),
+          db.select().from(organizationRole),
+          db.select().from(applicationConsent).where(eq(applicationConsent.resourceServerId, id)),
+          db.select().from(agentIdentity),
+        ])
+        const ownerUsers = new Set(members.map((membership) => membership.userId))
+        const applicationOwners = new Map(applications.map((app) => [app.id, app.ownerOrganizationId]))
+        const identityOwners = new Map(identities.map((identity) => [identity.id, identity.ownerOrganizationId]))
+        const statements: [BatchItem<'sqlite'>, ...BatchItem<'sqlite'>[]] = [update]
+        for (const app of applications) {
+          if (app.ownerOrganizationId === ownerOrganizationId) continue
+          const resourceScopes = app.resourceScopes.filter((configuration) => configuration.resourceServerId !== id)
+          if (resourceScopes.length !== app.resourceScopes.length) {
+            statements.push(
+              db.update(application).set({ resourceScopes, updatedAt: now }).where(eq(application.id, app.id)),
+            )
+          }
         }
-      }
-      for (const entitlement of entitlements) {
-        const remainsVisible = entitlement.userId
-          ? ownerUsers.has(entitlement.userId)
-          : entitlement.applicationId
-            ? applicationOwners.get(entitlement.applicationId) === ownerOrganizationId
-            : identityOwners.get(entitlement.agentIdentityId!) === ownerOrganizationId
-        if (!remainsVisible && !entitlement.endedAt) {
-          statements.push(
-            db
-              .update(resourceScopeEntitlement)
-              .set({ endedAt: now, endReason: 'revoked', updatedAt: now })
-              .where(eq(resourceScopeEntitlement.id, entitlement.id)),
-          )
+        for (const entitlement of entitlements) {
+          const remainsVisible = entitlement.userId
+            ? ownerUsers.has(entitlement.userId)
+            : entitlement.applicationId
+              ? applicationOwners.get(entitlement.applicationId) === ownerOrganizationId
+              : identityOwners.get(entitlement.agentIdentityId!) === ownerOrganizationId
+          if (!remainsVisible && !entitlement.endedAt) {
+            statements.push(
+              db
+                .update(resourceScopeEntitlement)
+                .set({ endedAt: now, endReason: 'revoked', updatedAt: now })
+                .where(eq(resourceScopeEntitlement.id, entitlement.id)),
+            )
+          }
         }
-      }
-      for (const role of roles) {
-        if (role.organizationId === ownerOrganizationId) continue
-        const encodedScopes = role.permission.scope ?? []
-        const scopes = encodedScopes.filter((value) => decodeRoleScope(value)?.resourceId !== id)
-        if (scopes.length !== encodedScopes.length) {
-          statements.push(
-            db
-              .update(organizationRole)
-              .set({ permission: { ...role.permission, scope: scopes }, updatedAt: now })
-              .where(eq(organizationRole.id, role.id)),
-          )
+        for (const role of roles) {
+          if (role.organizationId === ownerOrganizationId) continue
+          const encodedScopes = role.permission.scope ?? []
+          const scopes = encodedScopes.filter((value) => decodeRoleScope(value)?.resourceId !== id)
+          if (scopes.length !== encodedScopes.length) {
+            statements.push(
+              db
+                .update(organizationRole)
+                .set({ permission: { ...role.permission, scope: scopes }, updatedAt: now })
+                .where(eq(organizationRole.id, role.id)),
+            )
+          }
         }
-      }
-      for (const consent of consents) {
-        if (!ownerUsers.has(consent.userId) && !consent.revokedAt) {
-          statements.push(
-            db.update(applicationConsent).set({ revokedAt: now }).where(eq(applicationConsent.id, consent.id)),
-          )
+        for (const consent of consents) {
+          if (!ownerUsers.has(consent.userId) && !consent.revokedAt) {
+            statements.push(
+              db.update(applicationConsent).set({ revokedAt: now }).where(eq(applicationConsent.id, consent.id)),
+            )
+          }
         }
-      }
-      const [rows] = await db.batch(statements)
-      return rows.length > 0
+        const [rows] = await db.batch(statements)
+        return rows.length > 0
+      })
     },
 
     async replaceResourceDiscovery(id, { name, description, scopeRegistry: registry }) {
@@ -724,6 +728,12 @@ export function createDrizzleAuthorizationRepository(db: Database, ids: Identifi
     },
 
     async deleteResource(id, now, audit) {
+      const [active] = await db
+        .select({ id: apiResource.id })
+        .from(apiResource)
+        .where(and(eq(apiResource.id, id), isNull(apiResource.deletedAt)))
+        .limit(1)
+      if (!active) return false
       const encodedRoleScopePrefix = `${encodeURIComponent(id)}/`
       const statements: BatchItem<'sqlite'>[] = [
         db.insert(agentAuditEvent).select(
@@ -874,8 +884,8 @@ export function createDrizzleAuthorizationRepository(db: Database, ids: Identifi
             ),
           ),
       ]
-      const results = await db.batch(statements as [BatchItem<'sqlite'>, ...BatchItem<'sqlite'>[]])
-      return results[1].length > 0
+      await db.batch(statements as [BatchItem<'sqlite'>, ...BatchItem<'sqlite'>[]])
+      return true
     },
 
     async createOrganizationRole(organizationId, input, permission, audit) {
@@ -1015,6 +1025,17 @@ function isUniqueConstraint(error: unknown) {
     current = current.cause
   }
   return false
+}
+
+async function resourceKeyWrite<T>(write: () => Promise<T>) {
+  try {
+    return await write()
+  } catch (error) {
+    if (!isUniqueConstraint(error)) throw error
+    const mapped = conflict('An active Resource Server already uses this identifier or resource URL.')
+    mapped.cause = error
+    throw mapped
+  }
 }
 
 function activeEquivalentEntitlement(input: ResourceScopeEntitlementRecord) {

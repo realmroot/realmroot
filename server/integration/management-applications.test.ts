@@ -146,6 +146,10 @@ describe('applications management over real D1', () => {
 
     const missing = await harness.request(`/api/applications/${created.id}`, { headers: { cookie } })
     expect(missing.status).toBe(404)
+
+    const recreated = await createApplication(harness, cookie)
+    expect(recreated.id).not.toBe(created.id)
+    expect(recreated.clientId).not.toBe(created.clientId)
   })
 
   it('creates a fully derived machine Application through the Management API [spec: admin-console/admin-create-application]', async () => {

@@ -63,6 +63,155 @@ describe('authorization management over real D1', () => {
     expect(response.status).toBe(401)
   })
 
+  it('[spec: management-api/management-api-resource-soft-delete] reuses deleted keys and keeps delete outcomes atomic', async () => {
+    const cookie = await signInAdmin(harness)
+    const original = (await (
+      await postJson(harness, cookie, '/api/resource-servers', {
+        identifier: 'reserved-resource',
+        resourceUrl: 'https://reserved-resource.example.com/api',
+        authorizationModel: 'native',
+        ownerOrganizationId: platformOrganizationId,
+      })
+    ).json()) as { id: string }
+
+    const deleted = await harness.request(`/api/resource-servers/${original.id}`, {
+      method: 'DELETE',
+      headers: { cookie },
+    })
+    expect(deleted.status).toBe(204)
+
+    const retry = await harness.request(`/api/resource-servers/${original.id}`, {
+      method: 'DELETE',
+      headers: { cookie },
+    })
+    expect(retry.status).toBe(404)
+    await expect(retry.json()).resolves.toMatchObject({ error: { code: 'not_found' } })
+
+    const exactReplacement = (await (
+      await postJson(harness, cookie, '/api/resource-servers', {
+        identifier: 'reserved-resource',
+        resourceUrl: 'https://reserved-resource.example.com/api',
+        authorizationModel: 'native',
+        ownerOrganizationId: platformOrganizationId,
+      })
+    ).json()) as { id: string }
+    expect(exactReplacement.id).not.toBe(original.id)
+    expect(
+      (
+        await harness.request(`/api/resource-servers/${exactReplacement.id}`, {
+          method: 'DELETE',
+          headers: { cookie },
+        })
+      ).status,
+    ).toBe(204)
+
+    const sameIdentifier = (await (
+      await postJson(harness, cookie, '/api/resource-servers', {
+        identifier: 'reserved-resource',
+        resourceUrl: 'https://different-reserved-resource.example.com/api',
+        authorizationModel: 'native',
+        ownerOrganizationId: platformOrganizationId,
+      })
+    ).json()) as { id: string }
+    expect(
+      (
+        await harness.request(`/api/resource-servers/${sameIdentifier.id}`, {
+          method: 'DELETE',
+          headers: { cookie },
+        })
+      ).status,
+    ).toBe(204)
+
+    const sameUrl = (await (
+      await postJson(harness, cookie, '/api/resource-servers', {
+        identifier: 'different-reserved-resource',
+        resourceUrl: 'https://reserved-resource.example.com/api',
+        authorizationModel: 'native',
+        ownerOrganizationId: platformOrganizationId,
+      })
+    ).json()) as { id: string }
+    expect(
+      (
+        await harness.request(`/api/resource-servers/${sameUrl.id}`, {
+          method: 'DELETE',
+          headers: { cookie },
+        })
+      ).status,
+    ).toBe(204)
+
+    const activeKeyOwner = (await (
+      await postJson(harness, cookie, '/api/resource-servers', {
+        identifier: 'active-key-owner',
+        resourceUrl: 'https://active-key-owner.example.com/api',
+        authorizationModel: 'native',
+        ownerOrganizationId: platformOrganizationId,
+      })
+    ).json()) as { id: string }
+    const updateTarget = (await (
+      await postJson(harness, cookie, '/api/resource-servers', {
+        identifier: 'update-target-resource',
+        resourceUrl: 'https://update-target-resource.example.com/api',
+        authorizationModel: 'native',
+        ownerOrganizationId: platformOrganizationId,
+      })
+    ).json()) as { id: string }
+    for (const patch of [
+      { identifier: 'active-key-owner' },
+      { resourceUrl: 'https://active-key-owner.example.com/api' },
+    ]) {
+      const response = await harness.request(`/api/resource-servers/${updateTarget.id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json', cookie },
+        body: JSON.stringify(patch),
+      })
+      expect(response.status).toBe(409)
+      await expect(response.json()).resolves.toMatchObject({ error: { code: 'conflict' } })
+    }
+    expect(activeKeyOwner.id).toBeTruthy()
+
+    const concurrentBody = JSON.stringify({
+      identifier: 'concurrent-resource',
+      resourceUrl: 'https://concurrent-resource.example.com/api',
+      authorizationModel: 'native',
+      ownerOrganizationId: platformOrganizationId,
+    })
+    const concurrent = await Promise.all(
+      [0, 1].map(() =>
+        harness.request('/api/resource-servers', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', cookie },
+          body: concurrentBody,
+        }),
+      ),
+    )
+    expect(concurrent.map((response) => response.status).sort()).toEqual([201, 409])
+    const conflictResponse = concurrent.find((response) => response.status === 409)!
+    await expect(conflictResponse.json()).resolves.toMatchObject({ error: { code: 'conflict' } })
+
+    const rollbackTarget = (await (
+      await postJson(harness, cookie, '/api/resource-servers', {
+        identifier: 'rollback-resource',
+        resourceUrl: 'https://rollback-resource.example.com/api',
+        authorizationModel: 'native',
+        ownerOrganizationId: platformOrganizationId,
+      })
+    ).json()) as { id: string }
+    const [existingAudit] = await harness.db
+      .select()
+      .from(agentAuditEvent)
+      .where(eq(agentAuditEvent.resourceId, original.id))
+    await expect(
+      harness.deps.authorization.deleteResource(rollbackTarget.id, new Date(), {
+        ...existingAudit!,
+        resourceId: rollbackTarget.id,
+      }),
+    ).rejects.toThrow()
+    await expect(harness.deps.authorization.findResource(rollbackTarget.id)).resolves.toMatchObject({
+      id: rollbackTarget.id,
+      enabled: true,
+    })
+  })
+
   it('rejects a signed-in non-admin with 403', async () => {
     const adminCookie = await signInAdmin(harness)
     await createUser(harness, adminCookie, {

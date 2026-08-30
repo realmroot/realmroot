@@ -216,7 +216,7 @@ export const apiResource = sqliteTable(
   'api_resource',
   {
     id: text('id').primaryKey(),
-    identifier: text('identifier').notNull().unique(),
+    identifier: text('identifier').notNull(),
     name: text('name').notNull(),
     resourceUrl: text('resource_url').notNull(),
     authorizationModel: text('authorization_model', { enum: ['native', 'external'] })
@@ -249,7 +249,9 @@ export const apiResource = sqliteTable(
       .notNull(),
   },
   (table) => [
-    uniqueIndex('apiResource_resourceUrl_unique').on(table.resourceUrl),
+    // Deletion releases business keys for a new Resource Server while historical rows retain generated IDs.
+    uniqueIndex('apiResource_activeIdentifier_unique').on(table.identifier).where(sql`${table.deletedAt} is null`),
+    uniqueIndex('apiResource_activeResourceUrl_unique').on(table.resourceUrl).where(sql`${table.deletedAt} is null`),
     index('apiResource_enabled_idx').on(table.enabled),
     index('apiResource_connectorId_idx').on(table.connectorId),
     index('apiResource_ownerOrganizationId_idx').on(table.ownerOrganizationId),

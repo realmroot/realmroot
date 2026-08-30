@@ -40,6 +40,7 @@ const atomicExchangeRefreshRotationMigrationName = '20260818050000_atomic_exchan
 const groupAwareOidcMigrationName = '20260819015324_damp_exiles.sql'
 const nativeResourceAuthorityContextsMigrationName = '20260820070000_native_resource_authority_contexts.sql'
 const oauthClientConsentPolicyMigrationName = '20260820174500_sync_oauth_client_consent_policy.sql'
+const resourceServerLifecycleKeyMigrationName = '20260830200720_past_slayback.sql'
 
 describe('tenant ownership migration', () => {
   it('backfills authority constraints for existing brokered connections', () => {
@@ -125,6 +126,7 @@ describe('tenant ownership migration', () => {
             groupAwareOidcMigrationName,
             nativeResourceAuthorityContextsMigrationName,
             oauthClientConsentPolicyMigrationName,
+            resourceServerLifecycleKeyMigrationName,
           ].includes(name),
       )) {
         database.exec(readFileSync(new URL(`../../migrations/${name}`, import.meta.url), 'utf8'))

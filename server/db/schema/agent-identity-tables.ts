@@ -23,6 +23,7 @@ export const agentIdentity = sqliteTable(
     updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
   },
   (table) => [
+    // Stable Agent identities are historical principals and must never be reassigned after deletion.
     uniqueIndex('agentIdentity_issuer_subject_unique').on(table.issuer, table.subject),
     uniqueIndex('agentIdentity_username_unique').on(table.username).where(sql`${table.username} is not null`),
     index('agentIdentity_ownerUserId_idx').on(table.ownerUserId),

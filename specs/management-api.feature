@@ -186,6 +186,9 @@ Feature: Unified Realmroot resource API
     And its active authorization records are revoked while history remains
     And the deletion and its actor are recorded in the Agent audit log
     And concurrent requests cannot create new active authorization for the deleted resource
+    And its identifier and service URL can be reused by a newly created resource
+    And concurrent creates for the same identifier or service URL produce one resource and one conflict
+    And the first deletion returns success while a completed retry returns not found
     And no API can restore the resource
 
 

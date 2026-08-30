@@ -120,6 +120,7 @@ Feature: Agent identity and delegated API authorization
       When an authorized controller deletes the Agent
       Then the Agent can no longer authenticate, receive grants, or be queried through an interface
       And its subject remains reserved for historical audit records
+      And its username and installation identifiers remain reserved and return conflict when reused
       And no interface can restore it
 
     @entrypoint:agent-protocol @journey:agent-stable-issuer

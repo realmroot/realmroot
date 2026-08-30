@@ -1,3 +1,4 @@
+import { conflict } from '@server/domain/errors'
 import type {
   AgentEnrollmentIntentRecord,
   AgentIdentityAggregate,
@@ -216,10 +217,12 @@ export function createDrizzleAgentIdentityRepository(db: Database): AgentIdentit
     },
 
     async createIdentity(input) {
-      await db.batch([
-        db.insert(agentIdentity).values(input.identity),
-        db.insert(agentIdentityBinding).values(input.binding),
-      ])
+      await identityKeyWrite(() =>
+        db.batch([
+          db.insert(agentIdentity).values(input.identity),
+          db.insert(agentIdentityBinding).values(input.binding),
+        ]),
+      )
       const result = await this.findIdentity(input.identity.id)
       if (!result) throw new Error('Agent identity was not persisted.')
       return result
@@ -239,7 +242,7 @@ export function createDrizzleAgentIdentityRepository(db: Database): AgentIdentit
       } catch (error) {
         const raced = await this.findIdentity(input.identity.id)
         if (raced) return { identity: raced, created: false }
-        throw error
+        throw identityKeyConflict(error)
       }
       const identity = await this.findIdentity(input.identity.id)
       if (!identity) throw new Error('Agent identity and installation were not persisted.')
@@ -247,11 +250,13 @@ export function createDrizzleAgentIdentityRepository(db: Database): AgentIdentit
     },
 
     async claimIdentityProfile(identityId, input) {
-      const rows = await db
-        .update(agentIdentity)
-        .set(input)
-        .where(and(eq(agentIdentity.id, identityId), isNull(agentIdentity.username), isNull(agentIdentity.deletedAt)))
-        .returning({ id: agentIdentity.id })
+      const rows = await identityKeyWrite(() =>
+        db
+          .update(agentIdentity)
+          .set(input)
+          .where(and(eq(agentIdentity.id, identityId), isNull(agentIdentity.username), isNull(agentIdentity.deletedAt)))
+          .returning({ id: agentIdentity.id }),
+      )
       if (rows.length === 0) return null
       return this.findIdentity(identityId)
     },
@@ -284,7 +289,7 @@ export function createDrizzleAgentIdentityRepository(db: Database): AgentIdentit
           })
           .where(and(eq(agentEnrollmentIntent.id, input.intentId), eq(agentEnrollmentIntent.status, 'pending'))),
       )
-      await db.batch(statements as [BatchItem<'sqlite'>, ...BatchItem<'sqlite'>[]])
+      await identityKeyWrite(() => db.batch(statements as [BatchItem<'sqlite'>, ...BatchItem<'sqlite'>[]]))
       const result = await this.findIdentity(input.binding.agentIdentityId)
       if (!result) throw new Error('Approved Agent identity was not persisted.')
       return result
@@ -337,6 +342,12 @@ export function createDrizzleAgentIdentityRepository(db: Database): AgentIdentit
     },
 
     async deleteIdentity(identityId, now) {
+      const [active] = await db
+        .select({ id: agentIdentity.id })
+        .from(agentIdentity)
+        .where(and(eq(agentIdentity.id, identityId), isNull(agentIdentity.deletedAt)))
+        .limit(1)
+      if (!active) return false
       const protocolAgentIds = await activeProtocolAgentIds(db, identityId)
       const statements = revokeProtocolAgentStatements(db, identityId, protocolAgentIds, now)
       statements.unshift(
@@ -346,8 +357,8 @@ export function createDrizzleAgentIdentityRepository(db: Database): AgentIdentit
           .where(and(eq(agentIdentity.id, identityId), isNull(agentIdentity.deletedAt)))
           .returning({ id: agentIdentity.id }),
       )
-      const results = await db.batch(statements as [BatchItem<'sqlite'>, ...BatchItem<'sqlite'>[]])
-      return results[0].length > 0
+      await db.batch(statements as [BatchItem<'sqlite'>, ...BatchItem<'sqlite'>[]])
+      return true
     },
   }
 }
@@ -421,3 +432,29 @@ function revokeProtocolAgentStatements(db: Database, identityId: string, protoco
 }
 
 export type { AgentEnrollmentIntentRecord }
+
+async function identityKeyWrite<T>(write: () => Promise<T>) {
+  try {
+    return await write()
+  } catch (error) {
+    throw identityKeyConflict(error)
+  }
+}
+
+function identityKeyConflict(error: unknown) {
+  if (!isUniqueConstraint(error)) return error
+  const mapped = conflict(
+    'Agent identity and installation identifiers remain reserved after revocation or deletion and cannot be reused.',
+  )
+  mapped.cause = error
+  return mapped
+}
+
+function isUniqueConstraint(error: unknown) {
+  let current = error
+  while (current instanceof Error) {
+    if (/unique constraint|SQLITE_CONSTRAINT/i.test(current.message)) return true
+    current = current.cause
+  }
+  return false
+}

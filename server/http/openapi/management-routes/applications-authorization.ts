@@ -240,6 +240,7 @@ export const applicationAuthorizationRoutes: ManagementRouteConfig[] = [
     response: resourceServerSchema,
     status: 201,
     responseHeaders: locationResponseHeader,
+    errors: { 409: 'An active Resource Server already uses the identifier or resource URL.' },
   },
   {
     method: 'get',
@@ -282,6 +283,7 @@ export const applicationAuthorizationRoutes: ManagementRouteConfig[] = [
     summary: 'Update a Resource Server',
     request: { params: resourceServerIdParam, body: jsonBody(updateApiResourceSchema) },
     response: resourceServerSchema,
+    errors: { 409: 'An active Resource Server already uses the identifier or resource URL.' },
   },
   {
     method: 'delete',
@@ -290,6 +292,7 @@ export const applicationAuthorizationRoutes: ManagementRouteConfig[] = [
     summary: 'Delete a Resource Server',
     request: { params: resourceServerIdParam },
     noBody: true,
+    errors: { 404: 'The Resource Server was already deleted or does not exist.' },
   },
 
   {
