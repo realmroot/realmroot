@@ -68,14 +68,14 @@
     "drizzle-orm": "^0.45.2",
     "express": "5.2.1",
     "hono": "^4.12.18",
-    "i18next": "^26.1.0",
+    "i18next": "^26.4.0",
     "jose": "6.2.4",
     "lucide-react": "^1.14.0",
     "qrcode": "^1.5.4",
     "radix-ui": "^1.4.3",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
-    "react-i18next": "^17.0.7",
+    "react-i18next": "^17.0.12",
     "shadcn": "^4.7.0",
     "simple-icons": "16.28.0",
     "sonner": "^2.0.7",
@@ -89,8 +89,8 @@
   "devDependencies": {
     "@biomejs/biome": "^2.4.10",
     "@cloudflare/vite-plugin": "^1.36.3",
-    "@cloudflare/vitest-pool-workers": "^0.16.3",
-    "@cloudflare/workers-types": "5.20260807.2",
+    "@cloudflare/vitest-pool-workers": "^0.22.0",
+    "@cloudflare/workers-types": "5.20260830.1",
     "@playwright/test": "^1.59.1",
     "@tailwindcss/vite": "^4.2.2",
     "@tanstack/router-cli": "^1.167.5",
@@ -112,10 +112,10 @@
     "msw": "2.14.6",
     "tailwindcss": "^4.2.4",
     "tsx": "^4.22.2",
-    "typescript": "^6.0.3",
+    "typescript": "^7.0.2",
     "vite": "^8.0.11",
     "vitest": "^4.1.2",
-    "wrangler": "^4.90.0"
+    "wrangler": "^4.127.1"
   },
   "cloudflare": {
     "bindings": {
