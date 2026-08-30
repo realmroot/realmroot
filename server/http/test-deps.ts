@@ -30,7 +30,7 @@ const realmrootResource = {
     scopes: Object.keys(realmrootScopeRegistry).map((value) => ({
       value,
       description: null,
-      grantMode: 'assigned' as const,
+      grantMode: value === 'agents:write' ? ('automatic' as const) : ('assigned' as const),
     })),
   },
   availableToAgents: true,
