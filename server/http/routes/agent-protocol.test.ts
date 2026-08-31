@@ -202,7 +202,7 @@ describe('Agent protocol routes', () => {
       resourceUrl: 'https://drive.example.com/api',
       dpopNonce: 'next-nonce',
     }
-    vi.spyOn(externalResources, 'createAccessRequestCredential').mockResolvedValue(credential)
+    const issueCredential = vi.spyOn(externalResources, 'createAccessRequestCredential').mockResolvedValue(credential)
     const app = createRouteApp({ signJWT: vi.fn().mockResolvedValue({ token: 'signed' }) })
     const created = await app.request('/api/agent/access-requests', {
       method: 'POST',
@@ -218,6 +218,10 @@ describe('Agent protocol routes', () => {
     })
     expect(issued.status).toBe(201)
     expect(issued.headers.get('dpop-nonce')).toBe('next-nonce')
+    expect(issueCredential.mock.calls[0]?.[4]).toMatchObject({
+      runtime: 'codex',
+      sessionId: 'thread-raw-123',
+    })
     await expect(issued.json()).resolves.toEqual({
       accessToken: credential.accessToken,
       tokenType: credential.tokenType,
@@ -320,6 +324,8 @@ function createRouteApp(overrides: { signJWT?: () => Promise<{ token: string }> 
           identityId: 'identity-1',
           protocolAgentId: 'protocol-agent-1',
           hostId: 'host-1',
+          runtime: 'codex',
+          sessionId: 'thread-raw-123',
           identity: aggregate.identity,
           binding: aggregate.bindings[0],
           scopes: [

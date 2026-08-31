@@ -19,6 +19,8 @@ import {
 import { agentBootstrapScopes, realmrootOAuthScopes, resourceByRoutePrefix } from '@shared/authz'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
+import { decodeJwt } from 'jose'
+import { readRealmrootAgentBinding } from './agent-token-claims'
 import {
   isIdentityProviderCallbackPath,
   isPublicCorsPath,
@@ -494,6 +496,19 @@ async function issueAgentToken(
   const headers = new Headers({ authorization: `Bearer ${assertion}` })
   const session = await auth.api.getAgentSession({ headers, asResponse: false }).catch(() => null)
   if (!session) throw oauthError('invalid_grant', 'The Agent assertion is invalid.')
+  const assertionBinding = (() => {
+    try {
+      return readRealmrootAgentBinding(decodeJwt(assertion))
+    } catch {
+      throw oauthError('invalid_grant', 'The Agent assertion has an invalid runtime session binding.')
+    }
+  })()
+  if (
+    assertionBinding &&
+    (assertionBinding.protocol_agent_id !== session.agent.id || assertionBinding.host_id !== session.agent.hostId)
+  ) {
+    throw oauthError('invalid_grant', 'The Agent assertion binding does not match its authenticated Agent and Host.')
+  }
   const deps = c.get('deps')
   if (!realmrootResourceReconciled) await ensureRealmrootResourceServer(deps, new URL(issuer).origin)
   const active = await deps.agentIdentities.findActiveBindingByProtocolAgent(session.agent.id)
@@ -521,6 +536,8 @@ async function issueAgentToken(
       identityId: active.identity.id,
       protocolAgentId: session.agent.id,
       hostId: session.agent.hostId,
+      runtime: assertionBinding?.runtime,
+      sessionId: assertionBinding?.session_id,
       identity: active.identity,
       binding: active.binding,
     },

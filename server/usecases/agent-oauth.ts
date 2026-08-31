@@ -3,7 +3,11 @@ import type { Deps } from '@server/usecases/deps'
 import { validateDpopTokenProof } from '@server/usecases/dpop'
 import type { AgentAssertionSigner, AgentResourcePrincipal } from '@server/usecases/external-resources'
 import { agentBootstrapScopes } from '@shared/authz'
-import { realmrootAgentBindingClaim, realmrootCliClientId } from '@shared/oauth-token-profile'
+import {
+  realmrootAgentBindingClaim,
+  realmrootCliClientId,
+  toRealmrootAgentBindingClaim,
+} from '@shared/oauth-token-profile'
 
 const accessTokenLifetimeSeconds = 5 * 60
 
@@ -43,10 +47,7 @@ export async function issueAgentBootstrapAccessToken(
       sub: principal.subject,
       aud: input.resource,
       client_id: realmrootCliClientId,
-      [realmrootAgentBindingClaim]: {
-        protocol_agent_id: principal.protocolAgentId,
-        host_id: principal.hostId,
-      },
+      [realmrootAgentBindingClaim]: toRealmrootAgentBindingClaim(principal),
       scope: scopes.join(' '),
       cnf: { jkt: confirmationJkt },
       iat: now,
