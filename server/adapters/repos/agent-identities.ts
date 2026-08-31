@@ -9,6 +9,7 @@ import type { BatchItem } from 'drizzle-orm/batch'
 import type { Database } from '../../db/client'
 import {
   agent,
+  agentApplicationCreation,
   agentAuditEvent,
   agentCapabilityGrant,
   agentEnrollmentIntent,
@@ -216,6 +217,28 @@ export function createDrizzleAgentIdentityRepository(db: Database): AgentIdentit
       return row ? aggregate(db, row.identity) : null
     },
 
+    async findApplicationCreation(applicationId, actorUserId, idempotencyKey) {
+      const [reservation] = await db
+        .select()
+        .from(agentApplicationCreation)
+        .where(
+          and(
+            eq(agentApplicationCreation.applicationId, applicationId),
+            eq(agentApplicationCreation.actorUserId, actorUserId),
+            eq(agentApplicationCreation.idempotencyKey, idempotencyKey),
+          ),
+        )
+        .limit(1)
+      if (!reservation) return null
+      const [identity] = await db
+        .select()
+        .from(agentIdentity)
+        .where(eq(agentIdentity.id, reservation.agentIdentityId))
+        .limit(1)
+      if (!identity) throw new Error('Agent application creation reservation has no identity.')
+      return { reservation, identity: await aggregate(db, identity) }
+    },
+
     async createIdentity(input) {
       await identityKeyWrite(() =>
         db.batch([
@@ -229,8 +252,12 @@ export function createDrizzleAgentIdentityRepository(db: Database): AgentIdentit
     },
 
     async createAgentWithInstallation(input) {
-      const existing = await this.findIdentity(input.identity.id)
-      if (existing) return { identity: existing, created: false }
+      const existing = await this.findApplicationCreation(
+        input.reservation.applicationId,
+        input.reservation.actorUserId,
+        input.reservation.idempotencyKey,
+      )
+      if (existing) return { ...existing, created: false }
       try {
         await db.batch([
           db.insert(agentHost).values(input.host),
@@ -238,15 +265,20 @@ export function createDrizzleAgentIdentityRepository(db: Database): AgentIdentit
           db.insert(agentIdentity).values(input.identity),
           db.insert(agentIdentityBinding).values(input.binding),
           db.insert(agentAuditEvent).values(input.audit),
+          db.insert(agentApplicationCreation).values(input.reservation),
         ])
       } catch (error) {
-        const raced = await this.findIdentity(input.identity.id)
-        if (raced) return { identity: raced, created: false }
+        const raced = await this.findApplicationCreation(
+          input.reservation.applicationId,
+          input.reservation.actorUserId,
+          input.reservation.idempotencyKey,
+        )
+        if (raced) return { ...raced, created: false }
         throw identityKeyConflict(error)
       }
       const identity = await this.findIdentity(input.identity.id)
       if (!identity) throw new Error('Agent identity and installation were not persisted.')
-      return { identity, created: true }
+      return { identity, reservation: input.reservation, created: true }
     },
 
     async claimIdentityProfile(identityId, input) {
@@ -453,7 +485,7 @@ function identityKeyConflict(error: unknown) {
 function isUniqueConstraint(error: unknown) {
   let current = error
   while (current instanceof Error) {
-    if (/unique constraint|SQLITE_CONSTRAINT/i.test(current.message)) return true
+    if (/unique constraint|SQLITE_CONSTRAINT_UNIQUE/i.test(current.message)) return true
     current = current.cause
   }
   return false

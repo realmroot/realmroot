@@ -14,6 +14,12 @@ Existing prefixed identifiers remain valid references and are not rewritten.
 HTTP parameters therefore remain opaque strings wherever historical records can
 be addressed.
 
+Agent creation follows the same rule for the stable Agent resource identifier,
+OIDC subject, installation binding, audit event, and internal idempotency
+reservation. An application creation reservation durably maps its application,
+represented User, and `Idempotency-Key` to the generated Agent and a canonical
+request fingerprint; it never derives an identifier from that key.
+
 ## Boundaries
 
 This policy does not apply to credentials, access or refresh tokens, JWT `jti`

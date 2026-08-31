@@ -3,6 +3,7 @@ import {
   accountCenterSetting,
   agent,
   agentAccessRequest,
+  agentApplicationCreation,
   agentAuditEvent,
   agentCapabilityGrant,
   agentDpopJti,
@@ -240,6 +241,24 @@ describe('schema.test 1', () => {
       ]),
     )
     expect(indexNames(agentIdentityBinding)).toContain('agentIdentityBinding_protocolAgentId_unique')
+    expect(indexNames(agentApplicationCreation)).toEqual([
+      'agentApplicationCreation_applicationActorKey_unique',
+      'agentApplicationCreation_agentIdentityId_unique',
+    ])
+    expect(foreignKeyReferences(agentApplicationCreation)).toEqual([
+      {
+        columns: ['actor_user_id'],
+        foreignColumns: ['id'],
+        foreignTable: 'user',
+        onDelete: 'restrict',
+      },
+      {
+        columns: ['agent_identity_id'],
+        foreignColumns: ['id'],
+        foreignTable: 'agent_identity',
+        onDelete: 'restrict',
+      },
+    ])
     expect(foreignKeyReferences(agentIdentityBinding)).toEqual(
       expect.arrayContaining([
         {

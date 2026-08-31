@@ -189,7 +189,7 @@ describe('Agent login identity', () => {
 })
 
 describe('Application-created Agent installation', () => {
-  it('passes all five records to the atomic repository and replays the persisted aggregate', async () => {
+  it('passes the idempotency reservation and five UUIDv7 records to the atomic repository', async () => {
     const fixture = await applicationAgentFixture()
 
     expect(fixture.deps.agentIdentities.createAgentWithInstallation).toHaveBeenCalledWith({
@@ -203,8 +203,34 @@ describe('Application-created Agent installation', () => {
         controllerUserId: 'user-1',
         hostId: 'ama-host-1',
       }),
+      reservation: expect.objectContaining({
+        applicationId: 'ama-application',
+        actorUserId: 'user-1',
+        idempotencyKey: 'ama-create-1',
+        requestFingerprint: expect.stringMatching(/^[0-9a-f]{64}$/),
+      }),
     })
-    vi.mocked(fixture.deps.agentIdentities.findIdentity).mockResolvedValue(fixture.persisted)
+    const records = vi.mocked(fixture.deps.agentIdentities.createAgentWithInstallation).mock.calls[0]?.[0]
+    expect([
+      records?.identity.id,
+      records?.identity.subject,
+      records?.binding.id,
+      records?.audit.id,
+      records?.reservation.id,
+    ]).toEqual([
+      '00000000-0000-7000-8000-000000000000',
+      '00000000-0000-7000-8000-000000000001',
+      '00000000-0000-7000-8000-000000000002',
+      '00000000-0000-7000-8000-000000000003',
+      '00000000-0000-7000-8000-000000000004',
+    ])
+    const reservation = vi.mocked(fixture.deps.agentIdentities.createAgentWithInstallation).mock.calls[0]?.[0]
+      .reservation
+    if (!reservation) throw new Error('The Agent creation reservation was not passed to the repository.')
+    vi.mocked(fixture.deps.agentIdentities.findApplicationCreation).mockResolvedValue({
+      reservation,
+      identity: fixture.persisted,
+    })
 
     await expect(createAgentWithInstallation(fixture.deps, fixture.input, fixture.context)).resolves.toMatchObject({
       replayed: true,
@@ -216,6 +242,25 @@ describe('Application-created Agent installation', () => {
   it('reports a concurrent identical repository commit as an idempotent replay', async () => {
     const fixture = await applicationAgentFixture(false)
     expect(fixture.result.replayed).toBe(true)
+  })
+
+  it('rejects replay after the reserved Agent identity was deleted', async () => {
+    const fixture = await applicationAgentFixture()
+    const reservation = vi.mocked(fixture.deps.agentIdentities.createAgentWithInstallation).mock.calls[0]?.[0]
+      .reservation
+    if (!reservation) throw new Error('The Agent creation reservation was not passed to the repository.')
+    vi.mocked(fixture.deps.agentIdentities.findApplicationCreation).mockResolvedValue({
+      reservation,
+      identity: {
+        ...fixture.persisted,
+        identity: { ...fixture.persisted.identity, deletedAt: new Date() },
+      },
+    })
+
+    await expect(createAgentWithInstallation(fixture.deps, fixture.input, fixture.context)).rejects.toMatchObject({
+      status: 409,
+      code: 'conflict',
+    })
   })
 
   it('rejects invalid installation keys, occupied installation identifiers, and duplicate usernames', async () => {
@@ -267,13 +312,35 @@ describe('Application-created Agent installation', () => {
     ).rejects.toMatchObject({ status: 400 })
 
     const fixture = await applicationAgentFixture()
-    vi.mocked(fixture.deps.agentIdentities.findIdentity).mockResolvedValue({
-      ...fixture.persisted,
-      identity: { ...fixture.persisted.identity, name: 'Different Agent' },
+    const reservation = vi.mocked(fixture.deps.agentIdentities.createAgentWithInstallation).mock.calls[0]?.[0]
+      .reservation
+    if (!reservation) throw new Error('The Agent creation reservation was not passed to the repository.')
+    vi.mocked(fixture.deps.agentIdentities.findApplicationCreation).mockResolvedValue({
+      reservation,
+      identity: fixture.persisted,
     })
-    await expect(createAgentWithInstallation(fixture.deps, fixture.input, fixture.context)).rejects.toMatchObject({
-      status: 409,
+    await expect(
+      createAgentWithInstallation(fixture.deps, { ...fixture.input, name: 'Different Agent' }, fixture.context),
+    ).rejects.toMatchObject({ status: 409 })
+  })
+
+  it.each([
+    ['applicationId', 'different-application'],
+    ['actorUserId', 'different-user'],
+    ['issuer', 'https://different.example.com/api/auth'],
+  ] as const)('includes %s in the idempotency request fingerprint', async (boundary, value) => {
+    const fixture = await applicationAgentFixture()
+    const reservation = vi.mocked(fixture.deps.agentIdentities.createAgentWithInstallation).mock.calls[0]?.[0]
+      .reservation
+    if (!reservation) throw new Error('The Agent creation reservation was not passed to the repository.')
+    vi.mocked(fixture.deps.agentIdentities.findApplicationCreation).mockResolvedValue({
+      reservation,
+      identity: fixture.persisted,
     })
+
+    await expect(
+      createAgentWithInstallation(fixture.deps, fixture.input, { ...fixture.context, [boundary]: value }),
+    ).rejects.toMatchObject({ status: 409, code: 'conflict' })
   })
 
   it('maps a concurrent username claim after a failed atomic create to conflict', async () => {
@@ -1111,7 +1178,7 @@ async function applicationAgentFixture(created = true) {
     }
     vi.mocked(deps.agentIdentities.findProtocolAgent).mockResolvedValue(records.protocolAgent)
     vi.mocked(deps.agents.listHostsForAgents).mockResolvedValue([records.host])
-    return { identity: persisted, created }
+    return { identity: persisted, reservation: records.reservation, created }
   })
   const result = await createAgentWithInstallation(deps, input, context)
   if (!persisted) throw new Error('The Agent installation repository was not called.')

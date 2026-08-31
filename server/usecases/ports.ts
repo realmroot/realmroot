@@ -1055,6 +1055,16 @@ export interface AgentIdentityAggregate {
   bindings: AgentIdentityBindingRecord[]
 }
 
+export interface AgentApplicationCreationRecord {
+  id: string
+  applicationId: string
+  actorUserId: string
+  idempotencyKey: string
+  requestFingerprint: string
+  agentIdentityId: string
+  createdAt: Date
+}
+
 export interface AgentIdentityRepository {
   listPersonal(userId: string): Promise<AgentIdentityAggregate[]>
   listOrganization(organizationId: string): Promise<AgentIdentityAggregate[]>
@@ -1079,6 +1089,11 @@ export interface AgentIdentityRepository {
     id: string,
   ): Promise<{ identity: AgentIdentityRecord; binding: AgentIdentityBindingRecord } | null>
   findActiveByProtocolAgent(id: string): Promise<AgentIdentityAggregate | null>
+  findApplicationCreation(
+    applicationId: string,
+    actorUserId: string,
+    idempotencyKey: string,
+  ): Promise<{ reservation: AgentApplicationCreationRecord; identity: AgentIdentityAggregate } | null>
   createIdentity(input: {
     identity: AgentIdentityRecord
     binding: Omit<AgentIdentityBindingRecord, 'hostId'>
@@ -1089,7 +1104,12 @@ export interface AgentIdentityRepository {
     identity: AgentIdentityRecord
     binding: Omit<AgentIdentityBindingRecord, 'hostId'>
     audit: AgentAuditEventRecord
-  }): Promise<{ identity: AgentIdentityAggregate; created: boolean }>
+    reservation: AgentApplicationCreationRecord
+  }): Promise<{
+    identity: AgentIdentityAggregate
+    reservation: AgentApplicationCreationRecord
+    created: boolean
+  }>
   claimIdentityProfile(
     identityId: string,
     input: { username: string; name: string; runtime: string; updatedAt: Date },

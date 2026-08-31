@@ -314,6 +314,19 @@ describe('management routes 1', () => {
     expect(forbiddenResponse.description).not.toBe('Administrator access is required.')
   })
 
+  it('documents UUIDv7 Agent subjects while preserving historical subject references [spec: agent-identity/application-agent-creation]', () => {
+    const createAgent = openApiOperationObjects().find((operation) => operation.key === 'POST /agents')
+    const createdResponse = openApiRecord(openApiRecord(createAgent?.responses)['201'])
+    const content = openApiRecord(openApiRecord(createdResponse.content)['application/json'])
+    const schema = openApiSchemaObject(content.schema)
+    const properties = openApiRecord(schema.properties)
+    const subject = openApiSchemaObject(properties.subject)
+
+    expect(openApiSchemaObject(properties.id).description).toContain('New values are UUIDv7')
+    expect(subject.description).toContain('New Agent subjects are UUIDv7')
+    expect(subject.type).toBe('string')
+  })
+
   it('mounts the documented management collections behind the admin boundary', async () => {
     const app = createApp(createAuthMock(), createTestDeps({ users: createUserRepositoryMock() }))
 

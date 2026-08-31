@@ -53,10 +53,12 @@ Feature: Agent identity and delegated API authorization
       When the Application creates an Agent with its public installation credential
       Then Realmroot creates one active stable Agent and its initial installation
       And the represented User owns and controls the stable Agent and installation
-      And Realmroot returns the stable issuer and subject
+      And Realmroot returns the stable issuer and a UUID version 7 subject
+      And every new identity, binding, and audit identifier is an unprefixed UUID version 7
       And no account approval or enrollment decision resource is created
       And retrying the same request with the same idempotency key returns the same Agent
       And reusing the idempotency key with different Agent data is rejected
+      And historical prefixed Agent identities remain readable without being generated again
       And the original self-enrollment interface and approval behavior are unchanged
 
     @entrypoint:restish @journey:agent-whoami-requires-enrollment

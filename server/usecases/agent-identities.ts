@@ -86,15 +86,21 @@ export async function createAgentWithInstallation(
   await importJWK(input.installation.publicKey as JsonWebKey, 'EdDSA').catch(() => {
     throw badRequest('The installation publicKey must be a valid Ed25519 verification JWK.')
   })
-  const ids = await managedAgentIds(context.applicationId, context.actorUserId, context.idempotencyKey)
-  const existing = await deps.agentIdentities.findIdentity(ids.identityId)
+  const requestFingerprint = await applicationAgentCreationFingerprint(input, context)
+  const existing = await deps.agentIdentities.findApplicationCreation(
+    context.applicationId,
+    context.actorUserId,
+    context.idempotencyKey,
+  )
   if (existing) {
-    await requireMatchingApplicationAgent(deps, existing, input, ids, context.actorUserId)
-    return { agent: toAgent(existing), replayed: true }
+    requireMatchingApplicationAgentCreation(existing.reservation.requestFingerprint, requestFingerprint)
+    requireLiveApplicationAgent(existing.identity)
+    return { agent: toAgent(existing.identity), replayed: true }
   }
   await requireAvailableAgentInstallation(deps, input)
   await requireAvailableAgentUsername(deps, input.username)
   const now = new Date()
+  const ids = managedAgentIds(deps)
   const publicKey = canonicalJson(input.installation.publicKey)
   const identity = newAgentIdentityRecord({
     id: ids.identityId,
@@ -162,13 +168,23 @@ export async function createAgentWithInstallation(
         hostId: host.id,
         metadata: { source: 'application', applicationId: context.applicationId },
       }),
+      reservation: {
+        id: ids.reservationId,
+        applicationId: context.applicationId,
+        actorUserId: context.actorUserId,
+        idempotencyKey: context.idempotencyKey,
+        requestFingerprint,
+        agentIdentityId: identity.id,
+        createdAt: now,
+      },
     })
     .catch(async (error: unknown) => {
       await requireAvailableAgentInstallation(deps, input)
       await requireAvailableAgentUsername(deps, input.username)
       throw error
     })
-  await requireMatchingApplicationAgent(deps, created.identity, input, ids, context.actorUserId)
+  requireMatchingApplicationAgentCreation(created.reservation.requestFingerprint, requestFingerprint)
+  requireLiveApplicationAgent(created.identity)
   return { agent: toAgent(created.identity), replayed: !created.created }
 }
 
@@ -742,55 +758,40 @@ function newAgentIdentityBinding(input: {
   }
 }
 
-type ManagedAgentIds = Awaited<ReturnType<typeof managedAgentIds>>
-
-async function managedAgentIds(applicationId: string, actorUserId: string, idempotencyKey: string) {
-  const bytes = new TextEncoder().encode(`${applicationId}\u0000${actorUserId}\u0000${idempotencyKey}`)
-  const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), (byte) =>
-    byte.toString(16).padStart(2, '0'),
-  ).join('')
+function managedAgentIds(deps: Deps) {
   return {
-    identityId: `agi_${hash}`,
-    subject: `agt_${hash}`,
-    bindingId: `agb_${hash}`,
-    auditId: `aga_${hash}`,
+    identityId: deps.ids.generate(),
+    subject: deps.ids.generate(),
+    bindingId: deps.ids.generate(),
+    auditId: deps.ids.generate(),
+    reservationId: deps.ids.generate(),
   }
 }
 
-async function requireMatchingApplicationAgent(
-  deps: Deps,
-  aggregate: AgentIdentityAggregate,
+async function applicationAgentCreationFingerprint(
   input: CreateAgent,
-  ids: ManagedAgentIds,
-  actorUserId: string,
+  context: { applicationId: string; actorUserId: string; issuer: string },
 ) {
-  const binding = aggregate.bindings.find((candidate) => candidate.id === ids.bindingId)
-  const protocolAgent = await deps.agentIdentities.findProtocolAgent(input.installation.agentId)
-  const [host] = await deps.agents.listHostsForAgents([input.installation.hostId])
-  const matches =
-    aggregate.identity.id === ids.identityId &&
-    aggregate.identity.subject === ids.subject &&
-    aggregate.identity.username === input.username &&
-    aggregate.identity.name === input.name &&
-    aggregate.identity.runtime === input.runtime &&
-    aggregate.identity.ownerUserId === actorUserId &&
-    aggregate.identity.ownerOrganizationId === null &&
-    aggregate.identity.status === 'active' &&
-    binding?.protocolAgentId === input.installation.agentId &&
-    binding.hostId === input.installation.hostId &&
-    binding.status === 'active' &&
-    protocolAgent?.name === input.name &&
-    protocolAgent.userId === actorUserId &&
-    protocolAgent.hostId === input.installation.hostId &&
-    protocolAgent.status === 'active' &&
-    protocolAgent.kid === input.installation.kid &&
-    protocolAgent.publicKey === canonicalJson(input.installation.publicKey) &&
-    host?.name === input.installation.name &&
-    host.userId === actorUserId &&
-    host.status === 'active' &&
-    host.kid === input.installation.kid &&
-    host.publicKey === canonicalJson(input.installation.publicKey)
-  if (!matches) throw conflict('Idempotency-Key was already used for a different Agent.')
+  const representation = canonicalJson({
+    applicationId: context.applicationId,
+    actorUserId: context.actorUserId,
+    issuer: context.issuer,
+    agent: input,
+  })
+  const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(representation))
+  return Array.from(new Uint8Array(hash), (byte) => byte.toString(16).padStart(2, '0')).join('')
+}
+
+function requireMatchingApplicationAgentCreation(actualFingerprint: string, requestFingerprint: string) {
+  if (actualFingerprint !== requestFingerprint) {
+    throw conflict('Idempotency-Key was already used for a different Agent.')
+  }
+}
+
+function requireLiveApplicationAgent(identity: AgentIdentityAggregate) {
+  if (identity.identity.deletedAt) {
+    throw conflict('The Agent identity remains reserved after deletion and cannot be recreated.')
+  }
 }
 
 function canonicalJson(value: unknown): string {

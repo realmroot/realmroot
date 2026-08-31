@@ -1,0 +1,26 @@
+[
+  {
+    "method": "GET",
+    "path": "/agent",
+    "operationId": "getAgentStatus",
+    "semanticHash": "6f55f9108e19415d46cca9123a4a4aed4d4e4e630484c51d7cd67f290b8f43d5"
+  },
+  {
+    "method": "GET",
+    "path": "/agents",
+    "operationId": "listAgents",
+    "semanticHash": "07b4eb99be1f9455655a34775d88a006112edbc79897b2ac2d455607dd2656b4"
+  },
+  {
+    "method": "POST",
+    "path": "/agents",
+    "operationId": "createAgent",
+    "semanticHash": "9a6486866aa8fb53395d8702e30bd1de92dd89d8db8af0b4e3c0c50cb26829d1"
+  },
+  {
+    "method": "GET",
+    "path": "/agents/{agentId}",
+    "operationId": "getAgent",
+    "semanticHash": "8852315906157cc8fd54447c3c44334c04c08d672f98a113a5192c335d9eff1e"
+  }
+]

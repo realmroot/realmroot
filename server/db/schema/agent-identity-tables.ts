@@ -60,6 +60,32 @@ export const agentIdentityBinding = sqliteTable(
   ],
 )
 
+export const agentApplicationCreation = sqliteTable(
+  'agent_application_creation',
+  {
+    id: text('id').primaryKey(),
+    // The authenticated Application identifier is an immutable invocation-boundary value, not an Application row FK.
+    applicationId: text('application_id').notNull(),
+    actorUserId: text('actor_user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'restrict' }),
+    idempotencyKey: text('idempotency_key').notNull(),
+    requestFingerprint: text('request_fingerprint').notNull(),
+    agentIdentityId: text('agent_identity_id')
+      .notNull()
+      .references(() => agentIdentity.id, { onDelete: 'restrict' }),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (table) => [
+    uniqueIndex('agentApplicationCreation_applicationActorKey_unique').on(
+      table.applicationId,
+      table.actorUserId,
+      table.idempotencyKey,
+    ),
+    uniqueIndex('agentApplicationCreation_agentIdentityId_unique').on(table.agentIdentityId),
+  ],
+)
+
 export const agentEnrollmentIntent = sqliteTable(
   'agent_enrollment_intent',
   {

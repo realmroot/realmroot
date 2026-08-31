@@ -15,7 +15,7 @@ export const agentHomeSpaceSchema = z.discriminatedUnion('type', [
 ])
 
 export const agentIdentityBindingSchema = z.object({
-  id: z.string(),
+  id: z.string().describe('New binding identifiers are UUIDv7; legacy prefixed values remain readable.'),
   protocolAgentId: z.string(),
   hostId: z.string(),
   status: agentIdentityBindingStatusSchema,
@@ -24,9 +24,11 @@ export const agentIdentityBindingSchema = z.object({
 })
 
 export const agentIdentitySchema = z.object({
-  id: z.string(),
+  id: z.string().describe('New Agent identity identifiers are UUIDv7; legacy prefixed values remain readable.'),
   issuer: z.url(),
-  subject: z.string(),
+  subject: z
+    .string()
+    .describe('Stable OIDC subject. New Agent subjects are UUIDv7; historical values remain readable references.'),
   username: agentUsernameSchema.nullable(),
   name: z.string(),
   runtime: z.string().nullable(),
