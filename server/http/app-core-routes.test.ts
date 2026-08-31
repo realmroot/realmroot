@@ -160,6 +160,10 @@ describe('app.test 1', () => {
         createResource: vi.fn().mockResolvedValue({}),
       },
     })
+    const assertionKey = await generateKeyPair('ES256')
+    const assertion = await new SignJWT({})
+      .setProtectedHeader({ alg: 'ES256', typ: 'agent+jwt' })
+      .sign(assertionKey.privateKey)
     const response = await createApp(auth, deps, { baseURL: 'https://auth.example.com' }).request(
       'https://auth.example.com/api/auth/oauth2/token',
       {
@@ -171,7 +175,7 @@ describe('app.test 1', () => {
         body: new URLSearchParams({
           grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
           client_id: 'realmroot-cli',
-          assertion: 'agent-assertion',
+          assertion,
           resource: 'https://auth.example.com/api',
           scope: 'agent:read',
         }),
@@ -234,6 +238,16 @@ describe('app.test 1', () => {
       .setIssuedAt()
       .setJti(crypto.randomUUID())
       .sign(dpopKey.privateKey)
+    const assertion = await new SignJWT({
+      [realmrootAgentBindingClaim]: {
+        protocol_agent_id: 'protocol-agent-1',
+        host_id: 'host-1',
+        runtime: 'codex',
+        session_id: 'thread-raw-123',
+      },
+    })
+      .setProtectedHeader({ alg: 'ES256', typ: 'agent+jwt' })
+      .sign(signingKey.privateKey)
 
     const response = await createApp(auth, deps, { baseURL: 'https://auth.example.com' }).request(endpoint, {
       method: 'POST',
@@ -241,7 +255,7 @@ describe('app.test 1', () => {
       body: new URLSearchParams({
         grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
         client_id: 'realmroot-cli',
-        assertion: 'agent-assertion',
+        assertion,
         resource: 'https://auth.example.com/api',
         scope: 'agent:read',
       }),
@@ -261,7 +275,12 @@ describe('app.test 1', () => {
       client_id: 'realmroot-cli',
       scope: 'agent:read',
       cnf: { jkt: expect.any(String) },
-      [realmrootAgentBindingClaim]: { protocol_agent_id: 'protocol-agent-1', host_id: 'host-1' },
+      [realmrootAgentBindingClaim]: {
+        protocol_agent_id: 'protocol-agent-1',
+        host_id: 'host-1',
+        runtime: 'codex',
+        session_id: 'thread-raw-123',
+      },
     })
     expect(verified.payload).not.toHaveProperty('act')
     expect(auth.api.getAgentSession).toHaveBeenCalledWith({

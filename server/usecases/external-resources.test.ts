@@ -56,7 +56,11 @@ import { validateExternalResourceConnector } from '@server/usecases/resource-con
 import { protectedResourceMetadataUrl } from '@server/usecases/resource-metadata'
 import type { ApiResourceResponse } from '@shared/api/authorization'
 import type { AuthorizationDetail } from '@shared/api/authorization-details'
-import { realmrootCliClientId, realmrootOrganizationClaim } from '@shared/oauth-token-profile'
+import {
+  realmrootAgentBindingClaim,
+  realmrootCliClientId,
+  realmrootOrganizationClaim,
+} from '@shared/oauth-token-profile'
 import { exportJWK, generateKeyPair, type JWTHeaderParameters, jwtVerify, SignJWT } from 'jose'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -6002,6 +6006,12 @@ describe('external API resource authorization', () => {
         aud: builtIn.resourceUrl,
         client_id: realmrootCliClientId,
         act: { iss: principal().issuer, sub: principal().subject },
+        [realmrootAgentBindingClaim]: {
+          protocol_agent_id: 'protocol-agent-1',
+          host_id: 'host-1',
+          runtime: 'codex',
+          session_id: 'thread-raw-123',
+        },
         [realmrootOrganizationClaim]: 'org-1',
         groups: [],
         realmroot_authority: authority,
@@ -6639,6 +6649,8 @@ function principal() {
     identityId: 'identity-1',
     protocolAgentId: 'protocol-agent-1',
     hostId: 'host-1',
+    runtime: 'codex',
+    sessionId: 'thread-raw-123',
     identity: aggregate.identity,
     binding: aggregate.bindings[0],
   }
