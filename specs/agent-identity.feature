@@ -76,6 +76,7 @@ Feature: Agent identity and delegated API authorization
       And the controller's browser session is used only to approve enrollment or authority
       And the CLI requests bootstrap authority with the reserved client_id realmroot-cli
       And Realmroot issues an RFC 9068 DPoP-bound bootstrap token with the stable Agent as subject
+      And the bootstrap and Resource access tokens carry the runtime's raw session ID in the private Agent binding claim
       And the bootstrap token contains no actor claim or public Host claim
       And previously issued legacy Agent tokens remain accepted only until their existing expiry
 

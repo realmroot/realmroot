@@ -4,8 +4,9 @@ import type { ProtocolAgentSession } from '@server/usecases/agent-session'
 import type { Deps } from '@server/usecases/deps'
 import { validateDpopResourceProof } from '@server/usecases/dpop'
 import type { AgentIdentityBindingRecord, AgentIdentityRecord } from '@server/usecases/ports'
-import { realmrootAgentBindingClaim, realmrootCliClientId } from '@shared/oauth-token-profile'
+import { type RealmrootAgentBindingClaim, realmrootCliClientId } from '@shared/oauth-token-profile'
 import type { Context, MiddlewareHandler } from 'hono'
+import { readRealmrootAgentBinding } from '../agent-token-claims'
 import { toBoundaryError } from '../routes/auth-api'
 
 export interface AuthUser {
@@ -42,6 +43,8 @@ export interface PrincipalContext {
     identityId: string
     protocolAgentId: string
     hostId: string
+    runtime?: string
+    sessionId?: string
     identity: AgentIdentityRecord
     binding: AgentIdentityBindingRecord
     scopes: string[]
@@ -249,11 +252,18 @@ async function authenticateOAuthAgent(
   const deps = c.get('deps') as Deps
   const actorIssuer = objectStringClaim(payload, 'act', 'iss')
   const actorSubject = objectStringClaim(payload, 'act', 'sub')
+  const agentBinding = (() => {
+    try {
+      return readRealmrootAgentBinding(payload)
+    } catch {
+      throw unauthorized('OAuth access token has an invalid Agent runtime session binding.')
+    }
+  })()
   const activeAgent = legacyAgentToken
     ? resolveLegacyAgentToken(deps, issuer, tokenSubject, clientId, stringClaim(payload, 'host_id'))
     : actorIssuer && actorSubject
       ? resolveResourceTokenAgent(deps, accessToken, issuer, tokenSubject, actorIssuer, actorSubject)
-      : resolveBootstrapTokenAgent(deps, payload, issuer, tokenSubject)
+      : resolveBootstrapTokenAgent(deps, agentBinding, issuer, tokenSubject)
   const [active] = await Promise.all([
     activeAgent,
     validateDpopResourceProof(deps, {
@@ -274,6 +284,8 @@ async function authenticateOAuthAgent(
     identityId: active.identity.id,
     protocolAgentId: active.binding.protocolAgentId,
     hostId: active.binding.hostId,
+    runtime: agentBinding?.runtime,
+    sessionId: agentBinding?.session_id,
     identity: active.identity,
     binding: active.binding,
     scopes,
@@ -303,13 +315,13 @@ async function resolveLegacyAgentToken(
 
 async function resolveBootstrapTokenAgent(
   deps: Deps,
-  payload: Record<string, unknown>,
+  binding: RealmrootAgentBindingClaim | null,
   issuer: string,
   subject: string,
 ) {
-  const protocolAgentId = objectStringClaim(payload, realmrootAgentBindingClaim, 'protocol_agent_id')
-  const hostId = objectStringClaim(payload, realmrootAgentBindingClaim, 'host_id')
-  if (!protocolAgentId || !hostId) throw unauthorized('OAuth bootstrap token is missing its Agent binding.')
+  if (!binding) throw unauthorized('OAuth bootstrap token is missing its Agent binding.')
+  const protocolAgentId = binding.protocol_agent_id
+  const hostId = binding.host_id
   const active = await deps.agentIdentities.findActiveBindingByProtocolAgent(protocolAgentId)
   if (
     !active ||

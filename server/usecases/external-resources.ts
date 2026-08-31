@@ -44,7 +44,12 @@ import type {
 } from '@shared/api/external-resources'
 import { type PaginationInput, paginationMetadata } from '@shared/api/pagination'
 import { agentBootstrapScopes, realmrootOAuthScopes } from '@shared/authz'
-import { realmrootCliClientId, realmrootOrganizationClaim } from '@shared/oauth-token-profile'
+import {
+  realmrootAgentBindingClaim,
+  realmrootCliClientId,
+  realmrootOrganizationClaim,
+  toRealmrootAgentBindingClaim,
+} from '@shared/oauth-token-profile'
 import { realmrootManagementScopes } from '@shared/scope-registry'
 import { authorizationCodeRequest, generateCodeChallenge, refreshAccessTokenRequest } from 'better-auth/oauth2'
 import { refreshResourceScopeRegistry } from './authorization'
@@ -65,6 +70,8 @@ export interface AgentResourcePrincipal {
   identityId: string
   protocolAgentId: string
   hostId: string
+  runtime?: string
+  sessionId?: string
   identity: AgentIdentityRecord
   binding: AgentIdentityBindingRecord
 }
@@ -1551,6 +1558,7 @@ export async function issueTargetAccessToken(
       iat: nowSeconds,
       exp: nowSeconds + 300,
       jti: crypto.randomUUID(),
+      [realmrootAgentBindingClaim]: toRealmrootAgentBindingClaim(principal),
     },
     'JWT',
   )
@@ -1752,6 +1760,7 @@ async function issueNativeAccessToken(
         iss: principal.issuer,
         sub: principal.subject,
       },
+      [realmrootAgentBindingClaim]: toRealmrootAgentBindingClaim(principal),
     },
     'at+jwt',
   )

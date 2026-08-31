@@ -23,7 +23,7 @@ describe('Agent OAuth token issuance', () => {
           dpopProof: proof,
           tokenEndpoint: endpoint,
         },
-        principal('https://auth.example.com/api/auth'),
+        principal('https://auth.example.com/api/auth', true),
         { issuer: 'https://auth.example.com/api/auth', sign },
       ),
     ).resolves.toMatchObject({
@@ -38,7 +38,12 @@ describe('Agent OAuth token issuance', () => {
         sub: 'agt_1',
         aud: 'https://auth.example.com/api',
         client_id: realmrootCliClientId,
-        [realmrootAgentBindingClaim]: { protocol_agent_id: 'protocol-agent-1', host_id: 'host-1' },
+        [realmrootAgentBindingClaim]: {
+          protocol_agent_id: 'protocol-agent-1',
+          host_id: 'host-1',
+          runtime: 'codex',
+          session_id: 'thread-raw-123',
+        },
         scope: 'agent:read resource-servers:read',
         cnf: { jkt: expect.any(String) },
       }),
@@ -196,7 +201,7 @@ describe('Agent OAuth token issuance', () => {
   })
 })
 
-function principal(issuer: string) {
+function principal(issuer: string, withRuntimeSession = false) {
   const now = new Date('2026-08-14T00:00:00.000Z')
   const identity = {
     id: 'identity-1',
@@ -228,6 +233,7 @@ function principal(issuer: string) {
     identityId: identity.id,
     protocolAgentId: binding.protocolAgentId,
     hostId: binding.hostId,
+    ...(withRuntimeSession ? { runtime: 'codex', sessionId: 'thread-raw-123' } : {}),
     identity,
     binding,
   }
