@@ -1,6 +1,7 @@
 import { applyD1Migrations, env, reset } from 'cloudflare:test'
 import {
   agent,
+  agentApplicationCreation,
   agentAuditEvent,
   agentCapabilityGrant,
   agentHost,
@@ -14,6 +15,7 @@ import {
   createAgentEnrollmentIntent,
   createAgentWithInstallation,
   deleteAgentIdentity,
+  getAgent,
 } from '@server/usecases/agent-identities'
 import { createResource } from '@server/usecases/authorization'
 import {
@@ -22,6 +24,7 @@ import {
   listAgentResourceServers,
 } from '@server/usecases/external-resources'
 import type { CreateAgent } from '@shared/api/agent-api'
+import { uuidV7Pattern } from '@shared/api/identifiers'
 import { realmrootCliClientId, realmrootOrganizationClaim } from '@shared/oauth-token-profile'
 import { eq } from 'drizzle-orm'
 import { decodeProtectedHeader, exportJWK, generateKeyPair, importJWK, type JWK, jwtVerify, SignJWT } from 'jose'
@@ -98,6 +101,8 @@ describe('Agent identity enrollment over real D1', () => {
 
     expect(created).toMatchObject({ replayed: false, agent: { status: 'active', subject: expect.any(String) } })
     expect(replay).toEqual({ replayed: true, agent: created.agent })
+    expect(created.agent.id).toMatch(uuidV7Pattern)
+    expect(created.agent.subject).toMatch(uuidV7Pattern)
     await expect(
       createAgentWithInstallation(
         harness.deps,
@@ -118,12 +123,16 @@ describe('Agent identity enrollment over real D1', () => {
         idempotencyKey: 'different-key-same-installation',
       }),
     ).rejects.toMatchObject({ status: 409 })
-    const [protocolAgents, hosts, identities, bindings, audits, approvals] = await Promise.all([
+    const [protocolAgents, hosts, identities, bindings, audits, reservations, approvals] = await Promise.all([
       harness.db.select().from(agent),
       harness.db.select().from(agentHost),
       harness.db.select().from(agentIdentity),
       harness.db.select().from(agentIdentityBinding).where(eq(agentIdentityBinding.agentIdentityId, created.agent.id)),
       harness.db.select().from(agentAuditEvent).where(eq(agentAuditEvent.agentIdentityId, created.agent.id)),
+      harness.db
+        .select()
+        .from(agentApplicationCreation)
+        .where(eq(agentApplicationCreation.agentIdentityId, created.agent.id)),
       harness.db.select().from(approvalRequest),
     ])
     expect(protocolAgents.filter((item) => item.name === 'AMA Worker')).toHaveLength(1)
@@ -132,6 +141,7 @@ describe('Agent identity enrollment over real D1', () => {
     expect(protocolAgents).toContainEqual(expect.objectContaining({ name: 'AMA Worker', userId }))
     expect(hosts).toContainEqual(expect.objectContaining({ name: 'AMA Runner', userId }))
     expect(bindings).toHaveLength(1)
+    expect(bindings[0]?.id).toMatch(uuidV7Pattern)
     expect(audits).toEqual([
       expect.objectContaining({
         action: 'agent.identity_enrolled',
@@ -141,7 +151,140 @@ describe('Agent identity enrollment over real D1', () => {
         hostId: 'ama-host-1',
       }),
     ])
+    expect(audits[0]?.id).toMatch(uuidV7Pattern)
+    expect(reservations).toEqual([
+      expect.objectContaining({
+        id: expect.stringMatching(uuidV7Pattern),
+        applicationId: 'ama-application',
+        actorUserId: userId,
+        idempotencyKey: 'ama-agent-1',
+        requestFingerprint: expect.stringMatching(/^[0-9a-f]{64}$/),
+        agentIdentityId: created.agent.id,
+      }),
+    ])
     expect(approvals).toHaveLength(0)
+  })
+
+  it('reads historical prefixed Agent identity and subject values without generating them [spec: agent-identity/application-agent-creation]', async () => {
+    const now = new Date()
+    await harness.db.insert(agentIdentity).values({
+      id: 'agi_historical',
+      issuer: 'http://localhost/api/auth',
+      subject: 'agt_historical',
+      username: 'historical-agent',
+      name: 'Historical Agent',
+      runtime: 'legacy',
+      ownerUserId: userId,
+      ownerOrganizationId: null,
+      status: 'active',
+      deletedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    })
+
+    await expect(getAgent(harness.deps, 'agi_historical')).resolves.toMatchObject({
+      id: 'agi_historical',
+      subject: 'agt_historical',
+    })
+  })
+
+  it('replays a successful pre-reservation deployment and lazily records its UUIDv7 reservation [spec: agent-identity/application-agent-creation]', async () => {
+    const fixture = await seedLegacyApplicationAgent(harness, userId, 'rollout-replay')
+
+    const replay = await createAgentWithInstallation(harness.deps, fixture.input, fixture.context)
+
+    expect(replay).toEqual({ agent: expect.objectContaining({ id: fixture.identityId }), replayed: true })
+    const [identities, bindings, protocolAgents, hosts, audits, reservations] = await Promise.all([
+      harness.db.select().from(agentIdentity),
+      harness.db.select().from(agentIdentityBinding),
+      harness.db.select().from(agent),
+      harness.db.select().from(agentHost),
+      harness.db.select().from(agentAuditEvent),
+      harness.db.select().from(agentApplicationCreation),
+    ])
+    expect(identities).toHaveLength(1)
+    expect(bindings).toHaveLength(1)
+    expect(protocolAgents).toHaveLength(1)
+    expect(hosts).toHaveLength(1)
+    expect(audits).toHaveLength(1)
+    expect(reservations).toEqual([
+      expect.objectContaining({
+        id: expect.stringMatching(uuidV7Pattern),
+        agentIdentityId: fixture.identityId,
+        applicationId: fixture.context.applicationId,
+        actorUserId: userId,
+        idempotencyKey: fixture.context.idempotencyKey,
+        requestFingerprint: expect.stringMatching(/^[0-9a-f]{64}$/),
+      }),
+    ])
+  })
+
+  it('concurrently replays one pre-reservation deployment through one winning durable reservation [spec: agent-identity/application-agent-creation]', async () => {
+    const fixture = await seedLegacyApplicationAgent(harness, userId, 'rollout-concurrent')
+
+    const results = await Promise.all([
+      createAgentWithInstallation(harness.deps, fixture.input, fixture.context),
+      createAgentWithInstallation(harness.deps, fixture.input, fixture.context),
+    ])
+
+    expect(results).toEqual([
+      { agent: expect.objectContaining({ id: fixture.identityId }), replayed: true },
+      { agent: expect.objectContaining({ id: fixture.identityId }), replayed: true },
+    ])
+    await expect(
+      harness.db
+        .select()
+        .from(agentApplicationCreation)
+        .where(eq(agentApplicationCreation.idempotencyKey, fixture.context.idempotencyKey)),
+    ).resolves.toHaveLength(1)
+  })
+
+  it('rejects changed data for a pre-reservation deployment without recording a reservation [spec: agent-identity/application-agent-creation]', async () => {
+    const fixture = await seedLegacyApplicationAgent(harness, userId, 'rollout-conflict')
+
+    await expect(
+      createAgentWithInstallation(harness.deps, { ...fixture.input, name: 'Changed Agent' }, fixture.context),
+    ).rejects.toMatchObject({ status: 409, code: 'conflict' })
+    await expect(harness.db.select().from(agentApplicationCreation)).resolves.toHaveLength(0)
+  })
+
+  it('lets a concurrent identical request replay only the winning durable reservation [spec: agent-identity/application-agent-creation]', async () => {
+    const { publicKey } = await generateKeyPair('Ed25519')
+    const input: CreateAgent = {
+      username: 'concurrent-agent',
+      name: 'Concurrent Agent',
+      runtime: 'ama',
+      installation: {
+        agentId: 'concurrent-protocol-agent',
+        hostId: 'concurrent-host',
+        name: 'Concurrent Host',
+        kid: 'concurrent-key',
+        publicKey: {
+          ...(await exportJWK(publicKey)),
+          kid: 'concurrent-key',
+        } as CreateAgent['installation']['publicKey'],
+      },
+    }
+    const context = {
+      applicationId: 'concurrent-application',
+      actorUserId: userId,
+      issuer: 'http://localhost/api/auth',
+      idempotencyKey: 'concurrent-create',
+    }
+
+    const results = await Promise.all([
+      createAgentWithInstallation(harness.deps, input, context),
+      createAgentWithInstallation(harness.deps, input, context),
+    ])
+
+    expect(results.map((result) => result.replayed).sort()).toEqual([false, true])
+    expect(results[1]?.agent).toEqual(results[0]?.agent)
+    await expect(
+      harness.db
+        .select()
+        .from(agentApplicationCreation)
+        .where(eq(agentApplicationCreation.idempotencyKey, context.idempotencyKey)),
+    ).resolves.toHaveLength(1)
   })
 
   it('[spec: agent-identity/agent-identity-deletion] keeps deleted Agent identity keys permanently reserved', async () => {
@@ -242,18 +385,23 @@ describe('Agent identity enrollment over real D1', () => {
       ),
     ).rejects.toThrow()
 
-    const [protocolAgents, hosts, identities, bindings, audits] = await Promise.all([
+    const [protocolAgents, hosts, identities, bindings, audits, reservations] = await Promise.all([
       harness.db.select().from(agent).where(eq(agent.id, 'atomic-protocol-agent')),
       harness.db.select().from(agentHost).where(eq(agentHost.id, 'atomic-host')),
       harness.db.select().from(agentIdentity),
       harness.db.select().from(agentIdentityBinding),
       harness.db.select().from(agentAuditEvent).where(eq(agentAuditEvent.action, 'agent.identity_enrolled')),
+      harness.db
+        .select()
+        .from(agentApplicationCreation)
+        .where(eq(agentApplicationCreation.idempotencyKey, 'atomic-agent-1')),
     ])
     expect(protocolAgents).toHaveLength(0)
     expect(hosts).toHaveLength(0)
     expect(identities).toHaveLength(0)
     expect(bindings).toHaveLength(0)
     expect(audits).toHaveLength(0)
+    expect(reservations).toHaveLength(0)
   })
 
   it('creates and idempotently replays one complete installation through real OAuth, HTTP, and D1', async () => {
@@ -998,6 +1146,125 @@ async function approveIntent(harness: Harness, cookie: string, intentId: string)
 
 function jsonHeaders(cookie: string) {
   return { 'content-type': 'application/json', cookie }
+}
+
+async function seedLegacyApplicationAgent(harness: Harness, actorUserId: string, suffix: string) {
+  const { publicKey } = await generateKeyPair('Ed25519')
+  const kid = `${suffix}-key`
+  const input: CreateAgent = {
+    username: `${suffix}-agent`,
+    name: `${suffix} Agent`,
+    runtime: 'ama',
+    installation: {
+      agentId: `${suffix}-protocol-agent`,
+      hostId: `${suffix}-host`,
+      name: `${suffix} Host`,
+      kid,
+      publicKey: { ...(await exportJWK(publicKey)), kid } as CreateAgent['installation']['publicKey'],
+    },
+  }
+  const context = {
+    applicationId: `${suffix}-application`,
+    actorUserId,
+    issuer: 'http://localhost/api/auth',
+    idempotencyKey: `${suffix}-key`,
+  }
+  const hash = await sha256Hex(`${context.applicationId}\u0000${context.actorUserId}\u0000${context.idempotencyKey}`)
+  const identityId = `agi_${hash}`
+  const subject = `agt_${hash}`
+  const bindingId = `agb_${hash}`
+  const now = new Date()
+  const publicKeyJson = canonicalJson(input.installation.publicKey)
+  await harness.db.batch([
+    harness.db.insert(agentHost).values({
+      id: input.installation.hostId,
+      name: input.installation.name,
+      userId: actorUserId,
+      defaultCapabilities: JSON.stringify([]),
+      publicKey: publicKeyJson,
+      kid,
+      jwksUrl: null,
+      enrollmentTokenHash: null,
+      enrollmentTokenExpiresAt: null,
+      status: 'active',
+      activatedAt: now,
+      expiresAt: null,
+      lastUsedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    }),
+    harness.db.insert(agent).values({
+      id: input.installation.agentId,
+      name: input.name,
+      userId: actorUserId,
+      hostId: input.installation.hostId,
+      status: 'active',
+      mode: 'delegated',
+      publicKey: publicKeyJson,
+      kid,
+      jwksUrl: null,
+      lastUsedAt: null,
+      activatedAt: now,
+      expiresAt: null,
+      metadata: null,
+      createdAt: now,
+      updatedAt: now,
+    }),
+    harness.db.insert(agentIdentity).values({
+      id: identityId,
+      issuer: context.issuer,
+      subject,
+      username: input.username,
+      name: input.name,
+      runtime: input.runtime,
+      ownerUserId: actorUserId,
+      ownerOrganizationId: null,
+      status: 'active',
+      deletedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    }),
+    harness.db.insert(agentIdentityBinding).values({
+      id: bindingId,
+      agentIdentityId: identityId,
+      protocolAgentId: input.installation.agentId,
+      status: 'active',
+      boundAt: now,
+      revokedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    }),
+    harness.db.insert(agentAuditEvent).values(
+      agentGovernanceAuditRecord(`aga_${hash}`, {
+        action: 'agent.identity_enrolled',
+        result: 'allowed',
+        tenant: { type: 'user', id: actorUserId },
+        controllerUserId: actorUserId,
+        issuer: context.issuer,
+        subject,
+        agentIdentityId: identityId,
+        hostId: input.installation.hostId,
+        metadata: { source: 'application', applicationId: context.applicationId },
+      }),
+    ),
+  ])
+  return { input, context, identityId }
+}
+
+async function sha256Hex(value: string) {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')
+}
+
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`
+  if (value && typeof value === 'object') {
+    return `{${Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, member]) => `${JSON.stringify(key)}:${canonicalJson(member)}`)
+      .join(',')}}`
+  }
+  return JSON.stringify(value)
 }
 
 function hashApprovalCode(code: string) {

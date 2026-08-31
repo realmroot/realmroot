@@ -65,6 +65,9 @@ describe('OpenAPI semantic contract gate', () => {
     const applicationAgentCreationContract = JSON.parse(
       readFileSync(new URL('./approved-application-agent-creation-semantic-baseline.json', import.meta.url), 'utf8'),
     ) as typeof unchanged
+    const agentResourceIdentifierContract = JSON.parse(
+      readFileSync(new URL('./approved-agent-resource-identifier-semantic-baseline.json', import.meta.url), 'utf8'),
+    ) as typeof unchanged
     const resourceTokenDelegationContract = JSON.parse(
       readFileSync(new URL('./approved-resource-token-delegation-semantic-baseline.json', import.meta.url), 'utf8'),
     ) as typeof unchanged
@@ -212,9 +215,17 @@ describe('OpenAPI semantic contract gate', () => {
       ...agentIdTokenExchangeContract,
     ].sort((left, right) => `${left.path}:${left.method}`.localeCompare(`${right.path}:${right.method}`))
     const lifecycleConflictChanges = new Set(lifecycleConflictContract.map(({ method, path }) => `${method}:${path}`))
+    const agentResourceIdentifierChanges = new Set(
+      agentResourceIdentifierContract.map(({ method, path }) => `${method}:${path}`),
+    )
     const baseline = [
-      ...preLifecycleConflictBaseline.filter(({ method, path }) => !lifecycleConflictChanges.has(`${method}:${path}`)),
+      ...preLifecycleConflictBaseline.filter(
+        ({ method, path }) =>
+          !lifecycleConflictChanges.has(`${method}:${path}`) &&
+          !agentResourceIdentifierChanges.has(`${method}:${path}`),
+      ),
       ...lifecycleConflictContract,
+      ...agentResourceIdentifierContract,
     ].sort((left, right) => `${left.path}:${left.method}`.localeCompare(`${right.path}:${right.method}`))
 
     expect(openApiSemanticSnapshot(unifiedOpenApi as unknown as Record<string, unknown>, () => true)).toEqual(baseline)

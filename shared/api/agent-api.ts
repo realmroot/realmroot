@@ -40,9 +40,13 @@ const scopeListSchema = z
   .transform((values) => [...new Set(values)].sort())
 
 export const agentSchema = z.object({
-  id: z.string(),
+  id: z
+    .string()
+    .describe('Stable Agent resource identifier. New values are UUIDv7; legacy prefixed values remain readable.'),
   issuer: z.url(),
-  subject: z.string(),
+  subject: z
+    .string()
+    .describe('Stable OIDC subject. New Agent subjects are UUIDv7; historical values remain readable references.'),
   username: agentUsernameSchema.nullable(),
   name: z.string(),
   runtime: z.string().nullable(),

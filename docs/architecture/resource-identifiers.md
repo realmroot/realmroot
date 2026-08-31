@@ -14,6 +14,18 @@ Existing prefixed identifiers remain valid references and are not rewritten.
 HTTP parameters therefore remain opaque strings wherever historical records can
 be addressed.
 
+Agent creation follows the same rule for the stable Agent resource identifier,
+OIDC subject, installation binding, audit event, and internal idempotency
+reservation. An application creation reservation durably maps its application,
+represented User, and `Idempotency-Key` to the generated Agent and a canonical
+request fingerprint; the reservation identifier is never derived from that key.
+
+When a reservation is absent during the UUIDv7 rollout, Realmroot may derive
+the retired prefixed identifiers solely to locate and validate a creation that
+was committed by the previous release. A matching historical Agent receives a
+UUIDv7 reservation lazily; the derived values are never used to create another
+resource or event.
+
 ## Boundaries
 
 This policy does not apply to credentials, access or refresh tokens, JWT `jti`
