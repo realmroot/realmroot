@@ -496,6 +496,7 @@ export interface AgentAuditEventRecord {
 
 export interface AgentAuditRepository {
   append(input: AgentAuditEventRecord): Promise<void>
+  findById(id: string): Promise<AgentAuditEventRecord | null>
   list(
     page: PaginationInput,
     filter?: {
@@ -1094,6 +1095,11 @@ export interface AgentIdentityRepository {
     actorUserId: string,
     idempotencyKey: string,
   ): Promise<{ reservation: AgentApplicationCreationRecord; identity: AgentIdentityAggregate } | null>
+  reserveApplicationCreation(reservation: AgentApplicationCreationRecord): Promise<{
+    reservation: AgentApplicationCreationRecord
+    identity: AgentIdentityAggregate
+    created: boolean
+  }>
   createIdentity(input: {
     identity: AgentIdentityRecord
     binding: Omit<AgentIdentityBindingRecord, 'hostId'>

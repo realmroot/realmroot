@@ -34,7 +34,9 @@ import {
   toAgentEnrollment,
 } from '@server/usecases/agent-identities'
 import type {
+  AgentAuditEventRecord,
   AgentEnrollmentIntentRecord,
+  AgentHostRecord,
   AgentIdentityAggregate,
   AgentIdentityRecord,
   AgentRecord,
@@ -242,6 +244,231 @@ describe('Application-created Agent installation', () => {
   it('reports a concurrent identical repository commit as an idempotent replay', async () => {
     const fixture = await applicationAgentFixture(false)
     expect(fixture.result.replayed).toBe(true)
+  })
+
+  it('migrates a matching pre-reservation Agent creation into the durable idempotency map', async () => {
+    const { publicKey } = await generateKeyPair('Ed25519')
+    const input = applicationAgentInput(await exportedAgentPublicJwk(publicKey, 'ama-key-1'))
+    const context = applicationAgentContext()
+    const fixture = await legacyApplicationAgentFixture(input, context)
+    const deps = createTestDeps()
+    deps.ids.generate = vi.fn(deps.ids.generate)
+    vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(fixture.identity)
+    vi.mocked(deps.agentIdentities.findProtocolAgent).mockResolvedValue(fixture.protocolAgent)
+    vi.mocked(deps.agents.listHostsForAgents).mockResolvedValue([fixture.host])
+    vi.mocked(deps.agentAudit.findById).mockResolvedValue(fixture.audit)
+    vi.mocked(deps.agentIdentities.reserveApplicationCreation).mockImplementation(async (reservation) => ({
+      reservation,
+      identity: fixture.identity,
+      created: true,
+    }))
+
+    await expect(createAgentWithInstallation(deps, input, context)).resolves.toEqual({
+      agent: toAgent(fixture.identity),
+      replayed: true,
+    })
+    expect(deps.agentIdentities.reserveApplicationCreation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: '00000000-0000-7000-8000-000000000000',
+        applicationId: context.applicationId,
+        actorUserId: context.actorUserId,
+        idempotencyKey: context.idempotencyKey,
+        requestFingerprint: expect.stringMatching(/^[0-9a-f]{64}$/),
+        agentIdentityId: fixture.identity.identity.id,
+      }),
+    )
+    expect(deps.agentIdentities.createAgentWithInstallation).not.toHaveBeenCalled()
+    expect(deps.ids.generate).toHaveBeenCalledTimes(1)
+  })
+
+  it('propagates an unknown failure while reserving a matching legacy Agent', async () => {
+    const { publicKey } = await generateKeyPair('Ed25519')
+    const input = applicationAgentInput(await exportedAgentPublicJwk(publicKey, 'ama-key-1'))
+    const context = applicationAgentContext()
+    const fixture = await legacyApplicationAgentFixture(input, context)
+    const deps = createTestDeps()
+    const storageFailure = new Error('D1 unavailable')
+    vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(fixture.identity)
+    vi.mocked(deps.agentIdentities.findProtocolAgent).mockResolvedValue(fixture.protocolAgent)
+    vi.mocked(deps.agents.listHostsForAgents).mockResolvedValue([fixture.host])
+    vi.mocked(deps.agentAudit.findById).mockResolvedValue(fixture.audit)
+    vi.mocked(deps.agentIdentities.reserveApplicationCreation).mockRejectedValue(storageFailure)
+
+    await expect(createAgentWithInstallation(deps, input, context)).rejects.toBe(storageFailure)
+  })
+
+  it.each([
+    [
+      'identity subject',
+      (fixture: Awaited<ReturnType<typeof legacyApplicationAgentFixture>>) => {
+        fixture.identity.identity.subject = 'agt_changed'
+      },
+    ],
+    [
+      'identity issuer',
+      (fixture: Awaited<ReturnType<typeof legacyApplicationAgentFixture>>) => {
+        fixture.identity.identity.issuer = 'https://changed.example.com/api/auth'
+      },
+    ],
+    [
+      'identity username',
+      (fixture: Awaited<ReturnType<typeof legacyApplicationAgentFixture>>) => {
+        fixture.identity.identity.username = 'changed-agent'
+      },
+    ],
+    [
+      'identity name',
+      (fixture: Awaited<ReturnType<typeof legacyApplicationAgentFixture>>) => {
+        fixture.identity.identity.name = 'Changed Agent'
+      },
+    ],
+    [
+      'identity runtime',
+      (fixture: Awaited<ReturnType<typeof legacyApplicationAgentFixture>>) => {
+        fixture.identity.identity.runtime = 'changed'
+      },
+    ],
+    [
+      'identity owner',
+      (fixture: Awaited<ReturnType<typeof legacyApplicationAgentFixture>>) => {
+        fixture.identity.identity.ownerUserId = 'other-user'
+      },
+    ],
+    [
+      'identity status',
+      (fixture: Awaited<ReturnType<typeof legacyApplicationAgentFixture>>) => {
+        fixture.identity.identity.status = 'inactive'
+      },
+    ],
+    [
+      'binding',
+      (fixture: Awaited<ReturnType<typeof legacyApplicationAgentFixture>>) => {
+        fixture.identity.bindings[0] = { ...fixture.identity.bindings[0]!, status: 'revoked' }
+      },
+    ],
+    [
+      'protocol Agent',
+      (fixture: Awaited<ReturnType<typeof legacyApplicationAgentFixture>>) => {
+        fixture.protocolAgent = { ...fixture.protocolAgent, mode: 'changed' }
+      },
+    ],
+    [
+      'Host',
+      (fixture: Awaited<ReturnType<typeof legacyApplicationAgentFixture>>) => {
+        fixture.host = { ...fixture.host, name: 'Changed Host' }
+      },
+    ],
+    [
+      'protocol Agent kid',
+      (fixture: Awaited<ReturnType<typeof legacyApplicationAgentFixture>>) => {
+        fixture.protocolAgent = { ...fixture.protocolAgent, kid: 'changed-key' }
+      },
+    ],
+    [
+      'protocol Agent public key',
+      (fixture: Awaited<ReturnType<typeof legacyApplicationAgentFixture>>) => {
+        fixture.protocolAgent = { ...fixture.protocolAgent, publicKey: '{}' }
+      },
+    ],
+    [
+      'Host kid',
+      (fixture: Awaited<ReturnType<typeof legacyApplicationAgentFixture>>) => {
+        fixture.host = { ...fixture.host, kid: 'changed-key' }
+      },
+    ],
+    [
+      'Host public key',
+      (fixture: Awaited<ReturnType<typeof legacyApplicationAgentFixture>>) => {
+        fixture.host = { ...fixture.host, publicKey: '{}' }
+      },
+    ],
+    [
+      'audit',
+      (fixture: Awaited<ReturnType<typeof legacyApplicationAgentFixture>>) => {
+        fixture.audit = { ...fixture.audit, action: 'changed' }
+      },
+    ],
+  ])('rejects a pre-reservation legacy lookup with a different %s representation', async (_field, mutate) => {
+    const { publicKey } = await generateKeyPair('Ed25519')
+    const input = applicationAgentInput(await exportedAgentPublicJwk(publicKey, 'ama-key-1'))
+    const context = applicationAgentContext()
+    const fixture = await legacyApplicationAgentFixture(input, context)
+    mutate(fixture)
+    const deps = createTestDeps()
+    vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(fixture.identity)
+    vi.mocked(deps.agentIdentities.findProtocolAgent).mockResolvedValue(fixture.protocolAgent)
+    vi.mocked(deps.agents.listHostsForAgents).mockResolvedValue([fixture.host])
+    vi.mocked(deps.agentAudit.findById).mockResolvedValue(fixture.audit)
+
+    await expect(createAgentWithInstallation(deps, input, context)).rejects.toMatchObject({
+      status: 409,
+      code: 'conflict',
+    })
+    expect(deps.agentIdentities.reserveApplicationCreation).not.toHaveBeenCalled()
+    expect(deps.agentIdentities.createAgentWithInstallation).not.toHaveBeenCalled()
+  })
+
+  it('recovers a pre-reservation Agent committed by an older concurrent deployment', async () => {
+    const { publicKey } = await generateKeyPair('Ed25519')
+    const input = applicationAgentInput(await exportedAgentPublicJwk(publicKey, 'ama-key-1'))
+    const context = applicationAgentContext()
+    const fixture = await legacyApplicationAgentFixture(input, context)
+    const deps = createTestDeps()
+    vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValueOnce(null).mockResolvedValue(fixture.identity)
+    vi.mocked(deps.agentIdentities.findProtocolAgent)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValue(fixture.protocolAgent)
+    vi.mocked(deps.agents.listHostsForAgents).mockResolvedValueOnce([]).mockResolvedValue([fixture.host])
+    vi.mocked(deps.agentAudit.findById).mockResolvedValue(fixture.audit)
+    vi.mocked(deps.agentIdentities.createAgentWithInstallation).mockRejectedValue(new Error('unique constraint'))
+    vi.mocked(deps.agentIdentities.reserveApplicationCreation).mockImplementation(async (reservation) => ({
+      reservation,
+      identity: fixture.identity,
+      created: true,
+    }))
+
+    await expect(createAgentWithInstallation(deps, input, context)).resolves.toMatchObject({
+      agent: { id: fixture.identity.identity.id },
+      replayed: true,
+    })
+  })
+
+  it('rejects a different representation committed by an older concurrent deployment', async () => {
+    const { publicKey } = await generateKeyPair('Ed25519')
+    const input = applicationAgentInput(await exportedAgentPublicJwk(publicKey, 'ama-key-1'))
+    const context = applicationAgentContext()
+    const fixture = await legacyApplicationAgentFixture(input, context)
+    const deps = createTestDeps()
+    vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValueOnce(null).mockResolvedValue(fixture.identity)
+    vi.mocked(deps.agentIdentities.findProtocolAgent)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValue(fixture.protocolAgent)
+    vi.mocked(deps.agents.listHostsForAgents).mockResolvedValueOnce([]).mockResolvedValue([fixture.host])
+    vi.mocked(deps.agentAudit.findById).mockResolvedValue({ ...fixture.audit, action: 'changed' })
+    vi.mocked(deps.agentIdentities.createAgentWithInstallation).mockRejectedValue(new Error('unique constraint'))
+
+    await expect(createAgentWithInstallation(deps, input, context)).rejects.toMatchObject({
+      status: 409,
+      code: 'conflict',
+    })
+  })
+
+  it('preserves the original create failure when concurrent legacy recovery cannot be confirmed', async () => {
+    const { publicKey } = await generateKeyPair('Ed25519')
+    const input = applicationAgentInput(await exportedAgentPublicJwk(publicKey, 'ama-key-1'))
+    const context = applicationAgentContext()
+    const fixture = await legacyApplicationAgentFixture(input, context)
+    const deps = createTestDeps()
+    const storageFailure = new Error('D1 write unavailable')
+    vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValueOnce(null).mockResolvedValue(fixture.identity)
+    vi.mocked(deps.agentIdentities.findProtocolAgent)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValue(fixture.protocolAgent)
+    vi.mocked(deps.agents.listHostsForAgents).mockResolvedValueOnce([]).mockResolvedValue([fixture.host])
+    vi.mocked(deps.agentAudit.findById).mockRejectedValue(new Error('D1 read unavailable'))
+    vi.mocked(deps.agentIdentities.createAgentWithInstallation).mockRejectedValue(storageFailure)
+
+    await expect(createAgentWithInstallation(deps, input, context)).rejects.toBe(storageFailure)
   })
 
   it('rejects replay after the reserved Agent identity was deleted', async () => {
@@ -1183,6 +1410,108 @@ async function applicationAgentFixture(created = true) {
   const result = await createAgentWithInstallation(deps, input, context)
   if (!persisted) throw new Error('The Agent installation repository was not called.')
   return { deps, input, context, persisted, result }
+}
+
+async function legacyApplicationAgentFixture(input: CreateAgent, context: ReturnType<typeof applicationAgentContext>) {
+  const hash = Array.from(
+    new Uint8Array(
+      await crypto.subtle.digest(
+        'SHA-256',
+        new TextEncoder().encode(`${context.applicationId}\u0000${context.actorUserId}\u0000${context.idempotencyKey}`),
+      ),
+    ),
+    (byte) => byte.toString(16).padStart(2, '0'),
+  ).join('')
+  const now = new Date('2026-08-01T00:00:00.000Z')
+  const publicKey = JSON.stringify(
+    Object.fromEntries(
+      Object.entries(input.installation.publicKey).sort(([left], [right]) => left.localeCompare(right)),
+    ),
+  )
+  const identity: AgentIdentityAggregate = {
+    identity: {
+      id: `agi_${hash}`,
+      issuer: context.issuer,
+      subject: `agt_${hash}`,
+      username: input.username,
+      name: input.name,
+      runtime: input.runtime,
+      ownerUserId: context.actorUserId,
+      ownerOrganizationId: null,
+      status: 'active',
+      deletedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    },
+    bindings: [
+      {
+        id: `agb_${hash}`,
+        agentIdentityId: `agi_${hash}`,
+        protocolAgentId: input.installation.agentId,
+        hostId: input.installation.hostId,
+        status: 'active',
+        boundAt: now,
+        revokedAt: null,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ],
+  }
+  const protocolAgent: AgentRecord = {
+    id: input.installation.agentId,
+    name: input.name,
+    userId: context.actorUserId,
+    hostId: input.installation.hostId,
+    status: 'active',
+    mode: 'delegated',
+    publicKey,
+    kid: input.installation.kid,
+    jwksUrl: null,
+    lastUsedAt: null,
+    activatedAt: now,
+    expiresAt: null,
+    metadata: null,
+    createdAt: now,
+    updatedAt: now,
+  }
+  const host: AgentHostRecord = {
+    id: input.installation.hostId,
+    name: input.installation.name,
+    userId: context.actorUserId,
+    defaultCapabilities: JSON.stringify([]),
+    publicKey,
+    kid: input.installation.kid,
+    jwksUrl: null,
+    enrollmentTokenHash: null,
+    enrollmentTokenExpiresAt: null,
+    status: 'active',
+    activatedAt: now,
+    expiresAt: null,
+    lastUsedAt: null,
+    createdAt: now,
+    updatedAt: now,
+  }
+  const audit: AgentAuditEventRecord = {
+    id: `aga_${hash}`,
+    action: 'agent.identity_enrolled',
+    result: 'allowed',
+    realmOwned: false,
+    ownerUserId: context.actorUserId,
+    ownerOrganizationId: null,
+    controllerUserId: context.actorUserId,
+    subjectIssuer: context.issuer,
+    subject: `agt_${hash}`,
+    agentIdentityId: `agi_${hash}`,
+    hostId: input.installation.hostId,
+    resourceId: null,
+    resourceConnectionId: null,
+    accessRequestId: null,
+    scopes: null,
+    reasonCode: null,
+    metadata: { source: 'application', applicationId: context.applicationId },
+    occurredAt: now,
+  }
+  return { identity, protocolAgent, host, audit }
 }
 
 function applicationAgentInput(publicKey: CreateAgent['installation']['publicKey']): CreateAgent {

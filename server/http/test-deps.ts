@@ -105,6 +105,7 @@ export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> =
     },
     agentAudit: {
       append: vi.fn(),
+      findById: vi.fn().mockResolvedValue(null),
       list: vi.fn().mockResolvedValue({ items: [], total: 0 }),
       summarizeByDay: vi.fn().mockResolvedValue([]),
     },
@@ -125,6 +126,7 @@ export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> =
       findActiveBindingByProtocolAgent: vi.fn().mockResolvedValue(null),
       findActiveByProtocolAgent: vi.fn().mockResolvedValue(null),
       findApplicationCreation: vi.fn().mockResolvedValue(null),
+      reserveApplicationCreation: vi.fn(),
       createAgentWithInstallation: vi.fn().mockImplementation(async (input) => ({
         identity: {
           identity: input.identity,

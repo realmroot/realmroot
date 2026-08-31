@@ -57,6 +57,7 @@ Feature: Agent identity and delegated API authorization
       And every new identity, binding, and audit identifier is an unprefixed UUID version 7
       And no account approval or enrollment decision resource is created
       And retrying the same request with the same idempotency key returns the same Agent
+      And a retry first completed before the UUID version 7 rollout returns that historical Agent and records its durable idempotency reservation
       And reusing the idempotency key with different Agent data is rejected
       And historical prefixed Agent identities remain readable without being generated again
       And the original self-enrollment interface and approval behavior are unchanged

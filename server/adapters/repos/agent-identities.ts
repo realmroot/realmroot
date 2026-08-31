@@ -239,6 +239,38 @@ export function createDrizzleAgentIdentityRepository(db: Database): AgentIdentit
       return { reservation, identity: await aggregate(db, identity) }
     },
 
+    async reserveApplicationCreation(reservation) {
+      const existing = await this.findApplicationCreation(
+        reservation.applicationId,
+        reservation.actorUserId,
+        reservation.idempotencyKey,
+      )
+      if (existing) return { ...existing, created: false }
+      try {
+        await db.insert(agentApplicationCreation).values(reservation)
+      } catch (error) {
+        let raced: Awaited<ReturnType<typeof this.findApplicationCreation>>
+        try {
+          raced = await this.findApplicationCreation(
+            reservation.applicationId,
+            reservation.actorUserId,
+            reservation.idempotencyKey,
+          )
+        } catch {
+          throw error
+        }
+        if (raced) return { ...raced, created: false }
+        throw identityKeyConflict(error)
+      }
+      const persisted = await this.findApplicationCreation(
+        reservation.applicationId,
+        reservation.actorUserId,
+        reservation.idempotencyKey,
+      )
+      if (!persisted) throw new Error('Agent application creation reservation was not persisted.')
+      return { ...persisted, created: true }
+    },
+
     async createIdentity(input) {
       await identityKeyWrite(() =>
         db.batch([
@@ -268,11 +300,16 @@ export function createDrizzleAgentIdentityRepository(db: Database): AgentIdentit
           db.insert(agentApplicationCreation).values(input.reservation),
         ])
       } catch (error) {
-        const raced = await this.findApplicationCreation(
-          input.reservation.applicationId,
-          input.reservation.actorUserId,
-          input.reservation.idempotencyKey,
-        )
+        let raced: Awaited<ReturnType<typeof this.findApplicationCreation>>
+        try {
+          raced = await this.findApplicationCreation(
+            input.reservation.applicationId,
+            input.reservation.actorUserId,
+            input.reservation.idempotencyKey,
+          )
+        } catch {
+          throw error
+        }
         if (raced) return { ...raced, created: false }
         throw identityKeyConflict(error)
       }

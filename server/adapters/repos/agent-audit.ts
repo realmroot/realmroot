@@ -9,6 +9,11 @@ export function createAgentAuditRepository(db: Database): AgentAuditRepository {
       await db.insert(agentAuditEvent).values(input)
     },
 
+    async findById(id) {
+      const [record] = await db.select().from(agentAuditEvent).where(eq(agentAuditEvent.id, id)).limit(1)
+      return record ?? null
+    },
+
     async list(page, filter) {
       if (filter?.ownerOrganizationIds?.length === 0 && !filter.ownerUserId) {
         return { items: [], total: 0, ...page }
