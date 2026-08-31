@@ -190,6 +190,49 @@ describe('app.test 1', () => {
     expect(deps.agentIdentities.findProtocolAgent).not.toHaveBeenCalled()
   })
 
+  it('rejects runtime session context bound to another protocol Agent', async () => {
+    const auth = createAuthMock()
+    auth.api.getAgentSession.mockResolvedValue({
+      agentId: 'protocol-agent-1',
+      agent: { id: 'protocol-agent-1', hostId: 'host-1', mode: 'delegated', capabilityGrants: [] },
+      host: { id: 'host-1', userId: 'controller-1', status: 'active' },
+    })
+    const assertionKey = await generateKeyPair('ES256')
+    const assertion = await new SignJWT({
+      [realmrootAgentBindingClaim]: {
+        protocol_agent_id: 'protocol-agent-2',
+        host_id: 'host-1',
+        runtime: 'codex',
+        session_id: 'thread-raw-123',
+      },
+    })
+      .setProtectedHeader({ alg: 'ES256', typ: 'agent+jwt' })
+      .sign(assertionKey.privateKey)
+    const deps = createTestDeps()
+
+    const response = await createApp(auth, deps, { baseURL: 'https://auth.example.com' }).request(
+      'https://auth.example.com/api/auth/oauth2/token',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+          client_id: 'realmroot-cli',
+          assertion,
+          resource: 'https://auth.example.com/api',
+          scope: 'agent:read',
+        }),
+      },
+    )
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({
+      error: 'invalid_grant',
+      error_description: 'The Agent assertion binding does not match its authenticated Agent and Host.',
+    })
+    expect(deps.agentIdentities.findActiveBindingByProtocolAgent).not.toHaveBeenCalled()
+  })
+
   it('issues and verifies an Agent bootstrap JWT through the OAuth HTTP boundary', async () => {
     const issuer = 'https://auth.example.com/api/auth'
     const endpoint = `${issuer}/oauth2/token`

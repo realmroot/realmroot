@@ -2551,6 +2551,12 @@ describe('external API resource authorization', () => {
         iss: 'https://auth.example.com/api/auth',
         sub: 'agt_stable',
         aud: 'https://projects.example.com/token',
+        [realmrootAgentBindingClaim]: {
+          protocol_agent_id: 'protocol-agent-1',
+          host_id: 'host-1',
+          runtime: 'codex',
+          session_id: 'thread-raw-123',
+        },
       }),
       'JWT',
     )
