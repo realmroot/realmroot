@@ -100,98 +100,105 @@ export async function createAgentWithInstallation(
   }
   const legacyReplay = await replayLegacyApplicationAgent(deps, input, context, requestFingerprint)
   if (legacyReplay) return legacyReplay
+  let created: Awaited<ReturnType<typeof createUuidV7ApplicationAgent>>
   try {
-    await requireAvailableAgentInstallation(deps, input)
-    await requireAvailableAgentUsername(deps, input.username)
-    const now = new Date()
-    const ids = managedAgentIds(deps)
-    const publicKey = canonicalJson(input.installation.publicKey)
-    const identity = newAgentIdentityRecord({
-      id: ids.identityId,
-      subject: ids.subject,
-      issuer: context.issuer,
-      username: input.username,
-      name: input.name,
-      runtime: input.runtime,
-      homeSpace: { type: 'personal', userId: context.actorUserId },
-      now,
-    })
-    const host: AgentHostRecord = {
-      id: input.installation.hostId,
-      name: input.installation.name,
-      userId: context.actorUserId,
-      defaultCapabilities: JSON.stringify([]),
-      publicKey,
-      kid: input.installation.kid,
-      jwksUrl: null,
-      enrollmentTokenHash: null,
-      enrollmentTokenExpiresAt: null,
-      status: 'active',
-      activatedAt: now,
-      expiresAt: null,
-      lastUsedAt: null,
-      createdAt: now,
-      updatedAt: now,
-    }
-    const protocolAgent: AgentRecord = {
-      id: input.installation.agentId,
-      name: input.name,
-      userId: context.actorUserId,
-      hostId: host.id,
-      status: 'active',
-      mode: 'delegated',
-      publicKey,
-      kid: input.installation.kid,
-      jwksUrl: null,
-      lastUsedAt: null,
-      activatedAt: now,
-      expiresAt: null,
-      metadata: null,
-      createdAt: now,
-      updatedAt: now,
-    }
-    const created = await deps.agentIdentities.createAgentWithInstallation({
-      host,
-      protocolAgent,
-      identity,
-      binding: newAgentIdentityBinding({
-        id: ids.bindingId,
-        identityId: identity.id,
-        protocolAgentId: protocolAgent.id,
-        now,
-      }),
-      audit: agentGovernanceAuditRecord(ids.auditId, {
-        action: 'agent.identity_enrolled',
-        result: 'allowed',
-        tenant: { type: 'user', id: context.actorUserId },
-        controllerUserId: context.actorUserId,
-        issuer: identity.issuer,
-        subject: identity.subject,
-        agentIdentityId: identity.id,
-        hostId: host.id,
-        metadata: { source: 'application', applicationId: context.applicationId },
-      }),
-      reservation: {
-        id: ids.reservationId,
-        applicationId: context.applicationId,
-        actorUserId: context.actorUserId,
-        idempotencyKey: context.idempotencyKey,
-        requestFingerprint,
-        agentIdentityId: identity.id,
-        createdAt: now,
-      },
-    })
-    requireMatchingApplicationAgentCreation(created.reservation.requestFingerprint, requestFingerprint)
-    requireLiveApplicationAgent(created.identity)
-    return { agent: toAgent(created.identity), replayed: !created.created }
+    created = await createUuidV7ApplicationAgent(deps, input, context, requestFingerprint)
   } catch (error) {
     const recovered = await recoverLegacyApplicationAgentAfterFailure(deps, input, context, requestFingerprint, error)
     if (recovered) return recovered
-    if (error instanceof ApiError) throw error
-    await requireAvailableAgentInstallation(deps, input)
-    await requireAvailableAgentUsername(deps, input.username)
     throw error
   }
+  requireMatchingApplicationAgentCreation(created.reservation.requestFingerprint, requestFingerprint)
+  requireLiveApplicationAgent(created.identity)
+  return { agent: toAgent(created.identity), replayed: !created.created }
+}
+
+async function createUuidV7ApplicationAgent(
+  deps: Deps,
+  input: CreateAgent,
+  context: { applicationId: string; actorUserId: string; issuer: string; idempotencyKey: string },
+  requestFingerprint: string,
+) {
+  await requireAvailableAgentInstallation(deps, input)
+  await requireAvailableAgentUsername(deps, input.username)
+  const now = new Date()
+  const ids = managedAgentIds(deps)
+  const publicKey = canonicalJson(input.installation.publicKey)
+  const identity = newAgentIdentityRecord({
+    id: ids.identityId,
+    subject: ids.subject,
+    issuer: context.issuer,
+    username: input.username,
+    name: input.name,
+    runtime: input.runtime,
+    homeSpace: { type: 'personal', userId: context.actorUserId },
+    now,
+  })
+  const host: AgentHostRecord = {
+    id: input.installation.hostId,
+    name: input.installation.name,
+    userId: context.actorUserId,
+    defaultCapabilities: JSON.stringify([]),
+    publicKey,
+    kid: input.installation.kid,
+    jwksUrl: null,
+    enrollmentTokenHash: null,
+    enrollmentTokenExpiresAt: null,
+    status: 'active',
+    activatedAt: now,
+    expiresAt: null,
+    lastUsedAt: null,
+    createdAt: now,
+    updatedAt: now,
+  }
+  const protocolAgent: AgentRecord = {
+    id: input.installation.agentId,
+    name: input.name,
+    userId: context.actorUserId,
+    hostId: host.id,
+    status: 'active',
+    mode: 'delegated',
+    publicKey,
+    kid: input.installation.kid,
+    jwksUrl: null,
+    lastUsedAt: null,
+    activatedAt: now,
+    expiresAt: null,
+    metadata: null,
+    createdAt: now,
+    updatedAt: now,
+  }
+  return deps.agentIdentities.createAgentWithInstallation({
+    host,
+    protocolAgent,
+    identity,
+    binding: newAgentIdentityBinding({
+      id: ids.bindingId,
+      identityId: identity.id,
+      protocolAgentId: protocolAgent.id,
+      now,
+    }),
+    audit: agentGovernanceAuditRecord(ids.auditId, {
+      action: 'agent.identity_enrolled',
+      result: 'allowed',
+      tenant: { type: 'user', id: context.actorUserId },
+      controllerUserId: context.actorUserId,
+      issuer: identity.issuer,
+      subject: identity.subject,
+      agentIdentityId: identity.id,
+      hostId: host.id,
+      metadata: { source: 'application', applicationId: context.applicationId },
+    }),
+    reservation: {
+      id: ids.reservationId,
+      applicationId: context.applicationId,
+      actorUserId: context.actorUserId,
+      idempotencyKey: context.idempotencyKey,
+      requestFingerprint,
+      agentIdentityId: identity.id,
+      createdAt: now,
+    },
+  })
 }
 
 async function requireAvailableAgentInstallation(deps: Deps, input: CreateAgent) {

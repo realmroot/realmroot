@@ -570,45 +570,6 @@ describe('Application-created Agent installation', () => {
     ).rejects.toMatchObject({ status: 409, code: 'conflict' })
   })
 
-  it('maps a concurrent username claim after a failed atomic create to conflict', async () => {
-    const { publicKey } = await generateKeyPair('Ed25519')
-    const input = applicationAgentInput(await exportedAgentPublicJwk(publicKey, 'ama-key-1'))
-    const deps = createTestDeps()
-    vi.mocked(deps.agentIdentities.findByUsername)
-      .mockResolvedValueOnce(null)
-      .mockResolvedValue(identity({ username: input.username }))
-    vi.mocked(deps.agentIdentities.createAgentWithInstallation).mockRejectedValue(new Error('unique constraint'))
-
-    await expect(createAgentWithInstallation(deps, input, applicationAgentContext())).rejects.toMatchObject({
-      status: 409,
-      message: expect.stringContaining('username'),
-    })
-  })
-
-  it.each([
-    'protocolAgentId',
-    'hostId',
-  ] as const)('maps a concurrent %s claim after a failed atomic create to conflict', async (occupiedIdentifier) => {
-    const { publicKey } = await generateKeyPair('Ed25519')
-    const input = applicationAgentInput(await exportedAgentPublicJwk(publicKey, 'ama-key-1'))
-    const deps = createTestDeps()
-    if (occupiedIdentifier === 'protocolAgentId') {
-      vi.mocked(deps.agentIdentities.findProtocolAgent)
-        .mockResolvedValueOnce(null)
-        .mockResolvedValue({ id: input.installation.agentId } as AgentRecord)
-    } else {
-      vi.mocked(deps.agents.listHostsForAgents)
-        .mockResolvedValueOnce([])
-        .mockResolvedValue([{ id: input.installation.hostId }] as never)
-    }
-    vi.mocked(deps.agentIdentities.createAgentWithInstallation).mockRejectedValue(new Error('unique constraint'))
-
-    await expect(createAgentWithInstallation(deps, input, applicationAgentContext())).rejects.toMatchObject({
-      status: 409,
-      message: 'The Agent installation identifiers are already in use.',
-    })
-  })
-
   it('propagates an unknown atomic create failure when all race rechecks remain available', async () => {
     const { publicKey } = await generateKeyPair('Ed25519')
     const input = applicationAgentInput(await exportedAgentPublicJwk(publicKey, 'ama-key-1'))
@@ -617,6 +578,43 @@ describe('Application-created Agent installation', () => {
     vi.mocked(deps.agentIdentities.createAgentWithInstallation).mockRejectedValue(storageFailure)
 
     await expect(createAgentWithInstallation(deps, input, applicationAgentContext())).rejects.toBe(storageFailure)
+  })
+
+  it('preserves an ambiguous storage failure even when the installation appears committed afterward', async () => {
+    const { publicKey } = await generateKeyPair('Ed25519')
+    const input = applicationAgentInput(await exportedAgentPublicJwk(publicKey, 'ama-key-1'))
+    const deps = createTestDeps()
+    const storageFailure = new Error('D1 write result is unknown')
+    vi.mocked(deps.agentIdentities.findProtocolAgent)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValue({ id: input.installation.agentId } as AgentRecord)
+    vi.mocked(deps.agents.listHostsForAgents)
+      .mockResolvedValueOnce([])
+      .mockResolvedValue([{ id: input.installation.hostId }] as never)
+    vi.mocked(deps.agentIdentities.createAgentWithInstallation).mockRejectedValue(storageFailure)
+
+    await expect(createAgentWithInstallation(deps, input, applicationAgentContext())).rejects.toBe(storageFailure)
+    expect(deps.agentIdentities.findProtocolAgent).toHaveBeenCalledTimes(1)
+    expect(deps.agents.listHostsForAgents).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not disguise a post-commit Agent projection invariant as a concurrent conflict', async () => {
+    const { publicKey } = await generateKeyPair('Ed25519')
+    const input = applicationAgentInput(await exportedAgentPublicJwk(publicKey, 'ama-key-1'))
+    const deps = createTestDeps()
+    vi.mocked(deps.agentIdentities.createAgentWithInstallation).mockImplementation(async (records) => ({
+      identity: {
+        identity: { ...records.identity, ownerUserId: null },
+        bindings: [{ ...records.binding, hostId: records.host.id }],
+      },
+      reservation: records.reservation,
+      created: true,
+    }))
+
+    await expect(createAgentWithInstallation(deps, input, applicationAgentContext())).rejects.toThrow(
+      'Agent identity owner invariant was violated.',
+    )
+    expect(deps.agentIdentities.findIdentity).toHaveBeenCalledTimes(1)
   })
 })
 
