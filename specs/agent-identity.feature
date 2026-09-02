@@ -344,7 +344,19 @@ Feature: Agent identity and delegated API authorization
       And its scopes are the intersection of the request, current source mapping, Application Permissions, and User Context Permissions
       And the downstream token preserves the User subject and identifies the authenticated Application as client_id
       And the downstream token contains no act claim and no refresh token is issued
-      But an Agent subject token, an unmapped source or target, an empty scope intersection, or an unavailable target is rejected
+      But an unmapped source or target, an empty scope intersection, or an unavailable target is rejected
+
+    @entrypoint:agent-protocol @journey:agent-resource-token-delegation
+    Scenario: A Resource Server exchanges an inbound Agent token without losing its actor chain
+      Given a confidential Application has an explicit source-to-native-target Resource Server scope mapping
+      And an active Agent token, identity binding, and controller authorize the source Resource Server in a personal or Organization Context
+      And the Application and controller are entitled to the requested downstream scopes
+      When the Application exchanges that Agent token for the configured downstream Resource Server
+      Then Realmroot applies the same request, source mapping, Application Permission, and controller Context intersection
+      And the downstream token preserves the controller User in sub and the stable Agent in act
+      And the authenticated Application is identified as client_id without issuing a refresh token
+      And a short-lived delegated Agent token may continue through another explicitly mapped Application and Resource Server hop
+      But an inactive token lease, Agent, binding, controller, Organization membership when present, source, target, external target, or policy is rejected
 
     @entrypoint:product-ui @journey:connector-backed-connection-revocation
     Scenario: Revoking a connector-backed account connection revokes provider authority first

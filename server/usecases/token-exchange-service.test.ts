@@ -191,7 +191,444 @@ describe('token exchange service', () => {
     })
   })
 
-  it('rejects Agent actors and scope escalation during User token delegation', async () => {
+  it('[spec: agent-identity/agent-resource-token-delegation] preserves an active Agent actor across Resource delegation', async () => {
+    const { deps, clientSecret } = await tokenExchangeFixture({ scopes: ['identities:write'] })
+    const sourceResource = eligibleAudienceResource(['ak:agent:create'])
+    const targetResource = {
+      ...eligibleAudienceResource(['identities:write']),
+      id: 'res_ama',
+      resourceUrl: 'https://ama.example.com/api',
+      authorizationModel: 'native' as const,
+      scopeRegistry: {
+        ...eligibleAudienceResource(['identities:write']).scopeRegistry,
+        scopes: [{ value: 'identities:write', description: null, grantMode: 'assigned' as const }],
+      },
+    }
+    const findApplication = deps.applications.findByClientId
+    deps.applications.findByClientId = async (clientId) => {
+      const application = await findApplication(clientId)
+      return application
+        ? {
+            ...application,
+            tokenExchangePolicies: [
+              {
+                sourceResourceServerId: sourceResource.id,
+                targetResourceServerId: targetResource.id,
+                scopeMappings: [{ sourceScope: 'ak:agent:create', targetScope: 'identities:write' }],
+              },
+            ],
+            resourceScopes: [{ resourceServerId: targetResource.id, scopes: ['identities:write'] }],
+          }
+        : null
+    }
+    deps.authorization.findResourceByResourceUrl = async (resourceUrl) =>
+      (resourceUrl === sourceResource.resourceUrl
+        ? sourceResource
+        : resourceUrl === targetResource.resourceUrl
+          ? targetResource
+          : null) as never
+    deps.authorization.listActiveApplicationScopeEntitlements = async () => [{ scope: 'identities:write' }] as never
+    deps.authorization.listActiveUserScopeEntitlements = async () =>
+      [{ scope: 'identities:write', organizationId: 'org_1' }] as never
+    deps.authorization.findOrganization = async () => ({ id: 'org_1', disabled: false }) as never
+    deps.authorization.findMemberByOrganizationUser = async () => ({ id: 'member_1' }) as never
+    const identity = {
+      id: 'agent_identity_1',
+      issuer: realmrootIssuer,
+      subject: 'agent_1',
+      ownerUserId: 'user_1',
+      ownerOrganizationId: null,
+      status: 'active',
+      deletedAt: null,
+    }
+    deps.agentIdentities = {
+      findByIssuerSubject: vi.fn().mockResolvedValue(identity),
+      findIdentity: vi.fn().mockResolvedValue({
+        identity,
+        bindings: [{ id: 'binding_1', status: 'active', revokedAt: null }],
+      }),
+    } as never
+    deps.externalResources = {
+      findActiveTokenLeaseByTokenHash: vi
+        .fn()
+        .mockResolvedValue({ id: 'lease_1', requestId: 'request_1', bindingId: 'binding_1' }),
+      findAccessRequest: vi.fn().mockResolvedValue({
+        id: 'request_1',
+        resourceId: sourceResource.id,
+        agentIdentityId: identity.id,
+      }),
+    } as never
+    deps.agentAudit = { append: vi.fn() } as never
+    const input = {
+      grantType: tokenExchangeGrantType,
+      subjectToken: 'active-agent-resource-token',
+      subjectTokenType: accessTokenType,
+      audience: targetResource.resourceUrl,
+      scope: 'identities:write',
+      verifiedSubjectClaims: {
+        iss: realmrootIssuer,
+        sub: 'user_1',
+        aud: sourceResource.resourceUrl,
+        jti: 'resat_1',
+        client_id: 'realmroot-cli',
+        scope: 'ak:agent:create',
+        exp: Math.floor(Date.now() / 1000) + 600,
+        [realmrootOrganizationClaim]: 'org_1',
+        act: { iss: realmrootIssuer, sub: 'agent_1' },
+      },
+    }
+
+    const response = await exchangeToken(deps, input, { clientId: applicationClientId, clientSecret })
+
+    expect(response).not.toHaveProperty('refresh_token')
+    expect(decodeTestAccessToken(response.access_token)).toMatchObject({
+      sub: 'user_1',
+      act: { iss: realmrootIssuer, sub: 'agent_1' },
+      aud: targetResource.resourceUrl,
+      client_id: applicationClientId,
+      scope: 'identities:write',
+      [realmrootOrganizationClaim]: 'org_1',
+    })
+    expect(deps.agentAudit.append).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'oauth.agent_resource_token_exchanged',
+        result: 'allowed',
+        ownerOrganizationId: 'org_1',
+        controllerUserId: 'user_1',
+        subject: 'agent_1',
+        resourceId: targetResource.id,
+        scopes: ['identities:write'],
+      }),
+    )
+
+    vi.mocked(deps.externalResources.findActiveTokenLeaseByTokenHash).mockResolvedValueOnce(null)
+    await expect(exchangeToken(deps, input, { clientId: applicationClientId, clientSecret })).rejects.toMatchObject({
+      error: 'invalid_grant',
+    })
+    expect(deps.agentAudit.append).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        action: 'oauth.agent_resource_token_exchanged',
+        result: 'denied',
+        reasonCode: 'invalid_grant',
+      }),
+    )
+  })
+
+  it('[spec: agent-identity/agent-resource-token-delegation] delegates a personal-context Agent token without Organization lookup', async () => {
+    const fixture = await agentResourceDelegationFixture()
+    delete fixture.input.verifiedSubjectClaims[realmrootOrganizationClaim]
+    fixture.targetResource.scopeRegistry.scopes.push({
+      value: 'identities:delete',
+      description: null,
+      grantMode: 'assigned',
+    })
+    fixture.setPolicies([
+      {
+        sourceResourceServerId: fixture.sourceResource.id,
+        targetResourceServerId: fixture.targetResource.id,
+        scopeMappings: [
+          { sourceScope: 'ak:agent:create', targetScope: 'identities:write' },
+          { sourceScope: 'ak:agent:create', targetScope: 'identities:delete' },
+        ],
+      },
+    ])
+    const findApplication = fixture.deps.applications.findByClientId
+    fixture.deps.applications.findByClientId = async (clientId) => {
+      const application = await findApplication(clientId)
+      return application
+        ? {
+            ...application,
+            resourceScopes: [
+              { resourceServerId: fixture.targetResource.id, scopes: ['identities:write', 'identities:delete'] },
+            ],
+          }
+        : null
+    }
+    fixture.deps.authorization.listActiveApplicationScopeEntitlements = async () =>
+      [{ scope: 'identities:write' }, { scope: 'identities:delete' }] as never
+    fixture.deps.authorization.listActiveUserScopeEntitlements = async () =>
+      [{ scope: 'identities:write', organizationId: null }] as never
+    const findOrganization = vi.fn().mockResolvedValue({ id: 'org_1', disabled: false })
+    const findMemberByOrganizationUser = vi.fn(() => {
+      throw new Error('Personal Context must not query Organization membership')
+    })
+    fixture.deps.authorization.findOrganization = findOrganization as never
+    fixture.deps.authorization.findMemberByOrganizationUser = findMemberByOrganizationUser as never
+
+    const response = await exchangeToken(
+      fixture.deps,
+      { ...fixture.input, scope: 'identities:write identities:delete' },
+      {
+        clientId: applicationClientId,
+        clientSecret: fixture.clientSecret,
+      },
+    )
+
+    const claims = decodeTestAccessToken(response.access_token)
+    expect(claims).toMatchObject({
+      sub: 'user_1',
+      act: { iss: realmrootIssuer, sub: 'agent_1' },
+      aud: fixture.targetResource.resourceUrl,
+      client_id: applicationClientId,
+      scope: 'identities:write',
+    })
+    expect(claims).not.toHaveProperty(realmrootOrganizationClaim)
+    expect(findOrganization).toHaveBeenCalledOnce()
+    expect(findOrganization).toHaveBeenCalledWith('org_1')
+    expect(findMemberByOrganizationUser).not.toHaveBeenCalled()
+    expect(fixture.deps.agentAudit.append).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        action: 'oauth.agent_resource_token_exchanged',
+        result: 'allowed',
+        scopes: ['identities:write'],
+      }),
+    )
+  })
+
+  it('[spec: agent-identity/agent-resource-token-delegation] delegates a second Agent Resource hop without an immediate token lease', async () => {
+    const fixture = await delegatedAgentResourceFixture()
+
+    const response = await exchangeToken(fixture.deps, fixture.input, {
+      clientId: applicationClientId,
+      clientSecret: fixture.clientSecret,
+    })
+
+    expect(decodeTestAccessToken(response.access_token)).toMatchObject({
+      sub: 'user_1',
+      act: { iss: realmrootIssuer, sub: 'agent_1' },
+      aud: fixture.targetResource.resourceUrl,
+      client_id: applicationClientId,
+      scope: 'identities:write',
+      [realmrootOrganizationClaim]: 'org_1',
+    })
+    expect(fixture.deps.externalResources.findActiveTokenLeaseByTokenHash).not.toHaveBeenCalled()
+    expect(fixture.deps.externalResources.findAccessRequest).not.toHaveBeenCalled()
+  })
+
+  it('[spec: agent-identity/agent-resource-token-delegation] accepts the matching source policy when an earlier policy targets the same Resource', async () => {
+    const fixture = await delegatedAgentResourceFixture()
+    fixture.sourceApplication.tokenExchangePolicies.unshift({
+      sourceResourceServerId: 'res_unrelated',
+      targetResourceServerId: fixture.sourceResource.id,
+      scopeMappings: [{ sourceScope: 'unrelated:read', targetScope: 'ak:agent:read' }],
+    })
+
+    await expect(
+      exchangeToken(fixture.deps, fixture.input, {
+        clientId: applicationClientId,
+        clientSecret: fixture.clientSecret,
+      }),
+    ).resolves.toMatchObject({ scope: 'identities:write' })
+  })
+
+  it.each([
+    {
+      name: 'disabled source Application',
+      mutate: ({ sourceApplication }: Awaited<ReturnType<typeof delegatedAgentResourceFixture>>) => {
+        sourceApplication.disabled = true
+      },
+    },
+    {
+      name: 'cross-owner source Application',
+      mutate: ({ sourceApplication }: Awaited<ReturnType<typeof delegatedAgentResourceFixture>>) => {
+        sourceApplication.ownerOrganizationId = 'org_other'
+      },
+    },
+    {
+      name: 'removed source policy',
+      mutate: ({ sourceApplication }: Awaited<ReturnType<typeof delegatedAgentResourceFixture>>) => {
+        sourceApplication.tokenExchangePolicies = []
+      },
+    },
+    {
+      name: 'scope outside current source policy',
+      mutate: ({ input }: Awaited<ReturnType<typeof delegatedAgentResourceFixture>>) => {
+        input.verifiedSubjectClaims.scope = 'ak:agent:delete'
+      },
+    },
+    {
+      name: 'inactive binding on a delegated hop',
+      mutate: ({ aggregate }: Awaited<ReturnType<typeof delegatedAgentResourceFixture>>) => {
+        aggregate.bindings[0]!.status = 'revoked'
+      },
+    },
+  ])('[spec: agent-identity/agent-resource-token-delegation] rejects delegated hop: $name', async ({ mutate }) => {
+    const fixture = await delegatedAgentResourceFixture()
+    mutate(fixture)
+
+    await expect(
+      exchangeToken(fixture.deps, fixture.input, {
+        clientId: applicationClientId,
+        clientSecret: fixture.clientSecret,
+      }),
+    ).rejects.toMatchObject({ error: 'invalid_grant' })
+  })
+
+  it('[spec: agent-identity/agent-resource-token-delegation] audits unexpected dependency failures without converting them to OAuth errors', async () => {
+    const fixture = await agentResourceDelegationFixture()
+    const failure = new Error('user repository unavailable')
+    fixture.deps.users.getUser = async () => {
+      throw failure
+    }
+
+    await expect(
+      exchangeToken(fixture.deps, fixture.input, {
+        clientId: applicationClientId,
+        clientSecret: fixture.clientSecret,
+      }),
+    ).rejects.toBe(failure)
+    expect(fixture.deps.agentAudit.append).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        action: 'oauth.agent_resource_token_exchanged',
+        result: 'denied',
+        reasonCode: 'internal_error',
+        metadata: expect.objectContaining({ failureReason: 'Agent Resource token exchange failed unexpectedly.' }),
+      }),
+    )
+  })
+
+  const agentDelegationRejections: Array<{
+    name: string
+    expectedError: 'invalid_grant' | 'invalid_target'
+    mutate: (fixture: Awaited<ReturnType<typeof agentResourceDelegationFixture>>) => void
+  }> = [
+    {
+      name: 'malformed act',
+      expectedError: 'invalid_grant',
+      mutate: ({ input }) => {
+        input.verifiedSubjectClaims.act = { iss: realmrootIssuer }
+      },
+    },
+    {
+      name: 'wrong client_id',
+      expectedError: 'invalid_grant',
+      mutate: ({ input }) => {
+        input.verifiedSubjectClaims.client_id = 'other-client'
+      },
+    },
+    {
+      name: 'access request source Resource mismatch',
+      expectedError: 'invalid_grant',
+      mutate: ({ sourceRequest }) => {
+        sourceRequest.resourceId = 'other-resource'
+      },
+    },
+    {
+      name: 'access request Agent identity mismatch',
+      expectedError: 'invalid_grant',
+      mutate: ({ sourceRequest }) => {
+        sourceRequest.agentIdentityId = 'other-identity'
+      },
+    },
+    {
+      name: 'inactive Agent identity',
+      expectedError: 'invalid_grant',
+      mutate: ({ aggregate }) => {
+        aggregate.identity.status = 'inactive'
+      },
+    },
+    {
+      name: 'deleted Agent identity',
+      expectedError: 'invalid_grant',
+      mutate: ({ aggregate }) => {
+        aggregate.identity.deletedAt = new Date()
+      },
+    },
+    {
+      name: 'wrong binding',
+      expectedError: 'invalid_grant',
+      mutate: ({ lease }) => {
+        lease.bindingId = 'other-binding'
+      },
+    },
+    {
+      name: 'revoked binding',
+      expectedError: 'invalid_grant',
+      mutate: ({ aggregate }) => {
+        aggregate.bindings[0]!.status = 'revoked'
+        aggregate.bindings[0]!.revokedAt = new Date()
+      },
+    },
+    {
+      name: 'identity owner and controller mismatch',
+      expectedError: 'invalid_grant',
+      mutate: ({ aggregate }) => {
+        aggregate.identity.ownerUserId = 'other-controller'
+      },
+    },
+    {
+      name: 'disabled Organization',
+      expectedError: 'invalid_grant',
+      mutate: ({ deps }) => {
+        deps.authorization.findOrganization = vi
+          .fn()
+          .mockResolvedValueOnce({ id: 'org_1', disabled: false })
+          .mockResolvedValue({ id: 'org_1', disabled: true }) as never
+      },
+    },
+    {
+      name: 'missing Organization membership',
+      expectedError: 'invalid_grant',
+      mutate: ({ deps }) => {
+        deps.authorization.findMemberByOrganizationUser = async () => null
+      },
+    },
+    {
+      name: 'source Resource unavailable to Agents',
+      expectedError: 'invalid_grant',
+      mutate: ({ sourceResource }) => {
+        sourceResource.availableToAgents = false
+      },
+    },
+    {
+      name: 'target Resource unavailable to Agents',
+      expectedError: 'invalid_target',
+      mutate: ({ targetResource }) => {
+        targetResource.availableToAgents = false
+      },
+    },
+    {
+      name: 'target external authorization model',
+      expectedError: 'invalid_target',
+      mutate: ({ targetResource }) => {
+        Object.assign(targetResource, { authorizationModel: 'external' })
+      },
+    },
+    {
+      name: 'missing token exchange policy',
+      expectedError: 'invalid_target',
+      mutate: ({ setPolicies }) => setPolicies([]),
+    },
+    {
+      name: 'mismatched token exchange policy',
+      expectedError: 'invalid_target',
+      mutate: ({ setPolicies, targetResource }) =>
+        setPolicies([
+          {
+            sourceResourceServerId: 'other-resource',
+            targetResourceServerId: targetResource.id,
+            scopeMappings: [{ sourceScope: 'ak:agent:create', targetScope: 'identities:write' }],
+          },
+        ]),
+    },
+  ]
+
+  it.each(agentDelegationRejections)('[spec: agent-identity/agent-resource-token-delegation] rejects $name', async ({
+    expectedError,
+    mutate,
+  }) => {
+    const fixture = await agentResourceDelegationFixture()
+    mutate(fixture)
+
+    await expect(
+      exchangeToken(fixture.deps, fixture.input, {
+        clientId: applicationClientId,
+        clientSecret: fixture.clientSecret,
+      }),
+    ).rejects.toMatchObject({ error: expectedError })
+  })
+
+  it('rejects scope escalation during User token delegation', async () => {
     const { deps, clientSecret } = await tokenExchangeFixture({ scopes: ['agents:write'] })
     const findApplication = deps.applications.findByClientId
     deps.applications.findByClientId = async (clientId) => {
@@ -226,13 +663,6 @@ describe('token exchange service', () => {
     await expect(exchangeToken(deps, input, { clientId: applicationClientId, clientSecret })).rejects.toMatchObject({
       error: 'invalid_scope',
     })
-    await expect(
-      exchangeToken(
-        deps,
-        { ...input, verifiedSubjectClaims: { ...input.verifiedSubjectClaims, act: { sub: 'agent_1' } } },
-        { clientId: applicationClientId, clientSecret },
-      ),
-    ).rejects.toMatchObject({ error: 'invalid_grant' })
   })
 
   it('exchanges an active policy-bound Agent token for an OIDC ID token and audits revocation [spec: agent-identity/agent-oidc-id-token-exchange]', async () => {
@@ -2118,6 +2548,7 @@ function eligibleAudienceResource(scopes: string[] = ['runner:connect']) {
     id: audienceResourceId,
     resourceUrl: defaultAudience,
     enabled: true,
+    availableToAgents: true,
     ownerOrganizationId: 'org_1',
     visibility: 'private' as const,
     scopeRegistry: {
@@ -2133,6 +2564,136 @@ function eligibleAudienceResource(scopes: string[] = ['runner:connect']) {
         .map((value) => ({ value, description: null, grantMode: 'automatic' as const })),
     },
   }
+}
+
+async function agentResourceDelegationFixture() {
+  const { deps, clientSecret } = await tokenExchangeFixture({ scopes: ['identities:write'] })
+  const sourceResource = eligibleAudienceResource(['ak:agent:create'])
+  const targetResource = {
+    ...eligibleAudienceResource(['identities:write']),
+    id: 'res_ama',
+    resourceUrl: 'https://ama.example.com/api',
+    authorizationModel: 'native' as const,
+    scopeRegistry: {
+      ...eligibleAudienceResource(['identities:write']).scopeRegistry,
+      scopes: [{ value: 'identities:write', description: null, grantMode: 'assigned' as const }],
+    },
+  }
+  let policies = [
+    {
+      sourceResourceServerId: sourceResource.id,
+      targetResourceServerId: targetResource.id,
+      scopeMappings: [{ sourceScope: 'ak:agent:create', targetScope: 'identities:write' }],
+    },
+  ]
+  const findApplication = deps.applications.findByClientId
+  deps.applications.findByClientId = async (clientId) => {
+    const application = await findApplication(clientId)
+    return application
+      ? {
+          ...application,
+          tokenExchangePolicies: policies,
+          resourceScopes: [{ resourceServerId: targetResource.id, scopes: ['identities:write'] }],
+        }
+      : null
+  }
+  deps.authorization.findResourceByResourceUrl = async (resourceUrl) =>
+    (resourceUrl === sourceResource.resourceUrl
+      ? sourceResource
+      : resourceUrl === targetResource.resourceUrl
+        ? targetResource
+        : null) as never
+  deps.authorization.listActiveApplicationScopeEntitlements = async () => [{ scope: 'identities:write' }] as never
+  deps.authorization.listActiveUserScopeEntitlements = async () =>
+    [{ scope: 'identities:write', organizationId: 'org_1' }] as never
+  deps.authorization.findOrganization = async () => ({ id: 'org_1', disabled: false }) as never
+  deps.authorization.findMemberByOrganizationUser = async () => ({ id: 'member_1' }) as never
+  const identity = {
+    id: 'agent_identity_1',
+    issuer: realmrootIssuer,
+    subject: 'agent_1',
+    ownerUserId: 'user_1',
+    ownerOrganizationId: null,
+    status: 'active',
+    deletedAt: null as Date | null,
+  }
+  const aggregate = {
+    identity,
+    bindings: [{ id: 'binding_1', status: 'active', revokedAt: null as Date | null }],
+  }
+  deps.agentIdentities = {
+    findByIssuerSubject: vi.fn().mockResolvedValue(identity),
+    findIdentity: vi.fn().mockResolvedValue(aggregate),
+  } as never
+  const lease = { id: 'lease_1', requestId: 'request_1', bindingId: 'binding_1' }
+  const sourceRequest = {
+    id: 'request_1',
+    resourceId: sourceResource.id,
+    agentIdentityId: identity.id,
+  }
+  deps.externalResources = {
+    findActiveTokenLeaseByTokenHash: vi.fn().mockResolvedValue(lease),
+    findAccessRequest: vi.fn().mockResolvedValue(sourceRequest),
+  } as never
+  deps.agentAudit = { append: vi.fn() } as never
+  const input = {
+    grantType: tokenExchangeGrantType,
+    subjectToken: 'active-agent-resource-token',
+    subjectTokenType: accessTokenType,
+    audience: targetResource.resourceUrl,
+    scope: 'identities:write',
+    verifiedSubjectClaims: {
+      iss: realmrootIssuer,
+      sub: 'user_1',
+      aud: sourceResource.resourceUrl,
+      jti: 'resat_1',
+      client_id: 'realmroot-cli',
+      scope: 'ak:agent:create',
+      exp: Math.floor(Date.now() / 1000) + 600,
+      [realmrootOrganizationClaim]: 'org_1',
+      act: { iss: realmrootIssuer, sub: 'agent_1' } as { iss?: string; sub?: string },
+    } as Record<string, unknown> & { act: { iss?: string; sub?: string }; client_id: string },
+  }
+  return {
+    deps,
+    clientSecret,
+    sourceResource,
+    targetResource,
+    identity,
+    aggregate,
+    lease,
+    sourceRequest,
+    input,
+    setPolicies: (next: typeof policies) => {
+      policies = next
+    },
+  }
+}
+
+async function delegatedAgentResourceFixture() {
+  const fixture = await agentResourceDelegationFixture()
+  const findExchangeApplication = fixture.deps.applications.findByClientId
+  const sourceApplication = {
+    id: 'app_previous_hop',
+    clientId: 'previous-confidential-client',
+    ownerOrganizationId: 'org_1',
+    visibility: 'private' as const,
+    disabled: false,
+    oidcScopes: [],
+    resourceScopes: [],
+    tokenExchangePolicies: [
+      {
+        sourceResourceServerId: 'res_before_ak',
+        targetResourceServerId: fixture.sourceResource.id,
+        scopeMappings: [{ sourceScope: 'previous:agent', targetScope: 'ak:agent:create' }],
+      },
+    ],
+  }
+  fixture.deps.applications.findByClientId = async (clientId) =>
+    clientId === sourceApplication.clientId ? (sourceApplication as never) : findExchangeApplication(clientId)
+  fixture.input.verifiedSubjectClaims.client_id = sourceApplication.clientId
+
+  return { ...fixture, sourceApplication }
 }
 
 function clientScopes(repository: InMemoryTokenExchangeRepository) {
