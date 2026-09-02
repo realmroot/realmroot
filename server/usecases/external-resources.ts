@@ -1020,6 +1020,7 @@ export async function createAgentAccessRequest(
     return entitlement ? [{ scope, entitlementId: entitlement.id }] : []
   })
   const alreadyAuthorized = approvedEntitlements.length === scopes.length
+  const automaticControllerUserId = automaticNativeControllerUserId(resource, identity.identity.ownerUserId, scopes)
   const binding = identity.bindings.find(
     (candidate) => candidate.hostId === principal.hostId && candidate.protocolAgentId === principal.protocolAgentId,
   )!
@@ -1032,6 +1033,15 @@ export async function createAgentAccessRequest(
         exactAuthorizationDetails(request.authorizationDetails, authorizationDetails),
     )
     if (pending) {
+      if (automaticControllerUserId) {
+        return decideAgentAccessRequest(
+          deps,
+          pending.id,
+          { decision: 'approve', mode: 'persistent', authorizationDetails },
+          automaticControllerUserId,
+          'automatic_scope_policy',
+        )
+      }
       const token = await deps.secrets.open(pending.encryptedApprovalToken, accessRequestTokenContext(pending.id))
       return toAgentAccessRequest(pending, principal.hostId, approvalUrl(approvalOrigin, token))
     }
@@ -1070,11 +1080,30 @@ export async function createAgentAccessRequest(
   })
   const created = await deps.externalResources.createAccessRequestWithAudit(request, audit)
   if (!created) throw forbidden('Enabled Resource Server is required.')
+  if (!alreadyAuthorized && automaticControllerUserId) {
+    return decideAgentAccessRequest(
+      deps,
+      created.id,
+      { decision: 'approve', mode: 'persistent', authorizationDetails },
+      automaticControllerUserId,
+      'automatic_scope_policy',
+    )
+  }
   return toAgentAccessRequest(
     created,
     principal.hostId,
     alreadyAuthorized ? null : approvalUrl(approvalOrigin, rawApprovalToken),
   )
+}
+
+function automaticNativeControllerUserId(
+  resource: NonNullable<Awaited<ReturnType<Deps['authorization']['findResource']>>>,
+  controllerUserId: string | null,
+  scopes: string[],
+) {
+  if (!controllerUserId || requiresAccountConnection(resource)) return null
+  const modes = new Map(resource.scopeRegistry?.scopes.map((scope) => [scope.value, scope.grantMode]) ?? [])
+  return scopes.length > 0 && scopes.every((scope) => modes.get(scope) === 'automatic') ? controllerUserId : null
 }
 
 export async function createAccessRequest(
@@ -1262,6 +1291,8 @@ export async function decideAgentAccessRequest(
   requestId: string,
   input: DecideAgentAccessRequest,
   actorUserId: string,
+  approvalReasonCode: string | null = null,
+  retryEntitlementConflict = true,
 ) {
   const request = await deps.externalResources.findAccessRequest(requestId)
   if (!request || request.status !== 'pending' || request.expiresAt.getTime() <= Date.now()) {
@@ -1419,7 +1450,7 @@ export async function decideAgentAccessRequest(
     controllerUserId: actorUserId,
     scopes: request.scopes,
     authorizationDetails,
-    reasonCode: null,
+    reasonCode: approvalReasonCode,
   })
   const approved = await deps.externalResources.approveAccessRequestWithEntitlements(
     entitlements,
@@ -1437,6 +1468,14 @@ export async function decideAgentAccessRequest(
   )
   if (approved === 'resource_unavailable') {
     throw badRequest('The API resource was deleted before access could be approved.')
+  }
+  if (approved === 'entitlements_changed') {
+    const concurrentlyDecided = await deps.externalResources.findAccessRequest(requestId)
+    if (concurrentlyDecided?.status === 'approved') {
+      return toAgentAccessRequest(concurrentlyDecided, await requestHostId(deps, concurrentlyDecided), null)
+    }
+    if (!retryEntitlementConflict) throw badRequest('Agent permissions changed while access was being approved.')
+    return decideAgentAccessRequest(deps, requestId, input, actorUserId, approvalReasonCode, false)
   }
   if (approved === 'request_changed') throw badRequest('Agent access request was already decided.')
   return toAgentAccessRequest(approved.request, await requestHostId(deps, request), null)

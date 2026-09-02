@@ -619,7 +619,7 @@ export function createExternalResourceRepository(db: Database): ExternalResource
       )
       const requestRows = results[entitlements.length + entitlementUpdates.length] as AgentAccessRequestRecord[]
       const inserted = results.slice(0, entitlements.length).flat() as ResourceScopeEntitlementRecord[]
-      if (inserted.length !== entitlements.length) return 'resource_unavailable'
+      if (inserted.length !== entitlements.length) return 'entitlements_changed'
       const updated = results.slice(entitlements.length, entitlements.length + entitlementUpdates.length)
       if (updated.some((rows) => !Array.isArray(rows) || rows.length !== 1)) return 'resource_unavailable'
       if (!requestRows[0]) return 'request_changed'
@@ -1027,7 +1027,7 @@ export function createExternalResourceRepository(db: Database): ExternalResource
         ),
       )
       .where(and(activeResource(input.resourceServerId), activeConnection))
-    return db.insert(resourceScopeEntitlement).select(source).returning()
+    return db.insert(resourceScopeEntitlement).select(source).onConflictDoNothing().returning()
   }
 
   function insertTokenLease(
