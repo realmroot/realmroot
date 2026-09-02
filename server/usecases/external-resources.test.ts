@@ -4221,6 +4221,237 @@ describe('external API resource authorization', () => {
     expect(scopesFor('organization', 'org-2')).toEqual(['applications:write', 'organizations:read', 'users:write'])
   })
 
+  it('[spec: agent-identity/native-api-automatic-agent-permission] automatically approves all-automatic native scopes through persistent Permissions', async () => {
+    const { deps, native, personalIdentity, selectedContext } = automaticNativeAccessDeps({
+      'projects:read': 'automatic',
+      'projects:write': 'automatic',
+    })
+    let created: AgentAccessRequestRecord | null = null
+    vi.mocked(deps.externalResources.createAccessRequestWithAudit).mockImplementation(async (request) => {
+      created = request
+      return request
+    })
+    vi.mocked(deps.externalResources.findAccessRequest).mockImplementation(async (id) =>
+      created?.id === id ? created : null,
+    )
+    vi.mocked(deps.externalResources.approveAccessRequestWithEntitlements).mockImplementation(
+      async (entitlements, _updates, requestId, decision) => ({
+        entitlements,
+        request: { ...created!, id: requestId, ...decision },
+      }),
+    )
+
+    const access = await createAgentAccessRequest(
+      deps,
+      {
+        resourceId: native.id,
+        scopes: ['projects:write', 'projects:read'],
+        authorizationDetails: [selectedContext],
+      },
+      { ...principal(), identity: personalIdentity.identity, binding: personalIdentity.bindings[0]! },
+      'https://auth.example.com',
+    )
+
+    expect(access).toMatchObject({
+      status: 'approved',
+      approvalUrl: null,
+      scopes: ['projects:read', 'projects:write'],
+      approvedEntitlements: [
+        { scope: 'projects:read', entitlementId: expect.any(String) },
+        { scope: 'projects:write', entitlementId: expect.any(String) },
+      ],
+    })
+    expect(deps.externalResources.approveAccessRequestWithEntitlements).toHaveBeenCalledWith(
+      [
+        expect.objectContaining({
+          scope: 'projects:read',
+          mode: 'persistent',
+          grantedByUserId: 'user-1',
+          authorizationDetails: [selectedContext],
+        }),
+        expect.objectContaining({
+          scope: 'projects:write',
+          mode: 'persistent',
+          grantedByUserId: 'user-1',
+          authorizationDetails: [selectedContext],
+        }),
+      ],
+      [],
+      created!.id,
+      expect.objectContaining({ status: 'approved', authorizationDetails: [selectedContext] }),
+      expect.objectContaining({ reasonCode: 'automatic_scope_policy' }),
+    )
+  })
+
+  it('[spec: agent-identity/native-api-automatic-agent-permission] reuses a concurrent approval of the same automatic request', async () => {
+    const { deps, native, personalIdentity, selectedContext } = automaticNativeAccessDeps({
+      'projects:read': 'automatic',
+    })
+    let created: AgentAccessRequestRecord | null = null
+    const concurrentEntitlement = {
+      ...grantRecord(),
+      id: 'entitlement-from-concurrent-request',
+      agentIdentityId: personalIdentity.identity.id,
+      resourceServerId: native.id,
+      connectionId: null,
+      scope: 'projects:read',
+      authorizationDetails: [selectedContext],
+    }
+    vi.mocked(deps.externalResources.createAccessRequestWithAudit).mockImplementation(async (request) => {
+      created = request
+      return request
+    })
+    vi.mocked(deps.externalResources.findAccessRequest).mockImplementation(async (id) =>
+      created?.id === id ? created : null,
+    )
+    vi.mocked(deps.externalResources.listActiveEntitlementsByAgent).mockResolvedValueOnce([]).mockResolvedValueOnce([])
+    vi.mocked(deps.externalResources.approveAccessRequestWithEntitlements).mockImplementationOnce(async () => {
+      created = {
+        ...created!,
+        status: 'approved',
+        approvedEntitlements: [{ scope: 'projects:read', entitlementId: concurrentEntitlement.id }],
+      }
+      return 'entitlements_changed'
+    })
+
+    await expect(
+      createAgentAccessRequest(
+        deps,
+        {
+          resourceId: native.id,
+          scopes: ['projects:read'],
+          authorizationDetails: [selectedContext],
+        },
+        { ...principal(), identity: personalIdentity.identity, binding: personalIdentity.bindings[0]! },
+        'https://auth.example.com',
+      ),
+    ).resolves.toMatchObject({
+      status: 'approved',
+      approvedEntitlements: [{ scope: 'projects:read', entitlementId: concurrentEntitlement.id }],
+    })
+    expect(deps.externalResources.approveAccessRequestWithEntitlements).toHaveBeenCalledOnce()
+  })
+
+  it('[spec: agent-identity/native-api-automatic-agent-permission] retries when another request creates the Permission first', async () => {
+    const { deps, native, personalIdentity, selectedContext } = automaticNativeAccessDeps({
+      'projects:read': 'automatic',
+    })
+    let created: AgentAccessRequestRecord | null = null
+    const concurrentEntitlement = {
+      ...grantRecord(),
+      id: 'entitlement-from-other-request',
+      agentIdentityId: personalIdentity.identity.id,
+      resourceServerId: native.id,
+      connectionId: null,
+      scope: 'projects:read',
+      authorizationDetails: [selectedContext],
+    }
+    vi.mocked(deps.externalResources.createAccessRequestWithAudit).mockImplementation(async (request) => {
+      created = request
+      return request
+    })
+    vi.mocked(deps.externalResources.findAccessRequest).mockImplementation(async (id) =>
+      created?.id === id ? created : null,
+    )
+    vi.mocked(deps.externalResources.listActiveEntitlementsByAgent)
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([concurrentEntitlement])
+    vi.mocked(deps.externalResources.approveAccessRequestWithEntitlements)
+      .mockResolvedValueOnce('entitlements_changed')
+      .mockImplementationOnce(async (_entitlements, _updates, requestId, decision) => ({
+        entitlements: [],
+        request: { ...created!, id: requestId, ...decision },
+      }))
+
+    await expect(
+      createAgentAccessRequest(
+        deps,
+        {
+          resourceId: native.id,
+          scopes: ['projects:read'],
+          authorizationDetails: [selectedContext],
+        },
+        { ...principal(), identity: personalIdentity.identity, binding: personalIdentity.bindings[0]! },
+        'https://auth.example.com',
+      ),
+    ).resolves.toMatchObject({
+      status: 'approved',
+      approvedEntitlements: [{ scope: 'projects:read', entitlementId: concurrentEntitlement.id }],
+    })
+    expect(deps.externalResources.approveAccessRequestWithEntitlements).toHaveBeenCalledTimes(2)
+  })
+
+  it('[spec: agent-identity/native-api-automatic-agent-permission] keeps any assigned native scope pending', async () => {
+    const { deps, native, personalIdentity, selectedContext } = automaticNativeAccessDeps({
+      'projects:read': 'automatic',
+      'projects:write': 'assigned',
+    })
+
+    await expect(
+      createAgentAccessRequest(
+        deps,
+        {
+          resourceId: native.id,
+          scopes: ['projects:read', 'projects:write'],
+          authorizationDetails: [selectedContext],
+        },
+        { ...principal(), identity: personalIdentity.identity, binding: personalIdentity.bindings[0]! },
+        'https://auth.example.com',
+      ),
+    ).resolves.toMatchObject({ status: 'pending', approvalUrl: expect.stringContaining('/agent/access#token=') })
+    expect(deps.externalResources.approveAccessRequestWithEntitlements).not.toHaveBeenCalled()
+  })
+
+  it('[spec: agent-identity/native-api-automatic-agent-permission] keeps an Organization-owned Agent pending without inferring a User grantor', async () => {
+    const { deps, native, personalIdentity } = automaticNativeAccessDeps({ 'projects:read': 'automatic' })
+    personalIdentity.identity.ownerUserId = null
+    personalIdentity.identity.ownerOrganizationId = 'org-1'
+    vi.mocked(deps.authorization.findOrganization).mockResolvedValue({ id: 'org-1', disabled: false } as never)
+    const selectedContext = {
+      type: 'realmroot_authority' as const,
+      authority: 'organization' as const,
+      id: 'org-1',
+    }
+
+    await expect(
+      createAgentAccessRequest(
+        deps,
+        {
+          resourceId: native.id,
+          scopes: ['projects:read'],
+          authorizationDetails: [selectedContext],
+        },
+        { ...principal(), identity: personalIdentity.identity, binding: personalIdentity.bindings[0]! },
+        'https://auth.example.com',
+      ),
+    ).resolves.toMatchObject({
+      status: 'pending',
+      approvalUrl: expect.stringContaining('/agent/access#token='),
+      authorizationDetails: [selectedContext],
+    })
+    expect(deps.externalResources.approveAccessRequestWithEntitlements).not.toHaveBeenCalled()
+  })
+
+  it('[spec: agent-identity/native-api-automatic-agent-permission] rejects an unavailable authority Context without granting Permissions', async () => {
+    const { deps, native, personalIdentity } = automaticNativeAccessDeps({ 'projects:read': 'automatic' })
+
+    await expect(
+      createAgentAccessRequest(
+        deps,
+        {
+          resourceId: native.id,
+          scopes: ['projects:read'],
+          authorizationDetails: [{ type: 'realmroot_authority', authority: 'user', id: 'user-2' }],
+        },
+        { ...principal(), identity: personalIdentity.identity, binding: personalIdentity.bindings[0]! },
+        'https://auth.example.com',
+      ),
+    ).rejects.toThrow('Realmroot authority Context is not available to this Agent owner.')
+    expect(deps.externalResources.createAccessRequestWithAudit).not.toHaveBeenCalled()
+    expect(deps.externalResources.approveAccessRequestWithEntitlements).not.toHaveBeenCalled()
+  })
+
   it('resolves an organization-owned Agent to one Realmroot authority', async () => {
     const deps = createTestDeps()
     const builtIn = {
@@ -6599,6 +6830,34 @@ function connectionWithCredential(
     status: credential.status,
     updatedAt: credential.updatedAt,
   }
+}
+
+function automaticNativeAccessDeps(grantModes: Record<string, 'automatic' | 'assigned'>) {
+  const deps = createTestDeps()
+  const native = {
+    ...nativeResource(),
+    scopeRegistry: {
+      ...nativeResource().scopeRegistry!,
+      scopes: Object.entries(grantModes).map(([value, grantMode]) => ({ value, description: null, grantMode })),
+    },
+  }
+  const personalIdentity = identityAggregate()
+  personalIdentity.identity = {
+    ...personalIdentity.identity,
+    ownerUserId: 'user-1',
+    ownerOrganizationId: null,
+  }
+  const selectedContext = {
+    type: 'realmroot_authority' as const,
+    authority: 'user' as const,
+    id: 'user-1',
+  }
+  vi.mocked(deps.authorization.findResource).mockResolvedValue(native)
+  vi.mocked(deps.authorization.listUserMemberships).mockResolvedValue([])
+  vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(personalIdentity)
+  vi.mocked(deps.externalResources.listActiveEntitlementsByAgent).mockResolvedValue([])
+  vi.mocked(deps.externalResources.listPendingAccessRequestsByAgent).mockResolvedValue([])
+  return { deps, native, personalIdentity, selectedContext }
 }
 
 function providerConnectionFor(connection: ProviderResourceAuthorizationRecord): ProviderConnectionRecord {

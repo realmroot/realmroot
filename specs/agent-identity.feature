@@ -256,6 +256,17 @@ Feature: Agent identity and delegated API authorization
       Then the approval preserves the exact requested authorization details without an Account Connection
       Then Realmroot creates the same per-scope Permissions used for external APIs
 
+    @entrypoint:agent-protocol @journey:native-api-automatic-agent-permission
+    Scenario: A personal Agent requests only automatic scopes from a native API
+      Given an enabled native API resource marks every requested scope as automatic
+      And the personal Agent selects a current Realmroot authority Context controlled by its owner User
+      When the Agent requests that exact scope set
+      Then Realmroot approves the access request without controller interaction
+      And Realmroot creates persistent per-scope Agent Permissions through the normal approval path
+      And any assigned scope keeps the access request pending for controller approval
+      And an Organization-owned Agent remains pending because no single User grantor can be inferred
+      But an unavailable Context is rejected without creating a request or Permission
+
     @entrypoint:agent-protocol @journey:agent-resource-discovery-isolation
     Scenario: An unavailable API resource does not block resource discovery
       Given multiple enabled API resources are visible to an Agent
