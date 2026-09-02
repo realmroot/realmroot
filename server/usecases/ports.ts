@@ -859,6 +859,7 @@ export interface ExternalResourceRepository {
     audit: AgentAuditEventRecord,
   ): Promise<
     | { entitlements: ResourceScopeEntitlementRecord[]; request: AgentAccessRequestRecord }
+    | 'entitlements_changed'
     | 'resource_unavailable'
     | 'request_changed'
   >
