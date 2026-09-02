@@ -103,13 +103,36 @@ export async function exchangeToken(
     throw oauthError('invalid_request', 'Unsupported requested_token_type.')
   }
   if (input.subjectTokenType === accessTokenType) {
-    return exchangeDelegatedUserToken(
-      deps,
-      { ...input, verifiedSubjectClaims: await verifyRealmrootAccessToken(input, signer.issuer, verifier) },
-      oauthClient.clientId,
-      application,
-      signer,
-    )
+    const verifiedInput = {
+      ...input,
+      verifiedSubjectClaims: await verifyRealmrootAccessToken(input, signer.issuer, verifier),
+    }
+    if (!Object.hasOwn(verifiedInput.verifiedSubjectClaims, 'act')) {
+      return exchangeDelegatedUserToken(deps, verifiedInput, oauthClient.clientId, application, signer)
+    }
+    try {
+      const response = await exchangeDelegatedUserToken(deps, verifiedInput, oauthClient.clientId, application, signer)
+      await appendAgentResourceTokenExchangeAudit(
+        deps,
+        verifiedInput,
+        application,
+        'allowed',
+        null,
+        null,
+        parseSpaceSeparatedClaim(response.scope),
+      )
+      return response
+    } catch (error) {
+      await appendAgentResourceTokenExchangeAudit(
+        deps,
+        verifiedInput,
+        application,
+        'denied',
+        error instanceof OAuthError ? error.error : 'internal_error',
+        error instanceof OAuthError ? error.errorDescription : 'Agent Resource token exchange failed unexpectedly.',
+      )
+      throw error
+    }
   }
   if (input.subjectTokenType !== jwtTokenType) {
     throw oauthError('invalid_request', 'Unsupported subject_token_type.')
@@ -446,6 +469,49 @@ async function appendIdentityTokenExchangeAudit(
   })
 }
 
+async function appendAgentResourceTokenExchangeAudit(
+  deps: Deps,
+  input: TokenExchangeRequest & { verifiedSubjectClaims: Record<string, unknown> },
+  application: ApplicationAggregate,
+  result: 'allowed' | 'denied',
+  reasonCode: string | null,
+  failureReason: string | null,
+  issuedScopes?: string[],
+) {
+  const actor = isRecord(input.verifiedSubjectClaims.act) ? input.verifiedSubjectClaims.act : null
+  const actorIssuer = actor ? readString(actor.iss) : null
+  const actorSubject = actor ? readString(actor.sub) : null
+  const [identity, targetResource] = await Promise.all([
+    actorIssuer && actorSubject ? deps.agentIdentities.findByIssuerSubject(actorIssuer, actorSubject) : null,
+    deps.authorization.findResourceByResourceUrl(input.audience),
+  ])
+  await deps.agentAudit.append({
+    id: deps.ids.generate(),
+    action: 'oauth.agent_resource_token_exchanged',
+    result,
+    realmOwned: false,
+    ownerUserId: null,
+    ownerOrganizationId: application.ownerOrganizationId,
+    controllerUserId: readString(input.verifiedSubjectClaims.sub),
+    subjectIssuer: actorIssuer,
+    subject: actorSubject,
+    agentIdentityId: identity?.id ?? null,
+    hostId: null,
+    resourceId: targetResource?.id ?? null,
+    resourceConnectionId: null,
+    accessRequestId: null,
+    scopes: issuedScopes ?? parseSpaceSeparatedClaim(input.scope),
+    reasonCode,
+    metadata: {
+      exchangeClientId: application.clientId,
+      sourceTokenId: readString(input.verifiedSubjectClaims.jti),
+      targetAudience: input.audience,
+      failureReason,
+    },
+    occurredAt: new Date(),
+  })
+}
+
 async function exchangeDelegatedUserToken(
   deps: Deps,
   input: TokenExchangeRequest,
@@ -464,8 +530,6 @@ async function exchangeDelegatedUserToken(
   }
   if (expiresAtClaim <= Math.floor(Date.now() / 1000))
     throw oauthError('invalid_grant', 'Subject access token is expired.')
-  if (claims.act !== undefined)
-    throw oauthError('invalid_grant', 'Agent access tokens cannot be delegated by an Application.')
   await requireActiveDelegatedUser(deps, subject)
 
   const [sourceResource, targetResource] = await Promise.all([
@@ -505,6 +569,29 @@ async function exchangeDelegatedUserToken(
   if (organizationClaim !== undefined && organizationId === null) {
     throw oauthError('invalid_grant', 'Subject access token Organization claim is invalid.')
   }
+  const actor = claims.act === undefined ? null : isRecord(claims.act) ? claims.act : undefined
+  if (actor === undefined) throw oauthError('invalid_grant', 'Agent actor claim is invalid.')
+  if (actor && !sourceResource.availableToAgents) {
+    throw oauthError('invalid_grant', 'Subject access token audience is not available to Agents.')
+  }
+  if (actor && !targetResource.availableToAgents) {
+    throw oauthError('invalid_target', 'Requested audience is not available to Agents.')
+  }
+  if (actor && targetResource.authorizationModel !== 'native') {
+    throw oauthError('invalid_target', 'Agent delegation requires a native target Resource Server.')
+  }
+  const delegatedActor = actor
+    ? await requireActiveDelegatedAgent(
+        deps,
+        input,
+        claims,
+        sourceResource,
+        application.ownerOrganizationId,
+        subject,
+        organizationId,
+        actor,
+      )
+    : null
   const userScopes = new Set(
     await userEffectiveResourceScopes(deps, subject, targetResource, new Date(), organizationId),
   )
@@ -520,7 +607,10 @@ async function exchangeDelegatedUserToken(
     subject,
     audience: input.audience,
     scopes,
-    claims: organizationId ? { [realmrootOrganizationClaim]: organizationId } : {},
+    claims: {
+      ...(organizationId ? { [realmrootOrganizationClaim]: organizationId } : {}),
+    },
+    actor: delegatedActor,
     issuedAt: now,
     expiresAt,
   })
@@ -531,6 +621,90 @@ async function exchangeDelegatedUserToken(
     expires_in: Math.max(0, Math.floor((expiresAt.getTime() - now.getTime()) / 1000)),
     scope: scopes.join(' '),
   }
+}
+
+async function requireActiveDelegatedAgent(
+  deps: Deps,
+  input: TokenExchangeRequest,
+  claims: Record<string, unknown>,
+  sourceResource: NonNullable<Awaited<ReturnType<Deps['authorization']['findResourceByResourceUrl']>>>,
+  exchangeApplicationOwnerOrganizationId: string,
+  controllerUserId: string,
+  organizationId: string | null,
+  actor: Record<string, unknown>,
+) {
+  const actorIssuer = readString(actor.iss)
+  const actorSubject = readString(actor.sub)
+  const sourceTokenId = readString(claims.jti)
+  const sourceClientId = readString(claims.client_id)
+  if (!actorIssuer || !actorSubject || !sourceTokenId || !sourceClientId) {
+    throw oauthError('invalid_grant', 'Agent subject token is missing required claims.')
+  }
+  const nativeAgentToken = sourceClientId === realmrootCliClientId
+  const [identity, sourceApplication, organization, membership] = await Promise.all([
+    deps.agentIdentities.findByIssuerSubject(actorIssuer, actorSubject),
+    nativeAgentToken ? null : deps.applications.findByClientId(sourceClientId),
+    organizationId ? deps.authorization.findOrganization(organizationId) : null,
+    organizationId ? deps.authorization.findMemberByOrganizationUser(organizationId, controllerUserId) : null,
+  ])
+  let requiredBindingId: string | null = null
+  if (nativeAgentToken) {
+    const lease = await deps.externalResources.findActiveTokenLeaseByTokenHash(
+      await sha256(input.subjectToken),
+      new Date(),
+    )
+    if (!lease) throw oauthError('invalid_grant', 'Agent subject token is inactive or revoked.')
+    const sourceRequest = await deps.externalResources.findAccessRequest(lease.requestId)
+    if (
+      !sourceRequest ||
+      sourceRequest.resourceId !== sourceResource.id ||
+      sourceRequest.agentIdentityId !== identity?.id
+    ) {
+      throw oauthError('invalid_grant', 'Agent subject token authority does not match its claims.')
+    }
+    requiredBindingId = lease.bindingId
+  } else {
+    const sourcePolicies = sourceApplication?.tokenExchangePolicies.filter(
+      (
+        candidate,
+      ): candidate is Extract<
+        ApplicationAggregate['tokenExchangePolicies'][number],
+        { targetResourceServerId: string }
+      > => 'targetResourceServerId' in candidate && candidate.targetResourceServerId === sourceResource.id,
+    )
+    const tokenScopes = parseSpaceSeparatedClaim(claims.scope)
+    const policyStillAuthorizesToken = sourcePolicies?.some((sourcePolicy) => {
+      const currentlyMappedScopes = new Set(sourcePolicy.scopeMappings.map((mapping) => mapping.targetScope))
+      return tokenScopes.every((scope) => currentlyMappedScopes.has(scope))
+    })
+    if (
+      !sourceApplication ||
+      sourceApplication.disabled ||
+      sourceApplication.ownerOrganizationId !== exchangeApplicationOwnerOrganizationId ||
+      !policyStillAuthorizesToken
+    ) {
+      throw oauthError('invalid_grant', 'Delegated Agent subject token authority is no longer active.')
+    }
+  }
+  const aggregate = identity ? await deps.agentIdentities.findIdentity(identity.id) : null
+  if (
+    !aggregate ||
+    aggregate.identity.status !== 'active' ||
+    aggregate.identity.deletedAt ||
+    aggregate.identity.ownerUserId !== controllerUserId ||
+    !aggregate.bindings.some(
+      (binding) =>
+        (requiredBindingId === null || binding.id === requiredBindingId) &&
+        binding.status === 'active' &&
+        !binding.revokedAt,
+    )
+  ) {
+    throw oauthError('invalid_grant', 'Agent identity or binding is inactive.')
+  }
+  if (organizationId && (!organization || organization.disabled || !membership)) {
+    throw oauthError('invalid_grant', 'Controller Organization membership is inactive.')
+  }
+  return { iss: actorIssuer, sub: actorSubject }
 }
 
 async function requireActiveDelegatedUser(deps: Deps, subject: string) {
@@ -700,6 +874,7 @@ async function issueJwtAccessToken(
     audience: string
     scopes: string[]
     claims: Record<string, unknown>
+    actor?: { iss: string; sub: string } | null
     issuedAt: Date
     expiresAt: Date
   },
@@ -713,6 +888,7 @@ async function issueJwtAccessToken(
       client_id: input.clientId,
       scope: input.scopes.join(' '),
       ...(tenant === undefined ? {} : { [realmrootOrganizationClaim]: tenant }),
+      ...(input.actor ? { act: input.actor } : {}),
       iat: Math.floor(input.issuedAt.getTime() / 1000),
       exp: Math.floor(input.expiresAt.getTime() / 1000),
       jti: crypto.randomUUID(),

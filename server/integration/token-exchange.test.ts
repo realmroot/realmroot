@@ -430,6 +430,116 @@ describe('OAuth token exchange over real D1', () => {
       scope: 'resource:read',
     })
     expect(decodeJwt(body.access_token)).not.toHaveProperty('act')
+
+    const { publicKey } = await generateKeyPair('Ed25519')
+    const publicJwk = {
+      ...(await exportJWK(publicKey)),
+      kid: 'delegated-resource-agent-key',
+    } as CreateAgent['installation']['publicKey']
+    const agentInput: CreateAgent = {
+      username: 'delegated-resource-agent',
+      name: 'Delegated Resource Agent',
+      runtime: 'integration',
+      installation: {
+        agentId: 'delegated-resource-protocol-agent',
+        hostId: 'delegated-resource-host',
+        name: 'Delegated Resource Runtime',
+        kid: 'delegated-resource-agent-key',
+        publicKey: publicJwk,
+      },
+    }
+    const createdAgent = await createAgentWithInstallation(harness.deps, agentInput, {
+      applicationId: application.id,
+      actorUserId: delegatedUser!.id,
+      issuer: `${baseURL}/api/auth`,
+      idempotencyKey: 'delegated-resource-agent',
+    })
+    const activeBinding = await harness.deps.agentIdentities.findActiveBindingByProtocolAgent(
+      agentInput.installation.agentId,
+    )
+    if (!activeBinding) throw new Error('Delegated Agent binding was not persisted.')
+    const principal = {
+      issuer: createdAgent.agent.issuer,
+      subject: createdAgent.agent.subject,
+      identityId: createdAgent.agent.id,
+      protocolAgentId: agentInput.installation.agentId,
+      hostId: agentInput.installation.hostId,
+      identity: activeBinding.identity,
+      binding: activeBinding.binding,
+    }
+    const sourceAccess = await createAccessRequest(
+      harness.deps,
+      {
+        resourceServerId: source.id,
+        scopes: ['resource:read'],
+        authorizationDetails: [{ type: 'realmroot_authority', authority: 'organization', id: platformOrganizationId }],
+        reason: 'Exercise delegated Agent Resource exchange',
+      },
+      principal,
+      baseURL,
+    )
+    const sourceApproval = await harness.request(`/api/account/access-requests/${sourceAccess.id}/decision`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({
+        decision: 'approve',
+        mode: 'persistent',
+        authorizationDetails: [{ type: 'realmroot_authority', authority: 'organization', id: platformOrganizationId }],
+      }),
+    })
+    expect(sourceApproval.status, await sourceApproval.clone().text()).toBe(200)
+    const credentialUrl = `${baseURL}/api/access-requests/${sourceAccess.id}/credentials`
+    const agentSubjectToken = await createAccessRequestCredential(
+      harness.deps,
+      sourceAccess.id,
+      await dpopProof(credentialUrl),
+      credentialUrl,
+      principal,
+      harness.agentTokenSigner,
+    )
+    const exchangeAgent = () =>
+      harness.request('/api/auth/oauth2/token', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+          authorization: `Basic ${btoa(`${application.clientId}:${application.clientSecret}`)}`,
+          origin: baseURL,
+        },
+        body: new URLSearchParams({
+          grant_type: 'urn:ietf:params:oauth:grant-type:token-exchange',
+          subject_token: agentSubjectToken.accessToken,
+          subject_token_type: 'urn:ietf:params:oauth:token-type:access_token',
+          requested_token_type: 'urn:ietf:params:oauth:token-type:access_token',
+          audience: targetAudience,
+          scope: 'resource:read',
+        }).toString(),
+      })
+    const agentExchange = await exchangeAgent()
+    expect(agentExchange.status, await agentExchange.clone().text()).toBe(200)
+    const agentBody = (await agentExchange.json()) as { access_token: string; refresh_token?: string }
+    expect(agentBody.refresh_token).toBeUndefined()
+    expect(decodeJwt(agentBody.access_token)).toMatchObject({
+      sub: delegatedUser!.id,
+      aud: targetAudience,
+      client_id: application.clientId,
+      scope: 'resource:read',
+      act: { iss: createdAgent.agent.issuer, sub: createdAgent.agent.subject },
+    })
+    const allowedAudit = await env.DB.prepare(
+      "SELECT result, agent_identity_id AS agentIdentityId FROM agent_audit_event WHERE action = 'oauth.agent_resource_token_exchanged' ORDER BY occurred_at DESC LIMIT 1",
+    ).first<{ result: string; agentIdentityId: string }>()
+    expect(allowedAudit).toEqual({ result: 'allowed', agentIdentityId: createdAgent.agent.id })
+
+    await env.DB.prepare('UPDATE external_token_lease SET revoked_at = ? WHERE request_id = ?')
+      .bind(Date.now(), sourceAccess.id)
+      .run()
+    const revokedExchange = await exchangeAgent()
+    expect(revokedExchange.status).toBe(400)
+    await expect(revokedExchange.json()).resolves.toMatchObject({ error: 'invalid_grant' })
+    const deniedAudit = await env.DB.prepare(
+      "SELECT result, reason_code AS reasonCode FROM agent_audit_event WHERE action = 'oauth.agent_resource_token_exchanged' ORDER BY occurred_at DESC LIMIT 1",
+    ).first<{ result: string; reasonCode: string }>()
+    expect(deniedAudit).toEqual({ result: 'denied', reasonCode: 'invalid_grant' })
   })
 
   it('exchanges an ES256 subject token via a federated credential, then introspects it (real SQL)', async () => {
