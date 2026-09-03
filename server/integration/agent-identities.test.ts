@@ -137,7 +137,7 @@ describe('Agent identity enrollment over real D1', () => {
     ])
     expect(protocolAgents.filter((item) => item.name === 'AMA Worker')).toHaveLength(1)
     expect(hosts.filter((item) => item.name === 'AMA Runner')).toHaveLength(1)
-    expect(identities).toEqual([expect.objectContaining({ ownerUserId: userId, ownerOrganizationId: null })])
+    expect(identities).toEqual([expect.objectContaining({ ownerUserId: userId })])
     expect(protocolAgents).toContainEqual(expect.objectContaining({ name: 'AMA Worker', userId }))
     expect(hosts).toContainEqual(expect.objectContaining({ name: 'AMA Runner', userId }))
     expect(bindings).toHaveLength(1)
@@ -175,7 +175,6 @@ describe('Agent identity enrollment over real D1', () => {
       name: 'Historical Agent',
       runtime: 'legacy',
       ownerUserId: userId,
-      ownerOrganizationId: null,
       status: 'active',
       deletedAt: null,
       createdAt: now,
@@ -914,7 +913,6 @@ describe('Agent identity enrollment over real D1', () => {
     const intent = await createIntent(harness, userId, {
       name: 'Token Agent',
       protocolAgentId: seeded.agentId,
-      organizationId: platformOrganizationId,
     })
     const approved = await approveIntent(harness, ownerCookie, intent.id)
     harness.deps.externalHttp.fetch = resourceOpenApiFetch('https://api.example.com', 'repo:read')
@@ -927,7 +925,7 @@ describe('Agent identity enrollment over real D1', () => {
     const automaticScope = await harness.request(`/api/resource-servers/${resource.id}`, {
       method: 'PATCH',
       headers: jsonHeaders(ownerCookie),
-      body: JSON.stringify({ scopeGrantModes: [{ scope: 'repo:read', grantMode: 'automatic' }] }),
+      body: JSON.stringify({ scopeGrantModes: [{ scope: 'repo:read', grantMode: 'assigned' }] }),
     })
     expect(automaticScope.status, await automaticScope.clone().text()).toBe(200)
     const active = await harness.deps.agentIdentities.findActiveBindingByProtocolAgent(seeded.agentId)
@@ -1020,7 +1018,7 @@ describe('Agent identity enrollment over real D1', () => {
       audience: 'https://api.example.com',
     })
     expect(verified.payload).toMatchObject({
-      sub: platformOrganizationId,
+      sub: userId,
       scope: 'repo:read',
       cnf: { jkt: expect.any(String) },
       act: {
@@ -1098,7 +1096,7 @@ function resourceOpenApiFetch(resourceUrl: string, scope: string) {
 async function createIntent(
   harness: Harness,
   actorUserId: string,
-  input: { name?: string; agentIdentityId?: string; protocolAgentId: string; organizationId?: string },
+  input: { name?: string; agentIdentityId?: string; protocolAgentId: string },
 ) {
   if (input.agentIdentityId) {
     const result = await createAdditionalAgentEnrollmentIntent(
@@ -1118,7 +1116,6 @@ async function createIntent(
       username: input.protocolAgentId,
       runtime: 'codex',
       protocolAgentId: input.protocolAgentId,
-      organizationId: input.organizationId,
     },
     actorUserId,
     `${input.protocolAgentId}:new-identity`,
@@ -1218,7 +1215,6 @@ async function seedLegacyApplicationAgent(harness: Harness, actorUserId: string,
       name: input.name,
       runtime: input.runtime,
       ownerUserId: actorUserId,
-      ownerOrganizationId: null,
       status: 'active',
       deletedAt: null,
       createdAt: now,

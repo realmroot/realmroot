@@ -15,30 +15,23 @@ import { tt } from '@/lib/i18n'
 
 const pageSize = 20
 
-export function AgentsPage({ organizationId }: { organizationId?: string } = {}) {
+export function AgentsPage() {
   const [search, setSearch] = useState('')
-  const [ownerType, setOwnerType] = useState('any')
   const [status, setStatus] = useState('any')
   const [page, setPage] = useState(1)
   const query = useQuery({
-    queryKey: [...consoleQueryKeys.agents, { organizationId, page, pageSize }],
-    queryFn: () => getAgentInventory({ organizationId, page, pageSize }),
+    queryKey: [...consoleQueryKeys.agents, { page, pageSize }],
+    queryFn: () => getAgentInventory({ page, pageSize }),
   })
   const agents = (query.data?.items ?? []).filter((agent) => {
-    const type = agent.homeSpace.type === 'personal' ? 'user' : 'organization'
     return (
       `${agent.name} ${agent.issuer} ${agent.subject}`.toLowerCase().includes(search.toLowerCase()) &&
-      (ownerType === 'any' || ownerType === type) &&
       (status === 'any' || agent.status === status)
     )
   })
   return (
     <ResourcePage
-      description={tt(
-        organizationId
-          ? 'Review stable Agent identities belonging to this Organization.'
-          : 'Review stable Agent identities belonging to people and Organizations across this Realm.',
-      )}
+      description={tt('Review stable Agent identities belonging to people across this Realm.')}
       empty={agents.length === 0}
       emptyDescription={
         search ? tt('No Agents match the current filters.') : tt('Agents appear here after an enrollment is approved.')
@@ -64,20 +57,6 @@ export function AgentsPage({ organizationId }: { organizationId?: string } = {})
               value={search}
             />
           </InputGroup>
-          {organizationId ? null : (
-            <SelectInput
-              aria-label={tt('Filter owner type')}
-              onChange={(event) => {
-                setOwnerType(event.target.value)
-                setPage(1)
-              }}
-              value={ownerType}
-            >
-              <option value="any">{tt('Any owner type')}</option>
-              <option value="user">{tt('User')}</option>
-              <option value="organization">{tt('Organization')}</option>
-            </SelectInput>
-          )}
           <SelectInput
             aria-label={tt('Filter Agent status')}
             onChange={(event) => {
@@ -107,7 +86,7 @@ export function AgentsPage({ organizationId }: { organizationId?: string } = {})
           </TableHeader>
           <TableBody>
             {agents.length ? (
-              agents.map((agent) => <AgentRow agent={agent} organizationId={organizationId} key={agent.id} />)
+              agents.map((agent) => <AgentRow agent={agent} key={agent.id} />)
             ) : (
               <TableEmptyRow
                 colSpan={6}
@@ -154,29 +133,16 @@ export function AgentsPage({ organizationId }: { organizationId?: string } = {})
   )
 }
 
-function AgentRow({ agent, organizationId }: { agent: ManagementAgent; organizationId?: string }) {
+function AgentRow({ agent }: { agent: ManagementAgent }) {
   return (
     <TableRow className="cursor-pointer">
       <TableCell>
-        {organizationId ? (
-          <Link
-            className="block"
-            params={{ agentId: agent.id, organizationId }}
-            to="/organizations/$organizationId/agents/$agentId"
-          >
-            <strong>{agent.name}</strong>
-            <span className="block max-w-60 truncate font-mono text-xs text-muted-foreground">
-              {agent.issuer} · {agent.subject}
-            </span>
-          </Link>
-        ) : (
-          <Link className="block" params={{ agentId: agent.id }} to="/console/agents/$agentId">
-            <strong>{agent.name}</strong>
-            <span className="block max-w-60 truncate font-mono text-xs text-muted-foreground">
-              {agent.issuer} · {agent.subject}
-            </span>
-          </Link>
-        )}
+        <Link className="block" params={{ agentId: agent.id }} to="/console/agents/$agentId">
+          <strong>{agent.name}</strong>
+          <span className="block max-w-60 truncate font-mono text-xs text-muted-foreground">
+            {agent.issuer} · {agent.subject}
+          </span>
+        </Link>
       </TableCell>
       <TableCell>{agent.activeScopeCount.toLocaleString()}</TableCell>
       <TableCell>
@@ -185,28 +151,18 @@ function AgentRow({ agent, organizationId }: { agent: ManagementAgent; organizat
       <TableCell>
         <span className="block font-medium">{agent.owner.displayName}</span>
         <span className="block max-w-52 truncate text-xs text-muted-foreground">
-          {agent.owner.type === 'organization' ? tt('Organization') : tt('User')} · <code>{agent.owner.id}</code>
+          {tt('User')} · <code>{agent.owner.id}</code>
         </span>
       </TableCell>
       <TableCell className="whitespace-nowrap">{new Date(agent.updatedAt).toLocaleDateString()}</TableCell>
       <TableCell className="text-right">
-        {organizationId ? (
-          <Link
-            aria-label={tt('Open {{name}}', { name: agent.name })}
-            params={{ agentId: agent.id, organizationId }}
-            to="/organizations/$organizationId/agents/$agentId"
-          >
-            <ChevronRight className="ml-auto size-4 text-muted-foreground" />
-          </Link>
-        ) : (
-          <Link
-            aria-label={tt('Open {{name}}', { name: agent.name })}
-            params={{ agentId: agent.id }}
-            to="/console/agents/$agentId"
-          >
-            <ChevronRight className="ml-auto size-4 text-muted-foreground" />
-          </Link>
-        )}
+        <Link
+          aria-label={tt('Open {{name}}', { name: agent.name })}
+          params={{ agentId: agent.id }}
+          to="/console/agents/$agentId"
+        >
+          <ChevronRight className="ml-auto size-4 text-muted-foreground" />
+        </Link>
       </TableCell>
     </TableRow>
   )

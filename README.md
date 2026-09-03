@@ -86,8 +86,10 @@ permissions. [See the complete request path](https://realmroot.dev/docs/getting-
 - **Keep authorization where it belongs.** Realmroot coordinates identity,
   approval, and credential issuance; each service still enforces its own data
   and business rules.
-- **Separate identity from authority.** Enrollment identifies the Agent. A
-  grant independently authorizes one Resource, scope set, account, and lifetime.
+- **Separate identity from authority.** Every Agent belongs to one concrete
+  User. Enrollment identifies the Agent; grants independently authorize exact
+  Resource, scope, account, and lifetime boundaries, including Organization
+  authority explicitly delegated by that User.
 - **Avoid sharing personal credentials.** Agents use bounded, short-lived
   credentials rather than a controller's API key or refresh token.
 - **Own the deployment boundary.** Realmroot is open source and deploys as an

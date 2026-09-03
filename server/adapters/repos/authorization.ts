@@ -437,7 +437,7 @@ export function createDrizzleAuthorizationRepository(db: Database, ids: Identifi
         ])
         const ownerUsers = new Set(members.map((membership) => membership.userId))
         const applicationOwners = new Map(applications.map((app) => [app.id, app.ownerOrganizationId]))
-        const identityOwners = new Map(identities.map((identity) => [identity.id, identity.ownerOrganizationId]))
+        const identityOwners = new Map(identities.map((identity) => [identity.id, identity.ownerUserId]))
         const statements: [BatchItem<'sqlite'>, ...BatchItem<'sqlite'>[]] = [update]
         for (const app of applications) {
           if (app.ownerOrganizationId === ownerOrganizationId) continue
@@ -453,7 +453,7 @@ export function createDrizzleAuthorizationRepository(db: Database, ids: Identifi
             ? ownerUsers.has(entitlement.userId)
             : entitlement.applicationId
               ? applicationOwners.get(entitlement.applicationId) === ownerOrganizationId
-              : identityOwners.get(entitlement.agentIdentityId!) === ownerOrganizationId
+              : ownerUsers.has(identityOwners.get(entitlement.agentIdentityId!) ?? '')
           if (!remainsVisible && !entitlement.endedAt) {
             statements.push(
               db

@@ -723,7 +723,6 @@ export interface AgentAccessSummary {
 }
 
 export interface AgentAuthorityInventoryScope {
-  ownerOrganizationIds?: string[]
   ownerUserId?: string
 }
 
@@ -895,7 +894,6 @@ export interface ExternalResourceRepository {
   listAgentPermissions(
     query: PaginationInput & {
       agentId?: string
-      organizationId?: string
       resourceServerId?: string
       status?: 'active' | 'inactive'
     },
@@ -1039,8 +1037,7 @@ export interface AgentIdentityRecord {
   username: string | null
   name: string
   runtime?: string | null
-  ownerUserId: string | null
-  ownerOrganizationId: string | null
+  ownerUserId: string
   status: 'active' | 'inactive'
   deletedAt: Date | null
   createdAt: Date
@@ -1065,8 +1062,7 @@ export interface AgentEnrollmentIntentRecord {
   requestedName: string | null
   requestedUsername?: string | null
   requestedRuntime?: string | null
-  ownerUserId: string | null
-  ownerOrganizationId: string | null
+  ownerUserId: string
   protocolAgentId: string
   idempotencyKey: string | null
   status: string
@@ -1095,7 +1091,6 @@ export interface AgentApplicationCreationRecord {
 
 export interface AgentIdentityRepository {
   listPersonal(userId: string): Promise<AgentIdentityAggregate[]>
-  listOrganization(organizationId: string): Promise<AgentIdentityAggregate[]>
   listOwned(
     scope: AgentAuthorityInventoryScope,
     page: PaginationInput,

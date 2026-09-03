@@ -1,5 +1,4 @@
 import { z } from 'zod'
-import type { Agent } from './agent-api'
 import { type PaginationMetadata, paginationMetadataSchema } from './pagination'
 import { accountProfileLinkSchema } from './public-profiles'
 import { usernameSchema } from './users'
@@ -130,11 +129,6 @@ export type DeveloperConsoleAccessResponse = {
 
 export type AccountOrganizationContextResponse = {
   activeOrganizationId: string | null
-}
-
-export type AccountOrganizationAgentsResponse = {
-  items: Agent[]
-  pagination: PaginationMetadata
 }
 
 export const accountOrganizationTeamMemberSchema = z.object({

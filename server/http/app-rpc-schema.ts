@@ -1,7 +1,6 @@
 import type {
   AccountEmailChangeConfirmInput,
   AccountEmailChangeInput,
-  AccountOrganizationAgentsResponse,
   AccountOrganizationContextResponse,
   AccountOrganizationTeamMembersResponse,
   AccountPasswordChangeInput,
@@ -223,12 +222,6 @@ export type RpcSchema = {
   '/api/account/agents/:agentId': {
     $get: RpcEndpoint<{ param: { agentId: string } }, { agent: Agent }>
     $delete: RpcEndpoint<{ param: { agentId: string } }, EmptyResponse, 204>
-  }
-  '/api/account/organizations/:organizationId/agents': {
-    $get: RpcEndpoint<
-      { param: { organizationId: string }; query?: Partial<Record<keyof PaginationQuery, string>> },
-      AccountOrganizationAgentsResponse
-    >
   }
   '/api/account/organizations/:organizationId/teams/:teamId/members': {
     $get: RpcEndpoint<

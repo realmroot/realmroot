@@ -9,8 +9,112 @@ const organizationRbacMigration = migration('20260805160616_round_wither.sql')
 const rfc9728ScopeRegistryMigration = migration('20260806214840_rfc9728_scope_registry.sql')
 const platformAuthorityMigration = migration('20260807000000_platform_authority.sql')
 const groupAwareOidcMigration = migration('20260819015324_damp_exiles.sql')
+const agentUserOwnershipMigration = migration('20260903225315_cheerful_imperial_guard.sql')
 
 describe('D1 migration upgrades', () => {
+  it('moves Organization-owned Agents to a concrete User owner', () => {
+    const database = new DatabaseSync(':memory:')
+    try {
+      database.exec(`
+        PRAGMA foreign_keys = ON;
+        CREATE TABLE user (id TEXT PRIMARY KEY NOT NULL);
+        CREATE TABLE organization (id TEXT PRIMARY KEY NOT NULL);
+        CREATE TABLE member (
+          id TEXT PRIMARY KEY NOT NULL,
+          organization_id TEXT NOT NULL,
+          user_id TEXT NOT NULL,
+          created_at INTEGER NOT NULL
+        );
+        CREATE TABLE agent (
+          id TEXT PRIMARY KEY NOT NULL,
+          user_id TEXT NOT NULL
+        );
+        CREATE TABLE agent_identity (
+          id TEXT PRIMARY KEY NOT NULL,
+          issuer TEXT NOT NULL,
+          subject TEXT NOT NULL,
+          username TEXT,
+          name TEXT NOT NULL,
+          runtime TEXT,
+          owner_user_id TEXT,
+          owner_organization_id TEXT,
+          status TEXT NOT NULL,
+          deleted_at INTEGER,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        );
+        CREATE TABLE agent_identity_binding (
+          id TEXT PRIMARY KEY NOT NULL,
+          agent_identity_id TEXT NOT NULL REFERENCES agent_identity(id),
+          protocol_agent_id TEXT NOT NULL REFERENCES agent(id),
+          bound_at INTEGER NOT NULL
+        );
+        CREATE TABLE agent_enrollment_intent (
+          id TEXT PRIMARY KEY NOT NULL,
+          agent_identity_id TEXT REFERENCES agent_identity(id),
+          requested_name TEXT,
+          requested_username TEXT,
+          requested_runtime TEXT,
+          owner_user_id TEXT,
+          owner_organization_id TEXT,
+          protocol_agent_id TEXT NOT NULL REFERENCES agent(id),
+          idempotency_key TEXT,
+          status TEXT NOT NULL,
+          created_by_user_id TEXT NOT NULL REFERENCES user(id),
+          approved_by_user_id TEXT REFERENCES user(id),
+          expires_at INTEGER NOT NULL,
+          approved_at INTEGER,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        );
+        CREATE TABLE agent_audit_event (
+          id TEXT PRIMARY KEY NOT NULL,
+          agent_identity_id TEXT REFERENCES agent_identity(id),
+          controller_user_id TEXT,
+          owner_user_id TEXT,
+          owner_organization_id TEXT,
+          realm_owned INTEGER NOT NULL,
+          occurred_at INTEGER NOT NULL
+        );
+        INSERT INTO user VALUES ('bound-user'), ('creator-user'), ('member-user');
+        INSERT INTO organization VALUES ('org-1');
+        INSERT INTO member VALUES ('member-1', 'org-1', 'member-user', 1);
+        INSERT INTO agent VALUES ('protocol-agent', 'bound-user');
+        INSERT INTO agent_identity VALUES (
+          'identity-1', 'https://issuer.example', 'agent-subject', 'agent', 'Agent', 'codex',
+          NULL, 'org-1', 'active', NULL, 1, 1
+        );
+        INSERT INTO agent_identity_binding VALUES ('binding-1', 'identity-1', 'protocol-agent', 1);
+        INSERT INTO agent_enrollment_intent VALUES (
+          'intent-1', 'identity-1', NULL, NULL, NULL, NULL, 'org-1', 'protocol-agent', NULL,
+          'pending', 'creator-user', NULL, 10, NULL, 1, 1
+        );
+        INSERT INTO agent_audit_event VALUES (
+          'audit-1', 'identity-1', NULL, NULL, 'org-1', 0, 1
+        );
+      `)
+
+      applyMigration(database, agentUserOwnershipMigration)
+
+      expect(database.prepare('SELECT owner_user_id FROM agent_identity').get()).toEqual({
+        owner_user_id: 'bound-user',
+      })
+      expect(database.prepare('SELECT owner_user_id FROM agent_enrollment_intent').get()).toEqual({
+        owner_user_id: 'creator-user',
+      })
+      expect(() => database.exec("UPDATE agent_identity SET owner_user_id = NULL WHERE id = 'identity-1'")).toThrow(
+        'Agent identity requires a concrete User owner',
+      )
+      expect(database.prepare('SELECT owner_user_id, owner_organization_id FROM agent_audit_event').get()).toEqual({
+        owner_user_id: 'bound-user',
+        owner_organization_id: null,
+      })
+      expect(database.prepare('PRAGMA foreign_key_check').all()).toEqual([])
+    } finally {
+      database.close()
+    }
+  })
+
   it('migrates Applications and installs Better Auth Team storage [spec: platform-onboarding/existing-d1-upgrade]', () => {
     const database = new DatabaseSync(':memory:')
     try {

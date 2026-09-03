@@ -1,5 +1,4 @@
 import { applyD1Migrations, env, reset } from 'cloudflare:test'
-import { agentIdentity } from '@server/db/schema'
 import { createAgentLoginIdentity } from '@server/usecases/agent-identities'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
@@ -86,50 +85,18 @@ describe('agent protocol management over real D1', () => {
     )
 
     const authorizedOrganization = await createOrganization(harness, adminCookie, 'authorized-agents-org')
-    const unauthorizedOrganization = await createOrganization(harness, adminCookie, 'unauthorized-agents-org')
     const membership = await harness.request(`/api/organizations/${authorizedOrganization}/members`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', cookie: adminCookie },
       body: JSON.stringify({ userId, roles: ['developer'] }),
     })
     expect(membership.status, await membership.clone().text()).toBe(201)
-    const now = new Date()
-    await harness.db.insert(agentIdentity).values([
-      {
-        id: 'authorized-org-agent',
-        issuer: 'http://localhost/api/auth',
-        subject: 'authorized-org-subject',
-        username: 'authorized-org-agent.00000000000000000000000000000007',
-        name: 'Authorized Organization Agent',
-        ownerUserId: null,
-        ownerOrganizationId: authorizedOrganization,
-        status: 'active',
-        deletedAt: null,
-        createdAt: now,
-        updatedAt: now,
-      },
-      {
-        id: 'unauthorized-org-agent',
-        issuer: 'http://localhost/api/auth',
-        subject: 'unauthorized-org-subject',
-        username: 'unauthorized-org-agent.00000000000000000000000000000008',
-        name: 'Unauthorized Organization Agent',
-        ownerUserId: null,
-        ownerOrganizationId: unauthorizedOrganization,
-        status: 'active',
-        deletedAt: null,
-        createdAt: now,
-        updatedAt: now,
-      },
-    ])
-
     const managementList = await harness.request('/api/agents', { headers: { cookie: ownerCookie } })
     expect(managementList.status).toBe(200)
     const managedAgentIds = ((await managementList.json()) as { items: Array<{ id: string }> }).items.map(
       (agent) => agent.id,
     )
-    expect(managedAgentIds).toEqual(expect.arrayContaining([stableAgent.id, 'authorized-org-agent']))
-    expect(managedAgentIds).not.toContain('unauthorized-org-agent')
+    expect(managedAgentIds).toEqual([stableAgent.id])
 
     const list = await harness.request('/api/account/agents', { headers: { cookie: ownerCookie } })
     expect(list.status).toBe(200)

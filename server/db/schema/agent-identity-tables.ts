@@ -2,7 +2,6 @@ import { sql } from 'drizzle-orm'
 import { check, index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import { agent } from './agent-tables'
 import { user } from './auth-tables'
-import { organization } from './authorization-tables'
 
 export const agentIdentity = sqliteTable(
   'agent_identity',
@@ -13,8 +12,9 @@ export const agentIdentity = sqliteTable(
     username: text('username'),
     name: text('name').notNull(),
     runtime: text('runtime'),
-    ownerUserId: text('owner_user_id').references(() => user.id, { onDelete: 'restrict' }),
-    ownerOrganizationId: text('owner_organization_id').references(() => organization.id, { onDelete: 'restrict' }),
+    ownerUserId: text('owner_user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'restrict' }),
     status: text('status', { enum: ['active', 'inactive'] })
       .notNull()
       .default('active'),
@@ -27,13 +27,8 @@ export const agentIdentity = sqliteTable(
     uniqueIndex('agentIdentity_issuer_subject_unique').on(table.issuer, table.subject),
     uniqueIndex('agentIdentity_username_unique').on(table.username).where(sql`${table.username} is not null`),
     index('agentIdentity_ownerUserId_idx').on(table.ownerUserId),
-    index('agentIdentity_ownerOrganizationId_idx').on(table.ownerOrganizationId),
     index('agentIdentity_status_idx').on(table.status),
     index('agentIdentity_deletedAt_idx').on(table.deletedAt),
-    check(
-      'agentIdentity_exactly_one_owner_check',
-      sql`((${table.ownerUserId} is not null) + (${table.ownerOrganizationId} is not null)) = 1`,
-    ),
   ],
 )
 
@@ -94,8 +89,9 @@ export const agentEnrollmentIntent = sqliteTable(
     requestedName: text('requested_name'),
     requestedUsername: text('requested_username'),
     requestedRuntime: text('requested_runtime'),
-    ownerUserId: text('owner_user_id').references(() => user.id, { onDelete: 'restrict' }),
-    ownerOrganizationId: text('owner_organization_id').references(() => organization.id, { onDelete: 'restrict' }),
+    ownerUserId: text('owner_user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'restrict' }),
     protocolAgentId: text('protocol_agent_id')
       .notNull()
       .references(() => agent.id, { onDelete: 'restrict' }),
@@ -118,10 +114,6 @@ export const agentEnrollmentIntent = sqliteTable(
       .where(sql`${table.idempotencyKey} is not null`),
     index('agentEnrollmentIntent_status_idx').on(table.status),
     index('agentEnrollmentIntent_expiresAt_idx').on(table.expiresAt),
-    check(
-      'agentEnrollmentIntent_exactly_one_owner_check',
-      sql`((${table.ownerUserId} is not null) + (${table.ownerOrganizationId} is not null)) = 1`,
-    ),
     check(
       'agentEnrollmentIntent_new_or_existing_identity_check',
       sql`(${table.agentIdentityId} is not null) or ((${table.requestedName} is not null) and (${table.requestedUsername} is not null) and (${table.requestedRuntime} is not null))`,

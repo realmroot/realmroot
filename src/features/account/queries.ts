@@ -11,7 +11,6 @@ import {
   listAccountAgents,
   listAccountApplicationAuthorizations,
   listAccountConnections,
-  listAccountOrganizationAgents,
   listAccountOrganizationInvitations,
   listAccountOrganizationRoles,
   listAccountOrganizations,
@@ -105,15 +104,6 @@ export function useAccountOrganizationTeamMembers(
     queryFn: () => listAccountOrganizationTeamMembers(organizationId, teamId!, pagination),
     enabled: Boolean(teamId),
     placeholderData: keepPreviousData,
-    ...accountQueryOptions,
-  })
-}
-
-export function useAccountOrganizationAgents(organizationId: string, enabled = true) {
-  return useQuery({
-    queryKey: accountQueryKeys.organizationAgents(organizationId),
-    queryFn: () => listAccountOrganizationAgents(organizationId),
-    enabled,
     ...accountQueryOptions,
   })
 }

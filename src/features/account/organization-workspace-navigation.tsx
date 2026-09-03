@@ -2,7 +2,6 @@ import { Link, useNavigate } from '@tanstack/react-router'
 import {
   Activity,
   AppWindow,
-  Bot,
   Building2,
   Check,
   ChevronsUpDown,
@@ -47,10 +46,7 @@ const workspaceNavigation = [
   },
   {
     label: 'Access & authority',
-    items: [
-      { segment: 'agents', label: 'Agents', icon: Bot },
-      { segment: 'roles', label: 'Roles', icon: ShieldCheck },
-    ],
+    items: [{ segment: 'roles', label: 'Roles', icon: ShieldCheck }],
   },
   {
     items: [{ segment: 'settings', label: 'Settings', icon: Settings }],

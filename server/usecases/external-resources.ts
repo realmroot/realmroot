@@ -404,13 +404,11 @@ export async function createAccountConnection(
     }
     const identity = await deps.agentIdentities.findIdentity(request.agentIdentityId)
     if (!identity) throw notFound('Active Agent identity was not found.')
-    const owner = identity.identity.ownerOrganizationId
-      ? { type: 'organization' as const, organizationId: identity.identity.ownerOrganizationId }
-      : { type: 'user' as const }
+    const owner = { type: 'user' as const }
     const ownerConnection = await deps.externalResources.findConnectionByOwnerResource({
       resourceId: request.resourceId,
       ownerUserId: identity.identity.ownerUserId,
-      ownerOrganizationId: identity.identity.ownerOrganizationId,
+      ownerOrganizationId: null,
     })
     const connectionScopes = expandedConnectionScopes(
       controlledConnection ?? ownerConnection,
@@ -477,9 +475,7 @@ export async function listAccessRequestConnections(
   const identity = await deps.agentIdentities.findIdentity(request.agentIdentityId)
   if (!identity) throw notFound('Active Agent identity was not found.')
   const resourceConnections = (
-    identity.identity.ownerOrganizationId
-      ? await deps.externalResources.listConnectionsByOrganizations([identity.identity.ownerOrganizationId])
-      : await deps.externalResources.listConnectionsByUser(identity.identity.ownerUserId!)
+    await deps.externalResources.listConnectionsByUser(identity.identity.ownerUserId)
   ).filter((connection) => connection.resourceId === request.resourceId && connection.status === 'active')
   const connections = await Promise.all(
     resourceConnections.map(async (connection) => {
@@ -748,9 +744,7 @@ async function discoverAgentResourceRecords(deps: Deps, principal: AgentResource
   const identity = await requireActiveIdentityAndBinding(principal)
   const [visibleOrganizationIds, connections, configuredResources, connectors] = await Promise.all([
     activeIdentityOrganizationIds(deps, identity.identity),
-    identity.identity.ownerUserId
-      ? deps.externalResources.listConnectionsByUser(identity.identity.ownerUserId)
-      : deps.externalResources.listConnectionsByOrganizations([identity.identity.ownerOrganizationId!]),
+    deps.externalResources.listConnectionsByUser(identity.identity.ownerUserId),
     deps.authorization.listEnabledResources(),
     deps.connectors.listEnabled(),
   ])
@@ -894,7 +888,7 @@ export async function listAgentResourceServerAuthorizationDetails(
   const connection = await deps.externalResources.findConnectionByOwnerResource({
     resourceId: resourceServerId,
     ownerUserId: identity.identity.ownerUserId,
-    ownerOrganizationId: identity.identity.ownerOrganizationId,
+    ownerOrganizationId: null,
   })
   if (!connection || connection.status !== 'active') {
     return { items: [], pagination: paginationMetadata({ ...pagination, total: 0 }) }
@@ -931,7 +925,7 @@ export async function listAccountAccessRequestAuthorizationDetailCatalog(
     (await deps.externalResources.findConnectionByOwnerResource({
       resourceId: request.resourceId,
       ownerUserId: identity.identity.ownerUserId,
-      ownerOrganizationId: identity.identity.ownerOrganizationId,
+      ownerOrganizationId: null,
     }))
   if (!connection || connection.status !== 'active') {
     throw notFound('Active resource account connection was not found.')
@@ -952,7 +946,7 @@ export async function createAgentAccessRequest(
     ? await deps.externalResources.findConnectionByOwnerResource({
         resourceId: resource.id,
         ownerUserId: identity.identity.ownerUserId,
-        ownerOrganizationId: identity.identity.ownerOrganizationId,
+        ownerOrganizationId: null,
       })
     : null
   if (!requiresAccountConnection(resource)) validateResourceRequestedScopes(resource, input.scopes)
@@ -1342,7 +1336,7 @@ export async function decideAgentAccessRequest(
       const ownerConnection = await deps.externalResources.findConnectionByOwnerResource({
         resourceId: request.resourceId,
         ownerUserId: requestIdentity.identity.ownerUserId,
-        ownerOrganizationId: requestIdentity.identity.ownerOrganizationId,
+        ownerOrganizationId: null,
       })
       if (ownerConnection) {
         connection = await requireControlledConnection(deps, ownerConnection.id, actorUserId)
@@ -1353,11 +1347,7 @@ export async function decideAgentAccessRequest(
     if (connection.resourceId !== resource.id || connection.status !== 'active') {
       throw badRequest('The selected account connection does not belong to this API resource.')
     }
-    assertConnectionInHomeSpace(
-      connection,
-      requestIdentity.identity.ownerUserId,
-      requestIdentity.identity.ownerOrganizationId,
-    )
+    assertConnectionInHomeSpace(connection, requestIdentity.identity.ownerUserId)
     assertAuthorizationDetailsSelection(resource, connection, authorizationDetails)
     assertAuthorizationDetailsSubset(authorizationDetails, connection.authorizationDetails, 'connected account')
     const contextualScopes =
@@ -1761,8 +1751,7 @@ async function issueNativeAccessToken(
   const entitlementExpiry = earliestEntitlementExpiry(entitlements)
   const expiresAt =
     entitlementExpiry && entitlementExpiry.getTime() < maximumExpiresAt.getTime() ? entitlementExpiry : maximumExpiresAt
-  const subject = identity.identity.ownerUserId ?? identity.identity.ownerOrganizationId
-  if (!subject) throw forbidden('Agent home-space controller is unavailable.')
+  const subject = identity.identity.ownerUserId
   const platformResource = isRealmrootResourceServer(resource)
   const authority = request.authorizationDetails[0]
   assertNativeAuthoritySelection(request.authorizationDetails)
@@ -2210,13 +2199,11 @@ async function nativeAuthorityDetailsCatalog(
 
 async function nativeAuthorityDetails(
   deps: Deps,
-  identity: { identity: { ownerUserId: string | null; ownerOrganizationId: string | null } },
+  identity: { identity: { ownerUserId: string } },
 ): Promise<AuthorizationDetail[]> {
-  const details: AuthorizationDetail[] = []
-  const ownerUserId = identity.identity.ownerUserId
-  if (ownerUserId) {
-    details.push({ type: 'realmroot_authority', authority: 'user', id: ownerUserId })
-  }
+  const details: AuthorizationDetail[] = [
+    { type: 'realmroot_authority', authority: 'user', id: identity.identity.ownerUserId },
+  ]
   for (const organizationId of [...(await activeIdentityOrganizationIds(deps, identity.identity))].sort()) {
     details.push({
       type: 'realmroot_authority',
@@ -2755,9 +2742,7 @@ async function requireControlledRequestTarget(deps: Deps, request: AgentAccessRe
 async function controlsAgentIdentity(deps: Deps, identityId: string, actorUserId: string) {
   const identity = await deps.agentIdentities.findIdentity(identityId)
   if (!identity) return false
-  if (identity.identity.ownerUserId === actorUserId) return true
-  if (!identity.identity.ownerOrganizationId) return false
-  return organizationUserHasScope(deps, identity.identity.ownerOrganizationId, actorUserId, 'agents:write')
+  return identity.identity.ownerUserId === actorUserId
 }
 
 async function requireConnectionOwnerControl(
@@ -2771,17 +2756,8 @@ async function requireConnectionOwnerControl(
   }
 }
 
-function assertConnectionInHomeSpace(
-  connection: ProviderResourceAuthorizationRecord,
-  ownerUserId: string | null,
-  ownerOrganizationId: string | null,
-) {
-  if (
-    (ownerUserId && connection.ownerUserId === ownerUserId) ||
-    (ownerOrganizationId && connection.ownerOrganizationId === ownerOrganizationId)
-  ) {
-    return
-  }
+function assertConnectionInHomeSpace(connection: ProviderResourceAuthorizationRecord, ownerUserId: string) {
+  if (connection.ownerUserId === ownerUserId) return
   throw forbidden('Resource account connection is outside the Agent home space.')
 }
 
@@ -2847,9 +2823,7 @@ async function resolveAuditTenant(
   if (!identityId) throw new Error('Agent audit event has no tenant-owned resource.')
   const identity = await deps.agentIdentities.findIdentity(identityId)
   if (!identity) throw new Error(`Agent identity ${identityId} was not found while writing its audit event.`)
-  return identity.identity.ownerUserId
-    ? { type: 'user' as const, id: identity.identity.ownerUserId }
-    : { type: 'organization' as const, id: identity.identity.ownerOrganizationId! }
+  return { type: 'user' as const, id: identity.identity.ownerUserId }
 }
 
 async function revokeUncoveredEntitlements(
@@ -2987,7 +2961,7 @@ function assertNativeAuthoritySelection(authorizationDetails: AuthorizationDetai
 
 async function requireCurrentNativeAuthorityContext(
   deps: Deps,
-  identity: { identity: { ownerUserId: string | null; ownerOrganizationId: string | null } },
+  identity: { identity: { ownerUserId: string } },
   authorizationDetails: AuthorizationDetail[],
 ) {
   assertNativeAuthoritySelection(authorizationDetails)
@@ -3358,7 +3332,7 @@ function earliestEntitlementExpiry(entitlements: ResourceScopeEntitlementRecord[
 async function requireAgentResourceVisibility(
   deps: Deps,
   resource: NonNullable<Awaited<ReturnType<Deps['authorization']['findResource']>>>,
-  identity: { ownerUserId: string | null; ownerOrganizationId: string | null },
+  identity: { ownerUserId: string },
 ) {
   const organizationIds = await activeIdentityOrganizationIds(deps, identity)
   if (!resource.availableToAgents || !activeResourceVisibleToAgent(resource, organizationIds)) {
@@ -3366,17 +3340,10 @@ async function requireAgentResourceVisibility(
   }
 }
 
-async function activeIdentityOrganizationIds(
-  deps: Deps,
-  identity: { ownerUserId: string | null; ownerOrganizationId: string | null },
-) {
-  const candidateIds = identity.ownerOrganizationId
-    ? [identity.ownerOrganizationId]
-    : identity.ownerUserId
-      ? (await deps.authorization.listUserMemberships(identity.ownerUserId)).map(
-          (membership) => membership.organizationId,
-        )
-      : []
+async function activeIdentityOrganizationIds(deps: Deps, identity: { ownerUserId: string }) {
+  const candidateIds = (await deps.authorization.listUserMemberships(identity.ownerUserId)).map(
+    (membership) => membership.organizationId,
+  )
   const organizations = await Promise.all(
     [...new Set(candidateIds)].map((organizationId) => deps.authorization.findOrganization(organizationId)),
   )

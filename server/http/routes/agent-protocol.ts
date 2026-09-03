@@ -88,7 +88,6 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
           username: body.username,
           nickname: body.nickname,
           runtime: body.runtime,
-          organizationId: body.organizationId,
         },
         session.host.userId,
         parsedKey.data,

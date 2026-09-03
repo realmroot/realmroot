@@ -110,9 +110,7 @@ export async function decideAgentApproval(
     deps.agentIdentities.findProtocolAgent(input.agentId),
   ])
   const tenant = identity
-    ? identity.identity.ownerUserId !== null
-      ? { type: 'user' as const, id: identity.identity.ownerUserId }
-      : { type: 'organization' as const, id: identity.identity.ownerOrganizationId! }
+    ? { type: 'user' as const, id: identity.identity.ownerUserId }
     : protocolAgent?.userId
       ? { type: 'user' as const, id: protocolAgent.userId }
       : { type: 'user' as const, id: userId }

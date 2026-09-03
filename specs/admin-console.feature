@@ -347,7 +347,8 @@ Feature: Admin Console
     Then applications and API resource servers are limited to that Organization's owned inventory
     And Webhooks and audit activity are limited to that Organization
     And Organization Roles can be defined and assigned without entering Console
-    And Agent identities and activity are limited to authorized Organizations
+    And Agent identities are not part of Organization-owned inventory
+    And Organization activity excludes User-owned Agent governance events
     And member inventory exposes identity details without Realm-wide authentication state
     And direct detail or mutation requests for another Organization's resources are rejected
     And Realm operators retain the complete Realm inventory in Console

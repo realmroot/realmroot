@@ -258,18 +258,6 @@ describe('console collections', () => {
           }),
         )
       }
-      if (url === '/api/agents') {
-        return Promise.resolve(
-          jsonResponse({
-            items: [
-              { id: 'agent-1', homeSpace: { type: 'organization', organizationId: 'org-1' } },
-              { id: 'agent-2', homeSpace: { type: 'organization', organizationId: 'org-2' } },
-              { id: 'agent-personal', homeSpace: { type: 'personal', userId: 'user-1' } },
-            ],
-            pagination,
-          }),
-        )
-      }
       if (url === '/api/organizations/org-1/members') {
         return Promise.resolve(
           jsonResponse({
@@ -289,12 +277,10 @@ describe('console collections', () => {
     const acmeRow = (await screen.findByText('Acme')).closest('tr')
     expect(acmeRow).toBeTruthy()
     expect(await within(acmeRow!).findByText('2')).toBeTruthy()
-    expect(within(acmeRow!).getByText('1')).toBeTruthy()
 
     const betaRow = screen.getByText('Beta Company').closest('tr')
     expect(betaRow).toBeTruthy()
     expect(await within(betaRow!).findByText('Unavailable')).toBeTruthy()
-    expect(within(betaRow!).getByText('1')).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: 'Provision organization' }))
     const dialog = await screen.findByRole('dialog')

@@ -41,8 +41,8 @@ describe('console Agent detail', () => {
     renderWithQuery(<AgentDetailPage agentId="agent-1" />)
 
     expect(await screen.findByRole('heading', { name: 'Build Agent' })).toBeTruthy()
-    expect(screen.getByText('Organization')).toBeTruthy()
-    expect(screen.getByText('Acme Engineering · org-1')).toBeTruthy()
+    expect(screen.getByText('User')).toBeTruthy()
+    expect(screen.getByText('Jane Doe · user-1')).toBeTruthy()
 
     openTab('Installations')
     expect(await screen.findByText('Remote host')).toBeTruthy()
@@ -142,8 +142,7 @@ describe('console Agent detail', () => {
     await waitFor(() => expect(requests).toContainEqual({ method: 'DELETE', path: '/api/agents/agent-1' }))
   })
 
-  it('rejects cross-owner routes and shows empty Agent collections', async () => {
-    let organizationOwned = false
+  it('shows empty Agent collections', async () => {
     const requests: Array<{ method: string; path: string }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const request = requestDetails(input, init)
@@ -159,24 +158,15 @@ describe('console Agent detail', () => {
           ...emptyCollections,
           agent: {
             ...agent,
-            homeSpace: organizationOwned
-              ? { type: 'organization', organizationId: 'org-1' }
-              : { type: 'personal', userId: 'user-1' },
-            owner: organizationOwned
-              ? { id: 'org-1', type: 'organization', displayName: 'Acme Engineering' }
-              : { id: 'user-1', type: 'user', displayName: 'Jane Doe' },
+            homeSpace: { type: 'personal', userId: 'user-1' },
+            owner: { id: 'user-1', type: 'user', displayName: 'Jane Doe' },
             status: 'inactive',
           },
         }),
       )
     })
 
-    const mismatched = renderWithQuery(<AgentDetailPage agentId="agent-1" organizationId="org-1" section="settings" />)
-    expect(await screen.findByText('Agent does not belong to this Organization.')).toBeTruthy()
-    mismatched.unmount()
-
-    organizationOwned = true
-    const scoped = renderWithQuery(<AgentDetailPage agentId="agent-1" organizationId="org-1" section="settings" />)
+    const scoped = renderWithQuery(<AgentDetailPage agentId="agent-1" section="settings" />)
     expect(await screen.findByRole('heading', { name: 'Build Agent' })).toBeTruthy()
     expect(screen.getByRole('tab', { name: 'Settings' })).toBeTruthy()
     expect(screen.getByText('Inactive')).toBeTruthy()
@@ -305,8 +295,8 @@ const agent: ManagementAgent = {
   username: 'build-agent.00000000000000000000000000000003',
   name: 'Build Agent',
   runtime: 'codex',
-  homeSpace: { type: 'organization', organizationId: 'org-1' },
-  owner: { id: 'org-1', type: 'organization', displayName: 'Acme Engineering' },
+  homeSpace: { type: 'personal', userId: 'user-1' },
+  owner: { id: 'user-1', type: 'user', displayName: 'Jane Doe' },
   status: 'active',
   installationCount: 2,
   pendingRequestCount: 1,

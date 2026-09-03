@@ -9,10 +9,7 @@ export const agentIdentityStatusSchema = z.enum(['active', 'inactive'])
 export const agentIdentityBindingStatusSchema = z.enum(['active', 'revoked'])
 export const agentEnrollmentIntentStatusSchema = z.enum(['pending', 'approved', 'expired', 'cancelled'])
 
-export const agentHomeSpaceSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('personal'), userId: z.string() }),
-  z.object({ type: z.literal('organization'), organizationId: z.string() }),
-])
+export const agentHomeSpaceSchema = z.object({ type: z.literal('personal'), userId: z.string() })
 
 export const agentIdentityBindingSchema = z.object({
   id: z.string().describe('New binding identifiers are UUIDv7; legacy prefixed values remain readable.'),
@@ -48,7 +45,6 @@ export const createAgentEnrollmentIntentRequestSchema = z.object({
   nickname: z.string().trim().min(1).max(100).optional(),
   runtime: z.string().trim().min(1).max(100),
   protocolAgentId: z.string().trim().min(1),
-  organizationId: z.string().trim().min(1).optional(),
 })
 
 export const createAdditionalAgentEnrollmentIntentRequestSchema = z.object({
@@ -59,7 +55,6 @@ export const createAgentProtocolEnrollmentIntentRequestSchema = z.object({
   username: agentUsernameSchema,
   nickname: z.string().trim().min(1).max(100).optional(),
   runtime: z.string().trim().min(1).max(100),
-  organizationId: z.string().trim().min(1).optional(),
 })
 
 export const createAgentLoginIdentityRequestSchema = z.object({

@@ -32,8 +32,8 @@ export const resourceOwnershipInventory = {
     children: [],
   },
   agents: {
-    boundary: 'tenant',
-    persistedBy: 'agent_identity.owner_user_id xor owner_organization_id',
+    boundary: 'user',
+    persistedBy: 'agent_identity.owner_user_id',
     children: ['agent_identity_binding', 'agent_access_request', 'agent_access_grant'],
   },
   resourceConnections: {

@@ -181,7 +181,7 @@ function InstallationEnrollment({ intentId }: { intentId: string }) {
               label="Request"
               value={isAdditionalHost ? 'Add a trusted host' : 'Create a stable identity'}
             />
-            <DecisionField label="Owner" value={formatHomeSpace(intent)} />
+            <DecisionField label="Owner" value="Personal account" />
           </dl>
         ) : null}
         {agent ? <Status tone="success">{agent.name} is ready on this host.</Status> : null}
@@ -233,8 +233,4 @@ function DecisionField({ label, value, id }: { label: string; value: string; id?
       </dd>
     </div>
   )
-}
-
-function formatHomeSpace(intent: AgentEnrollment) {
-  return intent.homeSpace.type === 'personal' ? 'Personal account' : 'Organization'
 }

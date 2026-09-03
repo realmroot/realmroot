@@ -110,23 +110,6 @@ describe('Account Organization detail', () => {
         selectedOrganizationId = body.organizationId
         return json({ id: body.organizationId, name: 'Studio', slug: 'studio' })
       }),
-      http.get(`${base}/api/account/organizations/org-family/agents`, () =>
-        json({
-          items: [
-            {
-              id: 'agent-family',
-              issuer: 'https://identity.example.com/api/auth',
-              subject: 'agent-family-subject',
-              name: 'Family assistant',
-              homeSpace: { type: 'organization', organizationId: 'org-family' },
-              status: 'active',
-              createdAt: '2026-08-01T00:00:00.000Z',
-              updatedAt: '2026-08-01T00:00:00.000Z',
-            },
-          ],
-          pagination: { page: Math.floor(0 / 50) + 1, pageSize: 50, totalItems: 1, totalPages: Math.ceil(1 / 50) },
-        }),
-      ),
       http.get(`${base}/api/organizations/org-family/roles`, () =>
         json({
           items: ['owner', 'admin', 'developer', 'member'].map((key) => ({ key, displayName: key, predefined: true })),
@@ -164,10 +147,6 @@ describe('Account Organization detail', () => {
     renderWithClient(<AccountOrganizationDetailPage organizationId="org-family" section="members" />)
     expect((await screen.findAllByText(store.profile.email)).length).toBeGreaterThan(0)
     expect(screen.queryByRole('button', { name: 'Invite member' })).toBeNull()
-
-    cleanup()
-    renderWithClient(<AccountOrganizationDetailPage organizationId="org-family" section="agents" />)
-    expect(await screen.findByText('Family assistant')).toBeTruthy()
 
     cleanup()
     renderWithClient(<AccountOrganizationDetailPage organizationId="org-family" section="roles" />)

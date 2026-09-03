@@ -656,7 +656,6 @@ export function createExternalResourceRepository(db: Database): ExternalResource
       const where = and(
         query.agentId ? eq(resourceScopeEntitlement.agentIdentityId, query.agentId) : undefined,
         query.resourceServerId ? eq(resourceScopeEntitlement.resourceServerId, query.resourceServerId) : undefined,
-        query.organizationId ? eq(agentIdentity.ownerOrganizationId, query.organizationId) : undefined,
         authorityOwnerCondition(scope),
         isNull(agentIdentity.deletedAt),
         isNull(apiResource.deletedAt),
@@ -1197,11 +1196,5 @@ function uniqueJsonValues<T>(values: T[]) {
 
 function authorityOwnerCondition(scope?: AgentAuthorityInventoryScope) {
   if (!scope) return undefined
-  const owners = [
-    scope.ownerUserId ? eq(agentIdentity.ownerUserId, scope.ownerUserId) : undefined,
-    scope.ownerOrganizationIds?.length
-      ? inArray(agentIdentity.ownerOrganizationId, scope.ownerOrganizationIds)
-      : undefined,
-  ].filter((condition) => condition !== undefined)
-  return owners.length > 0 ? or(...owners) : sql`0`
+  return scope.ownerUserId ? eq(agentIdentity.ownerUserId, scope.ownerUserId) : sql`0`
 }

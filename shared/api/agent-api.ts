@@ -77,7 +77,6 @@ export const createAgentSelfEnrollmentSchema = z.discriminatedUnion('kind', [
     username: agentUsernameSchema,
     nickname: z.string().trim().min(1).max(100).optional(),
     runtime: z.string().trim().min(1).max(100),
-    organizationId: nonEmptyString.optional(),
   }),
   z.object({
     kind: z.literal('additional_installation'),
@@ -103,7 +102,7 @@ export const createAgentSchema = z
 export const managementAgentSchema = agentSchema.extend({
   owner: z.object({
     id: z.string(),
-    type: z.enum(['user', 'organization']),
+    type: z.literal('user'),
     displayName: z.string(),
   }),
   installationCount: z.number().int().nonnegative(),
@@ -120,9 +119,7 @@ export const managementAgentsResponseSchema = z.object({
   items: z.array(managementAgentSchema),
   pagination: paginationMetadataSchema,
 })
-export const listAgentsQuerySchema = paginationQuerySchema.extend({
-  organizationId: nonEmptyString.optional(),
-})
+export const listAgentsQuerySchema = paginationQuerySchema
 export type ListAgentsQuery = z.infer<typeof listAgentsQuerySchema>
 export const managementAgentAuditEventSchema = agentAuditEventSchema.extend({
   resource: z
@@ -219,7 +216,6 @@ export const createAgentEnrollmentSchema = z.object({
   username: agentUsernameSchema,
   nickname: z.string().trim().min(1).max(100).optional(),
   runtime: z.string().trim().min(1).max(100),
-  organizationId: nonEmptyString.optional(),
 })
 
 export const createAgentInstallationEnrollmentSchema = z.object({

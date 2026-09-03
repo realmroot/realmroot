@@ -28,15 +28,7 @@ import { tt } from '@/lib/i18n'
 
 export type AgentDetailSection = 'overview' | 'hosts' | 'grants' | 'activity' | 'settings'
 
-export function AgentDetailPage({
-  agentId,
-  organizationId,
-  section = 'overview',
-}: {
-  agentId: string
-  organizationId?: string
-  section?: AgentDetailSection
-}) {
+export function AgentDetailPage({ agentId, section = 'overview' }: { agentId: string; section?: AgentDetailSection }) {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const [tab, setTab] = useState<AgentDetailSection>(section)
@@ -73,12 +65,11 @@ export function AgentDetailPage({
       ...consoleQueryKeys.agents,
       agentId,
       'audit',
-      { action: auditAction, organizationId, result: auditResult, search: auditSearch, page: auditPage },
+      { action: auditAction, result: auditResult, search: auditSearch, page: auditPage },
     ],
     queryFn: () =>
       getAgentAuditEvents({
         agentId,
-        organizationId,
         page: auditPage,
         pageSize: 50,
         ...(auditSearch ? { search: auditSearch } : {}),
@@ -93,15 +84,7 @@ export function AgentDetailPage({
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: consoleQueryKeys.agents })
       setDeleteOpen(false)
-      if (organizationId) {
-        await navigate({
-          params: { organizationId },
-          search: {},
-          to: '/organizations/$organizationId/agents',
-        })
-      } else {
-        await navigate({ search: {}, to: '/console/agents' })
-      }
+      await navigate({ search: {}, to: '/console/agents' })
     },
   })
   const activation = useMutation({
@@ -134,26 +117,16 @@ export function AgentDetailPage({
   if (loadError)
     return <ErrorState error={loadError} onRetry={() => Promise.all(detailQueries.map((query) => query.refetch()))} />
   if (!agent) return <ErrorState error={new Error(tt('Agent not found.'))} />
-  if (organizationId && (agent.owner.type !== 'organization' || agent.owner.id !== organizationId)) {
-    return <ErrorState error={new Error(tt('Agent does not belong to this Organization.'))} />
-  }
   const owner = `${agent.owner.displayName} · ${agent.owner.id}`
   const tabs: AgentDetailSection[] = ['overview', 'hosts', 'grants', 'activity', 'settings']
 
   return (
     <>
       <div className="consoleDetailStack">
-        {organizationId ? (
-          <Link className="consoleBackLink" params={{ organizationId }} to="/organizations/$organizationId/agents">
-            <ArrowLeft />
-            {tt('Agents')}
-          </Link>
-        ) : (
-          <Link className="consoleBackLink" to="/console/agents">
-            <ArrowLeft />
-            {tt('Agents')}
-          </Link>
-        )}
+        <Link className="consoleBackLink" to="/console/agents">
+          <ArrowLeft />
+          {tt('Agents')}
+        </Link>
         <header className="consoleDetailHeader">
           <div>
             <div className="flex flex-wrap items-center gap-2">
@@ -170,12 +143,7 @@ export function AgentDetailPage({
           onValueChange={(value) => {
             const next = value as AgentDetailSection
             setTab(next)
-            navigateConsoleTab(
-              navigate,
-              organizationId
-                ? `/organizations/${organizationId}/agents/${agentId}/${next}`
-                : `/console/agents/${agentId}/${next}`,
-            )
+            navigateConsoleTab(navigate, `/console/agents/${agentId}/${next}`)
           }}
           value={tab}
         >
@@ -189,7 +157,7 @@ export function AgentDetailPage({
           <TabsContent className="mt-5" value="overview">
             <DetailRows
               rows={[
-                ['Owner type', agent.owner.type === 'organization' ? 'Organization' : 'User'],
+                ['Owner type', 'User'],
                 ['Owner', owner],
                 ['Stable subject', agent.subject],
                 ['Issuer', agent.issuer],

@@ -210,7 +210,6 @@ function principal(issuer: string, withRuntimeSession = false) {
     username: 'agent',
     name: 'Agent',
     ownerUserId: 'user-1',
-    ownerOrganizationId: null,
     status: 'active' as const,
     deletedAt: null,
     createdAt: now,

@@ -11,13 +11,7 @@ import { SimpleCreateDialog } from '@/features/management/create-dialogs'
 import { StatusBadge } from '@/features/management/dialogs'
 import { ListToolbar, ResourcePage } from '@/features/management/resource-components'
 import { formatDate, parseForm, useAdminMutation } from '@/features/management/utils'
-import {
-  consoleQueryKeys,
-  createOrganization,
-  getAgentInventory,
-  listOrganizationMembers,
-  listOrganizations,
-} from '@/lib/api/management'
+import { consoleQueryKeys, createOrganization, listOrganizationMembers, listOrganizations } from '@/lib/api/management'
 import { tt } from '@/lib/i18n'
 
 export function OrganizationsPage() {
@@ -27,7 +21,6 @@ export function OrganizationsPage() {
     queryFn: listOrganizations,
   })
   const queryClient = useQueryClient()
-  const agentsQuery = useQuery({ queryKey: consoleQueryKeys.agents, queryFn: () => getAgentInventory() })
   const [dialogOpen, setDialogOpen] = useState(false)
   const [search, setSearch] = useState('')
   const createMutation = useAdminMutation({
@@ -70,12 +63,12 @@ export function OrganizationsPage() {
           title={tt('Provision organization')}
         />
       }
-      error={query.error ?? agentsQuery.error}
+      error={query.error}
       empty={organizations.length === 0}
       emptyDescription="Provision an Organization when people need a shared identity and authorization context."
       emptyTitle="No organizations yet"
-      loading={query.isLoading || agentsQuery.isLoading}
-      onRetry={() => Promise.all([query.refetch(), agentsQuery.refetch()])}
+      loading={query.isLoading}
+      onRetry={() => query.refetch()}
       tableToolbar={
         <ListToolbar>
           <TextInput
@@ -92,7 +85,6 @@ export function OrganizationsPage() {
           <TableRow>
             <TableHead>{tt('Organization')}</TableHead>
             <TableHead>{tt('Members')}</TableHead>
-            <TableHead>{tt('Agents')}</TableHead>
             <TableHead>{tt('Status')}</TableHead>
             <TableHead>{tt('Updated')}</TableHead>
             <TableHead />
@@ -114,14 +106,6 @@ export function OrganizationsPage() {
                 </TableCell>
                 <TableCell>
                   <OrganizationMemberCount organizationId={organization.id} />
-                </TableCell>
-                <TableCell>
-                  {
-                    (agentsQuery.data?.items ?? []).filter(
-                      (agent) =>
-                        agent.homeSpace.type === 'organization' && agent.homeSpace.organizationId === organization.id,
-                    ).length
-                  }
                 </TableCell>
                 <TableCell>
                   <StatusBadge active={!organization.disabled} activeLabel="Enabled" inactiveLabel="Disabled" />

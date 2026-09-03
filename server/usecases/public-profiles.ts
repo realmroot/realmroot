@@ -130,25 +130,13 @@ function agentSummary(identity: AgentIdentityRecord) {
 }
 
 async function publicOwner(deps: Deps, identity: AgentIdentityRecord) {
-  if (identity.ownerUserId) {
-    const owner = await deps.users.getPublicProfile(identity.ownerUserId)
-    return {
-      type: 'user' as const,
-      id: owner.user.id,
-      username: owner.user.username,
-      displayName: owner.user.displayName,
-      picture: owner.user.image,
-    }
-  }
-
-  const organization = await deps.authorization.findOrganization(identity.ownerOrganizationId!)
-  if (!organization) throw notFound('Agent owner was not found.')
+  const owner = await deps.users.getPublicProfile(identity.ownerUserId)
   return {
-    type: 'organization' as const,
-    id: organization.id,
-    slug: organization.slug,
-    displayName: organization.displayName ?? organization.name,
-    picture: organization.logo,
+    type: 'user' as const,
+    id: owner.user.id,
+    username: owner.user.username,
+    displayName: owner.user.displayName,
+    picture: owner.user.image,
   }
 }
 

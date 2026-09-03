@@ -24,7 +24,6 @@ import {
   listManagementAgentAuthorizedResourceServers,
   listManagementAgentInstallations,
   listManagementAgentPermissions,
-  listOrganizationAgentIdentities,
   listPersonalAgentIdentities,
   listPersonalAgents,
   recoverAgentIdentity,
@@ -112,7 +111,6 @@ describe('Agent login identity', () => {
         username: 'build-agent',
         name: 'Build Agent',
         ownerUserId: 'user-1',
-        ownerOrganizationId: null,
         status: 'active',
         deletedAt: null,
         createdAt: new Date('2026-08-01T00:00:00.000Z'),
@@ -197,7 +195,7 @@ describe('Application-created Agent installation', () => {
     expect(fixture.deps.agentIdentities.createAgentWithInstallation).toHaveBeenCalledWith({
       host: expect.objectContaining({ id: 'ama-host-1', status: 'active', userId: 'user-1' }),
       protocolAgent: expect.objectContaining({ id: 'ama-agent-1', hostId: 'ama-host-1', status: 'active' }),
-      identity: expect.objectContaining({ ownerUserId: 'user-1', ownerOrganizationId: null, status: 'active' }),
+      identity: expect.objectContaining({ ownerUserId: 'user-1', status: 'active' }),
       binding: expect.objectContaining({ protocolAgentId: 'ama-agent-1', status: 'active' }),
       audit: expect.objectContaining({
         action: 'agent.identity_enrolled',
@@ -597,25 +595,6 @@ describe('Application-created Agent installation', () => {
     expect(deps.agentIdentities.findProtocolAgent).toHaveBeenCalledTimes(1)
     expect(deps.agents.listHostsForAgents).toHaveBeenCalledTimes(1)
   })
-
-  it('does not disguise a post-commit Agent projection invariant as a concurrent conflict', async () => {
-    const { publicKey } = await generateKeyPair('Ed25519')
-    const input = applicationAgentInput(await exportedAgentPublicJwk(publicKey, 'ama-key-1'))
-    const deps = createTestDeps()
-    vi.mocked(deps.agentIdentities.createAgentWithInstallation).mockImplementation(async (records) => ({
-      identity: {
-        identity: { ...records.identity, ownerUserId: null },
-        bindings: [{ ...records.binding, hostId: records.host.id }],
-      },
-      reservation: records.reservation,
-      created: true,
-    }))
-
-    await expect(createAgentWithInstallation(deps, input, applicationAgentContext())).rejects.toThrow(
-      'Agent identity owner invariant was violated.',
-    )
-    expect(deps.agentIdentities.findIdentity).toHaveBeenCalledTimes(1)
-  })
 })
 
 describe('Agent identity lifecycle', () => {
@@ -639,36 +618,24 @@ describe('Agent identity lifecycle', () => {
     )
   })
 
-  it('lists personal, organization, and inventory identities', async () => {
+  it('lists personal and inventory identities', async () => {
     const deps = identityDeps()
     const personal = aggregate()
-    const organization = aggregate({ ownerUserId: null, ownerOrganizationId: 'org-1' })
     vi.mocked(deps.agentIdentities.listPersonal).mockResolvedValue([personal])
-    vi.mocked(deps.agentIdentities.listOrganization).mockResolvedValue([organization])
     vi.mocked(deps.agentIdentities.listAll).mockResolvedValue({
-      items: [personal, organization],
-      total: 2,
+      items: [personal],
+      total: 1,
       limit: 20,
       offset: 5,
     })
-    vi.mocked(deps.authorization.findMemberByOrganizationUser).mockResolvedValue(member('owner'))
-
     await expect(listPersonalAgentIdentities(deps, 'user-1')).resolves.toMatchObject({
       items: [{ homeSpace: { type: 'personal', userId: 'user-1' } }],
     })
-    await expect(listOrganizationAgentIdentities(deps, 'org-1', 'user-1')).resolves.toMatchObject({
-      items: [{ homeSpace: { type: 'organization', organizationId: 'org-1' } }],
-    })
     await expect(listAllAgentIdentities(deps, { limit: 20, offset: 5 })).resolves.toMatchObject({
-      total: 2,
+      total: 1,
       limit: 20,
       offset: 5,
     })
-
-    vi.mocked(deps.authorization.findMemberByOrganizationUser).mockResolvedValue(member('member'))
-    await expect(listOrganizationAgentIdentities(deps, 'org-1', 'user-1')).rejects.toMatchObject({ status: 403 })
-    vi.mocked(deps.authorization.findMemberByOrganizationUser).mockResolvedValue(null)
-    await expect(listOrganizationAgentIdentities(deps, 'org-1', 'user-1')).rejects.toMatchObject({ status: 403 })
   })
 
   it('maps paginated Agent resources and public enrollment views', async () => {
@@ -943,31 +910,17 @@ describe('Agent identity lifecycle', () => {
     await expect(getProtocolAgentEnrollment(deps, 'missing', 'protocol-agent-1')).rejects.toMatchObject({ status: 404 })
   })
 
-  it('maps Organization-owned management Agents and validates summary invariants', async () => {
+  it('maps User-owned management Agents and validates summary invariants', async () => {
     const deps = managementDeps()
-    const organizationOwned = aggregate({ ownerUserId: null, ownerOrganizationId: 'org-1' })
     vi.mocked(deps.agentIdentities.listOwned).mockResolvedValue({
-      items: [organizationOwned],
+      items: [aggregate()],
       total: 1,
       limit: 20,
       offset: 0,
     })
-    vi.mocked(deps.authorization.findOrganization).mockResolvedValue({
-      id: 'org-1',
-      name: 'acme',
-      displayName: null,
-    } as never)
-
-    await expect(
-      listAllAgents(deps, { limit: 20, offset: 0 }, { ownerOrganizationIds: ['org-1'] }),
-    ).resolves.toMatchObject({
-      items: [{ owner: { id: 'org-1', type: 'organization', displayName: 'acme' } }],
+    await expect(listAllAgents(deps, { limit: 20, offset: 0 }, { ownerUserId: 'user-1' })).resolves.toMatchObject({
+      items: [{ owner: { id: 'user-1', type: 'user' } }],
     })
-
-    vi.mocked(deps.authorization.findOrganization).mockResolvedValue(null)
-    await expect(listAllAgents(deps, { limit: 20, offset: 0 }, { ownerOrganizationIds: ['org-1'] })).rejects.toThrow(
-      'owner Organization org-1 was not found',
-    )
 
     vi.mocked(deps.agentIdentities.listAll).mockResolvedValue({
       items: [aggregate()],
@@ -1054,15 +1007,6 @@ describe('Agent identity lifecycle', () => {
       homeSpace: { type: 'personal', userId: 'user-1' },
       status: 'pending',
     })
-
-    vi.mocked(deps.authorization.findMemberByOrganizationUser).mockResolvedValue(member('admin'))
-    const organization = await createAgentEnrollmentIntent(
-      deps,
-      { ...loginInput(), organizationId: 'org-1' },
-      'user-1',
-      'organization-key',
-    )
-    expect(organization.intent.homeSpace).toEqual({ type: 'organization', organizationId: 'org-1' })
 
     vi.mocked(deps.agentIdentities.findIntent).mockResolvedValue(intent())
     await expect(getAgentEnrollmentIntent(deps, 'intent-1', 'user-1')).resolves.toMatchObject({ id: 'intent-1' })
@@ -1249,21 +1193,6 @@ describe('Agent identity lifecycle', () => {
     )
 
     vi.mocked(deps.agentIdentities.findIntent).mockResolvedValue(
-      intent({ ownerUserId: null, ownerOrganizationId: 'org-1' }),
-    )
-    vi.mocked(deps.authorization.findMemberByOrganizationUser).mockResolvedValue(member('admin'))
-    vi.mocked(deps.agentIdentities.approveIntent).mockImplementation(async ({ identity, binding }) => ({
-      identity: identity!,
-      bindings: [{ ...binding, hostId: 'host-1' }],
-    }))
-    await expect(approveAgentEnrollment(deps, 'intent-1', 'https://auth.example.com', 'user-1')).resolves.toMatchObject(
-      { identity: { homeSpace: { type: 'organization', organizationId: 'org-1' } } },
-    )
-    expect(deps.agentAudit.append).toHaveBeenLastCalledWith(
-      expect.objectContaining({ ownerUserId: null, ownerOrganizationId: 'org-1' }),
-    )
-
-    vi.mocked(deps.agentIdentities.findIntent).mockResolvedValue(
       intent({ agentIdentityId: 'identity-1', requestedName: null }),
     )
     vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(aggregate())
@@ -1297,9 +1226,7 @@ describe('Agent identity lifecycle', () => {
     vi.mocked(deps.agentIdentities.findIntent).mockResolvedValue(
       intent({ agentIdentityId: 'identity-1', requestedName: null }),
     )
-    vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(
-      aggregate({ ownerUserId: null, ownerOrganizationId: 'org-1' }),
-    )
+    vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(aggregate({ ownerUserId: 'user-2' }))
     await expect(approveAgentEnrollment(deps, 'intent-1', 'https://auth.example.com', 'user-1')).rejects.toMatchObject({
       status: 403,
     })
@@ -1368,14 +1295,6 @@ describe('Agent identity lifecycle', () => {
       'has no requested or existing identity',
     )
   })
-
-  it('surfaces the owner invariant when persisted identity data is invalid', async () => {
-    const deps = createTestDeps()
-    vi.mocked(deps.agentIdentities.listPersonal).mockResolvedValue([
-      aggregate({ ownerUserId: null, ownerOrganizationId: null }),
-    ])
-    await expect(listPersonalAgentIdentities(deps, 'user-1')).rejects.toThrow('owner invariant')
-  })
 })
 
 function enrollmentDeps() {
@@ -1435,7 +1354,6 @@ async function legacyApplicationAgentFixture(input: CreateAgent, context: Return
       name: input.name,
       runtime: input.runtime,
       ownerUserId: context.actorUserId,
-      ownerOrganizationId: null,
       status: 'active',
       deletedAt: null,
       createdAt: now,
@@ -1574,18 +1492,6 @@ function managementDeps() {
   return deps
 }
 
-function member(role: string) {
-  return {
-    id: 'member-1',
-    organizationId: 'org-1',
-    userId: 'user-1',
-    roles: [role],
-    title: null,
-    createdAt: '2026-08-01T00:00:00.000Z',
-    updatedAt: '2026-08-01T00:00:00.000Z',
-  }
-}
-
 function loginInput() {
   return {
     protocolAgentId: 'protocol-agent-1',
@@ -1605,7 +1511,6 @@ function identity(overrides: Partial<AgentIdentityRecord> = {}): AgentIdentityRe
     name: 'Build Agent',
     runtime: 'codex',
     ownerUserId: 'user-1',
-    ownerOrganizationId: null,
     status: 'active',
     deletedAt: null,
     createdAt: now,
@@ -1644,7 +1549,6 @@ function intent(overrides: Partial<AgentEnrollmentIntentRecord> = {}): AgentEnro
     requestedUsername: 'build-agent',
     requestedRuntime: 'codex',
     ownerUserId: 'user-1',
-    ownerOrganizationId: null,
     protocolAgentId: 'protocol-agent-1',
     idempotencyKey: null,
     status: 'pending',

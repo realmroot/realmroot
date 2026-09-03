@@ -32,12 +32,7 @@ import { idempotencyKeySchema } from '@shared/api/idempotency'
 import { paginationInput, paginationMetadata, paginationQuerySchema } from '@shared/api/pagination'
 import { Hono } from 'hono'
 import { getActorUserId, getPrincipal } from '../../middleware/authn'
-import {
-  authorizedTenantInventory,
-  authorizeOrganization,
-  authorizeUser,
-  requireAgentScope,
-} from '../../middleware/authz'
+import { authorizedTenantInventory, authorizeUser, requireAgentScope } from '../../middleware/authz'
 import { getDeps } from '../../middleware/deps'
 import { readJson, readQuery } from '../validation'
 
@@ -75,7 +70,7 @@ managementAgentsRoute.get('/agents', async (c) => {
   const query = readQuery(c, listAgentsQuerySchema)
   return c.json(
     managementAgentsResponseSchema.parse(
-      await listAllAgents(getDeps(c), paginationInput(query), await agentInventoryScope(c, query.organizationId)),
+      await listAllAgents(getDeps(c), paginationInput(query), await agentInventoryScope(c)),
     ),
   )
 })
@@ -210,11 +205,7 @@ managementAgentsRoute.get('/realm/audit-events', async (c) => {
     : organizationIds
   if (query.agentId) {
     const agent = await getAgent(getDeps(c), query.agentId)
-    if (agent.homeSpace.type === 'organization') {
-      await authorizeOrganization(c, agent.homeSpace.organizationId, 'audit-events:read')
-    } else {
-      await authorizeUser(c, agent.homeSpace.userId, 'audit-events:read')
-    }
+    await authorizeUser(c, agent.homeSpace.userId, 'audit-events:read')
   }
   const page = paginationInput(query)
   const result = await getDeps(c).agentAudit.list(page, {
@@ -247,32 +238,19 @@ async function requireAgentByIdConsoleAccess(c: Parameters<typeof getDeps>[0], a
 async function requireAgentByIdPermissionAccess(c: Parameters<typeof getDeps>[0], agentId: string, write = false) {
   const agent = await getAgent(getDeps(c), agentId)
   const scope = write ? 'permissions:write' : 'permissions:read'
-  if (agent.homeSpace.type === 'organization') await authorizeOrganization(c, agent.homeSpace.organizationId, scope)
-  else await authorizeUser(c, agent.homeSpace.userId, scope)
+  await authorizeUser(c, agent.homeSpace.userId, scope)
 }
 
-async function authorityInventoryScope(c: Parameters<typeof getDeps>[0], requestedOrganizationId?: string) {
+async function authorityInventoryScope(c: Parameters<typeof getDeps>[0]) {
   const tenants = await authorizedTenantInventory(c, 'permissions:read')
-  if (!tenants) return requestedOrganizationId ? { ownerOrganizationIds: [requestedOrganizationId] } : undefined
-  const ownerOrganizationIds = tenants.filter((tenant) => tenant.type === 'organization').map((tenant) => tenant.id)
-  return requestedOrganizationId
-    ? { ownerOrganizationIds: ownerOrganizationIds.includes(requestedOrganizationId) ? [requestedOrganizationId] : [] }
-    : { ownerOrganizationIds, ownerUserId: tenants.find((tenant) => tenant.type === 'user')?.id }
+  if (!tenants) return undefined
+  return { ownerUserId: tenants.find((tenant) => tenant.type === 'user')?.id }
 }
 
-async function agentInventoryScope(c: Parameters<typeof getDeps>[0], requestedOrganizationId?: string) {
+async function agentInventoryScope(c: Parameters<typeof getDeps>[0]) {
   const tenants = await authorizedTenantInventory(c, 'agents:read')
-  if (!tenants) return requestedOrganizationId ? { ownerOrganizationIds: [requestedOrganizationId] } : undefined
-  const ownerOrganizationIds = tenants.filter((tenant) => tenant.type === 'organization').map((tenant) => tenant.id)
-  if (requestedOrganizationId) {
-    return {
-      ownerOrganizationIds: ownerOrganizationIds.includes(requestedOrganizationId) ? [requestedOrganizationId] : [],
-    }
-  }
-  return {
-    ownerUserId: tenants.find((tenant) => tenant.type === 'user')?.id,
-    ownerOrganizationIds,
-  }
+  if (!tenants) return undefined
+  return { ownerUserId: tenants.find((tenant) => tenant.type === 'user')?.id }
 }
 
 async function requireAgentAccess(
@@ -280,9 +258,5 @@ async function requireAgentAccess(
   agent: Awaited<ReturnType<typeof getAgent>>,
   write = false,
 ) {
-  if (agent.homeSpace.type === 'organization') {
-    await authorizeOrganization(c, agent.homeSpace.organizationId, write ? 'agents:write' : 'agents:read')
-    return
-  }
   await authorizeUser(c, agent.homeSpace.userId, write ? 'agents:write' : 'agents:read')
 }
