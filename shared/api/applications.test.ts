@@ -50,7 +50,7 @@ describe('application Resource Server scope contracts', () => {
 
 describe('application API pagination contracts', () => {
   it('parses pagination query defaults and numeric query strings', () => {
-    expect(paginationQuerySchema.parse({})).toEqual({ page: 1, pageSize: 50 })
+    expect(paginationQuerySchema.parse({})).toEqual({ page: 1, pageSize: 20 })
     expect(paginationQuerySchema.parse({ page: '3', pageSize: '25' })).toEqual({ page: 3, pageSize: 25 })
     expect(() => paginationQuerySchema.parse({ pageSize: '101' })).toThrow()
     expect(() => paginationQuerySchema.parse({ page: '0' })).toThrow()

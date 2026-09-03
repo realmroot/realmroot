@@ -124,7 +124,7 @@ context.
 Collection endpoints accept:
 
 - `page`: one-based positive integer;
-- `pageSize`: integer from 1 to 100.
+- `pageSize`: integer from 1 to 100, defaulting to 20.
 
 Collection responses include:
 

@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 export const paginationQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
-  pageSize: z.coerce.number().int().min(1).max(100).default(50),
+  pageSize: z.coerce.number().int().min(1).max(100).default(20),
 })
 
 // The single source of truth for collection pagination metadata, matching what
