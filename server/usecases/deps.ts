@@ -20,6 +20,7 @@ import type {
   ExternalHttpGateway,
   ExternalResourceRepository,
   JwksGateway,
+  OAuthRequestGateway,
   OnboardingRepository,
   SecretCipher,
   SecurityRepository,
@@ -43,6 +44,7 @@ export interface Deps {
   connectors: ConnectorRepository
   externalResources: ExternalResourceRepository
   externalHttp: ExternalHttpGateway
+  oauthRequests: OAuthRequestGateway
   onboarding: OnboardingRepository
   security: SecurityRepository
   secrets: SecretCipher

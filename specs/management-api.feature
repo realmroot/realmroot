@@ -7,14 +7,14 @@ Feature: Unified Realmroot resource API
     Given a first admin exists
 
 
-  @entrypoint:restish @journey:management-resource-identifiers
+  @entrypoint:restish @journey:management-resource-identifiers @proof:unit
   Scenario: Newly created resources use standard opaque identifiers
     When Realmroot creates a persistent resource or event record
     Then its identifier is a UUID version 7 without a resource-type prefix
     And existing prefixed identifiers remain valid resource references
     And credentials, tokens, protocol nonce values, and request trace identifiers retain their dedicated formats
 
-  @entrypoint:restish @journey:management-openapi-discovery
+  @entrypoint:restish @journey:management-openapi-discovery @proof:unit
   Scenario: The unified API contract is discoverable
     When an API client requests service discovery
     Then /api/openapi.json returns the OpenAPI 3.1 contract
@@ -34,7 +34,7 @@ Feature: Unified Realmroot resource API
     And Restish can validate structured authorization detail request bodies without the root OpenAPI document
 
 
-  @entrypoint:agent-protocol @journey:agent-skills-discovery
+  @entrypoint:agent-protocol @journey:agent-skills-discovery @proof:unit
   Scenario: Realmroot publishes instructions for Agents using its Toolbox
     When an Agent client requests /.well-known/agent-skills/index.json
     Then Realmroot returns the Agent Skills Discovery version 0.2.0 index
@@ -44,7 +44,7 @@ Feature: Unified Realmroot resource API
     And the Realmroot Skill directs Agents to install task-relevant Skills advertised by a selected Resource Server
 
 
-  @entrypoint:restish @journey:management-collection-envelope
+  @entrypoint:restish @journey:management-collection-envelope @proof:unit
   Scenario: Collection responses use one stable envelope
     When an authorized caller lists any growing resource collection
     Then the response exposes the resources through an items field
@@ -52,7 +52,7 @@ Feature: Unified Realmroot resource API
     And no collection uses a resource-specific plural field as its envelope
 
 
-  @entrypoint:restish @journey:management-realmroot-resource-server-origin
+  @entrypoint:restish @journey:management-realmroot-resource-server-origin @proof:unit
   Scenario: The built-in Realmroot Resource Server follows deployment configuration
     Given the deployment canonical origin or Realmroot scope catalog changed since the Resource Server was persisted
     When an authorized caller lists Resource Servers
@@ -63,7 +63,7 @@ Feature: Unified Realmroot resource API
     And its system identifier, platform owner, and native authorization model remain immutable
 
 
-  @entrypoint:restish @journey:management-restish-command-surface
+  @entrypoint:restish @journey:management-restish-command-surface @proof:unit
   Scenario: Restish keeps routine resource operations on its generic HTTP surface
     Given Restish is connected to the unified Realmroot API
     When Restish builds its command metadata from the OpenAPI contract
@@ -76,7 +76,7 @@ Feature: Unified Realmroot resource API
     And polling and short-lived credential issuance remain hidden behind the plugin's generic response protocols
 
 
-  @entrypoint:restish @journey:management-restish-agent-auth
+  @entrypoint:restish @journey:management-restish-agent-auth @proof:unit
   Scenario: Restish transparently authenticates as an Agent
     Given Restish is connected to the unified Realmroot API
     When a new Agent invokes the generated Agent enrollment operation
@@ -94,7 +94,7 @@ Feature: Unified Realmroot resource API
     And invoking whoami before enrollment fails without creating identity state
 
 
-  @entrypoint:agent-protocol @journey:management-standard-agent-oauth
+  @entrypoint:agent-protocol @journey:management-standard-agent-oauth @proof:unit
   Scenario: Realmroot authenticates Agent API requests through standard OAuth security
     Given an enrolled Agent has a locally protected signing key
     When the plugin requests Realmroot API access from the OAuth token endpoint
@@ -105,7 +105,7 @@ Feature: Unified Realmroot resource API
     And Realmroot publishes its authorization server and DPoP requirements through standard OAuth metadata
 
 
-  @entrypoint:restish @journey:management-native-device-approval
+  @entrypoint:restish @journey:management-native-device-approval @proof:unit
   Scenario: Native clients request OAuth device authorization codes when explicitly configured
     Given a public native application is configured with the OAuth device-code grant
     When a native client requests a device authorization code with JSON or standard form encoding for openid profile email offline_access scopes
@@ -114,7 +114,7 @@ Feature: Unified Realmroot resource API
     And confidential, disabled, or non-native clients cannot use device authorization
 
 
-  @entrypoint:restish @journey:management-restish-oauth-crud
+  @entrypoint:restish @journey:management-restish-oauth-crud @proof:integration
   Scenario: An authorized Agent manages applications through the unified API
     Given the Agent has approved applications:read and applications:write scopes
     When I create, update, list, and delete an application with Restish
@@ -122,7 +122,7 @@ Feature: Unified Realmroot resource API
     And Application authorizations form one Realm inventory whose application and status filters are optional
 
 
-  @entrypoint:restish @journey:management-machine-application-crud
+  @entrypoint:restish @journey:management-machine-application-crud @proof:unit
   Scenario: A Machine Application manages resources within its owner Organization
     Given a Machine Application has a direct Permission and matching configured Resource scope
     When it presents a client-credentials Bearer access token to the unified API
@@ -132,7 +132,7 @@ Feature: Unified Realmroot resource API
     And it cannot use its Organization scope to access another Organization or the platform Organization
 
 
-  @entrypoint:restish @journey:management-restish-user-crud
+  @entrypoint:restish @journey:management-restish-user-crud @proof:unit
   Scenario: Platform administration follows the built-in Organization authority
     Given the bootstrap administrator is an Owner of the built-in platform Organization
     And no runtime authorization rule treats the administrator role as a permission bypass
@@ -144,7 +144,7 @@ Feature: Unified Realmroot resource API
     And Realm-wide user mutations are rejected
 
 
-  @entrypoint:restish @journey:management-restish-organization-crud
+  @entrypoint:restish @journey:management-restish-organization-crud @proof:integration
   Scenario: Organization Agents manage only their tenant through the unified API
     Given an Agent has organizations:read and organizations:write scopes bound to one Organization
     When it lists, reads, or updates organizations with Restish
@@ -154,7 +154,7 @@ Feature: Unified Realmroot resource API
     And Organization, member, and invitation creation return their canonical locations
 
 
-  @entrypoint:restish @journey:management-restish-role-crud
+  @entrypoint:restish @journey:management-restish-role-crud @proof:unit
   Scenario: An authorized Organization user manages dynamic Roles through the unified API
     Given the Organization membership maps Better Auth Roles to roles:read and roles:write scopes
     When I create, update, list, and delete a Role with its Resource Server scope references
@@ -165,7 +165,7 @@ Feature: Unified Realmroot resource API
     And Agents and workloads cannot receive Organization Roles
 
 
-  @entrypoint:restish @journey:management-restish-api-resource-crud
+  @entrypoint:restish @journey:management-restish-api-resource-crud @proof:integration
   Scenario: An authorized Agent manages Resource Servers without duplicating business authorization definitions
     Given the Agent has approved resource-servers:read and resource-servers:write scopes for the owning Organization
     When I create, update, list, and delete an API resource with Restish
@@ -177,7 +177,7 @@ Feature: Unified Realmroot resource API
     And an ordinary Organization cannot create, adopt, or update an external Resource Server
     And only platform Organization authority can use a platform Connector
 
-  @entrypoint:restish @journey:management-api-resource-soft-delete
+  @entrypoint:restish @journey:management-api-resource-soft-delete @proof:unit
   Scenario: API resources are soft-deleted without losing authorization history
     Given the Agent has approved resource-servers:write scope
     And an API resource has authorization history
@@ -192,7 +192,7 @@ Feature: Unified Realmroot resource API
     And no API can restore the resource
 
 
-  @entrypoint:restish @journey:management-restish-webhook-crud
+  @entrypoint:restish @journey:management-restish-webhook-crud @proof:integration
   Scenario: An authorized Agent manages webhook endpoints
     Given the Agent has approved webhooks:read and webhooks:write scopes
     When I create, update, rotate, list, and delete a webhook endpoint with Restish
@@ -202,7 +202,7 @@ Feature: Unified Realmroot resource API
     And replaying the same key returns the same attempt without delivering twice
 
 
-  @entrypoint:restish @journey:management-canonical-authority-inventory
+  @entrypoint:restish @journey:management-canonical-authority-inventory @proof:unit
   Scenario: Authority records keep one canonical URI across product surfaces
     Given Organization memberships and Agent access records exist for User and Organization tenants
     When a Realm operator, Organization developer, or Account Center member reads authority inventory
@@ -211,7 +211,7 @@ Feature: Unified Realmroot resource API
     And the server limits each principal to the records that principal may inspect
     And no top-level Entitlement inventory or duplicate Account Center Entitlement URI exists
 
-  @entrypoint:restish @journey:management-tenant-owner-enforcement
+  @entrypoint:restish @journey:management-tenant-owner-enforcement @proof:unit
   Scenario: Resource ownership is enforced consistently across the Management API
     Given User, Organization, and platform Organization resources exist
     When a Session or tenant-bound Agent lists, reads, updates, or deletes those resources
@@ -223,7 +223,7 @@ Feature: Unified Realmroot resource API
     And no administrator role, principal type, or Realm authority bypasses that Organization boundary
 
 
-  @entrypoint:restish @journey:management-restish-settings-update
+  @entrypoint:restish @journey:management-restish-settings-update @proof:integration
   Scenario: An authorized Agent manages tenant settings
     Given the Agent has approved settings:read, settings:write, security:read, and security:write scopes
     When I update branding, Account Center, sign-in, Realm, Organization creation policy, Developer Console access policy, Email delivery configuration, and security resources with Restish

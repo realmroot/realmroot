@@ -1,41 +1,61 @@
-# Realmroot Specs
+# Realmroot Behavior Specifications
 
-Specs are the product-facing source of truth for Realmroot behavior. They
-describe the feature, scenario, and verification path. They are **Gherkin
-documentation, not an executable suite** — there is no Cucumber runner. Tests
-reference specs; the specs do not generate tests.
+The Feature files in this directory are the source of truth for observable
+product behavior. They cover capabilities and journeys, not every HTTP
+operation, database branch, component state, or implementation detail. The
+runtime OpenAPI document owns the endpoint inventory; architecture documents
+own technical boundaries.
 
-## Format
+## Capability coverage
 
-- One `.feature` file per product area.
-- Each scenario carries a stable `@journey:<id>` tag (the id never changes once
-  written) and exactly one `@entrypoint:<id>` tag (`agent-protocol`,
-  `product-ui`, or `restish`).
-- Add `@e2e` only to scenarios proven by the hermetic Playwright crown in
-  `../e2e`. Most behaviour is proven cheaper (usecase/web/integration) and
-  carries no `@e2e` tag.
-- Keep scenario steps user-facing. Implementation details belong in tests.
+| Product capability | Feature source |
+| --- | --- |
+| Deployment bootstrap, first administrator, route access, health | `platform-onboarding.feature` |
+| Hosted sign-in, sign-up, recovery, OAuth/OIDC consent and callbacks | `hosted-auth.feature` |
+| User profile, credentials, MFA, sessions, linked accounts, Organizations | `account-center.feature` |
+| Connector-backed authentication methods and availability | `connectors-and-methods.feature` |
+| Realm Console administration and operational settings | `admin-console.feature` |
+| Unified Resource API, discovery, Toolbox and machine administration | `management-api.feature` |
+| Stable Agent identity, Permissions, Resource access and token delegation | `agent-identity.feature` |
 
-## Traceability
+This map is complete for the current top-level product surfaces. A new surface
+must either extend the owning Feature or add a Feature and update this map.
 
-Every scenario maps to its home test by a `[spec: <feature>/<journey>]`
-breadcrumb in the test title (e.g. `[spec: platform-onboarding/first-admin-gate]`).
-The breadcrumb sits on the test that genuinely asserts the scenario's behaviour,
-at the cheapest meaningful layer (usecase, web, route, then the real-D1
-integration crown, with Playwright only for hermetic cross-stack journeys).
-`pnpm run spec:check` is a runner-less governance lint (sibling to `lint:arch`)
-that verifies:
+## Scenario contract
 
-1. Every scenario declares `@journey:<id>` and exactly one supported
-   `@entrypoint:<id>`.
-2. Every scenario has its matching `[spec:]` breadcrumb somewhere in the test
-   tree (`server/`, `src/`, `shared/`, `tests/`).
+Every scenario declares:
 
-The breadcrumb scan covers all co-located suites, so a behaviour proven by a
-usecase or web test is traced there — `@e2e` only marks the hermetic Playwright
-crown; it never relaxes the tracing requirement.
+- exactly one `@journey:<id>`, unique within its Feature file name;
+- exactly one `@entrypoint:product-ui|agent-protocol|restish`;
+- exactly one canonical `@proof:unit|integration|e2e`;
+- `@e2e` if and only if its canonical proof is Playwright E2E.
 
-When adding a product behaviour, update the source spec first, assign the
-journey and entrypoint, then cover it at the cheapest meaningful layer and add
-the `[spec:]` breadcrumb to that home test (adding a Playwright spec and the
-`@e2e` tag only when the behaviour is a genuinely cross-stack, hermetic journey).
+The canonical test includes `[spec: <feature-stem>/<journey>]` in its name.
+Additional tests may carry the same breadcrumb when another boundary deserves
+representative proof. The canonical layer remains the cheapest layer that
+completely proves the behavior:
+
+- `unit`: domain rules, use-case orchestration, error handling, and browser
+  component behavior with controlled dependencies;
+- `integration`: behavior that requires the real router, middleware, workerd,
+  D1, migration, serialization, or another application boundary;
+- `e2e`: a small critical journey through the real browser and application.
+
+Run `pnpm run spec:check` after changing a Feature or breadcrumb. The gate
+rejects duplicate or missing scenario identities, unsupported or mismatched
+proof layers, missing proofs, and test breadcrumbs with no declared scenario.
+
+## Completeness rule
+
+A product behavior is missing when a user, Agent, Application, operator, or
+downstream Resource can observe an outcome that no scenario specifies. Pure
+refactors, internal algorithms, schema helpers, and protocol mechanics already
+owned by an external standard do not become scenarios unless Realmroot adds an
+observable policy choice.
+
+When adding or changing behavior:
+
+1. Update the scenario first.
+2. Choose its canonical proof layer.
+3. Add or update the proving test with the stable breadcrumb.
+4. Run the exact affected test, then `pnpm run spec:check`.

@@ -1,8 +1,7 @@
 /**
  * Architecture enforcement for the hono-cf-clean-arch layout.
  *
- *   pnpm lint:arch  ->  depcruise server/ shared/ --config .dependency-cruiser.cjs
- *   (keep the trailing slashes — bare directory names can resolve to 0 modules)
+ *   pnpm lint:arch  ->  depcruise the TypeScript sources under server/ and shared/
  */
 
 /** @type {import('dependency-cruiser').IConfiguration} */
@@ -33,7 +32,7 @@ module.exports = {
       comment: 'usecases/ must not import delivery or persistence frameworks.',
       severity: 'error',
       from: { path: '^server/usecases' },
-      to: { path: 'node_modules/(hono|drizzle-orm|zod|better-auth|@better-auth)' },
+      to: { path: '(^|node_modules/)(hono|drizzle-orm|zod|better-auth|@better-auth)(/|$)' },
     },
     {
       name: 'adapters-not-into-delivery',
@@ -67,15 +66,6 @@ module.exports = {
       to: { path: '^server|^src' },
     },
     {
-      name: 'frontend-not-into-server',
-      comment:
-        'The SPA talks to the server over HTTP only. The single exception is the hono RPC ' +
-        'client (src/lib/api), which imports the AppType contract from server/http/app.',
-      severity: 'error',
-      from: { path: '^src' },
-      to: { path: '^server', pathNot: '^server/http/app\\.ts$' },
-    },
-    {
       name: 'server-not-into-frontend',
       comment: 'The server never reaches into the SPA; the two halves meet only through shared/.',
       severity: 'error',
@@ -84,6 +74,10 @@ module.exports = {
     },
   ],
   options: {
+    // TypeScript 7 is newer than dependency-cruiser's native TypeScript parser
+    // support. SWC keeps the architecture gate executable without pinning the
+    // application compiler to an older TypeScript release.
+    parser: 'swc',
     doNotFollow: { path: 'node_modules' },
     // `server/integration/` is the test crown — its harness wires real adapters,
     // schema, and migrations on purpose (nothing is faked there), so it sits

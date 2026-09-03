@@ -37,7 +37,7 @@
     "test:e2e": "pnpm run spec:check && playwright test",
     "test:watch": "vitest",
     "lint": "biome check .",
-    "lint:arch": "depcruise server/ shared/ src/ --config .dependency-cruiser.cjs",
+    "lint:arch": "node scripts/verify-frontend-boundary.mjs && depcruise 'server/**/*.ts' 'shared/**/*.ts' --config .dependency-cruiser.cjs",
     "lint:fix": "biome check --write .",
     "format": "biome format --write .",
     "prepare": "husky",
@@ -92,6 +92,7 @@
     "@cloudflare/vitest-pool-workers": "^0.22.0",
     "@cloudflare/workers-types": "5.20260830.1",
     "@playwright/test": "^1.59.1",
+    "@swc/core": "^1.16.1",
     "@tailwindcss/vite": "^4.2.2",
     "@tanstack/router-cli": "^1.167.5",
     "@tanstack/router-plugin": "^1.168.6",
@@ -148,6 +149,7 @@
   },
   "pnpm": {
     "onlyBuiltDependencies": [
+      "@swc/core",
       "esbuild",
       "msw",
       "sharp",

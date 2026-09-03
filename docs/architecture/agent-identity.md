@@ -1,9 +1,9 @@
-# Agent Identity Architecture
+# Agent Identity Reference
 
-Realmroot separates a durable Agent identity from the host registration and key
-that currently presents it. This lets an Agent survive host replacement and key
-rotation without changing its public identity or silently carrying authority
-between unrelated hosts.
+This document describes the current Agent records, claims, and protocol flows.
+The governing decisions are [ADR 0006](../adr/0006-stable-agent-identity-and-delegated-authorization.md),
+[ADR 0010](../adr/0010-resource-server-owns-business-authorization.md), and
+[ADR 0012](../adr/0012-preserve-history-with-explicit-lifecycle-semantics.md).
 
 ## Identity Model
 
@@ -105,7 +105,8 @@ When an external platform needs a compatibility Adapter, that Adapter is the
 external authorization server and protected Resource Server. Provider OAuth,
 credentials, permission translation, lifecycle state, and API forwarding stay
 inside the Adapter. Realmroot does not add an Adapter-specific authorization
-mode or broker protocol. See [Provider Adapter Boundary](provider-adapter-boundary.md).
+mode or broker protocol. See
+[ADR 0004](../adr/0004-provider-compatibility-through-external-adapters.md).
 
 ## Direct API Access
 

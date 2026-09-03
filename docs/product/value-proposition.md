@@ -134,7 +134,7 @@ Realmroot supplies trustworthy identity and authority data. It does not decide
 which business object a principal may access and it does not proxy the protected
 request. This boundary keeps policy beside the code and data it protects. The
 detailed model is recorded in
-[Authorization boundaries](../architecture/authorization-boundaries.md).
+[ADR 0010](../adr/0010-resource-server-owns-business-authorization.md).
 
 ### Value By Participant
 
@@ -264,7 +264,7 @@ Realmroot 刻意负责：
 
 Realmroot 提供可信的身份与权限数据，但不决定某个 Principal 能访问哪个业务对象，也不
 代理受保护请求。这个边界让策略与它保护的代码和数据保持在一起。详细模型记录在
-[授权边界](../architecture/authorization-boundaries.md)中。
+[ADR 0010](../adr/0010-resource-server-owns-business-authorization.md)中。
 
 ### 各参与方获得的价值
 

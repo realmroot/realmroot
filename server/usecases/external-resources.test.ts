@@ -209,6 +209,7 @@ describe('external API resource authorization', () => {
       'https://auth.example.com',
     )
     const authorizationUrl = new URL(started.authorizationUrl)
+    expect(deps.oauthRequests.generateCodeChallenge).toHaveBeenCalledWith(expect.any(String))
     expect(vi.mocked(deps.externalResources.createConnectionIntent).mock.calls[0]![0].clientGeneration).toBe(1)
     expect(authorizationUrl.searchParams.get('code_challenge_method')).toBe('S256')
     expect(authorizationUrl.searchParams.get('prompt')).toBe('consent')
@@ -249,6 +250,14 @@ describe('external API resource authorization', () => {
       { state: authorizationUrl.searchParams.get('state')!, code: 'authorization-code' },
       'https://auth.example.com',
     )
+    expect(deps.oauthRequests.createAuthorizationCodeRequest).toHaveBeenCalledWith({
+      code: 'authorization-code',
+      codeVerifier: intent!.encryptedPkceVerifier.replace(/^sealed:/, ''),
+      redirectUri: 'https://auth.example.com/oauth/account-connection/callback',
+      clientId: 'realmroot-client',
+      clientSecret: 'target-secret',
+      authentication: 'basic',
+    })
     expect(connection).toMatchObject({
       resourceId: 'resource-1',
       owner: { type: 'user', userId: 'user-1' },
@@ -2546,6 +2555,13 @@ describe('external API resource authorization', () => {
       principal(),
       { issuer: 'https://auth.example.com/api/auth', sign },
     )
+    expect(deps.oauthRequests.createRefreshTokenRequest).toHaveBeenCalledWith({
+      refreshToken: 'refresh',
+      clientId: 'realmroot-client',
+      clientSecret: 'target-secret',
+      authentication: 'basic',
+      extraParams: undefined,
+    })
     expect(sign).toHaveBeenCalledWith(
       expect.objectContaining({
         iss: 'https://auth.example.com/api/auth',

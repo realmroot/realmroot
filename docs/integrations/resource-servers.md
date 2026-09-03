@@ -247,7 +247,7 @@ Realmroot treats the Adapter exactly like any other external target. The
 Adapter may internally use OAuth user tokens, App installations, service
 principals, or another provider credential, but those details never create a
 third Realmroot authorization mode. See the normative
-[Provider Adapter Boundary](../architecture/provider-adapter-boundary.md).
+[ADR 0004](../adr/0004-provider-compatibility-through-external-adapters.md).
 
 ## External Authorization
 

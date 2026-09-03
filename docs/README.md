@@ -12,22 +12,19 @@ system, not as a second copy of executable contracts or product behaviour.
 
 ## Architecture
 
+- [Architecture decision records](adr/README.md): accepted decisions,
+  alternatives, consequences, and supersession history.
+
 - [Clean architecture](architecture/clean-architecture.md): source layout,
   dependency direction, runtime composition, and persistence boundaries.
 - [Auth provider](architecture/auth-provider.md): issuer model, OAuth/OIDC
   protocol surface, token shapes, and client model.
 - [Agent identity](architecture/agent-identity.md): durable Agent identities,
   controller authority, and delegated API access.
-- [Authorization boundaries](architecture/authorization-boundaries.md): scope
-  ownership, role semantics and assignments, token issuance, and final
-  resource-server enforcement.
-- [Provider Adapter boundary](architecture/provider-adapter-boundary.md): the
-  mandatory separation between Realmroot core and compatibility Adapters.
-- [Tenancy](architecture/tenancy.md): the deployment, user-pool, and isolation
-  boundary.
-- [Tenant ownership and management surfaces](architecture/tenant-ownership-and-management-surfaces.md):
-  User and Organization resource ownership plus the Account Center,
-  Organization Workspace, and Realm Console separation.
+- [Provider Adapter runtime](architecture/provider-adapter-reference.md):
+  published-operation, credential, and failure boundaries.
+- [Resource lifecycle](architecture/resource-lifecycle-reference.md): current
+  delete, revoke, and business-key behavior by resource.
 - [Security controls](architecture/security-controls.md): deployment security
   policy and WebAuthn configuration.
 
@@ -70,7 +67,8 @@ inventory into prose documentation.
 
 ## Sources Of Truth
 
-- `specs/*.feature` owns user-visible behaviour and journeys.
+- [`specs/*.feature`](../specs/README.md) owns user-visible behaviour, journeys,
+  and their canonical executable proof layer.
 - `skills/realmroot/` owns Agent operating procedures and generated Restish
   command workflows.
 - `skills/integrate-realmroot-application/` owns product OAuth and OIDC
@@ -79,7 +77,8 @@ inventory into prose documentation.
   authorization enforcement, registration, and Agent acceptance requirements;
   it does not own general business API design guidance.
 - `/api/openapi.json` owns the live Resource API contract.
-- `docs/` owns durable technical explanation and architectural decisions.
+- `docs/architecture/` owns mutable implementation maps and protocol reference;
+  `docs/adr/` is the only home for consequential decisions and their rationale.
 
 Historical acceptance evidence, progress logs, command transcripts, and copied
 endpoint catalogs do not belong in this directory.

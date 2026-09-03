@@ -70,7 +70,7 @@ policy, connectors, and email settings.
 Products that need separate user pools or administrators should use separate
 Realmroot deployments. Keep the deployment boundary as the isolation boundary
 instead of adding product-level tenant predicates inside one D1 database. See
-[Tenancy Model](../architecture/tenancy.md).
+[ADR 0002](../adr/0002-one-deployment-is-one-realm.md).
 
 ## Secrets And Runtime Settings
 

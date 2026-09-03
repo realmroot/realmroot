@@ -1,8 +1,11 @@
-# Auth Provider Architecture
+# Auth Provider Reference
 
 Realmroot uses Better Auth's OAuth Provider as the OAuth 2.1 and OpenID Connect
-foundation. One deployment owns one issuer, user pool, client registry, consent
-store, signing-key lifecycle, and security policy.
+foundation. This document describes the current protocol surface and token
+profiles. Deployment, browser-session, and Agent identity choices are recorded
+in [ADR 0002](../adr/0002-one-deployment-is-one-realm.md),
+[ADR 0005](../adr/0005-browser-session-and-token-boundary.md), and
+[ADR 0006](../adr/0006-stable-agent-identity-and-delegated-authorization.md).
 
 ## Protocol Boundary
 
@@ -79,8 +82,9 @@ one Organization. Agents, Applications, and workloads do not receive Roles;
 their consent, grant, or token exchange determines the exact tenant-bound scope
 set directly.
 
-See [Authorization boundaries](authorization-boundaries.md) for scope ownership,
-Organization Role mapping, issuance policy, and resource-server enforcement.
+See [ADR 0010](../adr/0010-resource-server-owns-business-authorization.md)
+for scope ownership, Organization Role mapping, issuance policy, and
+resource-server enforcement.
 
 ## Native Agent Tokens
 
@@ -131,5 +135,5 @@ allowed scope, and federated-credential status.
 - Realmroot owns resource authorization, roles, Agent identities, grants,
   federated credentials, and encrypted external-resource credentials.
 
-The [tenancy model](tenancy.md) explains why this entire protocol and storage
-boundary belongs to one deployment.
+[ADR 0002](../adr/0002-one-deployment-is-one-realm.md) explains why this entire
+protocol and storage boundary belongs to one deployment.

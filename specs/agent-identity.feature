@@ -9,7 +9,7 @@ Feature: Agent identity and delegated API authorization
 
   Rule: Public APIs expose product resources rather than security implementation records
 
-    @entrypoint:agent-protocol @journey:agent-public-resource-model
+    @entrypoint:agent-protocol @journey:agent-public-resource-model @proof:unit
     Scenario: API clients manage stable product aggregates
       Given Agent identity uses protocol registrations, host credentials, and identity bindings internally
       And external authorization uses discovery metadata, OAuth clients, connection state, and token leases internally
@@ -22,7 +22,7 @@ Feature: Agent identity and delegated API authorization
 
   Rule: Agent identities remain stable across hosts and credentials
 
-    @entrypoint:agent-protocol @journey:agent-identity-enrollment
+    @entrypoint:agent-protocol @journey:agent-identity-enrollment @proof:unit
     Scenario: A new Agent explicitly establishes a stable identity
       Given a new Agent connects Restish to the Realmroot OpenAPI contract
 		When the Agent invokes enrollment with an explicit username, optional nickname, and its detected runtime
@@ -47,7 +47,7 @@ Feature: Agent identity and delegated API authorization
       And enrollment alone grants no management or external API resource access
       And an unbound protocol registration cannot exercise Agent identity capabilities
 
-    @entrypoint:restish @journey:application-agent-creation
+    @entrypoint:restish @journey:application-agent-creation @proof:unit
     Scenario: An authorized Application creates a User-owned Agent directly
       Given an Application acts on behalf of a User and has agents:write authority
       When the Application creates an Agent with its public installation credential
@@ -62,14 +62,14 @@ Feature: Agent identity and delegated API authorization
       And historical prefixed Agent identities remain readable without being generated again
       And the original self-enrollment interface and approval behavior are unchanged
 
-    @entrypoint:restish @journey:agent-whoami-requires-enrollment
+    @entrypoint:restish @journey:agent-whoami-requires-enrollment @proof:unit
     Scenario: Agent identity inspection never creates an identity implicitly
       Given Restish has no local Realmroot Agent registration
       When the Agent invokes the generated whoami command
       Then the command fails with guidance to invoke the generated Agent enrollment command
       And Restish does not create keys, open a browser, or create an Agent identity
 
-    @entrypoint:restish @journey:agent-single-cli-principal
+    @entrypoint:restish @journey:agent-single-cli-principal @proof:unit
     Scenario: Command-line operations always use the Agent principal
       Given an Agent has established a stable identity in Restish
       When the Agent invokes any operation discovered from the Realmroot OpenAPI contract
@@ -83,7 +83,7 @@ Feature: Agent identity and delegated API authorization
       And the bootstrap token contains no actor claim or public Host claim
       And previously issued legacy Agent tokens remain accepted only until their existing expiry
 
-    @entrypoint:product-ui @journey:agent-enrollment-denial
+    @entrypoint:product-ui @journey:agent-enrollment-denial @proof:unit
     Scenario: A controller can deny Agent enrollment
       Given an Agent enrollment request is pending
       When the authorized controller denies the request
@@ -91,7 +91,16 @@ Feature: Agent identity and delegated API authorization
       And the hosted approval page clearly says the request was denied and can be closed
       And the waiting Realmroot command exits without receiving an Agent identity
 
-    @entrypoint:agent-protocol @journey:agent-multi-host-continuity
+    @entrypoint:product-ui @journey:agent-management-authority @proof:unit
+    Scenario: Agent control is established by one authoritative approval
+      Given an unowned Agent requests enrollment and more than one eligible controller can review it
+      When controllers make competing approval decisions
+      Then exactly one controller becomes the Agent owner
+      And only that owner's decision establishes the stable Agent identity
+      And later management requests authenticate as the Agent without substituting the controller
+      And Realmroot records one authoritative approval outcome
+
+    @entrypoint:agent-protocol @journey:agent-multi-host-continuity @proof:integration
     Scenario: One Agent identity can be used from independently secured hosts
       Given an Agent identity has an active host registration
       When the Agent client requests another enrollment for that stable Agent from a host with a different public key and an idempotency key
@@ -102,14 +111,14 @@ Feature: Agent identity and delegated API authorization
       Then both host registrations resolve to the same Agent issuer and subject
       And neither host receives the other host's private key
 
-    @entrypoint:agent-protocol @journey:agent-host-revocation
+    @entrypoint:agent-protocol @journey:agent-host-revocation @proof:integration
     Scenario: Revoking one host does not revoke the Agent identity
       Given an Agent identity has two active host registrations
       When a controller revokes one host
       Then that host can no longer authenticate as the Agent
       And the other host and the Agent identity remain active
 
-    @entrypoint:product-ui @journey:agent-identity-recovery
+    @entrypoint:product-ui @journey:agent-identity-recovery @proof:integration
     Scenario: A controller replaces compromised Agent credentials without changing its subject
       Given an Agent's host credentials may be compromised
       When an authorized controller recovers the Agent
@@ -118,7 +127,7 @@ Feature: Agent identity and delegated API authorization
       And the Agent becomes inactive without entering a recovering state
       And the Agent keeps the same issuer and subject
 
-    @entrypoint:product-ui @journey:agent-identity-deletion
+    @entrypoint:product-ui @journey:agent-identity-deletion @proof:integration
     Scenario: A soft-deleted Agent subject is never reassigned
       Given an Agent has a stable issuer and subject
       When an authorized controller deletes the Agent
@@ -127,7 +136,7 @@ Feature: Agent identity and delegated API authorization
       And its username and installation identifiers remain reserved and return conflict when reused
       And no interface can restore it
 
-    @entrypoint:agent-protocol @journey:agent-stable-issuer
+    @entrypoint:agent-protocol @journey:agent-stable-issuer @proof:unit
     Scenario: Agent identity uses the deployment's existing OIDC issuer
       Given Realmroot is reached through a non-canonical request origin
       When a controller approves an Agent enrollment
@@ -137,7 +146,7 @@ Feature: Agent identity and delegated API authorization
       And hosted Agent approval URLs use the configured deployment origin
       And Realmroot does not publish a second Agent-only OIDC issuer
 
-    @entrypoint:product-ui @journey:public-agent-profile
+    @entrypoint:product-ui @journey:public-agent-profile @proof:unit
     Scenario: External visitors resolve a stable public Agent profile
       Given a non-deleted Agent has a stable issuer and subject
       When an external visitor requests the Agent by its stable subject or immutable username
@@ -154,7 +163,7 @@ Feature: Agent identity and delegated API authorization
 
   Rule: Resource Servers expose authorization details through one Agent access workflow
 
-    @entrypoint:agent-protocol @journey:realmroot-built-in-resource-server
+    @entrypoint:agent-protocol @journey:realmroot-built-in-resource-server @proof:unit
     Scenario: Realmroot exposes its own API as a system-managed Resource Server
       Given a Realmroot deployment has completed onboarding
       And its persisted system-managed scope registry predates the current Realmroot scope catalog
@@ -177,7 +186,7 @@ Feature: Agent identity and delegated API authorization
       Then Realmroot returns the same canonical Resource Server representation
       And the credential authority changes only which Resource Servers the Agent may read or mutate
 
-    @entrypoint:agent-protocol @journey:agent-resource-server-model
+    @entrypoint:agent-protocol @journey:agent-resource-server-model @proof:unit
     Scenario: An Agent discovers Resource Servers before provider authorization details
       Given Realmroot has registered native and external Resource Servers
       When the Agent lists Resource Servers
@@ -189,7 +198,7 @@ Feature: Agent identity and delegated API authorization
       And an Organization owner may approve current assigned scopes of a Resource Server owned by that Organization
       And an access request copies the selected authorization detail directly without a generated Resource identifier or URL
 
-    @entrypoint:agent-protocol @journey:external-resource-authorization-detail-catalog
+    @entrypoint:agent-protocol @journey:external-resource-authorization-detail-catalog @proof:unit
     Scenario: An Agent discovers display-safe authorization details from an external Resource Server
       Given an external Resource Server's authorization server advertises an authorization-detail catalog endpoint
       And the Agent's controller has an active external Resource authorization
@@ -199,7 +208,7 @@ Feature: Agent identity and delegated API authorization
       And Realmroot reports the Agent's authorized and requestable scopes for that exact detail
       But the external provider credential is never returned to the Agent
 
-    @entrypoint:agent-protocol @journey:agent-private-resource-server-visibility
+    @entrypoint:agent-protocol @journey:agent-private-resource-server-visibility @proof:unit
     Scenario: A private Resource Server stays inside its owner Organization boundary
       Given a private Resource Server is owned by an Organization and available to Agents
       And a personal Agent's controller is an active member of that Organization
@@ -208,7 +217,7 @@ Feature: Agent identity and delegated API authorization
       But it remains hidden from Agents outside the owner Organization
       And discovery grants no Resource scope or credential
 
-    @entrypoint:product-ui @journey:native-api-resource-registration
+    @entrypoint:product-ui @journey:native-api-resource-registration @proof:integration
     Scenario: An administrator registers a native API that trusts Realmroot
       Given a product uses Realmroot as its OIDC provider and OAuth authorization server
       When an administrator creates an API resource with native authorization mode
@@ -224,7 +233,7 @@ Feature: Agent identity and delegated API authorization
       And advertised scopes remain valid even when no public operation references them
       And Realmroot stores only discovered scope metadata and local grant modes, never either source document
 
-    @entrypoint:product-ui @journey:api-resource-contract-validation
+    @entrypoint:product-ui @journey:api-resource-contract-validation @proof:unit
     Scenario: API resources require a discoverable OpenAPI contract
       Given an API resource URL cannot be reached or does not return a successful service-desc response
       When an administrator creates or enables the API resource, including a disabled registration
@@ -233,7 +242,7 @@ Feature: Agent identity and delegated API authorization
       When the administrator enables an existing draft or changes an enabled resource URL
       Then Realmroot validates the exact resource URL before saving the change
 
-    @entrypoint:agent-protocol @journey:native-api-resource-access-request
+    @entrypoint:agent-protocol @journey:native-api-resource-access-request @proof:unit
     Scenario: An Agent requests access to a native API
       Given an enabled native API resource belongs to the Agent's home space
       When the Agent lists available resources
@@ -256,7 +265,7 @@ Feature: Agent identity and delegated API authorization
       Then the approval preserves the exact requested authorization details without an Account Connection
       Then Realmroot creates the same per-scope Permissions used for external APIs
 
-    @entrypoint:agent-protocol @journey:native-api-automatic-agent-permission
+    @entrypoint:agent-protocol @journey:native-api-automatic-agent-permission @proof:unit
     Scenario: A personal Agent requests only automatic scopes from a native API
       Given an enabled native API resource marks every requested scope as automatic
       And the personal Agent selects a current Realmroot authority Context controlled by its owner User
@@ -267,7 +276,7 @@ Feature: Agent identity and delegated API authorization
       And an Organization-owned Agent remains pending because no single User grantor can be inferred
       But an unavailable Context is rejected without creating a request or Permission
 
-    @entrypoint:agent-protocol @journey:agent-resource-discovery-isolation
+    @entrypoint:agent-protocol @journey:agent-resource-discovery-isolation @proof:unit
     Scenario: An unavailable API resource does not block resource discovery
       Given multiple enabled API resources are visible to an Agent
       And one resource cannot publish its current OpenAPI contract
@@ -275,7 +284,7 @@ Feature: Agent identity and delegated API authorization
       Then Realmroot returns the resource with unavailable status and no requestable scopes
       And returns every available resource with available status and its current requestable scopes
 
-  @entrypoint:agent-protocol @journey:agent-resource-access-without-role
+  @entrypoint:agent-protocol @journey:agent-resource-access-without-role @proof:unit
     Scenario: An Agent requests resource access without a Role model
       Given an enabled API resource publishes the requested assigned scope in its local registry
       When the Agent requests that exact scope
@@ -283,7 +292,7 @@ Feature: Agent identity and delegated API authorization
       And the controller may approve only scopes within the controller's effective scope set
       And the approved request stores the exact Permission snapshot without a roles claim
 
-    @entrypoint:agent-protocol @journey:native-api-resource-token
+    @entrypoint:agent-protocol @journey:native-api-resource-token @proof:unit
     Scenario: An Agent calls a native API directly
       Given a controller approved an exact native API resource request
       When Restish accepts the approved access request's credential offer
@@ -312,7 +321,7 @@ Feature: Agent identity and delegated API authorization
       Then the plugin sends the access token and a fresh DPoP proof directly to the product API
       And the product API validates the token type, signature, issuer, audience, expiry, scopes, and DPoP binding
 
-    @entrypoint:agent-protocol @journey:agent-resource-entitlement-policy
+    @entrypoint:agent-protocol @journey:agent-resource-entitlement-policy @proof:unit
     Scenario: Both API authorization modes enforce the same Permissions
       Given an Agent requests a target token for an API resource
       When no active Permissions permit the Agent, resource, scopes, and lifetime
@@ -324,7 +333,7 @@ Feature: Agent identity and delegated API authorization
 
   Rule: Workload token exchange preserves authorization boundaries
 
-    @entrypoint:agent-protocol @journey:agent-oidc-id-token-exchange
+    @entrypoint:agent-protocol @journey:agent-oidc-id-token-exchange @proof:unit
     Scenario: A native Resource Server exchanges an Agent token for an OIDC ID token
       Given a confidential Application has an explicit source Resource Server to target OIDC Application policy
       And the target is an active private OIDC Application in the same Organization
@@ -334,7 +343,7 @@ Feature: Agent identity and delegated API authorization
       And current Organization Team names are emitted as groups without source Resource scopes or a refresh token
       But an inactive source token, Agent, controller, membership, source, target, or missing policy is rejected and audited
 
-    @entrypoint:agent-protocol @journey:user-resource-token-delegation
+    @entrypoint:agent-protocol @journey:user-resource-token-delegation @proof:unit
     Scenario: A Resource Server exchanges an inbound User token for a narrower downstream token
       Given a confidential Application has an explicit source-to-target Resource Server scope mapping
       And the Application is entitled to the requested scopes on a downstream Resource Server
@@ -346,7 +355,7 @@ Feature: Agent identity and delegated API authorization
       And the downstream token contains no act claim and no refresh token is issued
       But an unmapped source or target, an empty scope intersection, or an unavailable target is rejected
 
-    @entrypoint:agent-protocol @journey:agent-resource-token-delegation
+    @entrypoint:agent-protocol @journey:agent-resource-token-delegation @proof:unit
     Scenario: A Resource Server exchanges an inbound Agent token without losing its actor chain
       Given a confidential Application has an explicit source-to-native-target Resource Server scope mapping
       And an active Agent token, identity binding, and controller authorize the source Resource Server in a personal or Organization Context
@@ -358,14 +367,14 @@ Feature: Agent identity and delegated API authorization
       And a short-lived delegated Agent token may continue through another explicitly mapped Application and Resource Server hop
       But an inactive token lease, Agent, binding, controller, Organization membership when present, source, target, external target, or policy is rejected
 
-    @entrypoint:product-ui @journey:connector-backed-connection-revocation
+    @entrypoint:product-ui @journey:connector-backed-connection-revocation @proof:unit
     Scenario: Revoking a connector-backed account connection revokes provider authority first
       Given an active connector-backed account connection has provider access and refresh tokens
       When its controller revokes the connection
       Then Realmroot revokes the provider refresh token and access token before ending Permissions, Token Leases, and local connection state
       But a temporary provider failure leaves the local connection active and returns an explicit retryable failure
 
-    @entrypoint:agent-protocol @journey:workload-token-exchange-claims
+    @entrypoint:agent-protocol @journey:workload-token-exchange-claims @proof:unit
     Scenario: Introspection reports only authorization-server controlled security claims
       Given a trusted workload assertion contains untrusted private claims
       When Realmroot exchanges and introspects its RFC 9068 JWT access token
@@ -376,7 +385,7 @@ Feature: Agent identity and delegated API authorization
       And only the confidential client that owns the exchange can introspect the token
       And previously issued opaque exchange access tokens remain introspectable until they expire
 
-    @entrypoint:agent-protocol @journey:workload-refresh-security
+    @entrypoint:agent-protocol @journey:workload-refresh-security @proof:unit
     Scenario: Token-exchange refresh tokens are confidential, rotating, and revocable
       Given a confidential client received a token-exchange refresh token
       When it refreshes with valid client authentication and an enabled federated credential
@@ -387,7 +396,16 @@ Feature: Agent identity and delegated API authorization
 
   Rule: External API resources use target-issued authorization
 
-    @entrypoint:product-ui @journey:linear-managed-workspace-connections
+    @entrypoint:product-ui @journey:resource-account-connection @proof:unit
+    Scenario: A controller connects an external resource account securely
+      Given an external Resource Server requires a connected account
+      When the controller starts and completes its authorization
+      Then Realmroot uses authorization code flow with PKCE and explicit consent
+      And the authorization request identifies the exact target Resource Server
+      And Realmroot stores the resulting credentials only in encrypted custody
+      And an unavailable or mismatched authorization server fails without creating a connection
+
+    @entrypoint:product-ui @journey:linear-managed-workspace-connections @proof:unit
     Scenario: One Linear Connector independently supports sign-in and external resource authorization
       Given the Linear Connector uses Better Auth for authentication and the Linear Adapter as its external authorization issuer
       When a user signs in with Linear and authorizes Linear resource access
@@ -398,7 +416,7 @@ Feature: Agent identity and delegated API authorization
       And Realmroot exchanges the connected subject and Agent actor at the Linear Adapter
       And the Linear Adapter issues the final DPoP token used for its Resource Server
 
-    @entrypoint:product-ui @journey:adapter-external-resource-authorization
+    @entrypoint:product-ui @journey:adapter-external-resource-authorization @proof:unit
     Scenario: An Adapter presents a non-standard provider as a standard External Resource Server
       Given the provider cannot issue the Agent token required by Realmroot
       And its Adapter publishes a standard authorization server and protected Resource Server
@@ -411,7 +429,7 @@ Feature: Agent identity and delegated API authorization
       And the Adapter issues a DPoP token bound to the Agent and selected provider authority
       And reconnecting updates the external connection instead of creating another Realmroot connection
 
-    @entrypoint:product-ui @journey:external-api-resource-registration
+    @entrypoint:product-ui @journey:external-api-resource-registration @proof:unit
     Scenario: An administrator creates an external API resource with an OIDC connector
       Given a target resource publishes protected-resource and authorization-server metadata
       And a platform-managed standard OIDC connector exists for its authorization server
@@ -430,7 +448,7 @@ Feature: Agent identity and delegated API authorization
       And the resource cannot be enabled for Agents when a required capability is absent
       And the same connector can independently be enabled for Realmroot login
 
-    @entrypoint:restish @journey:external-api-resource-reconfiguration
+    @entrypoint:restish @journey:external-api-resource-reconfiguration @proof:integration
     Scenario: Changing an external API resource URL revalidates its connector boundary
       Given an external API resource is associated with an active OIDC connector
       When an administrator changes its resource URL or selects another OIDC connector
@@ -438,7 +456,7 @@ Feature: Agent identity and delegated API authorization
       And the resource remains enabled only when its authorization server matches the associated connector
       And the resource cannot remove its connector or become natively authorized
 
-    @entrypoint:restish @journey:external-api-resource-canonical-callback
+    @entrypoint:restish @journey:external-api-resource-canonical-callback @proof:unit
     Scenario: OIDC connector registration uses the deployment's canonical callbacks
       Given Realmroot is reached through a non-canonical request origin
       When an administrator dynamically registers an OIDC connector
@@ -446,7 +464,7 @@ Feature: Agent identity and delegated API authorization
       And a later Account Center authorization request uses that same redirect URI
       And a successful resource-account callback shows completion even when origin-scoped session storage is unavailable
 
-    @entrypoint:agent-protocol @journey:external-resource-dynamic-client-scope-upgrade
+    @entrypoint:agent-protocol @journey:external-resource-dynamic-client-scope-upgrade @proof:unit
     Scenario: A dynamic OIDC connector upgrades its registered scope authority
       Given an authorization server advertises scopes that were not registered by an existing dynamic connector
       When a controller expands an external resource account for one of those scopes
@@ -455,7 +473,7 @@ Feature: Agent identity and delegated API authorization
       And the connection intent is pinned to the new client generation
       And same-subject reauthorization preserves the selected account connection identity and switches only that connection to the new generation
 
-    @entrypoint:product-ui @journey:external-resource-rich-authorization-connection
+    @entrypoint:product-ui @journey:external-resource-rich-authorization-connection @proof:unit
     Scenario: A controller connects one external subject to multiple target contexts
       Given an authorization server advertises RFC 9396 authorization detail types
       And an external API resource configures opaque connection authorization detail templates using supported types
@@ -469,7 +487,7 @@ Feature: Agent identity and delegated API authorization
       And refresh-token rotation preserves the granted authorization details
       And unknown types or malformed authorization details fail with invalid_authorization_details
 
-    @entrypoint:agent-protocol @journey:external-resource-rar-without-catalog
+    @entrypoint:agent-protocol @journey:external-resource-rar-without-catalog @proof:unit
     Scenario: Rich authorization does not require an enumerable resource catalog
       Given an authorization server supports RFC 9396 authorization details
       And it does not advertise Realmroot's optional authorization detail catalog extension
@@ -478,7 +496,7 @@ Feature: Agent identity and delegated API authorization
       And Agent approval can select the concrete authorization details already returned by that account connection
       And Agents can request exact details already exposed by their connected account
 
-    @entrypoint:agent-protocol @journey:external-resource-contextual-delegation
+    @entrypoint:agent-protocol @journey:external-resource-contextual-delegation @proof:unit
     Scenario: An Agent delegates an exact external-resource context alongside scopes
       Given one external account connection grants multiple opaque authorization detail entries
       And the authorization server advertises Realmroot authorization detail catalog version 1 with an account-scoped endpoint and required scope
@@ -498,7 +516,7 @@ Feature: Agent identity and delegated API authorization
       And stores both dimensions with the token lease
       And audit events expose only safe authorization detail type and identifier projections
 
-    @entrypoint:product-ui @journey:external-resource-rich-authorization-reauthorization
+    @entrypoint:product-ui @journey:external-resource-rich-authorization-reauthorization @proof:unit
     Scenario: Reauthorization removes stale contextual authority without changing non-RAR resources
       Given an existing external resource account has active contextual Agent grants
       When reauthorization no longer returns one previously granted authorization detail entry
@@ -506,7 +524,7 @@ Feature: Agent identity and delegated API authorization
       And existing connections must be explicitly reauthorized when their resource becomes RAR-required
       And resources without configured authorization details preserve their existing connection, refresh, grant, token exchange, revocation, and audit behavior
 
-    @entrypoint:agent-protocol @journey:external-resource-first-access
+    @entrypoint:agent-protocol @journey:external-resource-first-access @proof:unit
     Scenario: An Agent requests first access to an external API resource
       Given an enabled external API resource has active authorization configuration
       And the Agent's home space has no account connection for that resource
@@ -529,7 +547,7 @@ Feature: Agent identity and delegated API authorization
       Then Realmroot binds the account connection to the exact request and grant
       And the Agent can obtain a DPoP-bound target access token
 
-    @entrypoint:product-ui @journey:resource-account-reauthorization
+    @entrypoint:product-ui @journey:resource-account-reauthorization @proof:unit
     Scenario: A controller reauthorizes a connected external resource account
       Given the controller's home space already has an account connection for an external API resource
       And a pending Agent access request requires scopes that its selected authorization detail does not yet cover
@@ -545,7 +563,7 @@ Feature: Agent identity and delegated API authorization
       And restores the connection when it was previously revoked
       And returns to the pending Agent approval so the controller can finish the continuous flow
 
-    @entrypoint:agent-protocol @journey:resource-account-connection-expansion
+    @entrypoint:agent-protocol @journey:resource-account-connection-expansion @proof:unit
     Scenario: An Agent requests additional authority from an existing resource account
       Given the Agent's home space has an active resource account connection with covered persistent grants
       When the Agent requests an additional scope for one selected authorization detail
@@ -558,7 +576,7 @@ Feature: Agent identity and delegated API authorization
       And Realmroot accepts the selected authorization detail as a subset of that snapshot
       And only a successful OAuth callback may replace the account authorization and invalidate grants the complete snapshot no longer covers
 
-    @entrypoint:agent-protocol @journey:agent-resource-discovery
+    @entrypoint:agent-protocol @journey:agent-resource-discovery @proof:unit
     Scenario: An Agent discovers resource connection and scope status before requesting exact authority
       Given enabled native and externally authorized API resources exist
       When the Agent lists available resources
@@ -575,7 +593,7 @@ Feature: Agent identity and delegated API authorization
       Then Realmroot creates one pending access request and returns a hosted approval URL
       And it does not require a pre-existing Agent resource grant
 
-    @entrypoint:agent-protocol @journey:agent-resource-access-ensure
+    @entrypoint:agent-protocol @journey:agent-resource-access-ensure @proof:unit
     Scenario: An Agent ensures exact resource access without selecting grants or tokens
       Given an Agent names an API resource, exact authorization details, and least-privilege scopes
       When the Agent requests that exact access
@@ -588,7 +606,7 @@ Feature: Agent identity and delegated API authorization
       And the Agent never selects a grant or invokes a token operation
       And the plugin returns a safe ready receipt without grant identifiers or token material
 
-    @entrypoint:product-ui @journey:agent-resource-approval
+    @entrypoint:product-ui @journey:agent-resource-approval @proof:unit
     Scenario: A controller decides an Agent resource request in one step
       Given an Agent resource access request is pending
       When an authorized controller approves it
@@ -602,7 +620,7 @@ Feature: Agent identity and delegated API authorization
       And a denied request cannot issue a target token
       And an incomplete approval URL shows only a recovery state without inactive authorization controls
 
-    @entrypoint:product-ui @journey:agent-resource-approval-sign-in
+    @entrypoint:product-ui @journey:agent-resource-approval-sign-in @proof:unit
     Scenario: A signed-out controller signs in without losing the Agent approval
       Given an Agent resource access request is pending
       And the controller is signed out
@@ -611,7 +629,7 @@ Feature: Agent identity and delegated API authorization
       Then Realmroot returns to the same approval without exposing its token to the server callback URL
       And the controller can approve or deny the request
 
-    @entrypoint:agent-protocol @journey:agent-direct-resource-access
+    @entrypoint:agent-protocol @journey:agent-direct-resource-access @proof:unit
     Scenario: An Agent calls an external API directly with a target-issued token
       Given a controller approved an exact external API resource request
       When the Realmroot CLI completes the Agent's exact access request
@@ -632,7 +650,7 @@ Feature: Agent identity and delegated API authorization
       Then the plugin sends the access token and a fresh DPoP proof directly to the target platform
       And no Realmroot egress or credential injection endpoint exists
 
-    @entrypoint:agent-protocol @journey:agent-resource-revocation
+    @entrypoint:agent-protocol @journey:agent-resource-revocation @proof:unit
     Scenario: Revocation stops direct external API access
       Given an Agent has an active target token
       When a controller revokes its grant, account connection, credential, or Agent
@@ -642,7 +660,7 @@ Feature: Agent identity and delegated API authorization
 
   Rule: Controllers and administrators can govern Agent activity
 
-    @entrypoint:product-ui @journey:agent-governance-surfaces
+    @entrypoint:product-ui @journey:agent-governance-surfaces @proof:unit
     Scenario: Agent management follows ownership and platform boundaries
       Given personal and organization-owned Agents exist
       When an authorized controller opens Agent management
@@ -650,14 +668,14 @@ Feature: Agent identity and delegated API authorization
       And organization settings present organization-owned Agents
       And Console presents tenant inventory, audit, and emergency revocation
 
-    @entrypoint:product-ui @journey:agent-audit-chain
+    @entrypoint:product-ui @journey:agent-audit-chain @proof:unit
     Scenario: Audit records reconstruct an Agent authorization decision
       Given an Agent host attempts to request external API resource authority
       When Realmroot allows or denies the request
       Then the audit record identifies the controller authority, resource account, Agent, host, grant, scopes, and result
       And it excludes credentials, authorization headers, and complete request or response bodies
 
-    @entrypoint:product-ui @journey:agent-governance-audit
+    @entrypoint:product-ui @journey:agent-governance-audit @proof:unit
     Scenario: Agent identity and management authority changes remain auditable
       Given an Agent identity is governed by a controller or administrator
       When the Agent is enrolled, recovered, retired, or receives a capability decision

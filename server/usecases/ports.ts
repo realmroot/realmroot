@@ -473,6 +473,32 @@ export interface ExternalHttpGateway {
   fetch(request: Request): Promise<Response>
 }
 
+export type OAuthClientAuthentication = 'basic' | 'post'
+
+export interface OAuthTokenRequest {
+  body: Record<string, string>
+  headers: Record<string, string>
+}
+
+export interface OAuthRequestGateway {
+  generateCodeChallenge(codeVerifier: string): Promise<string>
+  createAuthorizationCodeRequest(input: {
+    code: string
+    codeVerifier: string
+    redirectUri: string
+    clientId: string
+    clientSecret: string
+    authentication: OAuthClientAuthentication
+  }): Promise<OAuthTokenRequest>
+  createRefreshTokenRequest(input: {
+    refreshToken: string
+    clientId: string
+    clientSecret: string
+    authentication: OAuthClientAuthentication
+    extraParams?: Record<string, string>
+  }): Promise<OAuthTokenRequest>
+}
+
 export interface AgentAuditEventRecord {
   id: string
   action: string

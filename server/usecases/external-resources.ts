@@ -51,7 +51,6 @@ import {
   toRealmrootAgentBindingClaim,
 } from '@shared/oauth-token-profile'
 import { realmrootManagementScopes } from '@shared/scope-registry'
-import { authorizationCodeRequest, generateCodeChallenge, refreshAccessTokenRequest } from 'better-auth/oauth2'
 import { refreshResourceScopeRegistry } from './authorization'
 import { ensureDynamicConnectorScopes, refreshDynamicConnectorMetadata } from './connectors'
 import { validateDpopTokenProof } from './dpop'
@@ -166,7 +165,7 @@ export async function createResourceConnectionIntent(
     redirect_uri: redirectUri,
     scope: requestedScopes.join(driver.scopeSeparator),
     state,
-    code_challenge: await generateCodeChallenge(verifier),
+    code_challenge: await deps.oauthRequests.generateCodeChallenge(verifier),
     code_challenge_method: 'S256',
     resource: resource.resourceUrl,
     ...(driver.authorizationDetailsMode === 'provider' && authorizationDetails.length > 0
@@ -242,17 +241,18 @@ export async function completeResourceConnectionIntent(
   if (!driver) throw badRequest('Provider Connector no longer supports resource authorization.')
   const clientSecret = authorizationClientSecret(authorization)
   const verifier = await deps.secrets.open(intent.encryptedPkceVerifier, connectionIntentContext(intent.id))
-  const codeRequest = await authorizationCodeRequest({
+  const codeRequest = await deps.oauthRequests.createAuthorizationCodeRequest({
     code: input.code,
     codeVerifier: verifier,
-    redirectURI: resourceConnectionCallbackUrl(callbackOrigin),
-    options: { clientId: authorization.clientId, clientSecret },
+    redirectUri: resourceConnectionCallbackUrl(callbackOrigin),
+    clientId: authorization.clientId,
+    clientSecret,
     authentication: driver.tokenEndpointAuthentication,
   })
   const token = await postForm(
     deps,
     authorization.tokenEndpoint,
-    Object.fromEntries(codeRequest.body),
+    codeRequest.body,
     authorization.clientId,
     clientSecret,
     new Headers(codeRequest.headers),
@@ -2493,9 +2493,10 @@ async function refreshConnectionToken(
   const refreshToken = requiredString(payload, 'refreshToken', 'Stored resource connection')
   const clientSecret = authorizationClientSecret(authorization)
   try {
-    const refreshRequest = await refreshAccessTokenRequest({
+    const refreshRequest = await deps.oauthRequests.createRefreshTokenRequest({
       refreshToken,
-      options: { clientId: authorization.clientId, clientSecret },
+      clientId: authorization.clientId,
+      clientSecret,
       authentication: authorization.tokenEndpointAuthentication,
       extraParams:
         authorization.authorizationDetailsMode === 'provider' && credential.authorizationDetails.length > 0
@@ -2505,7 +2506,7 @@ async function refreshConnectionToken(
     const token = await postForm(
       deps,
       authorization.tokenEndpoint,
-      Object.fromEntries(refreshRequest.body),
+      refreshRequest.body,
       authorization.clientId,
       clientSecret,
       new Headers(),

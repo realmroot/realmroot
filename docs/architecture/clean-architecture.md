@@ -1,9 +1,12 @@
-# Clean Architecture (hono-cf-clean-arch)
+# Current Code Structure
 
-The `server/` half follows the four-layer clean-architecture layout. Source-code
-dependencies point inward only; the rule is enforced by `dependency-cruiser`
-(`pnpm run lint:arch`, scanning `server/ shared/ src/`), wired into the pre-commit
-hook and CI — not just prose.
+This is the mutable implementation map for
+[ADR 0003](../adr/0003-clean-architecture-dependency-direction.md). The
+`server/` half follows the four-layer clean-architecture layout. Source-code
+dependencies are enforced by `pnpm run lint:arch` in CI. Dependency Cruiser
+uses SWC to scan `server/` and `shared/` because its native parser does not yet
+support the repository's TypeScript 7 compiler. A TypeScript-AST check covers
+the `src/` boundary because Dependency Cruiser's SWC parser cannot parse TSX.
 
 ## Layout
 
@@ -20,7 +23,7 @@ server/
     <resource>.ts  # One usecase module per resource (+ <resource>-utils.ts helpers).
   adapters/
     repos/         # Drizzle repositories — the ONLY place the db schema is imported.
-    gateways/      # External services: email sender, JWKS fetch.
+    gateways/      # External services: email, JWKS, secrets, OAuth request construction.
   http/            # Hono routes (by resource), zod validation, error mapping, auth
                    #   middleware, the app assembler, and the RPC schema/AppType.
                    #   Routes read deps via c.get('deps'); they never construct adapters.
@@ -46,9 +49,11 @@ src/               # React SPA (not governed by the layers).
 - Drizzle schema is confined to `adapters/repos/` and `db/` — plus `server/auth*.ts`
   (the better-auth boundary owns its own tables; a named exception).
 - `http/` never constructs adapters; it gets `deps` from context (`c.get('deps')`).
-- `shared/` is a leaf. The SPA reaches the server only over HTTP; the single
-  type-level exception is the hono RPC client importing `AppType` from
-  `server/http/app` (scoped in the cruiser config).
+- `shared/` is a leaf and cannot import the server or SPA.
+- The server cannot import the SPA. The SPA normally reaches the server over
+  HTTP and currently has one allowed Hono RPC type import of `AppType` from
+  `src/lib/api/index.ts`; `scripts/verify-frontend-boundary.mjs` rejects other
+  SPA-to-server imports.
 
 ## Dependency injection
 

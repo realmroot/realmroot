@@ -119,7 +119,7 @@ where useful, and signs the resulting authority into a token or coordinates
 issuance with an external authorization server.
 
 This avoids a central permission catalog that can drift away from the API code.
-See [Authorization boundaries](docs/architecture/authorization-boundaries.md)
+See [ADR 0010](docs/adr/0010-resource-server-owns-business-authorization.md)
 for the detailed ownership model.
 
 ## Discover Broadly. Authorize Precisely. Call Directly.
@@ -365,7 +365,7 @@ To deploy a realm:
 Later upgrades use **Sync fork**. The pushed fork commit is the exact version
 deployed by the workflow. See [Deployment upgrades](docs/deploy/upgrades.md),
 [Fresh deployment setup](docs/deploy/setup.md), and
-[Tenancy](docs/architecture/tenancy.md) for operational details.
+[ADR 0002](docs/adr/0002-one-deployment-is-one-realm.md) for the isolation decision.
 
 ## Documentation
 
@@ -375,9 +375,9 @@ deployed by the workflow. See [Deployment upgrades](docs/deploy/upgrades.md),
   approval, account connection, token, and revocation journey.
 - [Agent identity architecture](docs/architecture/agent-identity.md): stable
   identity, Host bindings, authority, credentials, public profiles, and audit.
-- [Authorization boundaries](docs/architecture/authorization-boundaries.md):
+- [Authorization boundary decision](docs/adr/0010-resource-server-owns-business-authorization.md):
   resource-owned scopes, role semantics, issuance policy, and enforcement.
-- [Provider Adapter boundary](docs/architecture/provider-adapter-boundary.md):
+- [Provider Adapter boundary](docs/adr/0004-provider-compatibility-through-external-adapters.md):
   the mandatory separation between Realmroot core and compatibility Adapters.
 - [Resource server integration](docs/integrations/resource-servers.md): publish
   and validate native or external protected APIs.
