@@ -102,16 +102,20 @@ manually edit the state files.
 
 ## Smoke Tests
 
-After deployment, verify:
+After deployment, run the production-safe subset of the Playwright journeys
+against the existing deployment and its dedicated smoke account:
 
 ```bash
-curl https://AUTH_ORIGIN/api/configz
-curl https://AUTH_ORIGIN/api/auth/.well-known/openid-configuration
-curl https://AUTH_ORIGIN/api/openapi.json
+PVT_BASE_URL=https://AUTH_ORIGIN \
+PVT_USERNAME=realmroot-smoke \
+PVT_PASSWORD='...' \
+pnpm run pvt
 ```
 
-Confirm that the issuer matches the deployment origin and that the OpenAPI
-document describes the expected deployment version.
+The command reuses the normal E2E tests tagged `@production-safe`. It verifies
+service health, public configuration, OIDC discovery and keys, the OpenAPI
+document, signed-out routing, password sign-in, session cookies, Account Center,
+and sign-out. It does not reset or seed D1 and does not create Realm resources.
 
 Source:
 

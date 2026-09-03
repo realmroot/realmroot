@@ -19,7 +19,7 @@ export const organizationOwner = {
   organizationName: 'E2E Organization',
 }
 
-export const baseURL = process.env.E2E_BASE_URL ?? `http://localhost:${process.env.PLAYWRIGHT_PORT ?? '4189'}`
+export const baseURL = `http://localhost:${process.env.PLAYWRIGHT_PORT ?? '4189'}`
 const e2eWranglerConfig = process.env.E2E_WRANGLER_CONFIG ?? 'e2e/wrangler.toml'
 const e2ePersistStatePath = process.env.CF_PERSIST_STATE_PATH ?? 'e2e/.wrangler/state'
 const e2eD1Database = process.env.E2E_D1_DATABASE ?? 'realmroot-db-e2e'
@@ -62,12 +62,34 @@ export async function bootstrapAdmin() {
   }
 }
 
-export async function signIn(page: Page, password = admin.password) {
-  await page.goto('/auth/sign-in')
-  await page.getByRole('textbox', { name: 'Email or username' }).fill(admin.username)
-  await page.getByRole('textbox', { name: 'Password' }).fill(password)
+export async function signIn(
+  page: Page,
+  account: Pick<typeof admin, 'username' | 'password'> = admin,
+  options: { baseURL?: string; interactiveCaptcha?: boolean } = {},
+) {
+  await page.goto(options.baseURL ? new URL('/auth/sign-in', options.baseURL).href : '/auth/sign-in')
+  await page.getByRole('textbox', { name: 'Email or username' }).fill(account.username)
+
+  if (options.interactiveCaptcha) {
+    const captchaResponse = page.locator('input[name="cf-turnstile-response"]')
+    await captchaResponse.waitFor({ state: 'attached' })
+    console.log('Complete the CAPTCHA in the opened Chrome window to continue PVT.')
+    await page.waitForFunction(
+      () => Boolean(document.querySelector<HTMLInputElement>('input[name="cf-turnstile-response"]')?.value),
+      undefined,
+      { timeout: 120_000 },
+    )
+  }
+
+  const password = page.getByRole('textbox', { name: 'Password' })
+  await password.fill(account.password)
   await page.getByRole('button', { name: 'Sign in' }).click()
-  await page.waitForURL('**/profile')
+  try {
+    await page.waitForURL('**/profile')
+  } catch (error) {
+    if (await password.isVisible()) await password.fill('')
+    throw error
+  }
 }
 
 export async function signOut(page: Page) {

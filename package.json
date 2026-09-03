@@ -32,6 +32,7 @@
     "test:coverage:web": "vitest run --project web --coverage --coverage.include='src/features/**' --coverage.include='src/lib/**'",
     "spec:check": "node scripts/verify-specs.mjs",
     "e2e": "playwright test",
+    "pvt": "node scripts/run-pvt.mjs",
     "example:resource-external": "tsx examples/external-resource-server/server.ts",
     "example:resource-native": "tsx examples/native-resource-server/server.ts",
     "test:e2e": "pnpm run spec:check && playwright test",
