@@ -26,6 +26,7 @@ import {
   jsonContentType,
   locationResponseHeader,
   type ManagementRouteConfig,
+  paginationResponseHeader,
   uploadedAssetResponseSchema,
 } from './management-routes/helpers'
 import { platformRuntimeRoutes } from './management-routes/platform-runtime'
@@ -179,6 +180,7 @@ const managementRoutes: ManagementRouteConfig[] = [
       query: paginationQuerySchema,
     },
     response: resourceServerAuthorizationDetailsResponseSchema,
+    paginated: true,
   },
   {
     method: 'post',
@@ -314,15 +316,19 @@ function managementTagForPath(path: string): (typeof managementOpenApiTags)[numb
 
 function routeResponses(routeConfig: ManagementRouteConfig) {
   const responses: Record<string, unknown> = {}
+  const responseHeaders = {
+    ...(routeConfig.paginated ? paginationResponseHeader : {}),
+    ...routeConfig.responseHeaders,
+  }
   if (routeConfig.noBody)
     responses[routeConfig.status ?? 204] = {
       description: routeConfig.summary,
-      ...(routeConfig.responseHeaders ? { headers: routeConfig.responseHeaders } : {}),
+      ...(Object.keys(responseHeaders).length > 0 ? { headers: responseHeaders } : {}),
     }
   else
     responses[routeConfig.status ?? 200] = {
       description: routeConfig.summary,
-      ...(routeConfig.responseHeaders ? { headers: routeConfig.responseHeaders } : {}),
+      ...(Object.keys(responseHeaders).length > 0 ? { headers: responseHeaders } : {}),
       content: { [jsonContentType]: { schema: routeConfig.response } },
     }
   const expectedErrors = Object.fromEntries(

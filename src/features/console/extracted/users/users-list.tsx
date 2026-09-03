@@ -31,14 +31,14 @@ import { consoleQueryKeys, createUser, listUsers, requestUserPasswordReset } fro
 export function UsersPage() {
   const [search, setSearch] = useState('')
   const [banned, setBanned] = useState('')
-  const [offset, setOffset] = useState(0)
+  const [page, setPage] = useState(1)
   const query = useQuery({
     queryKey: [
       ...consoleQueryKeys.users,
       {
         search,
         banned,
-        offset,
+        page,
       },
     ],
     queryFn: () =>
@@ -53,8 +53,8 @@ export function UsersPage() {
               banned: banned === 'true',
             }
           : {}),
-        limit: 10,
-        offset,
+        page,
+        pageSize: 10,
       }),
   })
   const queryClient = useQueryClient()
@@ -101,7 +101,7 @@ export function UsersPage() {
             aria-label={tt('Search users')}
             onChange={(event) => {
               setSearch(event.target.value)
-              setOffset(0)
+              setPage(1)
             }}
             placeholder={tt('Search users')}
             value={search}
@@ -110,7 +110,7 @@ export function UsersPage() {
             aria-label={tt('Filter status')}
             onChange={(event) => {
               setBanned(event.target.value)
-              setOffset(0)
+              setPage(1)
             }}
             value={banned}
           >
@@ -194,14 +194,14 @@ export function UsersPage() {
           <div className="flex flex-wrap items-center justify-between gap-2 px-4 pb-4 text-sm text-muted-foreground">
             <span>
               {' '}
-              {tt('Showing')} {query.data.pagination.offset + 1}-
-              {Math.min(query.data.pagination.offset + query.data.pagination.limit, query.data.pagination.total)} of{' '}
-              {query.data.pagination.total}
+              {tt('Showing')} {(query.data.pagination.page - 1) * query.data.pagination.pageSize + 1}-
+              {Math.min(query.data.pagination.page * query.data.pagination.pageSize, query.data.pagination.totalItems)}{' '}
+              of {query.data.pagination.totalItems}
             </span>
             <div className="flex gap-2">
               <Button
-                disabled={offset === 0}
-                onClick={() => setOffset(Math.max(0, offset - (query.data?.pagination.limit ?? 10)))}
+                disabled={page === 1}
+                onClick={() => setPage(Math.max(1, page - 1))}
                 type="button"
                 variant="secondary"
               >
@@ -209,8 +209,8 @@ export function UsersPage() {
                 {tt('Previous')}{' '}
               </Button>
               <Button
-                disabled={!query.data.pagination.hasMore || query.data.pagination.nextOffset === null}
-                onClick={() => setOffset(query.data?.pagination.nextOffset ?? offset)}
+                disabled={query.data.pagination.page >= query.data.pagination.totalPages}
+                onClick={() => setPage(page + 1)}
                 type="button"
                 variant="secondary"
               >

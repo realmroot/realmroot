@@ -265,13 +265,7 @@ export function createConnectorServiceMock() {
   return {
     list: vi.fn().mockResolvedValue({
       items: [connectorFixture()],
-      pagination: {
-        limit: 1,
-        offset: 0,
-        total: 1,
-        hasMore: false,
-        nextOffset: null,
-      },
+      pagination: { page: Math.floor(0 / 1) + 1, pageSize: 1, totalItems: 1, totalPages: Math.ceil(1 / 1) },
     }),
     listTemplates: vi.fn().mockReturnValue({
       items: [
@@ -311,7 +305,7 @@ export function createWebhookServiceMock() {
     listEndpoints: vi.fn().mockImplementation((query) =>
       Promise.resolve({
         items: [webhookEndpointResponse()],
-        pagination: { limit: query.limit, offset: query.offset, total: 1, hasMore: false, nextOffset: null },
+        pagination: { page: query.page, pageSize: query.pageSize, totalItems: 1, totalPages: 1 },
       }),
     ),
     createEndpoint: vi.fn().mockResolvedValue({
@@ -328,13 +322,13 @@ export function createWebhookServiceMock() {
     listRequests: vi.fn().mockImplementation((query) =>
       Promise.resolve({
         items: [webhookRequestResponse()],
-        pagination: { limit: query.limit, offset: query.offset, total: 1, hasMore: false, nextOffset: null },
+        pagination: { page: query.page, pageSize: query.pageSize, totalItems: 1, totalPages: 1 },
       }),
     ),
     getRequest: vi.fn().mockResolvedValue(webhookRequestResponse()),
     listAttempts: vi.fn().mockResolvedValue({
       items: [webhookDeliveryAttemptResponse()],
-      pagination: { limit: 50, offset: 0, total: 1, hasMore: false, nextOffset: null },
+      pagination: { page: Math.floor(0 / 50) + 1, pageSize: 50, totalItems: 1, totalPages: Math.ceil(1 / 50) },
     }),
     getAttempt: vi.fn().mockResolvedValue(webhookDeliveryAttemptResponse()),
     createAttempt: vi.fn().mockResolvedValue({

@@ -419,7 +419,7 @@ describe('management routes 3', () => {
   it('exposes admin setup readiness through the management boundary', async () => {
     vi.spyOn(applications, 'listApplications').mockResolvedValue({
       items: [],
-      pagination: { limit: 1, offset: 0, total: 0, hasMore: false, nextOffset: null },
+      pagination: { page: Math.floor(0 / 1) + 1, pageSize: 1, totalItems: 0, totalPages: Math.ceil(0 / 1) },
     } as unknown as ListApplicationsResponse)
     vi.spyOn(configz, 'getConfig').mockResolvedValue(readinessConfig())
     const app = createApp(createAuthMock(), createTestDeps())
@@ -459,7 +459,7 @@ describe('management routes 3', () => {
   it('reports admin setup complete when an OIDC application exists', async () => {
     vi.spyOn(applications, 'listApplications').mockResolvedValue({
       items: [applicationFixture()],
-      pagination: { limit: 1, offset: 0, total: 1, hasMore: false, nextOffset: null },
+      pagination: { page: Math.floor(0 / 1) + 1, pageSize: 1, totalItems: 1, totalPages: Math.ceil(1 / 1) },
     } as unknown as ListApplicationsResponse)
     vi.spyOn(configz, 'getConfig').mockResolvedValue(readinessConfig())
     const app = createApp(createAuthMock(), createTestDeps())
@@ -479,7 +479,7 @@ describe('management routes 3', () => {
   it('does not count social sign-in as ready without a configured provider or connector', async () => {
     vi.spyOn(applications, 'listApplications').mockResolvedValue({
       items: [applicationFixture()],
-      pagination: { limit: 1, offset: 0, total: 1, hasMore: false, nextOffset: null },
+      pagination: { page: Math.floor(0 / 1) + 1, pageSize: 1, totalItems: 1, totalPages: Math.ceil(1 / 1) },
     } as unknown as ListApplicationsResponse)
     vi.spyOn(configz, 'getConfig').mockResolvedValue(
       readinessConfig({
@@ -505,7 +505,7 @@ describe('management routes 3', () => {
   it('does not count disabled social connectors as ready sign-in methods', async () => {
     vi.spyOn(applications, 'listApplications').mockResolvedValue({
       items: [applicationFixture()],
-      pagination: { limit: 1, offset: 0, total: 1, hasMore: false, nextOffset: null },
+      pagination: { page: Math.floor(0 / 1) + 1, pageSize: 1, totalItems: 1, totalPages: Math.ceil(1 / 1) },
     } as unknown as ListApplicationsResponse)
     vi.spyOn(configz, 'getConfig').mockResolvedValue(
       readinessConfig({

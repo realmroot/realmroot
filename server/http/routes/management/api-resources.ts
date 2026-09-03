@@ -20,6 +20,7 @@ import {
   updateApiResourceSchema,
 } from '@shared/api/agent-api'
 import { apiResourceContractResponseSchema, listApiResourcesQuerySchema } from '@shared/api/authorization'
+import { paginationInput } from '@shared/api/pagination'
 import { Hono } from 'hono'
 import type { AppConfig } from '../../app-types'
 import { getMutationActor, getPrincipal } from '../../middleware/authn'
@@ -38,23 +39,17 @@ export function createManagementApiResourcesRoute(config: Pick<AppConfig, 'baseU
 
   app.get('/', async (c) => {
     const origin = trustedRequestOrigin(config, c.req.url)
+    const query = readQuery(c, listApiResourcesQuerySchema)
+    const page = paginationInput(query)
     const principal = getPrincipal(c).agent
     if (principal && !principal.authority) {
-      return c.json(
-        await listAgentResourceServers(
-          getDeps(c),
-          principal,
-          readQuery(c, listApiResourcesQuerySchema.pick({ limit: true, offset: true })),
-          origin,
-        ),
-      )
+      return c.json(await listAgentResourceServers(getDeps(c), principal, page, origin))
     }
-    const query = readQuery(c, listApiResourcesQuerySchema)
     return c.json(
       resourceServersResponseSchema.parse(
         await listApiResources(
           getDeps(c),
-          query,
+          page,
           origin,
           await filterOrganizationSelection(c, query.ownerOrganizationId),
         ),

@@ -11,7 +11,7 @@ import {
   managementUserDetailResponseSchema,
   passwordResetRequestResponseSchema,
 } from '@shared/api/management'
-import { paginationMetadata, paginationQuerySchema } from '@shared/api/pagination'
+import { paginationInput, paginationMetadata, paginationQuerySchema } from '@shared/api/pagination'
 import {
   adminBanUserSchema,
   adminCreateUserSchema,
@@ -44,7 +44,7 @@ export function managementUserRoutes(authApi: ManagementAuthApi, _options: Manag
     const organizationIds = await filterOrganizationSelection(c, query.organizationId)
 
     const userIds = organizationIds ? await getDeps(c).authorization.listMemberUserIds(organizationIds) : undefined
-    const page = await users.listManagedUsers(query, userIds)
+    const page = await users.listManagedUsers({ ...query, ...paginationInput(query) }, userIds)
     return c.json(
       listManagementUsersResponseSchema.parse({
         items: page.items,
@@ -151,13 +151,19 @@ export function managementUserRoutes(authApi: ManagementAuthApi, _options: Manag
 
   app.get('/:id/linked-accounts', async (c) => {
     await authorizePlatformOrganization(c, 'users:read')
-    const page = await getDeps(c).users.listLinkedAccounts(c.req.param('id'), readQuery(c, paginationQuerySchema))
+    const page = await getDeps(c).users.listLinkedAccounts(
+      c.req.param('id'),
+      paginationInput(readQuery(c, paginationQuerySchema)),
+    )
     return c.json({ items: page.items, pagination: paginationMetadata(page) })
   })
 
   app.get('/:id/passkeys', async (c) => {
     await authorizePlatformOrganization(c, 'users:read')
-    const page = await getDeps(c).security.listPasskeys(c.req.param('id'), readQuery(c, paginationQuerySchema))
+    const page = await getDeps(c).security.listPasskeys(
+      c.req.param('id'),
+      paginationInput(readQuery(c, paginationQuerySchema)),
+    )
     return c.json({ items: page.items, pagination: paginationMetadata(page) })
   })
 
@@ -211,7 +217,10 @@ export function managementUserRoutes(authApi: ManagementAuthApi, _options: Manag
 
   app.get('/:id/sessions', async (c) => {
     await authorizePlatformOrganization(c, 'users:read')
-    const page = await getDeps(c).users.listSessions(c.req.param('id'), readQuery(c, paginationQuerySchema))
+    const page = await getDeps(c).users.listSessions(
+      c.req.param('id'),
+      paginationInput(readQuery(c, paginationQuerySchema)),
+    )
     return c.json({ items: page.items, pagination: paginationMetadata(page) })
   })
 

@@ -135,7 +135,7 @@ describe('account API client over the real network boundary', () => {
       http.get(`${base}/api/account/agents`, () =>
         HttpResponse.json({
           items: [{ id: 'ag1' }],
-          pagination: { limit: 50, offset: 0, total: 1, hasMore: false, nextOffset: null },
+          pagination: { page: Math.floor(0 / 50) + 1, pageSize: 50, totalItems: 1, totalPages: Math.ceil(1 / 50) },
         }),
       ),
       http.delete(`${base}/api/account/agents/:agentId`, () => new HttpResponse(null, { status: 204 })),
@@ -206,13 +206,13 @@ describe('account API client over the real network boundary', () => {
       http.get(`${base}/api/account/api-resources`, () =>
         HttpResponse.json({
           items: [],
-          pagination: { limit: 50, offset: 0, total: 0, hasMore: false, nextOffset: null },
+          pagination: { page: Math.floor(0 / 50) + 1, pageSize: 50, totalItems: 0, totalPages: Math.ceil(0 / 50) },
         }),
       ),
       http.get(`${base}/api/account/account-connections`, () =>
         HttpResponse.json({
           items: [],
-          pagination: { limit: 50, offset: 0, total: 0, hasMore: false, nextOffset: null },
+          pagination: { page: Math.floor(0 / 50) + 1, pageSize: 50, totalItems: 0, totalPages: Math.ceil(0 / 50) },
         }),
       ),
       http.post(`${base}/api/account/account-connections`, async ({ request }) => {
@@ -227,14 +227,14 @@ describe('account API client over the real network boundary', () => {
         requests.push({ url: new URL(request.url), method: request.method, body: null })
         return HttpResponse.json({
           items: [{ id: 'request-1' }],
-          pagination: { limit: 50, offset: 0, total: 1, hasMore: false, nextOffset: null },
+          pagination: { page: Math.floor(0 / 50) + 1, pageSize: 50, totalItems: 1, totalPages: Math.ceil(1 / 50) },
         })
       }),
       http.get(`${base}/api/account/access-requests/:requestId/authorization-detail-catalog`, ({ request }) => {
         requests.push({ url: new URL(request.url), method: request.method, body: null })
         return HttpResponse.json({
           items: [],
-          pagination: { limit: 50, offset: 0, total: 0, hasMore: false, nextOffset: null },
+          pagination: { page: Math.floor(0 / 50) + 1, pageSize: 50, totalItems: 0, totalPages: Math.ceil(0 / 50) },
         })
       }),
       http.put(`${base}/api/account/access-requests/:requestId/decision`, async ({ request }) => {
@@ -280,7 +280,7 @@ describe('account API client over the real network boundary', () => {
         method: 'GET',
         url: expect.objectContaining({
           pathname: expect.stringContaining('request%2F1/authorization-detail-catalog'),
-          search: '?approvalToken=approval+token&limit=100&offset=0',
+          search: '?approvalToken=approval+token&page=1&pageSize=100',
         }),
       }),
       expect.objectContaining({

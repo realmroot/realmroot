@@ -179,7 +179,7 @@ describe('user management over real D1', () => {
     const memberCookie = await signIn(harness, 'plain@example.com', 'plain-password-2026')
     const response = await harness.request('/api/users', { headers: { cookie: memberCookie } })
     expect(response.status).toBe(200)
-    await expect(response.json()).resolves.toMatchObject({ items: [], pagination: { total: 0 } })
+    await expect(response.json()).resolves.toMatchObject({ items: [], pagination: { totalItems: 0 } })
   })
 
   it('runs admin user CRUD through the user repository (real SQL)', async () => {

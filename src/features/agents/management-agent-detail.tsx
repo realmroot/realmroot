@@ -47,15 +47,15 @@ export function AgentDetailPage({
   const [auditSearch, setAuditSearch] = useState('')
   const [auditAction, setAuditAction] = useState('')
   const [auditResult, setAuditResult] = useState('')
-  const [auditOffset, setAuditOffset] = useState(0)
+  const [auditPage, setAuditPage] = useState(1)
   const agentQuery = useQuery({ queryKey: [...consoleQueryKeys.agents, agentId], queryFn: () => getAgent(agentId) })
   const hosts = useQuery({
     queryKey: [...consoleQueryKeys.agents, agentId, 'hosts'],
-    queryFn: () => listAgentInstallations(agentId, { limit: 100 }),
+    queryFn: () => listAgentInstallations(agentId, { page: 1, pageSize: 100 }),
   })
   const authorizedResources = useQuery({
     queryKey: [...consoleQueryKeys.agents, agentId, 'authorized-resource-servers'],
-    queryFn: () => listAgentAuthorizedResourceServers(agentId, { limit: 100 }),
+    queryFn: () => listAgentAuthorizedResourceServers(agentId, { page: 1, pageSize: 100 }),
   })
   const grantResources = authorizedResources.data?.items ?? []
   const grants = useQuery({
@@ -63,7 +63,8 @@ export function AgentDetailPage({
     queryKey: [...consoleQueryKeys.agents, agentId, 'permissions', { resourceServerId: selectedGrantResourceId }],
     queryFn: () =>
       listAgentPermissions(agentId, {
-        limit: 100,
+        page: 1,
+        pageSize: 100,
         resourceServerId: selectedGrantResourceId,
       }),
   })
@@ -72,14 +73,14 @@ export function AgentDetailPage({
       ...consoleQueryKeys.agents,
       agentId,
       'audit',
-      { action: auditAction, organizationId, result: auditResult, search: auditSearch, offset: auditOffset },
+      { action: auditAction, organizationId, result: auditResult, search: auditSearch, page: auditPage },
     ],
     queryFn: () =>
       getAgentAuditEvents({
         agentId,
         organizationId,
-        limit: 50,
-        offset: auditOffset,
+        page: auditPage,
+        pageSize: 50,
         ...(auditSearch ? { search: auditSearch } : {}),
         ...(auditAction ? { action: auditAction } : {}),
         ...(auditResult ? { result: auditResult as 'allowed' | 'denied' | 'pending' } : {}),
@@ -216,7 +217,7 @@ export function AgentDetailPage({
               resources={grantResources}
               revoking={permissionRevocation.isPending}
               selectedResourceId={selectedGrantResourceId}
-              total={grants.data?.pagination.total ?? 0}
+              total={grants.data?.pagination.totalItems ?? 0}
             />
           </TabsContent>
           <TabsContent className="mt-5" value="activity">
@@ -225,18 +226,18 @@ export function AgentDetailPage({
               events={audit.data?.items ?? []}
               onActionChange={(value) => {
                 setAuditAction(value)
-                setAuditOffset(0)
+                setAuditPage(1)
               }}
-              onNext={() => setAuditOffset(auditOffset + 50)}
-              onPrevious={() => setAuditOffset(Math.max(0, auditOffset - 50))}
+              onNext={() => setAuditPage(auditPage + 1)}
+              onPrevious={() => setAuditPage(Math.max(1, auditPage - 1))}
               onResultChange={(value) => {
                 setAuditResult(value)
-                setAuditOffset(0)
+                setAuditPage(1)
               }}
               onSearch={(event) => {
                 event.preventDefault()
                 setAuditSearch(auditSearchInput.trim())
-                setAuditOffset(0)
+                setAuditPage(1)
               }}
               onSearchInputChange={setAuditSearchInput}
               pagination={audit.data?.pagination}
@@ -582,25 +583,20 @@ function AgentActivityTable({
         headers={['Event', 'Result', 'Target', 'Details', 'Time']}
         rows={rows}
       />
-      {pagination && pagination.total > pagination.limit ? (
+      {pagination && pagination.totalPages > 1 ? (
         <div className="flex items-center justify-between">
           <p className="text-xs text-muted-foreground">
             {tt('{{start}}–{{end}} of {{total}}', {
-              start: pagination.offset + 1,
-              end: Math.min(pagination.offset + pagination.limit, pagination.total),
-              total: pagination.total,
+              start: (pagination.page - 1) * pagination.pageSize + 1,
+              end: Math.min(pagination.page * pagination.pageSize, pagination.totalItems),
+              total: pagination.totalItems,
             })}
           </p>
           <div className="flex gap-2">
-            <Button disabled={pagination.offset === 0} onClick={onPrevious} size="sm" variant="outline">
+            <Button disabled={pagination.page === 1} onClick={onPrevious} size="sm" variant="outline">
               {tt('Previous')}
             </Button>
-            <Button
-              disabled={pagination.offset + pagination.limit >= pagination.total}
-              onClick={onNext}
-              size="sm"
-              variant="outline"
-            >
+            <Button disabled={pagination.page >= pagination.totalPages} onClick={onNext} size="sm" variant="outline">
               {tt('Next')}
             </Button>
           </div>

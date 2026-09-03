@@ -62,6 +62,7 @@ export const platformWebhookRoutes: ManagementRouteConfig[] = [
     summary: 'List connectors',
     request: { query: paginationQuerySchema },
     response: listManagementConnectorsResponseSchema,
+    paginated: true,
   },
   {
     method: 'post',
@@ -262,6 +263,7 @@ export const platformWebhookRoutes: ManagementRouteConfig[] = [
     summary: 'List webhooks',
     request: { query: listWebhookEndpointsQuerySchema },
     response: listWebhookEndpointsResponseSchema,
+    paginated: true,
   },
   {
     method: 'post',
@@ -314,6 +316,7 @@ export const platformWebhookRoutes: ManagementRouteConfig[] = [
     summary: 'List webhook deliveries',
     request: { params: webhookParam, query: listWebhookRequestsQuerySchema.omit({ endpointId: true }) },
     response: listWebhookRequestsResponseSchema,
+    paginated: true,
   },
   {
     method: 'get',
@@ -330,6 +333,7 @@ export const platformWebhookRoutes: ManagementRouteConfig[] = [
     summary: 'List webhook delivery attempts',
     request: { params: webhookDeliveryParam, query: paginationQuerySchema },
     response: listWebhookDeliveryAttemptsResponseSchema,
+    paginated: true,
     errors: { 404: 'The webhook request was not found.' },
   },
   {

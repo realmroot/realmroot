@@ -73,7 +73,7 @@ import {
   listApplicationAuthorizationsResponseSchema,
 } from '@shared/api/applications'
 import { linkAccountRequestSchema, unlinkAccountQuerySchema } from '@shared/api/connectors'
-import { paginationMetadata, paginationQuerySchema } from '@shared/api/pagination'
+import { paginationInput, paginationMetadata, paginationQuerySchema } from '@shared/api/pagination'
 import type { SecurityPolicy } from '@shared/api/security'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
@@ -277,7 +277,7 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
     )
     const page = await getDeps(c).users.listLinkedAccounts(
       getPrincipal(c).user!.id,
-      readQuery(c, paginationQuerySchema),
+      paginationInput(readQuery(c, paginationQuerySchema)),
     )
     return c.json({ items: page.items, pagination: paginationMetadata(page) })
   })
@@ -387,7 +387,10 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
       securityPolicy,
     )
     const authContext = getPrincipal(c)
-    const page = await getDeps(c).users.listSessions(authContext.user!.id, readQuery(c, paginationQuerySchema))
+    const page = await getDeps(c).users.listSessions(
+      authContext.user!.id,
+      paginationInput(readQuery(c, paginationQuerySchema)),
+    )
     const currentSessionId = authContext.session?.session.id
     return c.json({
       items: page.items.map((session) => ({ ...session, current: session.id === currentSessionId })),
@@ -398,7 +401,11 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
   app.get('/agents', async (c) => {
     return c.json(
       agentsResponseSchema.parse(
-        await listPersonalAgents(getDeps(c), getPrincipal(c).user!.id, readQuery(c, paginationQuerySchema)),
+        await listPersonalAgents(
+          getDeps(c),
+          getPrincipal(c).user!.id,
+          paginationInput(readQuery(c, paginationQuerySchema)),
+        ),
       ),
     )
   })
@@ -437,7 +444,7 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
         getDeps(c),
         c.req.param('organizationId'),
         getPrincipal(c).user!.id,
-        readQuery(c, paginationQuerySchema),
+        paginationInput(readQuery(c, paginationQuerySchema)),
       ),
     )
   })
@@ -450,7 +457,7 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
           c.req.param('organizationId'),
           c.req.param('teamId'),
           getPrincipal(c).user!.id,
-          readQuery(c, paginationQuerySchema),
+          paginationInput(readQuery(c, paginationQuerySchema)),
         ),
       ),
     )
@@ -507,8 +514,13 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
     return c.json(
       accountConnectionsResponseSchema.parse(
         approvalToken
-          ? await listAccessRequestConnections(getDeps(c), approvalToken, getPrincipal(c).user!.id, pagination)
-          : await listAccountConnections(getDeps(c), getPrincipal(c).user!.id, pagination),
+          ? await listAccessRequestConnections(
+              getDeps(c),
+              approvalToken,
+              getPrincipal(c).user!.id,
+              paginationInput(pagination),
+            )
+          : await listAccountConnections(getDeps(c), getPrincipal(c).user!.id, paginationInput(pagination)),
       ),
     )
   })
@@ -516,7 +528,7 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
   app.get('/provider-connectors', async (c) => {
     return c.json(
       accountProviderConnectorsResponseSchema.parse(
-        await listAccountProviderConnectors(getDeps(c), readQuery(c, paginationQuerySchema)),
+        await listAccountProviderConnectors(getDeps(c), paginationInput(readQuery(c, paginationQuerySchema))),
       ),
     )
   })
@@ -524,7 +536,11 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
   app.get('/provider-connections', async (c) => {
     return c.json(
       accountProviderConnectionsResponseSchema.parse(
-        await listAccountProviderConnections(getDeps(c), getPrincipal(c).user!.id, readQuery(c, paginationQuerySchema)),
+        await listAccountProviderConnections(
+          getDeps(c),
+          getPrincipal(c).user!.id,
+          paginationInput(readQuery(c, paginationQuerySchema)),
+        ),
       ),
     )
   })
@@ -558,13 +574,11 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
     return c.json(
       connectableApiResourcesResponseSchema.parse({
         items: resources,
-        pagination: {
+        pagination: paginationMetadata({
           limit: resources.length || 1,
           offset: 0,
           total: resources.length,
-          hasMore: false,
-          nextOffset: null,
-        },
+        }),
       }),
     )
   })
@@ -602,16 +616,13 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
       return c.json(
         accessRequestApprovalsResponseSchema.parse({
           items: [request],
-          pagination: { limit: query.limit, offset: 0, total: 1, hasMore: false, nextOffset: null },
+          pagination: paginationMetadata({ ...paginationInput(query), total: 1 }),
         }),
       )
     }
     return c.json(
       accessRequestApprovalsResponseSchema.parse(
-        await listAccountAccessRequests(getDeps(c), getPrincipal(c).user!.id, {
-          limit: query.limit,
-          offset: query.offset,
-        }),
+        await listAccountAccessRequests(getDeps(c), getPrincipal(c).user!.id, paginationInput(query)),
       ),
     )
   })
@@ -625,7 +636,7 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
           c.req.param('requestId'),
           query.approvalToken,
           getPrincipal(c).user!.id,
-          query,
+          paginationInput(query),
         ),
       ),
     )

@@ -100,7 +100,7 @@ describe('management routes 4', () => {
     const app = createApp(createAuthMock(), createTestDeps())
     const headers = adminHeaders()
 
-    const list = await app.request('/api/connectors?limit=1&offset=0', { headers })
+    const list = await app.request('/api/connectors?page=1&pageSize=1', { headers })
     const templates = await app.request('/api/connectors/templates', { headers })
     const created = await app.request('/api/connectors', {
       method: 'POST',
@@ -135,13 +135,7 @@ describe('management routes 4', () => {
     await expect(list.json()).resolves.toEqual(
       listManagementConnectorsResponseSchema.parse({
         items: [connectorFixture()],
-        pagination: {
-          limit: 1,
-          offset: 0,
-          total: 1,
-          hasMore: false,
-          nextOffset: null,
-        },
+        pagination: { page: Math.floor(0 / 1) + 1, pageSize: 1, totalItems: 1, totalPages: Math.ceil(1 / 1) },
       }),
     )
     expect(templates.status).toBe(200)
@@ -211,7 +205,7 @@ describe('management routes 4', () => {
         clientSecret: 'REVIEW_CLIENT_SECRET',
       }),
     })
-    const list = await app.request('/api/connectors?limit=1&offset=0', { headers })
+    const list = await app.request('/api/connectors?page=1&pageSize=1', { headers })
     const templates = await app.request('/api/connectors/templates', { headers })
 
     expect(created.status).toBe(201)
@@ -276,7 +270,7 @@ describe('management routes 4', () => {
     const app = createApp(createAuthMock(), createTestDeps())
     const headers = adminHeaders()
 
-    const list = await app.request('/api/webhooks?limit=10&offset=5&search=auth&status=enabled', {
+    const list = await app.request('/api/webhooks?page=1&pageSize=10&search=auth&status=enabled', {
       headers,
     })
     const created = await app.request('/api/webhooks', {
@@ -296,7 +290,7 @@ describe('management routes 4', () => {
       body: JSON.stringify({ enabled: false }),
     })
     const rotated = await app.request('/api/webhooks/wh_1/secrets', { method: 'POST', headers })
-    const requests = await app.request('/api/webhooks/wh_1/deliveries?limit=2&offset=4&status=failed', {
+    const requests = await app.request('/api/webhooks/wh_1/deliveries?page=3&pageSize=2&status=failed', {
       headers,
     })
     const requestDetail = await app.request('/api/webhooks/wh_1/deliveries/whr_1', { headers })
@@ -311,7 +305,7 @@ describe('management routes 4', () => {
     expect(list.status).toBe(200)
     await expect(list.json()).resolves.toEqual({
       items: [webhookEndpointResponse()],
-      pagination: { limit: 10, offset: 5, total: 1, hasMore: false, nextOffset: null },
+      pagination: { page: 1, pageSize: 10, totalItems: 1, totalPages: 1 },
     })
     expect(created.status).toBe(201)
     await expect(created.json()).resolves.toEqual({
@@ -327,12 +321,12 @@ describe('management routes 4', () => {
     })
     await expect(requests.json()).resolves.toEqual({
       items: [webhookRequestResponse()],
-      pagination: { limit: 2, offset: 4, total: 1, hasMore: false, nextOffset: null },
+      pagination: { page: Math.floor(4 / 2) + 1, pageSize: 2, totalItems: 1, totalPages: Math.ceil(1 / 2) },
     })
     await expect(requestDetail.json()).resolves.toEqual(webhookRequestResponse())
     await expect(attempts.json()).resolves.toEqual({
       items: [webhookDeliveryAttemptResponse()],
-      pagination: { limit: 50, offset: 0, total: 1, hasMore: false, nextOffset: null },
+      pagination: { page: Math.floor(0 / 50) + 1, pageSize: 50, totalItems: 1, totalPages: Math.ceil(1 / 50) },
     })
     await expect(attemptDetail.json()).resolves.toEqual(webhookDeliveryAttemptResponse())
     expect(createdAttempt.status).toBe(201)
@@ -348,8 +342,8 @@ describe('management routes 4', () => {
     expect(webhooks.listEndpoints).toHaveBeenCalledWith(
       expect.anything(),
       {
-        limit: 10,
-        offset: 5,
+        page: 1,
+        pageSize: 10,
         search: 'auth',
         status: 'enabled',
       },
@@ -364,7 +358,7 @@ describe('management routes 4', () => {
     expect(webhooks.rotateSecret).toHaveBeenCalledWith(expect.anything(), 'wh_1')
     expect(webhooks.listRequests).toHaveBeenCalledWith(
       expect.anything(),
-      { endpointId: 'wh_1', limit: 2, offset: 4, status: 'failed' },
+      { endpointId: 'wh_1', page: 3, pageSize: 2, status: 'failed' },
       undefined,
     )
     expect(webhooks.getRequest).toHaveBeenCalledWith(expect.anything(), 'whr_1')

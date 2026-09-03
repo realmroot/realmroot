@@ -14,7 +14,7 @@ describe('management resource routes', () => {
   it('routes application management requests to the application service', async () => {
     const { app, applicationService } = await loadAppRoutes()
 
-    await expectJson(app, '/applications?limit=10&offset=0', 'GET', undefined, 200)
+    await expectJson(app, '/applications?page=1&pageSize=10', 'GET', undefined, 200)
     const createdApplication = await expectJson(
       app,
       '/applications',
@@ -31,7 +31,7 @@ describe('management resource routes', () => {
     await expectJson(app, '/applications/app-1', 'GET', undefined, 200)
     await expectJson(app, '/applications/app-1', 'PATCH', { disabled: true }, 200)
     await expectStatus(app, '/applications/app-1', 'DELETE', undefined, 204)
-    await expectJson(app, '/applications/app-1/redirect-uris?limit=1&offset=1', 'GET', undefined, 200)
+    await expectJson(app, '/applications/app-1/redirect-uris?page=2&pageSize=1', 'GET', undefined, 200)
     await expectJson(
       app,
       '/applications/app-1/redirect-uris',
@@ -43,7 +43,7 @@ describe('management resource routes', () => {
     await expectJson(app, '/applications/app-1/client-secrets', 'POST', undefined, 201)
     await expectJson(
       app,
-      '/applications/app-1/authorizations?userId=user-1&status=active&limit=10&offset=0',
+      '/applications/app-1/authorizations?userId=user-1&status=active&page=1&pageSize=10',
       'GET',
       undefined,
       200,
@@ -51,7 +51,7 @@ describe('management resource routes', () => {
     await expectJson(app, '/applications/app-1/authorizations/authorization-1', 'GET', undefined, 200)
     await expectStatus(app, '/applications/app-1/authorizations/authorization-1', 'DELETE', undefined, 204)
 
-    expect(applicationService.list).toHaveBeenCalledWith({ limit: 10, offset: 0 })
+    expect(applicationService.list).toHaveBeenCalledWith({ page: 1, pageSize: 10 })
     expect(applicationService.create).toHaveBeenCalledWith(
       {
         name: 'Portal',
@@ -69,8 +69,8 @@ describe('management resource routes', () => {
       applicationId: 'app-1',
       userId: 'user-1',
       status: 'active',
-      limit: 10,
-      offset: 0,
+      page: 1,
+      pageSize: 10,
     })
     expect(applicationService.revokeAuthorization).toHaveBeenCalledWith('authorization-1')
   })
@@ -196,7 +196,7 @@ describe('management resource routes', () => {
     const { app, connectorService } = await loadConnectorRoutes()
 
     await expectJson(app, '/connectors/templates', 'GET', undefined, 200)
-    await expectJson(app, '/connectors?limit=10&offset=0', 'GET', undefined, 200)
+    await expectJson(app, '/connectors?page=1&pageSize=10', 'GET', undefined, 200)
     await expectJson(
       app,
       '/connectors',
@@ -293,12 +293,12 @@ async function loadAuthorizationRoutes(agentMode: 'authority' | 'bootstrap' | nu
   }
   vi.spyOn(externalResourcesUsecase, 'listApiResources').mockResolvedValue({
     items: [apiResource],
-    pagination: { limit: 50, offset: 0, total: 1, hasMore: false, nextOffset: null },
+    pagination: { page: Math.floor(0 / 50) + 1, pageSize: 50, totalItems: 1, totalPages: Math.ceil(1 / 50) },
   })
   vi.spyOn(externalResourcesUsecase, 'getApiResource').mockResolvedValue(apiResource)
   vi.spyOn(externalResourcesUsecase, 'listAgentResourceServers').mockResolvedValue({
     items: [{ ...apiResource, connection: { status: 'not_required', displayName: null, authorizedScopes: [] } }],
-    pagination: { limit: 50, offset: 0, total: 1, hasMore: false, nextOffset: null },
+    pagination: { page: Math.floor(0 / 50) + 1, pageSize: 50, totalItems: 1, totalPages: Math.ceil(1 / 50) },
   })
   vi.spyOn(externalResourcesUsecase, 'getAgentResourceServer').mockResolvedValue({
     ...apiResource,
@@ -446,7 +446,7 @@ function applicationServiceMock() {
   return {
     list: vi.fn().mockResolvedValue({
       items: [application],
-      pagination: { limit: 10, offset: 0, total: 1, hasMore: false, nextOffset: null },
+      pagination: { page: Math.floor(0 / 10) + 1, pageSize: 10, totalItems: 1, totalPages: Math.ceil(1 / 10) },
     }),
     create: vi.fn().mockResolvedValue(application),
     get: vi.fn().mockResolvedValue(application),
@@ -457,12 +457,12 @@ function applicationServiceMock() {
       .mockResolvedValue({ ...application, redirectUris: ['https://next.example.com/callback'] }),
     listSecrets: vi.fn().mockResolvedValue({
       items: [],
-      pagination: { limit: 50, offset: 0, total: 0, hasMore: false, nextOffset: null },
+      pagination: { page: Math.floor(0 / 50) + 1, pageSize: 50, totalItems: 0, totalPages: Math.ceil(0 / 50) },
     }),
     rotateSecret: vi.fn().mockResolvedValue({ id: 'secret-1' }),
     listAuthorizations: vi.fn().mockResolvedValue({
       items: [],
-      pagination: { limit: 10, offset: 0, total: 0, hasMore: false, nextOffset: null },
+      pagination: { page: Math.floor(0 / 10) + 1, pageSize: 10, totalItems: 0, totalPages: Math.ceil(0 / 10) },
     }),
     getAuthorization: vi.fn().mockResolvedValue({
       id: 'authorization-1',
@@ -487,7 +487,7 @@ function applicationServiceMock() {
 function authorizationServiceMock() {
   const page = {
     items: [],
-    pagination: { limit: 50, offset: 0, total: 0, hasMore: false, nextOffset: null },
+    pagination: { page: Math.floor(0 / 50) + 1, pageSize: 50, totalItems: 0, totalPages: Math.ceil(0 / 50) },
   }
   const timestamp = '2026-08-01T00:00:00.000Z'
   const organization = {
@@ -609,7 +609,7 @@ function connectorServiceMock() {
     }),
     list: vi.fn().mockResolvedValue({
       items: [connector],
-      pagination: { limit: 10, offset: 0, total: 1, hasMore: false, nextOffset: null },
+      pagination: { page: Math.floor(0 / 10) + 1, pageSize: 10, totalItems: 1, totalPages: Math.ceil(1 / 10) },
     }),
     create: vi.fn().mockResolvedValue(connector),
     get: vi.fn().mockResolvedValue(connector),

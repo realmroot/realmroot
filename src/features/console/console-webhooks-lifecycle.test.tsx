@@ -180,10 +180,10 @@ describe('webhook endpoint and delivery operations', () => {
       const request = requestDetails(input, init)
       if (request.path === '/api/organizations') return jsonResponse({ items: [organization], pagination })
       if (request.path.startsWith('/api/webhooks?')) {
-        return jsonResponse({ items: [webhookEndpoint], pagination: { ...pagination, total: 1 } })
+        return jsonResponse({ items: [webhookEndpoint], pagination: { ...pagination, totalItems: 1 } })
       }
       if (request.path.startsWith('/api/webhooks/wh_1/deliveries') && request.method === 'GET') {
-        return jsonResponse({ items: requests, pagination: { ...pagination, total: requests.length } })
+        return jsonResponse({ items: requests, pagination: { ...pagination, totalItems: requests.length } })
       }
       if (request.path === '/api/webhooks/wh_1/deliveries/whr_1/attempts' && request.method === 'POST') {
         retries.push(await request.body)
@@ -230,7 +230,7 @@ describe('webhook endpoint and delivery operations', () => {
       if (request.path.startsWith('/api/webhooks')) {
         if (fail) return jsonResponse({ error: 'Webhook inventory unavailable.' }, 500)
         const endpoints = failRequests ? [webhookEndpoint] : []
-        return jsonResponse({ items: endpoints, pagination: { ...emptyPagination, total: endpoints.length } })
+        return jsonResponse({ items: endpoints, pagination: { ...emptyPagination, totalItems: endpoints.length } })
       }
       throw new Error(`Unexpected request: ${request.method} ${request.path}`)
     })

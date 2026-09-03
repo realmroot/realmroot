@@ -162,5 +162,5 @@ function OrganizationMemberCount({ organizationId }: { organizationId: string })
   })
   if (query.isLoading) return <span className="text-muted-foreground">—</span>
   if (query.error) return <span className="text-destructive">{tt('Unavailable')}</span>
-  return <>{query.data?.pagination.total ?? 0}</>
+  return <>{query.data?.pagination.totalItems ?? 0}</>
 }

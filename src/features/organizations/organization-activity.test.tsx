@@ -36,7 +36,7 @@ describe('Organization activity', () => {
               occurredAt: '2026-08-05T12:00:00.000Z',
             },
           ],
-          pagination: { ...emptyPagination, total: 1 },
+          pagination: { ...emptyPagination, totalItems: 1 },
         }),
       )
     })
@@ -87,7 +87,7 @@ describe('Organization activity', () => {
             occurredAt: '2026-08-05T12:00:00.000Z',
           },
         ],
-        pagination: { ...emptyPagination, total: 1 },
+        pagination: { ...emptyPagination, totalItems: 1 },
       }),
     )
 

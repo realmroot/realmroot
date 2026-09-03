@@ -44,7 +44,7 @@ function createApplication(
             updatedAt: '2026-01-01T00:00:00.000Z',
           },
         ],
-        pagination: { limit: 100, offset: 0, total: 1, hasMore: false, nextOffset: null },
+        pagination: { page: Math.floor(0 / 100) + 1, pageSize: 100, totalItems: 1, totalPages: Math.ceil(1 / 100) },
       })),
   } as Deps['authorization']
   return createApplicationUsecase(
@@ -82,23 +82,13 @@ describe('service.test 2', () => {
       'admin-1',
     )
 
-    await expect(listApplications(deps, issuer, { limit: 1, offset: 0 })).resolves.toMatchObject({
+    await expect(listApplications(deps, issuer, { page: 1, pageSize: 1 })).resolves.toMatchObject({
       items: [{ id: first.id }],
-      pagination: {
-        limit: 1,
-        offset: 0,
-        total: 2,
-        hasMore: true,
-      },
+      pagination: { page: 1, pageSize: 1, totalItems: 2, totalPages: 2 },
     })
-    await expect(listApplications(deps, issuer, { limit: 1, offset: 1 })).resolves.toMatchObject({
+    await expect(listApplications(deps, issuer, { page: 2, pageSize: 1 })).resolves.toMatchObject({
       items: [{ id: second.id }],
-      pagination: {
-        limit: 1,
-        offset: 1,
-        total: 2,
-        hasMore: false,
-      },
+      pagination: { page: 2, pageSize: 1, totalItems: 2, totalPages: 2 },
     })
   })
 
@@ -544,13 +534,10 @@ function withoutUndefined<T extends object>(input: T) {
 }
 
 function toPaginationMetadata(pagination: { limit: number; offset: number }, total: number) {
-  const nextOffset = pagination.offset + pagination.limit < total ? pagination.offset + pagination.limit : null
-
   return {
-    limit: pagination.limit,
-    offset: pagination.offset,
-    total,
-    hasMore: nextOffset !== null,
-    nextOffset,
+    page: Math.floor(pagination.offset / pagination.limit) + 1,
+    pageSize: pagination.limit,
+    totalItems: total,
+    totalPages: Math.ceil(total / pagination.limit),
   }
 }

@@ -261,7 +261,7 @@ async function findUser(db: Database, userId: string): Promise<UserProfile> {
   return mapUser(row)
 }
 
-function managedUserWhere(query: AdminUserListQuery) {
+function managedUserWhere(query: Omit<AdminUserListQuery, 'page' | 'pageSize'>) {
   const conditions: SQL[] = []
 
   if (query.search) {

@@ -256,7 +256,7 @@ describe('service.test 1', () => {
 
     await expect(listConnectors(deps, { limit: 25, offset: 0 })).resolves.toMatchObject({
       items: [],
-      pagination: { limit: 25, offset: 0, total: 0, hasMore: false, nextOffset: null },
+      pagination: { page: Math.floor(0 / 25) + 1, pageSize: 25, totalItems: 0, totalPages: Math.ceil(0 / 25) },
     })
     await expect(
       createConnector(deps, {

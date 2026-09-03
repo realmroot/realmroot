@@ -38,7 +38,7 @@ import {
   listManagementFederatedCredentialsResponseSchema,
   updateManagementFederatedCredentialRequestSchema,
 } from '@shared/api/management'
-import { paginationMetadata } from '@shared/api/pagination'
+import { paginationInput, paginationMetadata } from '@shared/api/pagination'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
 import { getActorUserId } from '../../middleware/authn'
@@ -126,18 +126,11 @@ managementApplicationsRoute.delete('/:applicationId', async (c) => {
 managementApplicationsRoute.get('/:applicationId/redirect-uris', async (c) => {
   const application = await requireApplicationAccess(c)
   const pagination = readQuery(c, paginationQuerySchema)
-  const redirectUris = application.redirectUris.slice(pagination.offset, pagination.offset + pagination.limit)
+  const page = paginationInput(pagination)
+  const redirectUris = application.redirectUris.slice(page.offset, page.offset + page.limit)
   return c.json({
     items: redirectUris,
-    pagination: {
-      ...pagination,
-      total: application.redirectUris.length,
-      hasMore: pagination.offset + pagination.limit < application.redirectUris.length,
-      nextOffset:
-        pagination.offset + pagination.limit < application.redirectUris.length
-          ? pagination.offset + pagination.limit
-          : null,
-    },
+    pagination: paginationMetadata({ ...page, total: application.redirectUris.length }),
   })
 })
 

@@ -152,9 +152,9 @@ export function getOrganizationDashboard(organizationId: string): Promise<Organi
   return Promise.all([
     getOrganization(organizationId),
     listApplications({ ownerOrganizationId: organizationId }),
-    listUsers({ organizationId, limit: 100 }),
+    listUsers({ organizationId, page: 1, pageSize: 100 }),
     listApiResources({ ownerOrganizationId: organizationId }),
-    getAgentInventory({ organizationId, limit: 100 }),
+    getAgentInventory({ organizationId, page: 1, pageSize: 100 }),
     listRoles(organizationId),
   ]).then(([organization, applications, users, apiResources, agents, roles]) => ({
     organization,
@@ -321,10 +321,10 @@ export async function listUserApplications(
     readRpcResponse(
       apiClient.api.users[':id']['application-authorizations'].$get({
         param: { id },
-        query: stringifyQuery({ ...query, limit: query.limit ?? 100 }),
+        query: stringifyQuery({ ...query, pageSize: query.pageSize ?? 100 }),
       }),
     ),
-    listApplications({ limit: 100 }),
+    listApplications({ page: 1, pageSize: 100 }),
   ])
   const applicationsById = new Map(inventory.items.map((application) => [application.id, application]))
   const applications = result.items.map((authorization) => {
@@ -691,7 +691,9 @@ export async function listWebhookRequests(
 ): Promise<ListWebhookRequestsResponse> {
   const endpointIds = query.endpointId
     ? [query.endpointId]
-    : (await listWebhookEndpoints({ organizationId: query.organizationId, limit: 100 })).items.map(({ id }) => id)
+    : (await listWebhookEndpoints({ organizationId: query.organizationId, page: 1, pageSize: 100 })).items.map(
+        ({ id }) => id,
+      )
   const childQuery = { ...query, endpointId: undefined }
   const responses = await Promise.all(
     endpointIds.map((id) =>
@@ -701,9 +703,15 @@ export async function listWebhookRequests(
     ),
   )
   const requests = responses.flatMap((response) => response.items)
+  const aggregatePageSize = Math.max(requests.length, 1)
   return {
     items: requests,
-    pagination: { offset: 0, limit: requests.length, total: requests.length, hasMore: false, nextOffset: null },
+    pagination: {
+      page: 1,
+      pageSize: aggregatePageSize,
+      totalItems: requests.length,
+      totalPages: requests.length === 0 ? 0 : 1,
+    },
   }
 }
 

@@ -38,21 +38,21 @@ const pageSize = 50
 
 export function PermissionsPanel({ subject }: { subject: PermissionSubject }) {
   const queryClient = useQueryClient()
-  const [offset, setOffset] = useState(0)
+  const [page, setPage] = useState(1)
   const [createOpen, setCreateOpen] = useState(false)
   const [revokeTarget, setRevokeTarget] = useState<Permission | null>(null)
-  const queryKey = permissionQueryKey(subject, offset)
+  const queryKey = permissionQueryKey(subject, page)
   const resourcesQuery = useQuery({
     queryKey: [...consoleQueryKeys.apiResources, { purpose: 'permissions' }],
-    queryFn: () => listApiResources({ limit: 100 }),
+    queryFn: () => listApiResources({ page: 1, pageSize: 100 }),
   })
   const permissionsQuery = useQuery({
     queryKey,
     queryFn: async (): Promise<PermissionPage> => {
       const result =
         subject.type === 'user'
-          ? await listUserPermissions(subject.id, { limit: pageSize, offset })
-          : await listApplicationPermissions(subject.id, { limit: pageSize, offset })
+          ? await listUserPermissions(subject.id, { page, pageSize })
+          : await listApplicationPermissions(subject.id, { page, pageSize })
       return { items: result.items, pagination: result.pagination }
     },
   })
@@ -68,7 +68,7 @@ export function PermissionsPanel({ subject }: { subject: PermissionSubject }) {
     },
     onSuccess: async () => {
       setCreateOpen(false)
-      setOffset(0)
+      setPage(1)
       await queryClient.invalidateQueries({ queryKey: permissionQueryPrefix(subject) })
     },
   })
@@ -79,7 +79,7 @@ export function PermissionsPanel({ subject }: { subject: PermissionSubject }) {
         : deleteApplicationPermission(subject.id, permissionId),
     onSuccess: async () => {
       setRevokeTarget(null)
-      if (permissionsQuery.data?.items.length === 1 && offset > 0) setOffset(Math.max(0, offset - pageSize))
+      if (permissionsQuery.data?.items.length === 1 && page > 1) setPage(page - 1)
       await queryClient.invalidateQueries({ queryKey: permissionQueryPrefix(subject) })
     },
   })
@@ -162,26 +162,22 @@ export function PermissionsPanel({ subject }: { subject: PermissionSubject }) {
               )}
             </TableBody>
           </Table>
-          {pagination && pagination.total > pageSize ? (
+          {pagination && pagination.totalPages > 1 ? (
             <div className="flex items-center justify-between border-t px-3 py-2">
               <p className="text-xs text-muted-foreground">
                 {tt('{{start}}–{{end}} of {{total}}', {
-                  start: pagination.offset + 1,
-                  end: Math.min(pagination.offset + pagination.limit, pagination.total),
-                  total: pagination.total,
+                  start: (pagination.page - 1) * pagination.pageSize + 1,
+                  end: Math.min(pagination.page * pagination.pageSize, pagination.totalItems),
+                  total: pagination.totalItems,
                 })}
               </p>
               <div className="flex gap-2">
-                <Button
-                  disabled={offset === 0}
-                  onClick={() => setOffset(Math.max(0, offset - pageSize))}
-                  variant="outline"
-                >
+                <Button disabled={page === 1} onClick={() => setPage(Math.max(1, page - 1))} variant="outline">
                   {tt('Previous')}
                 </Button>
                 <Button
-                  disabled={!pagination.hasMore || pagination.nextOffset === null}
-                  onClick={() => setOffset(pagination.nextOffset!)}
+                  disabled={pagination.page >= pagination.totalPages}
+                  onClick={() => setPage(page + 1)}
                   variant="outline"
                 >
                   {tt('Next')}
@@ -325,6 +321,6 @@ function permissionQueryPrefix(subject: PermissionSubject) {
     : [...consoleQueryKeys.applications, subject.id, 'permissions']
 }
 
-function permissionQueryKey(subject: PermissionSubject, offset: number) {
-  return [...permissionQueryPrefix(subject), { limit: pageSize, offset }]
+function permissionQueryKey(subject: PermissionSubject, page: number) {
+  return [...permissionQueryPrefix(subject), { page, pageSize }]
 }

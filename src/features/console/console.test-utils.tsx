@@ -135,7 +135,7 @@ export function accountRouteFetch(input: RequestInfo | URL, init?: RequestInit) 
   if (url === '/api/account/organization-context') {
     return Promise.resolve(jsonResponse({ activeOrganizationId: null }))
   }
-  if (url === '/api/account/provider-connections?limit=100&offset=0') {
+  if (url === '/api/account/provider-connections?page=1&pageSize=100') {
     return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
   }
   if (url === '/api/account/linked-accounts') {

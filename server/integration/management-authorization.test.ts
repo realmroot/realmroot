@@ -350,14 +350,14 @@ describe('authorization management over real D1', () => {
           resource: { id: auditResource.id, identifier: 'personal-audit-resource' },
         },
       ],
-      pagination: { total: 1 },
+      pagination: { totalItems: 1 },
     })
     const resourceSearch = await harness.request('/api/realm/audit-events?search=personal-audit-resource', {
       headers: { cookie },
     })
     await expect(resourceSearch.json()).resolves.toMatchObject({
       items: [{ id: 'personal-audit-denied-event' }],
-      pagination: { total: 1 },
+      pagination: { totalItems: 1 },
     })
   })
 
@@ -879,7 +879,7 @@ describe('authorization management over real D1', () => {
     })
     await expect(userResources.json()).resolves.toMatchObject({
       items: [{ id: resource.id, name: 'Grant API', identifier: 'grant-api', permissionCount: 1 }],
-      pagination: { total: 1 },
+      pagination: { totalItems: 1 },
     })
 
     const applicationGrant = (await (
@@ -901,7 +901,7 @@ describe('authorization management over real D1', () => {
     )
     await expect(applicationResources.json()).resolves.toMatchObject({
       items: [{ id: resource.id, name: 'Grant API', identifier: 'grant-api', permissionCount: 1 }],
-      pagination: { total: 1 },
+      pagination: { totalItems: 1 },
     })
 
     expect((await harness.request('/api/users/missing-user/permissions', { headers: { cookie } })).status).toBe(404)
@@ -980,14 +980,14 @@ describe('authorization management over real D1', () => {
           headers: { cookie },
         })
       ).json(),
-    ).resolves.toMatchObject({ items: [], pagination: { total: 0 } })
+    ).resolves.toMatchObject({ items: [], pagination: { totalItems: 0 } })
     await expect(
       (
         await harness.request(`/api/users/${targetUserId}/authorized-resource-servers`, {
           headers: { cookie },
         })
       ).json(),
-    ).resolves.toMatchObject({ items: [], pagination: { total: 0 } })
+    ).resolves.toMatchObject({ items: [], pagination: { totalItems: 0 } })
 
     await harness.db
       .update(resourceScopeEntitlement)
@@ -999,14 +999,14 @@ describe('authorization management over real D1', () => {
           headers: { cookie },
         })
       ).json(),
-    ).resolves.toMatchObject({ items: [], pagination: { total: 0 } })
+    ).resolves.toMatchObject({ items: [], pagination: { totalItems: 0 } })
     await expect(
       (
         await harness.request(`/api/applications/${application.id}/authorized-resource-servers`, {
           headers: { cookie },
         })
       ).json(),
-    ).resolves.toMatchObject({ items: [], pagination: { total: 0 } })
+    ).resolves.toMatchObject({ items: [], pagination: { totalItems: 0 } })
     await expect(
       (
         await harness.request(`/api/applications/${application.id}/permissions?status=inactive`, {
@@ -1015,7 +1015,7 @@ describe('authorization management over real D1', () => {
       ).json(),
     ).resolves.toMatchObject({
       items: [{ id: applicationGrant.id, status: 'ended', endReason: 'expired' }],
-      pagination: { total: 1 },
+      pagination: { totalItems: 1 },
     })
     expect((await harness.request('/api/user-scope-grants', { headers: { cookie } })).status).toBe(404)
     expect((await harness.request('/api/application-scope-grants', { headers: { cookie } })).status).toBe(404)
@@ -1753,7 +1753,7 @@ describe('authorization management over real D1', () => {
     expect(grants.status).toBe(200)
     await expect(grants.json()).resolves.toMatchObject({
       items: [],
-      pagination: { total: 0 },
+      pagination: { totalItems: 0 },
     })
     await Promise.all([
       harness.db

@@ -158,11 +158,10 @@ async function fixture(
       listResources: vi.fn().mockResolvedValue({
         items: options.resource === null ? [] : [options.resource === undefined ? resource : options.resource],
         pagination: {
-          limit: 100,
-          offset: 0,
-          total: options.resource === null ? 0 : 1,
-          hasMore: false,
-          nextOffset: null,
+          page: Math.floor(0 / 100) + 1,
+          pageSize: 100,
+          totalItems: options.resource === null ? 0 : 1,
+          totalPages: Math.ceil((options.resource === null ? 0 : 1) / 100),
         },
       }),
       listActiveApplicationScopeEntitlements: vi

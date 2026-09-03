@@ -167,7 +167,7 @@ function dependencies() {
       findResource: vi.fn().mockImplementation(async (id) => (id === internalResource.id ? internalResource : null)),
       listResources: vi.fn().mockResolvedValue({
         items: [internalResource],
-        pagination: { limit: 100, offset: 0, total: 1, hasMore: false, nextOffset: null },
+        pagination: { page: Math.floor(0 / 100) + 1, pageSize: 100, totalItems: 1, totalPages: Math.ceil(1 / 100) },
       }),
       listOrganizationRoleScopes: vi.fn().mockResolvedValue(new Map()),
     },

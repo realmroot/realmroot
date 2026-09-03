@@ -28,21 +28,25 @@ export function ConsoleDashboardPage() {
         title={tt('Dashboard')}
       />
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <MetricCard detail={tt('Realm identities')} label={tt('Users')} value={realmDashboard.users.pagination.total} />
+        <MetricCard
+          detail={tt('Realm identities')}
+          label={tt('Users')}
+          value={realmDashboard.users.pagination.totalItems}
+        />
         <MetricCard
           detail={tt('Registered OIDC clients')}
           label={tt('Applications')}
-          value={realmDashboard.applications.pagination.total}
+          value={realmDashboard.applications.pagination.totalItems}
         />
         <MetricCard
           detail={tt('Protected APIs')}
           label={tt('Resource servers')}
-          value={realmDashboard.apiResources.pagination.total}
+          value={realmDashboard.apiResources.pagination.totalItems}
         />
         <MetricCard
           detail={tt('Shared membership spaces')}
           label={tt('Organizations')}
-          value={realmDashboard.organizations.pagination.total}
+          value={realmDashboard.organizations.pagination.totalItems}
         />
       </div>
       <div className="consoleDashboardGrid">
@@ -122,7 +126,7 @@ function ConfigurationGaps({ dashboard }: { dashboard: AdminDashboard }) {
       meta: tt('Hosted authentication currently has no usable method.'),
     })
   }
-  if (dashboard.applications.pagination.total === 0) {
+  if (dashboard.applications.pagination.totalItems === 0) {
     items.push({
       href: '/console/applications',
       icon: <AppWindow />,
@@ -130,7 +134,7 @@ function ConfigurationGaps({ dashboard }: { dashboard: AdminDashboard }) {
       meta: tt('No client can use this Realm yet.'),
     })
   }
-  if (dashboard.apiResources.pagination.total === 0) {
+  if (dashboard.apiResources.pagination.totalItems === 0) {
     items.push({
       href: '/console/api-resources',
       icon: <Server />,

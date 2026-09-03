@@ -151,21 +151,20 @@ describe('admin console applications-detail-a', () => {
       if (url === '/api/applications/app-1' && method === 'GET') {
         return Promise.resolve(jsonResponse(application))
       }
-      if (url === '/api/applications/app-1/authorizations?status=active&limit=50&offset=0' && method === 'GET') {
+      if (url === '/api/applications/app-1/authorizations?status=active&page=1&pageSize=50' && method === 'GET') {
         return Promise.resolve(
           jsonResponse({
             items: active ? [authorization] : [],
             pagination: {
-              limit: 50,
-              offset: 0,
-              total: active ? 51 : 0,
-              hasMore: active,
-              nextOffset: active ? 50 : null,
+              page: Math.floor(0 / 50) + 1,
+              pageSize: 50,
+              totalItems: active ? 51 : 0,
+              totalPages: Math.ceil((active ? 51 : 0) / 50),
             },
           }),
         )
       }
-      if (url === '/api/applications/app-1/authorizations?status=active&limit=50&offset=50' && method === 'GET') {
+      if (url === '/api/applications/app-1/authorizations?status=active&page=2&pageSize=50' && method === 'GET') {
         return Promise.resolve(
           jsonResponse({
             items: active
@@ -177,7 +176,12 @@ describe('admin console applications-detail-a', () => {
                   },
                 ]
               : [],
-            pagination: { limit: 50, offset: 50, total: active ? 51 : 0, hasMore: false, nextOffset: null },
+            pagination: {
+              page: Math.floor(50 / 50) + 1,
+              pageSize: 50,
+              totalItems: active ? 51 : 0,
+              totalPages: Math.ceil((active ? 51 : 0) / 50),
+            },
           }),
         )
       }
@@ -240,7 +244,7 @@ describe('admin console applications-detail-a', () => {
         return Promise.resolve(jsonResponse({ items: [] }))
       }
       if (url === '/api/resource-servers') {
-        return Promise.resolve(jsonResponse({ items: [], pagination: { ...pagination, total: 0 } }))
+        return Promise.resolve(jsonResponse({ items: [], pagination: { ...pagination, totalItems: 0 } }))
       }
       if (url === '/api/organizations') {
         return Promise.resolve(
@@ -426,7 +430,7 @@ describe('admin console applications-detail-a', () => {
         return Promise.resolve(jsonResponse({ items: [] }))
       }
       if (url === '/api/resource-servers') {
-        return Promise.resolve(jsonResponse({ items: [], pagination: { ...pagination, total: 0 } }))
+        return Promise.resolve(jsonResponse({ items: [], pagination: { ...pagination, totalItems: 0 } }))
       }
       return consoleSharedFetch(input, init)
     })

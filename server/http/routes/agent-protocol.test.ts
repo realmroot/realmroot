@@ -416,5 +416,5 @@ function jsonHeaders() {
 }
 
 function page(total: number) {
-  return { limit: 20, offset: 0, total, hasMore: false, nextOffset: null }
+  return { page: 1, pageSize: 20, totalItems: total, totalPages: Math.ceil(total / 20) }
 }

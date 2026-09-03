@@ -1,4 +1,5 @@
 import type { ApplicationAggregate, ConsentRecord } from '@server/usecases/ports'
+import { paginationMetadata } from '@shared/api/pagination'
 import {
   type ApplicationOidcClaims,
   defaultApplicationOidcClaims,
@@ -126,15 +127,7 @@ function readTokenExchangePolicies(metadata: unknown): ApplicationAggregate['tok
 }
 
 export function toPaginationMetadata(pagination: { limit: number; offset: number }, total: number) {
-  const nextOffset = pagination.offset + pagination.limit < total ? pagination.offset + pagination.limit : null
-
-  return {
-    limit: pagination.limit,
-    offset: pagination.offset,
-    total,
-    hasMore: nextOffset !== null,
-    nextOffset,
-  }
+  return paginationMetadata({ ...pagination, total })
 }
 
 export function serializeList(values: readonly string[]) {

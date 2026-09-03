@@ -19,10 +19,10 @@ export function AgentsPage({ organizationId }: { organizationId?: string } = {})
   const [search, setSearch] = useState('')
   const [ownerType, setOwnerType] = useState('any')
   const [status, setStatus] = useState('any')
-  const [offset, setOffset] = useState(0)
+  const [page, setPage] = useState(1)
   const query = useQuery({
-    queryKey: [...consoleQueryKeys.agents, { organizationId, limit: pageSize, offset }],
-    queryFn: () => getAgentInventory({ organizationId, limit: pageSize, offset }),
+    queryKey: [...consoleQueryKeys.agents, { organizationId, page, pageSize }],
+    queryFn: () => getAgentInventory({ organizationId, page, pageSize }),
   })
   const agents = (query.data?.items ?? []).filter((agent) => {
     const type = agent.homeSpace.type === 'personal' ? 'user' : 'organization'
@@ -58,7 +58,7 @@ export function AgentsPage({ organizationId }: { organizationId?: string } = {})
               aria-label={tt('Search Agents')}
               onChange={(event) => {
                 setSearch(event.target.value)
-                setOffset(0)
+                setPage(1)
               }}
               placeholder={tt('Search Agents')}
               value={search}
@@ -69,7 +69,7 @@ export function AgentsPage({ organizationId }: { organizationId?: string } = {})
               aria-label={tt('Filter owner type')}
               onChange={(event) => {
                 setOwnerType(event.target.value)
-                setOffset(0)
+                setPage(1)
               }}
               value={ownerType}
             >
@@ -82,7 +82,7 @@ export function AgentsPage({ organizationId }: { organizationId?: string } = {})
             aria-label={tt('Filter Agent status')}
             onChange={(event) => {
               setStatus(event.target.value)
-              setOffset(0)
+              setPage(1)
             }}
             value={status}
           >
@@ -117,27 +117,30 @@ export function AgentsPage({ organizationId }: { organizationId?: string } = {})
             )}
           </TableBody>
         </Table>
-        {query.data && query.data.pagination.total > query.data.pagination.limit ? (
+        {query.data && query.data.pagination.totalPages > 1 ? (
           <div className="flex flex-wrap items-center justify-between gap-2 px-4 pb-4 text-sm text-muted-foreground">
             <span>
               {tt('{{start}}–{{end}} of {{total}}', {
-                start: query.data.pagination.offset + 1,
-                end: Math.min(query.data.pagination.offset + query.data.pagination.limit, query.data.pagination.total),
-                total: query.data.pagination.total,
+                start: (query.data.pagination.page - 1) * query.data.pagination.pageSize + 1,
+                end: Math.min(
+                  query.data.pagination.page * query.data.pagination.pageSize,
+                  query.data.pagination.totalItems,
+                ),
+                total: query.data.pagination.totalItems,
               })}
             </span>
             <div className="flex gap-2">
               <Button
-                disabled={offset === 0}
-                onClick={() => setOffset(Math.max(0, offset - query.data.pagination.limit))}
+                disabled={page === 1}
+                onClick={() => setPage(Math.max(1, page - 1))}
                 type="button"
                 variant="secondary"
               >
                 {tt('Previous')}
               </Button>
               <Button
-                disabled={!query.data.pagination.hasMore || query.data.pagination.nextOffset === null}
-                onClick={() => setOffset(query.data.pagination.nextOffset ?? offset)}
+                disabled={page >= query.data.pagination.totalPages}
+                onClick={() => setPage(page + 1)}
                 type="button"
                 variant="secondary"
               >

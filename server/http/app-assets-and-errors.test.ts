@@ -146,7 +146,7 @@ function _applicationCorsFactory(origins: string[]) {
         applicationResponse({ corsOrigins: origins }),
         applicationResponse({ disabled: true, corsOrigins: ['https://disabled.example.com'] }),
       ],
-      pagination: { limit: 100, offset: 0, total: 2, hasMore: false, nextOffset: null },
+      pagination: { page: Math.floor(0 / 100) + 1, pageSize: 100, totalItems: 2, totalPages: Math.ceil(2 / 100) },
     }),
     revokeConsent: vi.fn(),
   })

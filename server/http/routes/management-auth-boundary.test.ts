@@ -177,6 +177,14 @@ describe('management routes 1', () => {
     for (const operation of openApiOperationObjects()) {
       expect(operation.tags, operation.key).toHaveLength(1)
       expect(declaredTags.has(operation.tags?.[0] ?? ''), operation.key).toBe(true)
+      const usesPagePagination = operation.parameters?.some((parameter) => {
+        const value = openApiRecord(parameter)
+        return value.in === 'query' && value.name === 'page'
+      })
+      if (usesPagePagination) {
+        const successResponse = openApiRecord(openApiRecord(operation.responses)['200'])
+        expect(openApiRecord(successResponse.headers), operation.key).toHaveProperty('Link')
+      }
     }
     for (const operation of openApiOperationObjects().filter(({ key }) => /^\w+ \/realm(?:\/|$)/.test(key))) {
       expect(operation.tags, operation.key).toEqual(['Platform'])

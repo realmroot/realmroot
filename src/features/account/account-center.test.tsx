@@ -76,7 +76,7 @@ describe('account pages', () => {
         '/api/account/profile',
         '/api/account/developer-console-access',
         '/api/account/linked-accounts',
-        '/api/account/provider-connections?limit=100&offset=0',
+        '/api/account/provider-connections?page=1&pageSize=100',
       ]),
     )
 
@@ -105,8 +105,8 @@ describe('account pages', () => {
         '/api/configz',
         '/api/account/profile',
         '/api/account/developer-console-access',
-        '/api/account/provider-connectors?limit=100&offset=0',
-        '/api/account/provider-connections?limit=100&offset=0',
+        '/api/account/provider-connectors?page=1&pageSize=100',
+        '/api/account/provider-connections?page=1&pageSize=100',
       ]),
     )
   })
@@ -144,7 +144,7 @@ function mockAccountFetch() {
         }),
       )
     }
-    const pagination = { limit: 50, offset: 0, total: 0, hasMore: false, nextOffset: null }
+    const pagination = { page: 1, pageSize: 50, totalItems: 0, totalPages: 0 }
     if (path === '/api/account/security') return Promise.resolve(jsonResponse({ security }))
     if (path === '/api/account/security/passkeys') return Promise.resolve(jsonResponse({ passkeys: [] }))
     if (path === '/api/account/sessions') return Promise.resolve(jsonResponse({ items: [], pagination }))

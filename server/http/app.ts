@@ -38,6 +38,7 @@ import { authn, getPrincipal, type SessionReader } from './middleware/authn'
 import { authorizePlatformOrganization, authz } from './middleware/authz'
 import { trustedOriginCors } from './middleware/cors'
 import { depsMiddleware } from './middleware/deps'
+import { paginationLinkHeader, responsePagination } from './middleware/pagination'
 import { requestContext } from './middleware/request-context'
 import { requireSecurityPolicy } from './middleware/security-policy'
 import { unifiedOpenApi, unifiedOpenApiLinkHeader, unifiedOpenApiPath } from './openapi/management'
@@ -213,7 +214,7 @@ function mountApiRoutes(app: Hono, auth: AuthHandler, config: AppConfig) {
     .get('/api/health', (c) => c.json(healthStatus))
     .route('/api/configz', createConfigzRoutes(config.securityPolicy))
     .route('/api/assets', createAssetRoutes())
-    .use('/api/*', unifiedOpenApiDiscoveryHeader())
+    .use('/api/*', resourceLinkHeaders(config))
     .route(
       '/api/public',
       createPublicProfileRoutes((requestUrl) => oauthIssuer(config, requestUrl)),
@@ -304,12 +305,16 @@ function createUnifiedApiRoutes(_auth: AuthHandler, _config: AppConfig) {
   return app
 }
 
-function unifiedOpenApiDiscoveryHeader() {
+function resourceLinkHeaders(config: AppConfig) {
   return async (c: Context, next: () => Promise<void>) => {
     await next()
     if (c.req.path === unifiedOpenApiPath) return
-    const existing = c.res.headers.get('Link')
-    c.header('Link', existing ? `${existing}, ${unifiedOpenApiLinkHeader}` : unifiedOpenApiLinkHeader)
+    const pagination = await responsePagination(c.res)
+    const paginationLinks = pagination
+      ? paginationLinkHeader(trustedRequestUrl(config, c.req.url).toString(), pagination)
+      : null
+    const links = [c.res.headers.get('Link'), paginationLinks, unifiedOpenApiLinkHeader].filter(Boolean).join(', ')
+    c.header('Link', links)
   }
 }
 

@@ -6,12 +6,7 @@
  * layer's dependency budget.
  */
 import type { AccountProfileUpdateInput } from '@shared/api/account'
-import type {
-  ApplicationOidcClaims,
-  ApplicationResponse,
-  PaginationMetadata,
-  PaginationQuery,
-} from '@shared/api/applications'
+import type { ApplicationOidcClaims, ApplicationResponse, PaginationMetadata } from '@shared/api/applications'
 import type { AssetPurpose } from '@shared/api/assets'
 import type {
   ApiResourceResponse,
@@ -50,6 +45,8 @@ import type {
   WebhookEvent,
   WebhookRequestStatus,
 } from '@shared/api/webhooks'
+
+type RepositoryPageQuery<T extends { page: number; pageSize: number }> = Omit<T, 'page' | 'pageSize'> & PaginationInput
 
 // --- assets -----------------------------------------------------------------
 
@@ -158,7 +155,7 @@ export interface WebhookDeliveryAttemptInsert extends Omit<WebhookDeliveryAttemp
 
 export interface WebhookRepository {
   listEndpoints(
-    query: ListWebhookEndpointsQuery,
+    query: RepositoryPageQuery<ListWebhookEndpointsQuery>,
     organizationIds?: string[],
   ): Promise<{ items: WebhookEndpointRecord[]; total: number }>
   listSubscribedEndpoints(event: WebhookEvent, organizationIds: string[]): Promise<WebhookEndpointRecord[]>
@@ -167,7 +164,7 @@ export interface WebhookRepository {
   updateEndpoint(id: string, input: Partial<WebhookEndpointInsert>): Promise<WebhookEndpointRecord | null>
   deleteEndpoint(id: string): Promise<void>
   listRequests(
-    query: ListWebhookRequestsQuery,
+    query: RepositoryPageQuery<ListWebhookRequestsQuery>,
     organizationIds?: string[],
   ): Promise<{ items: WebhookRequestRecord[]; total: number }>
   findRequest(id: string): Promise<WebhookRequestRecord | null>
@@ -231,7 +228,10 @@ export interface UserRepository {
   getUser(userId: string): Promise<UserProfile>
   getPublicProfile(userId: string): Promise<UserPublicProfile>
   findPublicProfileByUsername(username: string): Promise<UserPublicProfile | null>
-  listManagedUsers(query: AdminUserListQuery, userIds?: string[]): Promise<PaginatedResult<UserProfile>>
+  listManagedUsers(
+    query: RepositoryPageQuery<AdminUserListQuery>,
+    userIds?: string[],
+  ): Promise<PaginatedResult<UserProfile>>
   createManagedUser(input: AdminCreateUserInput): Promise<UserProfile>
   updateManagedUser(userId: string, input: AdminUpdateUserInput): Promise<UserProfile>
   suspendManagedUser(userId: string, reason: string | null, expiresAt: Date | null): Promise<UserProfile>
@@ -1325,7 +1325,7 @@ export interface ApplicationRepository {
     clientSecret: Omit<ClientSecretRecord, 'createdAt' | 'expiresAt' | 'revokedAt'> | null
   }): Promise<ApplicationAggregate>
   list(
-    pagination: PaginationQuery,
+    pagination: PaginationInput,
     ownerOrganizationIds?: string[],
   ): Promise<ApplicationPaginatedResult<ApplicationAggregate>>
   findById(id: string): Promise<ApplicationAggregate | null>
@@ -1337,14 +1337,14 @@ export interface ApplicationRepository {
   delete(id: string): Promise<void>
   listSecrets(
     applicationId: string,
-    pagination: PaginationQuery,
+    pagination: PaginationInput,
   ): Promise<ApplicationPaginatedResult<ClientSecretRecord>>
   rotateSecret(input: {
     applicationId: string
     secret: Omit<ClientSecretRecord, 'createdAt' | 'expiresAt' | 'revokedAt'>
   }): Promise<ClientSecretRecord>
   listAuthorizations(
-    query: PaginationQuery & { applicationId?: string; userId?: string; status?: 'active' | 'expired' | 'revoked' },
+    query: PaginationInput & { applicationId?: string; userId?: string; status?: 'active' | 'expired' | 'revoked' },
     ownerOrganizationIds?: string[],
   ): Promise<ApplicationPaginatedResult<ApplicationAuthorizationRecord>>
   findAuthorization(authorizationId: string): Promise<ApplicationAuthorizationRecord | null>
@@ -1398,7 +1398,7 @@ export interface AuthorizationRepository {
     owner: Omit<MemberRecordInput, 'organizationId'>,
   ): Promise<OrganizationResponse>
   listOrganizations(
-    pagination: PaginationQuery,
+    pagination: PaginationInput,
     organizationIds?: string[],
   ): Promise<AuthorizationPaginatedResult<OrganizationResponse>>
   findOrganization(id: string): Promise<OrganizationResponse | null>
@@ -1407,13 +1407,13 @@ export interface AuthorizationRepository {
   addMember(organizationId: string, input: MemberRecordInput): Promise<MemberResponse>
   listMembers(
     organizationId: string,
-    pagination: PaginationQuery,
+    pagination: PaginationInput,
   ): Promise<AuthorizationPaginatedResult<MemberResponse>>
   findMember(id: string): Promise<MemberResponse | null>
   findMemberByOrganizationUser(organizationId: string, userId: string): Promise<MemberResponse | null>
   listUserMemberships(userId: string): Promise<MemberResponse[]>
   findTeam(id: string): Promise<TeamRecord | null>
-  listTeamMembers(teamId: string, pagination: PaginationQuery): Promise<AuthorizationPaginatedResult<TeamMemberRecord>>
+  listTeamMembers(teamId: string, pagination: PaginationInput): Promise<AuthorizationPaginatedResult<TeamMemberRecord>>
   listTeamNamesForUser(organizationId: string, userId: string): Promise<string[]>
   listMemberUserIds(organizationIds: string[]): Promise<string[]>
   countMembersByRole(organizationId: string, role: string): Promise<number>
@@ -1435,13 +1435,13 @@ export interface AuthorizationRepository {
   createInvitation(input: InvitationRecordInput): Promise<InvitationResponse>
   listInvitations(
     organizationId: string,
-    pagination: PaginationQuery,
+    pagination: PaginationInput,
   ): Promise<AuthorizationPaginatedResult<InvitationResponse>>
   findInvitation(id: string): Promise<InvitationResponse | null>
   cancelInvitation(id: string): Promise<void>
   createResource(input: ApiResourceRecordInput): Promise<ApiResourceResponse>
   listResources(
-    pagination: PaginationQuery,
+    pagination: PaginationInput,
     ownerOrganizationIds?: string[],
   ): Promise<AuthorizationPaginatedResult<ApiResourceResponse>>
   listEnabledResources(): Promise<ApiResourceResponse[]>
@@ -1460,7 +1460,7 @@ export interface AuthorizationRepository {
   findScopeEntitlement(id: string): Promise<ResourceScopeEntitlementRecord | null>
   listUserPermissions(
     userId: string,
-    query: ListPermissionsQuery,
+    query: RepositoryPageQuery<ListPermissionsQuery>,
     ownerOrganizationIds?: string[],
   ): Promise<AuthorizationPaginatedResult<ResourceScopeEntitlementRecord>>
   listActiveUserScopeEntitlements(
@@ -1470,11 +1470,11 @@ export interface AuthorizationRepository {
   ): Promise<ResourceScopeEntitlementRecord[]>
   listApplicationPermissions(
     applicationId: string,
-    query: ListPermissionsQuery,
+    query: RepositoryPageQuery<ListPermissionsQuery>,
   ): Promise<AuthorizationPaginatedResult<ResourceScopeEntitlementRecord>>
   listAuthorizedResourceServers(
     subject: PermissionSubject,
-    query: ListAuthorizedResourceServersQuery,
+    query: RepositoryPageQuery<ListAuthorizedResourceServersQuery>,
     now: Date,
     ownerOrganizationIds?: string[],
   ): Promise<AuthorizationPaginatedResult<AuthorizedResourceServerRecord>>

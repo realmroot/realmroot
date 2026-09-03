@@ -196,48 +196,30 @@ describe('management account settings routes', () => {
     const deps = createTestDeps({ users })
     deps.applications.listAuthorizations = vi.fn().mockResolvedValue({
       items: [],
-      pagination: { limit: 3, offset: 6, total: 10, hasMore: true, nextOffset: 9 },
+      pagination: { page: Math.floor(6 / 3) + 1, pageSize: 3, totalItems: 10, totalPages: Math.ceil(10 / 3) },
     })
     const app = createApp(createAuthMock(), deps)
     const headers = userHeaders()
 
     await app.request('/api/account/profile', { headers })
-    const accounts = await app.request('/api/account/linked-accounts?limit=2&offset=4', { headers })
-    const applications = await app.request('/api/account/application-authorizations?limit=3&offset=6', { headers })
-    const sessions = await app.request('/api/account/sessions?limit=4&offset=8', { headers })
+    const accounts = await app.request('/api/account/linked-accounts?page=3&pageSize=2', { headers })
+    const applications = await app.request('/api/account/application-authorizations?page=3&pageSize=3', { headers })
+    const sessions = await app.request('/api/account/sessions?page=3&pageSize=4', { headers })
 
     expect(users.getPublicProfile).toHaveBeenCalledWith('user-1')
     expect(users.listLinkedAccounts).toHaveBeenCalledWith('user-1', { limit: 2, offset: 4 })
     expect(users.listSessions).toHaveBeenCalledWith('user-1', { limit: 4, offset: 8 })
     await expect(accounts.json()).resolves.toMatchObject({
       items: [],
-      pagination: {
-        limit: 2,
-        offset: 4,
-        total: 10,
-        hasMore: true,
-        nextOffset: 6,
-      },
+      pagination: { page: Math.floor(4 / 2) + 1, pageSize: 2, totalItems: 10, totalPages: Math.ceil(10 / 2) },
     })
     await expect(applications.json()).resolves.toMatchObject({
       items: [],
-      pagination: {
-        limit: 3,
-        offset: 6,
-        total: 10,
-        hasMore: true,
-        nextOffset: 9,
-      },
+      pagination: { page: Math.floor(6 / 3) + 1, pageSize: 3, totalItems: 10, totalPages: Math.ceil(10 / 3) },
     })
     await expect(sessions.json()).resolves.toMatchObject({
       items: [],
-      pagination: {
-        limit: 4,
-        offset: 8,
-        total: 10,
-        hasMore: false,
-        nextOffset: null,
-      },
+      pagination: { page: Math.floor(8 / 4) + 1, pageSize: 4, totalItems: 10, totalPages: Math.ceil(10 / 4) },
     })
   })
 

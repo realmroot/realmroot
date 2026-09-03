@@ -15,6 +15,7 @@ import {
   paginationQuerySchema,
   updateManagementConnectorRequestSchema,
 } from '@shared/api/management'
+import { paginationInput } from '@shared/api/pagination'
 import { Hono } from 'hono'
 import { authorizePlatformOrganization } from '../../middleware/authz'
 import { getDeps } from '../../middleware/deps'
@@ -33,7 +34,7 @@ export function createManagementConnectorRoutes(canonicalOrigin?: string) {
   app.get('/', async (c) =>
     c.json(
       listManagementConnectorsResponseSchema.parse(
-        await listConnectors(getDeps(c), readQuery(c, paginationQuerySchema)),
+        await listConnectors(getDeps(c), paginationInput(readQuery(c, paginationQuerySchema))),
       ),
     ),
   )

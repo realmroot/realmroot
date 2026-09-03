@@ -23,6 +23,7 @@ import {
   rotateWebhookSecret,
   updateWebhookEndpoint,
 } from '@server/usecases/webhooks'
+import type { PaginationInput } from '@shared/api/pagination'
 import type { ListWebhookEndpointsQuery, ListWebhookRequestsQuery, WebhookEvent } from '@shared/api/webhooks'
 import { describe, expect, it } from 'vitest'
 
@@ -57,17 +58,17 @@ describe('WebhookService', () => {
       enabled: true,
     })
     await expect(getWebhookEndpoint(deps, created.endpoint.id)).resolves.toMatchObject({ id: created.endpoint.id })
-    expect(await listWebhookEndpoints(deps, { limit: 50, offset: 0, status: 'enabled' })).toMatchObject({
+    expect(await listWebhookEndpoints(deps, { page: 1, pageSize: 50, status: 'enabled' })).toMatchObject({
       items: [{ id: created.endpoint.id }],
-      pagination: { total: 1, hasMore: false },
+      pagination: { totalItems: 1 },
     })
 
     await expect(updateWebhookEndpoint(deps, created.endpoint.id, { enabled: false })).resolves.toMatchObject({
       enabled: false,
     })
-    await expect(listWebhookEndpoints(deps, { limit: 50, offset: 0, status: 'enabled' })).resolves.toMatchObject({
+    await expect(listWebhookEndpoints(deps, { page: 1, pageSize: 50, status: 'enabled' })).resolves.toMatchObject({
       items: [],
-      pagination: { total: 0 },
+      pagination: { totalItems: 0 },
     })
 
     const rotated = await rotateWebhookSecret(deps, created.endpoint.id)
@@ -90,9 +91,9 @@ describe('WebhookService', () => {
     })
 
     await expect(getWebhookRequest(deps, request.id)).resolves.toMatchObject({ id: 'whr_1', status: 'failed' })
-    await expect(listWebhookRequests(deps, { limit: 50, offset: 0, status: 'failed' })).resolves.toMatchObject({
+    await expect(listWebhookRequests(deps, { page: 1, pageSize: 50, status: 'failed' })).resolves.toMatchObject({
       items: [{ id: 'whr_1', status: 'failed' }],
-      pagination: { total: 1, hasMore: false },
+      pagination: { totalItems: 1 },
     })
     await expect(createWebhookDeliveryAttempt(deps, request.id, 'retry-1')).resolves.toMatchObject({
       attempt: { requestId: 'whr_1', status: 'delivered', sequence: 2, httpStatus: 204 },
@@ -101,7 +102,7 @@ describe('WebhookService', () => {
     await expect(getWebhookRequest(deps, request.id)).resolves.toMatchObject({ attemptCount: 2, status: 'delivered' })
     await expect(listWebhookDeliveryAttempts(deps, request.id, { limit: 50, offset: 0 })).resolves.toMatchObject({
       items: [{ requestId: request.id, sequence: 2 }],
-      pagination: { total: 1 },
+      pagination: { totalItems: 1 },
     })
     const [attempt] = (await listWebhookDeliveryAttempts(deps, request.id, { limit: 50, offset: 0 })).items
     await expect(getWebhookDeliveryAttempt(deps, request.id, attempt!.id)).resolves.toEqual(attempt)
@@ -110,7 +111,7 @@ describe('WebhookService', () => {
       replayed: true,
     })
     await expect(listWebhookDeliveryAttempts(deps, request.id, { limit: 50, offset: 0 })).resolves.toMatchObject({
-      pagination: { total: 1 },
+      pagination: { totalItems: 1 },
     })
 
     await deleteWebhookEndpoint(deps, created.endpoint.id)
@@ -435,7 +436,10 @@ class InMemoryWebhookRepository implements WebhookRepository {
   readonly missingEndpointUpdateIds = new Set<string>()
   readonly missingRequestUpdateIds = new Set<string>()
 
-  async listEndpoints(query: ListWebhookEndpointsQuery, organizationIds?: string[]) {
+  async listEndpoints(
+    query: Omit<ListWebhookEndpointsQuery, 'page' | 'pageSize'> & PaginationInput,
+    organizationIds?: string[],
+  ) {
     const items = this.endpoints.filter((endpoint) => {
       if (organizationIds && !endpoint.organizationId) return false
       if (organizationIds && !organizationIds.includes(endpoint.organizationId!)) return false
@@ -486,7 +490,10 @@ class InMemoryWebhookRepository implements WebhookRepository {
     this.requests = this.requests.filter((request) => request.endpointId !== id)
   }
 
-  async listRequests(query: ListWebhookRequestsQuery, organizationIds?: string[]) {
+  async listRequests(
+    query: Omit<ListWebhookRequestsQuery, 'page' | 'pageSize'> & PaginationInput,
+    organizationIds?: string[],
+  ) {
     const items = this.requests.filter((request) => {
       if (organizationIds && !request.organizationId) return false
       if (organizationIds && !organizationIds.includes(request.organizationId!)) return false

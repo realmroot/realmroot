@@ -38,7 +38,7 @@ describe('Organization Role lifecycle', () => {
           dynamicRole,
           { ...dynamicRole, key: 'member', displayName: 'Member', description: null, predefined: true },
         ],
-        pagination: { limit: 50, offset: 0, total: 2, hasMore: false, nextOffset: null },
+        pagination: { page: Math.floor(0 / 50) + 1, pageSize: 50, totalItems: 2, totalPages: Math.ceil(2 / 50) },
       })
     })
 
@@ -204,7 +204,7 @@ describe('Organization Role lifecycle', () => {
       .mockResolvedValueOnce(
         jsonResponse({
           items: [],
-          pagination: { limit: 50, offset: 0, total: 0, hasMore: false, nextOffset: null },
+          pagination: { page: Math.floor(0 / 50) + 1, pageSize: 50, totalItems: 0, totalPages: Math.ceil(0 / 50) },
         }),
       )
 

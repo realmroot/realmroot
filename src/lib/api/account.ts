@@ -25,7 +25,7 @@ import type {
 } from '@shared/api/agent-api'
 import type { AgentApprovalPreview } from '@shared/api/agents'
 import type { CreateInvitationRequest, InvitationResponse, ListRolesResponse } from '@shared/api/authorization'
-import type { PaginationInput } from '@shared/api/pagination'
+import type { PaginationQuery } from '@shared/api/pagination'
 import type {
   SecurityPasskeyRegistrationOptionsInput,
   SecurityTotpDisableInput,
@@ -99,7 +99,7 @@ export async function inviteAccountOrganizationMember(organizationId: string, in
 
 export async function listAccountOrganizationRoles(organizationId: string) {
   return readJsonResponse<ListRolesResponse>(
-    await fetch(`/api/organizations/${encodeURIComponent(organizationId)}/roles?limit=100&offset=0`),
+    await fetch(`/api/organizations/${encodeURIComponent(organizationId)}/roles?page=1&pageSize=100`),
   )
 }
 
@@ -153,13 +153,13 @@ export async function deleteAccountOrganizationTeam(organizationId: string, team
 export async function listAccountOrganizationTeamMembers(
   organizationId: string,
   teamId: string,
-  pagination: PaginationInput,
+  pagination: PaginationQuery,
 ) {
   return accountOrganizationTeamMembersResponseSchema.parse(
     await readRpcResponse(
       apiClient.api.account.organizations[':organizationId'].teams[':teamId'].members.$get({
         param: { organizationId, teamId },
-        query: { limit: String(pagination.limit), offset: String(pagination.offset) },
+        query: { page: String(pagination.page), pageSize: String(pagination.pageSize) },
       }),
     ),
   )
@@ -200,7 +200,7 @@ export function listLinkedAccounts() {
 export async function listAccountProviderConnectors() {
   return accountProviderConnectorsResponseSchema.parse(
     await readJsonResponse<unknown>(
-      await fetch('/api/account/provider-connectors?limit=100&offset=0', { credentials: 'same-origin' }),
+      await fetch('/api/account/provider-connectors?page=1&pageSize=100', { credentials: 'same-origin' }),
     ),
   )
 }
@@ -208,7 +208,7 @@ export async function listAccountProviderConnectors() {
 export async function listAccountProviderConnections() {
   return accountProviderConnectionsResponseSchema.parse(
     await readJsonResponse<unknown>(
-      await fetch('/api/account/provider-connections?limit=100&offset=0', { credentials: 'same-origin' }),
+      await fetch('/api/account/provider-connections?page=1&pageSize=100', { credentials: 'same-origin' }),
     ),
   )
 }
@@ -408,12 +408,12 @@ export function getAgentResourceApproval(token: string) {
 export function listApprovalAuthorizationDetailCatalog(
   requestId: string,
   approvalToken: string,
-  pagination: { limit: number; offset: number } = { limit: 100, offset: 0 },
+  pagination: PaginationQuery = { page: 1, pageSize: 100 },
 ) {
   const query = new URLSearchParams({
     approvalToken,
-    limit: String(pagination.limit),
-    offset: String(pagination.offset),
+    page: String(pagination.page),
+    pageSize: String(pagination.pageSize),
   })
   return fetch(`/api/account/access-requests/${encodeURIComponent(requestId)}/authorization-detail-catalog?${query}`, {
     credentials: 'same-origin',

@@ -77,6 +77,7 @@ export {
   managementSignInSettingsResponseSchema,
   managementUpdateUserRequestSchema,
   managementUserDetailResponseSchema,
+  managementUserListQuerySchema,
   managementUserSecurityResponseSchema,
   organizationCreationPolicyResponseSchema,
   paginationQuerySchema,
@@ -129,6 +130,7 @@ export interface ManagementRouteConfig {
   status?: number
   response?: ZodType
   noBody?: boolean
+  paginated?: boolean
   responseHeaders?: Record<string, { description: string; schema: Record<string, unknown> }>
   additionalResponses?: Record<
     number,
@@ -205,6 +207,13 @@ export const idempotencyKeyHeader = z.object({
 })
 export const locationResponseHeader = {
   Location: { description: 'Canonical URI of the created resource.', schema: { type: 'string' } },
+}
+export const paginationResponseHeader = {
+  Link: {
+    description:
+      'RFC 8288 pagination links. Applicable first, previous, next, and last relations use absolute URIs and preserve collection filters.',
+    schema: { type: 'string' },
+  },
 }
 export const interactiveResourceResponseHeaders = {
   Link: {

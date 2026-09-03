@@ -401,21 +401,21 @@ function ApplicationAuthorizations({
 }) {
   const pageSize = 50
   const queryClient = useQueryClient()
-  const [offset, setOffset] = useState(0)
+  const [page, setPage] = useState(1)
   const [revokeTarget, setRevokeTarget] = useState<
     Awaited<ReturnType<typeof listApplicationAuthorizations>>['items'][number] | null
   >(null)
-  const queryKey = [...consoleQueryKeys.applications, applicationId, 'authorizations', { limit: pageSize, offset }]
+  const queryKey = [...consoleQueryKeys.applications, applicationId, 'authorizations', { page, pageSize }]
   const query = useQuery({
     queryKey,
-    queryFn: () => listApplicationAuthorizations(applicationId, { status: 'active', limit: pageSize, offset }),
+    queryFn: () => listApplicationAuthorizations(applicationId, { status: 'active', page, pageSize }),
   })
   const revokeMutation = useMutation({
     mutationFn: (authorizationId: string) => revokeApplicationAuthorization(applicationId, authorizationId),
     onSuccess: async () => {
       setRevokeTarget(null)
-      if (query.data?.items.length === 1 && offset > 0) {
-        setOffset(Math.max(0, offset - pageSize))
+      if (query.data?.items.length === 1 && page > 1) {
+        setPage(page - 1)
         return
       }
       await queryClient.invalidateQueries({
@@ -490,26 +490,22 @@ function ApplicationAuthorizations({
             )}
           </TableBody>
         </Table>
-        {pagination && pagination.total > pageSize ? (
+        {pagination && pagination.totalPages > 1 ? (
           <div className="flex items-center justify-between border-t px-3 py-2">
             <p className="text-xs text-muted-foreground">
               {tt('{{start}}–{{end}} of {{total}}', {
-                start: pagination.offset + 1,
-                end: Math.min(pagination.offset + pagination.limit, pagination.total),
-                total: pagination.total,
+                start: (pagination.page - 1) * pagination.pageSize + 1,
+                end: Math.min(pagination.page * pagination.pageSize, pagination.totalItems),
+                total: pagination.totalItems,
               })}
             </p>
             <div className="flex gap-2">
-              <Button
-                disabled={offset === 0}
-                onClick={() => setOffset(Math.max(0, offset - pageSize))}
-                variant="outline"
-              >
+              <Button disabled={page === 1} onClick={() => setPage(Math.max(1, page - 1))} variant="outline">
                 {tt('Previous')}
               </Button>
               <Button
-                disabled={!pagination.hasMore || pagination.nextOffset === null}
-                onClick={() => setOffset(pagination.nextOffset!)}
+                disabled={pagination.page >= pagination.totalPages}
+                onClick={() => setPage(page + 1)}
                 variant="outline"
               >
                 {tt('Next')}

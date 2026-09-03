@@ -20,7 +20,7 @@ describe('Account Organization Agents', () => {
       listAccountOrganizationAgents(deps, 'org-1', 'user-1', { limit: 1, offset: 1 }),
     ).resolves.toMatchObject({
       items: [{ id: 'agent-2', homeSpace: { type: 'organization', organizationId: 'org-1' } }],
-      pagination: { limit: 1, offset: 1, total: 3, hasMore: true, nextOffset: 2 },
+      pagination: { page: Math.floor(1 / 1) + 1, pageSize: 1, totalItems: 3, totalPages: Math.ceil(3 / 1) },
     })
   })
 
@@ -41,12 +41,12 @@ describe('Account Organization Team members', () => {
     vi.mocked(deps.authorization.findTeam).mockResolvedValue({ id: 'team-1', organizationId: 'org-1' } as never)
     vi.mocked(deps.authorization.listTeamMembers).mockResolvedValue({
       items: [{ id: 'team-member-1', teamId: 'team-1', userId: 'user-2', createdAt: '2026-08-01T00:00:00Z' }],
-      pagination: { limit: 20, offset: 0, total: 1, hasMore: false, nextOffset: null },
+      pagination: { page: Math.floor(0 / 20) + 1, pageSize: 20, totalItems: 1, totalPages: Math.ceil(1 / 20) },
     })
 
     await expect(
       listAccountOrganizationTeamMembers(deps, 'org-1', 'team-1', 'admin-1', { limit: 20, offset: 0 }),
-    ).resolves.toMatchObject({ items: [{ userId: 'user-2' }], pagination: { total: 1 } })
+    ).resolves.toMatchObject({ items: [{ userId: 'user-2' }], pagination: { totalItems: 1 } })
   })
 
   it('rejects an ordinary Organization member', async () => {

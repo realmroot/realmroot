@@ -1253,11 +1253,11 @@ function OrganizationTeamsPanel({
   const [managedTeam, setManagedTeam] = useState<AccountOrganizationTeam | null>(null)
   const [deleteTeam, setDeleteTeam] = useState<AccountOrganizationTeam | null>(null)
   const [memberToAdd, setMemberToAdd] = useState('')
-  const [teamMembersOffset, setTeamMembersOffset] = useState(0)
+  const [teamMembersPage, setTeamMembersPage] = useState(1)
   const teamMembersPageSize = 20
   const teamMembersQuery = useAccountOrganizationTeamMembers(organizationId, managedTeam?.id ?? null, {
-    limit: teamMembersPageSize,
-    offset: teamMembersOffset,
+    page: teamMembersPage,
+    pageSize: teamMembersPageSize,
   })
   const memberByUserId = new Map(members.map((member) => [member.userId, member]))
   const teamMemberships = teamMembersQuery.data?.items ?? []
@@ -1266,7 +1266,7 @@ function OrganizationTeamsPanel({
   const closeMemberManagement = () => {
     setManagedTeam(null)
     setMemberToAdd('')
-    setTeamMembersOffset(0)
+    setTeamMembersPage(1)
   }
 
   return (
@@ -1296,7 +1296,7 @@ function OrganizationTeamsPanel({
                       onClick={() => {
                         setManagedTeam(team)
                         setMemberToAdd('')
-                        setTeamMembersOffset(0)
+                        setTeamMembersPage(1)
                       }}
                       size="sm"
                       variant="outline"
@@ -1375,7 +1375,7 @@ function OrganizationTeamsPanel({
               ).then(() => {
                 if (!failed) {
                   setMemberToAdd('')
-                  setTeamMembersOffset(0)
+                  setTeamMembersPage(1)
                 }
               })
             }}
@@ -1425,7 +1425,7 @@ function OrganizationTeamsPanel({
                     onClick={() => {
                       const team = managedTeam
                       if (!team) return
-                      const moveToPreviousPage = teamMemberships.length === 1 && teamMembersOffset > 0
+                      const moveToPreviousPage = teamMemberships.length === 1 && teamMembersPage > 1
                       let failed = false
                       void mutate(
                         'Team member removed.',
@@ -1438,7 +1438,7 @@ function OrganizationTeamsPanel({
                         },
                       ).then(() => {
                         if (!failed && moveToPreviousPage) {
-                          setTeamMembersOffset(Math.max(0, teamMembersOffset - teamMembersPageSize))
+                          setTeamMembersPage(Math.max(1, teamMembersPage - 1))
                         }
                       })
                     }}
@@ -1450,24 +1450,22 @@ function OrganizationTeamsPanel({
                 </div>
               )
             })}
-            {teamMembersPagination && teamMembersPagination.total > teamMembersPagination.limit ? (
+            {teamMembersPagination && teamMembersPagination.totalPages > 1 ? (
               <div className="flex items-center justify-between gap-3 pt-2">
                 <p className="text-xs text-muted-foreground">
                   {tt('{{start}}–{{end}} of {{total}}', {
-                    start: teamMembersPagination.offset + 1,
+                    start: (teamMembersPagination.page - 1) * teamMembersPagination.pageSize + 1,
                     end: Math.min(
-                      teamMembersPagination.offset + teamMembersPagination.limit,
-                      teamMembersPagination.total,
+                      teamMembersPagination.page * teamMembersPagination.pageSize,
+                      teamMembersPagination.totalItems,
                     ),
-                    total: teamMembersPagination.total,
+                    total: teamMembersPagination.totalItems,
                   })}
                 </p>
                 <div className="flex gap-2">
                   <Button
-                    disabled={teamMembersQuery.isPlaceholderData || teamMembersPagination.offset === 0}
-                    onClick={() =>
-                      setTeamMembersOffset(Math.max(0, teamMembersPagination.offset - teamMembersPagination.limit))
-                    }
+                    disabled={teamMembersQuery.isPlaceholderData || teamMembersPagination.page === 1}
+                    onClick={() => setTeamMembersPage(Math.max(1, teamMembersPagination.page - 1))}
                     size="sm"
                     type="button"
                     variant="outline"
@@ -1477,10 +1475,9 @@ function OrganizationTeamsPanel({
                   <Button
                     disabled={
                       teamMembersQuery.isPlaceholderData ||
-                      !teamMembersPagination.hasMore ||
-                      teamMembersPagination.nextOffset === null
+                      teamMembersPagination.page >= teamMembersPagination.totalPages
                     }
-                    onClick={() => setTeamMembersOffset(teamMembersPagination.offset + teamMembersPagination.limit)}
+                    onClick={() => setTeamMembersPage(teamMembersPagination.page + 1)}
                     size="sm"
                     type="button"
                     variant="outline"

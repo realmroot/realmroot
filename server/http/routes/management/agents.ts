@@ -29,7 +29,7 @@ import {
   managementAgentsResponseSchema,
 } from '@shared/api/agent-api'
 import { idempotencyKeySchema } from '@shared/api/idempotency'
-import { paginationMetadata, paginationQuerySchema } from '@shared/api/pagination'
+import { paginationInput, paginationMetadata, paginationQuerySchema } from '@shared/api/pagination'
 import { Hono } from 'hono'
 import { getActorUserId, getPrincipal } from '../../middleware/authn'
 import {
@@ -75,7 +75,7 @@ managementAgentsRoute.get('/agents', async (c) => {
   const query = readQuery(c, listAgentsQuerySchema)
   return c.json(
     managementAgentsResponseSchema.parse(
-      await listAllAgents(getDeps(c), query, await agentInventoryScope(c, query.organizationId)),
+      await listAllAgents(getDeps(c), paginationInput(query), await agentInventoryScope(c, query.organizationId)),
     ),
   )
 })
@@ -90,7 +90,11 @@ managementAgentsRoute.get('/agents/:agentId/installations', async (c) => {
   await requireAgentByIdConsoleAccess(c, c.req.param('agentId'))
   return c.json(
     managementAgentInstallationsResponseSchema.parse(
-      await listManagementAgentInstallations(getDeps(c), c.req.param('agentId'), readQuery(c, paginationQuerySchema)),
+      await listManagementAgentInstallations(
+        getDeps(c),
+        c.req.param('agentId'),
+        paginationInput(readQuery(c, paginationQuerySchema)),
+      ),
     ),
   )
 })
@@ -212,7 +216,8 @@ managementAgentsRoute.get('/realm/audit-events', async (c) => {
       await authorizeUser(c, agent.homeSpace.userId, 'audit-events:read')
     }
   }
-  const result = await getDeps(c).agentAudit.list(query, {
+  const page = paginationInput(query)
+  const result = await getDeps(c).agentAudit.list(page, {
     agentIdentityId: query.agentId,
     action: query.action,
     result: query.result,
@@ -230,7 +235,7 @@ managementAgentsRoute.get('/realm/audit-events', async (c) => {
         resource: event.resourceId ? (resourcesById.get(event.resourceId) ?? null) : null,
       }),
     ),
-    pagination: paginationMetadata({ ...query, total: result.total }),
+    pagination: paginationMetadata({ ...page, total: result.total }),
   })
 })
 

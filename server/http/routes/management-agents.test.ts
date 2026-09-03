@@ -120,12 +120,12 @@ describe('management Agent routes', () => {
           updatedAt: '2026-01-01T00:00:00.000Z',
         },
       ],
-      pagination: { limit: 10, offset: 20, total: 1, hasMore: false, nextOffset: null },
+      pagination: { page: Math.floor(20 / 10) + 1, pageSize: 10, totalItems: 1, totalPages: Math.ceil(1 / 10) },
     })
     const app = withAdminContext()
     app.route('/', managementAgentsRoute)
 
-    const response = await app.request('/agents?limit=10&offset=20')
+    const response = await app.request('/agents?page=3&pageSize=10')
 
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toEqual({
@@ -148,7 +148,7 @@ describe('management Agent routes', () => {
           updatedAt: '2026-01-01T00:00:00.000Z',
         },
       ],
-      pagination: { limit: 10, offset: 20, total: 1, hasMore: false, nextOffset: null },
+      pagination: { page: Math.floor(20 / 10) + 1, pageSize: 10, totalItems: 1, totalPages: Math.ceil(1 / 10) },
     })
     expect(agentIdentitiesUsecase.listAllAgents).toHaveBeenCalledWith(
       expect.anything(),

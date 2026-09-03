@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { protectedResourceScopes } from '../authz'
 import { agentUsernameSchema } from './identifiers'
-import { type PaginationInput, paginationMetadataSchema } from './pagination'
+import { type PaginationMetadata, paginationMetadataSchema } from './pagination'
 
 const dateValueSchema = z.union([z.string(), z.date()])
 
@@ -297,11 +297,7 @@ export const agentProtocolInventoryResponseSchema = z.object({
 
 export interface AgentProtocolPage<T> {
   items: T[]
-  pagination: PaginationInput & {
-    total: number
-    hasMore: boolean
-    nextOffset: number | null
-  }
+  pagination: PaginationMetadata
 }
 
 export type AgentIdentityStatus = z.infer<typeof agentIdentityStatusSchema>

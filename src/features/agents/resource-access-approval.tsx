@@ -459,11 +459,13 @@ function isFutureExpiry(value: string) {
 
 async function loadApprovalAuthorizationDetailCatalog(requestId: string, token: string) {
   const items: AuthorizationDetailCatalogEntry[] = []
-  let nextOffset: number | null = 0
-  while (nextOffset !== null) {
-    const page = await listApprovalAuthorizationDetailCatalog(requestId, token, { limit: 100, offset: nextOffset })
-    items.push(...page.items)
-    nextOffset = page.pagination.nextOffset
+  let pageNumber = 1
+  let totalPages = 1
+  while (pageNumber <= totalPages) {
+    const result = await listApprovalAuthorizationDetailCatalog(requestId, token, { page: pageNumber, pageSize: 100 })
+    items.push(...result.items)
+    totalPages = result.pagination.totalPages
+    pageNumber += 1
   }
   return items
 }

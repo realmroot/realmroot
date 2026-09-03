@@ -142,6 +142,7 @@ export function openApiOperationObjects() {
           cliHidden: resolvedOperation['x-cli-hidden'],
           cliName: resolvedOperation['x-cli-name'],
           tags: resolvedOperation.tags,
+          parameters: Array.isArray(resolvedOperation.parameters) ? resolvedOperation.parameters : [],
           requestBody: resolvedOperation.requestBody,
           responses: resolvedOperation.responses,
           security: resolvedOperation.security,

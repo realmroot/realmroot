@@ -46,6 +46,7 @@ import type {
   UpdateOrganizationRequest,
   UpdateRoleRequest,
 } from '@shared/api/authorization'
+import { paginationInput, paginationMetadata, repositoryPageQuery } from '@shared/api/pagination'
 import {
   encodeRoleScope,
   predefinedOrganizationRoleKeys,
@@ -74,7 +75,7 @@ export function createOrganization(deps: Deps, input: CreateOrganizationRequest,
 }
 
 export function listOrganizations(deps: Deps, pagination: PaginationQuery, organizationIds?: string[]) {
-  return deps.authorization.listOrganizations(pagination, organizationIds).then((page) => ({
+  return deps.authorization.listOrganizations(paginationInput(pagination), organizationIds).then((page) => ({
     items: page.items,
     pagination: page.pagination,
   }))
@@ -115,7 +116,7 @@ export async function addMember(deps: Deps, organizationId: string, input: AddMe
 
 export async function listMembers(deps: Deps, organizationId: string, pagination: PaginationQuery) {
   await getOrganization(deps, organizationId)
-  const page = await deps.authorization.listMembers(organizationId, pagination)
+  const page = await deps.authorization.listMembers(organizationId, paginationInput(pagination))
   return { items: page.items, pagination: page.pagination }
 }
 
@@ -187,7 +188,7 @@ export async function createInvitation(
 
 export async function listInvitations(deps: Deps, organizationId: string, pagination: PaginationQuery) {
   await getOrganization(deps, organizationId)
-  const page = await deps.authorization.listInvitations(organizationId, pagination)
+  const page = await deps.authorization.listInvitations(organizationId, paginationInput(pagination))
   return { items: page.items, pagination: page.pagination }
 }
 
@@ -311,7 +312,7 @@ function assertRealmrootResourceServerIdentity(resource: ApiResourceResponse, pl
 
 export function listResources(deps: Deps, pagination: PaginationQuery) {
   return deps.authorization
-    .listResources(pagination)
+    .listResources(paginationInput(pagination))
     .then((page) => ({ resources: page.items, pagination: page.pagination }))
 }
 
@@ -607,7 +608,7 @@ export async function listUserPermissions(
   ownerOrganizationIds?: string[],
 ) {
   await deps.users.getUser(userId)
-  const result = await deps.authorization.listUserPermissions(userId, query, ownerOrganizationIds)
+  const result = await deps.authorization.listUserPermissions(userId, repositoryPageQuery(query), ownerOrganizationIds)
   return { items: result.items.map(toPermissionResponse), pagination: result.pagination }
 }
 
@@ -620,7 +621,7 @@ export async function listUserAuthorizedResourceServers(
   await deps.users.getUser(userId)
   return deps.authorization.listAuthorizedResourceServers(
     { type: 'user', id: userId },
-    query,
+    repositoryPageQuery(query),
     new Date(),
     ownerOrganizationIds,
   )
@@ -694,7 +695,7 @@ export async function getApplicationPermission(deps: Deps, id: string) {
 }
 
 export async function listApplicationPermissions(deps: Deps, applicationId: string, query: ListPermissionsQuery) {
-  const result = await deps.authorization.listApplicationPermissions(applicationId, query)
+  const result = await deps.authorization.listApplicationPermissions(applicationId, repositoryPageQuery(query))
   return { items: result.items.map(toPermissionResponse), pagination: result.pagination }
 }
 
@@ -705,7 +706,11 @@ export async function listApplicationAuthorizedResourceServers(
 ) {
   const application = await deps.applications.findById(applicationId)
   if (!application) throw notFound('Application was not found.')
-  return deps.authorization.listAuthorizedResourceServers({ type: 'application', id: applicationId }, query, new Date())
+  return deps.authorization.listAuthorizedResourceServers(
+    { type: 'application', id: applicationId },
+    repositoryPageQuery(query),
+    new Date(),
+  )
 }
 
 export async function revokeApplicationPermission(deps: Deps, id: string) {
@@ -787,15 +792,11 @@ export async function listRoles(deps: Deps, organizationId: string, pagination: 
   const roles = [...(await predefinedRoleRepresentations(deps)), ...dynamic].sort((left, right) =>
     left.key.localeCompare(right.key),
   )
-  const paged = roles.slice(pagination.offset, pagination.offset + pagination.limit)
+  const page = paginationInput(pagination)
+  const paged = roles.slice(page.offset, page.offset + page.limit)
   return {
     items: paged,
-    pagination: {
-      limit: pagination.limit,
-      offset: pagination.offset,
-      total: roles.length,
-      hasMore: pagination.offset + paged.length < roles.length,
-    },
+    pagination: paginationMetadata({ ...page, total: roles.length }),
   }
 }
 

@@ -100,7 +100,9 @@ describe('admin console user detail lifecycle', () => {
       const method = init?.method ?? 'GET'
       if (url === '/api/users/user-1' && method === 'GET') return Promise.resolve(jsonResponse({ user: currentUser }))
       if (url === '/api/users/user-1/sessions' && method === 'GET') {
-        return Promise.resolve(jsonResponse({ items: sessions, pagination: { ...pagination, total: sessions.length } }))
+        return Promise.resolve(
+          jsonResponse({ items: sessions, pagination: { ...pagination, totalItems: sessions.length } }),
+        )
       }
       if (url === '/api/users/user-1/sessions/session-1' && method === 'DELETE') {
         requests.push({ method, url })
@@ -182,7 +184,9 @@ describe('admin console user detail lifecycle', () => {
         return Promise.resolve(new Response(null, { status: 204 }))
       }
       if (url === '/api/users/user-1/passkeys') {
-        return Promise.resolve(jsonResponse({ items: passkeys, pagination: { ...pagination, total: passkeys.length } }))
+        return Promise.resolve(
+          jsonResponse({ items: passkeys, pagination: { ...pagination, totalItems: passkeys.length } }),
+        )
       }
       if (url === '/api/agents') {
         return Promise.resolve(
@@ -205,7 +209,7 @@ describe('admin console user detail lifecycle', () => {
       }
       if (url === '/api/users/user-1/permissions' && method === 'GET') {
         return Promise.resolve(
-          jsonResponse({ items: accessGrants, pagination: { ...pagination, total: accessGrants.length } }),
+          jsonResponse({ items: accessGrants, pagination: { ...pagination, totalItems: accessGrants.length } }),
         )
       }
       if (url === '/api/users/user-1/permissions' && method === 'POST') {
@@ -293,7 +297,7 @@ describe('admin console user detail lifecycle', () => {
     expect(await screen.findByText('Customer portal')).toBeTruthy()
     expect(screen.getByText('Reports')).toBeTruthy()
     expect(screen.getByText('Never')).toBeTruthy()
-    expect(requestedUrls).toContain('/api/users/user-1/application-authorizations?limit=100')
+    expect(requestedUrls).toContain('/api/users/user-1/application-authorizations?pageSize=100')
 
     fireEvent.mouseDown(screen.getByRole('tab', { name: 'Settings' }), { button: 0, ctrlKey: false })
     fireEvent.click(await screen.findByRole('button', { name: 'Send reset link' }))

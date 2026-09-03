@@ -28,7 +28,7 @@ export function createManagementReadinessRoute({ securityPolicy }: { securityPol
     const deps = getDeps(c)
     const options = configzOptions(c, securityPolicy)
     const [applications, config, emailSettings] = await Promise.all([
-      listApplications(deps, issuerFor(c), { limit: 100, offset: 0 }),
+      listApplications(deps, issuerFor(c), { page: 1, pageSize: 100 }),
       getConfig(deps, options),
       getEmailDeliveryConfiguration(deps, options),
     ])

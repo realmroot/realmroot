@@ -42,7 +42,7 @@ import type {
 import { describe, expect, it, vi } from 'vitest'
 
 const timestamp = '2026-07-30T00:00:00.000Z'
-const pagination = { limit: 20, offset: 0, total: 1, hasMore: false, nextOffset: null }
+const pagination = { page: 1, pageSize: 20, totalItems: 1, totalPages: 1 }
 const actor = { controllerUserId: 'user-1', agent: null }
 const adminActor = { controllerUserId: 'admin-1', agent: null }
 const agentActor = {
@@ -230,7 +230,7 @@ describe('authorization CRUD and assignment policy', () => {
         title: null,
       }),
     )
-    await expect(listOrganizations(deps, { limit: 20, offset: 0 })).resolves.toEqual({
+    await expect(listOrganizations(deps, { page: 1, pageSize: 20 })).resolves.toEqual({
       items: [organization],
       pagination,
     })
@@ -242,7 +242,7 @@ describe('authorization CRUD and assignment policy', () => {
       organization.id,
       expect.objectContaining({ id: expect.stringMatching(/^00000000-0000-7000-8000-/), title: null }),
     )
-    await expect(listMembers(deps, organization.id, { limit: 20, offset: 0 })).resolves.toEqual({
+    await expect(listMembers(deps, organization.id, { page: 1, pageSize: 20 })).resolves.toEqual({
       items: [member],
       pagination,
     })
@@ -269,7 +269,7 @@ describe('authorization CRUD and assignment policy', () => {
     expect(authorization.createInvitation).toHaveBeenLastCalledWith(
       expect.objectContaining({ expiresAt: timestamp, inviterId: 'admin-1' }),
     )
-    await expect(listInvitations(deps, organization.id, { limit: 20, offset: 0 })).resolves.toEqual({
+    await expect(listInvitations(deps, organization.id, { page: 1, pageSize: 20 })).resolves.toEqual({
       items: [invitation],
       pagination,
     })
@@ -455,9 +455,9 @@ describe('authorization CRUD and assignment policy', () => {
     authorization.deleteOrganizationRole.mockResolvedValue('deleted')
     const deps = { ids: createIdentifierGeneratorFake(), authorization } as unknown as Deps
 
-    await expect(listRoles(deps, organization.id, { limit: 2, offset: 0 })).resolves.toMatchObject({
+    await expect(listRoles(deps, organization.id, { page: 1, pageSize: 2 })).resolves.toMatchObject({
       items: [{ key: 'admin' }, { key: 'developer' }],
-      pagination: { limit: 2, offset: 0, total: 5, hasMore: true },
+      pagination: { page: Math.floor(0 / 2) + 1, pageSize: 2, totalItems: 5, totalPages: Math.ceil(5 / 2) },
     })
     await expect(getRole(deps, organization.id, 'operator')).resolves.toMatchObject({
       key: 'operator',
@@ -786,7 +786,7 @@ describe('authorization CRUD and assignment policy', () => {
       }),
     )
 
-    await expect(listResources(deps, { limit: 20, offset: 0 })).resolves.toEqual({
+    await expect(listResources(deps, { page: 1, pageSize: 20 })).resolves.toEqual({
       resources: [resource],
       pagination,
     })
@@ -1140,7 +1140,7 @@ describe('authorization CRUD and assignment policy', () => {
     authorization.listOrganizationRoles.mockResolvedValue([dynamicRole])
     authorization.listOrganizationRoleScopes.mockResolvedValue(new Map())
     const deps = { ids: createIdentifierGeneratorFake(), authorization } as unknown as Deps
-    await expect(listRoles(deps, organization.id, { limit: 20, offset: 0 })).resolves.toMatchObject({
+    await expect(listRoles(deps, organization.id, { page: 1, pageSize: 20 })).resolves.toMatchObject({
       items: expect.arrayContaining([expect.objectContaining({ key: 'operator', scopes: [] })]),
     })
 
@@ -1405,12 +1405,12 @@ describe('authorization CRUD and assignment policy', () => {
       applications: { findById: vi.fn().mockResolvedValue({ id: 'application-1' }) },
     } as unknown as Deps
 
-    await expect(listUserAuthorizedResourceServers(deps, 'user-1', { limit: 20, offset: 0 })).resolves.toEqual({
+    await expect(listUserAuthorizedResourceServers(deps, 'user-1', { page: 1, pageSize: 20 })).resolves.toEqual({
       items: [],
       pagination,
     })
     await expect(
-      listApplicationAuthorizedResourceServers(deps, 'application-1', { limit: 20, offset: 0 }),
+      listApplicationAuthorizedResourceServers(deps, 'application-1', { page: 1, pageSize: 20 }),
     ).resolves.toEqual({
       items: [],
       pagination,
@@ -1418,7 +1418,7 @@ describe('authorization CRUD and assignment policy', () => {
     expect(authorization.listAuthorizedResourceServers).toHaveBeenCalledTimes(2)
 
     vi.mocked(deps.applications.findById).mockResolvedValue(null)
-    await expect(listApplicationAuthorizedResourceServers(deps, 'missing', { limit: 20, offset: 0 })).rejects.toThrow(
+    await expect(listApplicationAuthorizedResourceServers(deps, 'missing', { page: 1, pageSize: 20 })).rejects.toThrow(
       'Application was not found',
     )
   })

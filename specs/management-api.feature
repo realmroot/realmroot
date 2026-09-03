@@ -49,6 +49,8 @@ Feature: Unified Realmroot resource API
     When an authorized caller lists any growing resource collection
     Then the response exposes the resources through an items field
     And pagination metadata is exposed through a pagination field
+    And every collection uses one-based page and page size pagination with exact item and page totals
+    And applicable first, previous, next, and last navigation is exposed through an RFC 8288 Link header
     And no collection uses a resource-specific plural field as its envelope
 
 

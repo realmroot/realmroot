@@ -189,25 +189,35 @@ export function accountHandlers(store: AccountStore, config: ReturnType<typeof c
     http.get(`${base}/api/account/sessions`, () =>
       HttpResponse.json({
         items: store.sessions,
-        pagination: { limit: 50, offset: 0, total: store.sessions.length, hasMore: false },
+        pagination: {
+          page: Math.floor(0 / 50) + 1,
+          pageSize: 50,
+          totalItems: store.sessions.length,
+          totalPages: Math.ceil(store.sessions.length / 50),
+        },
       }),
     ),
     http.get(`${base}/api/account/linked-accounts`, () =>
       HttpResponse.json({
         items: store.linkedAccounts,
-        pagination: { limit: 50, offset: 0, total: store.linkedAccounts.length, hasMore: false },
+        pagination: {
+          page: Math.floor(0 / 50) + 1,
+          pageSize: 50,
+          totalItems: store.linkedAccounts.length,
+          totalPages: Math.ceil(store.linkedAccounts.length / 50),
+        },
       }),
     ),
     http.get(`${base}/api/account/provider-connectors`, () =>
       HttpResponse.json({
         items: [],
-        pagination: { limit: 50, offset: 0, total: 0, hasMore: false, nextOffset: null },
+        pagination: { page: Math.floor(0 / 50) + 1, pageSize: 50, totalItems: 0, totalPages: Math.ceil(0 / 50) },
       }),
     ),
     http.get(`${base}/api/account/provider-connections`, () =>
       HttpResponse.json({
         items: [],
-        pagination: { limit: 50, offset: 0, total: 0, hasMore: false, nextOffset: null },
+        pagination: { page: Math.floor(0 / 50) + 1, pageSize: 50, totalItems: 0, totalPages: Math.ceil(0 / 50) },
       }),
     ),
     http.get(`${base}/api/account/application-authorizations`, () =>
@@ -226,30 +236,34 @@ export function accountHandlers(store: AccountStore, config: ReturnType<typeof c
           status: 'active',
         })),
         pagination: {
-          limit: 50,
-          offset: 0,
-          total: store.applications.length,
-          hasMore: false,
-          nextOffset: null,
+          page: 1,
+          pageSize: 50,
+          totalItems: store.applications.length,
+          totalPages: store.applications.length === 0 ? 0 : 1,
         },
       }),
     ),
     http.get(`${base}/api/account/agents`, () =>
       HttpResponse.json({
         items: store.agentIdentities,
-        pagination: { limit: 50, offset: 0, total: store.agentIdentities.length, hasMore: false, nextOffset: null },
+        pagination: {
+          page: Math.floor(0 / 50) + 1,
+          pageSize: 50,
+          totalItems: store.agentIdentities.length,
+          totalPages: Math.ceil(store.agentIdentities.length / 50),
+        },
       }),
     ),
     http.get(`${base}/api/account/api-resources`, () =>
       HttpResponse.json({
         items: [],
-        pagination: { limit: 50, offset: 0, total: 0, hasMore: false, nextOffset: null },
+        pagination: { page: Math.floor(0 / 50) + 1, pageSize: 50, totalItems: 0, totalPages: Math.ceil(0 / 50) },
       }),
     ),
     http.get(`${base}/api/account/account-connections`, () =>
       HttpResponse.json({
         items: [],
-        pagination: { limit: 50, offset: 0, total: 0, hasMore: false, nextOffset: null },
+        pagination: { page: Math.floor(0 / 50) + 1, pageSize: 50, totalItems: 0, totalPages: Math.ceil(0 / 50) },
       }),
     ),
   ] as unknown as Handlers
