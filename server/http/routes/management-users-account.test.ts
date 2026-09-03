@@ -166,7 +166,7 @@ describe('management users and account routes', () => {
     await app.request('/api/users/user-1/sessions', { method: 'DELETE', headers: adminHeaders() })
     await app.request('/api/users/user-1/sessions/session-1', { method: 'DELETE', headers: adminHeaders() })
 
-    expect(users.listSessions).toHaveBeenCalledWith('user-1', { limit: 50, offset: 0 })
+    expect(users.listSessions).toHaveBeenCalledWith('user-1', { limit: 20, offset: 0 })
     expect(users.deleteSessions).toHaveBeenCalledWith('user-1')
     expect(users.deleteSessions).toHaveBeenCalledWith('user-1', 'session-1')
   })

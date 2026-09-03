@@ -362,7 +362,7 @@ describe('management routes 4', () => {
       undefined,
     )
     expect(webhooks.getRequest).toHaveBeenCalledWith(expect.anything(), 'whr_1')
-    expect(webhooks.listAttempts).toHaveBeenCalledWith(expect.anything(), 'whr_1', { limit: 50, offset: 0 })
+    expect(webhooks.listAttempts).toHaveBeenCalledWith(expect.anything(), 'whr_1', { limit: 20, offset: 0 })
     expect(webhooks.getAttempt).toHaveBeenCalledWith(expect.anything(), 'whr_1', 'wha_1')
     expect(webhooks.createAttempt).toHaveBeenCalledWith(expect.anything(), 'whr_1', 'retry-whr-1')
     expect(webhooks.deleteEndpoint).toHaveBeenCalledWith(expect.anything(), 'wh_1')

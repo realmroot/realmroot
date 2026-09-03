@@ -26,7 +26,7 @@ describe('console Agents page', () => {
     const agentLink = await screen.findByRole('link', { name: 'Open Stable Build Agent' })
     expect(agentLink.getAttribute('href')).toBe('/organizations/org-1/agents/agent-1')
     expect(screen.queryByLabelText('Filter owner type')).toBeNull()
-    expect(requests).toEqual(['/api/agents?organizationId=org-1&page=1&pageSize=50'])
+    expect(requests).toEqual(['/api/agents?organizationId=org-1&page=1&pageSize=20'])
   })
 
   it(`governs stable Agents without exposing protocol implementation records
@@ -102,13 +102,13 @@ describe('console Agents page', () => {
             ? [
                 {
                   ...agentInventory.items[1],
-                  id: 'agent-51',
+                  id: 'agent-21',
                   name: 'Last Page Agent',
                   subject: 'agt_last_page',
                 },
               ]
             : [agentInventory.items[0]],
-          pagination: { page: secondPage ? 2 : 1, pageSize: 50, totalItems: 51, totalPages: 2 },
+          pagination: { page: secondPage ? 2 : 1, pageSize: 20, totalItems: 21, totalPages: 2 },
         }),
       )
     })
@@ -116,16 +116,16 @@ describe('console Agents page', () => {
     renderWithQuery(<AgentsPage />)
 
     expect(await screen.findByText('Stable Build Agent')).toBeTruthy()
-    expect(requests).toEqual(['/api/agents?page=1&pageSize=50'])
+    expect(requests).toEqual(['/api/agents?page=1&pageSize=20'])
     fireEvent.click(screen.getByRole('button', { name: 'Next' }))
     expect(await screen.findByText('Last Page Agent')).toBeTruthy()
     expect(screen.queryByText('Stable Build Agent')).toBeNull()
-    expect(requests).toEqual(['/api/agents?page=1&pageSize=50', '/api/agents?page=2&pageSize=50'])
+    expect(requests).toEqual(['/api/agents?page=1&pageSize=20', '/api/agents?page=2&pageSize=20'])
     expect(screen.getByRole('button', { name: 'Next' })).toHaveProperty('disabled', true)
 
     fireEvent.click(screen.getByRole('button', { name: 'Previous' }))
     await waitFor(() => expect(screen.getByText('Stable Build Agent')).toBeTruthy())
-    expect(requests.at(-1)).toBe('/api/agents?page=1&pageSize=50')
+    expect(requests.at(-1)).toBe('/api/agents?page=1&pageSize=20')
   })
 
   it('renders an empty Agent inventory', async () => {

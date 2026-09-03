@@ -13,7 +13,7 @@ import { ListToolbar, ResourcePage } from '@/features/management/resource-compon
 import { consoleQueryKeys, getAgentInventory } from '@/lib/api/management'
 import { tt } from '@/lib/i18n'
 
-const pageSize = 50
+const pageSize = 20
 
 export function AgentsPage({ organizationId }: { organizationId?: string } = {}) {
   const [search, setSearch] = useState('')
