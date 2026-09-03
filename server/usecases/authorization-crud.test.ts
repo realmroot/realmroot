@@ -1097,6 +1097,35 @@ describe('authorization CRUD and assignment policy', () => {
     )
   })
 
+  it('preserves scope grant modes when resource details resubmit the unchanged URL', async () => {
+    const authorization = repository()
+    const registered = {
+      ...resource,
+      scopeRegistry: {
+        ...scopeRegistry(['projects:read']),
+        scopes: [{ value: 'projects:read', description: null, grantMode: 'automatic' as const }],
+      },
+    }
+    authorization.findResource.mockResolvedValue(registered)
+    authorization.updateResource.mockResolvedValue(true)
+    authorization.replaceResourceDiscovery.mockResolvedValue(true)
+    const deps = {
+      authorization,
+      externalHttp: { fetch: vi.fn(resourceScopeOpenApiFetch(resource.resourceUrl, ['projects:read'])) },
+    } as unknown as Deps
+
+    await expect(updateResource(deps, resource.id, { resourceUrl: resource.resourceUrl })).resolves.toBe(registered)
+
+    expect(authorization.replaceResourceDiscovery).toHaveBeenCalledWith(
+      resource.id,
+      expect.objectContaining({
+        scopeRegistry: expect.objectContaining({
+          scopes: [expect.objectContaining({ value: 'projects:read', grantMode: 'automatic' })],
+        }),
+      }),
+    )
+  })
+
   it('covers Role defaults, visibility, and derived token scopes', async () => {
     const authorization = repository()
     const dynamicRole = {

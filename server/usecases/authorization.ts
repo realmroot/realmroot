@@ -426,6 +426,7 @@ export async function updateResource(deps: Deps, id: string, input: UpdateApiRes
     throw badRequest('External Resource Servers must be owned by the built-in platform Organization.')
   }
   const resourceUrl = input.resourceUrl ?? resource.resourceUrl
+  const resourceUrlChanged = resourceUrl !== resource.resourceUrl
   const authorizationDetails = input.authorizationDetails ?? resource.authorizationDetails
   const enabled = input.enabled ?? resource.enabled
   const boundaryChanged =
@@ -448,7 +449,7 @@ export async function updateResource(deps: Deps, id: string, input: UpdateApiRes
     ? await synchronizeResourceDiscovery(
         deps,
         resourceUrl,
-        input.resourceUrl ? null : resource.scopeRegistry,
+        resourceUrlChanged ? null : resource.scopeRegistry,
         protectedMetadata!,
       )
     : null
