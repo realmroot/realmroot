@@ -21,6 +21,11 @@ export default async function globalTeardown() {
       headers: { origin: new URL(baseURL).origin },
     })
     if (!response.ok()) throw new Error(`PVT session cleanup failed with HTTP ${response.status()}.`)
+
+    const profileResponse = await context.get('/api/account/profile')
+    if (profileResponse.status() !== 401) {
+      throw new Error(`PVT session remained usable after sign-out (HTTP ${profileResponse.status()}).`)
+    }
   } finally {
     await context.dispose()
     rmSync(resolvedPath, { force: true })

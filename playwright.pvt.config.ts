@@ -8,6 +8,7 @@ if (existsSync('.dev.vars')) loadEnvFile('.dev.vars')
 const baseURL = productionOrigin(process.env.PVT_BASE_URL)
 requireCredential('PVT_USERNAME')
 requireCredential('PVT_PASSWORD')
+requireCredential('PVT_EXPECTED_VERSION')
 const storageState = requiredEnvironmentVariable('REALMROOT_PVT_STORAGE_STATE_PATH')
 
 export default defineConfig<RealmrootOptions>({

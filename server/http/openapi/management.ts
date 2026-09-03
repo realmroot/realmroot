@@ -6,6 +6,7 @@ import {
   resourceServerAuthorizationDetailsResponseSchema,
 } from '@shared/api/agent-api'
 import { agentPublicIdentifierSchema } from '@shared/api/identifiers'
+import { realmrootApiVersion } from '@shared/api/openapi'
 import { paginationQuerySchema } from '@shared/api/pagination'
 import {
   publicAgentResponseSchema,
@@ -249,7 +250,7 @@ function buildUnifiedOpenApi(): UnifiedOpenApiDocument {
       openapi: '3.1.0',
       info: {
         title: 'Realmroot API',
-        version: '2026-08-09',
+        version: realmrootApiVersion,
         description:
           'Unified API for Agent identity, self-service resources, and permission-gated tenant administration.',
       },

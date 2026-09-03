@@ -38,15 +38,19 @@ Provide the deployment origin and a dedicated smoke account explicitly:
 PVT_BASE_URL=https://auth.example.com \
 PVT_USERNAME=realmroot-smoke \
 PVT_PASSWORD='...' \
+PVT_EXPECTED_VERSION=2026-08-09 \
 pnpm run pvt
 ```
 
 The runner also loads these variables from the git-ignored `.dev.vars` file when
 it exists, so a configured workstation can run `pnpm run pvt` directly. Explicit
 environment variables take precedence. `PVT_BASE_URL` must be a remote HTTPS
-origin. The account must already exist; PVT creates and revokes only its own
-login session. Production verification disables Playwright traces and
-screenshots so credentials cannot enter failure artifacts.
+origin. `PVT_EXPECTED_VERSION` is the API contract version expected after the
+deployment and is compared with the published OpenAPI document. The account
+must already exist; PVT creates and revokes only its own login session, then
+proves that the revoked session can no longer access the Account API.
+Production verification disables Playwright traces and screenshots so
+credentials cannot enter failure artifacts.
 
 PVT launches the installed Google Chrome directly and connects through its local
 debugging protocol so production bot protection sees a normal browser rather
