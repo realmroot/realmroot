@@ -1,4 +1,8 @@
+import { mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { defineConfig, devices } from '@playwright/test'
+import type { RealmrootOptions } from './e2e/fixtures'
 
 // E2E runs against the real stack: `vite dev --mode e2e` serves the SPA + the
 // Worker against an ISOLATED local D1 (CF_PERSIST_STATE_PATH, separate from
@@ -13,9 +17,12 @@ const externalPort = Number(process.env.E2E_EXTERNAL_PORT ?? 4399)
 const externalOrigin = `http://127.0.0.1:${externalPort}`
 const nativePort = Number(process.env.E2E_NATIVE_PORT ?? 4400)
 const nativeOrigin = `http://127.0.0.1:${nativePort}`
-const persistStatePath = process.env.CF_PERSIST_STATE_PATH ?? 'e2e/.wrangler/state'
+const configuredPersistStatePath = process.env.CF_PERSIST_STATE_PATH
+const persistStatePath = configuredPersistStatePath ?? mkdtempSync(join(tmpdir(), 'realmroot-e2e-'))
+process.env.CF_PERSIST_STATE_PATH = persistStatePath
+if (!configuredPersistStatePath) process.env.REALMROOT_E2E_TEMP_STATE_PATH = persistStatePath
 
-export default defineConfig({
+export default defineConfig<RealmrootOptions>({
   testDir: './e2e',
   testMatch: '**/*.spec.ts',
   fullyParallel: false,
@@ -23,13 +30,13 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: 0,
   reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : 'list',
-  globalSetup: './e2e/global-setup.ts',
+  globalTeardown: './e2e/global-teardown.ts',
   use: {
     baseURL,
     screenshot: 'only-on-failure',
     trace: 'retain-on-failure',
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'], realmrootTarget: 'local' } }],
   webServer: [
     {
       command: 'pnpm run example:resource-external',

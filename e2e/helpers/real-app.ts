@@ -19,7 +19,7 @@ export const organizationOwner = {
   organizationName: 'E2E Organization',
 }
 
-export const baseURL = process.env.E2E_BASE_URL ?? `http://localhost:${process.env.PLAYWRIGHT_PORT ?? '4189'}`
+export const baseURL = `http://localhost:${process.env.PLAYWRIGHT_PORT ?? '4189'}`
 const e2eWranglerConfig = process.env.E2E_WRANGLER_CONFIG ?? 'e2e/wrangler.toml'
 const e2ePersistStatePath = process.env.CF_PERSIST_STATE_PATH ?? 'e2e/.wrangler/state'
 const e2eD1Database = process.env.E2E_D1_DATABASE ?? 'realmroot-db-e2e'
@@ -62,10 +62,10 @@ export async function bootstrapAdmin() {
   }
 }
 
-export async function signIn(page: Page, password = admin.password) {
+export async function signIn(page: Page, account: Pick<typeof admin, 'username' | 'password'> = admin) {
   await page.goto('/auth/sign-in')
-  await page.getByRole('textbox', { name: 'Email or username' }).fill(admin.username)
-  await page.getByRole('textbox', { name: 'Password' }).fill(password)
+  await page.getByRole('textbox', { name: 'Email or username' }).fill(account.username)
+  await page.getByRole('textbox', { name: 'Password' }).fill(account.password)
   await page.getByRole('button', { name: 'Sign in' }).click()
   await page.waitForURL('**/profile')
 }
