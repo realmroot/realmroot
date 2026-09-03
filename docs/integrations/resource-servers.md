@@ -439,8 +439,9 @@ detail catalog extension. Advertise all three metadata members together:
 ```
 
 Version 1 defines an account-authorized paginated `GET`. The endpoint receives
-`limit` and `offset` query parameters, authenticates the connected subject's
-Bearer access token, and requires the advertised catalog scope. It returns:
+one-based `page` and `pageSize` query parameters, with defaults of 1 and 20 and
+a maximum page size of 100. It authenticates the connected subject's Bearer
+access token and requires the advertised catalog scope. It returns:
 
 ```json
 {
@@ -458,14 +459,17 @@ Bearer access token, and requires the advertised catalog scope. It returns:
     }
   ],
   "pagination": {
-    "limit": 50,
-    "offset": 0,
-    "total": 1,
-    "hasMore": false,
-    "nextOffset": null
+    "page": 1,
+    "pageSize": 20,
+    "totalItems": 1,
+    "totalPages": 1
   }
 }
 ```
+
+When another page exists, the response also publishes absolute RFC 8288
+`Link` relations for navigation (`first`, `previous`, `next`, and `last` as
+applicable).
 
 `authorizationDetail` is opaque JSON except for its required non-empty `type`.
 `display` is presentation metadata only: `label` is human-readable and need not
