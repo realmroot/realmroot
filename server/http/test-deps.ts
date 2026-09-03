@@ -2,7 +2,7 @@ import { platformOrganization } from '@server/domain/platform-organization'
 import { realmrootResourceServer } from '@server/domain/realmroot-resource-server'
 import type { Deps } from '@server/usecases/deps'
 import { createIdentifierGeneratorFake } from '@server/usecases/identifier-generator.fake'
-import type { ProviderConnectionRecord } from '@server/usecases/ports'
+import type { OAuthRequestGateway, ProviderConnectionRecord } from '@server/usecases/ports'
 import type { SecurityPolicy } from '@shared/api/security'
 import { realmrootScopeRegistry } from '@shared/scope-registry'
 import { vi } from 'vitest'
@@ -357,6 +357,42 @@ export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> =
       revokeTokenLease: vi.fn().mockResolvedValue(false),
     },
     externalHttp: { fetch: vi.fn() },
+    oauthRequests: {
+      generateCodeChallenge: vi.fn().mockResolvedValue('test-code-challenge'),
+      createAuthorizationCodeRequest: vi
+        .fn()
+        .mockImplementation(async (input: Parameters<OAuthRequestGateway['createAuthorizationCodeRequest']>[0]) => ({
+          body: {
+            grant_type: 'authorization_code',
+            code: input.code,
+            code_verifier: input.codeVerifier,
+            redirect_uri: input.redirectUri,
+            ...(input.authentication === 'post'
+              ? { client_id: input.clientId, client_secret: input.clientSecret }
+              : {}),
+          },
+          headers:
+            input.authentication === 'basic'
+              ? { authorization: `Basic ${btoa(`${input.clientId}:${input.clientSecret}`)}` }
+              : {},
+        })),
+      createRefreshTokenRequest: vi
+        .fn()
+        .mockImplementation(async (input: Parameters<OAuthRequestGateway['createRefreshTokenRequest']>[0]) => ({
+          body: {
+            grant_type: 'refresh_token',
+            refresh_token: input.refreshToken,
+            ...(input.authentication === 'post'
+              ? { client_id: input.clientId, client_secret: input.clientSecret }
+              : {}),
+            ...input.extraParams,
+          },
+          headers:
+            input.authentication === 'basic'
+              ? { authorization: `Basic ${btoa(`${input.clientId}:${input.clientSecret}`)}` }
+              : {},
+        })),
+    },
     onboarding: {
       hasUsers: vi.fn().mockResolvedValue(true),
       createBootstrapAdmin: vi.fn(),

@@ -7,7 +7,7 @@ Feature: Hosted authentication
     Given a first admin exists
     And hosted auth reads runtime settings from /api/configz
 
-  @entrypoint:product-ui @journey:application-login-without-resource-access
+  @entrypoint:product-ui @journey:application-login-without-resource-access @proof:unit
   Scenario: Application login is independent from resource authorization
     Given I am signed in
     And an application requests a Resource Server I cannot access
@@ -15,7 +15,7 @@ Feature: Hosted authentication
     Then authentication and OIDC authorization continue
     And the inaccessible Resource Server contributes no scopes to the access token
 
-  @entrypoint:product-ui @journey:application-visibility-admission
+  @entrypoint:product-ui @journey:application-visibility-admission @proof:integration
   Scenario: Application visibility controls Organization admission
     Given a public Application and a private Organization-owned Application exist
     When a Realmroot User authorizes the public Application
@@ -31,7 +31,7 @@ Feature: Hosted authentication
     When that member is removed before refreshing
     Then the Refresh Token exchange fails with invalid_grant
 
-  @entrypoint:product-ui @journey:resource-scope-consent-boundary
+  @entrypoint:product-ui @journey:resource-scope-consent-boundary @proof:unit
   Scenario: Consent delegates only scopes the user already holds
     Given an application requests one automatic scope and one assigned scope from a visible Resource Server
     And I hold the assigned scope through a direct grant or Organization Role
@@ -39,42 +39,42 @@ Feature: Hosted authentication
     Then the access token contains both scopes
     But consent does not create a direct grant or Role assignment
 
-  @entrypoint:product-ui @journey:public-sign-in
+  @entrypoint:product-ui @journey:public-sign-in @proof:unit
   Scenario: Hosted sign-in renders enabled methods
     When I open /auth/sign-in
     Then I see the hosted sign-in card
     And enabled tenant sign-in methods are visible
     And credential errors appear with the active form before alternate sign-in methods
 
-  @entrypoint:product-ui @journey:identifier-first-sign-in
+  @entrypoint:product-ui @journey:identifier-first-sign-in @proof:unit
   Scenario: Identifier-first sign-in carries the identifier into password auth
     Given identifier-first sign-in is enabled
     When I enter my email or username
     And I continue to password authentication
     Then the selected identifier is retained for credential submission
 
-  @e2e @entrypoint:product-ui @journey:password-sign-in
+  @e2e @entrypoint:product-ui @journey:password-sign-in @proof:e2e
   Scenario: Password sign-in submits credentials to the real auth endpoint
     Given password sign-in is enabled
     When I submit valid credentials on /auth/sign-in
     Then I am authenticated
     And I land in Account Center
 
-  @entrypoint:product-ui @journey:better-auth-password-migration
+  @entrypoint:product-ui @journey:better-auth-password-migration @proof:unit
   Scenario: A directly imported Better Auth password remains usable
     Given a user credential was imported from Better Auth
     When I submit the existing password on /auth/sign-in
     Then Realmroot verifies the Better Auth scrypt credential
     And a pre-existing Realmroot password remains valid when both credentials were merged
 
-  @entrypoint:product-ui @journey:passwordless-linkage
+  @entrypoint:product-ui @journey:passwordless-linkage @proof:unit
   Scenario: Passwordless mode removes password UI and blocks native password endpoints
     Given password sign-in is disabled by tenant policy
     When I open hosted sign-in
     Then password controls are not available
     And direct password auth endpoint calls are rejected
 
-  @entrypoint:product-ui @journey:normal-signup-signin-account
+  @entrypoint:product-ui @journey:normal-signup-signin-account @proof:unit
   Scenario: Sign-up, sign-in, and Account Center complete as one real journey
     Given public sign-up is enabled
     And system email delivery is ready
@@ -84,7 +84,7 @@ Feature: Hosted authentication
     And I sign in as that user
     Then Account Center loads for the created account
 
-  @entrypoint:product-ui @journey:sign-up
+  @entrypoint:product-ui @journey:sign-up @proof:unit
   Scenario: Hosted sign-up creates an account
     Given public sign-up is enabled
     And system email delivery is not ready
@@ -92,14 +92,14 @@ Feature: Hosted authentication
     Then the account is created through the real auth endpoint
     And the authenticated session continues without claiming a verification message was sent
 
-  @entrypoint:product-ui @journey:sign-up-disabled
+  @entrypoint:product-ui @journey:sign-up-disabled @proof:unit
   Scenario: Disabled sign-up blocks UI and direct API registration
     Given public sign-up is disabled
     When I open hosted sign-up
     Then registration is unavailable
     And direct sign-up endpoint calls are rejected
 
-  @entrypoint:product-ui @journey:email-otp-sign-in
+  @entrypoint:product-ui @journey:email-otp-sign-in @proof:unit
   Scenario: Email OTP sign-in completes code flow
     Given email code sign-in is enabled
     When I request an email code
@@ -107,13 +107,13 @@ Feature: Hosted authentication
     And I submit the latest verification code
     Then I am authenticated
 
-  @entrypoint:product-ui @journey:email-otp
+  @entrypoint:product-ui @journey:email-otp @proof:unit
   Scenario: Email OTP connector settings control native email code endpoints
     Given managed Email code settings are changed in Console
     When I request or verify an email OTP
     Then the native auth endpoints follow the managed connector policy
 
-  @entrypoint:product-ui @journey:password-recovery
+  @entrypoint:product-ui @journey:password-recovery @proof:unit
   Scenario: Password recovery requests and completes OTP reset
     Given a user exists with password sign-in
     When I request password recovery
@@ -121,7 +121,7 @@ Feature: Hosted authentication
     Then the password is changed
     And the confirmation offers a return to hosted sign-in
 
-  @entrypoint:product-ui @journey:email-verification
+  @entrypoint:product-ui @journey:email-verification @proof:unit
   Scenario: Email verification requests and completes verification
     Given a user has an unverified email
     When I request verification
@@ -129,7 +129,7 @@ Feature: Hosted authentication
     Then the email is marked verified
     And the confirmation offers a return to hosted sign-in
 
-  @entrypoint:product-ui @journey:email-readiness-verification
+  @entrypoint:product-ui @journey:email-readiness-verification @proof:integration
   Scenario: Email readiness activates verification without locking existing accounts
     Given an existing password account has an unverified email
     And system email delivery becomes ready
@@ -138,19 +138,19 @@ Feature: Hosted authentication
     When I follow the verification message
     Then I can sign in to the existing account
 
-  @entrypoint:product-ui @journey:hosted-auth-error-flow
+  @entrypoint:product-ui @journey:hosted-auth-error-flow @proof:unit
   Scenario: Hosted auth errors show recovery UI
     When hosted callback or session state contains an error
     Then a compact recovery screen is shown
     And the raw error context is surfaced to the user
 
-  @entrypoint:product-ui @journey:oidc-hosted-sign-in-context
+  @entrypoint:product-ui @journey:oidc-hosted-sign-in-context @proof:unit
   Scenario: Hosted sign-in shows OIDC application context
     Given an OIDC client starts authorization
     When I arrive at hosted sign-in
     Then the application context is visible
 
-  @e2e @entrypoint:product-ui @journey:oauth-authorization-context-selection
+  @e2e @entrypoint:product-ui @journey:oauth-authorization-context-selection @proof:e2e
   Scenario: OAuth authorization selects an explicit tenant Context
     Given a public OIDC Application requests a public native Resource Server
     And the signed-in User belongs to multiple active Organizations
@@ -162,13 +162,13 @@ Feature: Hosted authentication
     And the authorization code and access token retain only that Context
     And selecting the User Context issues no Organization claim
 
-  @entrypoint:product-ui @journey:oidc-resource-authorization
+  @entrypoint:product-ui @journey:oidc-resource-authorization @proof:integration
   Scenario: Hosted OIDC authorization preserves the requested resource identifier
     Given an OIDC client starts authorization with a protected resource URL
     When the user completes hosted sign-in
     Then Realmroot exchanges the authorization code for an access token whose audience is that URL
 
-  @entrypoint:product-ui @journey:oauth-multi-resource-grant
+  @entrypoint:product-ui @journey:oauth-multi-resource-grant @proof:unit
   Scenario: One authorization grant covers multiple protected resources
     Given an OIDC client requests two registered protected resources with their allowed scopes
     When I approve the combined request once
@@ -177,7 +177,7 @@ Feature: Hosted authentication
     And the refresh token remains bound to the full original resource grant
     But a token request for a resource outside the original grant is rejected
 
-  @entrypoint:product-ui @journey:oidc-native-token-verification
+  @entrypoint:product-ui @journey:oidc-native-token-verification @proof:integration
   Scenario: Native OIDC clients can verify issued identity tokens
     Given a native OIDC client uses a standards-compliant JOSE verifier
     When Realmroot publishes discovery metadata and signs an identity token
@@ -187,7 +187,7 @@ Feature: Hosted authentication
     And the published RSA public key declares signature verification usage
     And the token can be verified with that key
 
-  @entrypoint:product-ui @journey:oidc-provider-logout
+  @entrypoint:product-ui @journey:oidc-provider-logout @proof:integration
   Scenario: OIDC provider logout ends the browser session
     Given I am signed in through an OIDC application
     When the application sends my identity token to the end-session endpoint
@@ -195,7 +195,7 @@ Feature: Hosted authentication
     And Realmroot expires the browser session cookie and cache
     And a subsequent authorization request requires hosted sign-in
 
-  @entrypoint:product-ui @journey:oauth-consent
+  @entrypoint:product-ui @journey:oauth-consent @proof:unit
   Scenario: OAuth consent approves requested scopes
     Given a third-party OIDC application requests scopes
     And its protected resource is Realm-wide
@@ -208,20 +208,20 @@ Feature: Hosted authentication
     And an incomplete consent URL shows a recovery state without exposing validation internals
     And the hosted consent helpers remain private Account APIs outside the public OpenAPI contract
 
-  @entrypoint:product-ui @journey:oauth-consent-account-switch
+  @entrypoint:product-ui @journey:oauth-consent-account-switch @proof:unit
   Scenario: OAuth consent can switch accounts without losing the request
     Given a third-party OIDC application requests scopes
     When I switch accounts from the consent page
     Then Realmroot returns to the same consent request after sign-in
     And consent granted by the previous account is not reused for the new account
 
-  @entrypoint:product-ui @journey:oauth-consent-deny
+  @entrypoint:product-ui @journey:oauth-consent-deny @proof:unit
   Scenario: OAuth consent denial returns safely to the client callback
     Given a third-party OIDC application requests scopes
     When I deny consent
     Then Realmroot redirects to the client callback with a denial result
 
-  @entrypoint:product-ui @journey:better-auth-device-approval
+  @entrypoint:product-ui @journey:better-auth-device-approval @proof:unit
   Scenario: Device approval requires a signed-in browser session
     Given a public native application requests a Better Auth device approval code
     When I open the device verification link while signed out

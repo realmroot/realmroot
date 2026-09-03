@@ -1,10 +1,17 @@
-# Security Controls
+# Security Controls Reference
 
-Realmroot uses Better Auth for MFA, passkey, and session enforcement. Product APIs under `/api/account/security` and `/api/security` wrap those Better Auth capabilities with resource-oriented account and admin views.
+Realmroot uses Better Auth for MFA, passkey, and session enforcement. Product
+APIs under `/api/account/security` and `/api/realm/security-policy` wrap those
+capabilities with resource-oriented account and Realm-administration views.
 
 ## Deployment Policy
 
-Security policy is deployment-level in v1.0:
+Security policy is Realm-wide. Environment values provide deployment defaults;
+Console and the Resource API persist managed overrides in D1. Request handling
+loads the effective policy and applies it to Better Auth, hosted authentication,
+and protected account and management operations.
+
+The deployment defaults are:
 
 - `MFA_POLICY`: `optional` or `required`; defaults to `optional`.
 - `PASSKEY_ENABLED`: `true` or `false`; defaults to `true`.
@@ -13,7 +20,13 @@ Security policy is deployment-level in v1.0:
 - `SESSION_FRESH_AGE_SECONDS`: sensitive-operation freshness window; defaults to 1 day.
 - `SESSION_COOKIE_CACHE_SECONDS`: Better Auth cookie cache TTL; defaults to 5 minutes.
 
-`MFA_POLICY=required` is exposed through the security policy API for clients and administrators. Better Auth two-factor challenge enforcement still applies to Better Auth credential sign-in flows; passwordless and OAuth flows need client flow handling before treating sign-in as complete.
+Managed policy also covers authenticator and email-OTP availability, backup
+codes, password rules, CAPTCHA, and sign-in blocklists. The management response
+reports whether a CAPTCHA secret is configured without returning the secret.
+
+When MFA is required, the API middleware blocks an authenticated User from
+non-enrollment operations until MFA is enabled. Better Auth still owns the
+second-factor challenge during supported credential sign-in flows.
 
 ## WebAuthn Origin And RP ID
 

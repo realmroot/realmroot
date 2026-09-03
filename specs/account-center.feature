@@ -7,36 +7,36 @@ Feature: Account Center
     Given a first admin exists
     And I am signed in
 
-  @e2e @entrypoint:product-ui @journey:account-center
+  @e2e @entrypoint:product-ui @journey:account-center @proof:e2e
   Scenario: Account Center loads account navigation
     When I open /profile
     Then I see the account navigation and the single Profile settings card
     And the sidebar does not show placeholder Realm identity details
 
-  @entrypoint:product-ui @journey:account-section-routes
+  @entrypoint:product-ui @journey:account-section-routes @proof:unit
   Scenario: Account Center groups related sections into route-backed pages
     When I open /, /profile, /security, /applications, /connections, /agents, or /organizations
     Then I see only the grouped account page in the account content area
     And every Account Center section is a root-level sibling route
 
-  @entrypoint:product-ui @journey:account-admin-console-entry
+  @entrypoint:product-ui @journey:account-admin-console-entry @proof:unit
   Scenario: Admin users can reach Console from Account Center
     Given my signed-in user has the admin role
     When I open /profile
     Then the account avatar menu includes a Console entry
     And the Account Center topbar does not repeat the Console entry
 
-  @entrypoint:product-ui @journey:sign-out
+  @entrypoint:product-ui @journey:sign-out @proof:unit
   Scenario: Account Center signs out
     When I click Sign out
     Then I am redirected to hosted sign-in
 
-  @entrypoint:product-ui @journey:profile-update
+  @entrypoint:product-ui @journey:profile-update @proof:integration
   Scenario: Profile edits are saved
     When I update my display profile
     Then Account Center shows the saved profile values
 
-  @entrypoint:product-ui @journey:public-user-profile
+  @entrypoint:product-ui @journey:public-user-profile @proof:unit
   Scenario: A public User profile exposes an intentionally public representation
     Given a User has a username, public profile details, and linked accounts
     And the User explicitly chooses which linked accounts to publish with HTTPS profile URLs
@@ -49,43 +49,43 @@ Feature: Account Center
     And the full view includes Public Agents, sanitized recent activity, and only the chosen accounts that remain linked
     But the public profile never returns email, credentials, sessions, grants, or private activity details
 
-  @entrypoint:product-ui @journey:profile-avatar-upload
+  @entrypoint:product-ui @journey:profile-avatar-upload @proof:unit
   Scenario: Avatar upload stores a profile image
     When I upload an avatar image
     Then the avatar preview updates
     And the account API persists the asset reference
 
-  @entrypoint:product-ui @journey:account-preferences
+  @entrypoint:product-ui @journey:account-preferences @proof:unit
   Scenario: Account presentation preferences apply to this browser
     When I change the Account Center language or time zone
     Then the interface language and displayed dates use that preference
     And the preference remains after reload
 
-  @entrypoint:product-ui @journey:account-data-export
+  @entrypoint:product-ui @journey:account-data-export @proof:unit
   Scenario: Account data can be exported
     When I request my account data export
     Then Realmroot downloads a machine-readable snapshot of my profile, identities, sessions, and grants
 
-  @entrypoint:product-ui @journey:email-update
+  @entrypoint:product-ui @journey:email-update @proof:unit
   Scenario: Email change requests verification
     When I request a new email address
     Then Realmroot records an email change verification
 
-  @entrypoint:product-ui @journey:password-update
+  @entrypoint:product-ui @journey:password-update @proof:unit
   Scenario: Password change rotates credentials
     When I submit my current password and a valid new password
     Then the new password can be used for sign-in
     And my current browser receives a replacement session while other sessions are revoked
     And a mismatched new-password confirmation is rejected before submission
 
-  @entrypoint:product-ui @journey:password-policy-native-change
+  @entrypoint:product-ui @journey:password-policy-native-change @proof:unit
   Scenario: Native password change endpoint enforces managed password policy
     Given a tenant password policy is configured
     When I call the native password change endpoint
     Then weak new passwords are rejected
     And compliant passwords are accepted
 
-  @entrypoint:product-ui @journey:totp-flow
+  @entrypoint:product-ui @journey:totp-flow @proof:unit
   Scenario: TOTP enrollment verifies a real code
     When I start TOTP enrollment
     Then Account Center shows a scannable authenticator QR code
@@ -94,7 +94,7 @@ Feature: Account Center
     And backup codes are shown before I finish setup
     And a second TOTP enrollment is rejected while that factor remains enabled
 
-  @entrypoint:product-ui @journey:mfa-policy-enforcement
+  @entrypoint:product-ui @journey:mfa-policy-enforcement @proof:unit
   Scenario: MFA policy controls enrollment and API access
     Given tenant MFA policy disables or requires TOTP
     When I attempt enrollment or protected API access
@@ -102,25 +102,25 @@ Feature: Account Center
     And redirects an unenrolled signed-in user to Account Security before protected product journeys
     And blocks every other protected API until enrollment is complete
 
-  @entrypoint:product-ui @journey:passkey-flow
+  @entrypoint:product-ui @journey:passkey-flow @proof:unit
   Scenario: Passkey enrollment completes with WebAuthn
     When I register a passkey from Account Center
     Then WebAuthn completes and the credential appears in security settings
 
-  @entrypoint:product-ui @journey:passkey-sign-in
+  @entrypoint:product-ui @journey:passkey-sign-in @proof:unit
   Scenario: Hosted passkey sign-in authenticates an enrolled passkey
     Given I have an enrolled passkey
     When I choose passkey sign-in from hosted auth
     Then I am authenticated through WebAuthn
 
-  @entrypoint:product-ui @journey:web3-wallet-sign-in
+  @entrypoint:product-ui @journey:web3-wallet-sign-in @proof:unit
   Scenario: Web3 wallet sign-in follows the SIWE boundary
     Given my account has a wallet address binding
     When I start hosted wallet sign-in
     Then Realmroot requires the external wallet signature boundary
     And the bound account can sign in
 
-  @entrypoint:product-ui @journey:provider-connections
+  @entrypoint:product-ui @journey:provider-connections @proof:unit
   Scenario: External provider accounts have one unified connection
     Given a Provider Connector is available for sign-in and Agent access
     When I connect the provider account
@@ -134,7 +134,7 @@ Feature: Account Center
     When I disconnect the Provider Connection
     Then its sign-in binding and external Resource authorizations are revoked together
 
-  @entrypoint:product-ui @journey:provider-connection-sign-in-linking
+  @entrypoint:product-ui @journey:provider-connection-sign-in-linking @proof:unit
   Scenario: An existing Provider Connection can add sign-in
     Given I connected a Provider account for Agent access without enabling sign-in
     And the Provider Connector is available for sign-in
@@ -144,7 +144,7 @@ Feature: Account Center
     And the existing Provider Connection gains sign-in without creating a second connection
     And the connection keeps the account label returned by the Provider
 
-  @entrypoint:product-ui @journey:provider-connection-social-sign-in
+  @entrypoint:product-ui @journey:provider-connection-social-sign-in @proof:unit
   Scenario: Social sign-in establishes one named Provider Connection
     Given a Provider Connector is available for sign-in
     When I sign in with that Provider account
@@ -153,7 +153,7 @@ Feature: Account Center
     When I later authorize an external Resource through the same Provider account
     Then the Resource authorization is attached to the existing Provider Connection
 
-  @entrypoint:product-ui @journey:provider-identity-ownership
+  @entrypoint:product-ui @journey:provider-identity-ownership @proof:unit
   Scenario: A Provider identity belongs to one Realmroot account
     Given my Provider identity is already connected to another Realmroot account
     When I authorize that same Provider identity from this account
@@ -161,19 +161,19 @@ Feature: Account Center
     And it does not reveal the other Realmroot account
     And it does not create another Provider Connection or Resource authorization
 
-  @entrypoint:product-ui @journey:session-revocation
+  @entrypoint:product-ui @journey:session-revocation @proof:unit
   Scenario: Sessions can be revoked
     Given my account has multiple sessions
     When I revoke all sessions or a single other session
     Then the revoked sessions can no longer be used
 
-  @entrypoint:product-ui @journey:authorized-app-revoke
+  @entrypoint:product-ui @journey:authorized-app-revoke @proof:unit
   Scenario: Authorized application access can be revoked
     Given I have granted an application access
     When I revoke it from the Account application-authorization collection
     Then the application is removed from authorized apps
 
-  @entrypoint:product-ui @journey:authorized-app-separation
+  @entrypoint:product-ui @journey:authorized-app-separation @proof:unit
   Scenario: Authorized applications remain separate from Provider Connections
     Given I connected an external Provider account for Agent access
     And I granted an application access to my Realmroot identity
@@ -183,7 +183,7 @@ Feature: Account Center
     When I open /connections
     Then I see the external Provider account and its Resource authorization summary
 
-  @e2e @entrypoint:product-ui @journey:account-organization-management
+  @e2e @entrypoint:product-ui @journey:account-organization-management @proof:e2e
   Scenario: Organization members manage their shared context
     When I create an Organization from Account Center
     Then I become its Owner
@@ -199,7 +199,7 @@ Feature: Account Center
     When I update its profile or invite a member with one or more Roles and Teams
     Then the Organization detail reflects the change
 
-  @entrypoint:product-ui @journey:account-organization-teams
+  @entrypoint:product-ui @journey:account-organization-teams @proof:unit
   Scenario: Organization administrators manage OIDC groups as Teams
     Given an Organization is created without an automatic default Team
     When an Organization administrator creates or renames a Team from the Teams Workspace page
@@ -210,21 +210,21 @@ Feature: Account Center
     And a rename warns that downstream RBAC mappings must be updated
     And another Organization may use the same Team name
 
-  @entrypoint:product-ui @journey:consumer-organization-boundary
+  @entrypoint:product-ui @journey:consumer-organization-boundary @proof:unit
   Scenario: A consumer Organization does not imply Developer Console access
     Given Organization creation is allowed but Developer Console remains restricted to Realm operators
     When I create and manage an Organization from Account Center
     Then I can manage its authorized Organization resources without an Open Console action
     And its membership grants no Realm platform administration
 
-  @entrypoint:product-ui @journey:agent-approval
+  @entrypoint:product-ui @journey:agent-approval @proof:unit
   Scenario: Delegated Agents receive identity separately from Resource authority
     Given an Agent requests delegated identity through AgentAuth device authorization
     When I approve the Agent identity enrollment
     Then the Agent receives a delegated identity without Resource API authority
     And account access requires a separately approved OAuth Resource scope
 
-  @entrypoint:product-ui @journey:account-agent-management
+  @entrypoint:product-ui @journey:account-agent-management @proof:unit
   Scenario: Delegated agent access can be managed from Account Center
     Given I have active delegated agents and capability grants
     When I open Account Center

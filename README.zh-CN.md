@@ -102,13 +102,13 @@ scope、取得控制者批准、在适合时将 scope 组织成角色，并把�
 或者与外部授权服务器协调完成签发。
 
 这样可以避免建立一个会逐渐偏离 API 代码的中心化权限目录。详细的所有权模型请参阅
-[授权边界](docs/architecture/authorization-boundaries.md)。
+[ADR 0010](docs/adr/0010-resource-server-owns-business-authorization.md)。
 
 ## 广泛发现，精确授权，直接调用
 
 Agent 可以检查资源目录，但不会因此获得业务权限。选定操作后，Realmroot 根据该资源
-当前的 OpenAPI 文档确定可申请的 scope。控制者会检查 Agent、资源、账户、用途、
-精确 scope 和授权有效期。
+当前的 RFC 9728 元数据确定可申请的 scope，并通过 OpenAPI 把操作映射到这些 scope。
+控制者会检查 Agent、资源、账户、用途、精确 scope 和授权有效期。
 
 注册只建立身份，不授予权限。Realmroot 将两种批准边界彼此分开：
 
@@ -156,10 +156,11 @@ Restish Adapter 会为每个 Resource Grant 创建独立的 P-256 DPoP 密钥，
 授权边界：
 
 1. 维护一个稳定的受保护资源 URL；
-2. 通过 RFC 8631 `service-desc` Link 从该 URL 暴露 OpenAPI 3.x 文档；
-3. 使用标准 OpenAPI Security Requirement 声明操作所需 scope；
-4. 验证签发的 Token 并在本地执行权限判定；
-5. 将资源以 `native` 或 `external` 类型注册到 Realmroot。
+2. 通过 RFC 9728 受保护资源元数据发布可申请的 scope；
+3. 通过 RFC 8631 `service-desc` Link 暴露 OpenAPI 3.x 文档；
+4. 使用标准 OpenAPI Security Requirement 声明操作所需 scope；
+5. 验证签发的 Token 并在本地执行权限判定；
+6. 将资源以 `native` 或 `external` 类型注册到 Realmroot。
 
 当 API 信任 Realmroot 作为授权服务器时选择 `native`；当目标平台拥有自己的用户和
 OAuth Server 时选择 `external`。两种方式都不需要维护 Agent 专用 Endpoint 或
@@ -283,7 +284,8 @@ Realmroot 在 Cloudflare Worker 内运行 Better Auth。Hono 提供 HTTP 接口�
 
 后续升级使用 **Sync fork**。Workflow 实际部署的版本就是推送到 Fork 的 Commit。
 运维细节请参阅[部署升级](docs/deploy/upgrades.md)、
-[全新部署设置](docs/deploy/setup.md)和[租户模型](docs/architecture/tenancy.md)。
+[全新部署设置](docs/deploy/setup.md)和
+[ADR 0002](docs/adr/0002-one-deployment-is-one-realm.md)。
 
 ## 文档
 
@@ -292,7 +294,7 @@ Realmroot 在 Cloudflare Worker 内运行 Better Auth。Hono 提供 HTTP 接口�
 - [Agent 访问指南](docs/guides/agent-access.md)：身份、批准、账户连接、Token 和撤销旅程；
 - [Agent 身份架构](docs/architecture/agent-identity.md)：稳定身份、Host 绑定、权限、凭证、
   公开 Profile 和审计；
-- [授权边界](docs/architecture/authorization-boundaries.md)：资源自有 Scope、角色语义、
+- [授权边界决策](docs/adr/0010-resource-server-owns-business-authorization.md)：资源自有 Scope、角色语义、
   签发策略和最终执行；
 - [资源服务器集成](docs/integrations/resource-servers.md)：发布并验证 Native 或 External
   受保护 API；

@@ -7,26 +7,26 @@ Feature: Admin Console
     Given a first admin exists
     And I am signed in to Console
 
-  @entrypoint:product-ui @journey:admin-dashboard
+  @entrypoint:product-ui @journey:admin-dashboard @proof:unit
   Scenario: Admin dashboard loads tenant health
     When I open /console
     Then the dashboard shows tenant health from real management APIs
 
-  @entrypoint:product-ui @journey:admin-signed-out-redirect
+  @entrypoint:product-ui @journey:admin-signed-out-redirect @proof:unit
   Scenario: Signed-out Console routes redirect before data loads
     Given I am signed out
     When I open a Console route
     Then I am redirected to admin sign-in
     And management API data requests are not made
 
-  @entrypoint:product-ui @journey:admin-platform-only
+  @entrypoint:product-ui @journey:admin-platform-only @proof:unit
   Scenario: Organization authority does not grant Console access
     Given I am an Organization Owner without Realm platform authority
     When I open a Console route
     Then I am redirected to my Organizations page
     And Realm management API data requests are not made
 
-  @e2e @entrypoint:product-ui @journey:organization-workspace-platform-boundary
+  @e2e @entrypoint:product-ui @journey:organization-workspace-platform-boundary @proof:e2e
   Scenario: Organization Owners use their Workspace without Console authority
     Given I am an Organization Owner without Realm platform authority
     When I open my Organization Workspace and navigate its resource sections
@@ -34,13 +34,13 @@ Feature: Admin Console
     When I open Console
     Then I am redirected to my Organizations page before Realm inventory loads
 
-  @entrypoint:product-ui @journey:admin-setup-gate
+  @entrypoint:product-ui @journey:admin-setup-gate @proof:unit
   Scenario: Console setup gate handles missing OIDC applications
     Given no OIDC application exists
     When I open Console
     Then setup guidance is shown without blocking persistent Console routes
 
-  @entrypoint:product-ui @journey:admin-route-backed-navigation
+  @entrypoint:product-ui @journey:admin-route-backed-navigation @proof:unit
   Scenario: Console navigation exposes persistent route-backed pages
     When I use Console navigation
     Then each visible product page has a canonical route
@@ -52,13 +52,13 @@ Feature: Admin Console
     And primary inventory filters form the header of the same surface as their table
     And API documentation opens in a separate browsing context
 
-  @entrypoint:product-ui @journey:admin-application-inventory
+  @entrypoint:product-ui @journey:admin-application-inventory @proof:unit
   Scenario: Applications page lists OIDC clients and status controls
     Given OIDC applications exist
     When I open the applications page
     Then clients and lifecycle controls are visible
 
-  @entrypoint:product-ui @journey:admin-create-application
+  @entrypoint:product-ui @journey:admin-create-application @proof:unit
   Scenario: Applications page creates a typed OAuth client
     When I create an application from Console
     Then the new Application appears in inventory as confidential_web, public_spa, public_native, or machine
@@ -72,7 +72,7 @@ Feature: Admin Console
     And Public Native Applications can enable or disable device login
     And new Applications are private by default while migrated Applications remain public
 
-  @entrypoint:product-ui @journey:admin-application-detail
+  @entrypoint:product-ui @journey:admin-application-detail @proof:unit
   Scenario: Application detail manages lifecycle, redirects, integration details, and secret rotation
     Given an application exists
     When I open its detail page
@@ -89,18 +89,18 @@ Feature: Admin Console
     And deleting it returns to inventory without refetching the removed client
     And visibility can be changed between public and private independently from OAuth client authentication
 
-  @entrypoint:product-ui @journey:admin-create-user
+  @entrypoint:product-ui @journey:admin-create-user @proof:unit
   Scenario: Users page creates a user
     When I create a user from Console
     Then the user is persisted through the management API
 
-  @entrypoint:product-ui @journey:admin-user-inventory
+  @entrypoint:product-ui @journey:admin-user-inventory @proof:unit
   Scenario: Users page supports search and status inventory
     Given users exist
     When I open the users page
     Then user search and status inventory are visible
 
-  @entrypoint:product-ui @journey:admin-user-detail
+  @entrypoint:product-ui @journey:admin-user-detail @proof:unit
   Scenario: User detail updates profile, resets password, and revokes sessions
     Given a user exists
     When I open user detail
@@ -108,23 +108,23 @@ Feature: Admin Console
     And direct Resource Server assignments are managed from Permissions
     And Authorized apps shows only the User's active Application authorization subresources
 
-  @entrypoint:product-ui @journey:admin-create-connector
+  @entrypoint:product-ui @journey:admin-create-connector @proof:unit
   Scenario: Connectors page creates a draft social connector
     When I create a social connector from Console
     Then the connector is saved as a draft
 
-  @entrypoint:product-ui @journey:admin-connector-inventory
+  @entrypoint:product-ui @journey:admin-connector-inventory @proof:unit
   Scenario: Connectors page lists email and SMS setup state
     When I open connectors
     Then Email and SMS setup state is visible
 
-  @entrypoint:product-ui @journey:admin-social-connector-inventory
+  @entrypoint:product-ui @journey:admin-social-connector-inventory @proof:unit
   Scenario: Social connectors list provider settings and availability
     When I open social connector settings
     Then provider settings and availability are visible
     And provider rows and hosted sign-in methods show a recognizable provider icon
 
-  @entrypoint:product-ui @journey:admin-oidc-connector-inventory
+  @entrypoint:product-ui @journey:admin-oidc-connector-inventory @proof:unit
   Scenario: Connectors page manages multiple standard OIDC clients
     Given multiple OIDC connectors are configured
     When I open connectors
@@ -134,29 +134,29 @@ Feature: Admin Console
     And inventory filters form the header of the same surface as their table
     And I can create, edit, enable for login, and delete each OIDC connector independently
 
-  @entrypoint:product-ui @journey:admin-sign-in-settings
+  @entrypoint:product-ui @journey:admin-sign-in-settings @proof:unit
   Scenario: Sign-in settings persist registration and method availability
     When I update registration rules or hosted sign-in method availability
     Then hosted auth uses the saved availability settings
     And the active settings tab saves atomically from its inline form
 
-  @entrypoint:product-ui @journey:admin-sign-in-experience-routes
+  @entrypoint:product-ui @journey:admin-sign-in-experience-routes @proof:unit
   Scenario: Sign-in experience tabs use canonical Console routes
     When I navigate sign-in experience tabs
     Then the browser URL uses canonical Console routes
 
-  @entrypoint:product-ui @journey:admin-account-center-settings
+  @entrypoint:product-ui @journey:admin-account-center-settings @proof:unit
   Scenario: Account Center settings change profile visibility
     When I update Account Center settings
     Then profile visibility changes for end users
 
-  @entrypoint:product-ui @journey:admin-content-settings
+  @entrypoint:product-ui @journey:admin-content-settings @proof:unit
   Scenario: Hosted legal and support destinations save through the management API
     When I update hosted legal and support destinations
     Then the management API persists the Terms, Privacy, and Support URLs
     And the hosted preview footer uses them
 
-  @entrypoint:product-ui @journey:admin-security-policy
+  @entrypoint:product-ui @journey:admin-security-policy @proof:unit
   Scenario: Security pages show policy, CAPTCHA, blocklist, and general settings
     When I open security settings
     Then MFA policy, CAPTCHA, blocklist, and general settings are visible
@@ -166,20 +166,20 @@ Feature: Admin Console
     And CAPTCHA secrets are stored by the management plane without being returned to Console
     And canceling a policy editor discards every unsaved controlled value
 
-  @entrypoint:product-ui @journey:admin-require-mfa-safely
+  @entrypoint:product-ui @journey:admin-require-mfa-safely @proof:unit
   Scenario: An operator cannot require MFA before enrolling it
     Given my operator account has not enrolled MFA
     When I change the Realm MFA policy from optional to required
     Then Realmroot rejects the change with enrollment guidance
     And the current Console session remains usable
 
-  @entrypoint:product-ui @journey:admin-create-organization
+  @entrypoint:product-ui @journey:admin-create-organization @proof:unit
   Scenario: Organizations page creates an organization
     When I create an organization
     Then it appears in authorization inventory
     And the authenticated creator becomes its Owner without an owner field in the request
 
-  @entrypoint:product-ui @journey:admin-govern-organization
+  @entrypoint:product-ui @journey:admin-govern-organization @proof:unit
   Scenario: Organization detail separates inventory from governance operations
     Given an organization exists
     When I select it from the Realm inventory
@@ -191,7 +191,7 @@ Feature: Admin Console
     And deleting an Organization returns to inventory without refetching its removed detail
     And Realm Console retains only the cross-Organization inventory
 
-  @entrypoint:product-ui @journey:admin-create-role
+  @entrypoint:product-ui @journey:admin-create-role @proof:unit
   Scenario: Organization Roles page creates a dynamic role
     Given I selected an Organization where my membership grants roles:write
     When I create a dynamic role
@@ -203,7 +203,7 @@ Feature: Admin Console
     And predefined Roles remain readable but cannot be modified or deleted
     And an assigned dynamic Role cannot be deleted
 
-  @entrypoint:product-ui @journey:admin-create-api-resource
+  @entrypoint:product-ui @journey:admin-create-api-resource @proof:unit
   Scenario: Resource servers page creates a Resource server
     When I create a Resource server
     Then it appears in authorization inventory
@@ -223,7 +223,7 @@ Feature: Admin Console
     And external authorization connection details are included in Overview
     And Organization Roles and direct Permissions remain managed from their owning resources
 
-  @entrypoint:product-ui @journey:admin-delete-api-resource
+  @entrypoint:product-ui @journey:admin-delete-api-resource @proof:unit
   Scenario: API resource settings soft-delete a resource
     Given an API resource exists
     When I delete the API resource from its settings
@@ -233,7 +233,7 @@ Feature: Admin Console
     And the deleted resource remains only in the database for incident investigation
     And the Console offers no restoration
 
-  @entrypoint:product-ui @journey:provider-connection-authority
+  @entrypoint:product-ui @journey:provider-connection-authority @proof:unit
   Scenario: One Provider Connector exposes independent authentication and resource-authorization facets
     Given a Connector driver supports authentication and resource authorization
     When I configure its Better Auth authentication client and its external authorization issuer
@@ -242,7 +242,7 @@ Feature: Admin Console
     And a Resource Server can reference only the external authorization facet
     And disabling authentication does not disable its Resource Servers or existing resource connections
 
-  @entrypoint:product-ui @journey:admin-authorization-inventory
+  @entrypoint:product-ui @journey:admin-authorization-inventory @proof:unit
   Scenario: Authorization inventory lists organizations, Organization Roles, and Resource servers
     Given authorization resources exist
     When I open the authorization pages
@@ -252,7 +252,7 @@ Feature: Admin Console
     And the last Owner cannot be removed by a Role replacement
     And each dynamic Role references only assigned scopes from visible Resource servers
 
-  @entrypoint:product-ui @journey:admin-resource-permissions
+  @entrypoint:product-ui @journey:admin-resource-permissions @proof:unit
   Scenario: Permissions are explicit authorization resources
     Given a visible Resource Server has assigned scopes
     When an authorized administrator grants scopes directly to a User or Application
@@ -268,7 +268,7 @@ Feature: Admin Console
     And direct Permissions combine with optional Organization Role scopes
     But public visibility does not automatically grant any assigned scope
 
-  @entrypoint:product-ui @journey:admin-branding-settings
+  @entrypoint:product-ui @journey:admin-branding-settings @proof:unit
   Scenario: Color schemes and brand assets update hosted auth
     When I choose a color scheme or update brand asset URLs
     Then the live preview updates before save
@@ -279,7 +279,7 @@ Feature: Admin Console
     And the preview remains fixed in the right column without a separate preview header while only the form column scrolls
     And hosted auth renders the saved branding
 
-  @entrypoint:product-ui @journey:admin-webhook-endpoint-lifecycle
+  @entrypoint:product-ui @journey:admin-webhook-endpoint-lifecycle @proof:unit
   Scenario: Administrators manage webhook endpoints from Console
     Given I am signed in to Console as a Realm administrator
     When I create, edit, disable, enable, rotate, and delete a webhook endpoint
@@ -289,7 +289,7 @@ Feature: Admin Console
     And endpoint and request filters form the header of the same surface as their active table
     And invalid endpoint URLs remain actionable inside the form
 
-  @entrypoint:product-ui @journey:webhook-event-delivery
+  @entrypoint:product-ui @journey:webhook-event-delivery @proof:integration
   Scenario: Subscribed product events are signed, delivered, and auditable
     Given an enabled webhook endpoint subscribes to a supported product event
     When that product event occurs
@@ -300,12 +300,12 @@ Feature: Admin Console
     And large request or response bodies remain scrollable without hiding request actions
     And retrying a failed delivery creates a new signed delivery attempt under the original request
 
-  @entrypoint:product-ui @journey:admin-deployment-settings
+  @entrypoint:product-ui @journey:admin-deployment-settings @proof:unit
   Scenario: Deployment page shows Cloudflare runtime settings
     When I open deployment settings
     Then Cloudflare runtime configuration is visible
 
-  @entrypoint:product-ui @journey:admin-general-settings
+  @entrypoint:product-ui @journey:admin-general-settings @proof:unit
   Scenario: General Realm settings persist through the management plane
     When I update the Realm name in General settings
     Then the management API persists it on the canonical Realm resource
@@ -313,7 +313,7 @@ Feature: Admin Console
     And hosted product surfaces use the saved Realm name
     And protocol endpoints remain derived from the canonical Realm origin
 
-  @entrypoint:product-ui @journey:admin-email-delivery-settings
+  @entrypoint:product-ui @journey:admin-email-delivery-settings @proof:unit
   Scenario: Email delivery settings persist independently from deployment variables
     Given the deployment exposes a Cloudflare Email binding
     When I configure the sender identity in Email delivery settings
@@ -323,7 +323,7 @@ Feature: Admin Console
     And authentication messages use the stored sender configuration
     And Console reports the binding and configuration state separately
 
-  @entrypoint:product-ui @journey:admin-developer-access-policy
+  @entrypoint:product-ui @journey:admin-developer-access-policy @proof:unit
   Scenario: Organization creation is independent from platform Console access
     When I configure Realm developer access
     Then I can choose an Organization creation policy without changing Console access
@@ -331,7 +331,16 @@ Feature: Admin Console
     And Organization access levels are not offered as Console access controls
     And changing an Organization access level never grants business API scopes
 
-  @entrypoint:product-ui @journey:organization-console-resource-boundary
+  @entrypoint:product-ui @journey:admin-organization-creation-policy @proof:unit
+  Scenario: Realm operators control who may create Organizations
+    Given Organization creation is governed independently from Console access
+    When a Realm operator changes the Organization creation policy
+    Then the policy can allow all users, Realm operators only, or an explicit set of users
+    And every referenced user must exist before the policy is saved
+    And an invalid reference leaves the previous policy unchanged
+    And the policy change does not grant Console or business API authority
+
+  @entrypoint:product-ui @journey:organization-console-resource-boundary @proof:unit
   Scenario: Organization administration uses the Organization Workspace
     Given a developer administers one Organization without Realm platform authority
     When the developer browses or manages resources in that Organization Workspace
@@ -343,7 +352,7 @@ Feature: Admin Console
     And direct detail or mutation requests for another Organization's resources are rejected
     And Realm operators retain the complete Realm inventory in Console
 
-  @entrypoint:product-ui @journey:admin-agent-governance-detail
+  @entrypoint:product-ui @journey:admin-agent-governance-detail @proof:unit
   Scenario: Agent detail presents the stable identity governance model
     Given a stable Agent identity has bound Hosts, access requests, and Permissions
     When I open the Agent detail in Console
@@ -357,7 +366,7 @@ Feature: Admin Console
     And Permission collections omit history associated with deleted Resource Servers
     And protocol Agent implementation records and credential material are not exposed
 
-  @entrypoint:product-ui @journey:admin-application-oidc-claims
+  @entrypoint:product-ui @journey:admin-application-oidc-claims @proof:unit
   Scenario: Application detail exposes one platform token profile
     Given an application exists
     When I inspect or update the Application through the Console or Management API
@@ -365,7 +374,7 @@ Feature: Admin Console
     And the Management API accepts legacy oidcClaims input without applying it and returns the fixed platform profile for migration compatibility
     And existing stored claim settings do not alter newly issued tokens
 
-  @entrypoint:product-ui @journey:oidc-claim-emission
+  @entrypoint:product-ui @journey:oidc-claim-emission @proof:integration
   Scenario: Applications receive standard identity and access token claims
     Given a user has organization membership, optional resource roles, and approved resource scopes
     When the Application completes an OIDC authorization flow for a Resource Server
@@ -379,7 +388,7 @@ Feature: Admin Console
     And no token carries the legacy object claim urn:realmroot:params:oauth:tenant
     But the access token contains no duplicate authorization object, azp, application_id, or top-level organization_id
 
-  @entrypoint:product-ui @journey:oidc-group-application-boundary
+  @entrypoint:product-ui @journey:oidc-group-application-boundary @proof:integration
   Scenario: One group-aware Application can serve multiple relying-party instances
     Given an Organization owns one public native Kubernetes Application and one confidential web Argo CD Application
     When multiple Kubernetes clusters use the native client and multiple Argo CD instances register callbacks on the web client
@@ -387,7 +396,7 @@ Feature: Admin Console
     And each relying party maps those groups to its own local authorization roles
     But Kubernetes and Argo CD do not share an Application or client secret boundary
 
-  @entrypoint:product-ui @journey:agent-discovery
+  @entrypoint:product-ui @journey:agent-discovery @proof:unit
   Scenario: AgentAuth discovery exposes a narrow delegated protocol surface
     When an agent client requests /.well-known/agent-configuration
     Then Realmroot advertises delegated mode and device authorization approval
@@ -395,7 +404,7 @@ Feature: Admin Console
     And the advertised endpoints, issuer, and proof algorithms are authoritative for the client
     And Management API authority is expressed only as OAuth scopes
 
-  @entrypoint:product-ui @journey:admin-agent-inventory
+  @entrypoint:product-ui @journey:admin-agent-inventory @proof:unit
   Scenario: Admins govern Agents without managing protocol internals
     Given delegated AgentAuth hosts, Agents, Permissions, and approval requests exist
     When Console reads the tenant Agent inventory

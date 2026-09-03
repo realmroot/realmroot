@@ -38,13 +38,14 @@ the architecture layers are the test taxonomy:
 For new or changed product behavior:
 
 1. Update or add the relevant `.feature` scenario first.
-2. Add `@journey:<id>` and exactly one `@entrypoint:<id>` to the scenario.
-3. Cover it at the cheapest meaningful layer. Carry a `[spec: <feature>/<journey>]`
+2. Add one `@journey:<id>`, one `@entrypoint:<id>`, and one
+   `@proof:unit|integration|e2e` to the scenario.
+3. Cover it at the declared cheapest meaningful layer. Carry a `[spec: <feature>/<journey>]`
    breadcrumb in the home test's name.
-4. Add `@e2e` and a Playwright spec only when the behaviour is a genuinely
-   cross-stack, hermetic journey.
-5. Run `pnpm run spec:check` (governance lint: every scenario tagged, every
-   `@e2e` scenario traced to a breadcrumb).
+4. Add `@e2e @proof:e2e` and a Playwright spec only when the behaviour is a
+   genuinely cross-stack, hermetic journey.
+5. Run `pnpm run spec:check` (governance lint: stable scenario IDs, declared
+   proof layers, and bidirectional scenario/test traceability).
 
 Choose the test command by the changed runtime:
 
@@ -108,15 +109,16 @@ Do not rely on CI for checks that can be run locally before commit.
 
 ## Architecture And Review
 
-The [Provider Adapter boundary](docs/architecture/provider-adapter-boundary.md)
+The [Provider Adapter boundary](docs/adr/0004-provider-compatibility-through-external-adapters.md)
 is a mandatory architecture constraint:
 
 - Realmroot supports only native and external authorization models.
 - A compatibility Adapter is a standard external authorization server and
   protected Resource, never a third authorization model.
-- Provider OAuth, credentials, lifecycle state, scope translation, API routing,
-  and provider-specific authorization-detail semantics must not enter Realmroot
-  core code or storage.
+- Provider-specific upstream OAuth, credentials, lifecycle state, scope
+  translation, API routing, and authorization-detail semantics must not enter
+  Realmroot core code or storage. Realmroot may retain the generic Connector
+  and external-resource OAuth state required by the standard boundary.
 - One logical Connector represents one provider and may independently enable
   authentication and resource authorization.
 - Adding a provider changes Adapter code and Realmroot configuration, not

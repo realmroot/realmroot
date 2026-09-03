@@ -909,7 +909,7 @@ describe('Agent identity enrollment over real D1', () => {
       [spec: agent-identity/native-api-resource-registration]
       [spec: agent-identity/native-api-resource-access-request]
       [spec: agent-identity/native-api-resource-token]
-      [spec: agent-identity/agent-resource-grant-policy]`, async () => {
+      [spec: agent-identity/agent-resource-entitlement-policy]`, async () => {
     const seeded = await seedAgent(harness, userId, 'token')
     const intent = await createIntent(harness, userId, {
       name: 'Token Agent',

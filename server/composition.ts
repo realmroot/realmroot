@@ -7,6 +7,7 @@
  */
 import { createConfiguredEmailSender } from '@server/adapters/gateways/email/sender'
 import { createJwksGateway } from '@server/adapters/gateways/jwks'
+import { createOAuthRequestGateway } from '@server/adapters/gateways/oauth-requests'
 import { createSecretCipher } from '@server/adapters/gateways/secrets'
 import { createUuidV7IdentifierGenerator } from '@server/adapters/identifiers/uuid-v7'
 import { createAgentAuditRepository } from '@server/adapters/repos/agent-audit'
@@ -57,6 +58,7 @@ export function createDeps(env: Env, config: RuntimeConfig, correlationId?: stri
         return env.EXTERNAL_HTTP ? env.EXTERNAL_HTTP.fetch(outbound) : fetch(outbound)
       },
     },
+    oauthRequests: createOAuthRequestGateway(),
     onboarding: createOnboardingRepository(env.DB, ids),
     security: createSecurityRepository(db, config.securityPolicy),
     secrets,

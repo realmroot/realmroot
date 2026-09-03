@@ -136,7 +136,7 @@ authorization class.
 
 Compatibility Adapters follow External Authorization as defined in the
 [Resource Server integration guide](resource-servers.md) and the normative
-[Provider Adapter Boundary](../architecture/provider-adapter-boundary.md).
+[ADR 0004](../adr/0004-provider-compatibility-through-external-adapters.md).
 
 ## Realmroot-specific extensions
 
