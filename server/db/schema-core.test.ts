@@ -234,11 +234,7 @@ describe('schema.test 1', () => {
   it('models stable Agent identities without changing AgentAuth host records', () => {
     expect(columnNames(agentHost)).not.toContain('agent_identity_id')
     expect(indexNames(agentIdentity)).toEqual(
-      expect.arrayContaining([
-        'agentIdentity_issuer_subject_unique',
-        'agentIdentity_ownerUserId_idx',
-        'agentIdentity_ownerOrganizationId_idx',
-      ]),
+      expect.arrayContaining(['agentIdentity_issuer_subject_unique', 'agentIdentity_ownerUserId_idx']),
     )
     expect(indexNames(agentIdentityBinding)).toContain('agentIdentityBinding_protocolAgentId_unique')
     expect(indexNames(agentApplicationCreation)).toEqual([

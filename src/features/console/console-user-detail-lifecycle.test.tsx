@@ -195,9 +195,9 @@ describe('admin console user detail lifecycle', () => {
               personalAgent,
               {
                 ...personalAgent,
-                id: 'agent-org',
-                name: 'Organization Agent',
-                homeSpace: { type: 'organization', organizationId: 'org-1' },
+                id: 'agent-secondary',
+                name: 'Secondary Agent',
+                homeSpace: { type: 'personal', userId: 'user-2' },
               },
             ],
             pagination,
@@ -291,7 +291,7 @@ describe('admin console user detail lifecycle', () => {
 
     fireEvent.mouseDown(screen.getByRole('tab', { name: 'Agents' }), { button: 0, ctrlKey: false })
     expect(await screen.findByText('Personal Agent')).toBeTruthy()
-    expect(screen.queryByText('Organization Agent')).toBeNull()
+    expect(screen.queryByText('Secondary Agent')).toBeNull()
 
     fireEvent.mouseDown(screen.getByRole('tab', { name: 'Authorized apps' }), { button: 0, ctrlKey: false })
     expect(await screen.findByText('Customer portal')).toBeTruthy()

@@ -33,7 +33,7 @@ Feature: Agent identity and delegated API authorization
       And the adapter creates a personal stable identity through the approved Agent session
       Then Realmroot creates an Agent with a stable issuer and subject
       And Realmroot assigns the requested immutable username independently of the Agent's nickname
-      And the Agent belongs to exactly one home space
+      And the Agent belongs to exactly one concrete User
       And users govern the Agent through explicit Permissions in that space
       And the host registration is bound to that Agent identity
       And the enrollment operation returns the stable Agent enrollment
@@ -93,10 +93,10 @@ Feature: Agent identity and delegated API authorization
 
     @entrypoint:product-ui @journey:agent-management-authority @proof:unit
     Scenario: Agent control is established by one authoritative approval
-      Given an unowned Agent requests enrollment and more than one eligible controller can review it
-      When controllers make competing approval decisions
-      Then exactly one controller becomes the Agent owner
-      And only that owner's decision establishes the stable Agent identity
+      Given an unowned Agent requests enrollment for the authenticated User
+      When that User approves the enrollment
+      Then that concrete User becomes the Agent owner
+      And only that owner can establish the stable Agent identity
       And later management requests authenticate as the Agent without substituting the controller
       And Realmroot records one authoritative approval outcome
 
@@ -252,7 +252,6 @@ Feature: Agent identity and delegated API authorization
       And the request selects exactly one realmroot_authority Context for a User or Organization visible to the Agent
       And every visible native Resource lists a personal Agent's User Context and every active Organization Context
       And private Resource visibility is checked before that Context catalog is exposed
-      And an Organization-owned Agent lists only its home Organization Context
       And missing, multiple, malformed, or unavailable Contexts fail closed
       And Realmroot verifies the controller currently holds every requested scope inside only the selected Context
       And User Context scopes include only automatic scopes and direct Permissions with no Organization
@@ -273,7 +272,6 @@ Feature: Agent identity and delegated API authorization
       Then Realmroot approves the access request without controller interaction
       And Realmroot creates persistent per-scope Agent Permissions through the normal approval path
       And any assigned scope keeps the access request pending for controller approval
-      And an Organization-owned Agent remains pending because no single User grantor can be inferred
       But an unavailable Context is rejected without creating a request or Permission
 
     @entrypoint:agent-protocol @journey:agent-resource-discovery-isolation @proof:unit
@@ -662,11 +660,11 @@ Feature: Agent identity and delegated API authorization
 
     @entrypoint:product-ui @journey:agent-governance-surfaces @proof:unit
     Scenario: Agent management follows ownership and platform boundaries
-      Given personal and organization-owned Agents exist
+      Given User-owned Agents exist
       When an authorized controller opens Agent management
-      Then Account Center presents personal Agents
-      And organization settings present organization-owned Agents
-      And Console presents tenant inventory, audit, and emergency revocation
+      Then Account Center presents the current User's Agents
+      And Organization membership does not grant Agent ownership or control
+      And Console presents User-owned inventory, audit, and emergency revocation
 
     @entrypoint:product-ui @journey:agent-audit-chain @proof:unit
     Scenario: Audit records reconstruct an Agent authorization decision

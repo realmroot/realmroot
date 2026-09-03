@@ -522,8 +522,6 @@ describe('planned Account Center journeys', () => {
 
     renderWithClient(<AccountOrganizationDetailPage organizationId="org-family" />)
     expect(await screen.findByText('Member')).toBeTruthy()
-    await openOrganizationSection('agents')
-    expect(await screen.findByText('No Organization Agents')).toBeTruthy()
     await openOrganizationSection('roles')
     expect(await screen.findByText('Your Organization Roles')).toBeTruthy()
     expect(screen.getByText('Assigned Roles')).toBeTruthy()
@@ -612,20 +610,6 @@ describe('planned Account Center journeys', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
     fireEvent.click(screen.getByRole('button', { name: 'Delete organization' }))
     await waitFor(() => expect(screen.getByRole('alertdialog')).toBeTruthy())
-  })
-
-  it('surfaces Organization Agent query failures', async () => {
-    server.use(
-      http.get(`${base}/api/account/organizations/org-family/agents`, () =>
-        json({ message: 'Agents unavailable.' }, { status: 500 }),
-      ),
-      ...organizationDetailHandlers('member'),
-    )
-    renderWithClient(<AccountOrganizationDetailPage organizationId="org-family" />)
-    expect(await screen.findByRole('heading', { name: 'Family' })).toBeTruthy()
-
-    await openOrganizationSection('agents')
-    expect((await screen.findByRole('alert')).textContent).toContain('Agents unavailable.')
   })
 
   it('renders Organization load failures', async () => {
@@ -817,7 +801,7 @@ describe('planned Account Center journeys', () => {
   })
 })
 
-async function openOrganizationSection(section: 'members' | 'teams' | 'roles' | 'agents' | 'settings') {
+async function openOrganizationSection(section: 'members' | 'teams' | 'roles' | 'settings') {
   cleanup()
   renderWithClient(<AccountOrganizationDetailPage organizationId="org-family" section={section} />)
   await screen.findByRole('heading', { name: 'Family' })

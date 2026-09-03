@@ -160,10 +160,10 @@ revocation, and audit model:
 | | Native Resource Server | External Resource Server |
 | --- | --- | --- |
 | Token issuer | Realmroot | Target platform |
-| User resource | Realmroot user or organization home space | Connected target account |
+| User resource | Realmroot user or an explicitly selected Organization authority Context | Connected target account |
 | User refresh credential exposed to Agent | Never | Never |
 | Final credential | Five-minute Realmroot `at+jwt` | Short-lived target DPoP token |
-| Subject | Personal owner or organization home space | Connected target user |
+| Subject | Concrete User owner | Connected target user |
 | Actor | Stable Agent | Stable Agent |
 
 For native resources, the API trusts Realmroot's issuer and JWKS. For external

@@ -73,7 +73,7 @@ describe('Agent stable identity approval', () => {
     expect(screen.queryByRole('button')).toBeNull()
   })
 
-  it('renders organization and completed enrollment details without enabling approval', async () => {
+  it('renders completed personal enrollment details without enabling approval', async () => {
     api.getAgentEnrollment.mockResolvedValue({
       id: 'intent-1',
       agentId: 'identity-1',
@@ -81,7 +81,7 @@ describe('Agent stable identity approval', () => {
       username: 'build-agent',
       runtime: 'codex',
       kind: 'additional_host',
-      homeSpace: { type: 'organization', organizationId: 'org-1' },
+      homeSpace: { type: 'personal', userId: 'user-1' },
       status: 'approved',
       expiresAt: '2026-08-01T00:10:00.000Z',
       decidedAt: '2026-08-01T00:01:00.000Z',
@@ -90,7 +90,7 @@ describe('Agent stable identity approval', () => {
     })
     render(<AgentIdentityApproval />)
 
-    expect(await screen.findByText('Organization')).toBeTruthy()
+    expect(await screen.findByText('Personal account')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Authorize' }).hasAttribute('disabled')).toBe(true)
   })
 

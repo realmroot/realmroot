@@ -1,7 +1,6 @@
 import type {
   AccountEmailChangeConfirmInput,
   AccountEmailChangeInput,
-  AccountOrganizationAgentsResponse,
   AccountPasswordChangeInput,
   AccountProfileUpdateInput,
   AccountWalletAddressLinkInput,
@@ -291,12 +290,6 @@ export function listAccountAgents(): Promise<{
   pagination: import('@shared/api/pagination').PaginationMetadata
 }> {
   return readRpcResponse(apiClient.api.account.agents.$get())
-}
-
-export function listAccountOrganizationAgents(organizationId: string): Promise<AccountOrganizationAgentsResponse> {
-  return readRpcResponse(
-    apiClient.api.account.organizations[':organizationId'].agents.$get({ param: { organizationId }, query: {} }),
-  )
 }
 
 export function getAgentEnrollment(enrollmentId: string): Promise<AgentEnrollment> {

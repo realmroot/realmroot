@@ -109,7 +109,6 @@ export type OrganizationDashboard = {
   applications: ListApplicationsResponse
   users: ListManagementUsersResponse
   apiResources: Awaited<ReturnType<typeof listApiResources>>
-  agents: Awaited<ReturnType<typeof getAgentInventory>>
   roles: ListRolesResponse
 }
 
@@ -154,14 +153,12 @@ export function getOrganizationDashboard(organizationId: string): Promise<Organi
     listApplications({ ownerOrganizationId: organizationId }),
     listUsers({ organizationId, page: 1, pageSize: 100 }),
     listApiResources({ ownerOrganizationId: organizationId }),
-    getAgentInventory({ organizationId, page: 1, pageSize: 100 }),
     listRoles(organizationId),
-  ]).then(([organization, applications, users, apiResources, agents, roles]) => ({
+  ]).then(([organization, applications, users, apiResources, roles]) => ({
     organization,
     applications,
     users,
     apiResources,
-    agents,
     roles,
   }))
 }

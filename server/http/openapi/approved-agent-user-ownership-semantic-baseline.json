@@ -1,0 +1,8 @@
+[
+  { "method": "GET", "path": "/agent", "operationId": "getAgentStatus", "semanticHash": "07d5b6799ddcb5bfa70b8634d2a5abd5d46bf3848cfcf0b688bf1307bcc78043" },
+  { "method": "POST", "path": "/agent/enrollments", "operationId": "createAgentEnrollment", "semanticHash": "a7d092a93ad0862785fcaba71eef59b31289ccd431eb5adfb53aceb35722f0a7" },
+  { "method": "GET", "path": "/agent/enrollments/{enrollmentId}", "operationId": "getAgentEnrollment", "semanticHash": "dec2bbdf9035ec15bb131c410edb9e4f0579c71cf62ea5633b74685605bb8044" },
+  { "method": "GET", "path": "/agents", "operationId": "listAgents", "semanticHash": "0e0cf0afd77adf7b1a42637fd9c197ca90e35666351f00d450f9112e76f9d3b2" },
+  { "method": "POST", "path": "/agents", "operationId": "createAgent", "semanticHash": "e0588dc5752292249b958815cfcc24fa1b92ea370bc1c84bf2cfe9a199c57b06" },
+  { "method": "GET", "path": "/agents/{agentId}", "operationId": "getAgent", "semanticHash": "c171757cec695b768c0b121272f357f9e4e394715ee2a18017c3e7578ed348a0" }
+]

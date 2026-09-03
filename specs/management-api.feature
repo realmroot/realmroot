@@ -147,7 +147,7 @@ Feature: Unified Realmroot resource API
 
 
   @entrypoint:restish @journey:management-restish-organization-crud @proof:integration
-  Scenario: Organization Agents manage only their tenant through the unified API
+  Scenario: User-owned Agents manage only explicitly delegated Organization authority
     Given an Agent has organizations:read and organizations:write scopes bound to one Organization
     When it lists, reads, or updates organizations with Restish
     Then the unified API exposes only that Organization

@@ -237,7 +237,6 @@ describe('token exchange service', () => {
       issuer: realmrootIssuer,
       subject: 'agent_1',
       ownerUserId: 'user_1',
-      ownerOrganizationId: null,
       status: 'active',
       deletedAt: null,
     }
@@ -706,7 +705,6 @@ describe('token exchange service', () => {
       issuer: realmrootIssuer,
       subject: 'agent_1',
       ownerUserId: 'user_1',
-      ownerOrganizationId: null,
       status: 'active',
       deletedAt: null,
     }
@@ -2613,7 +2611,6 @@ async function agentResourceDelegationFixture() {
     issuer: realmrootIssuer,
     subject: 'agent_1',
     ownerUserId: 'user_1',
-    ownerOrganizationId: null,
     status: 'active',
     deletedAt: null as Date | null,
   }

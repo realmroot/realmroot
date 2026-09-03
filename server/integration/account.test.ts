@@ -454,7 +454,7 @@ describe('account self-service over real D1', () => {
       subject: 'household-agent-subject',
       username: 'household-assistant.00000000000000000000000000000006',
       name: 'Household assistant',
-      ownerOrganizationId: organizationId,
+      ownerUserId: userId,
       status: 'active',
       createdAt: now,
       updatedAt: now,
@@ -515,11 +515,6 @@ describe('account self-service over real D1', () => {
       ]),
     )
 
-    const agents = await harness.request(`/api/account/organizations/${organizationId}/agents`, {
-      headers: { cookie },
-    })
-    expect(agents.status, await agents.clone().text()).toBe(200)
-    await expect(agents.json()).resolves.toMatchObject({ items: [{ id: 'household-agent' }] })
     const roles = await harness.request(`/api/organizations/${organizationId}/roles`, { headers: { cookie } })
     expect(roles.status, await roles.clone().text()).toBe(200)
     await expect(roles.json()).resolves.toMatchObject({
@@ -554,40 +549,7 @@ describe('account self-service over real D1', () => {
         updatedAt: now,
       },
     ])
-    const agentPermissions = await harness.request('/api/agents/household-agent/permissions', {
-      headers: { cookie },
-    })
-    expect(agentPermissions.status, await agentPermissions.clone().text()).toBe(200)
-    await expect(agentPermissions.json()).resolves.toMatchObject({
-      items: [{ id: 'ent_household', agentId: 'household-agent', scope: 'household:read' }],
-      pagination: { totalItems: 1 },
-    })
-    const authorizedResourceServers = await harness.request('/api/agents/household-agent/authorized-resource-servers', {
-      headers: { cookie },
-    })
-    await expect(authorizedResourceServers.json()).resolves.toMatchObject({
-      items: [{ id: resourceId, name: 'Test Resource API', identifier: 'household-api', permissionCount: 1 }],
-      pagination: { totalItems: 1 },
-    })
-    const inactiveAgentPermissions = await harness.request('/api/agents/household-agent/permissions?status=inactive', {
-      headers: { cookie },
-    })
-    await expect(inactiveAgentPermissions.json()).resolves.toMatchObject({
-      items: expect.arrayContaining([
-        expect.objectContaining({ id: 'ent_household_revoked', status: 'ended', endReason: 'revoked' }),
-        expect.objectContaining({ id: 'ent_household_expired', status: 'ended', endReason: 'expired' }),
-      ]),
-      pagination: { totalItems: 2 },
-    })
-    const explicitlyActiveAgentPermissions = await harness.request(
-      '/api/agents/household-agent/permissions?status=active',
-      { headers: { cookie } },
-    )
-    await expect(explicitlyActiveAgentPermissions.json()).resolves.toMatchObject({
-      items: [{ id: 'ent_household' }],
-      pagination: { totalItems: 1 },
-    })
-    expect((await harness.request('/api/agents/missing-agent/permissions', { headers: { cookie } })).status).toBe(404)
+    expect((await harness.request('/api/agents/household-agent/permissions', { headers: { cookie } })).status).toBe(403)
     const profile = await harness.request('/api/account/profile', { headers: { cookie } })
     await expect(profile.json()).resolves.toMatchObject({ user: { id: userId } })
     const developerAccess = await harness.request('/api/account/developer-console-access', {

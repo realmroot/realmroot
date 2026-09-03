@@ -157,47 +157,11 @@ describe('Public profiles', () => {
     })
   })
 
-  it('returns an organization owner and supports the Agent summary view', async () => {
-    const deps = createTestDeps()
-    const identity = { ...agentIdentity(), ownerUserId: null, ownerOrganizationId: 'org-1' }
-    vi.mocked(deps.agentIdentities.findByIssuerSubject).mockResolvedValue(identity)
-    vi.mocked(deps.authorization.findOrganization).mockResolvedValue({
-      id: 'org-1',
-      slug: 'builders',
-      name: 'Builders Inc.',
-      displayName: 'Builders',
-      logo: null,
-    } as never)
-
-    await expect(
-      getPublicAgentProfile(deps, identity.issuer, identity.subject, 'summary', now),
-    ).resolves.not.toHaveProperty('owner')
-    const profile = await getPublicAgentProfile(deps, identity.issuer, identity.subject, 'full', now)
-    expect(profile).toMatchObject({ owner: { type: 'organization', id: 'org-1', displayName: 'Builders' } })
-
-    vi.mocked(deps.authorization.findOrganization).mockResolvedValue({
-      id: 'org-1',
-      slug: 'builders',
-      name: 'Builders Inc.',
-      displayName: null,
-      logo: null,
-    } as never)
-    await expect(getPublicAgentProfile(deps, identity.issuer, identity.subject, 'full', now)).resolves.toMatchObject({
-      owner: { displayName: 'Builders Inc.' },
-    })
-  })
-
-  it('conceals missing Agent identities and owners', async () => {
+  it('conceals missing Agent identities', async () => {
     const deps = createTestDeps()
     await expect(
       getPublicAgentProfile(deps, 'https://identity.example.com/api/auth', 'agt_missing', 'summary'),
     ).rejects.toThrow('Public Agent profile was not found.')
-
-    const identity = { ...agentIdentity(), ownerUserId: null, ownerOrganizationId: 'org-missing' }
-    vi.mocked(deps.agentIdentities.findByIssuerSubject).mockResolvedValue(identity)
-    await expect(getPublicAgentProfile(deps, identity.issuer, identity.subject, 'full', now)).rejects.toThrow(
-      'Agent owner was not found.',
-    )
   })
 })
 
@@ -242,7 +206,6 @@ function agentIdentity(): AgentIdentityRecord {
     username: 'build-agent.00000000000000000000000000000004',
     name: 'Build Agent',
     ownerUserId: 'user-1',
-    ownerOrganizationId: null,
     status: 'active',
     deletedAt: null,
     createdAt: new Date('2026-02-01T00:00:00.000Z'),

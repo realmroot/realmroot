@@ -11,24 +11,6 @@ afterEach(() => {
 })
 
 describe('console Agents page', () => {
-  it('binds Organization Workspace Agent inventory and links to its Organization [spec: admin-console/organization-console-resource-boundary]', async () => {
-    const requests: string[] = []
-    vi.spyOn(window, 'fetch').mockImplementation((input) => {
-      const request = input instanceof Request ? input : null
-      const url = new URL(request?.url ?? String(input), window.location.origin)
-      requests.push(`${url.pathname}${url.search}`)
-      if (url.pathname === '/api/agents') return Promise.resolve(jsonResponse(agentInventory))
-      throw new Error(`Unexpected request: ${url.pathname}${url.search}`)
-    })
-
-    renderWithQuery(<AgentsPage organizationId="org-1" />)
-
-    const agentLink = await screen.findByRole('link', { name: 'Open Stable Build Agent' })
-    expect(agentLink.getAttribute('href')).toBe('/organizations/org-1/agents/agent-1')
-    expect(screen.queryByLabelText('Filter owner type')).toBeNull()
-    expect(requests).toEqual(['/api/agents?organizationId=org-1&page=1&pageSize=20'])
-  })
-
   it(`governs stable Agents without exposing protocol implementation records
       [spec: admin-console/admin-agent-inventory]
       [spec: agent-identity/agent-governance-surfaces]`, async () => {
@@ -47,19 +29,15 @@ describe('console Agents page', () => {
     expect(await screen.findByRole('heading', { name: 'Agents' })).toBeTruthy()
     expect(await screen.findByText('Stable Build Agent')).toBeTruthy()
     expect(screen.getByText('Inactive Personal Agent')).toBeTruthy()
-    expect(screen.getByText('Acme Engineering')).toBeTruthy()
+    expect(screen.getByText('Grace Hopper')).toBeTruthy()
     expect(screen.getByText('Ada Lovelace')).toBeTruthy()
-    expect(screen.getByText('org-1')).toBeTruthy()
+    expect(screen.getByText('user-1')).toBeTruthy()
     expect(screen.getByText('user-2')).toBeTruthy()
     expect(screen.queryByRole('button', { name: /create|new/i })).toBeNull()
     fireEvent.change(screen.getByRole('textbox', { name: 'Search Agents' }), { target: { value: 'inactive' } })
     expect(screen.queryByText('Stable Build Agent')).toBeNull()
     expect(screen.getByText('Inactive Personal Agent')).toBeTruthy()
     fireEvent.change(screen.getByRole('textbox', { name: 'Search Agents' }), { target: { value: '' } })
-    fireEvent.change(screen.getByLabelText('Filter owner type'), { target: { value: 'organization' } })
-    expect(screen.getByText('Stable Build Agent')).toBeTruthy()
-    expect(screen.queryByText('Inactive Personal Agent')).toBeNull()
-    fireEvent.change(screen.getByLabelText('Filter owner type'), { target: { value: 'any' } })
     fireEvent.change(screen.getByLabelText('Filter Agent status'), { target: { value: 'inactive' } })
     expect(screen.queryByText('Stable Build Agent')).toBeNull()
     expect(screen.getByText('Inactive Personal Agent')).toBeTruthy()
@@ -155,8 +133,8 @@ const agentInventory = {
       subject: 'agt_stable',
       username: 'stable-build-agent.0000000000000000000000000000000b',
       name: 'Stable Build Agent',
-      homeSpace: { type: 'organization', organizationId: 'org-1' },
-      owner: { id: 'org-1', type: 'organization', displayName: 'Acme Engineering' },
+      homeSpace: { type: 'personal', userId: 'user-1' },
+      owner: { id: 'user-1', type: 'user', displayName: 'Grace Hopper' },
       status: 'active',
       installationCount: 1,
       pendingRequestCount: 1,

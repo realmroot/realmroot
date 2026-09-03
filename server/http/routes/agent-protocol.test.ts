@@ -284,7 +284,6 @@ function createRouteApp(overrides: { signJWT?: () => Promise<{ token: string }> 
       name: 'Build Agent',
       runtime: 'codex',
       ownerUserId: 'user-1',
-      ownerOrganizationId: null,
       status: 'active',
       deletedAt: null,
       createdAt: now,

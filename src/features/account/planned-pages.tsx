@@ -60,7 +60,6 @@ import {
   useAccountApplicationAuthorizations,
   useAccountMutation,
   useAccountOrganization,
-  useAccountOrganizationAgents,
   useAccountOrganizationInvitations,
   useAccountOrganizationRoles,
   useAccountOrganizations,
@@ -891,7 +890,6 @@ export function AccountOrganizationDetailPage({
     | 'roles'
     | 'applications'
     | 'resource-servers'
-    | 'agents'
     | 'webhooks'
     | 'activity'
     | 'settings'
@@ -899,10 +897,6 @@ export function AccountOrganizationDetailPage({
   const navigate = useNavigate()
   const organizationQuery = useAccountOrganization(organizationId)
   const organizationRolesQuery = useAccountOrganizationRoles(organizationId, section === 'members')
-  const agentsQuery = useAccountOrganizationAgents(
-    organizationId,
-    section === 'overview' || (section === 'agents' && !content),
-  )
   const mutate = useAccountMutation()
   const [editOpen, setEditOpen] = useState(false)
   const [inviteOpen, setInviteOpen] = useState(false)
@@ -915,7 +909,6 @@ export function AccountOrganizationDetailPage({
     | null
   >(null)
   const organization = organizationQuery.data
-  const agents = agentsQuery.data?.items ?? []
   return (
     <AccountSurface>
       {(profile) => {
@@ -939,7 +932,7 @@ export function AccountOrganizationDetailPage({
         return (
           <>
             <AccountPageHeader
-              description={tt('Manage members, Agent identities, shared authority, and Organization settings.')}
+              description={tt('Manage members, shared authority, and Organization settings.')}
               title={organization.name}
             />
             <div className="accountTabs">
@@ -955,7 +948,6 @@ export function AccountOrganizationDetailPage({
                     <AccountRow label={tt('Slug')} value={<code>{organization.slug}</code>} />
                     <AccountRow label={tt('Members')} value={String(organization.members.length)} />
                     <AccountRow label={tt('Pending invitations')} value={String(pendingInvitations.length)} />
-                    <AccountRow label={tt('Agent identities')} value={String(agents.length)} />
                     <AccountRow label={tt('Created')} value={formatDate(organization.createdAt)} />
                   </AccountRows>
                 </AccountSectionContent>
@@ -988,40 +980,6 @@ export function AccountOrganizationDetailPage({
                   members={organization.members}
                   organizationId={organization.id}
                 />
-              ) : null}
-              {section === 'agents' ? (
-                <AccountSectionContent surface>
-                  <AccountRows>
-                    {agents.map((agent) => (
-                      <AccountRow
-                        description={agent.subject}
-                        key={agent.id}
-                        label={agent.name}
-                        value={
-                          <Badge variant={agent.status === 'active' ? 'secondary' : 'outline'}>
-                            {tt(agent.status)}
-                          </Badge>
-                        }
-                      />
-                    ))}
-                    {!agents.length ? (
-                      <AccountRow
-                        description={tt(
-                          'Agents can belong to a person or an Organization and are established only through enrollment.',
-                        )}
-                        label={tt('No Organization Agents')}
-                        value="—"
-                      />
-                    ) : null}
-                  </AccountRows>
-                  {agentsQuery.error ? (
-                    <p className="pt-4 text-sm text-destructive" role="alert">
-                      {agentsQuery.error instanceof Error
-                        ? agentsQuery.error.message
-                        : tt('Unable to load Organization Agents.')}
-                    </p>
-                  ) : null}
-                </AccountSectionContent>
               ) : null}
               {section === 'roles' ? (
                 <AccountSectionContent surface>

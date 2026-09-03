@@ -258,8 +258,8 @@ describe('AgentService', () => {
         issuer: 'https://auth.example.com',
         subject: 'agt-org',
         name: 'Organization Agent',
-        ownerUserId: null,
-        ownerOrganizationId: 'org-1',
+        ownerUserId: 'user-2',
+        ownerOrganizationId: null,
         status: 'active',
       },
       bindings: [],
@@ -267,7 +267,7 @@ describe('AgentService', () => {
     await decideAgentApproval(deps, { agentId: 'agent-org', userCode: 'ABCD-1234', action: 'approve' }, 'user-1')
     expect(repository.decideApproval).toHaveBeenLastCalledWith(
       expect.anything(),
-      expect.objectContaining({ ownerUserId: null, ownerOrganizationId: 'org-1' }),
+      expect.objectContaining({ ownerUserId: 'user-2', ownerOrganizationId: null }),
     )
 
     identities.findActiveByProtocolAgent.mockResolvedValueOnce(null)
@@ -337,7 +337,6 @@ function createAgentIdentityRepositoryMock() {
         subject: 'agt-1',
         name: 'Test Agent',
         ownerUserId: 'user-1',
-        ownerOrganizationId: null,
         status: 'active',
       },
       bindings: [],

@@ -347,7 +347,7 @@ async function resolveResourceTokenAgent(
     deps.agentIdentities.findByIssuerSubject(actorIssuer, actorSubject),
     deps.externalResources.findActiveTokenLeaseByTokenHash(await sha256(accessToken), new Date()),
   ])
-  if (!identity || !lease || (identity.ownerUserId ?? identity.ownerOrganizationId) !== ownerSubject) {
+  if (!identity || !lease || identity.ownerUserId !== ownerSubject) {
     throw unauthorized('The OAuth token does not belong to an active Agent resource grant.')
   }
   const aggregate = await deps.agentIdentities.findIdentity(identity.id)

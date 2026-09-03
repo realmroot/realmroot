@@ -2,7 +2,6 @@ import { ApiError, badRequest, conflict, forbidden, notFound } from '@server/dom
 import { agentGovernanceAuditRecord, appendAgentGovernanceAudit } from '@server/usecases/agent-audit'
 import type { Deps } from '@server/usecases/deps'
 import { revokeAgentResourceAccess, revokeAgentResourceLeasesForBinding } from '@server/usecases/external-resources'
-import { organizationUserHasScope } from '@server/usecases/organization-membership-scopes'
 import type {
   AgentAuditEventRecord,
   AgentAuthorityInventoryScope,
@@ -45,15 +44,6 @@ export async function getPersonalAgent(deps: Deps, agentId: string, actorUserId:
 
 export async function getAgent(deps: Deps, agentId: string): Promise<Agent> {
   return toAgent(await requireIdentity(deps, agentId))
-}
-
-export async function listOrganizationAgentIdentities(
-  deps: Deps,
-  organizationId: string,
-  actorUserId: string,
-): Promise<{ items: AgentIdentity[] }> {
-  await assertController(deps, { type: 'organization', organizationId }, actorUserId)
-  return { items: (await deps.agentIdentities.listOrganization(organizationId)).map(toIdentity) }
 }
 
 export async function listAllAgentIdentities(deps: Deps, page: { limit: number; offset: number }) {
@@ -414,9 +404,7 @@ export async function createAgentEnrollmentIntent(
     nickname: input.nickname ?? input.runtime,
     runtime: input.runtime,
   }
-  const homeSpace = input.organizationId
-    ? ({ type: 'organization', organizationId: input.organizationId } as const)
-    : ({ type: 'personal', userId: actorUserId } as const)
+  const homeSpace = { type: 'personal', userId: actorUserId } as const
   const existing = await deps.agentIdentities.findIntentByIdempotencyKey(input.protocolAgentId, idempotencyKey)
   if (existing) {
     const profiledIntent = existing.requestedUsername
@@ -510,11 +498,7 @@ function requireMatchingIdentityEnrollment(
   actorUserId: string,
 ) {
   if (intent.createdByUserId !== actorUserId) throw forbidden('This Agent cannot replay the enrollment request.')
-  const sameOwner =
-    (homeSpace.type === 'personal' && intent.ownerUserId === homeSpace.userId && intent.ownerOrganizationId === null) ||
-    (homeSpace.type === 'organization' &&
-      intent.ownerOrganizationId === homeSpace.organizationId &&
-      intent.ownerUserId === null)
+  const sameOwner = intent.ownerUserId === homeSpace.userId
   if (
     intent.agentIdentityId !== null ||
     intent.requestedName !== profile.nickname ||
@@ -709,30 +693,18 @@ async function requireIdentity(deps: Deps, identityId: string) {
   return identity
 }
 
-async function assertController(deps: Deps, homeSpace: AgentHomeSpace, actorUserId: string) {
-  if (homeSpace.type === 'personal') {
-    if (homeSpace.userId !== actorUserId) throw forbidden('Agent identity controller access is required.')
-    return
-  }
-  if (!(await organizationUserHasScope(deps, homeSpace.organizationId, actorUserId, 'agents:write'))) {
-    throw forbidden('Organization Agent controller access is required.')
-  }
+async function assertController(_deps: Deps, homeSpace: AgentHomeSpace, actorUserId: string) {
+  if (homeSpace.userId !== actorUserId) throw forbidden('Agent identity controller access is required.')
 }
 
 function assertSameHomeSpace(left: AgentHomeSpace, right: AgentHomeSpace) {
-  if (
-    left.type !== right.type ||
-    (left.type === 'personal' && right.type === 'personal' && left.userId !== right.userId) ||
-    (left.type === 'organization' && right.type === 'organization' && left.organizationId !== right.organizationId)
-  ) {
+  if (left.userId !== right.userId) {
     throw forbidden('Enrollment intent does not belong to the Agent identity home space.')
   }
 }
 
 function ownerColumns(homeSpace: AgentHomeSpace) {
-  return homeSpace.type === 'personal'
-    ? { ownerUserId: homeSpace.userId, ownerOrganizationId: null }
-    : { ownerUserId: null, ownerOrganizationId: homeSpace.organizationId }
+  return { ownerUserId: homeSpace.userId }
 }
 
 function newAgentIdentityRecord(input: {
@@ -873,7 +845,6 @@ function requireMatchingLegacyApplicationAgent(
       name: aggregate.identity.name,
       runtime: aggregate.identity.runtime,
       ownerUserId: aggregate.identity.ownerUserId,
-      ownerOrganizationId: aggregate.identity.ownerOrganizationId,
       status: aggregate.identity.status,
       deletedAt: aggregate.identity.deletedAt,
     },
@@ -927,7 +898,6 @@ function requireMatchingLegacyApplicationAgent(
       name: input.name,
       runtime: input.runtime,
       ownerUserId: context.actorUserId,
-      ownerOrganizationId: null,
       status: 'active',
       deletedAt: null,
     },
@@ -1025,10 +995,7 @@ async function appendIdentityAudit(
   await appendAgentGovernanceAudit(deps, {
     action,
     result: 'allowed',
-    tenant:
-      aggregate.identity.ownerUserId !== null
-        ? { type: 'user', id: aggregate.identity.ownerUserId }
-        : { type: 'organization', id: aggregate.identity.ownerOrganizationId! },
+    tenant: { type: 'user', id: aggregate.identity.ownerUserId },
     controllerUserId,
     issuer: aggregate.identity.issuer,
     subject: aggregate.identity.subject,
@@ -1051,35 +1018,19 @@ async function loadManagementSummaries(deps: Deps, agents: AgentIdentityAggregat
 }
 
 async function loadManagementOwners(deps: Deps, identities: AgentIdentityRecord[]) {
-  const homeSpaces = [
-    ...new Map(identities.map((identity) => [ownerKey(homeSpaceOf(identity)), homeSpaceOf(identity)])).values(),
-  ]
+  const homeSpaces = [...new Map(identities.map((identity) => [identity.ownerUserId, homeSpaceOf(identity)])).values()]
   const owners = await Promise.all(
     homeSpaces.map(async (homeSpace) => {
       const key = ownerKey(homeSpace)
-      if (homeSpace.type === 'personal') {
-        const user = await deps.users.getUser(homeSpace.userId)
-        return [key, { id: user.id, type: 'user' as const, displayName: user.displayName || user.email }] as const
-      }
-      const organization = await deps.authorization.findOrganization(homeSpace.organizationId)
-      if (!organization) {
-        throw new Error(`Agent owner Organization ${homeSpace.organizationId} was not found.`)
-      }
-      return [
-        key,
-        {
-          id: organization.id,
-          type: 'organization' as const,
-          displayName: organization.displayName ?? organization.name,
-        },
-      ] as const
+      const user = await deps.users.getUser(homeSpace.userId)
+      return [key, { id: user.id, type: 'user' as const, displayName: user.displayName || user.email }] as const
     }),
   )
-  return new Map<string, { id: string; type: 'user' | 'organization'; displayName: string }>(owners)
+  return new Map<string, { id: string; type: 'user'; displayName: string }>(owners)
 }
 
 function ownerKey(homeSpace: AgentHomeSpace) {
-  return homeSpace.type === 'personal' ? `user:${homeSpace.userId}` : `organization:${homeSpace.organizationId}`
+  return `user:${homeSpace.userId}`
 }
 
 function toManagementAgent(
@@ -1101,13 +1052,9 @@ function toManagementAgent(
 }
 
 function homeSpaceOf(
-  value:
-    | Pick<AgentIdentityRecord, 'ownerUserId' | 'ownerOrganizationId'>
-    | Pick<AgentEnrollmentIntentRecord, 'ownerUserId' | 'ownerOrganizationId'>,
+  value: Pick<AgentIdentityRecord, 'ownerUserId'> | Pick<AgentEnrollmentIntentRecord, 'ownerUserId'>,
 ): AgentHomeSpace {
-  if (value.ownerUserId) return { type: 'personal', userId: value.ownerUserId }
-  if (value.ownerOrganizationId) return { type: 'organization', organizationId: value.ownerOrganizationId }
-  throw new Error('Agent identity owner invariant was violated.')
+  return { type: 'personal', userId: value.ownerUserId }
 }
 
 function toIntent(record: AgentEnrollmentIntentRecord): AgentEnrollmentIntent {

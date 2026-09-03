@@ -14,7 +14,6 @@ export const accountQueryKeys = {
   organizationContext: ['account', 'organization-context'] as const,
   organizations: ['account', 'organizations'] as const,
   organizationInvitations: ['account', 'organization-invitations'] as const,
-  organizationAgents: (organizationId: string) => ['account', 'organizations', organizationId, 'agents'] as const,
   organizationRoles: (organizationId: string) => ['account', 'organizations', organizationId, 'roles'] as const,
   organizationTeams: (organizationId: string) => ['account', 'organizations', organizationId, 'teams'] as const,
   organizationTeamMembers: (teamId: string) => ['account', 'teams', teamId, 'members'] as const,
