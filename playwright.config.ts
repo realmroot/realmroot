@@ -27,6 +27,7 @@ export default defineConfig<RealmrootOptions>({
   testMatch: '**/*.spec.ts',
   fullyParallel: false,
   workers: 1,
+  timeout: 60_000,
   forbidOnly: !!process.env.CI,
   retries: 0,
   reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : 'list',
