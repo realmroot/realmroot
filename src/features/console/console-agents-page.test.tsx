@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, screen } from '@testing-library/react'
+import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AgentsPage } from '@/features/agents/management-agents-page'
 import { queryClient } from '@/router'
@@ -26,7 +26,7 @@ describe('console Agents page', () => {
     const agentLink = await screen.findByRole('link', { name: 'Open Stable Build Agent' })
     expect(agentLink.getAttribute('href')).toBe('/organizations/org-1/agents/agent-1')
     expect(screen.queryByLabelText('Filter owner type')).toBeNull()
-    expect(requests).toEqual(['/api/agents?organizationId=org-1'])
+    expect(requests).toEqual(['/api/agents?organizationId=org-1&limit=50&offset=0'])
   })
 
   it(`governs stable Agents without exposing protocol implementation records
@@ -85,6 +85,53 @@ describe('console Agents page', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
     expect(await screen.findByText('Stable Build Agent')).toBeTruthy()
     expect(requests.filter((url) => url === '/api/agents').length).toBeGreaterThan(1)
+  })
+
+  it('traverses Agent inventory through backend pages [spec: admin-console/admin-agent-inventory]', async () => {
+    const requests: string[] = []
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const request = input instanceof Request ? input : null
+      const url = new URL(request?.url ?? String(input), window.location.origin)
+      requests.push(`${url.pathname}${url.search}`)
+      if (url.pathname !== '/api/agents') throw new Error(`Unexpected request: ${url.pathname}${url.search}`)
+
+      const secondPage = url.searchParams.get('offset') === '50'
+      return Promise.resolve(
+        jsonResponse({
+          items: secondPage
+            ? [
+                {
+                  ...agentInventory.items[1],
+                  id: 'agent-51',
+                  name: 'Last Page Agent',
+                  subject: 'agt_last_page',
+                },
+              ]
+            : [agentInventory.items[0]],
+          pagination: {
+            limit: 50,
+            offset: secondPage ? 50 : 0,
+            total: 51,
+            hasMore: !secondPage,
+            nextOffset: secondPage ? null : 50,
+          },
+        }),
+      )
+    })
+
+    renderWithQuery(<AgentsPage />)
+
+    expect(await screen.findByText('Stable Build Agent')).toBeTruthy()
+    expect(requests).toEqual(['/api/agents?limit=50&offset=0'])
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }))
+    expect(await screen.findByText('Last Page Agent')).toBeTruthy()
+    expect(screen.queryByText('Stable Build Agent')).toBeNull()
+    expect(requests).toEqual(['/api/agents?limit=50&offset=0', '/api/agents?limit=50&offset=50'])
+    expect(screen.getByRole('button', { name: 'Next' })).toHaveProperty('disabled', true)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Previous' }))
+    await waitFor(() => expect(screen.getByText('Stable Build Agent')).toBeTruthy())
+    expect(requests.at(-1)).toBe('/api/agents?limit=50&offset=0')
   })
 
   it('renders an empty Agent inventory', async () => {

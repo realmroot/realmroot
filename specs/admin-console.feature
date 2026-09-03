@@ -409,6 +409,7 @@ Feature: Admin Console
     Given delegated AgentAuth hosts, Agents, Permissions, and approval requests exist
     When Console reads the tenant Agent inventory
     Then Realmroot presents stable Agents, access requests, Permissions, account connections, and audit events
+    And large Agent inventories can be traversed one bounded server page at a time
     And it does not expose hosts, registrations, bindings, or protocol approval records as management resources
     When an admin deletes an Agent or revokes a Permission
     Then the Agent or Permission is no longer active
