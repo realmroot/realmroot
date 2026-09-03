@@ -1007,13 +1007,17 @@ async function appendIdentityAudit(
 
 async function loadManagementSummaries(deps: Deps, agents: AgentIdentityAggregate[]) {
   const identities = agents.map((aggregate) => aggregate.identity)
-  const [access, owners] = await Promise.all([
-    deps.externalResources.summarizeAgentAccess(
-      identities.map((identity) => identity.id),
-      new Date(),
+  const identityIds = identities.map((identity) => identity.id)
+  const now = new Date()
+  const [accessBatches, owners] = await Promise.all([
+    Promise.all(
+      Array.from({ length: Math.ceil(identityIds.length / 50) }, (_, index) =>
+        deps.externalResources.summarizeAgentAccess(identityIds.slice(index * 50, (index + 1) * 50), now),
+      ),
     ),
     loadManagementOwners(deps, identities),
   ])
+  const access = new Map(accessBatches.flatMap((batch) => [...batch]))
   return { access, owners }
 }
 

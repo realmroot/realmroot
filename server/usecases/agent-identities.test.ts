@@ -938,6 +938,18 @@ describe('Agent identity lifecycle', () => {
     })
   })
 
+  it('batches access summaries within the production D1 parameter limit', async () => {
+    const deps = managementDeps()
+    const items = Array.from({ length: 100 }, (_, index) => aggregate({ id: `identity-${index}` }))
+    vi.mocked(deps.agentIdentities.listAll).mockResolvedValue({ items, total: items.length, limit: 100, offset: 0 })
+
+    const result = await listAllAgents(deps, { limit: 100, offset: 0 })
+    expect(result.items.map((item) => item.id)).toEqual(items.map((item) => item.identity.id))
+    expect(vi.mocked(deps.externalResources.summarizeAgentAccess).mock.calls.map(([ids]) => ids.length)).toEqual([
+      50, 50,
+    ])
+  })
+
   it('gets only active protocol-bound identities', async () => {
     const deps = createTestDeps()
     vi.mocked(deps.agentIdentities.findActiveByProtocolAgent).mockResolvedValue(aggregate())
