@@ -1,6 +1,6 @@
 import { badRequest, conflict, forbidden } from '@server/domain/errors'
 import type { ConfigzAccountCenter } from '@server/usecases/ports'
-import { paginationMetadata, paginationQuerySchema } from '@shared/api/pagination'
+import { paginationInput, paginationMetadata, paginationQuerySchema } from '@shared/api/pagination'
 import {
   securityBackupCodesRequestSchema,
   securityPasskeyUpdateSchema,
@@ -82,7 +82,7 @@ export function accountSecurityRoutes(authApi: ManagementAuthApi, accountCenterS
   app.get('/passkeys', async (c) => {
     const security = getDeps(c).security
     const state = await security.getSecurityState(currentUserId(c))
-    const page = await security.listPasskeys(currentUserId(c), readQuery(c, paginationQuerySchema))
+    const page = await security.listPasskeys(currentUserId(c), paginationInput(readQuery(c, paginationQuerySchema)))
     return c.json({ passkeys: page.items, policy: state.policy.passkeys, pagination: paginationMetadata(page) })
   })
 
@@ -112,7 +112,10 @@ export function accountSecurityRoutes(authApi: ManagementAuthApi, accountCenterS
   app.get('/sessions', async (c) => {
     await assertSessionsEnabled(c, accountCenterSettings)
     const authContext = getPrincipal(c)
-    const page = await getDeps(c).users.listSessions(authContext.user!.id, readQuery(c, paginationQuerySchema))
+    const page = await getDeps(c).users.listSessions(
+      authContext.user!.id,
+      paginationInput(readQuery(c, paginationQuerySchema)),
+    )
     const currentSessionId = authContext.session?.session.id
     return c.json({
       items: page.items.map((session) => ({ ...session, current: session.id === currentSessionId })),

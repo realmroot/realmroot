@@ -17,20 +17,30 @@ describe('built-in system resource lookup', () => {
     vi.mocked(deps.authorization.listOrganizations)
       .mockResolvedValueOnce({
         items: [{ ...platform, id: 'org-other', slug: 'other' }],
-        pagination: { limit: 100, offset: 0, total: 101, hasMore: true, nextOffset: 100 },
+        pagination: { page: Math.floor(0 / 100) + 1, pageSize: 100, totalItems: 101, totalPages: Math.ceil(101 / 100) },
       })
       .mockResolvedValueOnce({
         items: [platform],
-        pagination: { limit: 100, offset: 100, total: 101, hasMore: false, nextOffset: null },
+        pagination: {
+          page: Math.floor(100 / 100) + 1,
+          pageSize: 100,
+          totalItems: 101,
+          totalPages: Math.ceil(101 / 100),
+        },
       })
     vi.mocked(deps.authorization.listResources)
       .mockResolvedValueOnce({
         items: [{ ...realmroot, id: 'resource-other', identifier: 'other' }],
-        pagination: { limit: 100, offset: 0, total: 101, hasMore: true, nextOffset: 100 },
+        pagination: { page: Math.floor(0 / 100) + 1, pageSize: 100, totalItems: 101, totalPages: Math.ceil(101 / 100) },
       })
       .mockResolvedValueOnce({
         items: [realmroot],
-        pagination: { limit: 100, offset: 100, total: 101, hasMore: false, nextOffset: null },
+        pagination: {
+          page: Math.floor(100 / 100) + 1,
+          pageSize: 100,
+          totalItems: 101,
+          totalPages: Math.ceil(101 / 100),
+        },
       })
 
     await expect(findPlatformOrganization(deps)).resolves.toEqual(platform)
@@ -43,11 +53,11 @@ describe('built-in system resource lookup', () => {
     const deps = createTestDeps()
     vi.mocked(deps.authorization.listOrganizations).mockResolvedValue({
       items: [],
-      pagination: { limit: 100, offset: 0, total: 0, hasMore: false, nextOffset: null },
+      pagination: { page: Math.floor(0 / 100) + 1, pageSize: 100, totalItems: 0, totalPages: Math.ceil(0 / 100) },
     })
     vi.mocked(deps.authorization.listResources).mockResolvedValue({
       items: [],
-      pagination: { limit: 100, offset: 0, total: 0, hasMore: false, nextOffset: null },
+      pagination: { page: Math.floor(0 / 100) + 1, pageSize: 100, totalItems: 0, totalPages: Math.ceil(0 / 100) },
     })
 
     await expect(findPlatformOrganization(deps)).resolves.toBeNull()

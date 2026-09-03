@@ -117,7 +117,7 @@ describe('admin console application federated credentials', () => {
               updatedAt: '2026-01-01T00:00:00.000Z',
             },
           ],
-          pagination: { limit: 50, offset: 0, total: 1, hasMore: false, nextOffset: null },
+          pagination: { page: Math.floor(0 / 50) + 1, pageSize: 50, totalItems: 1, totalPages: Math.ceil(1 / 50) },
         })
       }
       if (url === '/api/applications/app-1/federated-credentials' && method === 'GET') {
@@ -230,7 +230,7 @@ describe('admin console application federated credentials', () => {
       if (url === '/api/resource-servers') {
         return jsonResponse({
           items: [],
-          pagination: { limit: 50, offset: 0, total: 0, hasMore: false, nextOffset: null },
+          pagination: { page: Math.floor(0 / 50) + 1, pageSize: 50, totalItems: 0, totalPages: Math.ceil(0 / 50) },
         })
       }
       if (url === '/api/applications/app-1/federated-credentials' && method === 'GET') {

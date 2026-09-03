@@ -124,13 +124,13 @@ describe('Account Organization detail', () => {
               updatedAt: '2026-08-01T00:00:00.000Z',
             },
           ],
-          pagination: { limit: 50, offset: 0, total: 1, hasMore: false, nextOffset: null },
+          pagination: { page: Math.floor(0 / 50) + 1, pageSize: 50, totalItems: 1, totalPages: Math.ceil(1 / 50) },
         }),
       ),
       http.get(`${base}/api/organizations/org-family/roles`, () =>
         json({
           items: ['owner', 'admin', 'developer', 'member'].map((key) => ({ key, displayName: key, predefined: true })),
-          pagination: { limit: 100, offset: 0, total: 4, hasMore: false, nextOffset: null },
+          pagination: { page: Math.floor(0 / 100) + 1, pageSize: 100, totalItems: 4, totalPages: Math.ceil(4 / 100) },
         }),
       ),
     )

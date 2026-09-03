@@ -128,11 +128,10 @@ const emptyForm: FormState = {}
 const emptyConnectorsResponse: ListManagementConnectorsResponse = {
   items: [],
   pagination: {
-    limit: 50,
-    offset: 0,
-    total: 0,
-    hasMore: false,
-    nextOffset: null,
+    page: 1,
+    pageSize: 50,
+    totalItems: 0,
+    totalPages: 0,
   },
 }
 const optionalAuthorizationFieldNames = new Set(['description', 'disabledReason', 'displayName'])

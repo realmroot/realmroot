@@ -47,7 +47,7 @@ function oidcConnector(overrides: Record<string, unknown> = {}) {
 function emptyConnectorFetch(input: RequestInfo | URL, init?: RequestInit) {
   const url = String(input)
   if (url === '/api/connectors')
-    return Promise.resolve(jsonResponse({ items: [], pagination: { ...pagination, total: 0 } }))
+    return Promise.resolve(jsonResponse({ items: [], pagination: { ...pagination, totalItems: 0 } }))
   if (url === '/api/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
   if (url === '/api/realm/sign-in-policy') return Promise.resolve(jsonResponse(signInSettings))
   if (url === '/api/realm/security-policy') return Promise.resolve(jsonResponse(securityPolicy))

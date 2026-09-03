@@ -11,12 +11,12 @@ describe('management API client', () => {
     const { calls, management } = await loadManagementApi({ userSecurity: { mfaEnabled: true } })
 
     await expect(management.getUserSecurity('user-1')).resolves.toEqual({ security: { mfaEnabled: true } })
-    await management.listWebhookDeliveryAttempts('wh-1', 'delivery-1', { limit: 10 })
+    await management.listWebhookDeliveryAttempts('wh-1', 'delivery-1', { pageSize: 10 })
     await management.addOrganizationMember('org/1', { userId: 'user-1', roles: ['member'] })
 
     expect(calls).toEqual([
       ['user.get', { param: { id: 'user-1' } }],
-      ['webhookDeliveryAttempts.get', { param: { id: 'wh-1', deliveryId: 'delivery-1' }, query: { limit: '10' } }],
+      ['webhookDeliveryAttempts.get', { param: { id: 'wh-1', deliveryId: 'delivery-1' }, query: { pageSize: '10' } }],
       [
         'fetch',
         '/api/organizations/org%2F1/members',
@@ -71,14 +71,14 @@ describe('management API client', () => {
     })
     await management.updateFederatedCredential('app-1', 'cred-1', { enabled: false })
     await management.deleteFederatedCredential('app-1', 'cred-1')
-    await management.listApplicationRedirectUris('app-1', { limit: 10, offset: 20 })
+    await management.listApplicationRedirectUris('app-1', { page: 3, pageSize: 10 })
     await management.replaceApplicationRedirectUris('app-1', { redirectUris: ['https://app.example.com/callback'] })
-    await management.listApplicationClientSecrets('app-1', { limit: 5 })
+    await management.listApplicationClientSecrets('app-1', { pageSize: 5 })
     await management.rotateApplicationClientSecret('app-1')
-    await management.listApplicationAuthorizations('app-1', { limit: 25, offset: 50 })
+    await management.listApplicationAuthorizations('app-1', { page: 3, pageSize: 25 })
     await management.revokeApplicationAuthorization('app-1', 'authorization-1')
     await management.uploadApplicationLogo('app-1', new File(['logo'], 'logo.png'))
-    await management.listUsers({ search: 'jane', limit: 50, offset: undefined })
+    await management.listUsers({ search: 'jane', pageSize: 50, page: undefined })
     await management.createUser({ email: 'jane@example.com', displayName: 'Jane Doe' })
     await management.updateUser('user-1', { displayName: 'Jane Admin' })
     await management.getUser('user-1')
@@ -86,11 +86,11 @@ describe('management API client', () => {
     await management.requestUserPasswordReset('user-1')
     await management.banUser('user-1', { reason: 'abuse', expiresInSeconds: 3600 })
     await management.unbanUser('user-1')
-    await management.listUserSessions('user-1', { limit: 10, offset: 20 })
+    await management.listUserSessions('user-1', { page: 3, pageSize: 10 })
     await management.revokeUserSessions('user-1')
     await management.revokeUserSession('user-1', 'session-1')
-    await management.listUserLinkedAccounts('user-1', { limit: 5 })
-    await management.listUserPasskeys('user-1', { limit: 2 })
+    await management.listUserLinkedAccounts('user-1', { pageSize: 5 })
+    await management.listUserPasskeys('user-1', { pageSize: 2 })
     await management.deleteUserPasskey('user-1', 'passkey-1')
     await management.listConnectors()
     await management.createConnector({
@@ -200,15 +200,15 @@ describe('management API client', () => {
         { param: { applicationId: 'app-1', credentialId: 'cred-1' }, json: { enabled: false } },
       ],
       ['federatedCredential.delete', { param: { applicationId: 'app-1', credentialId: 'cred-1' } }],
-      ['redirectUris.get', { param: { id: 'app-1' }, query: { limit: '10', offset: '20' } }],
+      ['redirectUris.get', { param: { id: 'app-1' }, query: { page: '3', pageSize: '10' } }],
       ['redirectUris.put', { param: { id: 'app-1' }, json: { redirectUris: ['https://app.example.com/callback'] } }],
-      ['clientSecrets.get', { param: { id: 'app-1' }, query: { limit: '5' } }],
+      ['clientSecrets.get', { param: { id: 'app-1' }, query: { pageSize: '5' } }],
       ['clientSecrets.post', { param: { id: 'app-1' } }],
-      ['applicationAuthorizations.get', { param: { id: 'app-1' }, query: { limit: '25', offset: '50' } }],
+      ['applicationAuthorizations.get', { param: { id: 'app-1' }, query: { page: '3', pageSize: '25' } }],
       ['applicationAuthorization.delete', { param: { id: 'app-1', authorizationId: 'authorization-1' } }],
       ['uploadAsset', 'application_logo', expect.any(File)],
       ['applications.patch', { param: { id: 'app-1' }, json: { iconUrl: '/api/assets/asset-1' } }],
-      ['users.get', { query: { search: 'jane', limit: '50' } }],
+      ['users.get', { query: { search: 'jane', pageSize: '50' } }],
       ['users.post', { json: { email: 'jane@example.com', displayName: 'Jane Doe' } }],
       ['users.patch', { param: { id: 'user-1' }, json: { displayName: 'Jane Admin' } }],
       ['user.get', { param: { id: 'user-1' } }],
@@ -216,11 +216,11 @@ describe('management API client', () => {
       ['userPasswordReset.post', { param: { id: 'user-1' }, json: {} }],
       ['userBan.put', { param: { id: 'user-1' }, json: { reason: 'abuse', expiresInSeconds: 3600 } }],
       ['userBan.delete', { param: { id: 'user-1' } }],
-      ['userSessions.get', { param: { id: 'user-1' }, query: { limit: '10', offset: '20' } }],
+      ['userSessions.get', { param: { id: 'user-1' }, query: { page: '3', pageSize: '10' } }],
       ['userSessions.delete', { param: { id: 'user-1' } }],
       ['userSession.delete', { param: { id: 'user-1', sessionId: 'session-1' } }],
-      ['userLinkedAccounts.get', { param: { id: 'user-1' }, query: { limit: '5' } }],
-      ['userPasskeys.get', { param: { id: 'user-1' }, query: { limit: '2' } }],
+      ['userLinkedAccounts.get', { param: { id: 'user-1' }, query: { pageSize: '5' } }],
+      ['userPasskeys.get', { param: { id: 'user-1' }, query: { pageSize: '2' } }],
       ['userPasskey.delete', { param: { id: 'user-1', passkeyId: 'passkey-1' } }],
       ['connectors.get'],
       [
@@ -370,7 +370,12 @@ async function loadManagementApi(options: { userSecurity?: unknown } = {}) {
       calls.push(input === undefined ? [key] : [key, input])
       return Promise.resolve(
         key === 'apiResources.get'
-          ? { key, input, items: [], pagination: { limit: 50, offset: 0, total: 0 } }
+          ? {
+              key,
+              input,
+              items: [],
+              pagination: { page: Math.floor(0 / 50) + 1, pageSize: 50, totalItems: 0, totalPages: Math.ceil(0 / 50) },
+            }
           : key === 'user.get' && 'userSecurity' in options
             ? { key, input, security: options.userSecurity }
             : { key, input },

@@ -195,7 +195,7 @@ export function createWebhookRepository(db: Database): WebhookRepository {
   }
 }
 
-function endpointWhere(query: ListWebhookEndpointsQuery, organizationIds?: string[]) {
+function endpointWhere(query: Omit<ListWebhookEndpointsQuery, 'page' | 'pageSize'>, organizationIds?: string[]) {
   const filters = []
   if (organizationIds) filters.push(inArray(webhookEndpoint.organizationId, organizationIds))
   if (query.status) filters.push(eq(webhookEndpoint.enabled, query.status === 'enabled'))
@@ -204,7 +204,7 @@ function endpointWhere(query: ListWebhookEndpointsQuery, organizationIds?: strin
   return filters.length > 0 ? and(...filters) : undefined
 }
 
-function requestWhere(query: ListWebhookRequestsQuery, organizationIds?: string[]) {
+function requestWhere(query: Omit<ListWebhookRequestsQuery, 'page' | 'pageSize'>, organizationIds?: string[]) {
   const filters = []
   if (organizationIds) filters.push(inArray(webhookEndpoint.organizationId, organizationIds))
   if (query.endpointId) filters.push(eq(webhookDeliveryRequest.endpointId, query.endpointId))

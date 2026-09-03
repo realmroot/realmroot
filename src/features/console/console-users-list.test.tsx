@@ -116,13 +116,7 @@ describe('admin console users-list', () => {
         return Promise.resolve(
           jsonResponse({
             items: [user],
-            pagination: {
-              limit: 10,
-              offset: url.includes('offset=10') ? 10 : 0,
-              total: 30,
-              hasMore: !url.includes('offset=10'),
-              nextOffset: url.includes('offset=10') ? null : 10,
-            },
+            pagination: { page: url.includes('page=2') ? 2 : 1, pageSize: 10, totalItems: 30, totalPages: 3 },
           }),
         )
       }
@@ -133,9 +127,8 @@ describe('admin console users-list', () => {
 
     expect(await screen.findByText('jane@example.com')).toBeTruthy()
     fireEvent.click(await screen.findByRole('button', { name: 'Next' }))
-    await waitFor(() => expect(seen.some((url) => url.includes('offset=10'))).toBe(true))
-    // on the last page Next is disabled (nextOffset null / hasMore false)
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Next' })).toHaveProperty('disabled', true))
+    await waitFor(() => expect(seen.some((url) => url.includes('page=2'))).toBe(true))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Next' })).toHaveProperty('disabled', false))
   })
 
   it('shows client-side validation errors for user creation', async () => {
@@ -223,13 +216,7 @@ describe('admin console users-list', () => {
         return Promise.resolve(
           jsonResponse({
             items: [{ ...user, email: null, emailVerified: true, role: null }],
-            pagination: {
-              limit: 10,
-              offset: url.includes('offset=10') ? 10 : 0,
-              total: 30,
-              hasMore: true,
-              nextOffset: 10,
-            },
+            pagination: { page: url.includes('page=2') ? 2 : 1, pageSize: 10, totalItems: 30, totalPages: 3 },
           }),
         )
       }
@@ -247,11 +234,11 @@ describe('admin console users-list', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Previous' }))
     await waitFor(() => {
       expect(requests.at(-1)).toContain('banned=true')
-      expect(requests.at(-1)).toContain('offset=0')
+      expect(requests.at(-1)).toContain('page=1')
     })
 
     await waitFor(() => {
-      expect(requests.some((url) => url.includes('banned=true') && url.includes('offset=10'))).toBe(true)
+      expect(requests.some((url) => url.includes('banned=true') && url.includes('page=2'))).toBe(true)
     })
     fireEvent.pointerDown(screen.getByLabelText('Actions for user-1'), { button: 0, ctrlKey: false })
     expect(screen.queryByText('Send reset link')).toBeNull()

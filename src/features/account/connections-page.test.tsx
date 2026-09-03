@@ -27,7 +27,7 @@ vi.mock('@tanstack/react-router', () => ({
 
 const store = createAccountStore()
 const server = createAccountServer(store)
-const pagination = { limit: 50, offset: 0, total: 1, hasMore: false, nextOffset: null }
+const pagination = { page: 1, pageSize: 50, totalItems: 1, totalPages: 1 }
 const githubConnector = {
   id: 'connector-github',
   slug: 'github',
@@ -104,7 +104,7 @@ describe('AccountConnectionsPage', () => {
         HttpResponse.json({ items: [githubConnector], pagination }),
       ),
       http.get(`${base}/api/account/provider-connections`, () =>
-        HttpResponse.json({ items: [], pagination: { ...pagination, total: 0 } }),
+        HttpResponse.json({ items: [], pagination: { ...pagination, totalItems: 0, totalPages: 0 } }),
       ),
       http.post(`${base}/api/account/provider-connection-intents`, () =>
         HttpResponse.json(
@@ -236,7 +236,7 @@ describe('AccountConnectionsPage', () => {
         HttpResponse.json({ items: [githubConnector], pagination }),
       ),
       http.get(`${base}/api/account/provider-connections`, () =>
-        HttpResponse.json({ items: [], pagination: { ...pagination, total: 0 } }),
+        HttpResponse.json({ items: [], pagination: { ...pagination, totalItems: 0, totalPages: 0 } }),
       ),
       http.post(`${base}/api/account/provider-connection-intents`, () =>
         HttpResponse.json({ message: 'Provider authorization unavailable.' }, { status: 503 }),
@@ -268,7 +268,7 @@ describe('AccountConnectionsPage', () => {
         }),
       ),
       http.get(`${base}/api/account/provider-connections`, () =>
-        HttpResponse.json({ items: [], pagination: { ...pagination, total: 0 } }),
+        HttpResponse.json({ items: [], pagination: { ...pagination, totalItems: 0, totalPages: 0 } }),
       ),
       http.post(`${base}/api/account/provider-connection-intents`, () =>
         HttpResponse.json(
@@ -308,7 +308,7 @@ describe('AccountConnectionsPage', () => {
         HttpResponse.json({ items: [signInConnector], pagination }),
       ),
       http.get(`${base}/api/account/provider-connections`, () =>
-        HttpResponse.json({ items: [], pagination: { ...pagination, total: 0 } }),
+        HttpResponse.json({ items: [], pagination: { ...pagination, totalItems: 0, totalPages: 0 } }),
       ),
       http.post(`${base}/api/auth/oauth2/link`, async ({ request }) => {
         linkedBody = await request.json()
@@ -342,7 +342,7 @@ describe('AccountConnectionsPage', () => {
         HttpResponse.json({ items: [socialConnector], pagination }),
       ),
       http.get(`${base}/api/account/provider-connections`, () =>
-        HttpResponse.json({ items: [], pagination: { ...pagination, total: 0 } }),
+        HttpResponse.json({ items: [], pagination: { ...pagination, totalItems: 0, totalPages: 0 } }),
       ),
       http.post(`${base}/api/auth/link-social`, () => HttpResponse.json({ url: 'https://github.com/login/oauth' })),
     )
@@ -368,7 +368,7 @@ describe('AccountConnectionsPage', () => {
         HttpResponse.json({ items: [socialConnector], pagination }),
       ),
       http.get(`${base}/api/account/provider-connections`, () =>
-        HttpResponse.json({ items: [], pagination: { ...pagination, total: 0 } }),
+        HttpResponse.json({ items: [], pagination: { ...pagination, totalItems: 0, totalPages: 0 } }),
       ),
       http.post(`${base}/api/auth/link-social`, () => HttpResponse.json({})),
     )
@@ -396,7 +396,7 @@ describe('AccountConnectionsPage', () => {
         }),
       ),
       http.get(`${base}/api/account/provider-connections`, () =>
-        HttpResponse.json({ items: [], pagination: { ...pagination, total: 0 } }),
+        HttpResponse.json({ items: [], pagination: { ...pagination, totalItems: 0, totalPages: 0 } }),
       ),
     )
 

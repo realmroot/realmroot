@@ -26,7 +26,7 @@ describe('console Agents page', () => {
     const agentLink = await screen.findByRole('link', { name: 'Open Stable Build Agent' })
     expect(agentLink.getAttribute('href')).toBe('/organizations/org-1/agents/agent-1')
     expect(screen.queryByLabelText('Filter owner type')).toBeNull()
-    expect(requests).toEqual(['/api/agents?organizationId=org-1&limit=50&offset=0'])
+    expect(requests).toEqual(['/api/agents?organizationId=org-1&page=1&pageSize=50'])
   })
 
   it(`governs stable Agents without exposing protocol implementation records
@@ -95,7 +95,7 @@ describe('console Agents page', () => {
       requests.push(`${url.pathname}${url.search}`)
       if (url.pathname !== '/api/agents') throw new Error(`Unexpected request: ${url.pathname}${url.search}`)
 
-      const secondPage = url.searchParams.get('offset') === '50'
+      const secondPage = url.searchParams.get('page') === '2'
       return Promise.resolve(
         jsonResponse({
           items: secondPage
@@ -108,13 +108,7 @@ describe('console Agents page', () => {
                 },
               ]
             : [agentInventory.items[0]],
-          pagination: {
-            limit: 50,
-            offset: secondPage ? 50 : 0,
-            total: 51,
-            hasMore: !secondPage,
-            nextOffset: secondPage ? null : 50,
-          },
+          pagination: { page: secondPage ? 2 : 1, pageSize: 50, totalItems: 51, totalPages: 2 },
         }),
       )
     })
@@ -122,16 +116,16 @@ describe('console Agents page', () => {
     renderWithQuery(<AgentsPage />)
 
     expect(await screen.findByText('Stable Build Agent')).toBeTruthy()
-    expect(requests).toEqual(['/api/agents?limit=50&offset=0'])
+    expect(requests).toEqual(['/api/agents?page=1&pageSize=50'])
     fireEvent.click(screen.getByRole('button', { name: 'Next' }))
     expect(await screen.findByText('Last Page Agent')).toBeTruthy()
     expect(screen.queryByText('Stable Build Agent')).toBeNull()
-    expect(requests).toEqual(['/api/agents?limit=50&offset=0', '/api/agents?limit=50&offset=50'])
+    expect(requests).toEqual(['/api/agents?page=1&pageSize=50', '/api/agents?page=2&pageSize=50'])
     expect(screen.getByRole('button', { name: 'Next' })).toHaveProperty('disabled', true)
 
     fireEvent.click(screen.getByRole('button', { name: 'Previous' }))
     await waitFor(() => expect(screen.getByText('Stable Build Agent')).toBeTruthy())
-    expect(requests.at(-1)).toBe('/api/agents?limit=50&offset=0')
+    expect(requests.at(-1)).toBe('/api/agents?page=1&pageSize=50')
   })
 
   it('renders an empty Agent inventory', async () => {
@@ -185,5 +179,5 @@ const agentInventory = {
       updatedAt: timestamp,
     },
   ],
-  pagination: { ...emptyPagination, total: 2 },
+  pagination: { ...emptyPagination, totalItems: 2 },
 }

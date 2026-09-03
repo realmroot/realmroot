@@ -42,7 +42,7 @@ describe('management users and account routes', () => {
     const app = createApp(auth, createTestDeps({ users }))
     const headers = adminHeaders()
 
-    await app.request('/api/users?search=ada&searchField=email&limit=10&role=user', { headers })
+    await app.request('/api/users?search=ada&searchField=email&pageSize=10&role=user', { headers })
     await app.request('/api/users', {
       method: 'POST',
       headers,
@@ -142,28 +142,16 @@ describe('management users and account routes', () => {
     const app = createApp(createAuthMock(), createTestDeps({ users }))
     const headers = adminHeaders()
 
-    const accounts = await app.request('/api/users/user-1/linked-accounts?limit=2&offset=4', { headers })
-    const sessions = await app.request('/api/users/user-1/sessions?limit=4&offset=8', { headers })
+    const accounts = await app.request('/api/users/user-1/linked-accounts?page=3&pageSize=2', { headers })
+    const sessions = await app.request('/api/users/user-1/sessions?page=3&pageSize=4', { headers })
 
     await expect(accounts.json()).resolves.toEqual({
       items: [],
-      pagination: {
-        limit: 2,
-        offset: 4,
-        total: 10,
-        hasMore: true,
-        nextOffset: 6,
-      },
+      pagination: { page: Math.floor(4 / 2) + 1, pageSize: 2, totalItems: 10, totalPages: Math.ceil(10 / 2) },
     })
     await expect(sessions.json()).resolves.toEqual({
       items: [],
-      pagination: {
-        limit: 4,
-        offset: 8,
-        total: 10,
-        hasMore: false,
-        nextOffset: null,
-      },
+      pagination: { page: Math.floor(8 / 4) + 1, pageSize: 4, totalItems: 10, totalPages: Math.ceil(10 / 4) },
     })
     expect(users.listLinkedAccounts).toHaveBeenCalledWith('user-1', { limit: 2, offset: 4 })
     expect(users.listSessions).toHaveBeenCalledWith('user-1', { limit: 4, offset: 8 })

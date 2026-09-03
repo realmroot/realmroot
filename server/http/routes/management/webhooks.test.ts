@@ -23,7 +23,7 @@ describe('createManagementWebhookRoutes', () => {
           updatedAt: '2026-01-01T00:00:00.000Z',
         },
       ],
-      pagination: { limit: 1, offset: 0, total: 1, hasMore: false, nextOffset: null },
+      pagination: { page: Math.floor(0 / 1) + 1, pageSize: 1, totalItems: 1, totalPages: Math.ceil(1 / 1) },
     }
     const listEndpoints = vi.fn().mockResolvedValue(result)
     const listWebhookEndpoints = vi
@@ -38,11 +38,11 @@ describe('createManagementWebhookRoutes', () => {
       await next()
     })
     app.route('/', createManagementWebhookRoutes())
-    const response = await app.request('/?limit=1&offset=0')
+    const response = await app.request('/?page=1&pageSize=1')
 
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toEqual(result)
     expect(listWebhookEndpoints).toHaveBeenCalled()
-    expect(listEndpoints).toHaveBeenCalledWith({ limit: 1, offset: 0 })
+    expect(listEndpoints).toHaveBeenCalledWith({ page: 1, pageSize: 1 })
   })
 })

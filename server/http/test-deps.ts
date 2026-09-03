@@ -153,7 +153,7 @@ export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> =
       create: vi.fn(),
       list: vi.fn().mockResolvedValue({
         items: [],
-        pagination: { limit: 100, offset: 0, total: 0, hasMore: false, nextOffset: null },
+        pagination: { page: Math.floor(0 / 100) + 1, pageSize: 100, totalItems: 0, totalPages: Math.ceil(0 / 100) },
       }),
       findById: vi.fn().mockResolvedValue(null),
       findByClientId: vi.fn().mockResolvedValue(null),
@@ -161,12 +161,12 @@ export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> =
       delete: vi.fn(),
       listSecrets: vi.fn().mockResolvedValue({
         items: [],
-        pagination: { limit: 20, offset: 0, total: 0, hasMore: false, nextOffset: null },
+        pagination: { page: Math.floor(0 / 20) + 1, pageSize: 20, totalItems: 0, totalPages: Math.ceil(0 / 20) },
       }),
       rotateSecret: vi.fn(),
       listAuthorizations: vi.fn().mockResolvedValue({
         items: [],
-        pagination: { limit: 50, offset: 0, total: 0, hasMore: false, nextOffset: null },
+        pagination: { page: Math.floor(0 / 50) + 1, pageSize: 50, totalItems: 0, totalPages: Math.ceil(0 / 50) },
       }),
       findAuthorization: vi.fn().mockResolvedValue(null),
       revokeAuthorization: vi.fn().mockResolvedValue(true),
@@ -199,11 +199,11 @@ export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> =
             updatedAt: '2026-01-01T00:00:00.000Z',
           },
         ],
-        pagination: { limit: 100, offset: 0, total: 1, hasMore: false, nextOffset: null },
+        pagination: { page: Math.floor(0 / 100) + 1, pageSize: 100, totalItems: 1, totalPages: Math.ceil(1 / 100) },
       }),
       listResources: vi.fn().mockResolvedValue({
         items: [realmrootResource],
-        pagination: { limit: 100, offset: 0, total: 1, hasMore: false, nextOffset: null },
+        pagination: { page: Math.floor(0 / 100) + 1, pageSize: 100, totalItems: 1, totalPages: Math.ceil(1 / 100) },
       }),
       listEnabledResources: vi.fn().mockResolvedValue([]),
       findResources: vi.fn().mockResolvedValue([]),
@@ -216,7 +216,7 @@ export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> =
       findTeam: vi.fn().mockResolvedValue(null),
       listTeamMembers: vi.fn().mockResolvedValue({
         items: [],
-        pagination: { limit: 20, offset: 0, total: 0, hasMore: false, nextOffset: null },
+        pagination: { page: Math.floor(0 / 20) + 1, pageSize: 20, totalItems: 0, totalPages: Math.ceil(0 / 20) },
       }),
       listMemberUserIds: vi.fn().mockResolvedValue([]),
       listOrganizationRoles: vi.fn().mockResolvedValue([]),

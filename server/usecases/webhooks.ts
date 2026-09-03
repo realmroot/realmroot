@@ -2,7 +2,7 @@ import { badRequest, conflict, notFound } from '@server/domain/errors'
 import type { Deps } from '@server/usecases/deps'
 import type { WebhookDeliveryAttemptRecord, WebhookEndpointRecord, WebhookRequestRecord } from '@server/usecases/ports'
 import { uuidV7Pattern } from '@shared/api/identifiers'
-import { type PaginationInput, paginationMetadata } from '@shared/api/pagination'
+import { type PaginationInput, paginationInput, paginationMetadata, repositoryPageQuery } from '@shared/api/pagination'
 import type {
   CreateWebhookEndpointRequest,
   ListWebhookEndpointsQuery,
@@ -19,10 +19,11 @@ import type {
 const webhookResponseLimit = 8 * 1024
 
 export async function listWebhookEndpoints(deps: Deps, query: ListWebhookEndpointsQuery, organizationIds?: string[]) {
-  const result = await deps.webhooks.listEndpoints(query, organizationIds)
+  const page = paginationInput(query)
+  const result = await deps.webhooks.listEndpoints(repositoryPageQuery(query), organizationIds)
   return {
     items: result.items.map(toEndpointResponse),
-    pagination: paginationMetadata({ ...query, total: result.total }),
+    pagination: paginationMetadata({ ...page, total: result.total }),
   }
 }
 
@@ -86,10 +87,11 @@ export async function rotateWebhookSecret(deps: Deps, id: string): Promise<Webho
 }
 
 export async function listWebhookRequests(deps: Deps, query: ListWebhookRequestsQuery, organizationIds?: string[]) {
-  const result = await deps.webhooks.listRequests(query, organizationIds)
+  const page = paginationInput(query)
+  const result = await deps.webhooks.listRequests(repositoryPageQuery(query), organizationIds)
   return {
     items: result.items.map(toRequestResponse),
-    pagination: paginationMetadata({ ...query, total: result.total }),
+    pagination: paginationMetadata({ ...page, total: result.total }),
   }
 }
 

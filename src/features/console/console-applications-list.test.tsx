@@ -45,7 +45,7 @@ describe('admin console applications-list', () => {
     expect(applicationLink.getAttribute('href')).toBe('/organizations/org-1/applications/app-1')
     expect(screen.queryByLabelText('Filter owner')).toBeNull()
     expect(requests).toContain('/api/applications?ownerOrganizationId=org-1')
-    expect(requests).not.toContain('/api/users?limit=100&organizationId=org-1')
+    expect(requests).not.toContain('/api/users?organizationId=org-1&page=1&pageSize=100')
     fireEvent.click(screen.getByRole('button', { name: 'New application' }))
     expect(screen.getByLabelText('Visibility').textContent).toContain('Private')
     expect(screen.queryByLabelText('Owner Organization')).toBeNull()

@@ -9,6 +9,7 @@ import {
   managementCreateUserRequestSchema,
   managementUpdateUserRequestSchema,
   managementUserDetailResponseSchema,
+  managementUserListQuerySchema,
   paginationQuerySchema,
   passwordResetRequestResponseSchema,
   securityPolicyResponseSchema,
@@ -25,7 +26,9 @@ export const userSecurityRoutes: ManagementRouteConfig[] = [
     path: '/users',
     operationId: 'listUsers',
     summary: 'List users',
+    request: { query: managementUserListQuerySchema },
     response: listManagementUsersResponseSchema,
+    paginated: true,
   },
   {
     method: 'post',
@@ -113,6 +116,7 @@ export const userSecurityRoutes: ManagementRouteConfig[] = [
     summary: 'List user sessions',
     request: { params: userIdParam, query: paginationQuerySchema },
     response: listManagementUserSessionsResponseSchema,
+    paginated: true,
   },
   {
     method: 'delete',
@@ -145,6 +149,7 @@ export const userSecurityRoutes: ManagementRouteConfig[] = [
     summary: 'List user linked accounts',
     request: { params: userIdParam, query: paginationQuerySchema },
     response: listManagementUserLinkedAccountsResponseSchema,
+    paginated: true,
   },
   {
     method: 'get',
@@ -153,6 +158,7 @@ export const userSecurityRoutes: ManagementRouteConfig[] = [
     summary: 'List user passkeys',
     request: { params: userIdParam, query: paginationQuerySchema },
     response: listManagementUserPasskeysResponseSchema,
+    paginated: true,
   },
   {
     method: 'delete',

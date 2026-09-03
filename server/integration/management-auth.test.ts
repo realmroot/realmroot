@@ -84,7 +84,7 @@ describe('resource access over real D1 and real Better Auth sessions', () => {
       headers: { cookie: memberCookie },
     })
     expect(filtered.status).toBe(200)
-    await expect(filtered.json()).resolves.toMatchObject({ items: [], pagination: { total: 0 } })
+    await expect(filtered.json()).resolves.toMatchObject({ items: [], pagination: { totalItems: 0 } })
   })
 
   it('lists applications for a signed-in admin and reflects a real D1 write', async () => {
@@ -93,8 +93,8 @@ describe('resource access over real D1 and real Better Auth sessions', () => {
 
     const before = await harness.request('/api/applications', { headers: { cookie } })
     expect(before.status, await before.clone().text()).toBe(200)
-    const beforeBody = (await before.json()) as { items: unknown[]; pagination: { total: number } }
-    const initialTotal = beforeBody.pagination.total
+    const beforeBody = (await before.json()) as { items: unknown[]; pagination: { totalItems: number } }
+    const initialTotal = beforeBody.pagination.totalItems
 
     const create = await harness.request('/api/applications', {
       method: 'POST',
@@ -111,8 +111,8 @@ describe('resource access over real D1 and real Better Auth sessions', () => {
     expect(create.status, await create.clone().text()).toBe(201)
 
     const after = await harness.request('/api/applications', { headers: { cookie } })
-    const afterBody = (await after.json()) as { pagination: { total: number } }
-    expect(afterBody.pagination.total).toBe(initialTotal + 1)
+    const afterBody = (await after.json()) as { pagination: { totalItems: number } }
+    expect(afterBody.pagination.totalItems).toBe(initialTotal + 1)
   })
 
   it('rejects an invalid application payload at the validation boundary', async () => {

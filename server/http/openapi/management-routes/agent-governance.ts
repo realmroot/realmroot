@@ -56,6 +56,7 @@ export const agentGovernanceRoutes: ManagementRouteConfig[] = [
     summary: 'List stable Agents',
     request: { query: listAgentsQuerySchema },
     response: managementAgentsResponseSchema,
+    paginated: true,
   },
   {
     method: 'get',
@@ -72,6 +73,7 @@ export const agentGovernanceRoutes: ManagementRouteConfig[] = [
     summary: 'List installations authorized for a stable Agent',
     request: { params: z.object({ agentId: z.string() }), query: paginationQuerySchema },
     response: managementAgentInstallationsResponseSchema,
+    paginated: true,
     errors: { 400: 'The pagination query is invalid.', 404: 'The Agent was not found.' },
   },
   {
@@ -82,6 +84,7 @@ export const agentGovernanceRoutes: ManagementRouteConfig[] = [
     security: [{ oauth2: ['permissions:read'] }, { sessionCookie: ['permissions:read'] }],
     request: { params: z.object({ agentId: z.string() }), query: listAgentAuthorizedResourceServersQuerySchema },
     response: agentAuthorizedResourceServersResponseSchema,
+    paginated: true,
     errors: { 400: 'The collection query is invalid.', 404: 'The Agent was not found.' },
   },
   {
@@ -92,6 +95,7 @@ export const agentGovernanceRoutes: ManagementRouteConfig[] = [
     security: [{ oauth2: ['permissions:read'] }, { sessionCookie: ['permissions:read'] }],
     request: { params: z.object({ agentId: z.string() }), query: listAgentPermissionsQuerySchema },
     response: agentPermissionsResponseSchema,
+    paginated: true,
     errors: { 400: 'The collection query is invalid.' },
   },
   {
@@ -184,5 +188,6 @@ export const agentGovernanceRoutes: ManagementRouteConfig[] = [
     summary: 'List Agent audit events',
     request: { query: listAgentAuditEventsQuerySchema },
     response: auditEventsResponseSchema,
+    paginated: true,
   },
 ]

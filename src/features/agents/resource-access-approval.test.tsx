@@ -82,7 +82,7 @@ describe('Agent resource access approval', () => {
     api.decideAgentResourceApproval.mockResolvedValue({ ...request, status: 'approved' })
     api.listApprovalAccountConnections.mockResolvedValue({
       items: [connection],
-      pagination: { limit: 50, offset: 0, total: 1, hasMore: false, nextOffset: null },
+      pagination: { page: Math.floor(0 / 50) + 1, pageSize: 50, totalItems: 1, totalPages: Math.ceil(1 / 50) },
     })
     api.listApprovalAuthorizationDetailCatalog.mockResolvedValue({
       items: [
@@ -94,7 +94,7 @@ describe('Agent resource access approval', () => {
           requestableScopes: [],
         },
       ],
-      pagination: { limit: 50, offset: 0, total: 1, hasMore: false, nextOffset: null },
+      pagination: { page: Math.floor(0 / 50) + 1, pageSize: 50, totalItems: 1, totalPages: Math.ceil(1 / 50) },
     })
     api.createAccountConnection.mockResolvedValue({
       ...connection,
@@ -166,7 +166,7 @@ describe('Agent resource access approval', () => {
     )
     api.listApprovalAccountConnections.mockResolvedValue({
       items: [],
-      pagination: { limit: 50, offset: 0, total: 0, hasMore: false, nextOffset: null },
+      pagination: { page: Math.floor(0 / 50) + 1, pageSize: 50, totalItems: 0, totalPages: Math.ceil(0 / 50) },
     })
 
     render(<ResourceAccessApproval />)
@@ -190,7 +190,7 @@ describe('Agent resource access approval', () => {
           ],
         },
       ],
-      pagination: { limit: 50, offset: 0, total: 1, hasMore: false, nextOffset: null },
+      pagination: { page: Math.floor(0 / 50) + 1, pageSize: 50, totalItems: 1, totalPages: Math.ceil(1 / 50) },
     })
     api.listApprovalAuthorizationDetailCatalog.mockResolvedValue({
       items: [
@@ -209,7 +209,7 @@ describe('Agent resource access approval', () => {
           requestableScopes: [],
         },
       ],
-      pagination: { limit: 50, offset: 0, total: 2, hasMore: false, nextOffset: null },
+      pagination: { page: Math.floor(0 / 50) + 1, pageSize: 50, totalItems: 2, totalPages: Math.ceil(2 / 50) },
     })
 
     render(<ResourceAccessApproval />)
@@ -238,7 +238,7 @@ describe('Agent resource access approval', () => {
     api.getAgentResourceApproval.mockResolvedValue({ ...request, authorizationDetails })
     api.listApprovalAccountConnections.mockResolvedValue({
       items: [{ ...connection, authorizationDetails }],
-      pagination: { limit: 50, offset: 0, total: 1, hasMore: false, nextOffset: null },
+      pagination: { page: Math.floor(0 / 50) + 1, pageSize: 50, totalItems: 1, totalPages: Math.ceil(1 / 50) },
     })
 
     render(<ResourceAccessApproval />)
@@ -269,7 +269,7 @@ describe('Agent resource access approval', () => {
             requestableScopes: [],
           },
         ],
-        pagination: { limit: 100, offset: 0, total: 101, hasMore: true, nextOffset: 100 },
+        pagination: { page: Math.floor(0 / 100) + 1, pageSize: 100, totalItems: 101, totalPages: Math.ceil(101 / 100) },
       })
       .mockResolvedValueOnce({
         items: [
@@ -281,7 +281,12 @@ describe('Agent resource access approval', () => {
             requestableScopes: [],
           },
         ],
-        pagination: { limit: 100, offset: 100, total: 101, hasMore: false, nextOffset: null },
+        pagination: {
+          page: Math.floor(100 / 100) + 1,
+          pageSize: 100,
+          totalItems: 101,
+          totalPages: Math.ceil(101 / 100),
+        },
       })
 
     render(<ResourceAccessApproval />)
@@ -289,12 +294,12 @@ describe('Agent resource access approval', () => {
     fireEvent.click(await screen.findByLabelText('Authorization detail 1'))
     expect(await screen.findByRole('option', { name: 'Project One Hundred One' })).toBeTruthy()
     expect(api.listApprovalAuthorizationDetailCatalog).toHaveBeenNthCalledWith(1, 'request-1', 'approval token', {
-      limit: 100,
-      offset: 0,
+      page: 1,
+      pageSize: 100,
     })
     expect(api.listApprovalAuthorizationDetailCatalog).toHaveBeenNthCalledWith(2, 'request-1', 'approval token', {
-      limit: 100,
-      offset: 100,
+      page: 2,
+      pageSize: 100,
     })
   })
 
@@ -308,7 +313,7 @@ describe('Agent resource access approval', () => {
     })
     api.listApprovalAccountConnections.mockResolvedValue({
       items: [],
-      pagination: { limit: 50, offset: 0, total: 0, hasMore: false, nextOffset: null },
+      pagination: { page: Math.floor(0 / 50) + 1, pageSize: 50, totalItems: 0, totalPages: Math.ceil(0 / 50) },
     })
     render(<ResourceAccessApproval />)
 
@@ -321,7 +326,7 @@ describe('Agent resource access approval', () => {
     api.getAgentResourceApproval.mockResolvedValue(nativeRequest)
     api.listApprovalAccountConnections.mockResolvedValue({
       items: [],
-      pagination: { limit: 50, offset: 0, total: 0, hasMore: false, nextOffset: null },
+      pagination: { page: Math.floor(0 / 50) + 1, pageSize: 50, totalItems: 0, totalPages: Math.ceil(0 / 50) },
     })
     render(<ResourceAccessApproval />)
 
@@ -339,7 +344,7 @@ describe('Agent resource access approval', () => {
     api.getAgentResourceApproval.mockResolvedValue(nativeRequest)
     api.listApprovalAccountConnections.mockResolvedValue({
       items: [],
-      pagination: { limit: 50, offset: 0, total: 0, hasMore: false, nextOffset: null },
+      pagination: { page: Math.floor(0 / 50) + 1, pageSize: 50, totalItems: 0, totalPages: Math.ceil(0 / 50) },
     })
     render(<ResourceAccessApproval />)
 
@@ -358,7 +363,7 @@ describe('Agent resource access approval', () => {
   it('does not submit external access while authorization details are unresolved', async () => {
     api.listApprovalAccountConnections.mockResolvedValue({
       items: [{ ...connection, authorizationDetails: [] }],
-      pagination: { limit: 50, offset: 0, total: 1, hasMore: false, nextOffset: null },
+      pagination: { page: Math.floor(0 / 50) + 1, pageSize: 50, totalItems: 1, totalPages: Math.ceil(1 / 50) },
     })
 
     render(<ResourceAccessApproval />)
@@ -373,7 +378,7 @@ describe('Agent resource access approval', () => {
     api.getAgentResourceApproval.mockResolvedValue(request)
     api.listApprovalAccountConnections.mockResolvedValue({
       items: [],
-      pagination: { limit: 50, offset: 0, total: 0, hasMore: false, nextOffset: null },
+      pagination: { page: Math.floor(0 / 50) + 1, pageSize: 50, totalItems: 0, totalPages: Math.ceil(0 / 50) },
     })
     render(<ResourceAccessApproval />)
 
@@ -409,7 +414,7 @@ describe('Agent resource access approval', () => {
     api.getAgentResourceApproval.mockResolvedValue(request)
     api.listApprovalAccountConnections.mockResolvedValue({
       items: [{ ...connection, id: 'connection-2' }],
-      pagination: { limit: 50, offset: 0, total: 1, hasMore: false, nextOffset: null },
+      pagination: { page: Math.floor(0 / 50) + 1, pageSize: 50, totalItems: 1, totalPages: Math.ceil(1 / 50) },
     })
 
     render(<ResourceAccessApproval />)
@@ -466,7 +471,7 @@ describe('Agent resource access approval', () => {
   it('rejects multiple connected accounts instead of presenting selection controls', async () => {
     api.listApprovalAccountConnections.mockResolvedValue({
       items: [connection, { ...connection, id: 'connection-2' }],
-      pagination: { limit: 50, offset: 0, total: 2, hasMore: false, nextOffset: null },
+      pagination: { page: Math.floor(0 / 50) + 1, pageSize: 50, totalItems: 2, totalPages: Math.ceil(2 / 50) },
     })
 
     render(<ResourceAccessApproval />)
@@ -479,7 +484,7 @@ describe('Agent resource access approval', () => {
     api.getAgentResourceApproval.mockResolvedValue(request)
     api.listApprovalAccountConnections.mockResolvedValue({
       items: [],
-      pagination: { limit: 50, offset: 0, total: 0, hasMore: false, nextOffset: null },
+      pagination: { page: Math.floor(0 / 50) + 1, pageSize: 50, totalItems: 0, totalPages: Math.ceil(0 / 50) },
     })
     api.createAccountConnection
       .mockRejectedValueOnce(new Error('Account authorization expired'))

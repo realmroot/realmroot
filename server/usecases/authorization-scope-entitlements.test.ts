@@ -52,11 +52,11 @@ function setup() {
     findScopeEntitlement: vi.fn().mockResolvedValue(entitlement()),
     listUserPermissions: vi.fn().mockResolvedValue({
       items: [entitlement()],
-      pagination: { limit: 20, offset: 0, total: 1, hasMore: false, nextOffset: null },
+      pagination: { page: Math.floor(0 / 20) + 1, pageSize: 20, totalItems: 1, totalPages: Math.ceil(1 / 20) },
     }),
     listApplicationPermissions: vi.fn().mockResolvedValue({
       items: [entitlement({ userId: null, applicationId: 'app-1' })],
-      pagination: { limit: 20, offset: 0, total: 1, hasMore: false, nextOffset: null },
+      pagination: { page: Math.floor(0 / 20) + 1, pageSize: 20, totalItems: 1, totalPages: Math.ceil(1 / 20) },
     }),
     endScopeEntitlement: vi.fn().mockResolvedValue(true),
   }
@@ -207,7 +207,7 @@ describe('direct scope Entitlements', () => {
   it('lists, reads, and revokes User and Application Entitlements', async () => {
     const { deps, authorization } = setup()
 
-    await expect(subject.listUserPermissions(deps, 'user-1', { limit: 20, offset: 0 })).resolves.toMatchObject({
+    await expect(subject.listUserPermissions(deps, 'user-1', { page: 1, pageSize: 20 })).resolves.toMatchObject({
       items: [expect.objectContaining({ id: 'ent_1', status: 'active' })],
     })
     vi.mocked(authorization.findScopeEntitlement).mockResolvedValue(
@@ -218,7 +218,7 @@ describe('direct scope Entitlements', () => {
       status: 'ended',
       endReason: 'revoked',
     })
-    await expect(subject.listApplicationPermissions(deps, 'app-1', { limit: 20, offset: 0 })).resolves.toMatchObject({
+    await expect(subject.listApplicationPermissions(deps, 'app-1', { page: 1, pageSize: 20 })).resolves.toMatchObject({
       items: [expect.objectContaining({ applicationId: 'app-1' })],
     })
     await subject.revokeApplicationPermission(deps, 'ent_1')

@@ -274,7 +274,7 @@ describe('console collections', () => {
         return Promise.resolve(
           jsonResponse({
             members: [{ id: 'member-1' }, { id: 'member-2' }],
-            pagination: { ...pagination, total: 2 },
+            pagination: { ...pagination, totalItems: 2 },
           }),
         )
       }

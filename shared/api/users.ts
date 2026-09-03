@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { paginationQuerySchema } from './pagination'
 
 export const usernameSchema = z
   .string()
@@ -7,11 +8,9 @@ export const usernameSchema = z
   .regex(/^[a-zA-Z0-9_.-]+$/)
   .transform((value) => value.toLowerCase())
 
-export const adminUserListQuerySchema = z.object({
+export const adminUserListQuerySchema = paginationQuerySchema.extend({
   search: z.string().min(1).optional(),
   searchField: z.enum(['email', 'name']).optional(),
-  limit: z.coerce.number().int().min(1).max(100).default(50),
-  offset: z.coerce.number().int().min(0).default(0),
   sortBy: z.enum(['createdAt', 'updatedAt', 'email', 'name']).optional(),
   sortDirection: z.enum(['asc', 'desc']).optional(),
   banned: z

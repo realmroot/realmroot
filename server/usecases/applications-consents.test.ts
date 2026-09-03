@@ -47,7 +47,7 @@ function createApplication(
             updatedAt: '2026-01-01T00:00:00.000Z',
           },
         ],
-        pagination: { limit: 100, offset: 0, total: 1, hasMore: false, nextOffset: null },
+        pagination: { page: Math.floor(0 / 100) + 1, pageSize: 100, totalItems: 1, totalPages: Math.ceil(1 / 100) },
       })),
   } as Deps['authorization']
   return createApplicationUsecase(
@@ -142,7 +142,7 @@ describe('service.test 3', () => {
     )
 
     await expect(
-      listApplicationAuthorizations(deps, { applicationId: created.id, limit: 50, offset: 0 }),
+      listApplicationAuthorizations(deps, { applicationId: created.id, page: 1, pageSize: 50 }),
     ).resolves.toMatchObject({
       items: [
         {
@@ -151,7 +151,7 @@ describe('service.test 3', () => {
           scopes: ['openid'],
         },
       ],
-      pagination: { total: 1 },
+      pagination: { totalItems: 1 },
     })
     const revocation = await putApplicationAuthorizationRevocation(deps, consent.id)
     await expect(putApplicationAuthorizationRevocation(deps, consent.id)).resolves.toEqual(revocation)
@@ -185,14 +185,14 @@ describe('service.test 3', () => {
     const applications = {
       listAuthorizations: async () => ({
         items: [authorization],
-        pagination: { limit: 20, offset: 0, total: 1, hasMore: false, nextOffset: null },
+        pagination: { page: Math.floor(0 / 20) + 1, pageSize: 20, totalItems: 1, totalPages: Math.ceil(1 / 20) },
       }),
       findAuthorization: async (id: string) => (id === authorization.id ? authorization : null),
       revokeAuthorization: async () => true,
     }
     const deps = { ids: createIdentifierGeneratorFake(), applications } as unknown as Deps
 
-    await expect(listApplicationAuthorizations(deps, { limit: 20, offset: 0 })).resolves.toMatchObject({
+    await expect(listApplicationAuthorizations(deps, { page: 1, pageSize: 20 })).resolves.toMatchObject({
       items: [
         {
           status: 'expired',
@@ -536,7 +536,7 @@ describe('service.test 3', () => {
       findOrganization: async (id: string) => organizations.get(id) ?? null,
       listOrganizations: async () => ({
         items: [{ id: 'org_platform', slug: 'realmroot' }],
-        pagination: { limit: 100, offset: 0, total: 1, hasMore: false, nextOffset: null },
+        pagination: { page: Math.floor(0 / 100) + 1, pageSize: 100, totalItems: 1, totalPages: Math.ceil(1 / 100) },
       }),
       listUserMemberships: async () => memberships,
       findResources: async () => Object.values(resources),
@@ -829,13 +829,10 @@ function withoutUndefined<T extends object>(input: T) {
 }
 
 function toPaginationMetadata(pagination: { limit: number; offset: number }, total: number) {
-  const nextOffset = pagination.offset + pagination.limit < total ? pagination.offset + pagination.limit : null
-
   return {
-    limit: pagination.limit,
-    offset: pagination.offset,
-    total,
-    hasMore: nextOffset !== null,
-    nextOffset,
+    page: Math.floor(pagination.offset / pagination.limit) + 1,
+    pageSize: pagination.limit,
+    totalItems: total,
+    totalPages: Math.ceil(total / pagination.limit),
   }
 }

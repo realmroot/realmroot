@@ -1,22 +1,32 @@
 import { z } from 'zod'
 
 export const paginationQuerySchema = z.object({
-  limit: z.coerce.number().int().min(1).max(100).default(50),
-  offset: z.coerce.number().int().min(0).default(0),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(50),
 })
 
 // The single source of truth for collection pagination metadata, matching what
 // `paginationMetadata()` below emits. Resource schemas import this instead of
 // redeclaring it.
-export const paginationMetadataSchema = z.object({
-  limit: z.number().int().positive(),
-  offset: z.number().int().min(0),
-  total: z.number().int().min(0),
-  hasMore: z.boolean(),
-  nextOffset: z.number().int().min(0).nullable(),
-})
+export const paginationMetadataSchema = z
+  .object({
+    page: z.number().int().min(1),
+    pageSize: z.number().int().positive(),
+    totalItems: z.number().int().min(0),
+    totalPages: z.number().int().min(0),
+  })
+  .superRefine((pagination, context) => {
+    if (pagination.totalPages !== Math.ceil(pagination.totalItems / pagination.pageSize)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['totalPages'],
+        message: 'totalPages must equal ceil(totalItems / pageSize).',
+      })
+    }
+  })
 
 export type PaginationMetadata = z.infer<typeof paginationMetadataSchema>
+export type PaginationQuery = z.infer<typeof paginationQuerySchema>
 
 export interface PaginationInput {
   limit: number
@@ -29,13 +39,28 @@ export interface PaginatedResult<T> extends PaginationInput {
 }
 
 export function paginationMetadata(page: PaginationInput & { total: number }) {
-  const nextOffset = page.offset + page.limit < page.total ? page.offset + page.limit : null
-
   return {
-    limit: page.limit,
-    offset: page.offset,
-    total: page.total,
-    hasMore: nextOffset !== null,
-    nextOffset,
+    page: Math.floor(page.offset / page.limit) + 1,
+    pageSize: page.limit,
+    totalItems: page.total,
+    totalPages: Math.ceil(page.total / page.limit),
+  }
+}
+
+export function paginationInput(query: PaginationQuery): PaginationInput {
+  return {
+    limit: query.pageSize,
+    offset: (query.page - 1) * query.pageSize,
+  }
+}
+
+export function repositoryPageQuery<T extends PaginationQuery>(
+  query: T,
+): Omit<T, keyof PaginationQuery> & PaginationInput {
+  const { page, pageSize, ...filters } = query
+  return {
+    ...filters,
+    limit: pageSize,
+    offset: (page - 1) * pageSize,
   }
 }

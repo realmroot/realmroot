@@ -42,7 +42,7 @@ import type {
   CreateResourceConnectionIntentRequest,
   DecideAgentAccessRequest,
 } from '@shared/api/external-resources'
-import { type PaginationInput, paginationMetadata } from '@shared/api/pagination'
+import { type PaginationInput, paginationMetadata, repositoryPageQuery } from '@shared/api/pagination'
 import { agentBootstrapScopes, realmrootOAuthScopes } from '@shared/authz'
 import {
   realmrootAgentBindingClaim,
@@ -510,19 +510,16 @@ async function accountScopesForAuthorizationDetails(
 ) {
   const requested = new Set(authorizationDetails.map(canonicalJson))
   const grantedByDetail = new Map<string, string[] | undefined>()
-  for (let offset = 0; ; ) {
-    const catalog = await readResourceCatalog(deps, resource, connection, agentIdentityId, { limit: 100, offset })
+  for (let page = 1; ; page += 1) {
+    const catalog = await readResourceCatalog(deps, resource, connection, agentIdentityId, {
+      limit: 100,
+      offset: (page - 1) * 100,
+    })
     for (const item of catalog.items) {
       const key = canonicalJson(item.authorizationDetail)
       if (requested.has(key)) grantedByDetail.set(key, item.grantedScopes)
     }
-    if (
-      grantedByDetail.size === requested.size ||
-      !catalog.pagination.hasMore ||
-      catalog.pagination.nextOffset === null
-    )
-      break
-    offset = catalog.pagination.nextOffset
+    if (grantedByDetail.size === requested.size || catalog.pagination.page >= catalog.pagination.totalPages) break
   }
   if (grantedByDetail.size !== requested.size) return []
   const contextual = [...grantedByDetail.values()]
@@ -1251,10 +1248,10 @@ async function resolveApprovalAuthorizationDetail(
   if (!request.connectionId) return null
   const connection = await deps.externalResources.findConnection(request.connectionId)
   if (!connection || connection.status !== 'active') throw notFound('Active resource account connection was not found.')
-  for (let offset = 0; ; ) {
+  for (let page = 1; ; page += 1) {
     const catalog = await readResourceCatalog(deps, resourceServer, connection, request.agentIdentityId, {
       limit: 100,
-      offset,
+      offset: (page - 1) * 100,
     })
     const match = catalog.items.find((item) => exactAuthorizationDetails([item.authorizationDetail], [detail]))
     if (match) {
@@ -1264,8 +1261,7 @@ async function resolveApprovalAuthorizationDetail(
         metadata: match.display.metadata ?? {},
       }
     }
-    if (!catalog.pagination.hasMore || catalog.pagination.nextOffset === null) break
-    offset = catalog.pagination.nextOffset
+    if (catalog.pagination.page >= catalog.pagination.totalPages) break
   }
   throw notFound('Authorization detail was not found.')
 }
@@ -1864,7 +1860,9 @@ export async function listAgentPermissions(
   query: ListAgentPermissionsQuery,
 ) {
   await requireActiveIdentityAndBinding(principal)
-  const result = await deps.externalResources.listAgentPermissions({ ...query, agentId: principal.identityId })
+  const result = await deps.externalResources.listAgentPermissions(
+    repositoryPageQuery({ ...query, agentId: principal.identityId }),
+  )
   return {
     items: result.items.map(({ entitlement, resource }) => toPermission(entitlement, resource)),
     pagination: paginationMetadata(result),
@@ -2044,8 +2042,9 @@ async function requestAuthorizationDetailCatalog(
   pagination: PaginationInput,
 ) {
   const catalogUrl = new URL(endpoint)
-  catalogUrl.searchParams.set('limit', String(pagination.limit))
-  catalogUrl.searchParams.set('offset', String(pagination.offset))
+  const requestedPage = Math.floor(pagination.offset / pagination.limit) + 1
+  catalogUrl.searchParams.set('page', String(requestedPage))
+  catalogUrl.searchParams.set('pageSize', String(pagination.limit))
   let response: Response
   try {
     response = await deps.externalHttp.fetch(
@@ -2066,17 +2065,13 @@ async function requestAuthorizationDetailCatalog(
       issues: parsed.error.issues.map((issue) => ({ path: issue.path.join('.'), message: issue.message })),
     })
   }
-  if (parsed.data.pagination.limit !== pagination.limit || parsed.data.pagination.offset !== pagination.offset) {
+  if (parsed.data.pagination.pageSize !== pagination.limit || parsed.data.pagination.page !== requestedPage) {
     throw badGateway('Authorization detail catalog returned mismatched pagination metadata.', { url: endpoint })
   }
   if (parsed.data.items.length > pagination.limit) {
     throw badGateway('Authorization detail catalog returned more items than requested.', { url: endpoint })
   }
-  if (
-    parsed.data.pagination.hasMore !== (parsed.data.pagination.nextOffset !== null) ||
-    (parsed.data.pagination.nextOffset !== null && parsed.data.pagination.nextOffset <= pagination.offset) ||
-    parsed.data.pagination.total < pagination.offset + parsed.data.items.length
-  ) {
+  if (parsed.data.pagination.totalItems < pagination.offset + parsed.data.items.length) {
     throw badGateway('Authorization detail catalog returned inconsistent pagination metadata.', { url: endpoint })
   }
   const catalogKeys = parsed.data.items.map((item) => canonicalJson(item.authorizationDetail))
@@ -2377,14 +2372,13 @@ async function resolveRequestedAuthorizationDetails(
     throw invalidAuthorizationDetails('This Resource Server does not use authorization details.')
   }
   const available: AuthorizationDetail[] = []
-  for (let offset = 0; ; ) {
+  for (let page = 1; ; page += 1) {
     const catalog = await readResourceCatalog(deps, resourceServer, connection, identity.identity.id, {
       limit: 100,
-      offset,
+      offset: (page - 1) * 100,
     })
     for (const item of catalog.items) available.push(item.authorizationDetail)
-    if (!catalog.pagination.hasMore || catalog.pagination.nextOffset === null) break
-    offset = catalog.pagination.nextOffset
+    if (catalog.pagination.page >= catalog.pagination.totalPages) break
   }
   if (
     !authorizationDetails.every((detail) =>

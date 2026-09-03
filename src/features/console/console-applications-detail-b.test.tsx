@@ -244,7 +244,7 @@ describe('admin console applications-detail-b', () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
       if (url === '/api/applications/app-1') return Promise.resolve(jsonResponse(application))
-      if (url === '/api/applications/app-1/authorizations?status=active&limit=50&offset=0') {
+      if (url === '/api/applications/app-1/authorizations?status=active&page=1&pageSize=50') {
         attempts += 1
         if (attempts === 1) {
           return Promise.resolve(jsonResponse({ error: { message: 'Authorizations unavailable.' } }, 503))
@@ -266,7 +266,7 @@ describe('admin console applications-detail-b', () => {
                   },
                 ]
               : [],
-            pagination: { ...emptyPagination, total: active ? 1 : 0 },
+            pagination: { ...emptyPagination, totalItems: active ? 1 : 0 },
           }),
         )
       }

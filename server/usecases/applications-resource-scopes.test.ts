@@ -61,7 +61,7 @@ function setup() {
     findOrganization: vi.fn().mockResolvedValue({ id: 'org-1', disabled: false }),
     listOrganizations: vi.fn().mockResolvedValue({
       items: [{ id: 'org-platform', slug: 'realmroot' }],
-      pagination: { limit: 100, offset: 0, total: 1, hasMore: false, nextOffset: null },
+      pagination: { page: Math.floor(0 / 100) + 1, pageSize: 100, totalItems: 1, totalPages: Math.ceil(1 / 100) },
     }),
     findResources: vi
       .fn()

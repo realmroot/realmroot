@@ -10,17 +10,17 @@ describe('account Organization Team routes', () => {
     vi.mocked(deps.authorization.findTeam).mockResolvedValue({ id: 'team-1', organizationId: 'org-1' } as never)
     vi.mocked(deps.authorization.listTeamMembers).mockResolvedValue({
       items: [{ id: 'membership-1', teamId: 'team-1', userId: 'user-2', createdAt: '2026-08-01T00:00:00Z' }],
-      pagination: { limit: 10, offset: 20, total: 21, hasMore: false, nextOffset: null },
+      pagination: { page: Math.floor(20 / 10) + 1, pageSize: 10, totalItems: 21, totalPages: Math.ceil(21 / 10) },
     })
     const app = withAccountContext(deps)
     app.route('/account', accountRoutes({} as never))
 
-    const response = await app.request('/account/organizations/org-1/teams/team-1/members?limit=10&offset=20')
+    const response = await app.request('/account/organizations/org-1/teams/team-1/members?page=3&pageSize=10')
 
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toMatchObject({
       items: [{ id: 'membership-1', userId: 'user-2' }],
-      pagination: { limit: 10, offset: 20, total: 21 },
+      pagination: { page: Math.floor(20 / 10) + 1, pageSize: 10, totalItems: 21, totalPages: Math.ceil(21 / 10) },
     })
     expect(deps.authorization.listTeamMembers).toHaveBeenCalledWith('team-1', { limit: 10, offset: 20 })
   })

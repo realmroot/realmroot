@@ -12,6 +12,7 @@ import {
   rotateWebhookSecret,
   updateWebhookEndpoint,
 } from '@server/usecases/webhooks'
+import { paginationInput } from '@shared/api/pagination'
 import {
   createWebhookEndpointRequestSchema,
   idempotencyKeySchema,
@@ -113,7 +114,7 @@ export function createManagementWebhookRoutes() {
         await listWebhookDeliveryAttempts(
           getDeps(c),
           c.req.param('deliveryId'),
-          readQuery(c, listWebhookRequestsQuerySchema.pick({ limit: true, offset: true })),
+          paginationInput(readQuery(c, listWebhookRequestsQuerySchema.pick({ page: true, pageSize: true }))),
         ),
       ),
     )

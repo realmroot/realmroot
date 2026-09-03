@@ -123,24 +123,25 @@ context.
 
 Collection endpoints accept:
 
-- `limit`: integer from 1 to 100;
-- `offset`: non-negative integer.
+- `page`: one-based positive integer;
+- `pageSize`: integer from 1 to 100.
 
 Collection responses include:
 
 ```json
 {
   "pagination": {
-    "limit": 20,
-    "offset": 0,
-    "total": 42,
-    "hasMore": true,
-    "nextOffset": 20
+    "page": 1,
+    "pageSize": 20,
+    "totalItems": 42,
+    "totalPages": 3
   }
 }
 ```
 
-`nextOffset` is `null` when there is no next page.
+Applicable `first`, `previous`, `next`, and `last` navigation URLs are returned
+as absolute URLs in the RFC 8288 `Link` response header. Existing filter and
+ordering query parameters are preserved in every navigation URL.
 
 `/application-authorizations`, `/role-assignments`, and `/agent/access-requests` are
 canonical Realm inventories. Direct Resource authority is exposed beneath its

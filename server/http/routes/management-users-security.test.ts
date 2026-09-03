@@ -22,20 +22,14 @@ describe('management routes 2', () => {
     const auth = createAuthMock()
     const users = createUserRepositoryMock()
     const response = await createApp(auth, createTestDeps({ users })).request(
-      '/api/users?limit=10&offset=20&banned=false',
+      '/api/users?page=3&pageSize=10&banned=false',
       { headers: adminHeaders() },
     )
 
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toEqual({
       items: [],
-      pagination: {
-        limit: 10,
-        offset: 20,
-        total: 10,
-        hasMore: false,
-        nextOffset: null,
-      },
+      pagination: { page: Math.floor(20 / 10) + 1, pageSize: 10, totalItems: 10, totalPages: Math.ceil(10 / 10) },
     })
     expect(users.listManagedUsers).toHaveBeenCalledWith(
       expect.objectContaining({ limit: 10, offset: 20, banned: false }),
@@ -107,13 +101,7 @@ describe('management routes 2', () => {
 
     await expect(managementResponse.json()).resolves.toEqual({
       items: [{ id: 'user-1' }],
-      pagination: {
-        limit: 50,
-        offset: 0,
-        total: 1,
-        hasMore: false,
-        nextOffset: null,
-      },
+      pagination: { page: Math.floor(0 / 50) + 1, pageSize: 50, totalItems: 1, totalPages: Math.ceil(1 / 50) },
     })
   })
 
@@ -172,8 +160,8 @@ describe('management routes 2', () => {
     const headers = adminHeaders()
 
     const detail = await app.request('/api/users/user-1', { headers })
-    const accounts = await app.request('/api/users/user-1/linked-accounts?limit=2&offset=4', { headers })
-    const sessions = await app.request('/api/users/user-1/sessions?limit=4&offset=8', { headers })
+    const accounts = await app.request('/api/users/user-1/linked-accounts?page=3&pageSize=2', { headers })
+    const sessions = await app.request('/api/users/user-1/sessions?page=3&pageSize=4', { headers })
     const reset = await app.request('/api/users/user-1/password-reset-requests', {
       method: 'POST',
       headers,
@@ -187,23 +175,11 @@ describe('management routes 2', () => {
     })
     await expect(accounts.json()).resolves.toEqual({
       items: [],
-      pagination: {
-        limit: 2,
-        offset: 4,
-        total: 10,
-        hasMore: true,
-        nextOffset: 6,
-      },
+      pagination: { page: Math.floor(4 / 2) + 1, pageSize: 2, totalItems: 10, totalPages: Math.ceil(10 / 2) },
     })
     await expect(sessions.json()).resolves.toEqual({
       items: [],
-      pagination: {
-        limit: 4,
-        offset: 8,
-        total: 10,
-        hasMore: false,
-        nextOffset: null,
-      },
+      pagination: { page: Math.floor(8 / 4) + 1, pageSize: 4, totalItems: 10, totalPages: Math.ceil(10 / 4) },
     })
     await expect(reset.json()).resolves.toMatchObject({ userId: 'user-1', status: 'accepted' })
 
@@ -231,7 +207,7 @@ describe('management routes 2', () => {
     )
     const headers = adminHeaders()
 
-    const passkeys = await app.request('/api/users/user-1/passkeys?limit=2&offset=4', { headers })
+    const passkeys = await app.request('/api/users/user-1/passkeys?page=3&pageSize=2', { headers })
     const deleted = await app.request('/api/users/user-1/passkeys/passkey-1', {
       method: 'DELETE',
       headers,
@@ -250,13 +226,7 @@ describe('management routes 2', () => {
           aaguid: null,
         },
       ],
-      pagination: {
-        limit: 2,
-        offset: 4,
-        total: 10,
-        hasMore: true,
-        nextOffset: 6,
-      },
+      pagination: { page: Math.floor(4 / 2) + 1, pageSize: 2, totalItems: 10, totalPages: Math.ceil(10 / 2) },
     })
     expect(deleted.status).toBe(204)
     expect(security.listPasskeys).toHaveBeenCalledWith('user-1', { limit: 2, offset: 4 })

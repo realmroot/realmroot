@@ -80,7 +80,7 @@ describe('AgentService', () => {
           capabilityGrants: [{ id: 'grant-1', capability: 'account.profile.read' }],
         },
       ],
-      pagination: { limit: 10, offset: 0, total: 1 },
+      pagination: { page: Math.floor(0 / 10) + 1, pageSize: 10, totalItems: 1, totalPages: Math.ceil(1 / 10) },
     })
     await revokeAccountAgent(deps, 'agent-1', 'user-1')
     await revokeAccountCapabilityGrant(deps, 'grant-1', 'user-1')

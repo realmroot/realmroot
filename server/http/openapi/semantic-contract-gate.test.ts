@@ -77,6 +77,9 @@ describe('OpenAPI semantic contract gate', () => {
     const lifecycleConflictContract = JSON.parse(
       readFileSync(new URL('./approved-lifecycle-conflict-semantic-baseline.json', import.meta.url), 'utf8'),
     ) as typeof unchanged
+    const pagePaginationContract = JSON.parse(
+      readFileSync(new URL('./approved-page-pagination-semantic-baseline.json', import.meta.url), 'utf8'),
+    ) as typeof unchanged
     const brokeredNativeChanges = new Set(brokeredNativeContract.map(({ method, path }) => `${method}:${path}`))
     const resourceDiscoveryChanges = new Set(resourceDiscoveryContract.map(({ method, path }) => `${method}:${path}`))
     const approvedChanges = new Set(
@@ -218,14 +221,17 @@ describe('OpenAPI semantic contract gate', () => {
     const agentResourceIdentifierChanges = new Set(
       agentResourceIdentifierContract.map(({ method, path }) => `${method}:${path}`),
     )
+    const pagePaginationChanges = new Set(pagePaginationContract.map(({ method, path }) => `${method}:${path}`))
     const baseline = [
       ...preLifecycleConflictBaseline.filter(
         ({ method, path }) =>
           !lifecycleConflictChanges.has(`${method}:${path}`) &&
-          !agentResourceIdentifierChanges.has(`${method}:${path}`),
+          !agentResourceIdentifierChanges.has(`${method}:${path}`) &&
+          !pagePaginationChanges.has(`${method}:${path}`),
       ),
-      ...lifecycleConflictContract,
-      ...agentResourceIdentifierContract,
+      ...lifecycleConflictContract.filter(({ method, path }) => !pagePaginationChanges.has(`${method}:${path}`)),
+      ...agentResourceIdentifierContract.filter(({ method, path }) => !pagePaginationChanges.has(`${method}:${path}`)),
+      ...pagePaginationContract,
     ].sort((left, right) => `${left.path}:${left.method}`.localeCompare(`${right.path}:${right.method}`))
 
     expect(openApiSemanticSnapshot(unifiedOpenApi as unknown as Record<string, unknown>, () => true)).toEqual(baseline)

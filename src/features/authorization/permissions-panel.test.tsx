@@ -48,14 +48,13 @@ const entitlement: {
   status: 'active',
   expiresAt: null,
 }
-const page = (items = [entitlement], offset = 0, hasMore = false) => ({
+const page = (items = [entitlement], currentPage = 1, totalItems = items.length) => ({
   items,
   pagination: {
-    limit: 50,
-    offset,
-    total: hasMore || offset ? 51 : items.length,
-    hasMore,
-    nextOffset: hasMore ? 50 : null,
+    page: currentPage,
+    pageSize: 50,
+    totalItems,
+    totalPages: Math.ceil(totalItems / 50),
   },
 })
 function request(input: RequestInfo | URL, init?: RequestInit) {
@@ -70,7 +69,7 @@ describe('Scope Permissions panel', () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       if (fail) return Promise.reject(new Error('offline'))
       const { url } = request(input, init)
-      if (url === '/api/resource-servers?limit=100')
+      if (url === '/api/resource-servers?page=1&pageSize=100')
         return Promise.resolve(jsonResponse({ items: [], pagination: page([]).pagination }))
       if (url.includes('/permissions?')) return Promise.resolve(jsonResponse(page([])))
       return unexpectedConsoleRequest(input, init)
@@ -91,9 +90,9 @@ describe('Scope Permissions panel', () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const { url, method } = request(input, init)
       calls.push(`${method} ${url}`)
-      if (url === '/api/resource-servers?limit=100')
+      if (url === '/api/resource-servers?page=1&pageSize=100')
         return Promise.resolve(jsonResponse({ items: [resource], pagination: page([]).pagination }))
-      if (url === '/api/users/user-1/permissions?limit=50&offset=0')
+      if (url === '/api/users/user-1/permissions?page=1&pageSize=50')
         return Promise.resolve(jsonResponse(page(permissions)))
       if (url === '/api/users/user-1/permissions' && method === 'POST')
         return new Promise<Response>((resolve) => {
@@ -124,10 +123,10 @@ describe('Scope Permissions panel', () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const { url, method } = request(input, init)
       calls.push(`${method} ${url}`)
-      if (url === '/api/resource-servers?limit=100')
+      if (url === '/api/resource-servers?page=1&pageSize=100')
         return Promise.resolve(jsonResponse({ items: [resource], pagination: page([]).pagination }))
-      if (url.endsWith('offset=0')) return Promise.resolve(jsonResponse(page([entitlement], 0, true)))
-      if (url.endsWith('offset=50')) return Promise.resolve(jsonResponse(page([entitlement], 50, false)))
+      if (url.endsWith('page=1&pageSize=50')) return Promise.resolve(jsonResponse(page([entitlement], 1, 51)))
+      if (url.endsWith('page=2&pageSize=50')) return Promise.resolve(jsonResponse(page([entitlement], 2, 51)))
       if (url === '/api/applications/app-1/permissions' && method === 'POST')
         return Promise.resolve(jsonResponse(entitlement, 201))
       if (url.endsWith('/ent_1') && method === 'DELETE') return Promise.resolve(new Response(null, { status: 204 }))
@@ -166,7 +165,7 @@ describe('Scope Permissions panel', () => {
     }
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const { url } = request(input, init)
-      if (url === '/api/resource-servers?limit=100') {
+      if (url === '/api/resource-servers?page=1&pageSize=100') {
         return Promise.resolve(
           jsonResponse({ items: [resource, secondResource, unregisteredResource], pagination: page([]).pagination }),
         )
@@ -189,7 +188,7 @@ describe('Scope Permissions panel', () => {
   it('treats omitted collection fields as empty boundary responses', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const { url } = request(input, init)
-      if (url === '/api/resource-servers?limit=100' || url.includes('/permissions?')) {
+      if (url === '/api/resource-servers?page=1&pageSize=100' || url.includes('/permissions?')) {
         return Promise.resolve(jsonResponse({}))
       }
       return unexpectedConsoleRequest(input, init)
@@ -202,11 +201,11 @@ describe('Scope Permissions panel', () => {
     let finishDelete: ((response: Response) => void) | undefined
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const { url, method } = request(input, init)
-      if (url === '/api/resource-servers?limit=100') {
+      if (url === '/api/resource-servers?page=1&pageSize=100') {
         return Promise.resolve(jsonResponse({ items: [resource], pagination: page([]).pagination }))
       }
-      if (url.endsWith('offset=0')) return Promise.resolve(jsonResponse(page([entitlement], 0, true)))
-      if (url.endsWith('offset=50')) return Promise.resolve(jsonResponse(page([entitlement], 50, false)))
+      if (url.endsWith('page=1&pageSize=50')) return Promise.resolve(jsonResponse(page([entitlement], 1, 51)))
+      if (url.endsWith('page=2&pageSize=50')) return Promise.resolve(jsonResponse(page([entitlement], 2, 51)))
       if (url.endsWith('/ent_1') && method === 'DELETE') {
         return new Promise<Response>((resolve) => {
           finishDelete = resolve

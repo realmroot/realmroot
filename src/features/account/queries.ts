@@ -1,4 +1,4 @@
-import type { PaginationInput } from '@shared/api/pagination'
+import type { PaginationQuery } from '@shared/api/pagination'
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { accountQueryKeys, accountQueryOptions } from '@/lib/account-query'
@@ -98,7 +98,7 @@ export function useAccountOrganizationTeams(organizationId: string, enabled = tr
 export function useAccountOrganizationTeamMembers(
   organizationId: string,
   teamId: string | null,
-  pagination: PaginationInput = { limit: 20, offset: 0 },
+  pagination: PaginationQuery = { page: 1, pageSize: 20 },
 ) {
   return useQuery({
     queryKey: [...accountQueryKeys.organizationTeamMembers(teamId ?? 'none'), pagination],

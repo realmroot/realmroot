@@ -51,7 +51,7 @@ describe('account agent routes', () => {
             updatedAt: '2026-01-01T00:00:00.000Z',
           },
         ],
-        pagination: { limit: 10, offset: 20, total: 1, hasMore: false, nextOffset: null },
+        pagination: { page: Math.floor(20 / 10) + 1, pageSize: 10, totalItems: 1, totalPages: Math.ceil(1 / 10) },
       }),
       retire: vi.fn().mockResolvedValue(undefined),
     }
@@ -65,13 +65,13 @@ describe('account agent routes', () => {
     const app = withAccountContext()
     app.route('/account', accountRoutes({} as never))
 
-    const listResponse = await app.request('/account/agents?limit=10&offset=20')
+    const listResponse = await app.request('/account/agents?page=3&pageSize=10')
     const agentResponse = await app.request('/account/agents/agent-1', { method: 'DELETE' })
 
     expect(listResponse.status).toBe(200)
     await expect(listResponse.json()).resolves.toMatchObject({
       items: [{ id: 'agent-1', subject: 'agt_1' }],
-      pagination: { limit: 10, offset: 20, total: 1 },
+      pagination: { page: Math.floor(20 / 10) + 1, pageSize: 10, totalItems: 1, totalPages: Math.ceil(1 / 10) },
     })
     expect(agentResponse.status).toBe(204)
     expect(stableAgents.list).toHaveBeenCalledWith('user-1', { limit: 10, offset: 20 })

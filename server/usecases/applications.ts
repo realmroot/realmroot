@@ -31,6 +31,7 @@ import {
   tokenExchangeGrantType,
   type UpdateApplicationRequest,
 } from '@shared/api/applications'
+import { paginationInput, repositoryPageQuery } from '@shared/api/pagination'
 
 export interface ApplicationServiceOptions {
   issuer: string
@@ -124,7 +125,7 @@ export async function listApplications(
   pagination: PaginationQuery,
   ownerOrganizationIds?: string[],
 ): Promise<ListApplicationsResponse> {
-  const result = await deps.applications.list(pagination, ownerOrganizationIds)
+  const result = await deps.applications.list(paginationInput(pagination), ownerOrganizationIds)
   const applications = await Promise.all(
     result.items.map(async (application) =>
       toResponse(issuer, application, (await deps.applications.listSecrets(application.id, defaultPagination())).items),
@@ -240,7 +241,7 @@ export async function listApplicationSecrets(
   pagination: PaginationQuery,
 ): Promise<ListClientSecretsResponse> {
   await requireApplication(deps, id)
-  const result = await deps.applications.listSecrets(id, pagination)
+  const result = await deps.applications.listSecrets(id, paginationInput(pagination))
   return {
     items: result.items.map(toSecretMetadata),
     pagination: result.pagination,
@@ -252,7 +253,7 @@ export async function listApplicationAuthorizations(
   query: ListApplicationAuthorizationsQuery,
   ownerOrganizationIds?: string[],
 ): Promise<ListApplicationAuthorizationsResponse> {
-  const result = await deps.applications.listAuthorizations(query, ownerOrganizationIds)
+  const result = await deps.applications.listAuthorizations(repositoryPageQuery(query), ownerOrganizationIds)
   return {
     items: result.items.map(toApplicationAuthorization),
     pagination: result.pagination,

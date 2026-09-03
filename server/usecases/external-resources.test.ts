@@ -605,7 +605,7 @@ describe('external API resource authorization', () => {
           },
         },
       ],
-      pagination: { total: 2 },
+      pagination: { totalItems: 2 },
     })
   })
 
@@ -1384,7 +1384,7 @@ describe('external API resource authorization', () => {
             display: { label: 'Project One' },
           },
         ],
-        pagination: { limit: 100, offset: 0, total: 1, hasMore: false, nextOffset: null },
+        pagination: { page: Math.floor(0 / 100) + 1, pageSize: 100, totalItems: 1, totalPages: Math.ceil(1 / 100) },
       }),
     )
 
@@ -2216,7 +2216,7 @@ describe('external API resource authorization', () => {
           },
         })
       }
-      expect(fetchRequest.url).toBe('https://projects.example.com/authorization-details?limit=100&offset=0')
+      expect(fetchRequest.url).toBe('https://projects.example.com/authorization-details?page=1&pageSize=100')
       expect(fetchRequest.headers.get('authorization')).toBe('Bearer subject')
       return Response.json({
         items: [
@@ -2230,7 +2230,7 @@ describe('external API resource authorization', () => {
             display: { label: 'Project Two', metadata: { region: 'ca-central-1' } },
           },
         ],
-        pagination: { limit: 100, offset: 0, total: 2, hasMore: false, nextOffset: null },
+        pagination: { page: Math.floor(0 / 100) + 1, pageSize: 100, totalItems: 2, totalPages: Math.ceil(2 / 100) },
       })
     })
 
@@ -2257,7 +2257,7 @@ describe('external API resource authorization', () => {
           requestableScopes: [],
         },
       ],
-      pagination: { limit: 100, offset: 0, total: 2, hasMore: false, nextOffset: null },
+      pagination: { page: Math.floor(0 / 100) + 1, pageSize: 100, totalItems: 2, totalPages: Math.ceil(2 / 100) },
     })
   })
 
@@ -2269,7 +2269,7 @@ describe('external API resource authorization', () => {
         principal(),
         { limit: 100, offset: 0 },
       ),
-    ).resolves.toMatchObject({ items: [], pagination: { total: 0 } })
+    ).resolves.toMatchObject({ items: [], pagination: { totalItems: 0 } })
 
     await expect(
       listAgentAuthorizationDetailCatalog(
@@ -2286,7 +2286,16 @@ describe('external API resource authorization', () => {
       [
         Response.json({
           items: [],
-          pagination: { limit: 100, offset: 0, total: 0, hasMore: true, nextOffset: null },
+          pagination: { page: 2, pageSize: 100, totalItems: 0, totalPages: 0 },
+        }),
+        'Authorization detail catalog returned mismatched pagination metadata.',
+      ],
+      [
+        Response.json({
+          items: [
+            { authorizationDetail: { type: 'project_access', identifier: 'project-1' }, display: { label: 'One' } },
+          ],
+          pagination: { page: 1, pageSize: 100, totalItems: 0, totalPages: 0 },
         }),
         'Authorization detail catalog returned inconsistent pagination metadata.',
       ],
@@ -2299,7 +2308,7 @@ describe('external API resource authorization', () => {
               display: { label: 'One again' },
             },
           ],
-          pagination: { limit: 100, offset: 0, total: 2, hasMore: false, nextOffset: null },
+          pagination: { page: Math.floor(0 / 100) + 1, pageSize: 100, totalItems: 2, totalPages: Math.ceil(2 / 100) },
         }),
         'Authorization detail catalog contains duplicate details.',
       ],
@@ -2308,7 +2317,7 @@ describe('external API resource authorization', () => {
           items: [
             { authorizationDetail: { type: 'other_access', identifier: 'other-1' }, display: { label: 'Other' } },
           ],
-          pagination: { limit: 100, offset: 0, total: 1, hasMore: false, nextOffset: null },
+          pagination: { page: Math.floor(0 / 100) + 1, pageSize: 100, totalItems: 1, totalPages: Math.ceil(1 / 100) },
         }),
         'Authorization detail catalog contains a detail outside the resource templates.',
       ],
@@ -2331,7 +2340,7 @@ describe('external API resource authorization', () => {
               { authorizationDetail: { type: 'project_access', identifier: 'project-1' }, display: { label: 'One' } },
               { authorizationDetail: { type: 'project_access', identifier: 'project-2' }, display: { label: 'Two' } },
             ],
-            pagination: { limit: 1, offset: 0, total: 2, hasMore: true, nextOffset: 1 },
+            pagination: { page: Math.floor(0 / 1) + 1, pageSize: 1, totalItems: 2, totalPages: Math.ceil(2 / 1) },
           }),
         }),
         'resource-1',
@@ -2371,7 +2380,7 @@ describe('external API resource authorization', () => {
     vi.mocked(nativeAgent.authorization.findResource).mockResolvedValue(nativeResource())
     await expect(
       listAgentAuthorizationDetailCatalog(nativeAgent, 'resource-1', principal(), { limit: 10, offset: 0 }),
-    ).resolves.toMatchObject({ items: [], pagination: { total: 0 } })
+    ).resolves.toMatchObject({ items: [], pagination: { totalItems: 0 } })
 
     for (const connection of [null, { ...connectionRecord(), status: 'revoked' as const }]) {
       const deps = authorizationCatalogDeps()
@@ -2380,7 +2389,7 @@ describe('external API resource authorization', () => {
         listAgentAuthorizationDetailCatalog(deps, 'resource-1', principal(), { limit: 10, offset: 0 }),
       ).resolves.toEqual({
         items: [],
-        pagination: { limit: 10, offset: 0, total: 0, hasMore: false, nextOffset: null },
+        pagination: { page: Math.floor(0 / 10) + 1, pageSize: 10, totalItems: 0, totalPages: Math.ceil(0 / 10) },
       })
     }
 
@@ -2944,11 +2953,10 @@ describe('external API resource authorization', () => {
             display: { label: `Project ${index + 1}` },
           })),
           pagination: {
-            limit: 100,
-            offset: 0,
-            total: expectedAuthorizationDetails.length,
-            hasMore: false,
-            nextOffset: null,
+            page: Math.floor(0 / 100) + 1,
+            pageSize: 100,
+            totalItems: expectedAuthorizationDetails.length,
+            totalPages: Math.ceil(expectedAuthorizationDetails.length / 100),
           },
         })
       }
@@ -3168,7 +3176,7 @@ describe('external API resource authorization', () => {
     })
     await expect(listAccountConnections(deps, 'user-1', { limit: 1, offset: 1 })).resolves.toMatchObject({
       items: [{ id: 'connection-2', subjectHint: '••••' }],
-      pagination: { total: 2 },
+      pagination: { totalItems: 2 },
     })
     vi.mocked(deps.externalResources.findConnection).mockResolvedValue(connectionRecord())
     await expect(getAccountConnection(deps, 'connection-1', 'user-1')).resolves.toMatchObject({
@@ -3339,7 +3347,7 @@ describe('external API resource authorization', () => {
       listAccessRequestConnections(deps, 'approval-token', 'user-1', { limit: 20, offset: 0 }),
     ).resolves.toMatchObject({
       items: [{ id: 'connection-1' }],
-      pagination: { total: 1 },
+      pagination: { totalItems: 1 },
     })
 
     vi.mocked(deps.externalResources.listConnectionsByOrganizations).mockResolvedValue([
@@ -3349,7 +3357,7 @@ describe('external API resource authorization', () => {
       listAccessRequestConnections(deps, 'approval-token', 'user-1', { limit: 20, offset: 0 }),
     ).resolves.toMatchObject({
       items: [{ id: 'connection-1', scopes: ['projects:read'] }],
-      pagination: { total: 1 },
+      pagination: { totalItems: 1 },
     })
 
     vi.mocked(deps.externalResources.listConnectionsByOrganizations).mockResolvedValue([
@@ -3357,7 +3365,7 @@ describe('external API resource authorization', () => {
     ])
     await expect(
       listAccessRequestConnections(deps, 'approval-token', 'user-1', { limit: 20, offset: 0 }),
-    ).resolves.toMatchObject({ items: [], pagination: { total: 0 } })
+    ).resolves.toMatchObject({ items: [], pagination: { totalItems: 0 } })
 
     const personalIdentity = identityAggregate()
     personalIdentity.identity.ownerOrganizationId = null
@@ -3366,7 +3374,7 @@ describe('external API resource authorization', () => {
     vi.mocked(deps.externalResources.listConnectionsByUser).mockResolvedValue([connectionRecord()])
     await expect(
       listAccessRequestConnections(deps, 'approval-token', 'user-1', { limit: 20, offset: 0 }),
-    ).resolves.toMatchObject({ items: [{ id: 'connection-1' }], pagination: { total: 1 } })
+    ).resolves.toMatchObject({ items: [{ id: 'connection-1' }], pagination: { totalItems: 1 } })
     vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
 
     vi.mocked(deps.externalResources.listConnectionsByOrganizations).mockResolvedValue([
@@ -3377,7 +3385,7 @@ describe('external API resource authorization', () => {
       listAccessRequestConnections(deps, 'approval-token', 'user-1', { limit: 20, offset: 0 }),
     ).resolves.toMatchObject({
       items: [{ id: 'connection-1' }, { id: 'duplicate-connection' }],
-      pagination: { total: 2 },
+      pagination: { totalItems: 2 },
     })
 
     vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValueOnce(identityAggregate()).mockResolvedValueOnce(null)
@@ -3390,7 +3398,7 @@ describe('external API resource authorization', () => {
       listAccessRequestConnections(deps, 'approval-token', 'user-1', { limit: 20, offset: 0 }),
     ).resolves.toEqual({
       items: [],
-      pagination: expect.objectContaining({ total: 0 }),
+      pagination: expect.objectContaining({ totalItems: 0 }),
     })
   })
 
@@ -3519,7 +3527,7 @@ describe('external API resource authorization', () => {
             display: { label: 'Project One' },
           },
         ],
-        pagination: { limit: 100, offset: 0, total: 1, hasMore: false, nextOffset: null },
+        pagination: { page: Math.floor(0 / 100) + 1, pageSize: 100, totalItems: 1, totalPages: Math.ceil(1 / 100) },
       }),
     })
     const request = {
@@ -3561,7 +3569,7 @@ describe('external API resource authorization', () => {
               display: { label: 'Other Project' },
             },
           ],
-          pagination: { limit: 100, offset: 0, total: 3, hasMore: true, nextOffset: 2 },
+          pagination: { page: 1, pageSize: 100, totalItems: 101, totalPages: 2 },
         }),
       )
       .mockResolvedValueOnce(
@@ -3573,7 +3581,7 @@ describe('external API resource authorization', () => {
               display: { label: 'Project Two' },
             },
           ],
-          pagination: { limit: 100, offset: 2, total: 3, hasMore: false, nextOffset: null },
+          pagination: { page: 2, pageSize: 100, totalItems: 101, totalPages: 2 },
         }),
       )
     const request = {
@@ -3600,7 +3608,7 @@ describe('external API resource authorization', () => {
     const deps = authorizationCatalogDeps({
       fetchResponse: Response.json({
         items: [{ authorizationDetail: detail, display: { label: 'Project One' } }],
-        pagination: { limit: 100, offset: 0, total: 1, hasMore: false, nextOffset: null },
+        pagination: { page: Math.floor(0 / 100) + 1, pageSize: 100, totalItems: 1, totalPages: Math.ceil(1 / 100) },
       }),
     })
     const request = { ...requestRecord(), authorizationDetails: [detail] }
@@ -3630,7 +3638,7 @@ describe('external API resource authorization', () => {
             display: { label: 'Other Project' },
           },
         ],
-        pagination: { limit: 100, offset: 0, total: 1, hasMore: false, nextOffset: null },
+        pagination: { page: Math.floor(0 / 100) + 1, pageSize: 100, totalItems: 1, totalPages: Math.ceil(1 / 100) },
       }),
     })
     const request = { ...requestRecord(), authorizationDetails: [requestedDetail] }
@@ -3660,7 +3668,7 @@ describe('external API resource authorization', () => {
             display: { label: 'Project One' },
           },
         ],
-        pagination: { limit: 100, offset: 0, total: 1, hasMore: false, nextOffset: null },
+        pagination: { page: Math.floor(0 / 100) + 1, pageSize: 100, totalItems: 1, totalPages: Math.ceil(1 / 100) },
       }),
     })
     const request = {
@@ -3763,7 +3771,7 @@ describe('external API resource authorization', () => {
     ])
     await expect(
       listAccessRequestConnections(deps, 'approval-token', 'user-1', { limit: 20, offset: 0 }),
-    ).resolves.toMatchObject({ items: [{ id: 'connection-1' }], pagination: { total: 1 } })
+    ).resolves.toMatchObject({ items: [{ id: 'connection-1' }], pagination: { totalItems: 1 } })
 
     vi.mocked(deps.externalResources.listConnectionsByOrganizations).mockResolvedValue([
       { ...connectionRecord(), ownerUserId: null, ownerOrganizationId: 'org-1' },
@@ -3773,7 +3781,7 @@ describe('external API resource authorization', () => {
       listAccessRequestConnections(deps, 'approval-token', 'user-1', { limit: 20, offset: 0 }),
     ).resolves.toMatchObject({
       items: [{ id: 'connection-1' }, { id: 'connection-2' }],
-      pagination: { total: 2 },
+      pagination: { totalItems: 2 },
     })
   })
 
@@ -3831,7 +3839,7 @@ describe('external API resource authorization', () => {
       findResource: vi.fn().mockResolvedValue(native),
       listResources: vi.fn().mockResolvedValue({
         items: [native],
-        pagination: { limit: 100, offset: 0, total: 1, hasMore: false, nextOffset: null },
+        pagination: { page: Math.floor(0 / 100) + 1, pageSize: 100, totalItems: 1, totalPages: Math.ceil(1 / 100) },
       }),
       listEnabledResources: vi.fn().mockResolvedValue([native]),
       findOrganization: vi.fn().mockResolvedValue({ id: 'org-1', name: 'Organization', disabled: false }),
@@ -3864,12 +3872,12 @@ describe('external API resource authorization', () => {
           connection: { status: 'not_required', displayName: null, authorizedScopes: [] },
         },
       ],
-      pagination: { total: 1 },
+      pagination: { totalItems: 1 },
     })
     vi.mocked(deps.authorization.findResource).mockResolvedValueOnce({ ...native, scopeRegistry: null })
     await expect(
       listAgentAuthorizationDetailCatalog(deps, native.id, principal(), { limit: 10, offset: 0 }),
-    ).resolves.toMatchObject({ pagination: { total: 1 } })
+    ).resolves.toMatchObject({ pagination: { totalItems: 1 } })
     const personalIdentity = identityAggregate()
     personalIdentity.identity.ownerOrganizationId = null
     personalIdentity.identity.ownerUserId = 'user-1'
@@ -3996,7 +4004,7 @@ describe('external API resource authorization', () => {
           authorizationDetail: { type: 'realmroot_authority', authority: 'organization', id: 'org-2' },
         }),
       ],
-      pagination: { total: 3 },
+      pagination: { totalItems: 3 },
     })
 
     vi.mocked(deps.authorization.listUserMemberships).mockResolvedValue([{ organizationId: 'org-other' }] as never)
@@ -4057,7 +4065,7 @@ describe('external API resource authorization', () => {
 
     const result = await listAgentAuthorizationDetailCatalog(deps, builtIn.id, principal(), { limit: 10, offset: 0 })
 
-    expect(result.pagination.total).toBe(1)
+    expect(result.pagination.totalItems).toBe(1)
     expect(result.items).toEqual([
       expect.objectContaining({
         authorizationDetail: expect.objectContaining({ type: 'realmroot_authority' }),
@@ -4097,7 +4105,7 @@ describe('external API resource authorization', () => {
     } as never)
     await expect(
       listAgentAuthorizationDetailCatalog(deps, builtIn.id, userPrincipal, { limit: 10, offset: 1 }),
-    ).resolves.toMatchObject({ pagination: { total: 1 }, items: [] })
+    ).resolves.toMatchObject({ pagination: { totalItems: 1 }, items: [] })
   })
 
   it('reads Realmroot Resource Servers and authority Resources without exposing protocol internals', async () => {
@@ -4498,7 +4506,7 @@ describe('external API resource authorization', () => {
     vi.mocked(deps.authorization.findOrganization).mockResolvedValue(null)
     await expect(
       listAgentAuthorizationDetailCatalog(deps, builtIn.id, principal(), { limit: 10, offset: 0 }),
-    ).resolves.toMatchObject({ items: [], pagination: { total: 0 } })
+    ).resolves.toMatchObject({ items: [], pagination: { totalItems: 0 } })
   })
 
   it('validates Realmroot scopes and requires exactly one authority Resource', async () => {
@@ -4673,7 +4681,7 @@ describe('external API resource authorization', () => {
       authorizedScopes: ['projects:read'],
       requestableScopes: ['projects:write'],
     })
-    expect(catalog.pagination.total).toBe(3)
+    expect(catalog.pagination.totalItems).toBe(3)
     expect(catalog.items[1]).toMatchObject({ name: '2', metadata: { project_id: '2' } })
     expect(catalog.items[2]).toMatchObject({ name: 'project_access', metadata: {} })
 
@@ -4945,7 +4953,7 @@ describe('external API resource authorization', () => {
     mockResourceOpenApi(deps, native.resourceUrl)
     await expect(
       listAgentAuthorizationDetailCatalog(deps, native.id, principal(), { limit: 10, offset: 1 }),
-    ).resolves.toMatchObject({ items: [], pagination: { total: 1 } })
+    ).resolves.toMatchObject({ items: [], pagination: { totalItems: 1 } })
   })
 
   it('derives compact display labels for provider-owned authorization details', async () => {
@@ -4995,8 +5003,8 @@ describe('external API resource authorization', () => {
     vi.mocked(deps.externalHttp.fetch).mockImplementation(async (request) => {
       const url = new URL(request.url)
       if (url.pathname !== '/authorization-details') return new Response(null, { status: 404 })
-      const offset = Number(url.searchParams.get('offset'))
-      if (offset === 0) {
+      const page = Number(url.searchParams.get('page'))
+      if (page === 1) {
         return Response.json({
           items: [
             {
@@ -5004,7 +5012,12 @@ describe('external API resource authorization', () => {
               display: { label: 'Project One' },
             },
           ],
-          pagination: { limit: 100, offset: 0, total: 101, hasMore: true, nextOffset: 100 },
+          pagination: {
+            page: Math.floor(0 / 100) + 1,
+            pageSize: 100,
+            totalItems: 101,
+            totalPages: Math.ceil(101 / 100),
+          },
         })
       }
       return Response.json({
@@ -5014,7 +5027,12 @@ describe('external API resource authorization', () => {
             display: { label: 'Project Two', description: 'Second project', metadata: { project: '2' } },
           },
         ],
-        pagination: { limit: 100, offset: 100, total: 101, hasMore: false, nextOffset: null },
+        pagination: {
+          page: Math.floor(100 / 100) + 1,
+          pageSize: 100,
+          totalItems: 101,
+          totalPages: Math.ceil(101 / 100),
+        },
       })
     })
 
@@ -5167,13 +5185,13 @@ describe('external API resource authorization', () => {
       }),
     ).resolves.toMatchObject({
       items: [{ authorizationDetail: connectedDetail, connectionStatus: 'authorized' }],
-      pagination: { total: 1 },
+      pagination: { totalItems: 1 },
     })
 
     const mismatched = authorizationCatalogDeps({
       fetchResponse: Response.json({
         items: [],
-        pagination: { limit: 99, offset: 0, total: 0, hasMore: false, nextOffset: null },
+        pagination: { page: Math.floor(0 / 99) + 1, pageSize: 99, totalItems: 0, totalPages: Math.ceil(0 / 99) },
       }),
     })
     vi.mocked(mismatched.externalResources.findAccessRequestByApprovalTokenHash).mockResolvedValue(request)
@@ -5231,7 +5249,7 @@ describe('external API resource authorization', () => {
         deletedAt: now,
         enabled: false,
       })),
-      pagination: { limit: 100, offset: 0, total: 101, hasMore: true, nextOffset: 100 },
+      pagination: { page: Math.floor(0 / 100) + 1, pageSize: 100, totalItems: 101, totalPages: Math.ceil(101 / 100) },
     })
     Object.assign(deps.authorization, {
       findResource: vi.fn().mockResolvedValue(active),
@@ -5260,7 +5278,7 @@ describe('external API resource authorization', () => {
     Object.assign(deps.authorization, {
       listResources: vi.fn().mockResolvedValue({
         items: [unavailable, healthy],
-        pagination: { total: 2, limit: 100, offset: 0, hasMore: false, nextOffset: null },
+        pagination: { page: Math.floor(0 / 100) + 1, pageSize: 100, totalItems: 2, totalPages: Math.ceil(2 / 100) },
       }),
       listEnabledResources: vi.fn().mockResolvedValue([unavailable, healthy]),
       findResource: vi.fn().mockImplementation(async (id) => {
@@ -5275,7 +5293,7 @@ describe('external API resource authorization', () => {
     mockResourceOpenApi(deps, healthy.resourceUrl)
 
     const result = await listAgentApiResources(deps, principal(), { limit: 10, offset: 0 }, 'https://auth.example.com')
-    expect(result).toMatchObject({ pagination: { total: 2 } })
+    expect(result).toMatchObject({ pagination: { totalItems: 2 } })
     expect(result.items[0]).toMatchObject({ id: unavailable.id, availability: { status: 'unavailable' }, scopes: [] })
     expect(result.items[1]).toMatchObject({ id: healthy.id, availability: { status: 'available' } })
     expect(result.items[1]?.scopes).toEqual(
@@ -5308,7 +5326,7 @@ describe('external API resource authorization', () => {
           authorizationDetail: null,
         },
       ],
-      pagination: { total: 2 },
+      pagination: { totalItems: 2 },
     })
     await expect(getAccountAccessRequest(deps, 'request-1', 'user-1')).resolves.toMatchObject({ id: 'request-1' })
     await expect(getAccountAccessRequestByToken(deps, 'approval-token', 'user-1')).resolves.toMatchObject({
@@ -5370,8 +5388,8 @@ describe('external API resource authorization', () => {
 
     await expect(
       listAgentPermissions(deps, principal(), {
-        limit: 10,
-        offset: 0,
+        page: 1,
+        pageSize: 10,
         resourceServerId: 'resource-1',
         status: 'inactive',
       }),
@@ -5561,7 +5579,7 @@ describe('external API resource authorization', () => {
                 display: { label: 'Project One' },
               },
             ],
-            pagination: { limit: 100, offset: 0, total: 1, hasMore: false, nextOffset: null },
+            pagination: { page: Math.floor(0 / 100) + 1, pageSize: 100, totalItems: 1, totalPages: Math.ceil(1 / 100) },
           })
         : providerFetch(request)
     })
@@ -6548,7 +6566,7 @@ function authorizationDeps(deps: ReturnType<typeof createTestDeps>) {
       .mockImplementation(async (id: string) => (id === realmrootResource.id ? realmrootResource : resource())),
     listResources: vi.fn().mockResolvedValue({
       items: [realmrootResource, resource()],
-      pagination: { total: 2, limit: 100, offset: 0, hasMore: false, nextOffset: null },
+      pagination: { page: Math.floor(0 / 100) + 1, pageSize: 100, totalItems: 2, totalPages: Math.ceil(2 / 100) },
     }),
     listEnabledResources: vi.fn().mockResolvedValue([resource()]),
     listUserMemberships: vi.fn().mockResolvedValue([{ organizationId: 'org-1', roles: ['owner'] }]),

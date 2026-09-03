@@ -1,11 +1,7 @@
 import { badRequest } from '@server/domain/errors'
 import type { ClientSecretRecord } from '@server/usecases/ports'
-import {
-  type ApplicationResponse,
-  deviceCodeGrantType,
-  type PaginationQuery,
-  tokenExchangeGrantType,
-} from '@shared/api/applications'
+import { type ApplicationResponse, deviceCodeGrantType, tokenExchangeGrantType } from '@shared/api/applications'
+import type { PaginationInput } from '@shared/api/pagination'
 
 export function buildDeniedAuthorizationUrl(redirectUri: string, state: string | undefined) {
   const url = new URL(redirectUri)
@@ -101,7 +97,7 @@ export function normalizeCorsOrigins(values: string[]) {
   return origins
 }
 
-export function defaultPagination(): PaginationQuery {
+export function defaultPagination(): PaginationInput {
   return { limit: 50, offset: 0 }
 }
 

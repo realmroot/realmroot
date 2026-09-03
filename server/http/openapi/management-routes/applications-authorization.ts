@@ -75,6 +75,7 @@ export const applicationAuthorizationRoutes: ManagementRouteConfig[] = [
     summary: 'List applications',
     request: { query: listApplicationsQuerySchema },
     response: listApplicationsResponseSchema,
+    paginated: true,
   },
   {
     method: 'post',
@@ -94,6 +95,7 @@ export const applicationAuthorizationRoutes: ManagementRouteConfig[] = [
     summary: 'List Application authorizations',
     request: { params: applicationIdParam, query: listApplicationAuthorizationsQuerySchema },
     response: listApplicationAuthorizationsResponseSchema,
+    paginated: true,
     errors: { 400: 'The collection query is invalid.' },
   },
   {
@@ -121,6 +123,7 @@ export const applicationAuthorizationRoutes: ManagementRouteConfig[] = [
     summary: "List a User's Application authorizations",
     request: { params: userIdParam, query: listApplicationAuthorizationsQuerySchema },
     response: listApplicationAuthorizationsResponseSchema,
+    paginated: true,
     errors: { 400: 'The collection query is invalid.' },
   },
   {
@@ -154,6 +157,7 @@ export const applicationAuthorizationRoutes: ManagementRouteConfig[] = [
     summary: 'List application redirect URIs',
     request: { params: applicationIdParam, query: paginationQuerySchema },
     response: listRedirectUrisResponseSchema,
+    paginated: true,
   },
   {
     method: 'put',
@@ -170,6 +174,7 @@ export const applicationAuthorizationRoutes: ManagementRouteConfig[] = [
     summary: 'List application client secrets',
     request: { params: applicationIdParam, query: paginationQuerySchema },
     response: listClientSecretsResponseSchema,
+    paginated: true,
   },
   {
     method: 'post',
@@ -230,6 +235,7 @@ export const applicationAuthorizationRoutes: ManagementRouteConfig[] = [
     security: [{ oauth2: ['resource-servers:read'] }, { sessionCookie: ['resource-servers:read'] }],
     request: { query: listApiResourcesQuerySchema },
     response: resourceServersResponseSchema,
+    paginated: true,
   },
   {
     method: 'post',
@@ -303,6 +309,7 @@ export const applicationAuthorizationRoutes: ManagementRouteConfig[] = [
     security: [{ oauth2: ['permissions:read'] }, { sessionCookie: ['permissions:read'] }],
     request: { params: z.object({ userId: z.string() }), query: listAuthorizedResourceServersQuerySchema },
     response: listAuthorizedResourceServersResponseSchema,
+    paginated: true,
     errors: { 400: 'The collection query is invalid.', 404: 'The User was not found.' },
   },
   {
@@ -313,6 +320,7 @@ export const applicationAuthorizationRoutes: ManagementRouteConfig[] = [
     security: [{ oauth2: ['permissions:read'] }, { sessionCookie: ['permissions:read'] }],
     request: { params: z.object({ userId: z.string() }), query: listPermissionsQuerySchema },
     response: listUserPermissionsResponseSchema,
+    paginated: true,
     errors: { 400: 'The collection query is invalid.' },
   },
   {
@@ -358,6 +366,7 @@ export const applicationAuthorizationRoutes: ManagementRouteConfig[] = [
       query: listAuthorizedResourceServersQuerySchema,
     },
     response: listAuthorizedResourceServersResponseSchema,
+    paginated: true,
     errors: { 400: 'The collection query is invalid.', 404: 'The Application was not found.' },
   },
   {
@@ -368,6 +377,7 @@ export const applicationAuthorizationRoutes: ManagementRouteConfig[] = [
     security: [{ oauth2: ['permissions:read'] }, { sessionCookie: ['permissions:read'] }],
     request: { params: z.object({ applicationId: z.string() }), query: listPermissionsQuerySchema },
     response: listApplicationPermissionsResponseSchema,
+    paginated: true,
     errors: { 400: 'The collection query is invalid.', 404: 'The Application was not found.' },
   },
   {
@@ -413,6 +423,7 @@ export const applicationAuthorizationRoutes: ManagementRouteConfig[] = [
     summary: 'List organizations',
     request: { query: paginationQuerySchema },
     response: listOrganizationsResponseSchema,
+    paginated: true,
   },
   {
     method: 'post',
@@ -455,6 +466,7 @@ export const applicationAuthorizationRoutes: ManagementRouteConfig[] = [
     summary: 'List organization members',
     request: { params: organizationIdParam, query: paginationQuerySchema },
     response: listMembersResponseSchema,
+    paginated: true,
   },
   {
     method: 'post',
@@ -497,6 +509,7 @@ export const applicationAuthorizationRoutes: ManagementRouteConfig[] = [
     summary: 'List organization invitations',
     request: { params: organizationIdParam, query: paginationQuerySchema },
     response: listInvitationsResponseSchema,
+    paginated: true,
   },
   {
     method: 'post',
@@ -532,6 +545,7 @@ export const applicationAuthorizationRoutes: ManagementRouteConfig[] = [
     summary: 'List Organization Roles',
     request: { params: organizationIdParam, query: paginationQuerySchema },
     response: listRolesResponseSchema,
+    paginated: true,
   },
   {
     method: 'post',

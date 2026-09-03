@@ -1,14 +1,14 @@
 export const pagination = {
-  limit: 50,
-  offset: 0,
-  total: 1,
-  hasMore: false,
-  nextOffset: null,
+  page: 1,
+  pageSize: 50,
+  totalItems: 1,
+  totalPages: 1,
 }
 
 export const emptyPagination = {
   ...pagination,
-  total: 0,
+  totalItems: 0,
+  totalPages: 0,
 }
 
 export const webhookEndpoint = {

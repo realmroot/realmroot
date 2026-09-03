@@ -9,7 +9,7 @@ export async function findPlatformOrganization(deps: Pick<Deps, 'authorization'>
     const page = await deps.authorization.listOrganizations({ limit: pageSize, offset })
     const organization = page.items.find(isPlatformOrganization)
     if (organization) return organization
-    if (!page.pagination.hasMore) return null
+    if (page.pagination.page >= page.pagination.totalPages) return null
   }
 }
 
@@ -24,6 +24,6 @@ export async function findRealmrootResourceServer(deps: Pick<Deps, 'authorizatio
     const page = await deps.authorization.listResources({ limit: pageSize, offset })
     const resource = page.items.find(isRealmrootResourceServer)
     if (resource) return resource
-    if (!page.pagination.hasMore) return null
+    if (page.pagination.page >= page.pagination.totalPages) return null
   }
 }

@@ -30,7 +30,7 @@ import {
   targetTokenSchema,
 } from '@shared/api/agent-api'
 import { idempotencyKeySchema } from '@shared/api/idempotency'
-import { paginationQuerySchema } from '@shared/api/pagination'
+import { paginationInput, paginationQuerySchema } from '@shared/api/pagination'
 import { type Context, Hono } from 'hono'
 import { getPrincipal } from '../middleware/authn'
 import { requireAgentScope } from '../middleware/authz'
@@ -145,7 +145,7 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
           getDeps(c),
           c.req.param('resourceServerId'),
           principal,
-          readQuery(c, paginationQuerySchema),
+          paginationInput(readQuery(c, paginationQuerySchema)),
         ),
       ),
     )

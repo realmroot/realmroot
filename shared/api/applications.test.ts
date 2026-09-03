@@ -50,20 +50,14 @@ describe('application Resource Server scope contracts', () => {
 
 describe('application API pagination contracts', () => {
   it('parses pagination query defaults and numeric query strings', () => {
-    expect(paginationQuerySchema.parse({})).toEqual({ limit: 50, offset: 0 })
-    expect(paginationQuerySchema.parse({ limit: '25', offset: '50' })).toEqual({ limit: 25, offset: 50 })
-    expect(() => paginationQuerySchema.parse({ limit: '101' })).toThrow()
-    expect(() => paginationQuerySchema.parse({ offset: '-1' })).toThrow()
+    expect(paginationQuerySchema.parse({})).toEqual({ page: 1, pageSize: 50 })
+    expect(paginationQuerySchema.parse({ page: '3', pageSize: '25' })).toEqual({ page: 3, pageSize: 25 })
+    expect(() => paginationQuerySchema.parse({ pageSize: '101' })).toThrow()
+    expect(() => paginationQuerySchema.parse({ page: '0' })).toThrow()
   })
 
   it('requires collection responses to include pagination metadata', () => {
-    const pagination = {
-      limit: 10,
-      offset: 0,
-      total: 0,
-      hasMore: false,
-      nextOffset: null,
-    }
+    const pagination = { page: 1, pageSize: 10, totalItems: 0, totalPages: 0 }
 
     expect(listApplicationsResponseSchema.parse({ items: [], pagination })).toEqual({
       items: [],
@@ -307,10 +301,9 @@ describe('application API pagination contracts', () => {
 
 function pagination(total: number) {
   return {
-    limit: 10,
-    offset: 0,
-    total,
-    hasMore: false,
-    nextOffset: null,
+    page: 1,
+    pageSize: 10,
+    totalItems: total,
+    totalPages: Math.ceil(total / 10),
   }
 }

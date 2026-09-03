@@ -1,3 +1,4 @@
+import { paginationMetadata } from '@shared/api/pagination'
 import type { apiResource, invitation, member, organization, organizationRole } from '../../db/schema'
 
 export function deserializeRoles(value: string) {
@@ -89,15 +90,7 @@ export function toOrganizationRole(row: typeof organizationRole.$inferSelect) {
 }
 
 export function toPagination(pagination: { limit: number; offset: number }, total: number) {
-  const nextOffset = pagination.offset + pagination.limit < total ? pagination.offset + pagination.limit : null
-
-  return {
-    limit: pagination.limit,
-    offset: pagination.offset,
-    total,
-    hasMore: nextOffset !== null,
-    nextOffset,
-  }
+  return paginationMetadata({ ...pagination, total })
 }
 
 export function withoutUndefined<T extends object>(input: T) {

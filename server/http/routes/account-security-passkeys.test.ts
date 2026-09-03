@@ -82,7 +82,7 @@ describe('account security passkey routes', () => {
       headers,
       body: JSON.stringify({ password: 'password-1' }),
     })
-    const passkeys = await app.request('/api/account/security/passkeys?limit=3&offset=6', { headers })
+    const passkeys = await app.request('/api/account/security/passkeys?page=3&pageSize=3', { headers })
     await app.request('/api/account/security/passkeys/passkey-1', {
       method: 'PATCH',
       headers,
@@ -99,13 +99,7 @@ describe('account security passkey routes', () => {
     await expect(passkeys.json()).resolves.toEqual({
       passkeys: [],
       policy: securityPolicy().passkeys,
-      pagination: {
-        limit: 3,
-        offset: 6,
-        total: 10,
-        hasMore: true,
-        nextOffset: 9,
-      },
+      pagination: { page: 3, pageSize: 3, totalItems: 10, totalPages: 4 },
     })
     expect(auth.api.generateBackupCodes).toHaveBeenCalledWith({
       body: { password: 'password-1' },
@@ -184,19 +178,13 @@ describe('account security passkey routes', () => {
       securityPolicy: securityPolicy(),
     })
 
-    const sessions = await app.request('/api/account/security/sessions?limit=2&offset=4', { headers: userHeaders() })
+    const sessions = await app.request('/api/account/security/sessions?page=3&pageSize=2', { headers: userHeaders() })
     await app.request('/api/account/security/sessions/session-1', { method: 'DELETE', headers: userHeaders() })
     await app.request('/api/account/security/sessions', { method: 'DELETE', headers: userHeaders() })
 
     await expect(sessions.json()).resolves.toEqual({
       items: [],
-      pagination: {
-        limit: 2,
-        offset: 4,
-        total: 10,
-        hasMore: true,
-        nextOffset: 6,
-      },
+      pagination: { page: 3, pageSize: 2, totalItems: 10, totalPages: 5 },
     })
     expect(users.listSessions).toHaveBeenCalledWith('user-1', { limit: 2, offset: 4 })
     expect(security.getSessionToken).toHaveBeenCalledWith('user-1', 'session-1')

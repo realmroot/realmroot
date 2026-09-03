@@ -625,13 +625,13 @@ describe('Agent identity lifecycle', () => {
     Object.assign(deps.authorization, {
       listAuthorizedResourceServers: vi.fn().mockResolvedValue({
         items: [],
-        pagination: { limit: 20, offset: 0, total: 0, hasMore: false, nextOffset: null },
+        pagination: { page: Math.floor(0 / 20) + 1, pageSize: 20, totalItems: 0, totalPages: Math.ceil(0 / 20) },
       }),
     })
 
     await expect(
-      listManagementAgentAuthorizedResourceServers(deps, 'identity-1', { limit: 20, offset: 0 }),
-    ).resolves.toMatchObject({ pagination: { total: 0 } })
+      listManagementAgentAuthorizedResourceServers(deps, 'identity-1', { page: 1, pageSize: 20 }),
+    ).resolves.toMatchObject({ pagination: { totalItems: 0 } })
     expect(deps.authorization.listAuthorizedResourceServers).toHaveBeenCalledWith(
       { type: 'agent', id: 'identity-1' },
       { limit: 20, offset: 0 },
@@ -686,11 +686,11 @@ describe('Agent identity lifecycle', () => {
 
     await expect(listPersonalAgents(deps, 'user-1', { limit: 10, offset: 0 })).resolves.toMatchObject({
       items: [{ id: 'identity-1', subject: 'agt_stable' }],
-      pagination: { total: 1, hasMore: false },
+      pagination: { totalItems: 1 },
     })
     await expect(listAllAgents(deps, { limit: 10, offset: 0 })).resolves.toMatchObject({
       items: [{ id: 'identity-1' }],
-      pagination: { total: 1 },
+      pagination: { totalItems: 1 },
     })
     await expect(getPersonalAgent(deps, 'identity-1', 'user-1')).resolves.toMatchObject({ id: 'identity-1' })
     await expect(getAgent(deps, 'identity-1')).resolves.toMatchObject({ id: 'identity-1' })
@@ -782,7 +782,7 @@ describe('Agent identity lifecycle', () => {
           lastSeenAt: '2026-08-02T01:00:00.000Z',
         },
       ],
-      pagination: { limit: 20, offset: 0, total: 1, hasMore: false, nextOffset: null },
+      pagination: { page: Math.floor(0 / 20) + 1, pageSize: 20, totalItems: 1, totalPages: Math.ceil(1 / 20) },
     })
 
     const grants = [
@@ -839,10 +839,10 @@ describe('Agent identity lifecycle', () => {
       offset: 0,
     } as never)
     await expect(
-      listManagementAgentPermissions(deps, { agentId: 'agent-1', limit: 20, offset: 0 }),
+      listManagementAgentPermissions(deps, { agentId: 'agent-1', page: 1, pageSize: 20 }),
     ).resolves.toMatchObject({
       items: [{ id: 'grant-active', status: 'active', expiresAt: null }],
-      pagination: { total: 1 },
+      pagination: { totalItems: 1 },
     })
     vi.mocked(deps.externalResources.findEntitlement).mockResolvedValue(grants[1] as never)
     await expect(getManagementAgentPermission(deps, 'grant-active')).resolves.toMatchObject({
@@ -904,12 +904,12 @@ describe('Agent identity lifecycle', () => {
           lastSeenAt: null,
         }),
       ],
-      pagination: { limit: 1, offset: 0, total: 2, hasMore: true, nextOffset: 1 },
+      pagination: { page: Math.floor(0 / 1) + 1, pageSize: 1, totalItems: 2, totalPages: Math.ceil(2 / 1) },
     })
 
     await expect(listManagementAgentInstallations(deps, 'identity-1', { limit: 1, offset: 1 })).resolves.toEqual({
       items: [expect.objectContaining({ id: 'binding-1', name: 'host-1', credentialType: 'remote_jwks' })],
-      pagination: { limit: 1, offset: 1, total: 2, hasMore: false, nextOffset: null },
+      pagination: { page: Math.floor(1 / 1) + 1, pageSize: 1, totalItems: 2, totalPages: Math.ceil(2 / 1) },
     })
   })
 

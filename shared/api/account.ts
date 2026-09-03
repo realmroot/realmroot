@@ -47,13 +47,7 @@ export const accountProviderConnectionSchema = z.object({
 
 export const accountProviderConnectorsResponseSchema = z.object({
   items: z.array(accountProviderConnectorSchema),
-  pagination: z.object({
-    limit: z.number().int().positive(),
-    offset: z.number().int().nonnegative(),
-    total: z.number().int().nonnegative(),
-    hasMore: z.boolean(),
-    nextOffset: z.number().int().nonnegative().nullable(),
-  }),
+  pagination: paginationMetadataSchema,
 })
 
 export const accountProviderConnectionsResponseSchema = z.object({

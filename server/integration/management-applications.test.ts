@@ -65,7 +65,7 @@ describe('applications management over real D1', () => {
 
     const response = await harness.request('/api/applications', { headers: { cookie: memberCookie } })
     expect(response.status).toBe(200)
-    await expect(response.json()).resolves.toMatchObject({ items: [], pagination: { total: 0 } })
+    await expect(response.json()).resolves.toMatchObject({ items: [], pagination: { totalItems: 0 } })
   })
 
   it('rejects an invalid create payload with 400', async () => {
@@ -368,7 +368,7 @@ describe('applications management over real D1', () => {
     expect(managed.status, await managed.clone().text()).toBe(200)
     await expect(managed.json()).resolves.toMatchObject({
       items: [{ id: consentId, scopes: ['openid', 'profile'], user: { email: 'admin@example.com' } }],
-      pagination: { total: 1 },
+      pagination: { totalItems: 1 },
     })
     const revoked = await harness.request(`/api/account/application-authorizations/${consentId}`, {
       method: 'DELETE',
@@ -411,7 +411,7 @@ describe('applications management over real D1', () => {
     )
     await expect(afterManagedRevocation.json()).resolves.toMatchObject({
       items: [],
-      pagination: { total: 0 },
+      pagination: { totalItems: 0 },
     })
   })
 })

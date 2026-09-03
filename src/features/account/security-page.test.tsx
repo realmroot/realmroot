@@ -97,7 +97,7 @@ describe('AccountSecurityPage', () => {
               updatedAt: '2026-08-08T00:00:00.000Z',
             },
           ],
-          pagination: { limit: 50, offset: 0, total: 1, hasMore: false, nextOffset: null },
+          pagination: { page: Math.floor(0 / 50) + 1, pageSize: 50, totalItems: 1, totalPages: Math.ceil(1 / 50) },
         }),
       ),
       http.delete(`${base}/api/account/wallet-addresses/:accountId`, () => {

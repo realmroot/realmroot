@@ -38,19 +38,19 @@ export function oauthClientCorsOrigins() {
     const deps = getDeps(context)
     const issuer = new URL(context.req.url).origin
     const origins = new Set<string>()
-    let offset = 0
+    let page = 1
 
     for (;;) {
       const result = await listApplications(deps, issuer, {
-        limit: 100,
-        offset,
+        page,
+        pageSize: 100,
       })
       for (const application of result.items) {
         if (application.disabled) continue
         for (const origin of application.corsOrigins) origins.add(origin)
       }
-      if (!result.pagination.hasMore || result.pagination.nextOffset === null) break
-      offset = result.pagination.nextOffset
+      if (result.pagination.page >= result.pagination.totalPages) break
+      page += 1
     }
 
     return [...origins]

@@ -22,7 +22,7 @@ import type {
   CreateAgentEnrollmentIntentRequest,
 } from '@shared/api/agents'
 import type { ListAuthorizedResourceServersQuery } from '@shared/api/authorization'
-import { type PaginationInput, paginationMetadata } from '@shared/api/pagination'
+import { type PaginationInput, paginationInput, paginationMetadata, repositoryPageQuery } from '@shared/api/pagination'
 import { importJWK } from 'jose'
 
 const enrollmentLifetimeMs = 10 * 60 * 1000
@@ -242,7 +242,7 @@ export async function listManagementAgentPermissions(
   query: ListAgentPermissionsQuery & { agentId: string },
   scope?: AgentAuthorityInventoryScope,
 ) {
-  const result = await deps.externalResources.listAgentPermissions(query, scope)
+  const result = await deps.externalResources.listAgentPermissions(repositoryPageQuery(query), scope)
   return {
     items: result.items.map(({ entitlement, resource }) => ({
       id: entitlement.id,
@@ -278,8 +278,8 @@ export async function getManagementAgentPermission(deps: Deps, entitlementId: st
     agentId: entitlement.agentIdentityId,
     resourceServerId: entitlement.resourceServerId,
     ...(resourceScopeEntitlementLifecycle(entitlement).status === 'ended' ? { status: 'inactive' as const } : {}),
-    limit: 100,
-    offset: 0,
+    page: 1,
+    pageSize: 100,
   })
   const projected = result.items.find((item) => item.id === entitlement.id)
   if (!projected) throw notFound('Agent Permission was not found.')
@@ -292,7 +292,14 @@ export async function listManagementAgentAuthorizedResourceServers(
   query: ListAuthorizedResourceServersQuery,
 ) {
   await requireIdentity(deps, agentId)
-  return deps.authorization.listAuthorizedResourceServers({ type: 'agent', id: agentId }, query, new Date())
+  return deps.authorization.listAuthorizedResourceServers(
+    { type: 'agent', id: agentId },
+    {
+      ...(query.search ? { search: query.search } : {}),
+      ...paginationInput(query),
+    },
+    new Date(),
+  )
 }
 
 export async function getAgentIdentityByProtocolAgent(deps: Deps, protocolAgentId: string): Promise<AgentIdentity> {

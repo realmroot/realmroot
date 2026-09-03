@@ -98,8 +98,8 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
   const [saved, setSaved] = useState(initialSettings)
   const organizations = useQuery({ queryKey: consoleQueryKeys.organizations, queryFn: listOrganizations })
   const users = useQuery({
-    queryKey: [...consoleQueryKeys.users, { limit: 100, purpose: 'developer-policy' }],
-    queryFn: () => listUsers({ limit: 100 }),
+    queryKey: [...consoleQueryKeys.users, { page: 1, pageSize: 100, purpose: 'developer-policy' }],
+    queryFn: () => listUsers({ page: 1, pageSize: 100 }),
   })
   const developerSettings = useQuery({ queryKey: consoleQueryKeys.developer, queryFn: getDeveloperSettings })
   const generalSettings = useQuery({ queryKey: consoleQueryKeys.general, queryFn: getRealm })

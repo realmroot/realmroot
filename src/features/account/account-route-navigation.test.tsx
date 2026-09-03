@@ -33,7 +33,7 @@ describe('Account Center route navigation', () => {
     expect(document.querySelector('.accountShell')).toBe(shell)
     expect(document.querySelector('.accountProductTopbar')).toBe(topbar)
     expect(fetchSpy.mock.calls.map(([input]) => String(input))).toEqual([
-      '/api/account/provider-connections?limit=100&offset=0',
+      '/api/account/provider-connections?page=1&pageSize=100',
     ])
   })
 })
