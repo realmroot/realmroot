@@ -1,9 +1,14 @@
+import { existsSync } from 'node:fs'
+import { loadEnvFile } from 'node:process'
 import { defineConfig, devices } from '@playwright/test'
 import type { RealmrootOptions } from './e2e/fixtures'
+
+if (existsSync('.dev.vars')) loadEnvFile('.dev.vars')
 
 const baseURL = productionOrigin(process.env.PVT_BASE_URL)
 requireCredential('PVT_USERNAME')
 requireCredential('PVT_PASSWORD')
+const storageState = requiredEnvironmentVariable('REALMROOT_PVT_STORAGE_STATE_PATH')
 
 export default defineConfig<RealmrootOptions>({
   testDir: './e2e',
@@ -14,9 +19,12 @@ export default defineConfig<RealmrootOptions>({
   forbidOnly: true,
   retries: 0,
   reporter: 'list',
+  globalSetup: './e2e/pvt-global-setup.ts',
+  globalTeardown: './e2e/pvt-global-teardown.ts',
   use: {
     baseURL,
-    screenshot: 'only-on-failure',
+    screenshot: 'off',
+    storageState,
     trace: 'off',
   },
   projects: [
@@ -42,4 +50,10 @@ function productionOrigin(value: string | undefined) {
 
 function requireCredential(name: string) {
   if (!process.env[name]?.trim()) throw new Error(`${name} is required for production verification.`)
+}
+
+function requiredEnvironmentVariable(name: string) {
+  const value = process.env[name]
+  if (!value?.trim()) throw new Error(`${name} is required to run production verification.`)
+  return value
 }

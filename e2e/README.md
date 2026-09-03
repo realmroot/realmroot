@@ -29,8 +29,10 @@ within one shard remain serial so they never mutate the same D1 concurrently.
 
 `pnpm run pvt` runs the same tests tagged `@production-safe` against an existing
 remote deployment. It never starts a local server, resets D1, bootstraps an
-administrator, or runs the local-only write journeys. Provide the deployment
-origin and a dedicated smoke account explicitly:
+administrator, or runs the local-only write journeys. PVT opens Chrome once so
+the operator can complete the deployment's real CAPTCHA; it then reuses that
+short-lived session for the authenticated scenarios and revokes it on exit.
+Provide the deployment origin and a dedicated smoke account explicitly:
 
 ```bash
 PVT_BASE_URL=https://auth.example.com \
@@ -39,9 +41,17 @@ PVT_PASSWORD='...' \
 pnpm run pvt
 ```
 
-`PVT_BASE_URL` must be a remote HTTPS origin. The account must already exist;
-PVT creates and revokes only its own login sessions. Production verification
-disables Playwright traces so credentials cannot enter trace artifacts.
+The runner also loads these variables from the git-ignored `.dev.vars` file when
+it exists, so a configured workstation can run `pnpm run pvt` directly. Explicit
+environment variables take precedence. `PVT_BASE_URL` must be a remote HTTPS
+origin. The account must already exist; PVT creates and revokes only its own
+login session. Production verification disables Playwright traces and
+screenshots so credentials cannot enter failure artifacts.
+
+PVT launches the installed Google Chrome directly and connects through its local
+debugging protocol so production bot protection sees a normal browser rather
+than a Playwright-launched one. Set `PVT_CHROME_EXECUTABLE` only when Chrome is
+installed at a non-standard path.
 
 ## Scope discipline
 

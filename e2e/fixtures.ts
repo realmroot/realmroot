@@ -1,5 +1,5 @@
-import { test as base, expect } from '@playwright/test'
-import { admin, resetAndBootstrap } from './helpers/real-app'
+import { test as base, expect, type Page } from '@playwright/test'
+import { admin, resetAndBootstrap, signIn, signOut } from './helpers/real-app'
 
 export type RealmrootTarget = 'local' | 'production'
 
@@ -13,6 +13,7 @@ export type TestAccount = {
 }
 
 type RealmrootFixtures = {
+  authenticatedPage: Page
   configuredRealm: undefined
   existingAccount: TestAccount
 }
@@ -23,7 +24,7 @@ export const test = base.extend<RealmrootOptions & RealmrootFixtures>({
     if (realmrootTarget === 'local') await resetAndBootstrap()
     await use(undefined)
   },
-  existingAccount: async ({ configuredRealm: _, realmrootTarget, context, baseURL }, use) => {
+  existingAccount: async ({ configuredRealm: _, realmrootTarget }, use) => {
     const account =
       realmrootTarget === 'local'
         ? admin
@@ -33,16 +34,15 @@ export const test = base.extend<RealmrootOptions & RealmrootFixtures>({
           }
 
     await use(account)
+  },
+  authenticatedPage: async ({ page, realmrootTarget, existingAccount }, use) => {
+    if (realmrootTarget === 'local') await signIn(page, existingAccount)
+    else await page.goto('/profile')
 
-    const cookies = await context.cookies()
-    if (!cookies.some((cookie) => cookie.name.includes('session'))) return
-    if (!baseURL) throw new Error('Playwright baseURL is required to revoke the smoke session.')
+    await expect(page).toHaveURL(/\/profile$/)
+    await use(page)
 
-    const response = await context.request.post(`${baseURL}/api/auth/sign-out`, {
-      data: {},
-      headers: { origin: new URL(baseURL).origin },
-    })
-    if (!response.ok()) throw new Error(`Smoke session cleanup failed with HTTP ${response.status()}.`)
+    if (realmrootTarget === 'local') await signOut(page)
   },
 })
 

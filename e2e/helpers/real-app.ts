@@ -62,12 +62,34 @@ export async function bootstrapAdmin() {
   }
 }
 
-export async function signIn(page: Page, account: Pick<typeof admin, 'username' | 'password'> = admin) {
-  await page.goto('/auth/sign-in')
+export async function signIn(
+  page: Page,
+  account: Pick<typeof admin, 'username' | 'password'> = admin,
+  options: { baseURL?: string; interactiveCaptcha?: boolean } = {},
+) {
+  await page.goto(options.baseURL ? new URL('/auth/sign-in', options.baseURL).href : '/auth/sign-in')
   await page.getByRole('textbox', { name: 'Email or username' }).fill(account.username)
-  await page.getByRole('textbox', { name: 'Password' }).fill(account.password)
+
+  if (options.interactiveCaptcha) {
+    const captchaResponse = page.locator('input[name="cf-turnstile-response"]')
+    await captchaResponse.waitFor({ state: 'attached' })
+    console.log('Complete the CAPTCHA in the opened Chrome window to continue PVT.')
+    await page.waitForFunction(
+      () => Boolean(document.querySelector<HTMLInputElement>('input[name="cf-turnstile-response"]')?.value),
+      undefined,
+      { timeout: 120_000 },
+    )
+  }
+
+  const password = page.getByRole('textbox', { name: 'Password' })
+  await password.fill(account.password)
   await page.getByRole('button', { name: 'Sign in' }).click()
-  await page.waitForURL('**/profile')
+  try {
+    await page.waitForURL('**/profile')
+  } catch (error) {
+    if (await password.isVisible()) await password.fill('')
+    throw error
+  }
 }
 
 export async function signOut(page: Page) {

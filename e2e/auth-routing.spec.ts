@@ -1,7 +1,7 @@
 import { expect, test } from './fixtures'
 import { organizationOwner, resetAndBootstrap, seedOrganizationOwner, signIn, signOut } from './helpers/real-app'
 
-test.describe('password sign-in and authenticated routing', { tag: '@production-safe' }, () => {
+test.describe('password sign-in', () => {
   test('[spec: hosted-auth/password-sign-in] password sign-in authenticates and sets a session cookie', async ({
     page,
     context,
@@ -14,29 +14,26 @@ test.describe('password sign-in and authenticated routing', { tag: '@production-
     expect(cookies.some((cookie) => cookie.name.includes('session'))).toBe(true)
     await signOut(page)
   })
+})
 
+test.describe('authenticated routing', { tag: '@production-safe' }, () => {
   test('[spec: platform-onboarding/root-signed-in-redirect] root opens Account Center for signed-in users', async ({
-    page,
-    existingAccount,
+    authenticatedPage,
   }) => {
-    await signIn(page, existingAccount)
-    await page.goto('/')
-    await expect(page).toHaveURL(/\/$/)
-    await expect(page.getByRole('navigation', { name: 'Account center' })).toBeVisible()
-    await expect(page.getByRole('heading', { name: /Good (morning|afternoon|evening), .+\./ })).toBeVisible()
-    await signOut(page)
+    await authenticatedPage.goto('/')
+    await expect(authenticatedPage).toHaveURL(/\/$/)
+    await expect(authenticatedPage.getByRole('navigation', { name: 'Account center' })).toBeVisible()
+    await expect(
+      authenticatedPage.getByRole('heading', { name: /Good (morning|afternoon|evening), .+\./ }),
+    ).toBeVisible()
   })
 
   test('[spec: account-center/account-center] Account Center loads account navigation', async ({
-    page,
-    existingAccount,
+    authenticatedPage,
   }) => {
-    await signIn(page, existingAccount)
-    await page.goto('/profile')
-    await expect(page.getByRole('navigation', { name: 'Account center' })).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'Profile' })).toBeVisible()
-    await expect(page.getByLabel('Identity details')).toBeVisible()
-    await signOut(page)
+    await expect(authenticatedPage.getByRole('navigation', { name: 'Account center' })).toBeVisible()
+    await expect(authenticatedPage.getByRole('heading', { name: 'Profile' })).toBeVisible()
+    await expect(authenticatedPage.getByLabel('Identity details')).toBeVisible()
   })
 })
 
