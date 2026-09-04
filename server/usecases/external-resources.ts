@@ -2188,7 +2188,7 @@ async function nativeAuthorityDetailsCatalog(
         detail,
       )
       return toResourceServerAuthorizationDetail({
-        id: typeof detail.id === 'string' ? detail.id : null,
+        id: detail.id,
         authorizationDetail: detail,
         display,
         connectionStatus: 'not_required',
@@ -2202,8 +2202,8 @@ async function nativeAuthorityDetailsCatalog(
 async function nativeAuthorityDetails(
   deps: Deps,
   identity: { identity: { ownerUserId: string } },
-): Promise<AuthorizationDetail[]> {
-  const details: AuthorizationDetail[] = [
+): Promise<Array<AuthorizationDetail & { id: string }>> {
+  const details: Array<AuthorizationDetail & { id: string }> = [
     { type: 'realmroot_authority', authority: 'user', id: identity.identity.ownerUserId },
   ]
   for (const organizationId of [...(await activeIdentityOrganizationIds(deps, identity.identity))].sort()) {
