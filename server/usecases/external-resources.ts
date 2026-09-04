@@ -2116,6 +2116,7 @@ async function readResourceCatalog(
         ),
       ].sort()
       return {
+        id: null,
         authorizationDetail,
         grantedScopes: undefined,
         display: authorizationDetailDisplay(authorizationDetail),
@@ -2187,6 +2188,7 @@ async function nativeAuthorityDetailsCatalog(
         detail,
       )
       return toResourceServerAuthorizationDetail({
+        id: detail.id,
         authorizationDetail: detail,
         display,
         connectionStatus: 'not_required',
@@ -2200,8 +2202,8 @@ async function nativeAuthorityDetailsCatalog(
 async function nativeAuthorityDetails(
   deps: Deps,
   identity: { identity: { ownerUserId: string } },
-): Promise<AuthorizationDetail[]> {
-  const details: AuthorizationDetail[] = [
+): Promise<Array<AuthorizationDetail & { id: string }>> {
+  const details: Array<AuthorizationDetail & { id: string }> = [
     { type: 'realmroot_authority', authority: 'user', id: identity.identity.ownerUserId },
   ]
   for (const organizationId of [...(await activeIdentityOrganizationIds(deps, identity.identity))].sort()) {
@@ -2282,6 +2284,7 @@ async function nativeAuthorityEffectiveScopes(
 }
 
 function toResourceServerAuthorizationDetail(input: {
+  id?: string | null
   authorizationDetail: AuthorizationDetail
   display: {
     label: string
@@ -2293,6 +2296,7 @@ function toResourceServerAuthorizationDetail(input: {
   requestableScopes: string[]
 }) {
   return {
+    id: input.id ?? null,
     authorizationDetail: input.authorizationDetail,
     name: input.display.label,
     description: input.display.description ?? null,

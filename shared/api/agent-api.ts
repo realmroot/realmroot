@@ -281,6 +281,7 @@ export const apiResourceSchema = resourceServerSchema
 export const apiResourcesResponseSchema = resourceServersResponseSchema
 
 export const resourceServerAuthorizationDetailSchema = z.object({
+  id: nonEmptyString.nullable(),
   authorizationDetail: authorizationDetailSchema,
   name: nonEmptyString,
   description: z.string().nullable(),

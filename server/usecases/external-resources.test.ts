@@ -2217,11 +2217,13 @@ describe('external API resource authorization', () => {
       return Response.json({
         items: [
           {
+            id: 'project-1',
             authorizationDetail: connectedDetail,
             display: { label: 'Project One' },
             grantedScopes: ['projects:read', 'projects:create'],
           },
           {
+            id: 'project-2',
             authorizationDetail: availableDetail,
             display: { label: 'Project Two', metadata: { region: 'ca-central-1' } },
           },
@@ -2235,6 +2237,7 @@ describe('external API resource authorization', () => {
     ).resolves.toEqual({
       items: [
         {
+          id: 'project-1',
           authorizationDetail: connectedDetail,
           name: 'Project One',
           description: null,
@@ -2244,6 +2247,7 @@ describe('external API resource authorization', () => {
           requestableScopes: ['projects:create'],
         },
         {
+          id: 'project-2',
           authorizationDetail: availableDetail,
           name: 'Project Two',
           description: null,
@@ -4043,8 +4047,9 @@ describe('external API resource authorization', () => {
 
     expect(result.pagination.totalItems).toBe(2)
     expect(result.items).toEqual([
-      expect.objectContaining({ name: 'Example User' }),
+      expect.objectContaining({ id: 'user-1', name: 'Example User' }),
       expect.objectContaining({
+        id: 'org-1',
         authorizationDetail: expect.objectContaining({ type: 'realmroot_authority' }),
         name: 'Example Organization',
       }),

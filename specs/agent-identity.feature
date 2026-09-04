@@ -193,10 +193,11 @@ Feature: Agent identity and delegated API authorization
       Then each item identifies one protected API service, its service URL, OAuth resource indicator, availability, and account connection status
       And the Agent-facing contract does not call a Resource Server an API Resource
       When the Agent lists one Resource Server's authorization details
-      Then each item exposes one RFC 9396 authorization detail with flat safe display metadata
+      Then each item exposes one RFC 9396 authorization detail, flat safe display metadata, and a stable Context ID when its source defines one
       And each item separately reports account authorization status, Agent-authorized scopes, and requestable scopes
       And an Organization owner may approve current assigned scopes of a Resource Server owned by that Organization
-      And an access request copies the selected authorization detail directly without a generated Resource identifier or URL
+      And native User and Organization Context IDs are their tenant IDs while external Context IDs come from the Resource Server catalog
+      And an access request copies the selected authorization detail directly while the Context ID remains only its selector
 
     @entrypoint:agent-protocol @journey:external-resource-authorization-detail-catalog @proof:unit
     Scenario: An Agent discovers display-safe authorization details from an external Resource Server
