@@ -1,0 +1,8 @@
+[
+  {
+    "method": "GET",
+    "path": "/resource-servers/{resourceServerId}/authorization-details",
+    "operationId": "listResourceServerAuthorizationDetails",
+    "semanticHash": "982404ec363faaf44ca516e314c1d541ab96e4c86e2aa4edf50775b1c13e8fb8"
+  }
+]

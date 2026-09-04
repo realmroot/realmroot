@@ -27,11 +27,11 @@ match, or the task requires an override:
 
 ```bash
 realmroot toolbox <resource-server> context
-realmroot toolbox <resource-server> context show <name>
-realmroot toolbox <resource-server> context use <name>
+realmroot toolbox <resource-server> context show <context-id>
+realmroot toolbox <resource-server> context use <context-id>
 ```
 
-Use `--context <name>` for a one-time override; use `context use` only when the
+Use `--context <context-id>` for a one-time override; use `context use` only when the
 user wants to change the default.
 
 Inspect operation help only when its arguments or required scopes are unknown:
@@ -47,7 +47,7 @@ the operation returns `403`, request all missing task scopes together:
 realmroot agent request \
   --resource-server <resource-server> \
   --scope <scope> \
-  --context <name> \
+  --context <context-id> \
   --reason "Perform the requested operation"
 ```
 
@@ -79,7 +79,7 @@ realmroot exec github -- gh <arguments>
 realmroot exec cloudflare -- wrangler <arguments>
 ```
 
-Add `--context <name>` before `--` only for a one-time Context override.
+Add `--context <context-id>` before `--` only for a one-time Context override.
 
 Native commands do not request or expand authority. If `exec` reports missing
 authority, inspect the selected server and request only the required scopes.

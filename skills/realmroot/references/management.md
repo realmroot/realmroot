@@ -15,7 +15,7 @@ Use the Realmroot Platform Organization only for platform-wide administration.
 
 ```bash
 realmroot toolbox platform context
-realmroot toolbox platform context use <name>
+realmroot toolbox platform context use <context-id>
 ```
 
 Use existing approved authority first. If the selected operation shows missing
@@ -25,7 +25,7 @@ authority or returns `403`, request its missing scopes:
 realmroot agent request \
   --resource-server platform \
   --scope <scope> \
-  --context <name> \
+  --context <context-id> \
   --reason "Perform the requested Realmroot administration"
 ```
 

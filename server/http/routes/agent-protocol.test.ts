@@ -170,6 +170,7 @@ describe('Agent protocol routes', () => {
     vi.spyOn(externalResources, 'listAgentResourceServerAuthorizationDetails').mockResolvedValue({
       items: [
         {
+          id: 'workspace-1',
           authorizationDetail,
           name: "Ambor's Space",
           description: null,
