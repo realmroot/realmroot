@@ -1,7 +1,6 @@
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ExperiencePage } from '@/features/console/extracted/branding-content/branding'
-import { ContentSettingsPage } from '@/features/console/extracted/branding-content/content-settings'
 import { SignInSettingsPage } from '@/features/console/extracted/sign-in-settings'
 import { queryClient } from '@/router'
 import {
@@ -242,7 +241,7 @@ describe('admin console hosted experience', () => {
       return consoleSharedFetch(input, init)
     })
 
-    renderWithQuery(<ContentSettingsPage />)
+    renderWithQuery(<ExperiencePage section="legal" />)
     expect(await screen.findByLabelText('Terms URL')).toBeTruthy()
     expect(screen.queryByLabelText('Sign-in message')).toBeNull()
     expect(screen.queryByLabelText('Sign-up message')).toBeNull()
@@ -289,7 +288,7 @@ describe('admin console hosted experience', () => {
       return consoleSharedFetch(input, init)
     })
 
-    renderWithQuery(<ContentSettingsPage />)
+    renderWithQuery(<ExperiencePage section="legal" />)
     const preview = await screen.findByLabelText('Acme Auth hosted sign-in preview')
     expect(within(preview).getByRole('button', { name: 'Continue with OneTap' })).toBeTruthy()
     expect(within(preview).queryByText('No sign-in methods are enabled.')).toBeNull()

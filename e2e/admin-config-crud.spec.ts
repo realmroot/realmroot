@@ -39,7 +39,14 @@ test.describe('admin config CRUD (Console UI)', () => {
     page,
   }) => {
     await signIn(page)
-    await page.goto('/console/sign-in-experience/account-center')
+    await page.goto('/console')
+    await page
+      .getByRole('navigation', { name: 'Console', exact: true })
+      .getByRole('link', { name: 'Settings', exact: true })
+      .click()
+    await expect(page).toHaveURL(/\/console\/tenant-settings\/general$/)
+    await expect(page.getByRole('tab', { name: 'General', exact: true })).toHaveAttribute('aria-selected', 'true')
+    await expect(page.getByRole('tab', { name: 'Account Center', exact: true })).toHaveCount(0)
     await expect(page.getByText('No external services configured.')).toBeVisible()
     async function add(name: string, url: string) {
       await page.getByRole('button', { name: 'Add service' }).click()
@@ -52,6 +59,31 @@ test.describe('admin config CRUD (Console UI)', () => {
     }
     await add('Wallet', 'https://wallet.example.com')
     await add('Docs', 'https://docs.example.com')
+    await page.screenshot({
+      animations: 'disabled',
+      path: test.info().outputPath('settings-desktop.png'),
+      fullPage: true,
+    })
+    await page.getByRole('button', { name: 'Edit account permissions' }).click()
+    await expect(page.getByRole('dialog').getByRole('switch', { name: 'Profile section' })).toBeVisible()
+    await page.screenshot({ animations: 'disabled', path: test.info().outputPath('account-permissions.png') })
+    await page.keyboard.press('Escape')
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.goto('/console')
+    await page.getByRole('button', { name: 'Open navigation', exact: true }).click()
+    await page.getByRole('dialog').getByRole('link', { name: 'Settings', exact: true }).click()
+    await expect(page.getByRole('dialog')).toBeHidden()
+    await expect(page.getByRole('button', { name: 'Edit: Wallet', exact: true })).toBeVisible()
+    await page.getByRole('button', { name: 'Edit: Wallet', exact: true }).scrollIntoViewIfNeeded()
+    await page.screenshot({
+      animations: 'disabled',
+      path: test.info().outputPath('settings-mobile.png'),
+      fullPage: true,
+    })
+    await page.getByRole('button', { name: 'Edit: Wallet', exact: true }).click()
+    await expect(page.getByRole('dialog').getByLabel('Name', { exact: true })).toHaveValue('Wallet')
+    await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click()
+    await page.setViewportSize({ width: 1280, height: 900 })
     await page.getByRole('button', { name: 'Move up: Docs', exact: true }).click()
     await expect(page.getByRole('button', { name: 'Move up: Docs', exact: true })).toBeDisabled()
     await page.getByRole('button', { name: 'Edit: Wallet', exact: true }).click()
@@ -73,7 +105,14 @@ test.describe('admin config CRUD (Console UI)', () => {
     )
     await page.keyboard.press('Escape')
     await page.setViewportSize({ width: 1280, height: 900 })
-    await page.goto('/console/sign-in-experience/account-center')
+    await page.goto('/console')
+    await page
+      .getByRole('navigation', { name: 'Console', exact: true })
+      .getByRole('link', { name: 'Settings', exact: true })
+      .click()
+    await expect(page).toHaveURL(/\/console\/tenant-settings\/general$/)
+    await expect(page.getByRole('tab', { name: 'General', exact: true })).toHaveAttribute('aria-selected', 'true')
+    await expect(page.getByRole('tab', { name: 'Account Center', exact: true })).toHaveCount(0)
     await page.getByRole('button', { name: 'Delete: My Wallet', exact: true }).click()
     await expect(page.getByRole('button', { name: 'Delete: My Wallet', exact: true })).toBeHidden()
     await page.getByRole('button', { name: 'Delete: Docs', exact: true }).click()

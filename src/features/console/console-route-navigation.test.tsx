@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { queryClientDefaultOptions } from '@/lib/query-client'
@@ -79,8 +79,6 @@ describe('console route navigation', () => {
       ['/console/sign-in-experience/theme', '/console/sign-in-experience/theme', 'Experience'],
       ['/console/sign-in-experience/assets', '/console/sign-in-experience/assets', 'Experience'],
       ['/console/sign-in-experience/legal', '/console/sign-in-experience/legal', 'Experience'],
-      ['/console/sign-in-experience/account-center', '/console/sign-in-experience/account-center', 'Account Center'],
-      ['/console/sign-in-experience/content', '/console/sign-in-experience/content', 'Experience'],
       ['/console/security', '/console/security/sign-in', 'Security policies'],
       ['/console/security/sign-in', '/console/security/sign-in', 'Security policies'],
       ['/console/security/mfa', '/console/security/mfa', 'Security policies'],
@@ -125,6 +123,19 @@ describe('console route navigation', () => {
     }
     expect(screen.queryByRole('tab', { name: 'Desktop' })).toBeNull()
     expect(screen.queryByRole('tab', { name: 'Mobile' })).toBeNull()
+  })
+
+  it('reaches service and account settings from the current sidebar', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation(consoleRouteFetch)
+    window.history.pushState(null, '', '/console')
+    render(<AppRouter />)
+    const nav = await screen.findByRole('navigation', { name: 'Console' })
+    await userEvent.click(within(nav).getByRole('link', { name: /^Settings$/ }))
+    await waitFor(() => expect(window.location.pathname).toBe('/console/tenant-settings/general'))
+    expect(await screen.findByRole('heading', { name: 'External services' })).toBeTruthy()
+    expect(screen.queryByRole('tab', { name: 'Account Center' })).toBeNull()
+    await userEvent.click(screen.getByRole('button', { name: 'Edit account permissions' }))
+    expect(await within(screen.getByRole('dialog')).findByRole('switch', { name: 'Profile section' })).toBeTruthy()
   })
 
   it('does not repeat fresh guard and page queries while switching Experience tabs', async () => {

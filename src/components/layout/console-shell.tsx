@@ -54,7 +54,7 @@ type ConsoleNavGroup = {
 
 const consoleNavGroups: ConsoleNavGroup[] = [
   {
-    items: [{ href: '/console', label: 'Dashboard', icon: Gauge, activePaths: ['/console', '/console/dashboard'] }],
+    items: [{ href: '/console', label: 'Dashboard', icon: Gauge, activePaths: ['/console'] }],
   },
   {
     label: 'Identity',
@@ -106,8 +106,6 @@ const consoleNavGroups: ConsoleNavGroup[] = [
           '/console/sign-in-experience/theme',
           '/console/sign-in-experience/assets',
           '/console/sign-in-experience/legal',
-          '/console/sign-in-experience/content',
-          '/console/sign-in-experience/account-center',
         ],
       },
       {
@@ -266,7 +264,7 @@ function ConsoleBreadcrumbs({ pathname }: { pathname: string }) {
 }
 
 function consoleBreadcrumbSection(pathname: string): Array<{ href?: string; label: string }> {
-  if (pathname === '/console' || pathname === '/console/dashboard') return [{ label: 'Dashboard' }]
+  if (pathname === '/console') return [{ label: 'Dashboard' }]
 
   const route = consoleBreadcrumbRoutes.find(
     (candidate) => pathname === candidate.href || pathname.startsWith(`${candidate.href}/`),
@@ -291,10 +289,7 @@ const breadcrumbRouteSegmentLabels: Record<string, Record<string, string>> = {
 
 const breadcrumbSegmentLabels: Record<string, string> = {
   overview: 'Overview',
-  profile: 'Overview',
   authentication: 'Authentication',
-  'linked-accounts': 'Authentication',
-  security: 'Authentication',
   sessions: 'Sessions',
   agents: 'Agents',
   'authorized-apps': 'Authorized apps',
@@ -302,7 +297,6 @@ const breadcrumbSegmentLabels: Record<string, string> = {
   members: 'Members',
   activity: 'Activity',
   settings: 'Settings',
-  operations: 'Settings',
   permissions: 'Permissions',
   assignments: 'Assignments',
   scopes: 'Scopes',

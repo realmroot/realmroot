@@ -4102,57 +4102,6 @@ textarea {
   backdrop-filter: blur(8px);
 }
 
-.changesSheet {
-  position: fixed;
-  right: 16px;
-  bottom: calc(16px + env(safe-area-inset-bottom));
-  left: 16px;
-  z-index: 45;
-  display: grid;
-  gap: 12px;
-  padding: 14px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--surface) 96%, transparent);
-  box-shadow: 0 18px 45px rgb(15 23 42 / 18%);
-  backdrop-filter: blur(12px);
-  animation: changesSheetIn 160ms ease-out;
-}
-
-.changesSheetControls {
-  display: grid;
-  gap: 10px;
-}
-
-.changesSheetActions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
-@keyframes changesSheetIn {
-  from {
-    opacity: 0;
-    transform: translateY(18px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@media (min-width: 768px) {
-  .changesSheet {
-    right: 24px;
-    left: 272px;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: center;
-    padding: 14px 16px;
-  }
-}
-
 .setupPanel {
   display: grid;
   gap: 10px;

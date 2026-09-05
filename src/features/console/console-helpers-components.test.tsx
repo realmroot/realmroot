@@ -27,10 +27,7 @@ import {
 } from '@/features/management/forms'
 import { HostedAuthPreview, PreviewBrandMark } from '@/features/management/hosted-auth-preview'
 import {
-  ChangesSection,
   PayloadBlock,
-  SettingsSection,
-  SettingsSections,
   WebhookEndpointRow,
   WebhookRequestDialog,
   WebhookSecretDisclosureDialog,
@@ -572,47 +569,6 @@ describe('helpers-preview presentational pieces', () => {
   it('renders payload blocks', () => {
     render(<PayloadBlock label="Body" value="{}" />)
     expect(screen.getByText('Body')).toBeTruthy()
-  })
-
-  it('renders settings sections and changes section visibility', () => {
-    const { rerender } = render(
-      <SettingsSections>
-        <SettingsSection description="desc" title="Section">
-          <div>inner</div>
-        </SettingsSection>
-      </SettingsSections>,
-    )
-    expect(screen.getByText('Section')).toBeTruthy()
-
-    const onDiscard = vi.fn()
-    rerender(
-      <ChangesSection
-        description="You have changes"
-        onDiscard={onDiscard}
-        pending={false}
-        saveLabel="Save"
-        visible={false}
-      />,
-    )
-    expect(screen.queryByText('You have changes')).toBeNull()
-
-    rerender(
-      <form>
-        <ChangesSection
-          description="You have changes"
-          error={<span>err</span>}
-          extraAction={<button type="button">Extra</button>}
-          onDiscard={onDiscard}
-          pending={false}
-          saveLabel="Save"
-          visible
-        />
-      </form>,
-    )
-    fireEvent.click(screen.getByRole('button', { name: 'Discard' }))
-    expect(onDiscard).toHaveBeenCalled()
-    expect(screen.getByText('err')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Extra' })).toBeTruthy()
   })
 })
 

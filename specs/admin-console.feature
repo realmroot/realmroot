@@ -147,7 +147,8 @@ Feature: Admin Console
 
   @entrypoint:product-ui @journey:admin-account-center-settings @proof:unit
   Scenario: Account Center settings change profile visibility
-    When I update Account Center settings
+    Given I open General settings from the Console sidebar
+    When I update account permissions in its dialog
     Then profile visibility changes for end users
 
   @entrypoint:product-ui @journey:admin-content-settings @proof:unit
@@ -437,7 +438,9 @@ Feature: Admin Console
 
   @e2e @entrypoint:product-ui @journey:site-navigation-console @proof:e2e
   Scenario: Operators manage service links and users navigate to them
-    When an operator adds, edits and reorders service links in Console dialogs
+    Given an operator opens Settings from the Console sidebar
+    And General settings shows external services without the retired experience tabs
+    When the operator adds, edits and reorders service links in dialogs
     Then Account Center shows the saved links in desktop and mobile navigation
     And removing all links hides the external service group
 

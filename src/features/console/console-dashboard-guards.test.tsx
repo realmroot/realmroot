@@ -207,12 +207,12 @@ describe('console dashboard guards', () => {
       if (url === '/api/account/profile') return Promise.resolve(jsonResponse({ error: 'Unauthorized' }, 401))
       return consoleSharedFetch(input, init)
     })
-    window.history.pushState(null, '', '/console/dashboard')
+    window.history.pushState(null, '', '/console')
 
     render(<AppRouter />)
 
     await waitFor(() => expect(window.location.pathname).toBe('/auth/sign-in'))
-    expect(new URLSearchParams(window.location.search).get('return_to')).toContain('/console/dashboard')
+    expect(new URLSearchParams(window.location.search).get('return_to')).toContain('/console')
     expect(requests.filter((url) => url.startsWith('/api') && !url.startsWith('/api/account/'))).toEqual([
       '/api/configz',
     ])
@@ -244,7 +244,7 @@ describe('console dashboard guards', () => {
       }
       return consoleSharedFetch(input, init)
     })
-    window.history.pushState(null, '', '/console/dashboard')
+    window.history.pushState(null, '', '/console')
 
     render(<AppRouter />)
 

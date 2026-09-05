@@ -58,6 +58,12 @@ describe('router authentication boundaries', () => {
 
     for (const routeId of [
       '/console/customize-jwt',
+      '/console/dashboard',
+      '/console/users/$userId/profile',
+      '/console/users/$userId/security',
+      '/console/users/$userId/operations',
+      '/console/users/$userId/linked-accounts',
+      '/console/users/$userId/applications',
       '/console/mfa',
       '/console/applications/$applicationId/branding',
       '/console/applications/$applicationId/federated-credentials',
@@ -73,8 +79,8 @@ describe('router authentication boundaries', () => {
     ]) {
       expect(routes[routeId]).toBeUndefined()
     }
-    expect(routes['/console/sign-in-experience/account-center']).toBeTruthy()
-    expect(routes['/console/sign-in-experience/content']).toBeTruthy()
+    expect(routes['/console/sign-in-experience/account-center']).toBeUndefined()
+    expect(routes['/console/sign-in-experience/content']).toBeUndefined()
   })
 
   it('does not repeat authentication requests while navigating protected routes', async () => {

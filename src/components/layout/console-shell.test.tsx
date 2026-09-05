@@ -162,8 +162,8 @@ describe('ConsoleShell', () => {
     })
   })
 
-  it('marks the dashboard alias active for local visual review', () => {
-    pathname = '/console/dashboard'
+  it('marks the canonical dashboard active', () => {
+    pathname = '/console'
 
     render(<TestConsoleShell>Dashboard content</TestConsoleShell>)
 
@@ -243,12 +243,12 @@ describe('ConsoleShell', () => {
     breadcrumb = screen.getByRole('navigation', { name: 'Breadcrumb' })
     expect(within(breadcrumb).getByText('OAuth').getAttribute('aria-current')).toBe('page')
 
-    pathname = '/console/users/user-1/linked-accounts'
+    pathname = '/console/users/user-1/authentication'
     rerender(<TestConsoleShell>User linked accounts</TestConsoleShell>)
     breadcrumb = screen.getByRole('navigation', { name: 'Breadcrumb' })
     expect(within(breadcrumb).getByText('Authentication').getAttribute('aria-current')).toBe('page')
 
-    pathname = '/console/users/user-1/operations'
+    pathname = '/console/users/user-1/settings'
     rerender(<TestConsoleShell>User operations</TestConsoleShell>)
     breadcrumb = screen.getByRole('navigation', { name: 'Breadcrumb' })
     expect(within(breadcrumb).getByText('Settings').getAttribute('aria-current')).toBe('page')
