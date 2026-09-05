@@ -46,15 +46,6 @@ export const managementErrorResponseSchema = z.object({
   }),
 })
 
-export const agentAccessRequestErrorResponseSchema = managementErrorResponseSchema.extend({
-  error: managementErrorResponseSchema.shape.error.extend({
-    code: z.enum([
-      ...managementErrorResponseSchema.shape.error.shape.code.options,
-      'requested_scopes_exceed_controller_boundary',
-    ]),
-  }),
-})
-
 export const managementBuiltInProviderSettingsSchema = z.object({
   email: z.object({
     enabled: z.boolean(),

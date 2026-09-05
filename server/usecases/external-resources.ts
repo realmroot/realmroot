@@ -1023,8 +1023,8 @@ export async function createAgentAccessRequest(
     if (missing.length > 0) {
       const authority = authorizationDetails[0]!
       throw new ApiError(
-        403,
-        'requested_scopes_exceed_controller_boundary',
+        400,
+        'bad_request',
         `Controller cannot grant the following scopes in Context "${authority.id}" (${authority.authority}): ${missing.join(', ')}. No approval request was created.`,
         { context: { id: authority.id, type: authority.authority }, scopes: missing },
       )

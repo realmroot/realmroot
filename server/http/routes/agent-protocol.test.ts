@@ -5,7 +5,7 @@ import { createAgentProtocolRoutes } from '@server/http/routes/agent-protocol'
 import * as agentIdentities from '@server/usecases/agent-identities'
 import * as externalResources from '@server/usecases/external-resources'
 import type { AgentIdentityAggregate } from '@server/usecases/ports'
-import { agentAccessRequestErrorResponseSchema } from '@shared/api/management'
+import { managementErrorResponseSchema } from '@shared/api/management'
 import { Hono } from 'hono'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createTestDeps } from '../test-deps'
@@ -21,17 +21,17 @@ describe('Agent protocol routes', () => {
     const details = { context: { id: 'user-1', type: 'user' }, scopes: ['applications:read'] }
     const message = 'Controller cannot grant applications:read. No approval request was created.'
     vi.spyOn(externalResources, 'createAccessRequest').mockRejectedValue(
-      new ApiError(403, 'requested_scopes_exceed_controller_boundary', message, details),
+      new ApiError(400, 'bad_request', message, details),
     )
     const response = await createRouteApp().request('/api/agent/access-requests', {
       method: 'POST',
       headers: jsonHeaders(),
       body: JSON.stringify({ resourceServerId: 'resource-1', scopes: ['applications:read'] }),
     })
-    expect(response.status).toBe(403)
+    expect(response.status).toBe(400)
     const body = await response.json()
-    expect(body).toMatchObject({ error: { code: 'requested_scopes_exceed_controller_boundary', message, details } })
-    expect(agentAccessRequestErrorResponseSchema.safeParse(body).success).toBe(true)
+    expect(body).toMatchObject({ error: { code: 'bad_request', message, details } })
+    expect(managementErrorResponseSchema.safeParse(body).success).toBe(true)
   })
 
   it('exposes the stable identity at its canonical resource path', async () => {

@@ -1,6 +1,5 @@
 export type ErrorCode =
   | 'bad_request'
-  | 'requested_scopes_exceed_controller_boundary'
   | 'unauthorized'
   | 'forbidden'
   | 'not_found'

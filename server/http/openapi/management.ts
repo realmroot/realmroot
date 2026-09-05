@@ -6,7 +6,6 @@ import {
   resourceServerAuthorizationDetailsResponseSchema,
 } from '@shared/api/agent-api'
 import { agentPublicIdentifierSchema } from '@shared/api/identifiers'
-import { agentAccessRequestErrorResponseSchema } from '@shared/api/management'
 import { realmrootApiVersion } from '@shared/api/openapi'
 import { paginationQuerySchema } from '@shared/api/pagination'
 import {
@@ -187,13 +186,6 @@ const managementRoutes: ManagementRouteConfig[] = [
     method: 'post',
     path: '/agent/access-requests',
     operationId: 'createAgentAuthorizationRequest',
-    errors: {
-      403: {
-        description:
-          'The controller cannot grant the requested scopes in the selected Context. No approval request is created for a controller boundary failure.',
-        schema: agentAccessRequestErrorResponseSchema,
-      },
-    },
     summary: 'Create an Agent authorization request',
     cli: { name: 'access' },
     security: [{ oauth2: ['access-requests:read', 'access-requests:write'] }],

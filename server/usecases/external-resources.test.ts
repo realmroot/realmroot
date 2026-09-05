@@ -4463,8 +4463,8 @@ describe('external API resource authorization', () => {
         'https://auth.example.com',
       ),
     ).rejects.toMatchObject({
-      status: 403,
-      code: 'requested_scopes_exceed_controller_boundary',
+      status: 400,
+      code: 'bad_request',
       message: expect.stringContaining('No approval request was created.'),
       details: {
         context: { id: 'user-1', type: 'user' },

@@ -256,7 +256,7 @@ Feature: Agent identity and delegated API authorization
       And missing, multiple, malformed, or unavailable Contexts fail closed
       And before creating or resuming a pending request Realmroot verifies the controller currently holds every requested scope inside only the selected Context
       And a scope outside that boundary is rejected without creating an approval request or notification
-      And the server returns HTTP 403 with error code "requested_scopes_exceed_controller_boundary", a message, and the selected Context and offending scopes in error details
+      And the server returns HTTP 400 with the existing "bad_request" error code, a message, and the selected Context and offending scopes in error details
       And User Context scopes include only automatic scopes and direct Permissions with no Organization
       And Organization Context scopes include only automatic scopes, matching Organization direct Permissions, and matching membership Roles
       And NULL direct Permissions never fall back to the Resource owner Organization

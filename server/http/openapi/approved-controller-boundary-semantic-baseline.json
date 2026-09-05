@@ -1,8 +1,0 @@
-[
-  {
-    "method": "POST",
-    "path": "/agent/access-requests",
-    "operationId": "createAgentAuthorizationRequest",
-    "semanticHash": "8c88b7a7c5fc56d2bb0d5b80c4b1a4706dccd15c503554a6d1aa82ede0e266eb"
-  }
-]
