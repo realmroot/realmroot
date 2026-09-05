@@ -5,7 +5,6 @@ export const consoleQueryKeys = {
   connectors: ['console', 'connectors'] as const,
   signIn: ['console', 'sign-in-settings'] as const,
   branding: ['console', 'branding-settings'] as const,
-  accountCenter: ['console', 'account-center-settings'] as const,
   developer: ['console', 'developer-settings'] as const,
   general: ['console', 'general-settings'] as const,
   email: ['console', 'email-settings'] as const,

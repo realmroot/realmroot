@@ -75,7 +75,7 @@ export const brandingSettings = {
   copy: signInSettings.copy,
 }
 
-export const accountCenterSettings = {
+const accountCenterSettings = {
   accountCenter: {
     profileEditingEnabled: true,
     displayNameEditable: true,

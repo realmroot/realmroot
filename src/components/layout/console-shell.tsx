@@ -308,6 +308,7 @@ const breadcrumbSegmentLabels: Record<string, string> = {
   assets: 'Brand assets',
   legal: 'Legal & support',
   general: 'General',
+  'external-services': 'External services',
   email: 'Email delivery',
   developer: 'Developer',
   deployment: 'Deployment',

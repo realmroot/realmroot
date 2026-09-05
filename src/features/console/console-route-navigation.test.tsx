@@ -89,6 +89,7 @@ describe('console route navigation', () => {
       ['/console/webhooks/requests', '/console/webhooks/requests', 'Webhooks'],
       ['/console/tenant-settings', '/console/tenant-settings/general', 'Settings'],
       ['/console/tenant-settings/general', '/console/tenant-settings/general', 'Settings'],
+      ['/console/tenant-settings/external-services', '/console/tenant-settings/external-services', 'Settings'],
     ] as const) {
       window.history.pushState(null, '', path)
       render(<AppRouter />)
@@ -125,17 +126,23 @@ describe('console route navigation', () => {
     expect(screen.queryByRole('tab', { name: 'Mobile' })).toBeNull()
   })
 
-  it('reaches service and account settings from the current sidebar', async () => {
+  it('reaches external services through its own Settings tab', async () => {
     vi.spyOn(window, 'fetch').mockImplementation(consoleRouteFetch)
     window.history.pushState(null, '', '/console')
     render(<AppRouter />)
     const nav = await screen.findByRole('navigation', { name: 'Console' })
     await userEvent.click(within(nav).getByRole('link', { name: /^Settings$/ }))
     await waitFor(() => expect(window.location.pathname).toBe('/console/tenant-settings/general'))
+    expect(screen.queryByRole('heading', { name: 'External services' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Edit account permissions' })).toBeNull()
+    await userEvent.click(screen.getByRole('tab', { name: 'External services' }))
+    await waitFor(() => expect(window.location.pathname).toBe('/console/tenant-settings/external-services'))
     expect(await screen.findByRole('heading', { name: 'External services' })).toBeTruthy()
-    expect(screen.queryByRole('tab', { name: 'Account Center' })).toBeNull()
-    await userEvent.click(screen.getByRole('button', { name: 'Edit account permissions' }))
-    expect(await within(screen.getByRole('dialog')).findByRole('switch', { name: 'Profile section' })).toBeTruthy()
+    expect(screen.getByRole('tab', { name: 'External services' }).getAttribute('aria-selected')).toBe('true')
+    expect(screen.queryByRole('switch')).toBeNull()
+    await userEvent.click(screen.getByRole('tab', { name: 'General' }))
+    await waitFor(() => expect(window.location.pathname).toBe('/console/tenant-settings/general'))
+    expect(screen.queryByRole('heading', { name: 'External services' })).toBeNull()
   })
 
   it('does not repeat fresh guard and page queries while switching Experience tabs', async () => {

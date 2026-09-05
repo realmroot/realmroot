@@ -54,7 +54,6 @@ import type {
   ListManagementUserPasskeysResponse,
   ListManagementUserSessionsResponse,
   ListManagementUsersResponse,
-  ManagementAccountCenterSettingsResponse,
   ManagementBanUserRequest,
   ManagementBrandingSettingsResponse,
   ManagementCreateUserRequest,
@@ -68,7 +67,6 @@ import type {
   ReplaceDeveloperConsoleAccessPolicyRequest,
   ReplaceEmailDeliveryConfigurationRequest,
   ReplaceOrganizationCreationPolicyRequest,
-  UpdateManagementAccountCenterSettingsRequest,
   UpdateManagementBrandingSettingsRequest,
   UpdateManagementConnectorRequest,
   UpdateManagementRealmRequest,
@@ -402,14 +400,6 @@ export function getBrandingSettings(): Promise<ManagementBrandingSettingsRespons
 
 export function updateBrandingSettings(input: UpdateManagementBrandingSettingsRequest) {
   return readRpcResponse(apiClient.api.realm.branding.$patch({ json: input }))
-}
-
-export function getAccountCenterSettings(): Promise<ManagementAccountCenterSettingsResponse> {
-  return readRpcResponse(apiClient.api.realm['account-management-policy'].$get())
-}
-
-export function updateAccountCenterSettings(input: UpdateManagementAccountCenterSettingsRequest) {
-  return readRpcResponse(apiClient.api.realm['account-management-policy'].$patch({ json: input }))
 }
 
 export type DeveloperSettingsViewModel = {
