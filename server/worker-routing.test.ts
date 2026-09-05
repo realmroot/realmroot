@@ -14,7 +14,6 @@ describe('Workers Assets routing', () => {
     const routes = parseRunWorkerFirstRoutes(wranglerConfig)
 
     expect(routes).toEqual([
-      '/',
       '/api/*',
       '/.well-known/jwks.json',
       '/.well-known/agent-configuration',
