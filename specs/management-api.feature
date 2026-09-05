@@ -6,6 +6,17 @@ Feature: Unified Realmroot resource API
   Background:
     Given a first admin exists
 
+  @entrypoint:agent-protocol @journey:public-service-discovery @proof:unit
+  Scenario: Agents discover the service from its public origin
+    When an anonymous client requests public service discovery
+    Then root OAuth and OpenAPI aliases redirect to their existing canonical API endpoints
+    And the API catalog links to the API contract, documentation, health, and protected resource metadata
+    And the static homepage advertises discovery links and always serves HTML
+    And robots.txt references a sitemap containing only public service pages
+    And static discovery documents and fixed redirects are served directly by Workers Assets
+    And the homepage never enters the Worker for content negotiation
+    And public discovery supports HEAD without requiring database or authentication initialization
+
 
   @entrypoint:restish @journey:management-resource-identifiers @proof:unit
   Scenario: Newly created resources use standard opaque identifiers

@@ -1,0 +1,4 @@
+/.well-known/oauth-authorization-server /.well-known/oauth-authorization-server/api/auth 308
+/.well-known/openid-configuration /api/auth/.well-known/openid-configuration 308
+/.well-known/oauth-protected-resource /.well-known/oauth-protected-resource/api 308
+/openapi.json /api/openapi.json 308

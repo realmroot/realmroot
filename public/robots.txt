@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://id.realmroot.dev/sitemap.xml
