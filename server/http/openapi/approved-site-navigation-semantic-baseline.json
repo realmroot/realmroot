@@ -1,0 +1,14 @@
+[
+  {
+    "method": "GET",
+    "path": "/realm/navigation",
+    "operationId": "getRealmNavigation",
+    "semanticHash": "34c4d710764c41be09c90bdf9a90c6b3be8d0bcfce4dc9008f5fae84c2b6832b"
+  },
+  {
+    "method": "PUT",
+    "path": "/realm/navigation",
+    "operationId": "replaceRealmNavigation",
+    "semanticHash": "8cf612383b88fd3f5aee53d8eb35157067b5b5523c0c6d88384d4fb550367a5d"
+  }
+]

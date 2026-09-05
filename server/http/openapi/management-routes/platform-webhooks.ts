@@ -1,3 +1,4 @@
+import { siteNavigationResponseSchema, siteNavigationSchema } from '@shared/api/navigation'
 import {
   connectorReadinessResponseSchema,
   createManagementConnectorRequestSchema,
@@ -187,6 +188,28 @@ export const platformWebhookRoutes: ManagementRouteConfig[] = [
     summary: 'Update Realm branding',
     request: { body: jsonBody(updateManagementBrandingSettingsRequestSchema) },
     response: managementBrandingSettingsResponseSchema,
+  },
+  {
+    method: 'get',
+    path: '/realm/navigation',
+    operationId: 'getRealmNavigation',
+    summary: 'Get site navigation',
+    response: siteNavigationResponseSchema,
+    responseHeaders: etagResponseHeader,
+  },
+  {
+    method: 'put',
+    path: '/realm/navigation',
+    operationId: 'replaceRealmNavigation',
+    summary: 'Replace site navigation',
+    request: { headers: ifMatchHeader, body: jsonBody(siteNavigationSchema) },
+    response: siteNavigationResponseSchema,
+    responseHeaders: etagResponseHeader,
+    errors: {
+      409: 'Site navigation changed during the update.',
+      412: 'Site navigation changed since it was read.',
+      428: 'If-Match is required.',
+    },
   },
   {
     method: 'get',

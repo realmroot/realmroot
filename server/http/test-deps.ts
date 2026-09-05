@@ -258,6 +258,8 @@ export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> =
       hasPendingInvitation: vi.fn().mockResolvedValue(false),
     },
     configz: {
+      getNavigation: vi.fn().mockResolvedValue({ externalLinks: [], revision: 0 }),
+      replaceNavigation: vi.fn().mockResolvedValue(undefined),
       getSettings: vi.fn().mockResolvedValue(null),
       getBranding: vi.fn().mockResolvedValue(null),
       getAccountCenterSettings: vi.fn().mockResolvedValue(null),

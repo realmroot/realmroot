@@ -35,4 +35,50 @@ test.describe('admin config CRUD (Console UI)', () => {
     await expect(dialog).toBeHidden()
     await expect(page.getByRole('cell', { name: 'E2E CRUD Application' }).first()).toBeVisible()
   })
+  test('[spec: admin-console/site-navigation-console] operators manage external services and Account Center navigation', async ({
+    page,
+  }) => {
+    await signIn(page)
+    await page.goto('/console/sign-in-experience/account-center')
+    await expect(page.getByText('No external services configured.')).toBeVisible()
+    async function add(name: string, url: string) {
+      await page.getByRole('button', { name: 'Add service' }).click()
+      const dialog = page.getByRole('dialog')
+      await dialog.getByLabel('Name', { exact: true }).fill(name)
+      await dialog.getByLabel('URL', { exact: true }).fill(url)
+      await dialog.getByLabel('Icon', { exact: true }).selectOption('wallet')
+      await dialog.getByRole('button', { name: 'Save', exact: true }).click()
+      await expect(dialog).toBeHidden()
+    }
+    await add('Wallet', 'https://wallet.example.com')
+    await add('Docs', 'https://docs.example.com')
+    await page.getByRole('button', { name: 'Move up: Docs', exact: true }).click()
+    await expect(page.getByRole('button', { name: 'Move up: Docs', exact: true })).toBeDisabled()
+    await page.getByRole('button', { name: 'Edit: Wallet', exact: true }).click()
+    await page.getByRole('dialog').getByLabel('Name', { exact: true }).fill('My Wallet')
+    await page.getByRole('dialog').getByRole('button', { name: 'Save', exact: true }).click()
+    await expect(page.getByRole('dialog')).toBeHidden()
+    await page.goto('/profile')
+    const navigation = page.getByRole('navigation', { name: 'Account Center', exact: true })
+    await expect(navigation.getByRole('link', { name: 'My Wallet', exact: true })).toHaveAttribute(
+      'href',
+      'https://wallet.example.com',
+    )
+    await expect(navigation.getByRole('link').filter({ hasText: /Docs|My Wallet/ })).toHaveText(['Docs', 'My Wallet'])
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.getByRole('button', { name: 'Open Account Center navigation' }).click()
+    await expect(page.getByRole('dialog').getByRole('link', { name: 'My Wallet', exact: true })).toHaveAttribute(
+      'href',
+      'https://wallet.example.com',
+    )
+    await page.keyboard.press('Escape')
+    await page.setViewportSize({ width: 1280, height: 900 })
+    await page.goto('/console/sign-in-experience/account-center')
+    await page.getByRole('button', { name: 'Delete: My Wallet', exact: true }).click()
+    await expect(page.getByRole('button', { name: 'Delete: My Wallet', exact: true })).toBeHidden()
+    await page.getByRole('button', { name: 'Delete: Docs', exact: true }).click()
+    await expect(page.getByText('No external services configured.')).toBeVisible()
+    await page.goto('/profile')
+    await expect(page.getByText('More services', { exact: true })).toHaveCount(0)
+  })
 })

@@ -1,4 +1,18 @@
 export const zhAccountTranslations: Record<string, string> = {
+  'More services': '更多服务',
+  'External services': '外部服务',
+  'External service': '外部服务',
+  'Configure optional links shown in Account Center. Links open the destination directly.':
+    '配置账户中心中显示的可选入口，点击即可前往对应服务。',
+  'No external services configured.': '尚未配置外部服务。',
+  'Choose a name, HTTPS destination and icon.': '设置服务名称、HTTPS 地址和图标。',
+  'Add service': '添加服务',
+  'Move up': '上移',
+  'Move down': '下移',
+  Reload: '重新加载',
+  'Use an HTTPS URL without embedded credentials.': '请使用不含登录凭据的 HTTPS 地址。',
+  'Link IDs must be unique.': '入口标识不能重复。',
+
   'API resource accounts': 'API 资源账户',
   Accept: '接受',
   'Access duration': '访问期限',

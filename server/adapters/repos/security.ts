@@ -3,7 +3,9 @@ import type { SecurityRepository } from '@server/usecases/ports'
 import { and, count, desc, eq } from 'drizzle-orm'
 import { type SecurityPolicy, securityPolicySchema } from '../../../shared/api/security'
 import type { Database } from '../../db/client'
-import { passkey, session, signInExperience, twoFactor, user } from '../../db/schema'
+import { passkey, session, twoFactor, user } from '../../db/schema'
+import { readSiteSettings, writeSiteSettings } from './site-settings'
+import { metadataSchema } from './site-settings-schemas'
 
 export function createSecurityRepository(db: Database, policy: SecurityPolicy): SecurityRepository {
   return {
@@ -12,7 +14,8 @@ export function createSecurityRepository(db: Database, policy: SecurityPolicy): 
     },
 
     async updatePolicy(input) {
-      const current = await readManagedPolicy(db, policy)
+      const stored = await readSiteSettings(db, 'security', metadataSchema)
+      const current = managedPolicy(stored?.value ?? null, policy)
       const nextCaptchaSecret = input.policy.captcha?.secretKey?.trim()
         ? input.policy.captcha.secretKey
         : input.policy.captcha?.provider === current.captcha.provider
@@ -32,10 +35,11 @@ export function createSecurityRepository(db: Database, policy: SecurityPolicy): 
         passkeys: { ...current.passkeys, ...input.policy.passkeys },
         sessions: input.policy.sessions ?? current.sessions,
       })
-      const row = await readSettingsRow(db)
-      const metadata = {
-        ...(row?.metadata ?? {}),
-        securityPolicy: {
+      await writeSiteSettings(
+        db,
+        'security',
+        {
+          ...stored?.value,
           mfa: next.mfa,
           passkeys: next.passkeys,
           sessions: next.sessions,
@@ -43,15 +47,8 @@ export function createSecurityRepository(db: Database, policy: SecurityPolicy): 
           captcha: next.captcha,
           blocklist: next.blocklist,
         },
-      }
-
-      await db
-        .insert(signInExperience)
-        .values({ ...settingsInsertDefaults(row), id: settingsId, metadata, updatedAt: new Date() })
-        .onConflictDoUpdate({
-          target: signInExperience.id,
-          set: { metadata, updatedAt: new Date() },
-        })
+        stored?.revision ?? null,
+      )
 
       return next
     },
@@ -147,11 +144,12 @@ export function createSecurityRepository(db: Database, policy: SecurityPolicy): 
   }
 }
 
-const settingsId = 'default'
-
 async function readManagedPolicy(db: Database, defaults: SecurityPolicy): Promise<SecurityPolicy> {
-  const row = await readSettingsRow(db)
-  const managed = readObject(row?.metadata, 'securityPolicy')
+  const row = await readSiteSettings(db, 'security', metadataSchema)
+  return managedPolicy(row?.value ?? null, defaults)
+}
+
+function managedPolicy(managed: Record<string, unknown> | null, defaults: SecurityPolicy): SecurityPolicy {
   const managedCaptcha = readObject(managed, 'captcha')
   return securityPolicySchema.parse({
     ...defaults,
@@ -176,27 +174,6 @@ function normalizeManagedCaptcha(value: Record<string, unknown>, defaults: Secur
         : typeof value.secretBinding === 'string'
           ? value.secretBinding
           : undefined,
-  }
-}
-
-async function readSettingsRow(db: Database): Promise<typeof signInExperience.$inferSelect | null> {
-  const rows = await db.select().from(signInExperience).where(eq(signInExperience.id, settingsId)).limit(1)
-  if (rows[0]) return rows[0]
-
-  const legacyRows = await db.select().from(signInExperience).limit(1)
-  return legacyRows[0] ?? null
-}
-
-function settingsInsertDefaults(settings: typeof signInExperience.$inferSelect | null) {
-  return {
-    passwordEnabled: settings?.passwordEnabled ?? true,
-    signupEnabled: settings?.signupEnabled ?? true,
-    socialLoginEnabled: settings?.socialLoginEnabled ?? true,
-    identifierFirst: settings?.identifierFirst ?? false,
-    termsUri: settings?.termsUri ?? null,
-    privacyUri: settings?.privacyUri ?? null,
-    supportEmail: settings?.supportEmail ?? null,
-    metadata: settings?.metadata ?? null,
   }
 }
 

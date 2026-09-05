@@ -153,6 +153,7 @@ export function resetLocalData() {
     DELETE FROM email_service_config;
     DELETE FROM custom_domain;
     DELETE FROM deployment_setting;
+    DELETE FROM site_settings;
     DELETE FROM sign_in_experience;
     DELETE FROM account_center_setting;
     DELETE FROM branding_setting;

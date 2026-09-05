@@ -106,6 +106,7 @@ import type {
   UpdateManagementRealmRequest,
   UpdateManagementSignInSettingsRequest,
 } from '@shared/api/management'
+import type { SiteNavigation, SiteNavigationResponse } from '@shared/api/navigation'
 import type { OnboardingAdminRequest } from '@shared/api/onboarding'
 import type { PaginationMetadata } from '@shared/api/pagination'
 import type {
@@ -465,6 +466,10 @@ export type RpcSchema = {
   }
   '/api/webhooks/:id/deliveries/:deliveryId/attempts/:attemptId': {
     $get: RpcEndpoint<{ param: { id: string; deliveryId: string; attemptId: string } }, WebhookDeliveryAttempt>
+  }
+  '/api/realm/navigation': {
+    $get: RpcEndpoint<RpcNoInput, SiteNavigationResponse>
+    $put: RpcEndpoint<{ json: SiteNavigation; header: { 'If-Match': string } }, SiteNavigationResponse>
   }
   '/api/realm/account-management-policy': {
     $get: RpcEndpoint<RpcNoInput, ManagementAccountCenterSettingsResponse>

@@ -201,6 +201,7 @@ export async function getConfig(deps: Deps, options: ConfigzOptions): Promise<Co
       passkeysEnabled: options.securityPolicy?.passkeys.enabled ?? false,
     },
     accountCenter: accountCenter ?? defaultAccountCenterSettings,
+    navigation: { externalLinks: (await deps.configz.getNavigation()).externalLinks },
     captcha: {
       enabled: options.securityPolicy?.captcha.enabled ?? false,
       provider: options.securityPolicy?.captcha.provider ?? 'turnstile',

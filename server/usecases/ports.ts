@@ -34,6 +34,7 @@ import type {
   ReplaceOrganizationCreationPolicyRequest,
   UpdateManagementSignInSettingsRequest,
 } from '@shared/api/management'
+import type { SiteNavigation, SiteNavigationResponse } from '@shared/api/navigation'
 import type { OnboardingAdminRequest } from '@shared/api/onboarding'
 import type { PaginatedResult, PaginationInput } from '@shared/api/pagination'
 import type { AccountProfileLink } from '@shared/api/public-profiles'
@@ -1224,6 +1225,8 @@ export type UpdateConfigzBrandingInput = Partial<ConfigzBranding> & {
 }
 
 export interface ConfigzRepository {
+  getNavigation(): Promise<SiteNavigationResponse>
+  replaceNavigation(input: SiteNavigation, revision: number): Promise<void>
   getSettings(): Promise<ConfigzSettings | null>
   getBranding(applicationId: string | null): Promise<ConfigzBranding | null>
   getAccountCenterSettings(): Promise<ConfigzAccountCenter | null>

@@ -1,9 +1,11 @@
 import { notFound } from '@server/domain/errors'
 import type { AssetRepository, UploadedAssetRecord } from '@server/usecases/ports'
-import { and, eq, isNull } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import type { Database } from '../../db/client'
-import { application, brandingSetting, oauthClient, organization, uploadedAsset, user } from '../../db/schema'
+import { application, oauthClient, organization, uploadedAsset, user } from '../../db/schema'
 import { writeApplicationMetadata } from './applications-mappers'
+import { readSiteSettings, writeSiteSettings } from './site-settings'
+import { brandingSettingsSchema } from './site-settings-schemas'
 
 export function createDrizzleAssetRepository(db: Database): AssetRepository {
   return {
@@ -66,26 +68,25 @@ export function createDrizzleAssetRepository(db: Database): AssetRepository {
     },
 
     async updateBrandingAsset(kind, assetId) {
-      const rows = await db
-        .select({ id: brandingSetting.id })
-        .from(brandingSetting)
-        .where(and(isNull(brandingSetting.applicationId), isNull(brandingSetting.organizationId)))
-        .limit(1)
-      const patch = kind === 'logo' ? { logoAssetId: assetId } : { faviconAssetId: assetId }
-
-      if (rows[0]) {
-        await db
-          .update(brandingSetting)
-          .set({ ...patch, updatedAt: new Date() })
-          .where(eq(brandingSetting.id, rows[0].id))
-        return
+      const current = await readSiteSettings(db, 'branding', brandingSettingsSchema)
+      const value = current?.value ?? {
+        logoUrl: null,
+        faviconUrl: null,
+        logoAssetId: null,
+        faviconAssetId: null,
+        primaryColor: null,
+        backgroundColor: null,
+        customCss: null,
       }
-
-      await db.insert(brandingSetting).values({
-        id: 'branding_default',
-        ...patch,
-        updatedAt: new Date(),
-      })
+      await writeSiteSettings(
+        db,
+        'branding',
+        {
+          ...value,
+          ...(kind === 'logo' ? { logoAssetId: assetId } : { faviconAssetId: assetId }),
+        },
+        current?.revision ?? null,
+      )
     },
   }
 }
