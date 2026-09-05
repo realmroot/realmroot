@@ -1,4 +1,4 @@
-import { createAgentSchema } from '@shared/api/agent-api'
+import { createAgentPermissionSchema, createAgentSchema } from '@shared/api/agent-api'
 import { describe, expect, it } from 'vitest'
 
 const installation = {
@@ -62,6 +62,21 @@ describe('Create Agent public JWK contract', () => {
   ])('rejects conflicting %s metadata', (member, value) => {
     expect(
       createAgentSchema.safeParse(request({ kty: 'OKP', crv: 'Ed25519', x: 'public-x', kid: 'key-1', [member]: value }))
+        .success,
+    ).toBe(false)
+  })
+})
+
+describe('Direct Agent permission lifetime contract', () => {
+  const input = { resourceServerId: 'resource-1', scope: 'projects:read', authorizationDetails: [] }
+  it('[spec: agent-identity/direct-agent-permission] validates persistent and until lifetimes', () => {
+    expect(createAgentPermissionSchema.safeParse({ ...input, mode: 'persistent' }).success).toBe(true)
+    expect(
+      createAgentPermissionSchema.safeParse({ ...input, mode: 'until', expiresAt: '2030-01-01T00:00:00Z' }).success,
+    ).toBe(true)
+    expect(createAgentPermissionSchema.safeParse({ ...input, mode: 'until' }).success).toBe(false)
+    expect(
+      createAgentPermissionSchema.safeParse({ ...input, mode: 'persistent', expiresAt: '2030-01-01T00:00:00Z' })
         .success,
     ).toBe(false)
   })
