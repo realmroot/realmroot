@@ -5,6 +5,7 @@ import {
   createAccessRequestCredential,
   createAccountConnection,
   createAgentAccessRequest,
+  createAgentPermission,
   createProviderConnectionIntent,
   createResourceConnectionIntent,
   decideAccessRequest,
@@ -69,6 +70,56 @@ const organizationAuthority = { type: 'realmroot_authority', authority: 'organiz
 const userAuthority = { type: 'realmroot_authority', authority: 'user', id: 'user-1' }
 
 describe('external API resource authorization', () => {
+  it('[spec: agent-identity/direct-agent-permission] grants before any request and reuses the grant on first Agent access', async () => {
+    const deps = createTestDeps()
+    authorizationDeps(deps)
+    vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
+    vi.mocked(deps.externalResources.findConnectionByOwnerResource).mockResolvedValue(connectionRecord())
+    vi.mocked(deps.externalResources.findConnection).mockResolvedValue(connectionRecord())
+    let saved: ResourceScopeEntitlementRecord | undefined
+    deps.authorization.createScopeEntitlement = vi.fn(async (record) => (saved ??= record))
+    vi.mocked(deps.externalResources.listActiveEntitlementsByAgent).mockImplementation(async () =>
+      saved ? [saved] : [],
+    )
+    const input = {
+      resourceServerId: 'resource-1',
+      scope: 'projects:read',
+      authorizationDetails: [],
+      mode: 'persistent' as const,
+    }
+    const permission = await createAgentPermission(deps, 'identity-1', input, 'user-1')
+    expect(permission).toMatchObject({ scope: 'projects:read', mode: 'persistent', sourceAccessRequestId: null })
+    expect(deps.externalResources.createAccessRequest).not.toHaveBeenCalled()
+    expect((await createAgentPermission(deps, 'identity-1', input, 'user-1')).id).toBe(permission.id)
+    vi.mocked(deps.externalResources.createAccessRequest).mockImplementation(async (record) => record)
+    const request = await createAgentAccessRequest(
+      deps,
+      { resourceId: 'resource-1', scopes: ['projects:read'], reason: 'Work', authorizationDetails: [] },
+      principal(),
+      'https://auth.example.com',
+    )
+    expect(request.status).toBe('approved')
+    expect(saved?.grantedByUserId).toBe('user-1')
+  })
+
+  it('[spec: agent-identity/direct-agent-permission] rejects another controller and scopes outside the account', async () => {
+    const deps = createTestDeps()
+    authorizationDeps(deps)
+    vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
+    vi.mocked(deps.externalResources.findConnectionByOwnerResource).mockResolvedValue(connectionRecord())
+    vi.mocked(deps.externalResources.findConnection).mockResolvedValue(connectionRecord())
+    deps.authorization.createScopeEntitlement = vi.fn()
+    const input = {
+      resourceServerId: 'resource-1',
+      scope: 'projects:write',
+      authorizationDetails: [],
+      mode: 'persistent' as const,
+    }
+    await expect(createAgentPermission(deps, 'identity-1', input, 'another-user')).rejects.toThrow('Agent controller')
+    await expect(createAgentPermission(deps, 'identity-1', input, 'user-1')).rejects.toThrow('connected account')
+    expect(deps.authorization.createScopeEntitlement).not.toHaveBeenCalled()
+  })
+
   it('rejects a deleted external resource connection intent', async () => {
     const deps = createTestDeps()
     authorizationDeps(deps)

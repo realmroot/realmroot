@@ -15,5 +15,7 @@
   {"method":"GET","path":"/users/{userId}/permissions","operationId":"listUserPermissions","semanticHash":"2faa10c5231520701113588c1220e62f6c1ec7469066d087554128583871ea55"},
   {"method":"POST","path":"/users/{userId}/permissions","operationId":"createUserPermission","semanticHash":"b11578f78703be6a0ced954ccd788667cb70265f0163653866a143e9b1c127b9"},
   {"method":"DELETE","path":"/users/{userId}/permissions/{permissionId}","operationId":"deleteUserPermission","semanticHash":"ba6f626203c200c69b24939796d32c8642dcc6d97f24b1a066476f3a55e7e61e"},
-  {"method":"GET","path":"/users/{userId}/permissions/{permissionId}","operationId":"getUserPermission","semanticHash":"5cffe9f6a5205f9cd301994fc4ef4b23eb9c2eaaffa060f5bf381a5fcd51e361"}
+  {"method":"GET","path":"/users/{userId}/permissions/{permissionId}","operationId":"getUserPermission","semanticHash":"5cffe9f6a5205f9cd301994fc4ef4b23eb9c2eaaffa060f5bf381a5fcd51e361"},
+  {"method":"GET","path":"/agents/{agentId}/permission-contexts","operationId":"listAgentPermissionContexts","semanticHash":"cfd1e5ff61f1dd110fa753771d6494fba7b54ce74ee073cc31a93bdc84bc323e"},
+  {"method":"POST","path":"/agents/{agentId}/permissions","operationId":"createAgentPermission","semanticHash":"70b749a888fd8080311082a2e1b5e93f3c45a3938513682b1dedb54b45830847"}
 ]

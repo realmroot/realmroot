@@ -682,3 +682,20 @@ Feature: Agent identity and delegated API authorization
       When the Agent is enrolled, recovered, retired, or receives a capability decision
       Then Realmroot records the action, result, controller, stable Agent identity, host, and affected capabilities
       And the audit event contains no host credential, session token, or approval code
+
+  @journey:direct-agent-permission @entrypoint:restish @proof:unit
+  Scenario: A controller grants an Agent permission before its first request
+    Given an active Agent and a Resource Context within its controller's authority
+    When the controller directly grants a persistent permission
+    Then Realmroot stores the permission without creating an access request
+    And repeated grants reuse the existing permission
+    And a later Agent request reuses that permission without human approval
+    And scopes outside the controller or connected account boundary are rejected
+
+  @journey:direct-agent-permission-http @entrypoint:restish @proof:integration
+  Scenario: Direct permissions preserve ownership and persistence through HTTP
+    Given a user controls an active Agent
+    When the user creates the same native permission twice through HTTP
+    Then both responses identify the same persistent permission without an access request
+    And anonymous and other-user writes are rejected
+    And invalid permission bodies are rejected

@@ -34,6 +34,8 @@ const operationsWithExplicitSecurity = new Set([
   'GET /resource-servers',
   'GET /resource-servers/{param}',
   'GET /agents/{param}/permissions',
+  'POST /agents/{param}/permissions',
+  'GET /agents/{param}/permission-contexts',
   'GET /agents/{param}/permissions/{param}',
   'DELETE /agents/{param}/permissions/{param}',
   'GET /agents/{param}/authorized-resource-servers',

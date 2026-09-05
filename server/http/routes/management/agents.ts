@@ -12,12 +12,21 @@ import {
   listManagementAgentInstallations,
   listManagementAgentPermissions,
 } from '@server/usecases/agent-identities'
-import { getAgentPermission, listAgentPermissions, revokeAgentPermission } from '@server/usecases/external-resources'
+import {
+  createAgentPermission,
+  getAgentPermission,
+  listAgentPermissionContexts,
+  listAgentPermissions,
+  revokeAgentPermission,
+} from '@server/usecases/external-resources'
 import {
   agentAuthorizedResourceServersResponseSchema,
+  agentPermissionContextsQuerySchema,
+  agentPermissionContextsResponseSchema,
   agentPermissionSchema,
   agentPermissionsResponseSchema,
   agentSchema,
+  createAgentPermissionSchema,
   createAgentSchema,
   listAgentAuditEventsQuerySchema,
   listAgentAuthorizedResourceServersQuerySchema,
@@ -112,6 +121,38 @@ managementAgentsRoute.get('/agents/:agentId/authorized-resource-servers', async 
       ),
     ),
   )
+})
+
+managementAgentsRoute.get('/agents/:agentId/permission-contexts', async (c) => {
+  const actorUserId = getActorUserId(c)
+  if (!actorUserId || getPrincipal(c).agent) throw forbidden('A User controller is required.')
+  await requireAgentByIdPermissionAccess(c, c.req.param('agentId'))
+  const query = readQuery(c, agentPermissionContextsQuerySchema)
+  return c.json(
+    agentPermissionContextsResponseSchema.parse(
+      await listAgentPermissionContexts(
+        getDeps(c),
+        c.req.param('agentId'),
+        query.resource,
+        actorUserId,
+        paginationInput(query),
+      ),
+    ),
+  )
+})
+
+managementAgentsRoute.post('/agents/:agentId/permissions', async (c) => {
+  const actorUserId = getActorUserId(c)
+  if (!actorUserId || getPrincipal(c).agent) throw forbidden('A User controller is required.')
+  await requireAgentByIdPermissionAccess(c, c.req.param('agentId'), true)
+  const permission = await createAgentPermission(
+    getDeps(c),
+    c.req.param('agentId'),
+    await readJson(c, createAgentPermissionSchema),
+    actorUserId,
+  )
+  c.header('Location', permission.links.self)
+  return c.json(agentPermissionSchema.parse(permission), 201)
 })
 
 managementAgentsRoute.get('/agents/:agentId/permissions', async (c) => {

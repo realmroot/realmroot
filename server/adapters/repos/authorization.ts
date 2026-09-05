@@ -561,14 +561,20 @@ export function createDrizzleAuthorizationRepository(db: Database, ids: Identifi
     },
 
     async createScopeEntitlement(input, now) {
-      const [existing] = await db
+      let [existing] = await db
         .select()
         .from(resourceScopeEntitlement)
         .where(activeEquivalentEntitlement(input))
         .limit(1)
       if (!existing) {
-        await db.insert(resourceScopeEntitlement).values(input)
-        return input
+        const [inserted] = await db.insert(resourceScopeEntitlement).values(input).onConflictDoNothing().returning()
+        if (inserted) return inserted
+        ;[existing] = await db
+          .select()
+          .from(resourceScopeEntitlement)
+          .where(activeEquivalentEntitlement(input))
+          .limit(1)
+        if (!existing) throw new Error('Equivalent active permission was not found after a concurrent grant.')
       }
       if (existing.expiresAt && existing.expiresAt.getTime() <= now.getTime()) {
         await db.batch([
