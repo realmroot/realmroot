@@ -3910,6 +3910,9 @@ describe('external API resource authorization', () => {
       ),
     ).resolves.toMatchObject({ reason: null })
 
+    vi.mocked(deps.authorization.listActiveUserScopeEntitlements).mockResolvedValue([
+      { ...grantRecord(), organizationId: 'org-1' },
+    ])
     vi.mocked(deps.externalResources.listActiveEntitlementsByAgent).mockResolvedValue([])
     await expect(
       createAccessRequest(
@@ -4392,6 +4395,9 @@ describe('external API resource authorization', () => {
       'projects:read': 'automatic',
       'projects:write': 'assigned',
     })
+    vi.mocked(deps.authorization.listActiveUserScopeEntitlements).mockResolvedValue([
+      { ...grantRecord(), scope: 'projects:write', organizationId: null },
+    ])
 
     await expect(
       createAgentAccessRequest(
@@ -4423,6 +4429,53 @@ describe('external API resource authorization', () => {
         'https://auth.example.com',
       ),
     ).rejects.toThrow('Realmroot authority Context is not available to this Agent owner.')
+    expect(deps.externalResources.createAccessRequestWithAudit).not.toHaveBeenCalled()
+    expect(deps.externalResources.approveAccessRequestWithEntitlements).not.toHaveBeenCalled()
+  })
+
+  it('rejects ungrantable personal scopes before creating or resuming approval [spec: agent-identity/native-api-resource-access-request]', async () => {
+    const deps = createTestDeps()
+    const builtIn = {
+      ...nativeResource(),
+      identifier: 'realmroot',
+      scopeRegistry: {
+        ...nativeResource().scopeRegistry!,
+        scopes: ['applications:read', 'permissions:read', 'agents:read'].map((value) => ({
+          value,
+          description: null,
+          grantMode: 'assigned' as const,
+        })),
+      },
+    }
+    vi.mocked(deps.authorization.findResource).mockResolvedValue(builtIn)
+    vi.mocked(deps.externalResources.listActiveEntitlementsByAgent).mockResolvedValue([])
+    vi.mocked(deps.authorization.listActiveUserScopeEntitlements).mockResolvedValue([])
+    const authorizationDetails = [{ type: 'realmroot_authority', authority: 'user', id: 'user-1' }]
+    vi.mocked(deps.externalResources.listPendingAccessRequestsByAgent).mockResolvedValue([
+      {
+        ...requestRecord(),
+        connectionId: null,
+        scopes: ['applications:read', 'permissions:read'],
+        authorizationDetails,
+      },
+    ])
+
+    await expect(
+      createAgentAccessRequest(
+        deps,
+        { resourceId: builtIn.id, scopes: ['applications:read', 'permissions:read'], authorizationDetails },
+        principal(),
+        'https://auth.example.com',
+      ),
+    ).rejects.toMatchObject({
+      status: 400,
+      code: 'bad_request',
+      message: expect.stringContaining('No approval request was created.'),
+      details: {
+        context: { id: 'user-1', type: 'user' },
+        scopes: ['applications:read', 'permissions:read'],
+      },
+    })
     expect(deps.externalResources.createAccessRequestWithAudit).not.toHaveBeenCalled()
     expect(deps.externalResources.approveAccessRequestWithEntitlements).not.toHaveBeenCalled()
   })
