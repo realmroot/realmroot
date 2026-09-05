@@ -1,10 +1,11 @@
-import { oauthError } from '@server/domain/errors'
+import { ApiError, oauthError } from '@server/domain/errors'
 import { handleApiError } from '@server/http/errors'
 import { depsMiddleware } from '@server/http/middleware/deps'
 import { createAgentProtocolRoutes } from '@server/http/routes/agent-protocol'
 import * as agentIdentities from '@server/usecases/agent-identities'
 import * as externalResources from '@server/usecases/external-resources'
 import type { AgentIdentityAggregate } from '@server/usecases/ports'
+import { agentAccessRequestErrorResponseSchema } from '@shared/api/management'
 import { Hono } from 'hono'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createTestDeps } from '../test-deps'
@@ -15,6 +16,23 @@ const authorizationDetail = { type: 'workspace', identifier: 'workspace-1' }
 
 describe('Agent protocol routes', () => {
   afterEach(() => vi.restoreAllMocks())
+
+  it('returns controller boundary failures through the HTTP error contract', async () => {
+    const details = { context: { id: 'user-1', type: 'user' }, scopes: ['applications:read'] }
+    const message = 'Controller cannot grant applications:read. No approval request was created.'
+    vi.spyOn(externalResources, 'createAccessRequest').mockRejectedValue(
+      new ApiError(403, 'requested_scopes_exceed_controller_boundary', message, details),
+    )
+    const response = await createRouteApp().request('/api/agent/access-requests', {
+      method: 'POST',
+      headers: jsonHeaders(),
+      body: JSON.stringify({ resourceServerId: 'resource-1', scopes: ['applications:read'] }),
+    })
+    expect(response.status).toBe(403)
+    const body = await response.json()
+    expect(body).toMatchObject({ error: { code: 'requested_scopes_exceed_controller_boundary', message, details } })
+    expect(agentAccessRequestErrorResponseSchema.safeParse(body).success).toBe(true)
+  })
 
   it('exposes the stable identity at its canonical resource path', async () => {
     vi.spyOn(agentIdentities, 'getAgentIdentityByProtocolAgent').mockResolvedValue(activeIdentity())

@@ -259,6 +259,14 @@ describe('OpenAPI semantic contract gate', () => {
       ...contextIDContract,
     ].sort((left, right) => `${left.path}:${left.method}`.localeCompare(`${right.path}:${right.method}`))
 
-    expect(openApiSemanticSnapshot(unifiedOpenApi as unknown as Record<string, unknown>, () => true)).toEqual(baseline)
+    const controllerBoundaryContract = JSON.parse(
+      readFileSync(new URL('./approved-controller-boundary-semantic-baseline.json', import.meta.url), 'utf8'),
+    ) as typeof unchanged
+    const controllerBoundaryChanges = new Set(controllerBoundaryContract.map(({ method, path }) => `${method}:${path}`))
+    const expected = [
+      ...baseline.filter(({ method, path }) => !controllerBoundaryChanges.has(`${method}:${path}`)),
+      ...controllerBoundaryContract,
+    ].sort((left, right) => `${left.path}:${left.method}`.localeCompare(`${right.path}:${right.method}`))
+    expect(openApiSemanticSnapshot(unifiedOpenApi as unknown as Record<string, unknown>, () => true)).toEqual(expected)
   })
 })

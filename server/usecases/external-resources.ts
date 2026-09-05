@@ -1,6 +1,7 @@
 import { connectorCapabilities } from '@server/domain/connectors/provider-templates'
 import { type ResourceOAuthDriver, resourceOAuthDriver } from '@server/domain/connectors/resource-oauth-driver'
 import {
+  ApiError,
   badGateway,
   badRequest,
   conflict,
@@ -1011,6 +1012,24 @@ export async function createAgentAccessRequest(
     return entitlement ? [{ scope, entitlementId: entitlement.id }] : []
   })
   const alreadyAuthorized = approvedEntitlements.length === scopes.length
+  if (!alreadyAuthorized && !requiresAccountConnection(resource)) {
+    const grantorScopes = await nativeAuthorityEffectiveScopes(
+      deps,
+      identity.identity.ownerUserId,
+      resource,
+      authorizationDetails[0]!,
+    )
+    const missing = scopes.filter((scope) => !grantorScopes.includes(scope))
+    if (missing.length > 0) {
+      const authority = authorizationDetails[0]!
+      throw new ApiError(
+        403,
+        'requested_scopes_exceed_controller_boundary',
+        `Controller cannot grant the following scopes in Context "${authority.id}" (${authority.authority}): ${missing.join(', ')}. No approval request was created.`,
+        { context: { id: authority.id, type: authority.authority }, scopes: missing },
+      )
+    }
+  }
   const automaticControllerUserId = automaticNativeControllerUserId(resource, identity.identity.ownerUserId, scopes)
   const binding = identity.bindings.find(
     (candidate) => candidate.hostId === principal.hostId && candidate.protocolAgentId === principal.protocolAgentId,
