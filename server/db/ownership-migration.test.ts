@@ -337,9 +337,12 @@ describe('tenant ownership migration', () => {
 })
 
 function migrationNames() {
-  return readdirSync(new URL('../../migrations', import.meta.url))
-    .filter((name) => name.endsWith('.sql'))
-    .sort()
+  return (
+    readdirSync(new URL('../../migrations', import.meta.url))
+      // This historical ownership fixture requires the legacy settings schema.
+      .filter((name) => name.endsWith('.sql') && name < '20260905051211_noisy_echo.sql')
+      .sort()
+  )
 }
 
 function columnNames(database: DatabaseSync, table: string) {

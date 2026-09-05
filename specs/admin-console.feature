@@ -440,3 +440,11 @@ Feature: Admin Console
     When an operator adds, edits and reorders service links in Console dialogs
     Then Account Center shows the saved links in desktop and mobile navigation
     And removing all links hides the external service group
+
+  @entrypoint:restish @journey:site-settings-cleanup @proof:unit
+  Scenario: Verified site settings retire legacy storage
+    Given existing configuration has been migrated and the new release verified
+    When legacy settings storage is removed
+    Then the current settings and revisions remain unchanged
+    And the old settings tables and temporary synchronization triggers no longer exist
+    And cleanup refuses to discard configuration that has no migrated group
