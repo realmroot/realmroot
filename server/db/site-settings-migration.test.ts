@@ -68,6 +68,16 @@ describe('site settings migration', () => {
       expect(group(db, 'email')).toMatchObject({ fromEmail: 'hello@example.com', enabled: true })
       db.exec("UPDATE sign_in_experience SET password_enabled=1 WHERE id='default'")
       expect(group(db, 'sign_in').passwordEnabled).toBe(true)
+      db.exec(
+        readFileSync(
+          new URL('../../migrations/20260905054000_site_settings_developer_sync.sql', import.meta.url),
+          'utf8',
+        ),
+      )
+      db.exec(
+        "INSERT INTO organization(id, slug, name) VALUES ('test-org', 'test-org', 'Test'); UPDATE organization SET metadata = '{\"realmroot\":{\"console\":{\"enabled\":true}}}' WHERE id = 'test-org'",
+      )
+      expect(group(db, 'developer').selectedOrganizationIds).toEqual(['test-org'])
       expect(db.prepare("SELECT revision FROM site_settings WHERE key='sign_in'").get()).toMatchObject({ revision: 2 })
       expect(db.prepare('SELECT count(*) AS count FROM sign_in_experience').get()).toMatchObject({ count: 1 })
     } finally {
