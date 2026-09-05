@@ -50,7 +50,7 @@ describe('unified site settings', () => {
     const config = (await (await harness.request('/api/configz')).json()) as { navigation: typeof input }
     expect(config.navigation).toEqual(input)
     const current = saved.headers.get('etag')!
-    for (const url of ['javascript:alert(1)', 'http://example.com', 'https://user:secret@example.com']) {
+    for (const url of ['javascript:alert(1)', 'http://example.com', 'https://user:secret@example.com', 'not a url']) {
       expect((await put({ externalLinks: [{ ...input.externalLinks[0], url }] }, current)).status).toBe(400)
     }
     await createUser(harness, cookie, {
