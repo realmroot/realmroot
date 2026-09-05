@@ -1,8 +1,4 @@
 export const zhAccountTranslations: Record<string, string> = {
-  'Account permissions': '账户权限',
-  'Edit account permissions': '编辑账户权限',
-  'Control which account center sections and profile fields users can manage.':
-    '设置用户可以管理的账户中心功能和个人资料字段。',
   'More services': '更多服务',
   'External services': '外部服务',
   'External service': '外部服务',

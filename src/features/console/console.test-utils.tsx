@@ -61,7 +61,6 @@ export function consoleSharedFetch(input: RequestInfo | URL, init?: RequestInit)
   }
   if (url === '/api/account/security') return Promise.resolve(jsonResponse({ security: accountSecurity }))
   if (url === '/api/realm/sign-in-policy') return Promise.resolve(jsonResponse(signInSettings))
-  if (url === '/api/realm/account-management-policy') return Promise.resolve(jsonResponse(accountCenterSettings))
   if (url === '/api/realm/organization-creation-policy') {
     return Promise.resolve(
       jsonResponse(
@@ -164,7 +163,6 @@ export function consoleRouteFetch(input: RequestInfo | URL) {
     return Promise.resolve(jsonResponse({ user: consoleAccountProfile, access: consoleAccountAccess }))
   }
   if (url === '/api/realm/sign-in-policy') return Promise.resolve(jsonResponse(signInSettings))
-  if (url === '/api/realm/account-management-policy') return Promise.resolve(jsonResponse(accountCenterSettings))
   if (url === '/api/realm/configuration-status') {
     return Promise.resolve(
       jsonResponse({ admin: { setupRequired: false, setupHref: '/console/applications', missing: [] } }),
@@ -199,7 +197,6 @@ export function consoleRouteFetch(input: RequestInfo | URL) {
 }
 
 import {
-  accountCenterSettings,
   accountSecurity,
   brandingSettings,
   configz,
