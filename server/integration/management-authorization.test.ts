@@ -59,8 +59,15 @@ describe('authorization management over real D1', () => {
   })
 
   it('[spec: agent-identity/direct-agent-permission-http] creates and reuses permissions with controller boundaries', async () => {
-    const cookie = await signInAdmin(harness)
-    const admin = await harness.db.query.user.findFirst({ where: eq(user.email, 'admin@example.com') })
+    const adminCookie = await signInAdmin(harness)
+    await createUser(harness, adminCookie, {
+      email: 'agent-controller@example.com',
+      username: 'agent-controller',
+      displayName: 'Agent controller',
+      password: 'Password123!',
+    })
+    const cookie = await signIn(harness, 'agent-controller@example.com', 'Password123!')
+    const admin = await harness.db.query.user.findFirst({ where: eq(user.email, 'agent-controller@example.com') })
     expect(admin).toBeDefined()
     const now = new Date()
     await harness.db.insert(agentIdentity).values({
@@ -100,7 +107,7 @@ describe('authorization management over real D1', () => {
     })
     expect(anonymous.status).toBe(401)
     await postJson(harness, cookie, '/api/agents/direct-identity/permissions', { ...input, mode: 'until' }, 400)
-    await createUser(harness, cookie, {
+    await createUser(harness, adminCookie, {
       email: 'other-controller@example.com',
       username: 'other-controller',
       displayName: 'Other controller',

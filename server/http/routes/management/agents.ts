@@ -126,7 +126,7 @@ managementAgentsRoute.get('/agents/:agentId/authorized-resource-servers', async 
 managementAgentsRoute.get('/agents/:agentId/permission-contexts', async (c) => {
   const actorUserId = getActorUserId(c)
   if (!actorUserId || getPrincipal(c).agent) throw forbidden('A User controller is required.')
-  await requireAgentByIdPermissionAccess(c, c.req.param('agentId'))
+  await requireAgentAccess(c, await getAgent(getDeps(c), c.req.param('agentId')), true)
   const query = readQuery(c, agentPermissionContextsQuerySchema)
   return c.json(
     agentPermissionContextsResponseSchema.parse(
@@ -144,7 +144,7 @@ managementAgentsRoute.get('/agents/:agentId/permission-contexts', async (c) => {
 managementAgentsRoute.post('/agents/:agentId/permissions', async (c) => {
   const actorUserId = getActorUserId(c)
   if (!actorUserId || getPrincipal(c).agent) throw forbidden('A User controller is required.')
-  await requireAgentByIdPermissionAccess(c, c.req.param('agentId'), true)
+  await requireAgentAccess(c, await getAgent(getDeps(c), c.req.param('agentId')), true)
   const permission = await createAgentPermission(
     getDeps(c),
     c.req.param('agentId'),

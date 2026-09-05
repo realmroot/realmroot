@@ -8,7 +8,7 @@ A User controller can provision permissions before an Agent requests access:
   `authorizationDetails`, `mode` (persistent or until), optional `expiresAt`,
   and optional `accountConnectionId`.
 
-The operations require permissions:read/write respectively and the target
+Both operations use the existing agents:write capability and require the target
 Agent's controller. User-delegated OAuth applications are supported. An Agent
 principal cannot use these endpoints to grant itself or another Agent authority.
 
