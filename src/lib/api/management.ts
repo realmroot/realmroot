@@ -74,6 +74,7 @@ import type {
   UpdateManagementRealmRequest,
   UpdateManagementSignInSettingsRequest,
 } from '@shared/api/management'
+import { type SiteNavigation, siteNavigationResponseSchema } from '@shared/api/navigation'
 import type { SecurityPolicyResponse, UpdateSecurityPolicyInput } from '@shared/api/security'
 import type {
   CreateWebhookEndpointRequest,
@@ -928,4 +929,16 @@ function stringifyWebhookQuery<T extends Record<string, unknown>>(query: Partial
       .filter((entry): entry is [keyof T & string, Exclude<T[keyof T], undefined>] => entry[1] !== undefined)
       .map(([key, value]) => [key, String(value)]),
   ) as Partial<Record<keyof T, string>>
+}
+
+export async function getSiteNavigation() {
+  const result = await readVersionedResponse(apiClient.api.realm.navigation.$get(undefined, versionedGetOptions))
+  return { ...siteNavigationResponseSchema.parse(result), etag: result.etag }
+}
+
+export async function replaceSiteNavigation({ input, etag }: { input: SiteNavigation; etag: string }) {
+  const result = await readVersionedResponse(
+    apiClient.api.realm.navigation.$put({ json: input, header: { 'If-Match': etag } }),
+  )
+  return { ...siteNavigationResponseSchema.parse(result), etag: result.etag }
 }

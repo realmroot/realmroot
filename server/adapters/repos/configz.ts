@@ -3,7 +3,6 @@ import { defaultAccountCenterSettings } from '@server/usecases/configz'
 import type {
   ConfigzIdentityProvider,
   ConfigzRepository,
-  ConfigzSettings,
   UpdateConfigzBrandingInput,
   UpdateConfigzSettingsInput,
 } from '@server/usecases/ports'
@@ -12,71 +11,108 @@ import {
   emailServiceSettingsSchema,
   organizationCreationPolicyResponseSchema,
 } from '@shared/api/management'
-import type { SQL } from 'drizzle-orm'
-import { and, eq, isNull } from 'drizzle-orm'
+import { siteNavigationSchema } from '@shared/api/navigation'
+import { eq } from 'drizzle-orm'
 import type { Database } from '../../db/client'
-import {
-  accountCenterSetting,
-  brandingSetting,
-  emailServiceConfig,
-  identityProviderConnector,
-  organization,
-  signInExperience,
-  uploadedAsset,
-} from '../../db/schema'
+import { identityProviderConnector, organization, uploadedAsset } from '../../db/schema'
 
-const settingsId = 'default'
-const globalBrandingId = 'branding_default'
-const accountCenterSettingsId = 'account_center_default'
-const emailSettingsId = 'email_default'
+import { readSiteSettings, writeSiteSettings } from './site-settings'
+import {
+  accountSettingsSchema,
+  brandingSettingsSchema,
+  generalSettingsSchema,
+  metadataSchema,
+  signInSettingsSchema,
+  storedEmailSettingsSchema,
+} from './site-settings-schemas'
 
 export function createDrizzleConfigzRepository(db: Database): ConfigzRepository {
   return {
+    async getNavigation() {
+      const row = await readSiteSettings(db, 'navigation', siteNavigationSchema)
+      return { ...(row?.value ?? { externalLinks: [] }), revision: row?.revision ?? 0 }
+    },
+    async replaceNavigation(input, revision) {
+      await writeSiteSettings(db, 'navigation', siteNavigationSchema.parse(input), revision === 0 ? null : revision)
+    },
     async getSettings() {
-      const rows = await db.select().from(signInExperience).where(eq(signInExperience.id, settingsId)).limit(1)
-      if (rows[0]) return toSettings(rows[0])
-
-      const legacyRows = await db.select().from(signInExperience).limit(1)
-      return legacyRows[0] ? toSettings(legacyRows[0]) : null
+      const signIn = await readSiteSettings(db, 'sign_in', signInSettingsSchema)
+      const general = await readSiteSettings(db, 'general', generalSettingsSchema)
+      if (!signIn && !general) return null
+      const value = general?.value ?? generalSettingsSchema.parse({})
+      return {
+        passwordEnabled: signIn?.value.passwordEnabled ?? true,
+        signupEnabled: signIn?.value.signupEnabled ?? true,
+        socialLoginEnabled: signIn?.value.socialLoginEnabled ?? true,
+        identifierFirst: signIn?.value.identifierFirst ?? false,
+        termsUri: value.termsUri,
+        privacyUri: value.privacyUri,
+        supportEmail: value.supportEmail,
+        metadata: { ...signIn?.value.metadata, copy: value.copy, supportUri: value.supportUri },
+      }
     },
 
     async updateSettings(input) {
-      const current = await this.getSettings()
-      const patch = toSettingsPatch(input, current?.metadata ?? null)
-      await db
-        .insert(signInExperience)
-        .values({ ...settingsInsertDefaults(current), id: settingsId, ...patch })
-        .onConflictDoUpdate({
-          target: signInExperience.id,
-          set: patch,
-        })
+      const { copy, termsUri, privacyUri, supportEmail, supportUri, ...signInInput } = input
+      if (Object.keys(signInInput).length) {
+        const current = await readSiteSettings(db, 'sign_in', signInSettingsSchema)
+        const value = current?.value ?? {
+          passwordEnabled: true,
+          signupEnabled: true,
+          socialLoginEnabled: true,
+          identifierFirst: false,
+          metadata: {},
+        }
+        const patch = toSettingsPatch(signInInput, value.metadata)
+        const { updatedAt: _updatedAt, ...next } = patch
+        await writeSiteSettings(
+          db,
+          'sign_in',
+          signInSettingsSchema.parse({ ...value, ...next }),
+          current?.revision ?? null,
+        )
+      }
+      if (
+        copy !== undefined ||
+        termsUri !== undefined ||
+        privacyUri !== undefined ||
+        supportEmail !== undefined ||
+        supportUri !== undefined
+      ) {
+        const current = await readSiteSettings(db, 'general', generalSettingsSchema)
+        const value = current?.value ?? generalSettingsSchema.parse({})
+        const next = {
+          ...value,
+          ...withoutUndefined({ termsUri, privacyUri, supportEmail, supportUri }),
+          ...(copy ? { copy: { ...value.copy, ...copy } } : {}),
+        }
+        await writeSiteSettings(db, 'general', generalSettingsSchema.parse(next), current?.revision ?? null)
+      }
     },
 
     async updateBranding(input) {
       if (input.copy) await this.updateSettings({ copy: input.copy })
-
+      const current = await readSiteSettings(db, 'branding', brandingSettingsSchema)
+      const value = current?.value ?? emptyBranding
       const patch = toBrandingPatch(input)
-      await db
-        .insert(brandingSetting)
-        .values({ id: globalBrandingId, ...patch })
-        .onConflictDoUpdate({
-          target: brandingSetting.id,
-          set: patch,
-        })
+      await writeSiteSettings(
+        db,
+        'branding',
+        brandingSettingsSchema.parse({ ...value, ...patch }),
+        current?.revision ?? null,
+      )
     },
 
     async getAccountCenterSettings() {
-      const rows = await db
-        .select()
-        .from(accountCenterSetting)
-        .where(eq(accountCenterSetting.id, accountCenterSettingsId))
-        .limit(1)
-      return rows[0] ? toAccountCenterSettings(rows[0]) : null
+      const row = await readSiteSettings(db, 'account_center', accountSettingsSchema)
+      if (!row) return null
+      const { metadata: _metadata, ...value } = row.value
+      return value
     },
 
     async getOrganizationCreationPolicy() {
-      const settings = await this.getSettings()
-      const configured = readObjectMetadata(settings?.metadata ?? null, 'developerPolicy')
+      const settings = await readSiteSettings(db, 'developer', metadataSchema)
+      const configured = settings?.value ?? {}
       return organizationCreationPolicyResponseSchema.parse({
         mode: configured.organizationCreation ?? 'admins_only',
         approvedUserIds: configured.approvedUserIds ?? [],
@@ -84,130 +120,86 @@ export function createDrizzleConfigzRepository(db: Database): ConfigzRepository 
     },
 
     async getDeveloperConsoleAccessPolicy() {
-      const settings = await this.getSettings()
-      const configured = readObjectMetadata(settings?.metadata ?? null, 'developerPolicy')
+      const settings = await readSiteSettings(db, 'developer', metadataSchema)
+      const configured = settings?.value ?? {}
       const rows = await db.select({ id: organization.id, metadata: organization.metadata }).from(organization)
       return developerConsoleAccessPolicyResponseSchema.parse({
         mode: configured.consoleAccess ?? 'realm_operators',
         eligibleAccessLevels: configured.eligibleAccessLevels ?? ['owner', 'admin'],
         selectedOrganizationIds: rows
-          .filter((row) => organizationConsoleEnabled(row.metadata))
+          .filter(
+            (row) =>
+              Array.isArray(configured.selectedOrganizationIds) && configured.selectedOrganizationIds.includes(row.id),
+          )
           .map((row) => row.id)
           .sort(),
       })
     },
 
     async getEmailSettings() {
-      const rows = await db.select().from(emailServiceConfig).where(eq(emailServiceConfig.id, emailSettingsId)).limit(1)
-      const row = rows[0]
-      return row
-        ? emailServiceSettingsSchema.parse({
-            provider: row.provider,
-            enabled: row.enabled,
-            fromEmail: row.fromEmail,
-            fromName: row.fromName,
-            replyToEmail: row.replyToEmail,
-          })
-        : null
+      const row = await readSiteSettings(db, 'email', storedEmailSettingsSchema)
+      return row ? emailServiceSettingsSchema.parse(row.value) : null
     },
 
     async updateAccountCenterSettings(input) {
-      const current = (await this.getAccountCenterSettings()) ?? defaultAccountCenterSettings
-      const next = { ...current, ...input }
-      const patch = toAccountCenterPatch(input, current)
-      await db
-        .insert(accountCenterSetting)
-        .values({
-          id: accountCenterSettingsId,
-          applicationId: null,
-          profileEditingEnabled: next.profileEditingEnabled,
-          passwordChangeEnabled: next.passwordChangeEnabled,
-          connectedAccountsEnabled: next.connectedAccountsEnabled,
-          sessionsViewEnabled: next.sessionsViewEnabled,
-          dangerZoneEnabled: next.dangerZoneEnabled,
-          metadata: accountCenterMetadata(next),
-          updatedAt: new Date(),
-        })
-        .onConflictDoUpdate({
-          target: accountCenterSetting.id,
-          set: patch,
-        })
+      const current = await readSiteSettings(db, 'account_center', accountSettingsSchema)
+      const next = accountSettingsSchema.parse({ ...(current?.value ?? defaultAccountCenterSettings), ...input })
+      await writeSiteSettings(db, 'account_center', next, current?.revision ?? null)
     },
 
     async updateOrganizationCreationPolicy(input) {
-      const current = await this.getSettings()
-      const configured = readObjectMetadata(current?.metadata ?? null, 'developerPolicy')
-      const metadata = {
-        ...(current?.metadata ?? {}),
-        developerPolicy: {
-          ...configured,
+      const current = await readSiteSettings(db, 'developer', metadataSchema)
+      await writeSiteSettings(
+        db,
+        'developer',
+        {
+          ...current?.value,
           organizationCreation: input.mode,
           approvedUserIds: input.mode === 'approved_users' ? input.approvedUserIds : [],
         },
-      }
-      await db
-        .insert(signInExperience)
-        .values({ ...settingsInsertDefaults(current), id: settingsId, metadata, updatedAt: new Date() })
-        .onConflictDoUpdate({
-          target: signInExperience.id,
-          set: { metadata, updatedAt: new Date() },
-        })
+        current?.revision ?? null,
+      )
     },
 
     async updateDeveloperConsoleAccessPolicy(input) {
-      const current = await this.getSettings()
-      const configured = readObjectMetadata(current?.metadata ?? null, 'developerPolicy')
-      const rows = await db.select({ id: organization.id, metadata: organization.metadata }).from(organization)
-      const selected = new Set(input.mode === 'selected_organizations' ? input.selectedOrganizationIds : [])
-      const metadata = {
-        ...(current?.metadata ?? {}),
-        developerPolicy: {
-          ...configured,
+      const current = await readSiteSettings(db, 'developer', metadataSchema)
+      await writeSiteSettings(
+        db,
+        'developer',
+        {
+          ...current?.value,
           consoleAccess: input.mode,
           eligibleAccessLevels: input.eligibleAccessLevels,
+          selectedOrganizationIds: input.mode === 'selected_organizations' ? input.selectedOrganizationIds : [],
         },
-      }
-      const statements: Parameters<typeof db.batch>[0] = [
-        db
-          .insert(signInExperience)
-          .values({ ...settingsInsertDefaults(current), id: settingsId, metadata, updatedAt: new Date() })
-          .onConflictDoUpdate({
-            target: signInExperience.id,
-            set: { metadata, updatedAt: new Date() },
-          }),
-        ...rows.map((row) =>
-          db
-            .update(organization)
-            .set({
-              metadata: withOrganizationConsoleEnabled(row.metadata, selected.has(row.id)),
-              updatedAt: new Date(),
-            })
-            .where(eq(organization.id, row.id)),
-        ),
-      ]
-      await db.batch(statements)
+        current?.revision ?? null,
+      )
     },
 
     async updateEmailSettings(input) {
-      await db
-        .insert(emailServiceConfig)
-        .values({ id: emailSettingsId, ...input, updatedAt: new Date() })
-        .onConflictDoUpdate({
-          target: emailServiceConfig.id,
-          set: { ...input, updatedAt: new Date() },
-        })
+      const current = await readSiteSettings(db, 'email', storedEmailSettingsSchema)
+      await writeSiteSettings(
+        db,
+        'email',
+        storedEmailSettingsSchema.parse({ ...current?.value, ...input }),
+        current?.revision ?? null,
+      )
     },
 
-    async getBranding(applicationId) {
-      const applicationBranding = applicationId
-        ? await findBranding(db, eq(brandingSetting.applicationId, applicationId))
-        : null
-      if (applicationBranding) return applicationBranding
-
-      return (
-        (await findBranding(db, eq(brandingSetting.id, globalBrandingId))) ??
-        findBranding(db, and(isNull(brandingSetting.applicationId), isNull(brandingSetting.organizationId))!)
-      )
+    async getBranding(_applicationId) {
+      const row = await readSiteSettings(db, 'branding', brandingSettingsSchema)
+      if (!row) return null
+      const { logoAssetId, faviconAssetId, ...value } = row.value
+      async function assetUrl(id: string | null) {
+        if (!id) return null
+        const [asset] = await db
+          .select({ publicUrl: uploadedAsset.publicUrl })
+          .from(uploadedAsset)
+          .where(eq(uploadedAsset.id, id))
+          .limit(1)
+        return asset?.publicUrl ?? null
+      }
+      return { ...value, logoAssetUrl: await assetUrl(logoAssetId), faviconAssetUrl: await assetUrl(faviconAssetId) }
     },
 
     async listEnabledIdentityProviders() {
@@ -217,39 +209,14 @@ export function createDrizzleConfigzRepository(db: Database): ConfigzRepository 
   }
 }
 
-async function findBranding(db: Database, where: SQL) {
-  const rows = await db
-    .select({
-      branding: brandingSetting,
-      logo: uploadedAsset.publicUrl,
-    })
-    .from(brandingSetting)
-    .leftJoin(uploadedAsset, eq(brandingSetting.logoAssetId, uploadedAsset.id))
-    .where(where)
-    .limit(1)
-
-  const row = rows[0]
-  if (!row) return null
-
-  let faviconAssetUrl: string | null = null
-  if (row.branding.faviconAssetId) {
-    const faviconRows = await db
-      .select({ publicUrl: uploadedAsset.publicUrl })
-      .from(uploadedAsset)
-      .where(eq(uploadedAsset.id, row.branding.faviconAssetId))
-      .limit(1)
-    faviconAssetUrl = faviconRows[0]?.publicUrl ?? null
-  }
-
-  return {
-    logoUrl: row.branding.logoUrl,
-    logoAssetUrl: row.logo,
-    faviconUrl: row.branding.faviconUrl,
-    faviconAssetUrl,
-    primaryColor: row.branding.primaryColor,
-    backgroundColor: row.branding.backgroundColor,
-    customCss: row.branding.customCss,
-  }
+const emptyBranding = {
+  logoUrl: null,
+  faviconUrl: null,
+  logoAssetId: null,
+  faviconAssetId: null,
+  primaryColor: null,
+  backgroundColor: null,
+  customCss: null,
 }
 
 function toSettingsPatch(input: UpdateConfigzSettingsInput, metadata: Record<string, unknown> | null) {
@@ -309,19 +276,6 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 }
 
-function settingsInsertDefaults(settings: ConfigzSettings | null) {
-  return {
-    passwordEnabled: settings?.passwordEnabled ?? true,
-    signupEnabled: settings?.signupEnabled ?? true,
-    socialLoginEnabled: settings?.socialLoginEnabled ?? true,
-    identifierFirst: settings?.identifierFirst ?? false,
-    termsUri: settings?.termsUri ?? null,
-    privacyUri: settings?.privacyUri ?? null,
-    supportEmail: settings?.supportEmail ?? null,
-    metadata: settings?.metadata ?? null,
-  }
-}
-
 function toBrandingPatch(input: UpdateConfigzBrandingInput) {
   return withoutUndefined({
     applicationId: null,
@@ -337,39 +291,6 @@ function toBrandingPatch(input: UpdateConfigzBrandingInput) {
   })
 }
 
-function toAccountCenterPatch(
-  input: Partial<typeof defaultAccountCenterSettings>,
-  current: typeof defaultAccountCenterSettings,
-) {
-  const profileMetadata = accountCenterMetadata({ ...current, ...input })
-  return withoutUndefined({
-    profileEditingEnabled: input.profileEditingEnabled,
-    passwordChangeEnabled: input.passwordChangeEnabled,
-    connectedAccountsEnabled: input.connectedAccountsEnabled,
-    sessionsViewEnabled: input.sessionsViewEnabled,
-    dangerZoneEnabled: input.dangerZoneEnabled,
-    metadata:
-      input.displayNameEditable === undefined &&
-      input.usernameEditable === undefined &&
-      input.avatarEditable === undefined &&
-      input.emailChangeEnabled === undefined
-        ? undefined
-        : profileMetadata,
-    updatedAt: new Date(),
-  })
-}
-
-function accountCenterMetadata(settings: typeof defaultAccountCenterSettings) {
-  return {
-    fieldPermissions: {
-      displayNameEditable: settings.displayNameEditable,
-      usernameEditable: settings.usernameEditable,
-      avatarEditable: settings.avatarEditable,
-      emailChangeEnabled: settings.emailChangeEnabled,
-    },
-  }
-}
-
 function readCopyMetadata(metadata: Record<string, unknown> | null) {
   return metadata && typeof metadata.copy === 'object' && metadata.copy !== null
     ? (metadata.copy as Record<string, unknown>)
@@ -382,49 +303,13 @@ function readObjectMetadata(metadata: Record<string, unknown> | null, key: strin
     : {}
 }
 
-function organizationConsoleEnabled(metadata: Record<string, unknown> | null) {
-  const realmroot = readObjectMetadata(metadata, 'realmroot')
-  const consoleSettings = readObjectMetadata(realmroot, 'console')
-  return consoleSettings.enabled === true
-}
-
-function withOrganizationConsoleEnabled(metadata: Record<string, unknown> | null, enabled: boolean) {
-  const realmroot = readObjectMetadata(metadata, 'realmroot')
-  const consoleSettings = readObjectMetadata(realmroot, 'console')
-  return {
-    ...(metadata ?? {}),
-    realmroot: {
-      ...realmroot,
-      console: {
-        ...consoleSettings,
-        enabled,
-      },
-    },
-  }
-}
-
 function withoutUndefined<T extends Record<string, unknown>>(input: T) {
   return Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined)) as {
     [K in keyof T as undefined extends T[K] ? K : K]: Exclude<T[K], undefined>
   }
 }
 
-type SignInExperienceRow = typeof signInExperience.$inferSelect
 type IdentityProviderConnectorRow = typeof identityProviderConnector.$inferSelect
-type AccountCenterSettingRow = typeof accountCenterSetting.$inferSelect
-
-function toSettings(row: SignInExperienceRow): ConfigzSettings {
-  return {
-    passwordEnabled: row.passwordEnabled,
-    signupEnabled: row.signupEnabled,
-    socialLoginEnabled: row.socialLoginEnabled,
-    identifierFirst: row.identifierFirst,
-    termsUri: row.termsUri,
-    privacyUri: row.privacyUri,
-    supportEmail: row.supportEmail,
-    metadata: row.metadata ?? null,
-  }
-}
 
 function toIdentityProvider(row: IdentityProviderConnectorRow): ConfigzIdentityProvider {
   return {
@@ -433,43 +318,5 @@ function toIdentityProvider(row: IdentityProviderConnectorRow): ConfigzIdentityP
     providerId: row.providerId,
     displayName: row.displayName,
     icon: connectorTemplates.find((template) => template.providerId === row.providerId)?.icon ?? 'oauth',
-  }
-}
-
-function toAccountCenterSettings(row: AccountCenterSettingRow): typeof defaultAccountCenterSettings {
-  const fieldPermissions = readFieldPermissions(row.metadata)
-  return {
-    profileEditingEnabled: row.profileEditingEnabled,
-    displayNameEditable: fieldPermissions.displayNameEditable,
-    usernameEditable: fieldPermissions.usernameEditable,
-    avatarEditable: fieldPermissions.avatarEditable,
-    emailChangeEnabled: fieldPermissions.emailChangeEnabled,
-    passwordChangeEnabled: row.passwordChangeEnabled,
-    connectedAccountsEnabled: row.connectedAccountsEnabled,
-    sessionsViewEnabled: row.sessionsViewEnabled,
-    dangerZoneEnabled: row.dangerZoneEnabled,
-  }
-}
-
-function readFieldPermissions(metadata: Record<string, unknown> | null) {
-  const value =
-    metadata && typeof metadata.fieldPermissions === 'object' && metadata.fieldPermissions !== null
-      ? (metadata.fieldPermissions as Record<string, unknown>)
-      : {}
-  return {
-    displayNameEditable:
-      typeof value.displayNameEditable === 'boolean'
-        ? value.displayNameEditable
-        : defaultAccountCenterSettings.displayNameEditable,
-    usernameEditable:
-      typeof value.usernameEditable === 'boolean'
-        ? value.usernameEditable
-        : defaultAccountCenterSettings.usernameEditable,
-    avatarEditable:
-      typeof value.avatarEditable === 'boolean' ? value.avatarEditable : defaultAccountCenterSettings.avatarEditable,
-    emailChangeEnabled:
-      typeof value.emailChangeEnabled === 'boolean'
-        ? value.emailChangeEnabled
-        : defaultAccountCenterSettings.emailChangeEnabled,
   }
 }

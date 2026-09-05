@@ -85,6 +85,8 @@ function createDeps(repository: ConfigzRepository): Deps {
 
 function createRepository(overrides: Partial<MockData> = {}): ConfigzRepository {
   return {
+    getNavigation: async () => ({ externalLinks: [], revision: 0 }),
+    replaceNavigation: async () => {},
     getSettings: async () => overrides.settings ?? null,
     getBranding: async () => null,
     getAccountCenterSettings: async () => null,

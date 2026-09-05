@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { siteNavigationSchema } from './navigation'
 import { captchaProviderSchema } from './security'
 
 const nullableUrlSchema = z.string().nullable()
@@ -122,6 +123,7 @@ export const configzConfigResponseSchema = z.object({
     passkeysEnabled: z.boolean(),
   }),
   accountCenter: configzAccountCenterSchema,
+  navigation: siteNavigationSchema.default({ externalLinks: [] }),
   captcha: z.object({
     enabled: z.boolean(),
     provider: captchaProviderSchema,

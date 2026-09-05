@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { AuthLayout, BrandIdentity, brandingStyle } from '@/components/layout/auth-layout'
 
 const config: ConfigzConfigResponse = {
+  navigation: { externalLinks: [] },
   onboarding: { required: false, href: '/onboarding' },
   signIn: {
     passwordEnabled: true,

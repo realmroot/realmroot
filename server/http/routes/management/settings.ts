@@ -30,6 +30,7 @@ import {
   updateManagementRealmRequestSchema,
   updateManagementSignInSettingsRequestSchema,
 } from '@shared/api/management'
+import { siteNavigationResponseSchema, siteNavigationSchema } from '@shared/api/navigation'
 import type { SecurityPolicy } from '@shared/api/security'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
@@ -48,6 +49,19 @@ export function createManagementSettingsRoutes(securityPolicy?: SecurityPolicy) 
   }
   app.use('/realm', requireRealmAccess)
   app.use('/realm/*', requireRealmAccess)
+
+  app.get('/realm/navigation', async (c) =>
+    versionedResponse(c, siteNavigationResponseSchema.parse(await getDeps(c).configz.getNavigation())),
+  )
+  app.put('/realm/navigation', async (c) => {
+    const repository = getDeps(c).configz
+    const current = await repository.getNavigation()
+    const representation = await representationWithEtag(current)
+    requireMatchingIfMatch(c.req.header('If-Match'), representation.etag, 'Site navigation')
+    const input = await readJson(c, siteNavigationSchema)
+    await repository.replaceNavigation(input, current.revision)
+    return versionedResponse(c, siteNavigationResponseSchema.parse(await repository.getNavigation()))
+  })
 
   app.get('/realm/sign-in-policy', async (c) => {
     const response = await getManagementSignInSettings(getDeps(c), configzOptions(c, securityPolicy))

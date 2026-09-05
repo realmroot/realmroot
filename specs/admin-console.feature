@@ -415,3 +415,28 @@ Feature: Admin Console
     When an admin deletes an Agent or revokes a Permission
     Then the Agent or Permission is no longer active
     And no autonomous agent mode or broad admin mutation capability is enabled
+
+  @entrypoint:restish @journey:site-settings-migration @proof:unit
+  Scenario: Existing site configuration survives unified settings migration
+    Given existing sign-in, branding, account-center, email and security configuration
+    When site settings storage is migrated
+    Then all configured values and nulls are preserved in named settings groups
+    And old configuration tables remain until the new release is verified
+
+  @entrypoint:restish @journey:site-settings-concurrency @proof:integration
+  Scenario: Concurrent site settings changes preserve independent groups
+    When administrators update different site settings groups
+    Then both updates persist
+    And a stale revision cannot overwrite a newer group revision
+
+  @entrypoint:product-ui @journey:site-navigation-settings @proof:integration
+  Scenario: Operators configure optional external service navigation
+    When a platform operator saves ordered external service links
+    Then public configuration exposes the saved links
+    And invalid destinations and unauthorized writes are rejected
+
+  @e2e @entrypoint:product-ui @journey:site-navigation-console @proof:e2e
+  Scenario: Operators manage service links and users navigate to them
+    When an operator adds, edits and reorders service links in Console dialogs
+    Then Account Center shows the saved links in desktop and mobile navigation
+    And removing all links hides the external service group

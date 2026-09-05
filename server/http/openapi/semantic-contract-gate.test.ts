@@ -230,7 +230,11 @@ describe('OpenAPI semantic contract gate', () => {
     const pagePaginationChanges = new Set(pagePaginationContract.map(({ method, path }) => `${method}:${path}`))
     const agentUserOwnershipChanges = new Set(agentUserOwnershipContract.map(({ method, path }) => `${method}:${path}`))
     const contextIDChanges = new Set(contextIDContract.map(({ method, path }) => `${method}:${path}`))
+    const navigationContract = JSON.parse(
+      readFileSync(new URL('./approved-site-navigation-semantic-baseline.json', import.meta.url), 'utf8'),
+    ) as typeof unchanged
     const baseline = [
+      ...navigationContract,
       ...preLifecycleConflictBaseline.filter(
         ({ method, path }) =>
           !lifecycleConflictChanges.has(`${method}:${path}`) &&

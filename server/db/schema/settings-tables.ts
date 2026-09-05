@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
+import { check, index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import { uploadedAsset } from './agent-tables'
 import { user } from './auth-tables'
 import { application, organization } from './authorization-tables'
@@ -199,5 +199,19 @@ export const customDomain = sqliteTable(
     index('customDomain_applicationId_idx').on(table.applicationId),
     index('customDomain_organizationId_idx').on(table.organizationId),
     index('customDomain_status_idx').on(table.status),
+  ],
+)
+
+export const siteSettings = sqliteTable(
+  'site_settings',
+  {
+    key: text('key').primaryKey(),
+    value: text('value', { mode: 'json' }).$type<Record<string, unknown>>().notNull(),
+    revision: integer('revision').notNull().default(1),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (table) => [
+    check('site_settings_value_json', sql`json_valid(${table.value})`),
+    check('site_settings_revision_positive', sql`${table.revision} > 0`),
   ],
 )

@@ -105,6 +105,7 @@ describe('ConfigzService', () => {
         passkeysEnabled: false,
       },
       accountCenter: defaultAccountCenterSettings,
+      navigation: { externalLinks: [] },
       captcha: {
         enabled: false,
         provider: 'turnstile',
@@ -686,6 +687,8 @@ function enabledConnector(providerId: string): ConnectorRecord {
 
 function createRepository(overrides: Partial<MockData> = {}): ConfigzRepository {
   return {
+    getNavigation: async () => ({ externalLinks: [], revision: 0 }),
+    replaceNavigation: async () => {},
     getSettings: async () => overrides.settings ?? null,
     getBranding: async () => overrides.branding ?? null,
     getAccountCenterSettings: overrides.getAccountCenterSettings ?? (async () => overrides.accountCenter ?? null),

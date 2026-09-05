@@ -11,6 +11,7 @@ describe('configz routes', () => {
 
   it('serves public runtime config and does not expose removed hosted API contracts', async () => {
     vi.spyOn(configz, 'getConfig').mockResolvedValue({
+      navigation: { externalLinks: [] },
       onboarding: { required: true, href: '/onboarding' },
       signIn: {
         passwordEnabled: true,

@@ -152,6 +152,7 @@ function baseConfigz() {
       endSessionEndpoint: '/logout',
     },
     security: { mfaRequired: false, sessionExpiresInSeconds: 3600, passkeysEnabled: true },
+    navigation: { externalLinks: [] },
     accountCenter: {
       profileEditingEnabled: true,
       displayNameEditable: true,

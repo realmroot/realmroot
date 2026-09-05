@@ -1,10 +1,14 @@
 import type { DeveloperConsoleAccessResponse } from '@shared/api/account'
+import type { SiteNavigation } from '@shared/api/navigation'
 import { useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
 import {
   AppWindow,
+  ArrowUpRight,
+  BookOpen,
   Bot,
   Building2,
+  Folder,
   Gauge,
   HelpCircle,
   LayoutDashboard,
@@ -13,6 +17,7 @@ import {
   Menu,
   Shield,
   UserRound,
+  Wallet,
 } from 'lucide-react'
 import { type ReactNode, useRef, useState } from 'react'
 import { toast } from 'sonner'
@@ -151,7 +156,12 @@ export function AccountPageShell({
         {organizationId ? (
           <OrganizationWorkspaceNavigation organizationId={organizationId} pathname={pathname} />
         ) : (
-          <AccountSidebar access={access} profile={profile} section={section} />
+          <AccountSidebar
+            access={access}
+            externalLinks={config?.navigation?.externalLinks ?? []}
+            profile={profile}
+            section={section}
+          />
         )}
         <section
           className={cn(
@@ -189,6 +199,7 @@ export function AccountPageShell({
           ) : (
             <AccountSidebar
               access={access}
+              externalLinks={config?.navigation?.externalLinks ?? []}
               onNavigate={() => setNavigationOpen(false)}
               profile={profile}
               section={section}
@@ -235,13 +246,17 @@ export function AccountPageError({
   )
 }
 
+const externalLinkIcons = { wallet: Wallet, app: AppWindow, link: Link2, book: BookOpen, folder: Folder }
+
 function AccountSidebar({
   access,
+  externalLinks,
   onNavigate,
   profile,
   section,
 }: {
   access: DeveloperConsoleAccessResponse
+  externalLinks: SiteNavigation['externalLinks']
   onNavigate?: () => void
   profile: UserProfile
   section: AccountCenterSection
@@ -280,6 +295,21 @@ function AccountSidebar({
               ))}
           </div>
         ))}
+        {externalLinks.length > 0 ? (
+          <div className="accountNavGroup">
+            <p>{tt('More services')}</p>
+            {externalLinks.map((link) => {
+              const Icon = externalLinkIcons[link.icon]
+              return (
+                <a className="accountNavItem" href={link.url} key={link.id} onClick={onNavigate}>
+                  <Icon aria-hidden="true" />
+                  <span>{link.label}</span>
+                  <ArrowUpRight aria-hidden="true" className="ml-auto size-3" />
+                </a>
+              )
+            })}
+          </div>
+        ) : null}
       </nav>
     </aside>
   )
