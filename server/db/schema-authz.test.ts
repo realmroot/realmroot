@@ -1,6 +1,5 @@
 import {
   account,
-  accountCenterSetting,
   accountRelations,
   agent,
   agentCapabilityGrant,
@@ -17,10 +16,7 @@ import {
   applicationRelations,
   approvalRequest,
   approvalRequestRelations,
-  brandingSetting,
   customDomain,
-  deploymentSetting,
-  emailServiceConfig,
   identityProviderConnector,
   invitation,
   jwks,
@@ -41,7 +37,7 @@ import {
   passkeyRelations,
   session,
   sessionRelations,
-  signInExperience,
+  siteSettings,
   twoFactor,
   twoFactorRelations,
   uploadedAsset,
@@ -106,16 +102,7 @@ describe('schema.test 2', () => {
     expect(indexNames(uploadedAsset)).toEqual(
       expect.arrayContaining(['uploadedAsset_purpose_idx', 'uploadedAsset_createdByUserId_idx']),
     )
-    expect(columnNames(emailServiceConfig)).toEqual(
-      expect.arrayContaining(['provider', 'enabled', 'from_email', 'reply_to_email', 'metadata']),
-    )
-    expect(columnNames(signInExperience)).toEqual(
-      expect.arrayContaining(['default_application_id', 'password_enabled', 'identifier_first', 'support_email']),
-    )
-    expect(indexNames(brandingSetting)).toEqual(
-      expect.arrayContaining(['brandingSetting_applicationId_idx', 'brandingSetting_organizationId_idx']),
-    )
-    expect(indexNames(accountCenterSetting)).toEqual(expect.arrayContaining(['accountCenterSetting_applicationId_idx']))
+    expect(columnNames(siteSettings)).toEqual(['key', 'value', 'revision', 'updated_at'])
     expect(indexNames(customDomain)).toEqual(
       expect.arrayContaining([
         'customDomain_applicationId_idx',
@@ -123,7 +110,6 @@ describe('schema.test 2', () => {
         'customDomain_status_idx',
       ]),
     )
-    expect(columnNames(deploymentSetting)).toEqual(expect.arrayContaining(['environment', 'base_url', 'issuer_path']))
   })
 
   it('models webhook endpoint, delivery request, and delivery attempt persistence explicitly', () => {
@@ -262,7 +248,7 @@ describe('schema.test 2', () => {
       .filter((column) => column.onUpdateFn)
       .map((column) => column.onUpdateFn?.())
 
-    expect(updateValues).toHaveLength(21)
+    expect(updateValues).toHaveLength(16)
     for (const value of updateValues) {
       expect(value).toBeInstanceOf(Date)
     }
@@ -296,11 +282,7 @@ const schemaTables = [
   applicationClientMetadata,
   applicationConsent,
   identityProviderConnector,
-  emailServiceConfig,
-  signInExperience,
-  brandingSetting,
-  accountCenterSetting,
-  deploymentSetting,
+  siteSettings,
   customDomain,
   webhookEndpoint,
   webhookDeliveryRequest,

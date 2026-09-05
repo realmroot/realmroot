@@ -27,3 +27,10 @@ Use the preview deployment with a platform operator. Open Console account-center
 The current Cloudflare main-branch trigger runs `pnpm run build` and `npx wrangler deploy`; it does not apply D1 migrations. The release operator must apply the expand migration with the Agent identity before merging. Contract migration is applied only after deployed group values and public behavior are verified. Both migrations are then recorded in the normal D1 history.
 
 Validation before first rollout: 1,744 unit/Web/integration tests; Console CRUD and desktop/mobile navigation browser journeys; typecheck, lint, architecture lint, spec traceability, and production build. A private production snapshot was replayed through the migration successfully. No secrets or production configuration are committed.
+
+
+## Verified contraction
+
+The expansion release was merged as PR #240 and deployed by Cloudflare from `27bb36977b0c0ff6db6a5e9cba46db6439e7485a`. All five existing production groups matched the private migration baseline exactly. Public configuration retained every existing value. Authenticated management reads passed for Realm identity, sign-in policy, branding, account management and email delivery. The Wallet link was saved through the conditional navigation API; unsafe destination and stale-version requests were rejected without modifying it.
+
+The contract migration removes the five superseded tables and temporary synchronization triggers. It refuses removal of a populated source when its migrated group is absent. Current group values and revisions are left intact. The migration suite proves preservation of settings edited after the expansion release, missing-group refusal, and a fresh installation. Historical ownership migration fixtures remain bounded to their own supported legacy schema.

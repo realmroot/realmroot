@@ -49,7 +49,7 @@ export const resourceOwnershipInventory = {
   platformConfiguration: {
     boundary: 'realm',
     persistedBy: 'resource kind',
-    children: ['identity_provider_connector', 'email_service_config', 'sign_in_experience', 'deployment_setting'],
+    children: ['identity_provider_connector', 'site_settings'],
   },
   auditEvents: {
     boundary: 'tenant',

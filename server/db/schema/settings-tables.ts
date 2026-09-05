@@ -1,23 +1,7 @@
 import { sql } from 'drizzle-orm'
 import { check, index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
-import { uploadedAsset } from './agent-tables'
 import { user } from './auth-tables'
 import { application, organization } from './authorization-tables'
-
-export const emailServiceConfig = sqliteTable('email_service_config', {
-  id: text('id').primaryKey(),
-  provider: text('provider').notNull().default('cloudflare_email'),
-  enabled: integer('enabled', { mode: 'boolean' }).default(false).notNull(),
-  fromEmail: text('from_email').notNull(),
-  fromName: text('from_name'),
-  replyToEmail: text('reply_to_email'),
-  defaultLocale: text('default_locale'),
-  metadata: text('metadata', { mode: 'json' }).$type<Record<string, unknown>>(),
-  updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
-    .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
-    .$onUpdate(() => new Date())
-    .notNull(),
-})
 
 export const webhookEndpoint = sqliteTable(
   'webhook_endpoint',
@@ -100,80 +84,6 @@ export const webhookDeliveryAttempt = sqliteTable(
     index('webhookDeliveryAttempt_createdAt_idx').on(table.createdAt),
   ],
 )
-
-export const signInExperience = sqliteTable('sign_in_experience', {
-  id: text('id').primaryKey(),
-  defaultApplicationId: text('default_application_id').references(() => application.id, { onDelete: 'set null' }),
-  passwordEnabled: integer('password_enabled', { mode: 'boolean' }).default(true).notNull(),
-  signupEnabled: integer('signup_enabled', { mode: 'boolean' }).default(true).notNull(),
-  socialLoginEnabled: integer('social_login_enabled', { mode: 'boolean' }).default(true).notNull(),
-  identifierFirst: integer('identifier_first', { mode: 'boolean' }).default(false).notNull(),
-  defaultRedirectUri: text('default_redirect_uri'),
-  termsUri: text('terms_uri'),
-  privacyUri: text('privacy_uri'),
-  supportEmail: text('support_email'),
-  metadata: text('metadata', { mode: 'json' }).$type<Record<string, unknown>>(),
-  updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
-    .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
-    .$onUpdate(() => new Date())
-    .notNull(),
-})
-
-export const brandingSetting = sqliteTable(
-  'branding_setting',
-  {
-    id: text('id').primaryKey(),
-    applicationId: text('application_id').references(() => application.id, { onDelete: 'cascade' }),
-    organizationId: text('organization_id').references(() => organization.id, { onDelete: 'cascade' }),
-    logoAssetId: text('logo_asset_id').references(() => uploadedAsset.id, { onDelete: 'set null' }),
-    faviconAssetId: text('favicon_asset_id').references(() => uploadedAsset.id, { onDelete: 'set null' }),
-    logoUrl: text('logo_url'),
-    faviconUrl: text('favicon_url'),
-    primaryColor: text('primary_color'),
-    backgroundColor: text('background_color'),
-    customCss: text('custom_css'),
-    updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
-      .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
-      .$onUpdate(() => new Date())
-      .notNull(),
-  },
-  (table) => [
-    index('brandingSetting_applicationId_idx').on(table.applicationId),
-    index('brandingSetting_organizationId_idx').on(table.organizationId),
-  ],
-)
-
-export const accountCenterSetting = sqliteTable(
-  'account_center_setting',
-  {
-    id: text('id').primaryKey(),
-    applicationId: text('application_id').references(() => application.id, { onDelete: 'cascade' }),
-    profileEditingEnabled: integer('profile_editing_enabled', { mode: 'boolean' }).default(true).notNull(),
-    passwordChangeEnabled: integer('password_change_enabled', { mode: 'boolean' }).default(true).notNull(),
-    connectedAccountsEnabled: integer('connected_accounts_enabled', { mode: 'boolean' }).default(true).notNull(),
-    sessionsViewEnabled: integer('sessions_view_enabled', { mode: 'boolean' }).default(true).notNull(),
-    dangerZoneEnabled: integer('danger_zone_enabled', { mode: 'boolean' }).default(false).notNull(),
-    metadata: text('metadata', { mode: 'json' }).$type<Record<string, unknown>>(),
-    updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
-      .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
-      .$onUpdate(() => new Date())
-      .notNull(),
-  },
-  (table) => [index('accountCenterSetting_applicationId_idx').on(table.applicationId)],
-)
-
-export const deploymentSetting = sqliteTable('deployment_setting', {
-  id: text('id').primaryKey(),
-  environment: text('environment').notNull().unique(),
-  baseUrl: text('base_url').notNull(),
-  issuerPath: text('issuer_path').notNull().default('/api/auth'),
-  cookieDomain: text('cookie_domain'),
-  metadata: text('metadata', { mode: 'json' }).$type<Record<string, unknown>>(),
-  updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
-    .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
-    .$onUpdate(() => new Date())
-    .notNull(),
-})
 
 export const customDomain = sqliteTable(
   'custom_domain',

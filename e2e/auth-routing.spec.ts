@@ -1,4 +1,5 @@
 import type { AccountProfileResponse } from '../shared/api/account'
+import { configzConfigResponseSchema } from '../shared/api/configz'
 import { expect, test } from './fixtures'
 import { organizationOwner, resetAndBootstrap, seedOrganizationOwner, signIn, signOut } from './helpers/real-app'
 
@@ -62,6 +63,25 @@ test.describe('authenticated routing', { tag: '@production-safe' }, () => {
     await expect(authenticatedPage.getByRole('navigation', { name: 'Account center' })).toBeVisible()
     await expect(authenticatedPage.getByRole('heading', { name: 'Profile' })).toBeVisible()
     await expect(authenticatedPage.getByLabel('Identity details')).toBeVisible()
+    const response = await authenticatedPage.request.get('/api/configz')
+    expect(response.status()).toBe(200)
+    const config = configzConfigResponseSchema.parse(await response.json())
+    const navigation = authenticatedPage.getByRole('navigation', { name: 'Account center' })
+    for (const link of config.navigation.externalLinks) {
+      await expect(navigation.getByRole('link', { name: link.label, exact: true })).toHaveAttribute('href', link.url)
+    }
+    if (config.navigation.externalLinks.length) {
+      const viewport = authenticatedPage.viewportSize()
+      await authenticatedPage.setViewportSize({ width: 390, height: 844 })
+      await authenticatedPage.getByRole('button', { name: 'Open Account Center navigation' }).click()
+      for (const link of config.navigation.externalLinks) {
+        await expect(
+          authenticatedPage.getByRole('dialog').getByRole('link', { name: link.label, exact: true }),
+        ).toHaveAttribute('href', link.url)
+      }
+      await authenticatedPage.keyboard.press('Escape')
+      if (viewport) await authenticatedPage.setViewportSize(viewport)
+    }
   })
 })
 
