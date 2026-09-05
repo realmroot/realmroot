@@ -13,6 +13,8 @@ Feature: Unified Realmroot resource API
     And the API catalog links to the API contract, documentation, health, and protected resource metadata
     And the homepage advertises discovery links and negotiates HTML or Markdown with Vary Accept
     And robots.txt references a sitemap containing only public service pages
+    And static discovery documents and fixed redirects are served directly by Workers Assets
+    And only homepage content negotiation runs in the Worker and reads the selected static asset
     And public discovery supports HEAD without requiring database or authentication initialization
 
 

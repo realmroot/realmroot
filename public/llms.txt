@@ -1,0 +1,29 @@
+# Realmroot
+
+> Identity and controller-approved authorization for people, applications, and AI agents.
+
+The browser application provides sign-in, account management, and an administration console.
+Agents use the published API and their own identity. Protected operations require the appropriate authorization scopes.
+
+## Discover the API
+
+- [API catalog](/.well-known/api-catalog)
+- [OpenAPI contract](/api/openapi.json)
+- [Interactive API documentation](/api/docs)
+- [Service health](/api/health)
+- [Protected resource metadata](/.well-known/oauth-protected-resource/api)
+- [OAuth authorization server metadata](/.well-known/oauth-authorization-server/api/auth)
+- [OpenID Connect metadata](/api/auth/.well-known/openid-configuration)
+
+The OAuth issuer is this deployment's origin followed by /api/auth.
+The protected API resource identifier is this deployment's origin followed by /api.
+Root discovery redirects are convenience links; they do not change these identifiers.
+
+## Agent access
+
+- [Agent configuration](/.well-known/agent-configuration)
+- [Agent Skills index](/.well-known/agent-skills/index.json)
+
+Install the Realmroot skill from the index for enrollment, controller approval, resource discovery,
+and authorized API access. The index also provides application and resource server integration skills.
+Use an Agent's own identity and request only the scopes needed for the task.

@@ -15,14 +15,6 @@ describe('Workers Assets routing', () => {
 
     expect(routes).toEqual([
       '/',
-      '/llms.txt',
-      '/robots.txt',
-      '/sitemap.xml',
-      '/.well-known/api-catalog',
-      '/.well-known/oauth-authorization-server',
-      '/.well-known/openid-configuration',
-      '/.well-known/oauth-protected-resource',
-      '/openapi.json',
       '/api/*',
       '/.well-known/jwks.json',
       '/.well-known/agent-configuration',

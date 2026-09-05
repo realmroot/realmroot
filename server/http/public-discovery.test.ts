@@ -1,53 +1,46 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it, vi } from 'vitest'
-import { publicDiscovery } from './public-discovery'
+import { serveHomepage } from './public-discovery'
 
 function fixture() {
-  const fetch = vi.fn(
-    async () =>
-      new Response('<html>Realmroot</html>', {
-        headers: { 'Content-Type': 'text/html', Vary: 'Accept-Encoding', ETag: '"html"' },
-      }),
-  )
-  const env = { ASSETS: { fetch }, BETTER_AUTH_URL: 'https://auth.example.com' }
-  return { fetch, request: (path: string, init?: RequestInit) => publicDiscovery.request(path, init, env) }
+  const fetch = vi.fn(async (request: Request) => {
+    const markdown = new URL(request.url).pathname === '/llms.txt'
+    return new Response(
+      request.method === 'HEAD'
+        ? null
+        : markdown
+          ? '# Realmroot\n[OpenAPI contract](/api/openapi.json)'
+          : '<html>Realmroot</html>',
+      {
+        headers: {
+          'Content-Type': markdown ? 'text/markdown' : 'text/html',
+          Vary: 'Accept-Encoding',
+          ETag: markdown ? '"markdown"' : '"html"',
+        },
+      },
+    )
+  })
+  return {
+    fetch,
+    request: (path: string, init?: RequestInit) =>
+      serveHomepage(new Request(`https://auth.example.com${path}`, init), { fetch }),
+  }
 }
 
 describe('public service discovery', () => {
-  it('publishes canonical discovery without authentication [spec: management-api/public-service-discovery]', async () => {
-    const { request, fetch } = fixture()
-    for (const [source, target] of [
-      ['/.well-known/oauth-authorization-server', '/.well-known/oauth-authorization-server/api/auth'],
-      ['/.well-known/openid-configuration', '/api/auth/.well-known/openid-configuration'],
-      ['/.well-known/oauth-protected-resource', '/.well-known/oauth-protected-resource/api'],
-      ['/openapi.json', '/api/openapi.json'],
-    ]) {
-      const response = await request(`${source}?ignored=1`)
-      expect(response.status).toBe(308)
-      expect(response.headers.get('Location')).toBe(target)
-    }
-    const catalog = await request('/.well-known/api-catalog')
-    expect(catalog.headers.get('Content-Type')).toContain('application/linkset+json')
-    expect(catalog.headers.get('Access-Control-Allow-Origin')).toBe('*')
-    expect(await catalog.json()).toEqual({
-      linkset: [
-        {
-          anchor: 'https://auth.example.com/api',
-          'service-desc': [{ href: 'https://auth.example.com/api/openapi.json', type: 'application/json' }],
-          'service-doc': [{ href: 'https://auth.example.com/api/docs', type: 'text/html' }],
-          'service-meta': [
-            { href: 'https://auth.example.com/.well-known/oauth-protected-resource/api', type: 'application/json' },
-          ],
-          status: [{ href: 'https://auth.example.com/api/health', type: 'application/json' }],
-        },
-      ],
-    })
-    expect(await (await request('/robots.txt')).text()).toContain('Sitemap: https://auth.example.com/sitemap.xml')
-    const sitemap = await request('/sitemap.xml')
-    expect(sitemap.headers.get('Content-Type')).toContain('application/xml')
-    expect(await sitemap.text()).toBe(
-      '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>https://auth.example.com/</loc></url>\n  <url><loc>https://auth.example.com/api/docs</loc></url>\n</urlset>\n',
-    )
-    expect(fetch).not.toHaveBeenCalled()
+  it('publishes static discovery files [spec: management-api/public-service-discovery]', () => {
+    const catalog = JSON.parse(readFileSync('public/.well-known/api-catalog', 'utf8'))
+    expect(catalog.linkset[0].anchor).toBe('https://id.realmroot.dev/api')
+    expect(catalog.linkset[0]['service-desc'][0].href).toBe('https://id.realmroot.dev/api/openapi.json')
+    expect(readFileSync('public/robots.txt', 'utf8')).toContain('Sitemap: https://id.realmroot.dev/sitemap.xml')
+    expect(readFileSync('public/sitemap.xml', 'utf8').match(/<loc>/g)).toHaveLength(2)
+    expect(readFileSync('public/llms.txt', 'utf8')).toContain('[OpenAPI contract](/api/openapi.json)')
+    expect(readFileSync('public/_redirects', 'utf8').trim().split('\n')).toEqual([
+      '/.well-known/oauth-authorization-server /.well-known/oauth-authorization-server/api/auth 308',
+      '/.well-known/openid-configuration /api/auth/.well-known/openid-configuration 308',
+      '/.well-known/oauth-protected-resource /.well-known/oauth-protected-resource/api 308',
+      '/openapi.json /api/openapi.json 308',
+    ])
   })
 
   it.each([
@@ -72,17 +65,21 @@ describe('public service discovery', () => {
       expect(fetch).toHaveBeenCalledOnce()
     } else {
       expect(await response.text()).toContain('[OpenAPI contract](/api/openapi.json)')
-      expect(response.headers.has('ETag')).toBe(false)
-      expect(fetch).not.toHaveBeenCalled()
+      expect(response.headers.get('ETag')).toBe('"markdown"')
+      expect(fetch).toHaveBeenCalledOnce()
     }
   })
 
-  it('serves HEAD metadata without a body', async () => {
-    const { request } = fixture()
-    for (const path of ['/', '/llms.txt', '/robots.txt', '/sitemap.xml', '/.well-known/api-catalog', '/openapi.json']) {
-      const response = await request(path, { method: 'HEAD', headers: { Accept: 'text/markdown' } })
-      expect(await response.text()).toBe('')
-      expect(response.status).toBe(path === '/openapi.json' ? 308 : 200)
-    }
+  it('forwards HEAD and conditional requests to the selected asset', async () => {
+    const { request, fetch } = fixture()
+    const response = await request('/', {
+      method: 'HEAD',
+      headers: { Accept: 'text/markdown', 'If-None-Match': '"markdown"' },
+    })
+    expect(await response.text()).toBe('')
+    const forwarded = fetch.mock.calls[0][0]
+    expect(forwarded.url).toBe('https://auth.example.com/llms.txt')
+    expect(forwarded.method).toBe('HEAD')
+    expect(forwarded.headers.get('If-None-Match')).toBe('"markdown"')
   })
 })

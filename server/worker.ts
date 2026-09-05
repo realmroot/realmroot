@@ -9,7 +9,7 @@ import { createDb } from '@server/db/client'
 import { type Env, type RuntimeConfig, validateEnv } from '@server/env'
 import { createApp, healthStatus } from '@server/http/app'
 import { readCorrelationId } from '@server/http/correlation'
-import { publicDiscovery, publicDiscoveryPaths } from '@server/http/public-discovery'
+import { serveHomepage } from '@server/http/public-discovery'
 import {
   reconcileRealmrootResourceServer,
   synchronizeEnabledResourceScopeRegistries,
@@ -43,7 +43,8 @@ export default {
     // Liveness probe answers from the process alone — before any D1 read — so it
     // reports the worker is up even when the database is unmigrated or down.
     const path = new URL(request.url).pathname
-    if (publicDiscoveryPaths.includes(path)) return publicDiscovery.fetch(request, env)
+    if (path === '/' && (request.method === 'GET' || request.method === 'HEAD'))
+      return serveHomepage(request, env.ASSETS)
     if (path === '/api/health') return Response.json(healthStatus)
     const publicMetadataCache =
       request.method === 'GET' && cachedPublicMetadataPaths.has(path)
