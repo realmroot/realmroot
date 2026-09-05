@@ -4452,7 +4452,12 @@ describe('external API resource authorization', () => {
     vi.mocked(deps.authorization.listActiveUserScopeEntitlements).mockResolvedValue([])
     const authorizationDetails = [{ type: 'realmroot_authority', authority: 'user', id: 'user-1' }]
     vi.mocked(deps.externalResources.listPendingAccessRequestsByAgent).mockResolvedValue([
-      { ...requestRecord(), connectionId: null, scopes: ['applications:read', 'permissions:read'], authorizationDetails },
+      {
+        ...requestRecord(),
+        connectionId: null,
+        scopes: ['applications:read', 'permissions:read'],
+        authorizationDetails,
+      },
     ])
 
     await expect(
