@@ -2,6 +2,7 @@ import { type SiteNavigation, siteNavigationSchema } from '@shared/api/navigatio
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowDown, ArrowUp, ExternalLink, Pencil, Plus, Trash2 } from 'lucide-react'
 import { type FormEvent, useState } from 'react'
+import { SettingsFormSection } from '@/components/settings-form'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -13,7 +14,6 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { SettingsSection } from '@/features/management/previews'
 import { accountQueryKeys } from '@/lib/account-query'
 import { getSiteNavigation, replaceSiteNavigation } from '@/lib/api/management'
 import { tt } from '@/lib/i18n'
@@ -67,7 +67,7 @@ export function SiteNavigationSettings() {
   }
   const error = validationError || mutation.error?.message || query.error?.message
   return (
-    <SettingsSection
+    <SettingsFormSection
       title={tt('External services')}
       description={tt('Configure optional links shown in Account Center. Links open the destination directly.')}
     >
@@ -147,7 +147,7 @@ export function SiteNavigationSettings() {
             </ul>
           )}
           <Button
-            className="mt-3"
+            className="mt-3 w-fit"
             type="button"
             variant="secondary"
             disabled={mutation.isPending || links.length >= 20}
@@ -225,6 +225,6 @@ export function SiteNavigationSettings() {
           ) : null}
         </DialogContent>
       </Dialog>
-    </SettingsSection>
+    </SettingsFormSection>
   )
 }

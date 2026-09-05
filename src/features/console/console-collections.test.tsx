@@ -2,9 +2,8 @@ import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/re
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ApplicationsPage } from '@/features/applications/management/applications-list'
 import { ExperiencePage } from '@/features/console/extracted/branding-content/branding'
-import { ContentSettingsPage } from '@/features/console/extracted/branding-content/content-settings'
 import { ConnectorsPage } from '@/features/console/extracted/connectors'
-import { DeploymentSettingsPage, SettingsPage } from '@/features/console/extracted/deployment-misc/deployment'
+import { SettingsPage } from '@/features/console/extracted/deployment-misc/deployment'
 import { OrganizationsPage } from '@/features/console/extracted/organizations'
 import { SecurityPoliciesPage } from '@/features/console/extracted/security-settings'
 import { SignInSettingsPage } from '@/features/console/extracted/sign-in-settings'
@@ -339,7 +338,7 @@ describe('console collections', () => {
         text: 'Registration and identifiers',
       },
       {
-        component: <ContentSettingsPage />,
+        component: <ExperiencePage section="legal" />,
         matches: (url: string) => url === '/api/realm/sign-in-policy',
         success: signInSettings,
         text: 'Legal & support',
@@ -414,7 +413,7 @@ describe('console collections', () => {
     expect(screen.getByRole('button', { name: 'Save changes' })).toBeTruthy()
 
     unmount()
-    renderWithQuery(<DeploymentSettingsPage />)
+    renderWithQuery(<SettingsPage section="deployment" />)
 
     expect(await screen.findByRole('heading', { name: 'Settings' })).toBeTruthy()
     expect(await screen.findByText('Cloudflare Workers')).toBeTruthy()

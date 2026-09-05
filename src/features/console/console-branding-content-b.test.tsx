@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { AccountCenterSettingsPage } from '@/features/console/extracted/branding-content/account-center-settings'
+import { AccountManagementSettings } from '@/features/console/extracted/deployment-misc/account-management-settings'
 import { AppRouter, queryClient } from '@/router'
 import {
   accountCenterSettings,
@@ -27,7 +28,6 @@ afterEach(() => {
 describe('admin console account center and deferred configuration', () => {
   it('persists Account Center visibility and field permissions [spec: admin-console/admin-account-center-settings]', async () => {
     const requests: unknown[] = []
-    const open = vi.spyOn(window, 'open').mockImplementation(() => null)
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
       if (url === '/api/realm/account-management-policy' && init?.method === 'PATCH') {
@@ -37,13 +37,13 @@ describe('admin console account center and deferred configuration', () => {
       return consoleSharedFetch(input, init)
     })
 
-    renderWithQuery(<AccountCenterSettingsPage />)
+    renderWithQuery(<AccountManagementSettings />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit account permissions' }))
 
-    expect(await screen.findByRole('heading', { name: 'Account Center' })).toBeTruthy()
     await screen.findByRole('switch', { name: 'Profile section' })
     expect(screen.getByRole('heading', { name: 'Visible sections' })).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Profile field permissions' })).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'Save account center' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Save changes' }).hasAttribute('disabled')).toBe(true)
     fireEvent.click(screen.getByRole('switch', { name: 'Profile section' }))
     fireEvent.click(screen.getByRole('switch', { name: 'Password section' }))
     fireEvent.click(screen.getByRole('switch', { name: 'Connected accounts and apps' }))
@@ -52,9 +52,7 @@ describe('admin console account center and deferred configuration', () => {
     fireEvent.click(screen.getByRole('switch', { name: 'Username' }))
     fireEvent.click(screen.getByRole('switch', { name: 'Avatar' }))
     fireEvent.click(screen.getByRole('switch', { name: 'Email changes' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Open account center' }))
-    expect(open).toHaveBeenCalledWith('/profile', '_blank', 'noopener')
-    fireEvent.click(await screen.findByRole('button', { name: 'Save account center' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Save changes' }))
 
     await waitFor(() =>
       expect(requests).toEqual([
@@ -84,21 +82,23 @@ describe('admin console account center and deferred configuration', () => {
       return consoleSharedFetch(input, init)
     })
 
-    renderWithQuery(<AccountCenterSettingsPage />)
+    renderWithQuery(<AccountManagementSettings />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit account permissions' }))
     const profile = await screen.findByRole('switch', { name: 'Profile section' })
     fireEvent.click(profile)
-    expect(await screen.findByRole('button', { name: 'Save account center' })).toBeTruthy()
+    expect(await screen.findByRole('button', { name: 'Save changes' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Discard' }))
-    await waitFor(() => expect(screen.queryByRole('button', { name: 'Save account center' })).toBeNull())
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Save changes' }).hasAttribute('disabled')).toBe(true),
+    )
     expect(profile.getAttribute('aria-checked')).toBe('true')
 
     fireEvent.click(profile)
-    fireEvent.click(await screen.findByRole('button', { name: 'Save account center' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Save changes' }))
     expect(await screen.findByText('Account center save failed.')).toBeTruthy()
   })
 
-  it('retries Account Center loading and opens the live surface after recovery', async () => {
-    const open = vi.spyOn(window, 'open').mockImplementation(() => null)
+  it('retries account permissions loading inside the dialog', async () => {
     let attempts = 0
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       if (String(input) === '/api/realm/account-management-policy') {
@@ -110,11 +110,37 @@ describe('admin console account center and deferred configuration', () => {
       return consoleSharedFetch(input, init)
     })
 
-    renderWithQuery(<AccountCenterSettingsPage />)
+    renderWithQuery(<AccountManagementSettings />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit account permissions' }))
     expect(await screen.findByText('Account center unavailable.')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Open account center' }))
-    expect(open).toHaveBeenCalledWith('/profile', '_blank', 'noopener')
+    expect(await screen.findByRole('switch', { name: 'Profile section' })).toBeTruthy()
+  })
+
+  it('discards a closed draft and keeps the dialog open until saving finishes', async () => {
+    let finishSave: (response: Response) => void = () => undefined
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      if (String(input) === '/api/realm/account-management-policy' && init?.method === 'PATCH') {
+        return new Promise<Response>((resolve) => {
+          finishSave = resolve
+        })
+      }
+      return consoleSharedFetch(input, init)
+    })
+    renderWithQuery(<AccountManagementSettings />)
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit account permissions' }))
+    await userEvent.click(await screen.findByRole('switch', { name: 'Profile section' }))
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    await userEvent.click(screen.getByRole('button', { name: 'Edit account permissions' }))
+    expect((await screen.findByRole('switch', { name: 'Profile section' })).getAttribute('aria-checked')).toBe('true')
+    await userEvent.click(screen.getByRole('switch', { name: 'Profile section' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    await userEvent.keyboard('{Escape}')
+    expect(screen.getByRole('dialog')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Saving…' }).hasAttribute('disabled')).toBe(true)
+    finishSave(jsonResponse(accountCenterSettings))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
   })
 
   it('keeps deferred audit logs out of the Console', async () => {

@@ -29,6 +29,8 @@ import {
   updateRealm,
 } from '@/lib/api/management'
 import { tt } from '@/lib/i18n'
+import { AccountManagementSettings } from './account-management-settings'
+import { SiteNavigationSettings } from './site-navigation-settings'
 
 export type SettingsSection = 'general' | 'email' | 'developer' | 'deployment'
 type SettingsState = {
@@ -227,6 +229,10 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
               />
             </SettingsFormSection>
           </SettingsForm>
+          <div className="mt-7">
+            <SiteNavigationSettings />
+            <AccountManagementSettings />
+          </div>
         </TabsContent>
         <TabsContent className="mt-5" value="email">
           <SettingsForm
@@ -380,10 +386,6 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
       </Tabs>
     </ResourcePage>
   )
-}
-
-export function DeploymentSettingsPage() {
-  return <SettingsPage section="deployment" />
 }
 
 function emailSettingsState(

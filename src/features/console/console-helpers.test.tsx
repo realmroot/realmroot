@@ -67,10 +67,10 @@ describe('admin console helpers', () => {
     expect(previewSignInAction('password')).toBe('Sign in')
     const navigate = vi.fn()
     window.history.pushState(null, '', '/console/users/user-1')
-    navigateConsoleTab(navigate, '/console/users/user-1/security')
-    expect(navigate).toHaveBeenCalledWith({ to: '/console/users/user-1/security' })
+    navigateConsoleTab(navigate, '/console/users/user-1/authentication')
+    expect(navigate).toHaveBeenCalledWith({ to: '/console/users/user-1/authentication' })
     window.history.pushState(null, '', '/profile')
-    navigateConsoleTab(navigate, '/console/users/user-1/security')
+    navigateConsoleTab(navigate, '/console/users/user-1/authentication')
     expect(navigate).toHaveBeenCalledTimes(1)
     expect(userDetailTabs().map((tab) => tab.value)).toEqual([
       'overview',

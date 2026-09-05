@@ -8,7 +8,6 @@ export {
 } from './hosted-auth-preview'
 
 import { CopyButton, SwitchRow } from './dialogs'
-import { ResourcePage, RoutedSettingsTabs } from './resource-components'
 import {
   Button,
   Dialog,
@@ -19,13 +18,11 @@ import {
   DialogTitle,
   type ReactNode,
   RefreshCw,
-  Save,
   SettingRow,
   TableCell,
   TableRow,
   Trash2,
   tt,
-  Undo2,
   type WebhookEndpoint,
   type WebhookRequest,
 } from './shared'
@@ -141,73 +138,6 @@ export function PayloadBlock({ label, value }: { label: string; value: string })
     </div>
   )
 }
-export type SignInExperienceTab = {
-  href: string
-  label: string
-  value: string
-}
-const signInExperienceTabs: SignInExperienceTab[] = [
-  {
-    value: 'branding',
-    label: 'Branding',
-    href: '/console/sign-in-experience/theme',
-  },
-  {
-    value: 'sign-in',
-    label: 'Sign-up and sign-in',
-    href: '/console/sign-in-experience/sign-in',
-  },
-  {
-    value: 'account-center',
-    label: 'Account Center',
-    href: '/console/sign-in-experience/account-center',
-  },
-  {
-    value: 'content',
-    label: 'Content',
-    href: '/console/sign-in-experience/content',
-  },
-]
-export function SignInExperiencePage({
-  activeTab,
-  action,
-  children,
-  description,
-  error,
-  loading,
-  onRetry,
-  title,
-}: {
-  activeTab: string
-  action?: ReactNode
-  children: ReactNode
-  description: string
-  error?: Error | null
-  loading?: boolean
-  onRetry?: () => void
-  title: string
-}) {
-  return (
-    <ResourcePage
-      action={action}
-      description={description}
-      error={error}
-      framed={false}
-      loading={loading}
-      onRetry={onRetry}
-      title={title}
-      toolbar={
-        <RoutedSettingsTabs
-          active={activeTab}
-          ariaLabel="Sign-in and account settings"
-          tabs={signInExperienceTabs.map((tab) => [tab.value, tab.label, tab.href] as const)}
-        />
-      }
-    >
-      {children}
-    </ResourcePage>
-  )
-}
 export function SignInExperienceEditorLayout({ settings }: { settings: ReactNode }) {
   return <div className="signInExperienceSettings">{settings}</div>
 }
@@ -216,69 +146,5 @@ export function SignInExperiencePreviewPanel({ children }: { children: ReactNode
     <aside className="signInExperiencePreviewPanel" aria-label={tt('Hosted authentication preview')}>
       {children}
     </aside>
-  )
-}
-export function SettingsSections({ children }: { children: ReactNode }) {
-  return <div className="grid gap-4">{children}</div>
-}
-export function SettingsSection({
-  children,
-  description,
-  title,
-}: {
-  children: ReactNode
-  description: string
-  title: string
-}) {
-  return (
-    <section className="grid gap-4 rounded-2xl border border-border bg-background p-5 md:grid-cols-[18rem_minmax(0,1fr)]">
-      <div>
-        <h2 className="text-xs font-semibold uppercase leading-5 tracking-[0.12em] text-muted-foreground">{title}</h2>
-        <p className="mt-1 text-xs leading-5 text-muted-foreground">{description}</p>
-      </div>
-      <div className="min-w-0">{children}</div>
-    </section>
-  )
-}
-export function ChangesSection({
-  description,
-  error,
-  extraAction,
-  onDiscard,
-  pending,
-  saveLabel,
-  visible,
-}: {
-  description: string
-  error?: ReactNode
-  extraAction?: ReactNode
-  onDiscard: () => void
-  pending: boolean
-  saveLabel: string
-  visible: boolean
-}) {
-  if (!visible) return null
-  return (
-    <section aria-label={tt('Unsaved changes')} className="changesSheet">
-      <div className="min-w-0">
-        <h2 className="text-xs font-semibold uppercase leading-5 tracking-[0.12em] text-muted-foreground">
-          {tt('Changes')}
-        </h2>
-        <p className="mt-1 text-xs leading-5 text-muted-foreground">{description}</p>
-      </div>
-      <div className="changesSheetControls">
-        {error}
-        <div className="changesSheetActions">
-          {extraAction}
-          <Button onClick={onDiscard} type="button" variant="ghost">
-            <Undo2 data-icon="inline-start" /> {tt('Discard')}{' '}
-          </Button>
-          <Button disabled={pending} type="submit">
-            <Save data-icon="inline-start" />
-            {saveLabel}
-          </Button>
-        </div>
-      </div>
-    </section>
   )
 }
