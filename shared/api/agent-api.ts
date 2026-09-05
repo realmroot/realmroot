@@ -161,6 +161,23 @@ const managementAgentResourceSchema = z.object({
   identifier: z.string(),
   name: z.string(),
 })
+export const createAgentPermissionSchema = z
+  .object({
+    resourceServerId: nonEmptyString,
+    accountConnectionId: nonEmptyString.optional(),
+    scope: nonEmptyString,
+    authorizationDetails: authorizationDetailsSchema,
+    mode: z.enum(['persistent', 'until']),
+    expiresAt: z.iso.datetime().optional(),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if ((value.mode === 'until') !== Boolean(value.expiresAt)) {
+      context.addIssue({ code: 'custom', path: ['expiresAt'], message: 'Only until permissions require an expiry.' })
+    }
+  })
+export type CreateAgentPermission = z.infer<typeof createAgentPermissionSchema>
+
 export const agentPermissionSchema = z.object({
   id: z.string(),
   agentId: z.string(),
@@ -504,6 +521,11 @@ export type CreateAccessRequest = z.input<typeof createAccessRequestSchema>
 export type AccessRequest = z.infer<typeof accessRequestSchema>
 export type AccessRequestApproval = z.infer<typeof accessRequestApprovalSchema>
 export type DecideAccessRequest = z.input<typeof decideAccessRequestSchema>
+export const agentPermissionContextsQuerySchema = paginationQuerySchema.extend({ resource: z.url() })
+export const agentPermissionContextsResponseSchema = resourceServerAuthorizationDetailsResponseSchema.extend({
+  resourceServerId: nonEmptyString,
+})
+
 export type AgentPermission = z.infer<typeof agentPermissionSchema>
 export type ResourceServer = z.infer<typeof resourceServerSchema>
 export type ResourceServerAuthorizationDetail = z.infer<typeof resourceServerAuthorizationDetailSchema>

@@ -5,6 +5,7 @@ import {
   createAccessRequestCredential,
   createAccountConnection,
   createAgentAccessRequest,
+  createAgentPermission,
   createProviderConnectionIntent,
   createResourceConnectionIntent,
   decideAccessRequest,
@@ -32,6 +33,7 @@ import {
   listAccountProviderConnectors,
   listAgentResourceServers as listAgentApiResources,
   listAgentResourceServerAuthorizationDetails as listAgentAuthorizationDetailCatalog,
+  listAgentPermissionContexts,
   listAgentPermissions,
   listApiResources,
   listConnectableExternalResources,
@@ -69,6 +71,124 @@ const organizationAuthority = { type: 'realmroot_authority', authority: 'organiz
 const userAuthority = { type: 'realmroot_authority', authority: 'user', id: 'user-1' }
 
 describe('external API resource authorization', () => {
+  it('[spec: agent-identity/direct-agent-permission] grants before any request and reuses the grant on first Agent access', async () => {
+    const deps = createTestDeps()
+    authorizationDeps(deps)
+    vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
+    vi.mocked(deps.externalResources.findConnectionByOwnerResource).mockResolvedValue(connectionRecord())
+    vi.mocked(deps.externalResources.findConnection).mockResolvedValue(connectionRecord())
+    let saved: ResourceScopeEntitlementRecord | undefined
+    deps.authorization.createScopeEntitlement = vi.fn(async (record) => (saved ??= record))
+    vi.mocked(deps.externalResources.listActiveEntitlementsByAgent).mockImplementation(async () =>
+      saved ? [saved] : [],
+    )
+    const input = {
+      resourceServerId: 'resource-1',
+      scope: 'projects:read',
+      authorizationDetails: [],
+      mode: 'persistent' as const,
+    }
+    const permission = await createAgentPermission(deps, 'identity-1', input, 'user-1')
+    expect(permission).toMatchObject({ scope: 'projects:read', mode: 'persistent', sourceAccessRequestId: null })
+    expect(deps.externalResources.createAccessRequest).not.toHaveBeenCalled()
+    expect((await createAgentPermission(deps, 'identity-1', input, 'user-1')).id).toBe(permission.id)
+    vi.mocked(deps.externalResources.createAccessRequest).mockImplementation(async (record) => record)
+    const request = await createAgentAccessRequest(
+      deps,
+      { resourceId: 'resource-1', scopes: ['projects:read'], reason: 'Work', authorizationDetails: [] },
+      principal(),
+      'https://auth.example.com',
+    )
+    expect(request.status).toBe('approved')
+    expect(saved?.grantedByUserId).toBe('user-1')
+  })
+
+  it('[spec: agent-identity/direct-agent-permission] rejects another controller and scopes outside the account', async () => {
+    const deps = createTestDeps()
+    authorizationDeps(deps)
+    vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
+    vi.mocked(deps.externalResources.findConnectionByOwnerResource).mockResolvedValue(connectionRecord())
+    vi.mocked(deps.externalResources.findConnection).mockResolvedValue(connectionRecord())
+    deps.authorization.createScopeEntitlement = vi.fn()
+    const input = {
+      resourceServerId: 'resource-1',
+      scope: 'projects:write',
+      authorizationDetails: [],
+      mode: 'persistent' as const,
+    }
+    await expect(createAgentPermission(deps, 'identity-1', input, 'another-user')).rejects.toThrow('Agent controller')
+    await expect(createAgentPermission(deps, 'identity-1', input, 'user-1')).rejects.toThrow('connected account')
+    expect(deps.authorization.createScopeEntitlement).not.toHaveBeenCalled()
+  })
+
+  it('[spec: agent-identity/direct-agent-permission] lists native Contexts for the owning controller', async () => {
+    const deps = createTestDeps()
+    authorizationDeps(deps)
+    deps.authorization.findResourceByResourceUrl = vi.fn().mockResolvedValue(nativeResource())
+    vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
+    const result = await listAgentPermissionContexts(deps, 'identity-1', nativeResource().resourceUrl, 'user-1', {
+      limit: 1,
+      offset: 0,
+    })
+    expect(result.resourceServerId).toBe('resource-1')
+    expect(result.items).toHaveLength(1)
+    expect(result.items[0]).toMatchObject({ id: 'user-1', authorizationDetail: userAuthority })
+    await expect(
+      listAgentPermissionContexts(deps, 'identity-1', nativeResource().resourceUrl, 'another-user', {
+        limit: 1,
+        offset: 0,
+      }),
+    ).rejects.toThrow('Agent controller')
+    vi.mocked(deps.authorization.findResourceByResourceUrl).mockResolvedValue(null)
+    await expect(
+      listAgentPermissionContexts(deps, 'identity-1', 'https://unknown.test', 'user-1', { limit: 1, offset: 0 }),
+    ).rejects.toThrow('Resource Server')
+  })
+
+  it('[spec: agent-identity/direct-agent-permission] reads the connected external Context catalog and reports missing connections', async () => {
+    const deps = authorizationCatalogDeps({ providerMetadata: metadata() })
+    deps.authorization.findResourceByResourceUrl = vi.fn().mockResolvedValue(resource())
+    const result = await listAgentPermissionContexts(deps, 'identity-1', resource().resourceUrl, 'user-1', {
+      limit: 100,
+      offset: 0,
+    })
+    expect(result).toMatchObject({ resourceServerId: 'resource-1', items: [] })
+    vi.mocked(deps.externalResources.findConnectionByOwnerResource).mockResolvedValue(null)
+    await expect(
+      listAgentPermissionContexts(deps, 'identity-1', resource().resourceUrl, 'user-1', { limit: 100, offset: 0 }),
+    ).rejects.toThrow('must connect')
+    const inactive = identityAggregate()
+    inactive.identity.status = 'inactive'
+    vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(inactive)
+    await expect(
+      listAgentPermissionContexts(deps, 'identity-1', resource().resourceUrl, 'user-1', { limit: 100, offset: 0 }),
+    ).rejects.toThrow('Active Agent')
+  })
+
+  it('[spec: agent-identity/direct-agent-permission] grants a time-limited permission and rejects an already expired lifetime', async () => {
+    const deps = createTestDeps()
+    authorizationDeps(deps)
+    vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
+    vi.mocked(deps.externalResources.findConnectionByOwnerResource).mockResolvedValue(connectionRecord())
+    vi.mocked(deps.externalResources.findConnection).mockResolvedValue(connectionRecord())
+    deps.authorization.createScopeEntitlement = vi.fn(async (record) => record)
+    const input = {
+      resourceServerId: 'resource-1',
+      accountConnectionId: 'connection-1',
+      scope: 'projects:read',
+      authorizationDetails: [],
+      mode: 'until' as const,
+      expiresAt: '2030-01-01T00:00:00.000Z',
+    }
+    expect(await createAgentPermission(deps, 'identity-1', input, 'user-1')).toMatchObject({
+      mode: 'until',
+      expiresAt: input.expiresAt,
+    })
+    await expect(
+      createAgentPermission(deps, 'identity-1', { ...input, expiresAt: '2020-01-01T00:00:00Z' }, 'user-1'),
+    ).rejects.toThrow('future')
+  })
+
   it('rejects a deleted external resource connection intent', async () => {
     const deps = createTestDeps()
     authorizationDeps(deps)

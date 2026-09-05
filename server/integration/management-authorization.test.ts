@@ -58,6 +58,65 @@ describe('authorization management over real D1', () => {
     harness.deps.externalHttp.fetch = resourceOpenApiFetch
   })
 
+  it('[spec: agent-identity/direct-agent-permission-http] creates and reuses permissions with controller boundaries', async () => {
+    const adminCookie = await signInAdmin(harness)
+    await createUser(harness, adminCookie, {
+      email: 'agent-controller@example.com',
+      username: 'agent-controller',
+      displayName: 'Agent controller',
+      password: 'Password123!',
+    })
+    const cookie = await signIn(harness, 'agent-controller@example.com', 'Password123!')
+    const admin = await harness.db.query.user.findFirst({ where: eq(user.email, 'agent-controller@example.com') })
+    expect(admin).toBeDefined()
+    const now = new Date()
+    await harness.db.insert(agentIdentity).values({
+      id: 'direct-identity',
+      issuer: 'http://localhost/api/auth',
+      subject: 'direct-subject',
+      username: 'direct-permission-agent',
+      name: 'Direct permission Agent',
+      ownerUserId: admin!.id,
+      status: 'active',
+      createdAt: now,
+      updatedAt: now,
+    })
+    const input = {
+      resourceServerId: realmrootResourceServerId,
+      scope: 'agents:read',
+      mode: 'persistent',
+      authorizationDetails: [{ type: 'realmroot_authority', authority: 'user', id: admin!.id }],
+    }
+    const [first, replay] = await Promise.all([
+      postJson(harness, cookie, '/api/agents/direct-identity/permissions', input),
+      postJson(harness, cookie, '/api/agents/direct-identity/permissions', input),
+    ])
+    const permission = (await first.json()) as { id: string }
+    expect(await replay.json()).toMatchObject({ id: permission.id, sourceAccessRequestId: null, status: 'active' })
+    expect(
+      await harness.db
+        .select()
+        .from(resourceScopeEntitlement)
+        .where(eq(resourceScopeEntitlement.agentIdentityId, 'direct-identity')),
+    ).toHaveLength(1)
+    expect(await harness.db.select().from(agentAccessRequest)).toHaveLength(0)
+    const anonymous = await harness.request('/api/agents/direct-identity/permissions', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(input),
+    })
+    expect(anonymous.status).toBe(401)
+    await postJson(harness, cookie, '/api/agents/direct-identity/permissions', { ...input, mode: 'until' }, 400)
+    await createUser(harness, adminCookie, {
+      email: 'other-controller@example.com',
+      username: 'other-controller',
+      displayName: 'Other controller',
+      password: 'Password123!',
+    })
+    const other = await signIn(harness, 'other-controller@example.com', 'Password123!')
+    await postJson(harness, other, '/api/agents/direct-identity/permissions', input, 403)
+  })
+
   it('rejects anonymous reads with 401', async () => {
     const response = await harness.request('/api/resource-servers')
     expect(response.status).toBe(401)
