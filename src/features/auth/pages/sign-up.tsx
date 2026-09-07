@@ -1,4 +1,5 @@
 import { SpaLink } from '@/components/spa-link'
+import { ConfigurationLoadPage } from '../error-page'
 import {
   AuthMethodDivider,
   authPageHref,
@@ -27,7 +28,7 @@ import {
 } from './shared'
 
 export function SignUpPage() {
-  const { data: config } = useConfigz()
+  const { data: config, error: configError, loading: configLoading } = useConfigz()
   const [submit, setSubmit] = useState(initialSubmitState)
   const [email, setEmail] = useState('')
   const [name, setName] = useState('')
@@ -64,6 +65,7 @@ export function SignUpPage() {
       }
     })
   }
+  if (configLoading || configError) return <ConfigurationLoadPage error={configError} />
   return (
     <AuthLayout
       config={config}

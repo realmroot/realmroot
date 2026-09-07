@@ -29,6 +29,17 @@ describe('[spec: hosted-auth/hosted-auth-error-flow] hosted errors', () => {
     expect(fetch).not.toHaveBeenCalled()
   })
 
+  it.each([
+    'invalid_target',
+    'access_denied',
+    'unknown_code',
+  ])('explains errors even when %s has no description', (code) => {
+    window.history.replaceState(null, '', `/auth/error?error=${code}`)
+    render(<AuthErrorPage />)
+    expect(screen.getByRole('alert').textContent).not.toBe(code)
+    expect(screen.getByText(code)).toBeTruthy()
+  })
+
   it('treats error descriptions as text and missing context as failure', () => {
     window.history.replaceState(
       null,

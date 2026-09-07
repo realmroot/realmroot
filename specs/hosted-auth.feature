@@ -149,7 +149,7 @@ Feature: Hosted authentication
 
   @entrypoint:product-ui @journey:browser-auth-failure-page @proof:unit
   Scenario: Browser authorization and connection failures reach a hosted error page
-    When a browser navigation to authorization or an identity or resource callback fails
+    When a browser GET or POST navigation to authorization, logout, or an identity or resource callback fails
     Then the browser reaches a local error page with the failure code and public description
     And unexpected server failures do not expose internal details
     But API requests and existing OAuth callback redirects retain their protocol responses
@@ -238,3 +238,27 @@ Feature: Hosted authentication
     Then hosted sign-in preserves the device verification return path
     And code entry and the approval decision continue on the same hosted device page
     And approving or denying the device code requires the signed-in browser session
+
+  @entrypoint:product-ui @journey:request-initialization-failure @proof:unit
+  Scenario: Request initialization errors have an independent final response
+    Given database or authentication configuration loading fails before routing
+    When a browser opens an authorization or callback URL
+    Then a standalone error document explains the failure and offers safe recovery links
+    And API callers retain JSON errors and OAuth callers retain OAuth error responses
+    And the response is not cached and does not expose internal failure details
+
+  @e2e @entrypoint:product-ui @journey:browser-fatal-recovery @proof:e2e
+  Scenario: Hosted interaction remains readable when the application cannot run
+    When JavaScript is disabled or the application entry script cannot load
+    Then an independent recovery screen remains visible with navigation controls
+    When application rendering, an uncaught error, or an unhandled promise rejection fails
+    Then the application is hidden and the final recovery screen is shown
+    And no authorization decision is automatically repeated
+    And denied preference storage does not prevent sign-in or error pages from rendering
+
+  @entrypoint:product-ui @journey:authorization-unavailable-contexts @proof:unit
+  Scenario: Authorization without an available Context explains how to recover
+    When the authorization request offers no available Contexts
+    Then authorization stays disabled and the page explains that another account or administrator is needed
+    And loading failures offer account switching without losing the authorization request
+    And sign-up and recovery configuration failures show an error instead of enabling an unconfigured form

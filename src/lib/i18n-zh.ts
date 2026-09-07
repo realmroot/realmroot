@@ -17,6 +17,26 @@ export const zhFlatTranslations: Record<string, string> = {
     '当前身份无权访问请求的资源服务器，请联系管理员检查资源可见性和组织权限。',
   'Requested Resource Server is not visible to the current user.':
     '当前用户无权访问请求的资源服务器，请联系管理员检查资源可见性和组织权限。',
+  'Loading this page…': '正在加载页面…',
+  'Checking your access…': '正在检查访问权限…',
+  'If this takes too long, reload the page or return to the requesting application.':
+    '如果等待时间过长，请刷新页面或返回发起操作的应用。',
+  'Unable to load sign-in settings.': '无法加载登录设置。',
+  'No authorization Contexts are available. Use another account or ask the application administrator to check your access.':
+    '没有可用的授权上下文。请换用其他账户，或联系应用管理员检查你的访问权限。',
+  'Access was denied. Use an account with the required permissions or contact the application administrator.':
+    '访问被拒绝。请使用具有所需权限的账户，或联系应用管理员。',
+  'The requested resource is unavailable to this account. Ask the application administrator to check resource visibility.':
+    '当前账户无法访问所请求的资源，请联系应用管理员检查资源可见性。',
+  'The application could not be verified. Return to the application and contact its administrator.':
+    '无法验证此应用，请返回应用并联系其管理员。',
+  'This authorization request is invalid or incomplete. Start again from the application.':
+    '授权请求无效或不完整，请从应用重新发起授权。',
+  'The application callback address is invalid. Contact the application administrator.':
+    '应用回调地址无效，请联系应用管理员。',
+  'The application requested permissions that are not available. Contact its administrator.':
+    '应用请求了不可用的权限，请联系应用管理员。',
+  'The service is temporarily unavailable. Please try again later.': '服务暂时不可用，请稍后重试。',
   Account: '账户',
   'Account Center': '账户中心',
   'Account details': '账户详情',

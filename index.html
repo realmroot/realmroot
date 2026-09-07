@@ -6,9 +6,66 @@
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#10191a" media="(prefers-color-scheme: dark)" />
     <title>Realmroot</title>
+    <style>
+      #root[hidden], #page-recovery[hidden] { display: none !important; }
+      #page-recovery { box-sizing: border-box; min-height: 100vh; margin: 0; padding: 32px 16px; display: grid; place-items: center; background: #f5f8f8; color: #142022; font: 16px/1.6 system-ui, sans-serif; }
+      #page-recovery .recovery-card { box-sizing: border-box; width: min(100%, 460px); padding: 28px; border: 1px solid #d8e2e3; border-radius: 16px; background: white; overflow-wrap: anywhere; }
+      #page-recovery h1 { font-size: 24px; line-height: 1.3; }
+      #page-recovery a { display: inline-block; padding: 10px 14px; margin: 4px; border: 1px solid #007b83; border-radius: 8px; color: #005f66; }
+      #page-recovery a:focus-visible { outline: 3px solid #007b83; outline-offset: 3px; }
+      #page-recovery [lang=zh] { display: none; }
+      html[data-recovery-language=zh] #page-recovery [lang=en] { display: none; }
+      html[data-recovery-language=zh] #page-recovery [lang=zh] { display: revert; }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <main id="page-recovery" tabindex="-1" aria-labelledby="recovery-title">
+      <section class="recovery-card">
+        <strong>Realmroot</strong>
+        <h1 id="recovery-title"><span lang="en">Opening Realmroot…</span><span lang="zh">正在打开 Realmroot…</span></h1>
+        <p id="recovery-message"><span lang="en">If this page does not load, reload it or return to the application that sent you here.</span><span lang="zh">如果页面未能加载，请刷新页面，或返回发起操作的应用。</span></p>
+        <noscript><p>JavaScript is disabled. Enable it to continue. / 请启用 JavaScript 后继续。</p></noscript>
+        <nav aria-label="Recovery">
+          <a href=""><span lang="en">Reload page</span><span lang="zh">刷新页面</span></a>
+          <a href="/auth/sign-in"><span lang="en">Back to sign in</span><span lang="zh">返回登录</span></a>
+        </nav>
+      </section>
+    </main>
+    <div id="root" hidden></div>
+    <script>
+      // Install before importing any application code; this surface has no runtime dependencies.
+      (() => {
+        const recovery = document.getElementById('page-recovery');
+        const root = document.getElementById('root');
+        const title = document.getElementById('recovery-title');
+        const message = document.getElementById('recovery-message');
+        let failed = false;
+        document.documentElement.dataset.recoveryLanguage = navigator.language.startsWith('zh') ? 'zh' : 'en';
+        function fail() {
+          if (failed) return;
+          failed = true;
+          root.hidden = true;
+          recovery.hidden = false;
+          recovery.setAttribute('role', 'alert');
+          title.querySelector('[lang=en]').textContent = 'Unable to continue';
+          title.querySelector('[lang=zh]').textContent = '无法继续操作';
+          message.querySelector('[lang=en]').textContent = 'The page could not load or encountered an unexpected error. If you submitted an authorization decision, check its status in the requesting application before trying again.';
+          message.querySelector('[lang=zh]').textContent = '页面加载失败或发生意外错误。如果你已经提交授权决定，请先在发起操作的应用中确认结果，再决定是否重试。';
+          recovery.focus();
+        }
+        window.addEventListener('realmroot:fatal', fail);
+        window.addEventListener('error', (event) => {
+          if (event instanceof ErrorEvent || (event.target instanceof HTMLScriptElement && event.target.type === 'module')) fail();
+        }, true);
+        window.addEventListener('unhandledrejection', fail);
+        window.addEventListener('realmroot:ready', (event) => {
+          if (event.detail === 'zh' || event.detail === 'en') document.documentElement.dataset.recoveryLanguage = event.detail;
+          if (failed) return;
+          root.hidden = false;
+          recovery.hidden = true;
+        });
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

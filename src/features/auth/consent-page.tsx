@@ -112,6 +112,11 @@ export function ConsentPage() {
       >
         {loading ? <Status>{tt('Loading consent request')}</Status> : null}
         {error ? <Status tone="error">{error}</Status> : null}
+        {!loading ? (
+          <Button disabled={switchingAccount} onClick={() => void switchAccount()} type="button" variant="outline">
+            {tt('Use a different account')}
+          </Button>
+        ) : null}
         {!loading && !error ? (
           <Status tone="warning">
             {tt('This consent request is no longer available. Start sign-in again from the application.')}

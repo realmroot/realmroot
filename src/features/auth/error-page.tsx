@@ -47,14 +47,16 @@ function ErrorPage({
 
 export function AuthErrorPage() {
   const params = new URLSearchParams(window.location.search)
+  const code = params.get('error')
+  const description = params.get('error_description')
+  const knownMessage =
+    code && Object.hasOwn(authorizationErrorMessages, code) ? authorizationErrorMessages[code] : undefined
   return (
     <ErrorPage
       title="Sign-in could not continue."
       description="Return to the application to start again. If access is denied, ask its administrator to check your permissions."
-      message={
-        params.get('error_description') || params.get('error') || 'Unable to complete this request. Please try again.'
-      }
-      code={params.get('error') || undefined}
+      message={description?.trim() || knownMessage || 'Unable to complete this request. Please try again.'}
+      code={code || undefined}
     />
   )
 }
@@ -83,4 +85,43 @@ export function PageNotFound() {
       code="404"
     />
   )
+}
+
+export function RoutePendingPage() {
+  return (
+    <AuthLayout
+      config={null}
+      layout="focused"
+      title={tt('Loading this page…')}
+      description={tt('If this takes too long, reload the page or return to the requesting application.')}
+    >
+      <Status>{tt('Checking your access…')}</Status>
+      <a href="/auth/sign-in">{tt('auth.backToSignIn')}</a>
+    </AuthLayout>
+  )
+}
+
+export function ConfigurationLoadPage({ error }: { error: string | null }) {
+  return error ? (
+    <ErrorPage
+      title="Unable to load sign-in settings."
+      description="Reload the page or use one of the links below."
+      message={error}
+    />
+  ) : (
+    <RoutePendingPage />
+  )
+}
+
+const authorizationErrorMessages: Record<string, string> = {
+  access_denied:
+    'Access was denied. Use an account with the required permissions or contact the application administrator.',
+  invalid_target:
+    'The requested resource is unavailable to this account. Ask the application administrator to check resource visibility.',
+  invalid_client: 'The application could not be verified. Return to the application and contact its administrator.',
+  invalid_request: 'This authorization request is invalid or incomplete. Start again from the application.',
+  invalid_redirect: 'The application callback address is invalid. Contact the application administrator.',
+  invalid_scope: 'The application requested permissions that are not available. Contact its administrator.',
+  server_error: 'The service is temporarily unavailable. Please try again later.',
+  temporarily_unavailable: 'The service is temporarily unavailable. Please try again later.',
 }

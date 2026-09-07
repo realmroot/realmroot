@@ -37,6 +37,20 @@ describe('[spec: hosted-auth/browser-auth-failure-page] browser failure boundary
     expect(response.headers.get('Cache-Control')).toBe('no-store')
   })
 
+  it.each([
+    '/api/auth/callback/demo',
+    '/api/auth/oauth2/end-session',
+  ])('shows document-navigation failures for %s', async (path) => {
+    const response = await appWithResponse(
+      Response.json(
+        { error: 'access_denied', error_description: 'This request is no longer available.' },
+        { status: 400 },
+      ),
+    ).request(path, { method: 'POST', headers: { 'Sec-Fetch-Mode': 'navigate', Accept: 'text/html' } })
+    expect(response.status).toBe(303)
+    expect(response.headers.get('Location')).toContain('/auth/error?error=access_denied')
+  })
+
   it('handles thrown errors without exposing server internals', async () => {
     const response = await appWithResponse(new Error('secret database failure')).request('/api/auth/oauth2/authorize', {
       headers: { Accept: 'text/html' },
@@ -47,7 +61,7 @@ describe('[spec: hosted-auth/browser-auth-failure-page] browser failure boundary
   })
 
   it('handles invalid resource connection callbacks at the mounted boundary', async () => {
-    const response = await appWithResponse(new Response()).request('/api/oauth/account-connection/callback', {
+    const response = await appWithResponse(new Response()).request('/oauth/account-connection/callback', {
       headers: { Accept: 'text/html' },
     })
     expect(response.status).toBe(303)

@@ -1,4 +1,5 @@
 import { createMiddleware } from 'hono/factory'
+import { isBrowserNavigation } from '../browser-navigation'
 
 export function hostedAuthErrors() {
   return createMiddleware(async (c, next) => {
@@ -6,20 +7,14 @@ export function hostedAuthErrors() {
     const path = c.req.path
     const interactivePath =
       path === '/api/auth/oauth2/authorize' ||
+      path === '/api/auth/oauth2/end-session' ||
       path === '/api/auth/error' ||
       path === '/api/auth/verify-email' ||
       path.startsWith('/api/auth/reset-password/') ||
       path.startsWith('/api/auth/callback/') ||
       path.startsWith('/api/auth/oauth2/callback/') ||
-      path === '/api/oauth/account-connection/callback'
-    if (
-      !interactivePath ||
-      c.req.method !== 'GET' ||
-      (c.req.header('Sec-Fetch-Mode') !== undefined && c.req.header('Sec-Fetch-Mode') !== 'navigate') ||
-      !c.req.header('Accept')?.includes('text/html') ||
-      c.res.status < 400
-    )
-      return
+      path === '/oauth/account-connection/callback'
+    if (!interactivePath || !isBrowserNavigation(c.req.raw) || c.res.status < 400) return
 
     let code = 'server_error'
     let message = 'Unable to complete this request. Please try again.'
