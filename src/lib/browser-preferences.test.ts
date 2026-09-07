@@ -22,10 +22,16 @@ it.each(['SecurityError', 'QuotaExceededError'])('does not make optional prefere
   expect(() => writeBrowserPreference('theme', 'dark')).not.toThrow()
 })
 
-it('preserves unexpected implementation failures', () => {
-  const error = new Error('unexpected bug')
+it.each([
+  new Error('unexpected bug'),
+  new DOMException('unexpected storage failure', 'InvalidStateError'),
+])('preserves unexpected read and write failures: %s', (error) => {
   vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
     throw error
   })
   expect(() => readBrowserPreference('theme')).toThrow(error)
+  vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+    throw error
+  })
+  expect(() => writeBrowserPreference('theme', 'dark')).toThrow(error)
 })
