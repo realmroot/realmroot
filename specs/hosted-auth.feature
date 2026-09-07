@@ -143,6 +143,16 @@ Feature: Hosted authentication
     When hosted callback or session state contains an error
     Then a compact recovery screen is shown
     And the raw error context is surfaced to the user
+    And OAuth error descriptions remain visible in consent and device submission failures
+    And authentication library errors use the hosted error page in production
+    And route loading failures, rendering failures, and missing pages show a recovery screen
+
+  @entrypoint:product-ui @journey:browser-auth-failure-page @proof:unit
+  Scenario: Browser authorization and connection failures reach a hosted error page
+    When a browser navigation to authorization or an identity or resource callback fails
+    Then the browser reaches a local error page with the failure code and public description
+    And unexpected server failures do not expose internal details
+    But API requests and existing OAuth callback redirects retain their protocol responses
 
   @entrypoint:product-ui @journey:oidc-hosted-sign-in-context @proof:unit
   Scenario: Hosted sign-in shows OIDC application context

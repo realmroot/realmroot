@@ -43,7 +43,12 @@ async function responseMessage(response: Pick<Response, 'status' | 'text'>): Pro
   if (!text) return `Request failed with status ${response.status}.`
 
   try {
-    const parsed = JSON.parse(text) as { message?: string; error?: string | { message?: string } }
+    const parsed = JSON.parse(text) as {
+      message?: string
+      error_description?: string
+      error?: string | { message?: string }
+    }
+    if (typeof parsed.error_description === 'string' && parsed.error_description) return parsed.error_description
     if (typeof parsed.error === 'string') return parsed.error
     return parsed.message ?? parsed.error?.message ?? text
   } catch {

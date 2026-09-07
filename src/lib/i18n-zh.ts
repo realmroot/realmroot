@@ -3,6 +3,20 @@ import { zhFlatTranslationsExtraA } from './i18n-zh-extra-a'
 import { zhFlatTranslationsExtraB } from './i18n-zh-extra-b'
 
 export const zhFlatTranslations: Record<string, string> = {
+  'Return to the application to start again. If access is denied, ask its administrator to check your permissions.':
+    '请返回应用重新发起操作。如果访问被拒绝，请联系应用管理员检查你的权限。',
+  'Unable to complete this request. Please try again.': '无法完成此请求，请重试。',
+  'Unable to open this page.': '无法打开此页面。',
+  'Unable to load this page. Please reload it or try again later.': '无法加载此页面，请刷新或稍后重试。',
+  'Page not found.': '页面不存在。',
+  'Check the address or return to Account Center.': '请检查页面地址，或返回账户中心。',
+  'Reload the page or use one of the links below.': '请刷新页面，或使用下方链接继续。',
+  'The page may have moved or the address may be incorrect.': '页面可能已移动，或访问地址不正确。',
+  'Error code': '错误代码',
+  'Requested Resource Server is not visible to this principal.':
+    '当前身份无权访问请求的资源服务器，请联系管理员检查资源可见性和组织权限。',
+  'Requested Resource Server is not visible to the current user.':
+    '当前用户无权访问请求的资源服务器，请联系管理员检查资源可见性和组织权限。',
   Account: '账户',
   'Account Center': '账户中心',
   'Account details': '账户详情',

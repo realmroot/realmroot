@@ -38,6 +38,7 @@ import { authn, getPrincipal, type SessionReader } from './middleware/authn'
 import { authorizePlatformOrganization, authz } from './middleware/authz'
 import { trustedOriginCors } from './middleware/cors'
 import { depsMiddleware } from './middleware/deps'
+import { hostedAuthErrors } from './middleware/hosted-auth-errors'
 import { paginationLinkHeader, responsePagination } from './middleware/pagination'
 import { requestContext } from './middleware/request-context'
 import { requireSecurityPolicy } from './middleware/security-policy'
@@ -89,6 +90,7 @@ export function createApp(auth: AuthHandler, deps: Deps, config: AppConfig = {})
   app.use('*', depsMiddleware(deps))
   app.use('*', requestContext())
   app.use('*', accessLog())
+  app.use('*', hostedAuthErrors())
   app.on(['GET', 'HEAD'], ['/.well-known/jwks.json', '/api/auth/jwks'], (c) => publishJwks(c, auth))
   const cors = trustedOriginCors(config.trustedOrigins ?? [], {
     isOriginExemptPath: isIdentityProviderCallbackPath,

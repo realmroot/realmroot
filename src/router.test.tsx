@@ -164,7 +164,7 @@ describe('root route', () => {
     render(<AppRouter />)
 
     await waitFor(() => expect(screen.queryByRole('heading', { name: 'Sign in route' })).toBeNull())
-    expect(document.body.textContent).toContain('Not Found')
+    expect(await screen.findByRole('heading', { name: 'Page not found.' })).toBeTruthy()
   })
 })
 
