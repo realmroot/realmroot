@@ -232,3 +232,28 @@ Feature: Account Center
     And protocol registrations, hosts, and identity bindings remain internal
     When I delete an Agent or revoke a selected Permission
     Then that delegated access is no longer active for my account
+
+  @entrypoint:product-ui @journey:application-session-lifecycle @proof:integration
+  Scenario: Application login sessions retain identity across refresh rotation
+    Given my application has two independent offline login authorizations
+    And I have another application and another user has the same application
+    When credentials rotate or I repeat login
+    Then rotation preserves the session identity and repeated login creates a new session
+    And only unexpired refresh authorizations are counted for my selected application
+    When I remove one application login session
+    Then its entire refresh chain is revoked even when refresh races removal
+    And repeated removal succeeds without affecting other sessions or users
+    And a concurrent refresh can consume a refresh credential only once
+    And browser SSO logout does not erase the application login session identity
+    And standard refresh-token revocation ends only its application login session
+    And already issued JWT access tokens remain valid until their expiry
+
+  @e2e @entrypoint:product-ui @journey:hosted-application-sessions @proof:e2e
+  Scenario: An application opens its hosted login-session management page
+    Given an application opens /application-sessions with its client_id
+    When I authenticate in the system browser
+    Then I return to the selected application and see the managed account and application
+    And the page describes login sessions rather than physical devices
+    When I confirm removal of one listed session
+    Then the active session list and count update
+    And the page explains the remaining access-token validity window

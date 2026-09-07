@@ -1,0 +1,14 @@
+[
+  {
+    "method": "GET",
+    "operationId": "listAccountApplicationSessions",
+    "path": "/account/application-sessions",
+    "semanticHash": "8d8aa0b60d7fd1389a65b31d8d905ed8019ad5ed39a9743b4f89d70dfd16233b"
+  },
+  {
+    "method": "DELETE",
+    "operationId": "deleteAccountApplicationSession",
+    "path": "/account/application-sessions/{sessionId}",
+    "semanticHash": "18227847e43688ff52d75945af2b0df5d4000ceb1a5ec704af5894414178f27e"
+  }
+]

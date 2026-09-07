@@ -5,6 +5,7 @@ import {
   createAccessRequestSchema,
   resourceServerAuthorizationDetailsResponseSchema,
 } from '@shared/api/agent-api'
+import { applicationSessionsQuerySchema, applicationSessionsResponseSchema } from '@shared/api/application-sessions'
 import { agentPublicIdentifierSchema } from '@shared/api/identifiers'
 import { realmrootApiVersion } from '@shared/api/openapi'
 import { paginationQuerySchema } from '@shared/api/pagination'
@@ -98,6 +99,36 @@ const publicProfileAdditionalResponses = {
 }
 
 const managementRoutes: ManagementRouteConfig[] = [
+  {
+    method: 'get',
+    path: '/account/application-sessions',
+    operationId: 'listAccountApplicationSessions',
+    summary: 'List active application login sessions for the browser account',
+    description:
+      'Hosted Account Center API. client_id selects the application; ownership comes from the browser cookie. Applications integrate the hosted page instead of this API. A session is a refresh-authorization lifecycle, not a physical device.',
+    security: [{ sessionCookie: [] }],
+    request: { query: applicationSessionsQuerySchema },
+    response: applicationSessionsResponseSchema,
+    paginated: true,
+    responseHeaders: { 'Cache-Control': { description: 'Always no-store.', schema: { type: 'string' } } },
+    errors: { 404: 'Application was not found.' },
+  },
+  {
+    method: 'delete',
+    path: '/account/application-sessions/{sessionId}',
+    operationId: 'deleteAccountApplicationSession',
+    summary: 'Remove one application login session owned by the browser account',
+    description:
+      'Idempotently revokes the complete refresh-token lifecycle. Requires the browser cookie and trusted origin. Already-issued JWT access tokens remain valid until expiry (up to one hour plus resource-server clock tolerance).',
+    security: [{ sessionCookie: [] }],
+    request: {
+      params: z.object({ sessionId: z.string().min(1) }),
+      query: applicationSessionsQuerySchema.pick({ client_id: true }),
+    },
+    noBody: true,
+    status: 204,
+    errors: { 404: 'Application login session was not found for this account and application.' },
+  },
   {
     method: 'get',
     path: '/public/users/{username}',
@@ -279,6 +310,7 @@ function createManagementRoute(routeConfig: ManagementRouteConfig) {
     path: routeConfig.path,
     operationId: routeConfig.operationId,
     summary: routeConfig.summary,
+    ...(routeConfig.description ? { description: routeConfig.description } : {}),
     tags: [routeConfig.cli?.group ?? managementTagForPath(routeConfig.path)],
     ...(routeConfig.cli
       ? {
@@ -307,7 +339,7 @@ function managementTagForPath(path: string): (typeof managementOpenApiTags)[numb
   if (path.startsWith('/applications')) return 'Applications'
   if (path.startsWith('/resource-servers')) return 'Resource Servers'
   if (path.startsWith('/organizations')) return 'Organizations'
-  if (path.startsWith('/users')) return 'Users'
+  if (path.startsWith('/users') || path.startsWith('/account/')) return 'Users'
   if (path.startsWith('/connectors')) return 'Connectors'
   if (path === '/realm' || path.startsWith('/realm/')) return 'Platform'
   if (path.startsWith('/webhooks')) return 'Webhooks'

@@ -1,5 +1,5 @@
 diff --git a/dist/index.mjs b/dist/index.mjs
-index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..a5ac3f996c7a7dc477ae7f4e7387fbb983ee9389 100644
+index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..6344ab860813e1e5327c21df0d05fd7c8392d025 100644
 --- a/dist/index.mjs
 +++ b/dist/index.mjs
 @@ -9,7 +9,7 @@ import { generateRandomString, makeSignature } from "better-auth/crypto";
@@ -194,7 +194,7 @@ index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..a5ac3f996c7a7dc477ae7f4e7387fbb9
  	const iat = payload.iat ?? Math.floor(Date.now() / 1e3);
  	const exp = payload?.exp ?? iat + (opts.refreshTokenExpiresIn ?? 2592e3);
  	const token = opts.generateRefreshToken ? await opts.generateRefreshToken() : generateRandomString(32, "A-Z", "a-z");
-@@ -447,6 +512,7 @@ async function createRefreshToken(ctx, opts, user, referenceId, client, scopes,
+@@ -447,9 +512,15 @@ async function createRefreshToken(ctx, opts, user, referenceId, client, scopes,
  		referenceId,
  		authTime,
  		scopes,
@@ -202,7 +202,15 @@ index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..a5ac3f996c7a7dc477ae7f4e7387fbb9
  		createdAt: /* @__PURE__ */ new Date(iat * 1e3),
  		expiresAt: /* @__PURE__ */ new Date(exp * 1e3)
  	};
-@@ -487,19 +553,55 @@ async function createRefreshToken(ctx, opts, user, referenceId, client, scopes,
++	if (opts.refreshAuthorizationPersistence) {
++		const id = await opts.refreshAuthorizationPersistence.persist(newRow, originalRefresh?.id, ctx.request?.headers.get("user-agent"));
++		if (!id) throw new APIError("BAD_REQUEST", { error: "invalid_grant", error_description: "Application login session is no longer active" });
++		return { id, token: await encodeRefreshToken(opts, token, sessionId) };
++	}
+ 	if (!originalRefresh?.id) return {
+ 		id: (await ctx.context.adapter.create({
+ 			model: "oauthRefreshToken",
+@@ -487,19 +558,55 @@ async function createRefreshToken(ctx, opts, user, referenceId, client, scopes,
  */
  async function checkResource(ctx, opts, scopes) {
  	const resource = ctx.body.resource;
@@ -267,7 +275,7 @@ index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..a5ac3f996c7a7dc477ae7f4e7387fbb9
  	const iat = Math.floor(Date.now() / 1e3);
  	const defaultExp = iat + (user ? opts.accessTokenExpiresIn ?? 3600 : opts.m2mAccessTokenExpiresIn ?? 3600);
  	const exp = opts.scopeExpirations ? scopes.map((sc) => opts.scopeExpirations?.[sc] ? toExpJWT(opts.scopeExpirations[sc], iat) : defaultExp).reduce((prev, curr) => {
-@@ -516,7 +618,7 @@ async function createUserTokens(ctx, opts, params) {
+@@ -516,7 +623,7 @@ async function createUserTokens(ctx, opts, params) {
  		metadata: parseClientMetadata(client.metadata),
  		verificationValue
  	}) : void 0;
@@ -276,7 +284,7 @@ index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..a5ac3f996c7a7dc477ae7f4e7387fbb9
  		iat,
  		exp: iat + (opts.refreshTokenExpiresIn ?? 2592e3),
  		sid: sessionId
-@@ -531,12 +633,12 @@ async function createUserTokens(ctx, opts, params) {
+@@ -531,12 +638,12 @@ async function createUserTokens(ctx, opts, params) {
  			exp,
  			sid: sessionId
  		}, referenceId, earlyRefreshToken?.id),
@@ -291,7 +299,7 @@ index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..a5ac3f996c7a7dc477ae7f4e7387fbb9
  	]);
  	return ctx.json({
  		...customFields,
-@@ -682,6 +784,125 @@ async function handleAuthorizationCodeGrant(ctx, opts) {
+@@ -682,6 +789,125 @@ async function handleAuthorizationCodeGrant(ctx, opts) {
  		verificationValue
  	});
  }
@@ -417,7 +425,7 @@ index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..a5ac3f996c7a7dc477ae7f4e7387fbb9
  /**
  * Grant that allows direct access to an API using the application's credentials
  * This grant is for M2M so the concept of a user id does not exist on the token.
-@@ -771,13 +992,10 @@ async function handleRefreshTokenGrant(ctx, opts) {
+@@ -771,13 +997,10 @@ async function handleRefreshTokenGrant(ctx, opts) {
  		error_description: "invalid refresh token",
  		error: "invalid_grant"
  	});
@@ -432,7 +440,7 @@ index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..a5ac3f996c7a7dc477ae7f4e7387fbb9
  	const scopes = refreshToken?.scopes;
  	const requestedScopes = scope?.split(" ");
  	if (requestedScopes) {
-@@ -846,10 +1064,11 @@ async function validateJwtAccessToken(ctx, opts, token, clientId) {
+@@ -846,10 +1069,11 @@ async function validateJwtAccessToken(ctx, opts, token, clientId) {
  		}
  		throw new Error(error);
  	}
@@ -447,7 +455,7 @@ index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..a5ac3f996c7a7dc477ae7f4e7387fbb9
  	const sessionId = jwtPayload.sid;
  	if (sessionId) {
  		const session = await ctx.context.adapter.findOne({
-@@ -861,7 +1080,8 @@ async function validateJwtAccessToken(ctx, opts, token, clientId) {
+@@ -861,7 +1085,8 @@ async function validateJwtAccessToken(ctx, opts, token, clientId) {
  		});
  		if (!session || session.expiresAt < /* @__PURE__ */ new Date()) jwtPayload.sid = void 0;
  	}
@@ -457,7 +465,7 @@ index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..a5ac3f996c7a7dc477ae7f4e7387fbb9
  	jwtPayload.active = true;
  	return jwtPayload;
  }
-@@ -1167,6 +1387,7 @@ async function rpInitiatedLogoutEndpoint(ctx, opts) {
+@@ -1167,6 +1392,7 @@ async function rpInitiatedLogoutEndpoint(ctx, opts) {
  			}]
  		});
  	} catch {}
@@ -465,7 +473,7 @@ index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..a5ac3f996c7a7dc477ae7f4e7387fbb9
  	if (post_logout_redirect_uri) {
  		if (client.postLogoutRedirectUris?.includes(post_logout_redirect_uri)) {
  			const redirectUri = new URL(post_logout_redirect_uri);
-@@ -1658,7 +1879,8 @@ const adminCreateOAuthClient = (opts) => createAuthEndpoint("/admin/oauth2/creat
+@@ -1658,7 +1884,8 @@ const adminCreateOAuthClient = (opts) => createAuthEndpoint("/admin/oauth2/creat
  		grant_types: z.array(z.enum([
  			"authorization_code",
  			"client_credentials",
@@ -475,7 +483,7 @@ index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..a5ac3f996c7a7dc477ae7f4e7387fbb9
  		])).default(["authorization_code"]).optional(),
  		response_types: z.array(z.enum(["code"])).default(["code"]).optional(),
  		type: z.enum([
-@@ -1842,7 +2064,8 @@ const createOAuthClient = (opts) => createAuthEndpoint("/oauth2/create-client",
+@@ -1842,7 +2069,8 @@ const createOAuthClient = (opts) => createAuthEndpoint("/oauth2/create-client",
  		grant_types: z.array(z.enum([
  			"authorization_code",
  			"client_credentials",
@@ -485,7 +493,7 @@ index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..a5ac3f996c7a7dc477ae7f4e7387fbb9
  		])).default(["authorization_code"]).optional(),
  		response_types: z.array(z.enum(["code"])).default(["code"]).optional(),
  		type: z.enum([
-@@ -1944,7 +2167,8 @@ const createOAuthClient = (opts) => createAuthEndpoint("/oauth2/create-client",
+@@ -1944,7 +2172,8 @@ const createOAuthClient = (opts) => createAuthEndpoint("/oauth2/create-client",
  							enum: [
  								"authorization_code",
  								"client_credentials",
@@ -495,7 +503,7 @@ index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..a5ac3f996c7a7dc477ae7f4e7387fbb9
  							]
  						},
  						description: "Requested authentication method for the token endpoint"
-@@ -2044,7 +2268,8 @@ const adminUpdateOAuthClient = (opts) => createAuthEndpoint("/admin/oauth2/updat
+@@ -2044,7 +2273,8 @@ const adminUpdateOAuthClient = (opts) => createAuthEndpoint("/admin/oauth2/updat
  			grant_types: z.array(z.enum([
  				"authorization_code",
  				"client_credentials",
@@ -505,7 +513,7 @@ index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..a5ac3f996c7a7dc477ae7f4e7387fbb9
  			])).optional(),
  			response_types: z.array(z.enum(["code"])).optional(),
  			type: z.enum([
-@@ -2086,7 +2311,8 @@ const updateOAuthClient = (opts) => createAuthEndpoint("/oauth2/update-client",
+@@ -2086,7 +2316,8 @@ const updateOAuthClient = (opts) => createAuthEndpoint("/oauth2/update-client",
  			grant_types: z.array(z.enum([
  				"authorization_code",
  				"client_credentials",
@@ -515,7 +523,19 @@ index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..a5ac3f996c7a7dc477ae7f4e7387fbb9
  			])).optional(),
  			response_types: z.array(z.enum(["code"])).optional(),
  			type: z.enum([
-@@ -2639,6 +2865,10 @@ const schema = {
+@@ -2342,6 +2573,11 @@ async function revokeRefreshToken(ctx, opts, token, clientId) {
+ 		error_description: "token not found",
+ 		error: "invalid_request"
+ 	});
++	if (!refreshToken.clientId || refreshToken.clientId !== clientId) return null;
++	if (opts.refreshAuthorizationPersistence) {
++		await opts.refreshAuthorizationPersistence.revoke(refreshToken.id);
++		return;
++	}
+ 	if (refreshToken.revoked) {
+ 		await invalidateRefreshFamily(ctx, clientId, refreshToken.userId);
+ 		throw new APIError$1("BAD_REQUEST", {
+@@ -2639,6 +2875,10 @@ const schema = {
  		scopes: {
  			type: "string[]",
  			required: true
@@ -526,7 +546,7 @@ index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..a5ac3f996c7a7dc477ae7f4e7387fbb9
  		}
  	} },
  	/**
-@@ -2800,7 +3030,8 @@ const oauthProvider = (options) => {
+@@ -2800,7 +3040,8 @@ const oauthProvider = (options) => {
  		grantTypes: [
  			"authorization_code",
  			"client_credentials",
@@ -536,7 +556,7 @@ index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..a5ac3f996c7a7dc477ae7f4e7387fbb9
  		],
  		...options,
  		scopes: Array.from(scopes),
-@@ -2863,6 +3094,7 @@ const oauthProvider = (options) => {
+@@ -2863,6 +3104,7 @@ const oauthProvider = (options) => {
  			request_uri: z.string().optional(),
  			code_challenge: z.string().optional(),
  			code_challenge_method: z.enum(["S256"]).optional(),
@@ -544,7 +564,7 @@ index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..a5ac3f996c7a7dc477ae7f4e7387fbb9
  			nonce: z.string().optional(),
  			prompt: z.enum([
  				"none",
-@@ -3125,6 +3357,7 @@ const oauthProvider = (options) => {
+@@ -3125,6 +3367,7 @@ const oauthProvider = (options) => {
  					selected: z.boolean().optional().meta({ description: "Confirms an account has been selected and authorization can proceed." }),
  					created: z.boolean().optional().meta({ description: "Confirms an account was registered" }),
  					postLogin: z.boolean().optional().meta({ description: "Confirms organization and/or team selection." }),
@@ -552,7 +572,7 @@ index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..a5ac3f996c7a7dc477ae7f4e7387fbb9
  					oauth_query: z.string().optional().meta({ description: "The redirected page's query parameters" })
  				}),
  				use: [sessionMiddleware],
-@@ -3144,7 +3377,7 @@ const oauthProvider = (options) => {
+@@ -3144,7 +3387,7 @@ const oauthProvider = (options) => {
  					} }
  				} }
  			}, async (ctx) => {
@@ -561,7 +581,7 @@ index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..a5ac3f996c7a7dc477ae7f4e7387fbb9
  			}),
  			oauth2Token: createAuthEndpoint("/oauth2/token", {
  				method: "POST",
-@@ -3152,11 +3385,13 @@ const oauthProvider = (options) => {
+@@ -3152,11 +3395,13 @@ const oauthProvider = (options) => {
  					grant_type: z.enum([
  						"authorization_code",
  						"client_credentials",
@@ -576,7 +596,7 @@ index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..a5ac3f996c7a7dc477ae7f4e7387fbb9
  					code_verifier: z.string().optional(),
  					redirect_uri: SafeUrlSchema.optional(),
  					refresh_token: z.string().optional(),
-@@ -3174,11 +3409,12 @@ const oauthProvider = (options) => {
+@@ -3174,11 +3419,12 @@ const oauthProvider = (options) => {
  								properties: {
  									grant_type: {
  										type: "string",
@@ -594,7 +614,7 @@ index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..a5ac3f996c7a7dc477ae7f4e7387fbb9
  										description: "OAuth2 grant type"
  									},
  									client_id: {
-@@ -3193,6 +3429,10 @@ const oauthProvider = (options) => {
+@@ -3193,6 +3439,10 @@ const oauthProvider = (options) => {
  										type: "string",
  										description: "Authorization code (for authorization_code grant)"
  									},
@@ -605,7 +625,7 @@ index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..a5ac3f996c7a7dc477ae7f4e7387fbb9
  									code_verifier: {
  										type: "string",
  										description: "PKCE code verifier (for authorization_code grant)"
-@@ -3600,7 +3840,8 @@ const oauthProvider = (options) => {
+@@ -3600,7 +3850,8 @@ const oauthProvider = (options) => {
  					grant_types: z.array(z.enum([
  						"authorization_code",
  						"client_credentials",
@@ -615,7 +635,7 @@ index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..a5ac3f996c7a7dc477ae7f4e7387fbb9
  					])).default(["authorization_code"]).optional(),
  					response_types: z.array(z.enum(["code"])).default(["code"]).optional(),
  					type: z.enum([
-@@ -3954,22 +4195,34 @@ async function authorizeEndpoint(ctx, opts, settings) {
+@@ -3954,22 +4205,34 @@ async function authorizeEndpoint(ctx, opts, settings) {
  			return redirectWithPromptCode(ctx, opts, "create", { page: typeof signupRedirect === "string" ? signupRedirect : void 0 });
  		}
  	}
@@ -656,7 +676,7 @@ index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..a5ac3f996c7a7dc477ae7f4e7387fbb9
  	});
  	if (client.skipConsent) return redirectWithAuthorizationCode(ctx, opts, {
  		query,
-@@ -3998,7 +4251,10 @@ async function authorizeEndpoint(ctx, opts, settings) {
+@@ -3998,7 +4261,10 @@ async function authorizeEndpoint(ctx, opts, settings) {
  	});
  	if (!consent || !requestedScopes.every((val) => consent.scopes.includes(val))) {
  		if (promptNone) return redirectWithPromptNoneError(ctx, opts, query, "consent_required", "End-User consent is required");
@@ -668,7 +688,7 @@ index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..a5ac3f996c7a7dc477ae7f4e7387fbb9
  	}
  	return redirectWithAuthorizationCode(ctx, opts, {
  		query,
-@@ -4046,7 +4302,24 @@ async function redirectWithAuthorizationCode(ctx, opts, verificationValue) {
+@@ -4046,7 +4312,24 @@ async function redirectWithAuthorizationCode(ctx, opts, verificationValue) {
  	return handleRedirect(ctx, redirectUriWithCode.toString());
  }
  async function redirectWithPromptCode(ctx, opts, type, options) {
@@ -694,7 +714,7 @@ index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..a5ac3f996c7a7dc477ae7f4e7387fbb9
  	let path = opts.loginPage;
  	if (type === "select_account") path = opts.selectAccount?.page ?? opts.loginPage;
  	else if (type === "post_login") {
-@@ -4064,7 +4337,13 @@ async function signParams(ctx, opts, flags) {
+@@ -4064,7 +4347,13 @@ async function signParams(ctx, opts, flags) {
  	params.set(signedQueryIssuedAtParam, String(issuedAt));
  	params.delete("sig");
  	params.delete(postLoginClearedParam);
@@ -708,7 +728,7 @@ index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..a5ac3f996c7a7dc477ae7f4e7387fbb9
  	setSignedOAuthQueryParameterNames(params);
  	const signature = await makeSignature(canonicalizeOAuthQueryParams(params).toString(), ctx.context.secret);
  	params.set("sig", signature);
-@@ -4083,12 +4362,14 @@ function authServerMetadata(ctx, opts, overrides) {
+@@ -4083,12 +4372,14 @@ function authServerMetadata(ctx, opts, overrides) {
  		registration_endpoint: overrides?.dynamic_client_registration_supported ? `${baseURL}/oauth2/register` : void 0,
  		introspection_endpoint: `${baseURL}/oauth2/introspect`,
  		revocation_endpoint: `${baseURL}/oauth2/revoke`,
@@ -725,7 +745,7 @@ index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..a5ac3f996c7a7dc477ae7f4e7387fbb9
  		token_endpoint_auth_methods_supported: [
  			...overrides?.public_client_supported ? ["none"] : [],
 diff --git a/dist/oauth-BFBataE_.d.mts b/dist/oauth-BFBataE_.d.mts
-index 21db9f619b24c6ddf16a2b7e805bab38426672d1..2f92f34437968fb82ca9d5ad4622ba1b6e72036e 100644
+index 21db9f619b24c6ddf16a2b7e805bab38426672d1..fce2721579d23ea593107e8d0edc3ad4a0c56afd 100644
 --- a/dist/oauth-BFBataE_.d.mts
 +++ b/dist/oauth-BFBataE_.d.mts
 @@ -622,6 +622,7 @@ interface OAuthOptions<Scopes extends readonly Scope[] = InternallySupportedScop
@@ -787,7 +807,23 @@ index 21db9f619b24c6ddf16a2b7e805bab38426672d1..2f92f34437968fb82ca9d5ad4622ba1b
    /**
     * Custom fields to include in the token response body.
     *
-@@ -1325,6 +1348,8 @@ interface OAuthRefreshToken<Scopes extends readonly Scope[] = InternallySupporte
+@@ -895,6 +918,15 @@ interface OAuthOptions<Scopes extends readonly Scope[] = InternallySupportedScop
+    * generateRandomString(32, "A-Z", "a-z")
+    */
+   generateRefreshToken?: () => Awaitable<string>;
++  /** Realmroot: atomic application login-session persistence across rotation. */
++  refreshAuthorizationPersistence?: {
++    persist(input: {
++      token: string; clientId: string; userId: string; sessionId?: string | null;
++      referenceId?: string | null; authTime?: Date | null; scopes: string[];
++      resources?: string[]; createdAt: Date; expiresAt: Date;
++    }, originalTokenId?: string, userAgent?: string | null): Promise<string | null>;
++    revoke(tokenId: string): Promise<void>;
++  };
+   /**
+    * Confirmations that individually silences specific well-known endpoint
+    * configuration warnings.
+@@ -1325,6 +1357,8 @@ interface OAuthRefreshToken<Scopes extends readonly Scope[] = InternallySupporte
     * Persisted so refreshed ID tokens can include a correct `auth_time` claim.
     */
    authTime?: Date;
@@ -796,7 +832,7 @@ index 21db9f619b24c6ddf16a2b7e805bab38426672d1..2f92f34437968fb82ca9d5ad4622ba1b
    /**
     * Scopes granted for this refresh token.
     *
-@@ -1349,7 +1374,7 @@ type OAuthConsent<Scopes extends readonly Scope[] = InternallySupportedScopes[]>
+@@ -1349,7 +1383,7 @@ type OAuthConsent<Scopes extends readonly Scope[] = InternallySupportedScopes[]>
  /**
   * Supported grant types of the token endpoint
   */
@@ -805,7 +841,7 @@ index 21db9f619b24c6ddf16a2b7e805bab38426672d1..2f92f34437968fb82ca9d5ad4622ba1b
  type AuthMethod = "client_secret_basic" | "client_secret_post";
  type TokenEndpointAuthMethod = AuthMethod | "none";
  type BearerMethodsSupported = "header" | "body";
-@@ -1379,6 +1404,12 @@ interface AuthServerMetadata {
+@@ -1379,6 +1413,12 @@ interface AuthServerMetadata {
     * @default `/oauth2/token`
     */
    token_endpoint: string;

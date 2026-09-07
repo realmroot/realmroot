@@ -1,4 +1,34 @@
 export const zhAccountTranslations: Record<string, string> = {
+  'Client information': '客户端信息',
+  'This login will no longer be able to refresh credentials. Other login sessions and applications remain signed in. Local files are not deleted.':
+    '此登录将无法再刷新凭据。其他会话和应用仍保持登录，本地文件不会被删除。',
+  'Remove this login session?': '移除此登录会话？',
+  'Login session pages': '登录会话分页',
+  'Logins with valid refresh authorization will appear here.': '具有有效刷新授权的登录将显示在此处。',
+  'No active login sessions': '暂无有效登录会话',
+  'Remove session': '移除会话',
+  'Last activity': '最近活动',
+  'Signed in': '登录时间',
+  'Client information unavailable': '客户端信息不可用',
+  'Login session': '登录会话',
+  'Historical login authorization': '历史登录授权',
+  'Client information is the reported User-Agent at token exchange. Last activity means the latest credential refresh, not app usage. Device names may be unavailable.':
+    '客户端信息来自首次交换令牌时上报的 User-Agent。最近活动表示最近一次刷新凭据的时间，不是使用应用的时间。设备名称可能不可用。',
+  'Removing a session stops credential refresh. Access tokens already issued remain valid for up to 1 hour, plus any clock tolerance used by the resource server. Signing in again is still allowed.':
+    '移除会话后将无法刷新凭据。已签发的访问令牌最长仍可使用 1 小时，另加资源服务器允许的时钟误差。之后仍可重新登录。',
+  'Application ID': '应用 ID',
+  '{{count}} active login sessions': '{{count}} 个有效登录会话',
+  '1 active login session': '1 个有效登录会话',
+  'Login session removed. Existing access tokens may still work until they expire.':
+    '登录会话已移除。已签发的访问令牌在到期前可能仍然有效。',
+  'Loading application sessions…': '正在加载应用会话…',
+  'Open this page from an application with a client_id.': '请从应用打开包含 client_id 的管理链接。',
+  'This is the account signed in to this browser. It may differ from the account in your app.':
+    '这是当前浏览器登录的账户，可能与应用内的账户不同。',
+  'Managing account': '正在管理的账户',
+  'Manage active logins for one application. Each login is a session, not a verified physical device.':
+    '管理一个应用的有效登录。每次登录对应一个会话，不代表经过验证的物理设备。',
+  'Application login sessions': '应用登录会话',
   'More services': '更多服务',
   'External services': '外部服务',
   'External service': '外部服务',

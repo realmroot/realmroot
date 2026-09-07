@@ -28,7 +28,8 @@ function accountSection(pathname: string) {
   if (pathname.startsWith('/profile')) return 'profile' as const
   if (pathname.startsWith('/security')) return 'security' as const
   if (pathname.startsWith('/connections')) return 'connections' as const
-  if (pathname.startsWith('/applications')) return 'applications' as const
+  if (pathname.startsWith('/applications') || pathname.startsWith('/application-sessions'))
+    return 'applications' as const
   if (pathname.startsWith('/agents')) return 'agents' as const
   if (pathname.startsWith('/organizations')) return 'organizations' as const
   return 'overview' as const

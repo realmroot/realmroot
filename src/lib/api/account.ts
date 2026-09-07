@@ -23,6 +23,7 @@ import type {
   DecideAccessRequest,
 } from '@shared/api/agent-api'
 import type { AgentApprovalPreview } from '@shared/api/agents'
+import { applicationSessionsResponseSchema } from '@shared/api/application-sessions'
 import type { CreateInvitationRequest, InvitationResponse, ListRolesResponse } from '@shared/api/authorization'
 import type { PaginationQuery } from '@shared/api/pagination'
 import type {
@@ -512,4 +513,19 @@ export function revokeOtherSessions() {
 
 export function revokeSession(sessionId: string) {
   return readRpcResponse(apiClient.api.account.security.sessions[':sessionId'].$delete({ param: { sessionId } }))
+}
+
+export async function listApplicationSessions(clientId: string, page: number) {
+  const query = new URLSearchParams({ client_id: clientId, page: String(page), pageSize: '20' })
+  const response = await fetch(`/api/account/application-sessions?${query}`, { credentials: 'same-origin' })
+  return applicationSessionsResponseSchema.parse(await readJsonResponse<unknown>(response))
+}
+
+export async function removeApplicationSession(clientId: string, sessionId: string) {
+  const query = new URLSearchParams({ client_id: clientId })
+  const response = await fetch(`/api/account/application-sessions/${encodeURIComponent(sessionId)}?${query}`, {
+    method: 'DELETE',
+    credentials: 'same-origin',
+  })
+  if (!response.ok) await readJsonResponse<never>(response)
 }

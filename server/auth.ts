@@ -6,6 +6,7 @@ import type { TransactionalEmailSender } from '@server/adapters/gateways/email/s
 import { verifyStoredPassword } from '@server/adapters/gateways/migrated-password'
 import { createDrizzleAgentTokenRepository } from '@server/adapters/repos/agent-tokens'
 import { createDrizzleAgentRepository } from '@server/adapters/repos/agents'
+import { createRefreshAuthorizationPersistence } from '@server/adapters/repos/application-sessions'
 import { createDrizzleApplicationRepository } from '@server/adapters/repos/applications'
 import { createDrizzleAuthorizationRepository } from '@server/adapters/repos/authorization'
 import { createDrizzleConfigzRepository } from '@server/adapters/repos/configz'
@@ -475,6 +476,7 @@ export function createAuth(
         config: connectors.genericOAuthProviders,
       }),
       oauthProvider({
+        refreshAuthorizationPersistence: createRefreshAuthorizationPersistence(db, ids),
         loginPage: '/auth/sign-in',
         consentPage: '/auth/consent',
         scopes: oauthScopes,
