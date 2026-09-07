@@ -1,4 +1,5 @@
 import { createContext, type ReactNode, useContext, useEffect, useMemo, useState } from 'react'
+import { readBrowserPreference, writeBrowserPreference } from './browser-preferences'
 
 export type Theme = 'light' | 'dark'
 
@@ -36,7 +37,7 @@ export function useTheme() {
 }
 
 function readStoredTheme(): Theme {
-  const stored = window.localStorage.getItem(themeStorageKey)
+  const stored = readBrowserPreference(themeStorageKey)
   if (stored === 'dark' || stored === 'light') return stored
   if (!window.matchMedia) return 'light'
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
@@ -45,5 +46,5 @@ function readStoredTheme(): Theme {
 function applyTheme(theme: Theme) {
   document.documentElement.classList.toggle('dark', theme === 'dark')
   document.documentElement.dataset.theme = theme
-  window.localStorage.setItem(themeStorageKey, theme)
+  writeBrowserPreference(themeStorageKey, theme)
 }

@@ -1,4 +1,5 @@
 import { SpaLink } from '@/components/spa-link'
+import { ConfigurationLoadPage } from '../error-page'
 import {
   authPageHref,
   authRequestContext,
@@ -38,7 +39,7 @@ import {
 } from './shared'
 
 export function ForgotPasswordPage() {
-  const { data: config } = useConfigz()
+  const { data: config, error: configError, loading: configLoading } = useConfigz()
   const search = new URLSearchParams(window.location.search)
   const resetToken = search.get('token')
   const invalidLink = search.get('mode') === 'link' && Boolean(search.get('error'))
@@ -123,6 +124,7 @@ export function ForgotPasswordPage() {
           ? tt('Enter the one-time code sent to {{email}}, then choose a new password.', { email })
           : (authContext.description ?? tt('Enter your email address to receive a one-time password reset code.'))
 
+  if (configLoading || configError) return <ConfigurationLoadPage error={configError} />
   return (
     <AuthLayout
       config={config}
@@ -231,7 +233,7 @@ export function ForgotPasswordPage() {
   )
 }
 export function EmailVerificationPage() {
-  const { data: config } = useConfigz()
+  const { data: config, error: configError, loading: configLoading } = useConfigz()
   const [submit, setSubmit] = useState(initialSubmitState)
   const search = new URLSearchParams(window.location.search)
   const [email, setEmail] = useState(search.get('email') ?? '')
@@ -263,6 +265,7 @@ export function EmailVerificationPage() {
       return 'Verification code sent.'
     })
   }
+  if (configLoading || configError) return <ConfigurationLoadPage error={configError} />
   return (
     <AuthLayout
       config={config}

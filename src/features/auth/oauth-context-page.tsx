@@ -100,6 +100,18 @@ export function OAuthContextPage() {
     >
       {loading ? <Status>{tt('Loading authorization Contexts')}</Status> : null}
       {error ? <Status tone="error">{error}</Status> : null}
+      {!loading && !request ? (
+        <Button disabled={switchingAccount} onClick={() => void switchAccount()} type="button" variant="outline">
+          {tt('Use a different account')}
+        </Button>
+      ) : null}
+      {request?.authorizationContexts.length === 0 ? (
+        <Status tone="warning">
+          {tt(
+            'No authorization Contexts are available. Use another account or ask the application administrator to check your access.',
+          )}
+        </Status>
+      ) : null}
       {request ? (
         <form className="oauthContextForm" onSubmit={continueAuthorization}>
           <fieldset className="oauthContextChoices" disabled={disabled}>

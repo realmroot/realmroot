@@ -97,6 +97,7 @@ export function createAuth(
 
   const auth = betterAuth({
     appName: 'Realmroot',
+    onAPIError: { errorURL: '/auth/error' },
     database: drizzleAdapter(db, { provider: 'sqlite', schema }),
     advanced: {
       database: {

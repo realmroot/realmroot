@@ -1,6 +1,7 @@
 import type { TOptions } from 'i18next'
 import i18n from 'i18next'
 import { initReactI18next } from 'react-i18next'
+import { readBrowserPreference, writeBrowserPreference } from './browser-preferences'
 
 export const supportedLanguages = ['en', 'zh'] as const
 export type SupportedLanguage = (typeof supportedLanguages)[number]
@@ -139,7 +140,7 @@ void i18n.use(initReactI18next).init({
 i18n.on('languageChanged', (language) => {
   const nextLanguage = normalizeLanguage(language)
   document.documentElement.lang = nextLanguage === 'zh' ? 'zh-CN' : 'en'
-  window.localStorage.setItem(languageStorageKey, nextLanguage)
+  writeBrowserPreference(languageStorageKey, nextLanguage)
   // Better Auth's i18n plugin detects the locale from a regular request cookie.
   // biome-ignore lint/suspicious/noDocumentCookie: Cookie Store API support is not universal enough here.
   document.cookie = `${localeCookieName}=${nextLanguage}; Path=/; Max-Age=31536000; SameSite=Lax`
@@ -156,7 +157,7 @@ export function tt(key: string, options?: TOptions) {
 }
 
 function readStoredLanguage(): SupportedLanguage {
-  return normalizeLanguage(window.localStorage.getItem(languageStorageKey) ?? navigator.language)
+  return normalizeLanguage(readBrowserPreference(languageStorageKey) ?? navigator.language)
 }
 
 export { i18n }

@@ -13,6 +13,27 @@ import type { ManagementSignInSettingsResponse } from '@shared/api/management'
 import { describe, expect, it, vi } from 'vitest'
 
 describe('auth.test 3', () => {
+  it('[spec: hosted-auth/hosted-auth-error-flow] sends library errors to the hosted error page', async () => {
+    const auth = createAuth(
+      {} as Database,
+      createIdentifierGeneratorFake(),
+      '01234567890123456789012345678901',
+      'https://auth.example.com',
+      ['https://auth.example.com'],
+      createEmailSenderMock(),
+      createSecurityPolicy(),
+    )
+    const response = await auth.handler(
+      new Request(
+        'https://auth.example.com/api/auth/error?error=invalid_target&error_description=Resource%20not%20visible',
+      ),
+    )
+    expect(response.status).toBe(302)
+    expect(response.headers.get('Location')).toBe(
+      '/auth/error?error=invalid_target&error_description=Resource+not+visible',
+    )
+  })
+
   it('configures account profile fields and email changes', () => {
     const auth = createAuth(
       {} as Database,

@@ -6,7 +6,7 @@ import type {
 import type { QueryClient } from '@tanstack/react-query'
 import { redirect } from '@tanstack/react-router'
 import { accountQueryKeys, accountQueryOptions } from '@/lib/account-query'
-import { apiClient } from '@/lib/api'
+import { ApiRequestError, apiClient } from '@/lib/api'
 import { getAccountOrganizationContext, setActiveAccountOrganization } from '@/lib/api/account'
 
 const returnTargetPrefix = 'realmroot:return-target:'
@@ -16,13 +16,13 @@ export type RouteAccountProfile = AccountProfileResponse
 export async function loadAccountProfile() {
   const response = await apiClient.api.account.profile.$get()
   if (response.status === 401) return null
-  if (!response.ok) throw new Error(await readErrorMessage(response))
+  if (!response.ok) throw new ApiRequestError(await readErrorMessage(response), response.status)
   return (await response.json()) as RouteAccountProfile
 }
 
 export async function loadDeveloperConsoleAccess() {
   const response = await apiClient.api.account['developer-console-access'].$get()
-  if (!response.ok) throw new Error(await readErrorMessage(response))
+  if (!response.ok) throw new ApiRequestError(await readErrorMessage(response), response.status)
   return (await response.json()) as DeveloperConsoleAccessResponse
 }
 
@@ -80,7 +80,7 @@ export async function requireAccountProfile(locationHref: string, queryClient: Q
 
 async function loadAccountSecurity() {
   const response = await apiClient.api.account.security.$get()
-  if (!response.ok) throw new Error(await readErrorMessage(response))
+  if (!response.ok) throw new ApiRequestError(await readErrorMessage(response), response.status)
   return (await response.json()) as AccountSecurityResponse
 }
 
