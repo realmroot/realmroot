@@ -25,6 +25,9 @@ afterEach(() => {
 })
 const item = {
   id: 'session-1',
+  identified: false,
+  deviceName: null,
+  devicePlatform: null,
   createdAt: '2026-09-07T00:00:00.000Z',
   lastActiveAt: '2026-09-07T01:00:00.000Z',
   userAgent: null,
@@ -34,6 +37,7 @@ function collection(items = [item]) {
   return {
     application: { name: 'Example App', clientId: 'example' },
     items,
+    summary: { devices: 0, unidentifiedSessions: items.length },
     pagination: { page: 1, pageSize: 20, totalItems: items.length, totalPages: items.length ? 1 : 0 },
   }
 }
@@ -53,8 +57,8 @@ describe('Hosted application session feedback', () => {
     expect(screen.getAllByText('jane@example.com')[0]).toBeTruthy()
     fail = false
     await userEvent.click(screen.getByRole('button', { name: 'Retry' }))
-    expect(await screen.findByText('Client information unavailable')).toBeTruthy()
-    expect(screen.getByText('1 active login session')).toBeTruthy()
+    expect(await screen.findByText('This app did not provide an installation ID.')).toBeTruthy()
+    expect(screen.getByText('0 devices · 1 unidentified sessions')).toBeTruthy()
     expect(screen.queryByText('Current')).toBeNull()
   })
 
@@ -75,12 +79,32 @@ describe('Hosted application session feedback', () => {
     const dialog = screen.getByRole('alertdialog')
     await userEvent.click(within(dialog).getByRole('button', { name: 'Remove session' }))
     expect(await within(dialog).findByText('Removal unavailable')).toBeTruthy()
-    expect(screen.getByText('1 active login session')).toBeTruthy()
+    expect(screen.getByText('0 devices · 1 unidentified sessions')).toBeTruthy()
     fail = false
     await userEvent.click(within(dialog).getByRole('button', { name: 'Remove session' }))
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
     expect(await screen.findByText('No active login sessions')).toBeTruthy()
-    expect(screen.getByText('0 active login sessions')).toBeTruthy()
+    expect(screen.getByText('0 devices · 0 unidentified sessions')).toBeTruthy()
+  })
+
+  it('distinguishes installation names and platforms from unidentified sessions using full-collection counts', async () => {
+    server.use(
+      http.get(`${base}/api/account/application-sessions`, () =>
+        HttpResponse.json({
+          ...collection(),
+          summary: { devices: 12, unidentifiedSessions: 3 },
+          items: [
+            item,
+            { ...item, id: 'device-1', identified: true, deviceName: 'My Phone', devicePlatform: 'android' },
+          ],
+        }),
+      ),
+    )
+    renderWithClient(<ApplicationSessionsPage clientId="example" />)
+    expect(await screen.findByText('My Phone · device-1')).toBeTruthy()
+    expect(screen.getByText('android')).toBeTruthy()
+    expect(screen.getByText('Unidentified session · ession-1')).toBeTruthy()
+    expect(screen.getByText('12 devices · 3 unidentified sessions')).toBeTruthy()
   })
 
   it('does not fetch a collection when the application selector is absent', async () => {

@@ -37,9 +37,9 @@ export function ApplicationSessionsPage({ clientId }: { clientId: string }) {
   return (
     <div className="space-y-6">
       <AccountPageHeader
-        title={tt('Application login sessions')}
+        title={tt('Application devices')}
         description={tt(
-          'Manage active logins for one application. Each login is a session, not a verified physical device.',
+          'Manage signed-in app installations. Logins without an installation ID appear separately as unidentified sessions.',
         )}
       />
       <AccountObjectSection
@@ -75,11 +75,10 @@ export function ApplicationSessionsPage({ clientId }: { clientId: string }) {
         <AccountObjectSection
           surface
           title={data.application.name}
-          description={
-            data.pagination.totalItems === 1
-              ? tt('1 active login session')
-              : tt('{{count}} active login sessions', { count: data.pagination.totalItems })
-          }
+          description={tt('{{devices}} devices · {{sessions}} unidentified sessions', {
+            devices: data.summary.devices,
+            sessions: data.summary.unidentifiedSessions,
+          })}
         >
           <div className="space-y-3 px-5 py-4">
             <p className="break-all text-sm text-muted-foreground">
@@ -92,7 +91,7 @@ export function ApplicationSessionsPage({ clientId }: { clientId: string }) {
             </p>
             <p className="text-sm text-muted-foreground">
               {tt(
-                'Client information is the reported User-Agent at token exchange. Last activity means the latest credential refresh, not app usage. Device names may be unavailable.',
+                'Device names and platforms are reported by the app. Last activity means the latest login or credential refresh, not app usage.',
               )}
             </p>
           </div>
@@ -100,8 +99,12 @@ export function ApplicationSessionsPage({ clientId }: { clientId: string }) {
             {data.items.map((item) => (
               <AccountRow
                 key={item.id}
-                label={`${item.legacy ? tt('Historical login authorization') : tt('Login session')} · ${item.id.slice(-8)}`}
-                description={item.userAgent ? undefined : tt('Client information unavailable')}
+                label={`${item.identified ? item.deviceName || tt('Unnamed device') : tt('Unidentified session')} · ${item.id.slice(-8)}`}
+                description={
+                  item.identified
+                    ? item.devicePlatform || tt('Platform unavailable')
+                    : tt('This app did not provide an installation ID.')
+                }
                 value={
                   <>
                     <span>
@@ -128,7 +131,7 @@ export function ApplicationSessionsPage({ clientId }: { clientId: string }) {
                       setSelected(item)
                     }}
                   >
-                    {tt('Remove session')}
+                    {tt(item.identified ? 'Remove device' : 'Remove session')}
                   </Button>
                 }
               />
@@ -159,11 +162,11 @@ export function ApplicationSessionsPage({ clientId }: { clientId: string }) {
       ) : null}
       <DestructiveConfirmation
         open={Boolean(selected)}
-        title={tt('Remove this login session?')}
+        title={tt(selected?.identified ? 'Remove this device?' : 'Remove this login session?')}
         description={tt(
-          'This login will no longer be able to refresh credentials. Other login sessions and applications remain signed in. Local files are not deleted.',
+          'This login will no longer be able to refresh credentials. Other devices and applications remain signed in. Local files are not deleted.',
         )}
-        confirmLabel={tt('Remove session')}
+        confirmLabel={tt(selected?.identified ? 'Remove device' : 'Remove session')}
         cancelLabel={tt('Cancel')}
         pending={remove.isPending}
         error={remove.error ? <Status tone="error">{remove.error.message}</Status> : undefined}

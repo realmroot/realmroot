@@ -240,6 +240,33 @@ export const oauthClient = sqliteTable(
   ],
 )
 
+export const applicationSession = sqliteTable(
+  'application_session',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    clientId: text('client_id')
+      .notNull()
+      .references(() => oauthClient.clientId, { onDelete: 'cascade' }),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    lastActiveAt: integer('last_active_at', { mode: 'timestamp_ms' }).notNull(),
+    userAgent: text('user_agent'),
+    installationId: text('installation_id'),
+    deviceName: text('device_name'),
+    devicePlatform: text('device_platform'),
+    legacy: integer('legacy', { mode: 'boolean' }).notNull().default(false),
+    revokedAt: integer('revoked_at', { mode: 'timestamp_ms' }),
+  },
+  (table) => [
+    index('application_session_owner_idx').on(table.userId, table.clientId),
+    uniqueIndex('application_session_active_installation_idx')
+      .on(table.userId, table.clientId, table.installationId)
+      .where(sql`${table.installationId} is not null and ${table.revokedAt} is null`),
+  ],
+)
+
 export const oauthRefreshToken = sqliteTable(
   'oauth_refresh_token',
   {
@@ -261,11 +288,15 @@ export const oauthRefreshToken = sqliteTable(
     authTime: integer('auth_time', { mode: 'timestamp_ms' }),
     scopes: text('scopes').notNull(),
     resources: text('resources'),
+    applicationSessionId: text('application_session_id').references(() => applicationSession.id, {
+      onDelete: 'cascade',
+    }),
   },
   (table) => [
     index('oauthRefreshToken_clientId_idx').on(table.clientId),
     index('oauthRefreshToken_sessionId_idx').on(table.sessionId),
     index('oauthRefreshToken_userId_idx').on(table.userId),
+    index('oauthRefreshToken_applicationSessionId_idx').on(table.applicationSessionId),
   ],
 )
 

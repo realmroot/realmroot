@@ -240,4 +240,18 @@ export const zhAccountTranslations: Record<string, string> = {
   '{{ip}} · expires {{date}}': '{{ip}} · 过期于 {{date}}',
   '{{resource}} · {{scopes}}': '{{resource}} · {{scopes}}',
   'Your account': '你的账户',
+  'Application devices': '应用设备',
+  'Manage signed-in app installations. Logins without an installation ID appear separately as unidentified sessions.':
+    '管理已登录的应用安装。未提供安装 ID 的登录将单独显示为未识别会话。',
+  '{{devices}} devices · {{sessions}} unidentified sessions': '{{devices}} 台设备 · {{sessions}} 个未识别会话',
+  'Device names and platforms are reported by the app. Last activity means the latest login or credential refresh, not app usage.':
+    '设备名称和平台由应用提供。最近活动表示最近一次登录或凭据刷新时间，并非应用使用时间。',
+  'Unnamed device': '未命名设备',
+  'Unidentified session': '未识别会话',
+  'Platform unavailable': '平台信息不可用',
+  'This app did not provide an installation ID.': '该应用未提供安装 ID。',
+  'This login will no longer be able to refresh credentials. Other devices and applications remain signed in. Local files are not deleted.':
+    '此登录将无法继续刷新凭据。其他设备和应用保持登录，本地文件不会被删除。',
+  'Remove device': '移除设备',
+  'Remove this device?': '移除此设备？',
 }

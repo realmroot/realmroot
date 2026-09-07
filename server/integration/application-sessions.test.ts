@@ -49,7 +49,12 @@ describe('Application login session authorization over real D1', () => {
     expect(response.status, await response.clone().text()).toBe(201)
     return ((await response.json()) as { clientId: string }).clientId
   }
-  async function login(target = clientId, browserCookie = cookie): Promise<Tokens> {
+  async function login(
+    target = clientId,
+    browserCookie = cookie,
+    installation: Record<string, string> = {},
+    exchange: Record<string, string> = {},
+  ): Promise<Tokens> {
     const challenge = btoa(
       String.fromCharCode(...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)))),
     )
@@ -64,6 +69,7 @@ describe('Application login session authorization over real D1', () => {
         scope: 'openid offline_access',
         code_challenge: challenge,
         code_challenge_method: 'S256',
+        ...installation,
       })}`,
       { headers: { cookie: browserCookie }, redirect: 'manual' },
     )
@@ -71,6 +77,7 @@ describe('Application login session authorization over real D1', () => {
     const code = new URL(authorization.headers.get('location')!).searchParams.get('code')
     expect(code, authorization.headers.get('location')!).toBeTruthy()
     const response = await token({
+      ...exchange,
       grant_type: 'authorization_code',
       client_id: target,
       code: code!,
@@ -102,6 +109,128 @@ describe('Application login session authorization over real D1', () => {
     return h.request(`/api/account/application-sessions/${id}?client_id=${target}`, {
       method: 'DELETE',
       headers: { cookie: browserCookie, origin },
+    })
+  }
+
+  it('[spec: account-center/application-installation-identity] binds installation identity to PKCE authorization and isolates authorization generations', async () => {
+    const device = { installation_id: 'installation-0001', device_name: 'My Android', device_platform: 'android' }
+    const first = await login(clientId, cookie, device, {
+      installation_id: 'spoofed-installation',
+      device_name: 'Spoofed',
+    })
+    const initial = await list()
+    expect(initial.summary).toEqual({ devices: 1, unidentifiedSessions: 0 })
+    const oldId = initial.items[0]!.id
+    expect(initial.items[0]).toMatchObject({ identified: true, deviceName: 'My Android', devicePlatform: 'android' })
+    const [second, third] = await Promise.all([login(clientId, cookie, device), login(clientId, cookie, device)])
+    expect((await list()).items.map((item) => item.id)).toEqual([oldId])
+    const otherDevice = await login(clientId, cookie, { ...device, installation_id: 'installation-0002' })
+    const otherClient = await application('Installation Other App')
+    const otherApp = await login(otherClient, cookie, device)
+    await createUser(h, cookie, {
+      email: 'installation@example.com',
+      username: 'installation',
+      displayName: 'Installation User',
+      password: 'installation-password-2026',
+    })
+    const otherCookie = await signIn(h, 'installation@example.com', 'installation-password-2026')
+    const otherUser = await login(clientId, otherCookie, device)
+    await login()
+    expect((await list()).summary).toEqual({ devices: 2, unidentifiedSessions: 1 })
+    const rotated = await token({
+      grant_type: 'refresh_token',
+      client_id: clientId,
+      refresh_token: first.refresh_token,
+      installation_id: 'installation-0002',
+      device_name: 'Changed by refresh',
+      device_platform: 'ios',
+    })
+    expect(rotated.status).toBe(200)
+    const rotatedToken = (await rotated.json()) as Tokens
+    expect((await list()).items.find((item) => item.id === oldId)).toMatchObject({
+      deviceName: 'My Android',
+      devicePlatform: 'android',
+    })
+    expect((await remove(oldId)).status).toBe(204)
+    for (const credentials of [rotatedToken, second, third])
+      expect((await refresh(credentials.refresh_token)).status).toBe(400)
+    const fresh = await login(clientId, cookie, device)
+    const freshId = (await list()).items.find((item) => item.deviceName === device.device_name && item.id !== oldId)!.id
+    expect(freshId).not.toBe(oldId)
+    expect((await revoke(first.refresh_token)).status).toBe(200)
+    expect((await refresh(fresh.refresh_token)).status).toBe(200)
+    expect((await refresh(otherDevice.refresh_token)).status).toBe(200)
+    expect((await refresh(otherApp.refresh_token, otherClient)).status).toBe(200)
+    expect((await refresh(otherUser.refresh_token)).status).toBe(200)
+
+    const expiring = await login(clientId, cookie, {
+      ...device,
+      installation_id: 'installation-0003',
+      device_name: 'Expiring device',
+    })
+    const expiredId = (await list()).items.find((item) => item.deviceName === 'Expiring device')!.id
+    await h.db
+      .update(oauthRefreshToken)
+      .set({ expiresAt: new Date(0) })
+      .where(eq(oauthRefreshToken.applicationSessionId, expiredId))
+    const [expiredToken] = await h.db
+      .select()
+      .from(oauthRefreshToken)
+      .where(eq(oauthRefreshToken.applicationSessionId, expiredId))
+    // A delayed issuance must compare expiration with persistence time, not its earlier issue timestamp.
+    await createRefreshAuthorizationPersistence(h.db, h.deps.ids).persist(
+      {
+        ...expiredToken!,
+        token: 'delayed-initial-issuance',
+        createdAt: new Date(-1000),
+        expiresAt: new Date(Date.now() + 60000),
+        scopes: JSON.parse(expiredToken!.scopes),
+        resources: undefined,
+      },
+      undefined,
+      undefined,
+      { id: 'installation-0003', name: 'Delayed device', platform: 'android' },
+    )
+    expect((await list()).items.find((item) => item.deviceName === 'Delayed device')!.id).not.toBe(expiredId)
+    const renewed = await login(clientId, cookie, {
+      ...device,
+      installation_id: 'installation-0003',
+      device_name: 'Renewed device',
+    })
+    expect((await list()).items.find((item) => item.deviceName === 'Renewed device')!.id).not.toBe(expiredId)
+    expect((await revoke(expiring.refresh_token)).status).toBe(200)
+    expect((await refresh(renewed.refresh_token)).status).toBe(200)
+  })
+
+  it('rejects malformed installation metadata at authorization', async () => {
+    const invalidMetadata: Record<string, string>[] = [
+      { installation_id: 'short' },
+      { device_name: 'Missing ID' },
+      { device_platform: 'android' },
+      { installation_id: 'installation-0001', device_name: ' ' },
+      { installation_id: 'installation-0001', device_platform: 'unknown-os' },
+    ]
+    for (const metadata of invalidMetadata) {
+      const response = await h.request(
+        `/api/auth/oauth2/authorize?${new URLSearchParams({
+          client_id: clientId,
+          response_type: 'code',
+          redirect_uri: redirectUri,
+          scope: 'openid offline_access',
+          ...metadata,
+        })}`,
+        { headers: { cookie }, redirect: 'manual' },
+      )
+      expect(response.status, await response.clone().text()).toBe(400)
+    }
+    expect((await list()).pagination.totalItems).toBe(0)
+  })
+
+  function revoke(refreshToken: string) {
+    return h.request('/api/auth/oauth2/revoke', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ client_id: clientId, token: refreshToken, token_type_hint: 'refresh_token' }),
     })
   }
 

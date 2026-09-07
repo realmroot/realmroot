@@ -278,6 +278,9 @@ export function authContinuationParams() {
     'code_challenge',
     'code_challenge_method',
     'nonce',
+    'installation_id',
+    'device_name',
+    'device_platform',
     'resource',
   ]) {
     for (const value of params.getAll(name)) {

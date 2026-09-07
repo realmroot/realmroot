@@ -9,6 +9,7 @@ export async function listApplicationSessions(deps: Deps, userId: string, client
   return {
     application: { clientId: application.clientId!, name: application.name },
     items: sessions.items,
+    summary: { devices: sessions.devices, unidentifiedSessions: sessions.total - sessions.devices },
     pagination: paginationMetadata(sessions),
   }
 }

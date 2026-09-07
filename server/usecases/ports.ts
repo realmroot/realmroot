@@ -1652,6 +1652,10 @@ export interface EmailGateway {
 }
 
 export interface ApplicationSessionRepository {
-  list(userId: string, clientId: string, page: PaginationInput): Promise<PaginatedResult<ApplicationSession>>
+  list(
+    userId: string,
+    clientId: string,
+    page: PaginationInput,
+  ): Promise<PaginatedResult<ApplicationSession> & { devices: number }>
   revoke(userId: string, clientId: string, sessionId: string): Promise<boolean>
 }

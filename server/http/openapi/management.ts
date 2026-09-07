@@ -103,9 +103,9 @@ const managementRoutes: ManagementRouteConfig[] = [
     method: 'get',
     path: '/account/application-sessions',
     operationId: 'listAccountApplicationSessions',
-    summary: 'List active application login sessions for the browser account',
+    summary: 'List active application devices and unidentified sessions for the browser account',
     description:
-      'Hosted Account Center API. client_id selects the application; ownership comes from the browser cookie. Applications integrate the hosted page instead of this API. A session is a refresh-authorization lifecycle, not a physical device.',
+      'Hosted Account Center API. client_id selects the application; ownership comes from the browser cookie. Applications integrate the hosted page instead of this API. Identified installations are grouped by user, client and installation ID; unidentified logins remain separate sessions. Summary counts cover the entire collection.',
     security: [{ sessionCookie: [] }],
     request: { query: applicationSessionsQuerySchema },
     response: applicationSessionsResponseSchema,
@@ -117,7 +117,7 @@ const managementRoutes: ManagementRouteConfig[] = [
     method: 'delete',
     path: '/account/application-sessions/{sessionId}',
     operationId: 'deleteAccountApplicationSession',
-    summary: 'Remove one application login session owned by the browser account',
+    summary: 'Remove one application device authorization or unidentified session',
     description:
       'Idempotently revokes the complete refresh-token lifecycle. Requires the browser cookie and trusted origin. Already-issued JWT access tokens remain valid until expiry (up to one hour plus resource-server clock tolerance).',
     security: [{ sessionCookie: [] }],

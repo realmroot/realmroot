@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  authContinuationParams,
   CaptchaTokenField,
   navigateAfterAuth,
   redirectToMissingEmailSignUp,
@@ -47,6 +48,21 @@ describe('redirectToMissingEmailSignUp', () => {
     const target = assign.mock.calls[0][0] as string
     expect(target.startsWith('/auth/callback?')).toBe(true)
     expect(target).toContain('error=missing_email_signup')
+  })
+})
+
+describe('installation identity through hosted authentication', () => {
+  it('preserves the authorization metadata when switching sign-in and sign-up pages', () => {
+    vi.stubGlobal('location', {
+      ...window.location,
+      search:
+        '?client_id=app&redirect_uri=com.example.app%3A%2Fcallback&installation_id=installation-0001&device_name=My%20Phone&device_platform=android',
+    })
+    expect(Object.fromEntries(authContinuationParams())).toMatchObject({
+      installation_id: 'installation-0001',
+      device_name: 'My Phone',
+      device_platform: 'android',
+    })
   })
 })
 

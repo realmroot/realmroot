@@ -45,7 +45,7 @@ inventory into prose documentation.
 
 ## Integration
 
-- [Hosted application login sessions](integrations/application-sessions.md): native app entry point, session counting, revocation, and access-token enforcement timing.
+- [Hosted application devices](integrations/application-sessions.md): stable installation IDs, hosted management, revocation, and access-token enforcement timing.
 
 - [Resource server integration](integrations/resource-servers.md): connect
   Realmroot-native or external protected APIs, publish discovery metadata, and

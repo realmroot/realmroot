@@ -1,171 +1,9 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "3fa0bbbc-1570-4371-861a-95cd14e60303",
+  "id": "cda4a305-ba4e-4de3-a9be-66c8e97449d7",
   "prevId": "c26def24-aa2b-458a-befb-c20bf1adc929",
   "tables": {
-    "application_session": {
-      "name": "application_session",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "client_id": {
-          "name": "client_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "last_active_at": {
-          "name": "last_active_at",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "user_agent": {
-          "name": "user_agent",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "legacy": {
-          "name": "legacy",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": false
-        },
-        "revoked_at": {
-          "name": "revoked_at",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "application_session_owner_idx": {
-          "name": "application_session_owner_idx",
-          "columns": [
-            "user_id",
-            "client_id"
-          ],
-          "isUnique": false
-        }
-      },
-      "foreignKeys": {
-        "application_session_user_id_user_id_fk": {
-          "name": "application_session_user_id_user_id_fk",
-          "tableFrom": "application_session",
-          "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "application_session_client_id_oauth_client_client_id_fk": {
-          "name": "application_session_client_id_oauth_client_client_id_fk",
-          "tableFrom": "application_session",
-          "tableTo": "oauth_client",
-          "columnsFrom": [
-            "client_id"
-          ],
-          "columnsTo": [
-            "client_id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
-    "application_session_token": {
-      "name": "application_session_token",
-      "columns": {
-        "token_id": {
-          "name": "token_id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "application_session_id": {
-          "name": "application_session_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "application_session_token_session_idx": {
-          "name": "application_session_token_session_idx",
-          "columns": [
-            "application_session_id"
-          ],
-          "isUnique": false
-        }
-      },
-      "foreignKeys": {
-        "application_session_token_token_id_oauth_refresh_token_id_fk": {
-          "name": "application_session_token_token_id_oauth_refresh_token_id_fk",
-          "tableFrom": "application_session_token",
-          "tableTo": "oauth_refresh_token",
-          "columnsFrom": [
-            "token_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "application_session_token_application_session_id_application_session_id_fk": {
-          "name": "application_session_token_application_session_id_application_session_id_fk",
-          "tableFrom": "application_session_token",
-          "tableTo": "application_session",
-          "columnsFrom": [
-            "application_session_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
     "agent_audit_event": {
       "name": "agent_audit_event",
       "columns": {
@@ -1974,6 +1812,140 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
+    "application_session": {
+      "name": "application_session",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "client_id": {
+          "name": "client_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "last_active_at": {
+          "name": "last_active_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "user_agent": {
+          "name": "user_agent",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "installation_id": {
+          "name": "installation_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "device_name": {
+          "name": "device_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "device_platform": {
+          "name": "device_platform",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "legacy": {
+          "name": "legacy",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "revoked_at": {
+          "name": "revoked_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "application_session_owner_idx": {
+          "name": "application_session_owner_idx",
+          "columns": [
+            "user_id",
+            "client_id"
+          ],
+          "isUnique": false
+        },
+        "application_session_active_installation_idx": {
+          "name": "application_session_active_installation_idx",
+          "columns": [
+            "user_id",
+            "client_id",
+            "installation_id"
+          ],
+          "isUnique": true,
+          "where": "\"application_session\".\"installation_id\" is not null and \"application_session\".\"revoked_at\" is null"
+        }
+      },
+      "foreignKeys": {
+        "application_session_user_id_user_id_fk": {
+          "name": "application_session_user_id_user_id_fk",
+          "tableFrom": "application_session",
+          "tableTo": "user",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "application_session_client_id_oauth_client_client_id_fk": {
+          "name": "application_session_client_id_oauth_client_client_id_fk",
+          "tableFrom": "application_session",
+          "tableTo": "oauth_client",
+          "columnsFrom": [
+            "client_id"
+          ],
+          "columnsTo": [
+            "client_id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
     "device_code": {
       "name": "device_code",
       "columns": {
@@ -2836,6 +2808,13 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "application_session_id": {
+          "name": "application_session_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {
@@ -2864,6 +2843,13 @@
           "name": "oauthRefreshToken_userId_idx",
           "columns": [
             "user_id"
+          ],
+          "isUnique": false
+        },
+        "oauthRefreshToken_applicationSessionId_idx": {
+          "name": "oauthRefreshToken_applicationSessionId_idx",
+          "columns": [
+            "application_session_id"
           ],
           "isUnique": false
         }
@@ -2901,6 +2887,19 @@
           "tableTo": "user",
           "columnsFrom": [
             "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "oauth_refresh_token_application_session_id_application_session_id_fk": {
+          "name": "oauth_refresh_token_application_session_id_application_session_id_fk",
+          "tableFrom": "oauth_refresh_token",
+          "tableTo": "application_session",
+          "columnsFrom": [
+            "application_session_id"
           ],
           "columnsTo": [
             "id"
