@@ -117,6 +117,7 @@ export interface ManagementRouteConfig {
   path: string
   operationId: string
   summary: string
+  description?: string
   cli?: {
     group?: 'Agent'
     name: string

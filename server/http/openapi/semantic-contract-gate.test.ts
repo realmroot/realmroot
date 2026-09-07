@@ -233,7 +233,11 @@ describe('OpenAPI semantic contract gate', () => {
     const navigationContract = JSON.parse(
       readFileSync(new URL('./approved-site-navigation-semantic-baseline.json', import.meta.url), 'utf8'),
     ) as typeof unchanged
+    const applicationSessionContract = JSON.parse(
+      readFileSync(new URL('./approved-application-sessions-semantic-baseline.json', import.meta.url), 'utf8'),
+    ) as typeof unchanged
     const baseline = [
+      ...applicationSessionContract,
       ...navigationContract,
       ...preLifecycleConflictBaseline.filter(
         ({ method, path }) =>

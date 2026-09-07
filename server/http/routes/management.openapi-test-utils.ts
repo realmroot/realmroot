@@ -177,7 +177,7 @@ export function toManagementOperationKey(route: HonoRoute) {
     route.path === '/api/health' ||
     route.path === '/api/configz' ||
     route.path === '/api/account' ||
-    route.path.startsWith('/api/account/') ||
+    (route.path.startsWith('/api/account/') && !route.path.startsWith('/api/account/application-sessions')) ||
     route.path === '/api/onboarding' ||
     route.path.startsWith('/api/onboarding/') ||
     route.path === '/api/auth' ||

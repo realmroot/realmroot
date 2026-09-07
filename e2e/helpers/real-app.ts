@@ -135,6 +135,7 @@ export function resetLocalData() {
     DELETE FROM application_client_metadata;
     DELETE FROM application;
     DELETE FROM oauth_access_token;
+    DELETE FROM application_session;
     DELETE FROM oauth_refresh_token;
     DELETE FROM oauth_consent;
     DELETE FROM oauth_client;

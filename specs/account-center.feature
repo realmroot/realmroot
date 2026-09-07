@@ -232,3 +232,42 @@ Feature: Account Center
     And protocol registrations, hosts, and identity bindings remain internal
     When I delete an Agent or revoke a selected Permission
     Then that delegated access is no longer active for my account
+
+  @entrypoint:product-ui @journey:application-session-lifecycle @proof:integration
+  Scenario: Application login sessions retain identity across refresh rotation
+    Given my application has two independent offline login authorizations without installation IDs
+    And I have another application and another user has the same application
+    When credentials rotate or I repeat login
+    Then rotation preserves the session identity and repeated login creates a new session
+    And only unexpired refresh authorizations are counted for my selected application
+    When I remove one application login session
+    Then its entire refresh chain is revoked even when refresh races removal
+    And repeated removal succeeds without affecting other sessions or users
+    And a concurrent refresh can consume a refresh credential only once
+    And browser SSO logout does not erase the application login session identity
+    And standard refresh-token revocation ends only its application login session
+    And already issued JWT access tokens remain valid until their expiry
+
+  @e2e @entrypoint:product-ui @journey:hosted-application-sessions @proof:e2e
+  Scenario: An application opens its hosted device management page
+    Given an application opens /application-sessions with its client_id
+    When I authenticate in the system browser
+    Then I return to the selected application and see the managed account and application
+    And repeated logins from the same installation count as one named device
+    When I confirm removal of one listed device
+    Then the device list and count update and only that device loses refresh access
+    And the page explains the remaining access-token validity window
+
+  @entrypoint:product-ui @journey:application-installation-identity @proof:integration
+  Scenario: An application identifies its installed devices during PKCE login
+    Given the client persists a random installation ID and supplies it in the authorization request
+    When the same user signs in repeatedly on that installation
+    Then one active device authorization is shown for that application
+    And its reported name and platform are bound to the authorization code
+    And another installation, application or user has independent authorization
+    When the device is removed and signs in again
+    Then a new authorization lifecycle is created without reviving old refresh credentials
+    And revoking an old lifecycle cannot revoke the new lifecycle
+    And an expired lifecycle is not reused by reauthentication
+    And concurrent login on the same installation creates one active device
+    And refresh cannot change the installation identity

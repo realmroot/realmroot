@@ -14,6 +14,7 @@ import { createAgentAuditRepository } from '@server/adapters/repos/agent-audit'
 import { createDrizzleAgentIdentityRepository } from '@server/adapters/repos/agent-identities'
 import { createDrizzleAgentTokenRepository } from '@server/adapters/repos/agent-tokens'
 import { createDrizzleAgentRepository } from '@server/adapters/repos/agents'
+import { createApplicationSessionRepository } from '@server/adapters/repos/application-sessions'
 import { createDrizzleApplicationRepository } from '@server/adapters/repos/applications'
 import { createDrizzleAssetRepository } from '@server/adapters/repos/assets'
 import { createDrizzleAuthorizationRepository } from '@server/adapters/repos/authorization'
@@ -41,6 +42,7 @@ export function createDeps(env: Env, config: RuntimeConfig, correlationId?: stri
   const configz = createDrizzleConfigzRepository(db)
   return {
     ids,
+    applicationSessions: createApplicationSessionRepository(db),
     agents: createDrizzleAgentRepository(db),
     agentAudit: createAgentAuditRepository(db),
     agentIdentities: createDrizzleAgentIdentityRepository(db),

@@ -6,6 +6,7 @@
  * layer's dependency budget.
  */
 import type { AccountProfileUpdateInput } from '@shared/api/account'
+import type { ApplicationSession } from '@shared/api/application-sessions'
 import type { ApplicationOidcClaims, ApplicationResponse, PaginationMetadata } from '@shared/api/applications'
 import type { AssetPurpose } from '@shared/api/assets'
 import type {
@@ -1648,4 +1649,13 @@ export type EmailTemplate =
 
 export interface EmailGateway {
   send(email: { to: string; template: EmailTemplate }): Promise<unknown>
+}
+
+export interface ApplicationSessionRepository {
+  list(
+    userId: string,
+    clientId: string,
+    page: PaginationInput,
+  ): Promise<PaginatedResult<ApplicationSession> & { devices: number }>
+  revoke(userId: string, clientId: string, sessionId: string): Promise<boolean>
 }

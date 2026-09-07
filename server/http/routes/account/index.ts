@@ -1,4 +1,4 @@
-import { badRequest, forbidden, notFound } from '@server/domain/errors'
+import { badRequest, forbidden, notFound, unauthorized } from '@server/domain/errors'
 import { validateEmailPolicy, validatePasswordPolicy } from '@server/domain/security/policy'
 import { listAccountOrganizationTeamMembers } from '@server/usecases/account-organizations'
 import {
@@ -13,6 +13,7 @@ import {
   toAgent,
 } from '@server/usecases/agent-identities'
 import { decideAgentApproval, getAgentApprovalPreview } from '@server/usecases/agents'
+import { listApplicationSessions, revokeApplicationSession } from '@server/usecases/application-sessions'
 import {
   getApplicationAuthorization,
   listApplicationAuthorizations,
@@ -65,6 +66,7 @@ import {
   decideAgentEnrollmentSchema,
 } from '@shared/api/agent-api'
 import { agentApprovalPreviewSchema, decideAgentApprovalResponseSchema } from '@shared/api/agents'
+import { applicationSessionsQuerySchema, applicationSessionsResponseSchema } from '@shared/api/application-sessions'
 import {
   listApplicationAuthorizationsQuerySchema,
   listApplicationAuthorizationsResponseSchema,
@@ -373,6 +375,36 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
       throw notFound('Application authorization was not found.')
     }
     await putApplicationAuthorizationRevocation(getDeps(c), authorization.id)
+    return c.body(null, 204)
+  })
+
+  app.get('/application-sessions', async (c) => {
+    if (!getPrincipal(c).session) throw unauthorized('A browser session is required.')
+    c.header('Cache-Control', 'no-store')
+    await assertAccountCenterAllowed(
+      c,
+      'sessionsViewEnabled',
+      'Session management is disabled for this account center.',
+      securityPolicy,
+    )
+    const query = readQuery(c, applicationSessionsQuerySchema)
+    return c.json(
+      applicationSessionsResponseSchema.parse(
+        await listApplicationSessions(getDeps(c), getPrincipal(c).user!.id, query.client_id, paginationInput(query)),
+      ),
+    )
+  })
+
+  app.delete('/application-sessions/:sessionId', async (c) => {
+    if (!getPrincipal(c).session) throw unauthorized('A browser session is required.')
+    await assertAccountCenterAllowed(
+      c,
+      'sessionsViewEnabled',
+      'Session removal is disabled for this account center.',
+      securityPolicy,
+    )
+    const query = readQuery(c, applicationSessionsQuerySchema)
+    await revokeApplicationSession(getDeps(c), getPrincipal(c).user!.id, query.client_id, c.req.param('sessionId'))
     return c.body(null, 204)
   })
 
