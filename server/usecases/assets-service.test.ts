@@ -228,3 +228,41 @@ function responseAsset() {
     createdAt: '2026-01-01T00:00:00.000Z',
   }
 }
+
+describe('failed avatar persistence', () => {
+  it.each([
+    { actor: 'user-1', storageFails: false, queued: false },
+    { actor: 'user-1', storageFails: true, queued: true },
+    { actor: 'user-1', storageFails: true, queued: false },
+    { actor: null, storageFails: true, queued: false },
+  ])('removes or durably queues orphaned objects without hiding errors: %j', async ({
+    actor,
+    storageFails,
+    queued,
+  }) => {
+    const repository = createRepository()
+    const cause = new Error('metadata write rejected')
+    const cleanupCause = new Error('R2 unavailable')
+    vi.mocked(repository.createAsset).mockRejectedValue(cause)
+    const storage = { put: vi.fn(), get: vi.fn(), delete: vi.fn() }
+    if (storageFails) storage.delete.mockRejectedValue(cleanupCause)
+    const deps = depsWith(repository, storage)
+    deps.accountDeletion = {
+      enqueueAssetCleanup: vi.fn().mockResolvedValue(queued),
+    } as unknown as Deps['accountDeletion']
+    const operation = uploadAsset(deps, {
+      purpose: 'avatar',
+      file: new File([pngBytes()], 'avatar.png', { type: 'image/png' }),
+      actorUserId: actor,
+    })
+    if (storageFails && !queued) {
+      await expect(operation).rejects.toMatchObject({ errors: [cause, cleanupCause] })
+    } else {
+      await expect(operation).rejects.toBe(cause)
+    }
+    const key = storage.put.mock.calls[0]![0]
+    expect(storage.delete).toHaveBeenCalledWith(key)
+    if (storageFails && actor) expect(deps.accountDeletion.enqueueAssetCleanup).toHaveBeenCalledWith(actor, key)
+    else expect(deps.accountDeletion.enqueueAssetCleanup).not.toHaveBeenCalled()
+  })
+})

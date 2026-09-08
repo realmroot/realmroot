@@ -41,6 +41,8 @@ import {
   revokeAgentPermission,
   revokeAgentResourceAccess,
   revokeAgentResourceLeasesForBinding,
+  revokeDeletedAccountConnection,
+  revokeDeletedAccountLease,
   revokeResourceConnection,
 } from '@server/usecases/external-resources'
 import type {
@@ -7159,3 +7161,72 @@ function grantRecord(): ResourceScopeEntitlementRecord {
     updatedAt: now,
   }
 }
+
+describe('deleted account upstream revocation', () => {
+  it('revokes retained credentials without reactivating local authority and skips already erased credentials', async () => {
+    const deps = createTestDeps()
+    authorizationDeps(deps)
+    const connection = connectionWithCredential(connectionRecord(), { status: 'revoked', revokedAt: now })
+    connection.credentials.push({ ...connection.credentials[0]!, id: 'erased', encryptedTokens: '' })
+    vi.mocked(deps.externalResources.findConnection).mockResolvedValue(connection)
+    vi.mocked(deps.externalHttp.fetch).mockImplementation(async () => new Response(null, { status: 200 }))
+    await revokeDeletedAccountConnection(deps, connection.id)
+    const tokens = await Promise.all(
+      vi
+        .mocked(deps.externalHttp.fetch)
+        .mock.calls.map(async ([request]) => new URLSearchParams(await request.text()).get('token')),
+    )
+    expect(tokens).toEqual(['refresh', 'subject'])
+    expect(connection.status).toBe('revoked')
+    expect(connection.credentials.every((item) => item.status === 'revoked')).toBe(true)
+    vi.mocked(deps.externalResources.findConnection).mockResolvedValue(null)
+    await expect(revokeDeletedAccountConnection(deps, connection.id)).rejects.toMatchObject({ status: 404 })
+  })
+
+  it.each([
+    'external',
+    'native',
+    'expired',
+    'missing',
+    'empty-credentials',
+  ])('cleans a %s token lease without persisting authority again', async (state) => {
+    const deps = createTestDeps()
+    authorizationDeps(deps)
+    const lease = {
+      id: 'deleted-lease',
+      entitlementIds: [],
+      requestId: 'request-1',
+      bindingId: 'binding-1',
+      encryptedAccessToken: 'sealed:old-access-token',
+      tokenHash: 'hash',
+      confirmationJkt: 'jkt',
+      scopes: ['projects:read'],
+      authorizationDetails: [],
+      expiresAt: new Date(Date.now() + (state === 'expired' ? -1 : 60_000)),
+      revokedAt: now,
+      createdAt: now,
+    }
+    deps.accountDeletion.findLease = vi.fn().mockResolvedValue(state === 'missing' ? null : lease)
+    vi.mocked(deps.externalResources.findAccessRequest).mockResolvedValue({
+      ...requestRecord(),
+      connectionId: state === 'native' ? null : 'connection-1',
+    })
+    vi.mocked(deps.authorization.findResource).mockResolvedValue(state === 'native' ? nativeResource() : resource())
+    vi.mocked(deps.externalResources.findConnection).mockResolvedValue(
+      state === 'empty-credentials' ? { ...connectionRecord(), credentials: [] } : connectionRecord(),
+    )
+    vi.mocked(deps.externalHttp.fetch).mockImplementation(async () => new Response(null, { status: 200 }))
+    if (state === 'missing') {
+      await expect(revokeDeletedAccountLease(deps, lease.id)).rejects.toMatchObject({ status: 404 })
+    } else {
+      await revokeDeletedAccountLease(deps, lease.id)
+    }
+    if (state === 'external' || state === 'empty-credentials') {
+      const [request] = vi.mocked(deps.externalHttp.fetch).mock.calls[0]!
+      expect(new URLSearchParams(await request.text()).get('token')).toBe('old-access-token')
+    } else {
+      expect(deps.externalHttp.fetch).not.toHaveBeenCalled()
+    }
+    expect(deps.externalResources.revokeTokenLease).not.toHaveBeenCalled()
+  })
+})

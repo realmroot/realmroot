@@ -51,3 +51,5 @@ Acceptance recorded on 2026-09-08 on the PR branch based on `e7cf7e1d` (main):
 - `pnpm run lint`, `pnpm run lint:arch`, `pnpm run build`, and `git diff --check` passed. `pnpm run db:generate` reports no schema changes.
 
 These are local acceptance results. No production migration or deployment was performed.
+
+Coverage follow-up on 2026-09-08: the initial CI failure was missing unit-layer proof for logic already exercised by D1/E2E tests. Added scheduler failure/completion, orphaned-upload cleanup, upstream revocation, and browser state tests without changing production behavior or coverage thresholds. Both CI coverage commands now pass locally: `pnpm run test:coverage:backend` (968 tests) and `pnpm run test:coverage:web` (725 tests). The deletion scheduler and deletion panel each have 100% statement, branch, function, and line coverage.
