@@ -4,6 +4,7 @@ export type AuthEndpoint<TInput, TOutput> = (input: TInput) => Promise<TOutput>
 export type AuthResponseEndpoint<TInput> = (input: TInput & { asResponse: true }) => Promise<Response>
 
 export interface ManagementAuthApi {
+  signOut: AuthResponseEndpoint<{ headers: Headers }>
   signJWT?: (context: {
     body: { payload: Record<string, unknown>; overrideOptions?: { jwt?: { type?: string } } }
     asResponse: false

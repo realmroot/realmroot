@@ -101,6 +101,7 @@ export async function signOut(page: Page) {
 export function resetLocalData() {
   sql(`
     PRAGMA foreign_keys = OFF;
+    DELETE FROM account_deletion_cleanup;
     DELETE FROM agent_audit_event;
     DELETE FROM ownership_quarantine;
     DELETE FROM agent_dpop_jti;

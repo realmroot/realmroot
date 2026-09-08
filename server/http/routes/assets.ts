@@ -17,7 +17,7 @@ export function createAssetRoutes() {
     const { asset, object } = await getAssetObject(getDeps(c), c.req.param('assetId'))
     return new Response(object.body, {
       headers: {
-        'cache-control': 'public, max-age=31536000, immutable',
+        'cache-control': asset.purpose === 'avatar' ? 'no-store' : 'public, max-age=31536000, immutable',
         'content-length': String(asset.byteSize),
         'content-type': asset.contentType,
         etag: asset.checksumSha256,

@@ -8,6 +8,7 @@ import type { Database } from '@server/db/client'
 import { createApp } from '@server/http/app'
 import { createIdentifierGeneratorFake } from '@server/usecases/identifier-generator.fake'
 import type { ManagementSignInSettingsResponse } from '@shared/api/management'
+import { jwtVerify, SignJWT } from 'jose'
 import { describe, expect, it, vi } from 'vitest'
 import { createTestDeps } from './test-deps'
 
@@ -169,7 +170,10 @@ describe('auth.test 1', () => {
     await auth.options.emailVerification?.sendVerificationEmail?.({
       user: createUser(),
       url: 'https://auth.example.com/verify',
-      token: 'verification-token',
+      token: await new SignJWT({ email: 'user@example.com' })
+        .setProtectedHeader({ alg: 'HS256' })
+        .setExpirationTime('1h')
+        .sign(new TextEncoder().encode('01234567890123456789012345678901')),
     })
     await auth.options.emailAndPassword?.sendResetPassword?.({
       user: createUser(),
@@ -197,11 +201,17 @@ describe('auth.test 1', () => {
       },
     })
 
+    const verificationUrl = emailSender.send.mock.calls[0]?.[0].template.url as string
+    const { payload } = await jwtVerify(
+      new URL(verificationUrl).searchParams.get('token')!,
+      new TextEncoder().encode('01234567890123456789012345678901'),
+    )
+    expect(payload).toMatchObject({ sub: createUser().id, email: 'user@example.com' })
     expect(emailSender.send).toHaveBeenCalledWith({
       to: 'user@example.com',
       template: {
         type: 'verification',
-        url: 'https://auth.example.com/verify',
+        url: expect.stringMatching(/^https:\/\/auth\.example\.com\/verify\?token=/),
       },
     })
     expect(emailSender.send).toHaveBeenCalledWith({

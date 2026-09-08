@@ -23,12 +23,13 @@ import { deviceAuthorization, genericOAuth, jwt, oneTap, phoneNumber, siwe, twoF
 import { emailOTP } from 'better-auth/plugins/email-otp'
 import { organization } from 'better-auth/plugins/organization'
 import { username } from 'better-auth/plugins/username'
-import { and, eq, ne } from 'drizzle-orm'
+import { and, eq, isNull, ne } from 'drizzle-orm'
 import { verifyMessage } from 'viem'
 import { parseSiweMessage, validateSiweMessage } from 'viem/siwe'
 import { deviceCodeGrantType, userConfigurableApplicationScopes } from '../shared/api/applications'
 import type { ManagementSignInSettingsResponse } from '../shared/api/management'
 import type { SecurityPolicy } from '../shared/api/security'
+import { bindEmailVerification, hasLiveEmailVerification } from './auth-email-verification'
 import {
   applicationUserHasAccess,
   buildOAuthAccessTokenClaims,
@@ -95,10 +96,29 @@ export function createAuth(
     externalHttp: options.externalHttp,
   } as unknown as Deps
 
+  const baseAdapter = drizzleAdapter(db, { provider: 'sqlite', schema })
+  const activeUserAdapter: typeof baseAdapter = (options) => {
+    const adapter = baseAdapter(options)
+    return {
+      ...adapter,
+      findOne: (input) =>
+        adapter.findOne(
+          input.model === 'user'
+            ? { ...input, where: [...(input.where ?? []), { field: 'deletedAt', value: null }] }
+            : input,
+        ),
+      findMany: (input) =>
+        adapter.findMany(
+          input.model === 'user'
+            ? { ...input, where: [...(input.where ?? []), { field: 'deletedAt', value: null }] }
+            : input,
+        ),
+    }
+  }
   const auth = betterAuth({
     appName: 'Realmroot',
     onAPIError: { errorURL: '/auth/error' },
-    database: drizzleAdapter(db, { provider: 'sqlite', schema }),
+    database: activeUserAdapter,
     advanced: {
       database: {
         generateId: () => ids.generate(),
@@ -224,6 +244,7 @@ export function createAuth(
     },
     user: {
       additionalFields: {
+        deletedAt: { type: 'date', required: false, input: false, returned: false },
         username: {
           type: 'string',
           required: false,
@@ -243,12 +264,14 @@ export function createAuth(
     emailVerification: {
       sendOnSignUp: options.emailDeliveryReady ?? false,
       sendOnSignIn: options.emailDeliveryReady ?? false,
-      sendVerificationEmail: async ({ user, url }) => {
+      sendVerificationEmail: async ({ user, url, token }) => {
+        const verificationUrl = new URL(url)
+        verificationUrl.searchParams.set('token', await bindEmailVerification(user.id, token, secret))
         await emailSender.send({
           to: user.email,
           template: {
             type: 'verification',
-            url,
+            url: verificationUrl.toString(),
           },
         })
       },
@@ -542,9 +565,67 @@ export function createAuth(
       }),
     ],
   })
+  const getSession = (async (input: Parameters<typeof auth.api.getSession>[0]) => {
+    const result = await auth.api.getSession({
+      ...input,
+      headers: input!.headers!,
+      asResponse: false,
+      returnHeaders: false,
+      returnStatus: false,
+    })
+    if (result) {
+      const [live] = await db
+        .select({ createdAt: schema.session.createdAt })
+        .from(schema.session)
+        .innerJoin(schema.user, eq(schema.user.id, schema.session.userId))
+        .where(
+          and(
+            eq(schema.session.id, result.session.id),
+            eq(schema.session.userId, result.user.id),
+            isNull(schema.user.deletedAt),
+          ),
+        )
+      if (!live) return input?.asResponse ? Response.json(null) : null
+      result.session.createdAt = live.createdAt
+    }
+    if (input?.asResponse || input?.returnHeaders || input?.returnStatus)
+      return auth.api.getSession({ ...input, headers: input.headers! })
+    return result
+  }) as typeof auth.api.getSession
   return {
     ...auth,
+    api: { ...auth.api, getSession },
     handler: async (request: Request) => {
+      const incomingUrl = new URL(request.url)
+      if (incomingUrl.pathname.endsWith('/verify-email')) {
+        const token = incomingUrl.searchParams.get('token')
+        if (!token || !(await hasLiveEmailVerification(db, token, secret))) {
+          return Response.json(
+            {
+              code: 'INVALID_TOKEN',
+              message: 'Verification link is invalid or expired. Request a new verification email.',
+            },
+            { status: 401 },
+          )
+        }
+      }
+      // Native Better Auth routes also consume cached cookies; do not let a deleted
+      // principal use them to read data, mint tokens, or mutate its tombstone.
+      const cachedSession = await auth.api.getSession({ headers: request.headers, asResponse: false })
+      if (cachedSession?.user) {
+        const [current] = await db
+          .select({ deletedAt: schema.user.deletedAt })
+          .from(schema.user)
+          .where(eq(schema.user.id, cachedSession.user.id))
+        if (!current || current.deletedAt) {
+          if (new URL(request.url).pathname.endsWith('/get-session')) return Response.json(null)
+          if (!new URL(request.url).pathname.endsWith('/sign-out'))
+            return Response.json(
+              { code: 'ACCOUNT_DELETED', message: 'This account has been deleted.' },
+              { status: 401 },
+            )
+        }
+      }
       const normalizedRequest = await normalizeDeviceAuthorizationRequest(request)
       const deviceAdmissionError = await enforceDeviceApprovalAccess(
         normalizedRequest,
@@ -555,6 +636,16 @@ export function createAuth(
       )
       if (deviceAdmissionError) return deviceAdmissionError
       const response = await auth.handler(await withOAuthConsentContext(normalizedRequest))
+      if (new URL(request.url).pathname.endsWith('/oauth2/introspect') && response.ok) {
+        const result = (await response.clone().json()) as { active?: boolean; sub?: string }
+        if (result.active && result.sub) {
+          const [subject] = await db
+            .select({ deletedAt: schema.user.deletedAt })
+            .from(schema.user)
+            .where(eq(schema.user.id, result.sub))
+          if (subject?.deletedAt) return Response.json({ active: false }, { headers: { 'Cache-Control': 'no-store' } })
+        }
+      }
       return translateNonInteractiveConsentError(normalizedRequest, response)
     },
   }

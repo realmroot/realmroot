@@ -39,7 +39,8 @@ describe('management users and account routes', () => {
   it('delegates managed user CRUD to the repository and password reset delivery to Better Auth', async () => {
     const auth = createAuthMock()
     const users = createUserRepositoryMock()
-    const app = createApp(auth, createTestDeps({ users }))
+    const deps = createTestDeps({ users })
+    const app = createApp(auth, deps)
     const headers = adminHeaders()
 
     await app.request('/api/users?search=ada&searchField=email&pageSize=10&role=user', { headers })
@@ -98,7 +99,7 @@ describe('management users and account routes', () => {
     })
     expect(users.suspendManagedUser).toHaveBeenCalledWith('user-1', 'abuse', expect.any(Date))
     expect(users.restoreManagedUser).toHaveBeenCalledWith('user-1')
-    expect(users.deleteManagedUser).toHaveBeenCalledWith('user-1')
+    expect(deps.accountDeletion.erase).toHaveBeenCalledWith('user-1', expect.any(Number))
     expect(auth.api.requestPasswordReset).toHaveBeenCalledWith({
       body: {
         email: 'ada@example.com',

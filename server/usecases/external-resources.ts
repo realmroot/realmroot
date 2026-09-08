@@ -2087,7 +2087,7 @@ async function revokeTokenLeaseAtTarget(
   const authorization = await externalOAuthAuthorization(
     deps,
     resource,
-    connection ? providerCredentialGeneration(connection) : 1,
+    connection ? (connection.credentials[0]?.clientGeneration ?? providerCredentialGeneration(connection)) : 1,
   )
   if (!authorization) {
     if (persist) await deps.externalResources.revokeTokenLease(lease.id, now)
@@ -3778,4 +3778,21 @@ function base64Url(value: Uint8Array) {
 
 function createProtocolId(prefix: string) {
   return `${prefix}_${crypto.randomUUID().replaceAll('-', '')}`
+}
+
+export async function revokeDeletedAccountConnection(deps: Deps, connectionId: string) {
+  const connection = await deps.externalResources.findConnection(connectionId)
+  if (!connection) throw notFound('Deletion cleanup connection was not found.')
+  await revokeRealmrootCustodiedProviderAuthorization(deps, {
+    ...connection,
+    credentials: connection.credentials
+      .filter((item) => item.encryptedTokens !== '')
+      .map((item) => ({ ...item, status: 'active' })),
+  })
+}
+
+export async function revokeDeletedAccountLease(deps: Deps, leaseId: string) {
+  const lease = await deps.accountDeletion.findLease(leaseId)
+  if (!lease) throw notFound('Deletion cleanup lease was not found.')
+  if (lease.expiresAt.getTime() > Date.now()) await revokeTokenLeaseAtTarget(deps, lease, new Date(), false)
 }

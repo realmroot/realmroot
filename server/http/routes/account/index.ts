@@ -1,5 +1,6 @@
 import { badRequest, forbidden, notFound } from '@server/domain/errors'
 import { validateEmailPolicy, validatePasswordPolicy } from '@server/domain/security/policy'
+import { assertDeletionAuthentication, deleteAccount } from '@server/usecases/account-deletion'
 import { listAccountOrganizationTeamMembers } from '@server/usecases/account-organizations'
 import {
   activateAgentIdentity,
@@ -39,6 +40,7 @@ import {
 } from '@server/usecases/external-resources'
 import type { ConfigzAccountCenter } from '@server/usecases/ports'
 import {
+  accountDeletionRequestSchema,
   accountEmailChangeConfirmSchema,
   accountEmailChangeSchema,
   accountOrganizationTeamMembersResponseSchema,
@@ -92,6 +94,23 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
   app.use('*', authenticatedUser())
 
   app.get('/profile', async (c) => c.json(await accountProfile(c)))
+
+  app.delete('/', async (c) => {
+    await readJson(c, accountDeletionRequestSchema)
+    const principal = getPrincipal(c)
+    // Delegated OAuth authorization is not authority to permanently delete a controller.
+    if (!principal.session || principal.application || principal.agent)
+      throw forbidden('Account deletion requires a browser sign-in.')
+    const current = principal.session.session
+    assertDeletionAuthentication(
+      current.createdAt ? { createdAt: current.createdAt, impersonatedBy: current.impersonatedBy } : null,
+    )
+    await deleteAccount(getDeps(c), principal.user!.id)
+    const signedOut = await authApi.signOut({ headers: c.req.raw.headers, asResponse: true })
+    if (!signedOut.ok) return signedOut
+    for (const cookie of signedOut.headers.getSetCookie()) c.header('Set-Cookie', cookie, { append: true })
+    return c.json({ deleted: true, cleanup: 'pending' }, 202)
+  })
 
   app.get('/developer-console-access', async (c) => {
     const deps = getDeps(c)

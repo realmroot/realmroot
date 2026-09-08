@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import type { ReactNode, RefObject } from 'react'
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -20,6 +20,7 @@ export function DestructiveConfirmation({
   open,
   pending = false,
   title,
+  returnFocusRef,
 }: {
   cancelLabel?: string
   confirmLabel: string
@@ -30,6 +31,7 @@ export function DestructiveConfirmation({
   open: boolean
   pending?: boolean
   title: ReactNode
+  returnFocusRef?: RefObject<HTMLElement | null>
 }) {
   return (
     <AlertDialog
@@ -38,7 +40,16 @@ export function DestructiveConfirmation({
       }}
       open={open}
     >
-      <AlertDialogContent>
+      <AlertDialogContent
+        onCloseAutoFocus={
+          returnFocusRef
+            ? (event) => {
+                event.preventDefault()
+                returnFocusRef.current?.focus()
+              }
+            : undefined
+        }
+      >
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
           <AlertDialogDescription>{description}</AlertDialogDescription>

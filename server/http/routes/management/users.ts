@@ -1,5 +1,6 @@
 import { badRequest, forbidden, notFound } from '@server/domain/errors'
 import { validateEmailPolicy, validatePasswordPolicy } from '@server/domain/security/policy'
+import { deleteAccount } from '@server/usecases/account-deletion'
 import { listApplicationAuthorizations } from '@server/usecases/applications'
 import { publishWebhookEvent } from '@server/usecases/webhooks'
 import {
@@ -209,9 +210,7 @@ export function managementUserRoutes(authApi: ManagementAuthApi, _options: Manag
     const userId = c.req.param('id')
     const actor = getPrincipal(c).user
     if (actor?.id === userId) throw badRequest('You cannot remove yourself.')
-    const user = await getDeps(c).users.getUser(userId)
-    await getDeps(c).users.deleteManagedUser(userId)
-    await publishWebhookEvent(getDeps(c), 'user.deleted', { user: managementUserWebhookData(user) })
+    await deleteAccount(getDeps(c), userId)
     return c.body(null, 204)
   })
 

@@ -77,6 +77,7 @@ function emptyPage() {
 export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> = {}): Deps {
   let currentProviderConnection: ProviderConnectionRecord | null = null
   const policy = testSecurityPolicy()
+  const accountDeletion = { erase: vi.fn().mockResolvedValue(undefined) }
   const platformOwnerMembership = {
     id: 'member-platform-owner',
     organizationId: platformOrganizationId,
@@ -84,6 +85,7 @@ export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> =
     roles: ['owner'],
   }
   const base = {
+    accountDeletion,
     ids: createIdentifierGeneratorFake(),
     agents: {
       listHosts: vi.fn().mockResolvedValue(emptyPage()),

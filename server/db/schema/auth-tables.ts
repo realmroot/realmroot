@@ -4,6 +4,7 @@ import type { AccountProfileLink } from '../../../shared/api/public-profiles'
 
 export const user = sqliteTable('user', {
   id: text('id').primaryKey(),
+  deletedAt: integer('deleted_at', { mode: 'timestamp_ms' }),
   name: text('name').notNull(),
   username: text('username').unique(),
   displayUsername: text('display_username'),

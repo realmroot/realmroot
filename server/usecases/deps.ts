@@ -1,3 +1,4 @@
+import type { AccountDeletionRepository } from './ports'
 /**
  * Aggregate of the ports the usecase layer depends on. Composition (wiring
  * concrete adapters to these ports) is a later phase; this is only the shape
@@ -31,6 +32,7 @@ import type {
 } from '@server/usecases/ports'
 
 export interface Deps {
+  accountDeletion: AccountDeletionRepository
   ids: IdentifierGenerator
   agents: AgentRepository
   agentAudit: AgentAuditRepository

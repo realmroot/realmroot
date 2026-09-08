@@ -506,7 +506,7 @@ describe('management routes 1', () => {
     expect(removed.status).toBe(204)
     expect(users.createManagedUser).toHaveBeenCalled()
     expect(users.updateManagedUser).toHaveBeenCalledWith('user-1', { displayName: 'Updated User' })
-    expect(users.deleteManagedUser).toHaveBeenCalledWith('user-1')
+    expect(deps.accountDeletion.erase).toHaveBeenCalledWith('user-1', expect.any(Number))
   })
 
   it('accepts Bearer Applications, rejects DPoP Applications, and limits Machine authority [spec: management-api/management-machine-application-crud]', async () => {

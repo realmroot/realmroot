@@ -10,6 +10,7 @@ import { createJwksGateway } from '@server/adapters/gateways/jwks'
 import { createOAuthRequestGateway } from '@server/adapters/gateways/oauth-requests'
 import { createSecretCipher } from '@server/adapters/gateways/secrets'
 import { createUuidV7IdentifierGenerator } from '@server/adapters/identifiers/uuid-v7'
+import { createAccountDeletionRepository } from '@server/adapters/repos/account-deletion'
 import { createAgentAuditRepository } from '@server/adapters/repos/agent-audit'
 import { createDrizzleAgentIdentityRepository } from '@server/adapters/repos/agent-identities'
 import { createDrizzleAgentTokenRepository } from '@server/adapters/repos/agent-tokens'
@@ -41,6 +42,7 @@ export function createDeps(env: Env, config: RuntimeConfig, correlationId?: stri
   const configz = createDrizzleConfigzRepository(db)
   return {
     ids,
+    accountDeletion: createAccountDeletionRepository(env.DB),
     agents: createDrizzleAgentRepository(db),
     agentAudit: createAgentAuditRepository(db),
     agentIdentities: createDrizzleAgentIdentityRepository(db),
