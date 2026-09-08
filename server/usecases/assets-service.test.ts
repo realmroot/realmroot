@@ -18,7 +18,7 @@ function depsWith(assets: AssetRepository, assetStorage: AssetStorage): Deps {
 describe('AssetService', () => {
   it('validates uploads, writes R2 objects, and stores D1 metadata [spec: account-center/profile-avatar-upload]', async () => {
     const repository = createRepository()
-    const storage = { put: vi.fn().mockResolvedValue(undefined), get: vi.fn() }
+    const storage = { delete: vi.fn(), put: vi.fn().mockResolvedValue(undefined), get: vi.fn() }
     const deps = depsWith(repository, storage)
 
     const response = await uploadAsset(deps, {
@@ -51,7 +51,7 @@ describe('AssetService', () => {
   })
 
   it('fails fast for unsupported content types, mismatched bytes, and oversized favicons', async () => {
-    const deps = depsWith(createRepository(), { put: vi.fn(), get: vi.fn() })
+    const deps = depsWith(createRepository(), { delete: vi.fn(), put: vi.fn(), get: vi.fn() })
 
     await expect(
       uploadAsset(deps, {
@@ -80,7 +80,7 @@ describe('AssetService', () => {
 
   it('canonicalizes Microsoft icon uploads to the stored content type', async () => {
     const repository = createRepository()
-    const storage = { put: vi.fn().mockResolvedValue(undefined), get: vi.fn() }
+    const storage = { delete: vi.fn(), put: vi.fn().mockResolvedValue(undefined), get: vi.fn() }
     const deps = depsWith(repository, storage)
 
     const response = await uploadAsset(deps, {
@@ -97,7 +97,7 @@ describe('AssetService', () => {
   })
 
   it('accepts JPEG and WebP uploads when signatures match their declared types', async () => {
-    const storage = { put: vi.fn().mockResolvedValue(undefined), get: vi.fn() }
+    const storage = { delete: vi.fn(), put: vi.fn().mockResolvedValue(undefined), get: vi.fn() }
     const deps = depsWith(createRepository(), storage)
 
     await uploadAsset(deps, {
@@ -120,7 +120,7 @@ describe('AssetService', () => {
   })
 
   it('fails fast for empty uploads and missing stored objects', async () => {
-    const storage = { put: vi.fn(), get: vi.fn().mockResolvedValue(null) }
+    const storage = { delete: vi.fn(), put: vi.fn(), get: vi.fn().mockResolvedValue(null) }
     const repository = createRepository()
     repository.findAsset = vi.fn().mockResolvedValue({
       id: 'asset-1',
@@ -164,7 +164,7 @@ describe('AssetService', () => {
     const repository = createRepository()
     repository.findAsset = vi.fn().mockResolvedValue(asset)
     const object = { body: 'logo' } as unknown as R2ObjectBody
-    const deps = depsWith(repository, { put: vi.fn(), get: vi.fn().mockResolvedValue(object) })
+    const deps = depsWith(repository, { delete: vi.fn(), put: vi.fn(), get: vi.fn().mockResolvedValue(object) })
 
     await expect(getAssetObject(deps, 'asset-1')).resolves.toEqual({ asset, object })
     await updateUserAvatar(deps, 'user-1', responseAsset())
@@ -179,7 +179,7 @@ describe('AssetService', () => {
   })
 
   it('surfaces missing asset metadata before reading R2', async () => {
-    const storage = { put: vi.fn(), get: vi.fn() }
+    const storage = { delete: vi.fn(), put: vi.fn(), get: vi.fn() }
     const deps = depsWith(createRepository(), storage)
 
     await expect(getAssetObject(deps, 'missing')).rejects.toMatchObject({
@@ -228,3 +228,41 @@ function responseAsset() {
     createdAt: '2026-01-01T00:00:00.000Z',
   }
 }
+
+describe('failed avatar persistence', () => {
+  it.each([
+    { actor: 'user-1', storageFails: false, queued: false },
+    { actor: 'user-1', storageFails: true, queued: true },
+    { actor: 'user-1', storageFails: true, queued: false },
+    { actor: null, storageFails: true, queued: false },
+  ])('removes or durably queues orphaned objects without hiding errors: %j', async ({
+    actor,
+    storageFails,
+    queued,
+  }) => {
+    const repository = createRepository()
+    const cause = new Error('metadata write rejected')
+    const cleanupCause = new Error('R2 unavailable')
+    vi.mocked(repository.createAsset).mockRejectedValue(cause)
+    const storage = { put: vi.fn(), get: vi.fn(), delete: vi.fn() }
+    if (storageFails) storage.delete.mockRejectedValue(cleanupCause)
+    const deps = depsWith(repository, storage)
+    deps.accountDeletion = {
+      enqueueAssetCleanup: vi.fn().mockResolvedValue(queued),
+    } as unknown as Deps['accountDeletion']
+    const operation = uploadAsset(deps, {
+      purpose: 'avatar',
+      file: new File([pngBytes()], 'avatar.png', { type: 'image/png' }),
+      actorUserId: actor,
+    })
+    if (storageFails && !queued) {
+      await expect(operation).rejects.toMatchObject({ errors: [cause, cleanupCause] })
+    } else {
+      await expect(operation).rejects.toBe(cause)
+    }
+    const key = storage.put.mock.calls[0]![0]
+    expect(storage.delete).toHaveBeenCalledWith(key)
+    if (storageFails && actor) expect(deps.accountDeletion.enqueueAssetCleanup).toHaveBeenCalledWith(actor, key)
+    else expect(deps.accountDeletion.enqueueAssetCleanup).not.toHaveBeenCalled()
+  })
+})

@@ -132,6 +132,7 @@ export async function publishWebhookEvent(
   event: WebhookEvent,
   data: Record<string, unknown>,
   organizationIds?: string[],
+  eventId?: string,
 ): Promise<WebhookRequest[]> {
   const eventOrganizationIds = organizationIds ?? (await resolveEventOrganizationIds(deps, event, data))
   const endpoints = await deps.webhooks.listSubscribedEndpoints(event, eventOrganizationIds)
@@ -139,7 +140,7 @@ export async function publishWebhookEvent(
 
   const now = new Date()
   const envelope: WebhookEventEnvelope = {
-    id: deps.ids.generate(),
+    id: eventId ?? deps.ids.generate(),
     type: event,
     createdAt: now.toISOString(),
     data,

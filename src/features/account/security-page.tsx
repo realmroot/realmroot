@@ -8,6 +8,7 @@ import { deletePasskey, revokeOtherSessions, revokeSession, unlinkWalletAddress 
 import { tt } from '@/lib/i18n'
 import { AccountPageHeader, AccountTabContent, AccountTabs } from './account-page'
 import { useAccountCenterLayout } from './account-surface'
+import { DeleteAccountPanel } from './delete-account-panel'
 import {
   DestructiveConfirmationDialog,
   ItemList,
@@ -47,6 +48,7 @@ export function AccountSecurityPage() {
         profile={profile}
         walletProvider={config?.builtInProviders.web3Wallet}
       />
+      <DeleteAccountPanel />
       <DestructiveConfirmationDialog confirmation={confirmation} onClose={() => setConfirmation(null)} />
     </>
   )

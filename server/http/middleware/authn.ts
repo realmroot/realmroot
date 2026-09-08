@@ -23,6 +23,8 @@ export interface AuthUser {
 }
 
 export interface AuthSession {
+  createdAt?: Date | string
+  impersonatedBy?: string | null
   id: string
   activeOrganizationId?: string | null
 }

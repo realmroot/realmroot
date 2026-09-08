@@ -232,3 +232,36 @@ Feature: Account Center
     And protocol registrations, hosts, and identity bindings remain internal
     When I delete an Agent or revoke a selected Permission
     Then that delegated access is no longer active for my account
+
+  @entrypoint:product-ui @journey:permanent-account-deletion @proof:integration
+  Scenario: Account deletion is permanent and preserves only historical tombstones
+    Given I have authenticated within five minutes and explicitly confirm permanent deletion
+    When I delete my account
+    Then my personal profile and sign-in credentials are erased and all local access is revoked atomically
+    And my historical identity remains a non-restorable tombstone
+    And cached sessions and issued OAuth tokens cannot authorize Realmroot requests
+    And my email can register a new identity without inheriting permissions
+    And old email verification links cannot verify or sign in the new identity
+    And the last organization owner must transfer ownership or delete the organization first
+    And administrator deletion uses the same lifecycle
+
+  @entrypoint:product-ui @journey:account-deletion-cleanup @proof:integration
+  Scenario: External cleanup survives interruption
+    Given a deleted account has external credentials or stored avatars awaiting cleanup
+    When cleanup runs and an external service fails
+    Then the account remains deleted and the durable cleanup work remains retryable
+    And successful cleanup erases temporary credentials and stored avatars
+
+  @entrypoint:product-ui @journey:account-deletion-confirmation @proof:unit
+  Scenario: Account settings explain and confirm permanent deletion
+    When I open Delete account in security settings
+    Then I must explicitly confirm deletion after reading its scope
+    And a failed deletion remains visible without reporting success
+
+  @e2e @entrypoint:product-ui @journey:account-deletion-browser @proof:e2e
+  Scenario: A browser user permanently deletes their account
+    When I open Delete account in security settings
+    Then cancel restores focus without deleting anything
+    And confirming deletion opens the completion page
+    And returning to a protected page requires signing in as a new identity
+    And I can sign in to another account in the same browser without clearing cookies manually

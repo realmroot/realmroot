@@ -34,18 +34,29 @@ export async function uploadAsset(
   const publicUrl = `/api/assets/${assetId}`
 
   await deps.assetStorage.put(storageKey, bytes, { httpMetadata: { contentType } })
-  const asset = await deps.assets.createAsset({
-    id: assetId,
-    purpose: input.purpose,
-    storageKey,
-    publicUrl,
-    contentType,
-    byteSize: bytes.byteLength,
-    checksumSha256,
-    createdByUserId: input.actorUserId,
-  })
+  try {
+    const asset = await deps.assets.createAsset({
+      id: assetId,
+      purpose: input.purpose,
+      storageKey,
+      publicUrl,
+      contentType,
+      byteSize: bytes.byteLength,
+      checksumSha256,
+      createdByUserId: input.actorUserId,
+    })
 
-  return { asset: toResponse(asset) }
+    return { asset: toResponse(asset) }
+  } catch (cause) {
+    try {
+      await deps.assetStorage.delete(storageKey)
+    } catch (cleanupCause) {
+      if (!input.actorUserId || !(await deps.accountDeletion.enqueueAssetCleanup(input.actorUserId, storageKey))) {
+        throw new AggregateError([cause, cleanupCause], 'Asset persistence and cleanup failed.')
+      }
+    }
+    throw cause
+  }
 }
 
 export async function getAssetObject(deps: Deps, assetId: string) {

@@ -6,6 +6,7 @@ import type {
   AccountWalletAddressLinkInput,
 } from '@shared/api/account'
 import {
+  accountDeletionResponseSchema,
   accountOrganizationTeamMembersResponseSchema,
   accountProviderConnectionsResponseSchema,
   accountProviderConnectorsResponseSchema,
@@ -512,4 +513,13 @@ export function revokeOtherSessions() {
 
 export function revokeSession(sessionId: string) {
   return readRpcResponse(apiClient.api.account.security.sessions[':sessionId'].$delete({ param: { sessionId } }))
+}
+
+export async function deleteOwnAccount() {
+  const response = await fetch('/api/account', {
+    method: 'DELETE',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ confirmation: 'DELETE' }),
+  })
+  return accountDeletionResponseSchema.parse(await readJsonResponse(response))
 }

@@ -10,6 +10,7 @@ import { type Env, type RuntimeConfig, validateEnv } from '@server/env'
 import { createApp, healthStatus } from '@server/http/app'
 import { readCorrelationId } from '@server/http/correlation'
 import { withRequestErrorBoundary } from '@server/http/request-error-boundary'
+import { processAccountDeletionCleanup } from '@server/usecases/account-deletion'
 import {
   reconcileRealmrootResourceServer,
   synchronizeEnabledResourceScopeRegistries,
@@ -98,7 +99,9 @@ export default {
   },
   async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext) {
     const config = validateEnv(env, env.BETTER_AUTH_URL ?? 'https://scheduled.realmroot.invalid')
-    ctx.waitUntil(synchronizeEnabledResourceScopeRegistries(createDeps(env, config)))
+    const deps = createDeps(env, config)
+    ctx.waitUntil(processAccountDeletionCleanup(deps))
+    if (_controller.cron === '0 3 * * *') ctx.waitUntil(synchronizeEnabledResourceScopeRegistries(deps))
   },
 }
 

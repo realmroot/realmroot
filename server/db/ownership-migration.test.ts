@@ -129,6 +129,7 @@ describe('tenant ownership migration', () => {
             oauthClientConsentPolicyMigrationName,
             resourceServerLifecycleKeyMigrationName,
             agentUserOwnershipMigrationName,
+            '20260908181744_loose_lilandra.sql',
           ].includes(name),
       )) {
         database.exec(readFileSync(new URL(`../../migrations/${name}`, import.meta.url), 'utf8'))

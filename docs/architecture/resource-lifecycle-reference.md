@@ -44,3 +44,5 @@ Implementation sources: [authorization schema](../../server/db/schema/authorizat
 [external Resource schema](../../server/db/schema/external-resource-tables.ts),
 [provider connection schema](../../server/db/schema/provider-connection-tables.ts),
 and the [Resource API contract](../api/resource-api.md).
+
+User self-service and management deletion share the permanent tombstone lifecycle described in [Account deletion](account-deletion.md).

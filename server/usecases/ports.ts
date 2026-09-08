@@ -73,6 +73,7 @@ export interface AssetRepository {
 }
 
 export interface AssetStorage {
+  delete(key: string): Promise<unknown>
   put(key: string, value: ArrayBuffer, options: { httpMetadata: { contentType: string } }): Promise<unknown>
   get(key: string): Promise<R2ObjectBody | null>
 }
@@ -1648,4 +1649,25 @@ export type EmailTemplate =
 
 export interface EmailGateway {
   send(email: { to: string; template: EmailTemplate }): Promise<unknown>
+}
+
+export interface AccountDeletionJob {
+  userId: string
+  assetKeys: string[]
+  organizationIds: string[]
+  attempts: number
+  claimId: string
+}
+
+export interface AccountDeletionRepository {
+  enqueueAssetCleanup(userId: string, key: string): Promise<boolean>
+  erase(userId: string, now: number): Promise<void>
+  claim(now: number, claimId: string): Promise<AccountDeletionJob | null>
+  findLease(id: string): Promise<ExternalTokenLeaseRecord | null>
+  pendingConnections(userId: string): Promise<string[]>
+  pendingLeases(userId: string): Promise<string[]>
+  clearConnection(id: string): Promise<void>
+  clearLease(id: string): Promise<void>
+  finish(job: AccountDeletionJob): Promise<void>
+  retry(job: AccountDeletionJob, now: number): Promise<void>
 }

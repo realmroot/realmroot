@@ -1,3 +1,4 @@
+export * from './schema/account-deletion-tables'
 export * from './schema/agent-audit-tables'
 export * from './schema/agent-identity-tables'
 export * from './schema/agent-tables'

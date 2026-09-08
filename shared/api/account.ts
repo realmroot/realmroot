@@ -180,3 +180,6 @@ export type AccountSecurityResponse = {
 }
 
 export type { AccountAgent, AccountAgentGrant, AccountAgentsResponse } from './agents'
+
+export const accountDeletionRequestSchema = z.object({ confirmation: z.literal('DELETE') }).strict()
+export const accountDeletionResponseSchema = z.object({ deleted: z.literal(true), cleanup: z.literal('pending') })

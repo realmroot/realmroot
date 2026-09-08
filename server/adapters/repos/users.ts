@@ -2,12 +2,13 @@ import { badRequest, notFound } from '@server/domain/errors'
 import { hashPassword } from '@server/domain/password'
 import type { IdentifierGenerator } from '@server/usecases/identifier-generator'
 import type { UserProfile, UserRepository } from '@server/usecases/ports'
-import { and, asc, count, desc, eq, inArray, like, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, eq, inArray, isNull, like, type SQL } from 'drizzle-orm'
 import type { BatchItem } from 'drizzle-orm/batch'
 import type { AccountProfileUpdateInput } from '../../../shared/api/account'
 import type { AdminUpdateUserInput, AdminUserListQuery } from '../../../shared/api/users'
 import type { Database } from '../../db/client'
 import { account, passwordResetRequest, session, uploadedAsset, user, userProfile } from '../../db/schema'
+import { createAccountDeletionRepository } from './account-deletion'
 
 export function createUserRepository(db: Database, ids: IdentifierGenerator): UserRepository {
   return {
@@ -20,7 +21,11 @@ export function createUserRepository(db: Database, ids: IdentifierGenerator): Us
     },
 
     async findPublicProfileByUsername(username) {
-      const [row] = await db.select().from(user).where(eq(user.username, username)).limit(1)
+      const [row] = await db
+        .select()
+        .from(user)
+        .where(and(eq(user.username, username), isNull(user.deletedAt)))
+        .limit(1)
       return row ? loadPublicProfile(db, mapUser(row)) : null
     },
 
@@ -82,7 +87,11 @@ export function createUserRepository(db: Database, ids: IdentifierGenerator): Us
         throw badRequest('No user fields were provided.')
       }
 
-      const [updated] = await db.update(user).set(update).where(eq(user.id, userId)).returning()
+      const [updated] = await db
+        .update(user)
+        .set(update)
+        .where(and(eq(user.id, userId), isNull(user.deletedAt)))
+        .returning()
       if (!updated) {
         throw notFound('User not found.')
       }
@@ -94,7 +103,7 @@ export function createUserRepository(db: Database, ids: IdentifierGenerator): Us
       const [updated] = await db
         .update(user)
         .set({ banned: true, banReason: reason, banExpires: expiresAt })
-        .where(eq(user.id, userId))
+        .where(and(eq(user.id, userId), isNull(user.deletedAt)))
         .returning()
       if (!updated) throw notFound('User not found.')
       return mapUser(updated)
@@ -104,16 +113,14 @@ export function createUserRepository(db: Database, ids: IdentifierGenerator): Us
       const [updated] = await db
         .update(user)
         .set({ banned: false, banReason: null, banExpires: null })
-        .where(eq(user.id, userId))
+        .where(and(eq(user.id, userId), isNull(user.deletedAt)))
         .returning()
       if (!updated) throw notFound('User not found.')
       return mapUser(updated)
     },
 
     async deleteManagedUser(userId) {
-      const existing = await findUser(db, userId)
-      await db.delete(session).where(eq(session.userId, existing.id))
-      await db.delete(user).where(eq(user.id, existing.id))
+      await createAccountDeletionRepository(db.$client).erase(userId, Date.now())
     },
 
     async updateProfile(userId, input) {
@@ -128,7 +135,12 @@ export function createUserRepository(db: Database, ids: IdentifierGenerator): Us
       const publicUpdate = publicProfileUpdate(input)
       const statements: BatchItem<'sqlite'>[] = []
       if (Object.keys(identityUpdate).length > 0) {
-        statements.push(db.update(user).set(identityUpdate).where(eq(user.id, userId)))
+        statements.push(
+          db
+            .update(user)
+            .set(identityUpdate)
+            .where(and(eq(user.id, userId), isNull(user.deletedAt))),
+        )
       }
       if (Object.keys(publicUpdate).length > 0) {
         const now = new Date()
@@ -252,7 +264,10 @@ async function countRows(
 }
 
 async function findUser(db: Database, userId: string): Promise<UserProfile> {
-  const [row] = await db.select().from(user).where(eq(user.id, userId))
+  const [row] = await db
+    .select()
+    .from(user)
+    .where(and(eq(user.id, userId), isNull(user.deletedAt)))
 
   if (!row) {
     throw notFound('User not found.')
@@ -262,7 +277,7 @@ async function findUser(db: Database, userId: string): Promise<UserProfile> {
 }
 
 function managedUserWhere(query: Omit<AdminUserListQuery, 'page' | 'pageSize'>) {
-  const conditions: SQL[] = []
+  const conditions: SQL[] = [isNull(user.deletedAt)]
 
   if (query.search) {
     const column = query.searchField === 'name' ? user.name : user.email
