@@ -1258,9 +1258,13 @@ describe('OIDC authorization over real D1', () => {
         'SELECT reference_id AS referenceId, scopes FROM oauth_consent WHERE client_id = ? AND user_id = ?',
       )
         .bind(application.clientId, target.userId)
-        .first<{ referenceId: string; scopes: string }>()
-      expect(providerConsent?.referenceId).toBe(resource.id)
-      expect(new Set(JSON.parse(providerConsent?.scopes ?? '[]'))).toEqual(new Set(['openid', initialScope]))
+        .all<{ referenceId: string; scopes: string }>()
+      expect(new Set(providerConsent.results.map((row) => row.referenceId))).toEqual(
+        new Set([resource.id, target.expectedReferenceId]),
+      )
+      for (const row of providerConsent.results) {
+        expect(new Set(JSON.parse(row.scopes))).toEqual(new Set(['openid', initialScope]))
+      }
 
       discoveredScopes = [initialScope, expandedScope]
       const expandRegistry = await harness.request(`/api/resource-servers/${resource.id}`, {
@@ -1311,6 +1315,83 @@ describe('OIDC authorization over real D1', () => {
         previouslyApprovedScopes: ['openid', initialScope],
         consentReason: 'expanded',
       })
+
+      const createExpandedConsent = await harness.request('/api/account/application-authorizations', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', cookie: target.cookie },
+        body: JSON.stringify({
+          clientId: application.clientId,
+          resourceServerId: resource.id,
+          scopes: ['openid', initialScope, expandedScope],
+        }),
+      })
+      expect(createExpandedConsent.status, await createExpandedConsent.clone().text()).toBe(201)
+      const approveExpanded = await harness.request('/api/auth/oauth2/consent', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', cookie: target.cookie, origin: baseURL },
+        body: JSON.stringify({
+          accept: true,
+          scope: `openid ${initialScope} ${expandedScope}`,
+          oauth_query: expandedConsent.search.slice(1),
+        }),
+      })
+      expect(approveExpanded.status, await approveExpanded.clone().text()).toBe(200)
+      const expandedCallback = new URL(((await approveExpanded.json()) as { url: string }).url, redirectUri)
+      expect(expandedCallback.pathname).toBe(`/${target.identifier}-callback`)
+      const expandedToken = await harness.request('/api/auth/oauth2/token', {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          grant_type: 'authorization_code',
+          client_id: application.clientId,
+          redirect_uri: redirectUri,
+          code: expandedCallback.searchParams.get('code') ?? '',
+          code_verifier: expandedVerifier,
+          resource: target.resourceUrl,
+        }),
+      })
+      expect(expandedToken.status, await expandedToken.clone().text()).toBe(200)
+      await expect(expandedToken.json()).resolves.toMatchObject({
+        scope: `openid ${initialScope} ${expandedScope}`,
+      })
+      const expandedApplicationConsent = await env.DB.prepare(
+        'SELECT resource_server_id AS resourceServerId, scopes FROM application_consent WHERE application_id = ? AND user_id = ? AND revoked_at IS NULL',
+      )
+        .bind(application.id, target.userId)
+        .first<{ resourceServerId: string; scopes: string }>()
+      expect(expandedApplicationConsent?.resourceServerId).toBe(resource.id)
+      expect(new Set(JSON.parse(expandedApplicationConsent?.scopes ?? '[]'))).toEqual(
+        new Set(['openid', initialScope, expandedScope]),
+      )
+      const expandedProviderConsent = await env.DB.prepare(
+        'SELECT reference_id AS referenceId, scopes FROM oauth_consent WHERE client_id = ? AND user_id = ?',
+      )
+        .bind(application.clientId, target.userId)
+        .all<{ referenceId: string; scopes: string }>()
+      expect(new Set(expandedProviderConsent.results.map((row) => row.referenceId))).toEqual(
+        new Set([resource.id, target.expectedReferenceId]),
+      )
+      for (const row of expandedProviderConsent.results) {
+        expect(new Set(JSON.parse(row.scopes))).toEqual(new Set(['openid', initialScope, expandedScope]))
+      }
+
+      const repeatVerifier = `${target.identifier}-repeat-verifier-0123456789`
+      const repeatAuthorizeParams = new URLSearchParams({
+        response_type: 'code',
+        client_id: application.clientId,
+        redirect_uri: redirectUri,
+        scope: `openid ${initialScope} ${expandedScope}`,
+        code_challenge: await pkceChallenge(repeatVerifier),
+        code_challenge_method: 'S256',
+        resource: target.resourceUrl,
+      })
+      const repeatAuthorize = await harness.request(`/api/auth/oauth2/authorize?${repeatAuthorizeParams}`, {
+        headers: { cookie: target.cookie },
+        redirect: 'manual',
+      })
+      expect(repeatAuthorize.status, await repeatAuthorize.clone().text()).toBe(302)
+      const repeatCallback = new URL(repeatAuthorize.headers.get('location') ?? '', redirectUri)
+      expect(repeatCallback.pathname).toBe(`/${target.identifier}-callback`)
     }
   })
 
