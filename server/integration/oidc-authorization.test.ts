@@ -1351,9 +1351,12 @@ describe('OIDC authorization over real D1', () => {
         }),
       })
       expect(expandedToken.status, await expandedToken.clone().text()).toBe(200)
-      await expect(expandedToken.json()).resolves.toMatchObject({
-        scope: `openid ${initialScope} ${expandedScope}`,
-      })
+      const expandedTokenBody = (await expandedToken.json()) as { access_token: string; scope: string }
+      expect(expandedTokenBody.scope).toBe(`openid ${initialScope} ${expandedScope}`)
+      expect(jwtAudiences(expandedTokenBody.access_token)).toEqual([target.resourceUrl])
+      expect(new Set(String(decodeJwtPayload(expandedTokenBody.access_token).scope ?? '').split(' '))).toEqual(
+        new Set(['openid', initialScope, expandedScope]),
+      )
       const expandedApplicationConsent = await env.DB.prepare(
         'SELECT resource_server_id AS resourceServerId, scopes FROM application_consent WHERE application_id = ? AND user_id = ? AND revoked_at IS NULL',
       )
