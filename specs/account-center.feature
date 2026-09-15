@@ -15,7 +15,7 @@ Feature: Account Center
 
   @entrypoint:product-ui @journey:account-section-routes @proof:unit
   Scenario: Account Center groups related sections into route-backed pages
-    When I open /, /profile, /security, /applications, /connections, /agents, or /organizations
+    When I open /, /profile, /security, /data-privacy, /applications, /connections, /agents, or /organizations
     Then I see only the grouped account page in the account content area
     And every Account Center section is a root-level sibling route
 
@@ -63,7 +63,7 @@ Feature: Account Center
 
   @entrypoint:product-ui @journey:account-data-export @proof:unit
   Scenario: Account data can be exported
-    When I request my account data export
+    When I request my account data export from Data & privacy
     Then Realmroot downloads a machine-readable snapshot of my profile, identities, sessions, and grants
 
   @entrypoint:product-ui @journey:email-update @proof:unit
@@ -254,13 +254,13 @@ Feature: Account Center
 
   @entrypoint:product-ui @journey:account-deletion-confirmation @proof:unit
   Scenario: Account settings explain and confirm permanent deletion
-    When I open Delete account in security settings
+    When I open Delete account in Data & privacy
     Then I must explicitly confirm deletion after reading its scope
     And a failed deletion remains visible without reporting success
 
   @e2e @entrypoint:product-ui @journey:account-deletion-browser @proof:e2e
   Scenario: A browser user permanently deletes their account
-    When I open Delete account in security settings
+    When I open Delete account in Data & privacy
     Then cancel restores focus without deleting anything
     And confirming deletion opens the completion page
     And returning to a protected page requires signing in as a new identity

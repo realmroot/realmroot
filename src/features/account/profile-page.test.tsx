@@ -89,63 +89,10 @@ describe('AccountProfilePage', () => {
     await i18n.changeLanguage('en')
   })
 
-  it('downloads a machine-readable account snapshot [spec: account-center/account-data-export]', async () => {
-    const createObjectURL = vi.fn(() => 'blob:account-export')
-    const revokeObjectURL = vi.fn()
-    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createObjectURL })
-    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: revokeObjectURL })
-    const download = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
-
-    renderWithClient(<AccountProfilePage />)
-    fireEvent.mouseDown(await screen.findByRole('tab', { name: 'Account' }), { button: 0, ctrlKey: false })
-    fireEvent.click(await screen.findByRole('button', { name: 'Download data' }))
-
-    await waitFor(() => expect(success.mock.calls.length + errorToast.mock.calls.length).toBeGreaterThan(0))
-    expect(errorToast).not.toHaveBeenCalled()
-    expect(success).toHaveBeenCalledWith('Account data downloaded.')
-    expect(createObjectURL).toHaveBeenCalledOnce()
-    expect(download).toHaveBeenCalledOnce()
-    expect(revokeObjectURL).toHaveBeenCalledWith('blob:account-export')
-  })
-
-  it('omits disabled connected-account and session data from an export', async () => {
-    const limited = configz()
-    limited.accountCenter = {
-      ...limited.accountCenter,
-      connectedAccountsEnabled: false,
-      sessionsViewEnabled: false,
-    }
-    let protectedDataRequests = 0
-    server.use(
-      http.get(`${base}/api/configz`, () => HttpResponse.json(limited)),
-      http.get(`${base}/api/account/application-authorizations`, () => {
-        protectedDataRequests += 1
-        return HttpResponse.json({ items: [] })
-      }),
-      http.get(`${base}/api/account/linked-accounts`, () => {
-        protectedDataRequests += 1
-        return HttpResponse.json({ items: [], pagination: null })
-      }),
-      http.get(`${base}/api/account/sessions`, () => {
-        protectedDataRequests += 1
-        return HttpResponse.json({ items: [], pagination: null })
-      }),
-    )
-    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:limited-export') })
-    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() })
-    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
-
-    renderWithClient(<AccountProfilePage />)
-    fireEvent.mouseDown(await screen.findByRole('tab', { name: 'Account' }), { button: 0, ctrlKey: false })
-    fireEvent.click(await screen.findByRole('button', { name: 'Download data' }))
-
-    await waitFor(() => expect(success).toHaveBeenCalledWith('Account data downloaded.'))
-    expect(protectedDataRequests).toBe(0)
-  })
-
   it('shows a loading state then renders profile sections', async () => {
     renderWithClient(<AccountProfilePage />)
     expect(await screen.findByRole('heading', { name: 'Profile' })).toBeTruthy()
+    expect(screen.queryByText('Export account data')).toBeNull()
     expect(screen.getByRole('button', { name: /Edit avatar/ })).toBeTruthy()
     expect(screen.getByRole('button', { name: /Edit display name/ })).toBeTruthy()
     expect(screen.getByRole('button', { name: /Edit username/ })).toBeTruthy()

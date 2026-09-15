@@ -81,11 +81,11 @@ it('shows a useful message for a non-Error deletion rejection and allows another
   await waitFor(() => expect(replace).toHaveBeenCalled())
 })
 
-it('reauthenticates by signing out, clearing private state and returning to security after sign-in', async () => {
+it('reauthenticates by signing out, clearing private state and returning to Data & privacy after sign-in', async () => {
   vi.mocked(signOut).mockResolvedValue({})
   const client = openPanel()
   fireEvent.click(screen.getByRole('button', { name: 'Sign in again' }))
-  await waitFor(() => expect(assign).toHaveBeenCalledWith('/auth/sign-in?return_to=%2Fsecurity'))
+  await waitFor(() => expect(assign).toHaveBeenCalledWith('/auth/sign-in?return_to=%2Fdata-privacy'))
   expect(client.getQueryData(['profile'])).toBeUndefined()
   expect(remove).not.toHaveBeenCalled()
 })

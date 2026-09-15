@@ -27,6 +27,7 @@ function organizationIdFromPathname(pathname: string) {
 function accountSection(pathname: string) {
   if (pathname.startsWith('/profile')) return 'profile' as const
   if (pathname.startsWith('/security')) return 'security' as const
+  if (pathname.startsWith('/data-privacy')) return 'data-privacy' as const
   if (pathname.startsWith('/connections')) return 'connections' as const
   if (pathname.startsWith('/applications')) return 'applications' as const
   if (pathname.startsWith('/agents')) return 'agents' as const
