@@ -235,7 +235,7 @@ Feature: Account Center
 
   @entrypoint:product-ui @journey:permanent-account-deletion @proof:integration
   Scenario: Account deletion is permanent and preserves only historical tombstones
-    Given I have authenticated within five minutes and explicitly confirm permanent deletion
+    Given I have a valid browser session and explicitly confirm permanent deletion
     When I delete my account
     Then my personal profile and sign-in credentials are erased and all local access is revoked atomically
     And my historical identity remains a non-restorable tombstone
@@ -244,6 +244,12 @@ Feature: Account Center
     And old email verification links cannot verify or sign in the new identity
     And the last organization owner must transfer ownership or delete the organization first
     And administrator deletion uses the same lifecycle
+
+  @entrypoint:product-ui @journey:account-deletion-session-age @proof:integration
+  Scenario: Account deletion accepts an existing valid browser session
+    Given my browser session is still valid and was created more than five minutes ago
+    When I explicitly confirm permanent account deletion
+    Then my account is deleted without requiring another sign-in
 
   @entrypoint:product-ui @journey:account-deletion-cleanup @proof:integration
   Scenario: External cleanup survives interruption
@@ -256,6 +262,7 @@ Feature: Account Center
   Scenario: Account settings explain and confirm permanent deletion
     When I open Delete account in Data & privacy
     Then I must explicitly confirm deletion after reading its scope
+    And I am not asked to sign in again before confirming deletion
     And a failed deletion remains visible without reporting success
 
   @e2e @entrypoint:product-ui @journey:account-deletion-browser @proof:e2e

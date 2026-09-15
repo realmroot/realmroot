@@ -1,7 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { signOut } from '@/lib/auth-client'
 import { DeleteAccountPanel } from './delete-account-panel'
 
 const remove = vi.fn()
@@ -9,11 +8,9 @@ const assign = vi.fn()
 const replace = vi.fn()
 beforeEach(() => vi.stubGlobal('location', { ...window.location, assign, replace }))
 vi.mock('@/lib/api/account', () => ({ deleteOwnAccount: () => remove() }))
-vi.mock('@/lib/auth-client', () => ({ signOut: vi.fn() }))
 afterEach(() => {
   cleanup()
   remove.mockReset()
-  vi.mocked(signOut).mockReset()
   assign.mockReset()
   replace.mockReset()
   vi.unstubAllGlobals()
@@ -29,7 +26,8 @@ describe('account deletion confirmation', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: 'Delete account' }))
     expect(screen.getByRole('alertdialog')).toBeTruthy()
-    expect(screen.getByText(/Your profile and sign-in credentials will be erased/)).toBeTruthy()
+    expect(screen.getByText(/You will no longer be able to sign in to this account/)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Sign in again' })).toBeNull()
     expect(remove).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: 'Permanently delete account' }))
     await waitFor(() => expect(screen.getByRole('alert').textContent).toBe('Transfer ownership first.'))
@@ -79,26 +77,4 @@ it('shows a useful message for a non-Error deletion rejection and allows another
   await waitFor(() => expect(screen.getByRole('alert').textContent).toBe('Unable to delete account.'))
   fireEvent.click(screen.getByRole('button', { name: 'Permanently delete account' }))
   await waitFor(() => expect(replace).toHaveBeenCalled())
-})
-
-it('reauthenticates by signing out, clearing private state and returning to Data & privacy after sign-in', async () => {
-  vi.mocked(signOut).mockResolvedValue({})
-  const client = openPanel()
-  fireEvent.click(screen.getByRole('button', { name: 'Sign in again' }))
-  await waitFor(() => expect(assign).toHaveBeenCalledWith('/auth/sign-in?return_to=%2Fdata-privacy'))
-  expect(client.getQueryData(['profile'])).toBeUndefined()
-  expect(remove).not.toHaveBeenCalled()
-})
-
-it.each([
-  [new Error('Sign out failed.'), 'Sign out failed.'],
-  [null, 'Unable to sign out.'],
-])('preserves private state and allows retry when reauthentication fails: %s', async (cause, message) => {
-  vi.mocked(signOut).mockRejectedValue(cause)
-  const client = openPanel()
-  fireEvent.click(screen.getByRole('button', { name: 'Sign in again' }))
-  await waitFor(() => expect(screen.getByRole('alert').textContent).toBe(message))
-  expect(assign).not.toHaveBeenCalled()
-  expect(client.getQueryData(['profile'])).toEqual({ id: 'user-1' })
-  expect(screen.getByRole('button', { name: 'Sign in again' }).hasAttribute('disabled')).toBe(false)
 })

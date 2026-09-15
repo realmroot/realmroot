@@ -101,10 +101,7 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
     // Delegated OAuth authorization is not authority to permanently delete a controller.
     if (!principal.session || principal.application || principal.agent)
       throw forbidden('Account deletion requires a browser sign-in.')
-    const current = principal.session.session
-    assertDeletionAuthentication(
-      current.createdAt ? { createdAt: current.createdAt, impersonatedBy: current.impersonatedBy } : null,
-    )
+    assertDeletionAuthentication(principal.session.session)
     await deleteAccount(getDeps(c), principal.user!.id)
     const signedOut = await authApi.signOut({ headers: c.req.raw.headers, asResponse: true })
     if (!signedOut.ok) return signedOut

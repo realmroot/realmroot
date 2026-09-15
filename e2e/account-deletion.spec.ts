@@ -96,6 +96,11 @@ test('permanent deletion through account settings [spec: account-center/account-
     fullPage: true,
     animations: 'disabled',
   })
+  await page.getByRole('button', { name: '删除账户', exact: true }).click()
+  await expect(page.getByRole('alertdialog')).toContainText('此操作无法撤销。')
+  await expect(page.getByRole('button', { name: '重新登录', exact: true })).toHaveCount(0)
+  await page.screenshot({ path: 'test-results/account-deletion-confirmation-mobile-zh.png', animations: 'disabled' })
+  await page.getByRole('button', { name: '取消', exact: true }).click()
   await page.evaluate(() => {
     window.localStorage.setItem('realmroot.language', 'en')
   })
@@ -103,11 +108,13 @@ test('permanent deletion through account settings [spec: account-center/account-
   await expect(page.getByRole('heading', { name: 'Data & privacy' })).toBeVisible()
   await page.getByRole('button', { name: 'Delete account', exact: true }).click()
   await expect(page.getByRole('alertdialog')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Sign in again', exact: true })).toHaveCount(0)
   await page.getByRole('button', { name: 'Cancel', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Delete account', exact: true })).toBeFocused()
   await page.setViewportSize({ width: 1280, height: 900 })
   await page.getByRole('button', { name: 'Delete account', exact: true }).click()
   await expect(page.getByRole('alertdialog')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Sign in again', exact: true })).toHaveCount(0)
   await page.screenshot({
     path: 'test-results/account-deletion-confirmation.png',
     fullPage: true,

@@ -7,16 +7,9 @@ export async function deleteAccount(deps: Deps, userId: string) {
   await deps.accountDeletion.erase(userId, Date.now())
 }
 
-export function assertDeletionAuthentication(
-  session: { createdAt: Date | string; impersonatedBy?: string | null } | null,
-) {
-  if (
-    !session ||
-    session.impersonatedBy ||
-    Date.now() - new Date(session.createdAt).getTime() > 5 * 60_000 ||
-    !Number.isFinite(new Date(session.createdAt).getTime())
-  ) {
-    throw forbidden('Sign in again before deleting your account. A sign-in within five minutes is required.')
+export function assertDeletionAuthentication(session: { impersonatedBy?: string | null } | null) {
+  if (!session || session.impersonatedBy) {
+    throw forbidden('Account deletion requires signing in as yourself.')
   }
 }
 
