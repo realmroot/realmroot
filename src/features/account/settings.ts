@@ -14,6 +14,7 @@ export type AccountCenterSection =
   | 'overview'
   | 'profile'
   | 'security'
+  | 'data-privacy'
   | 'connections'
   | 'applications'
   | 'agents'

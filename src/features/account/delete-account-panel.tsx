@@ -1,12 +1,11 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { Trash2 } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { DestructiveConfirmation } from '@/components/destructive-confirmation'
 import { Button } from '@/components/ui/button'
 import { deleteOwnAccount } from '@/lib/api/account'
 import { signOut } from '@/lib/auth-client'
 import { tt } from '@/lib/i18n'
-import { PanelTitle, SettingsAction } from './primitives'
+import { AccountRow } from './account-page'
 
 export function DeleteAccountPanel() {
   const queryClient = useQueryClient()
@@ -40,7 +39,7 @@ export function DeleteAccountPanel() {
     try {
       await signOut()
       queryClient.clear()
-      window.location.assign('/auth/sign-in?return_to=%2Fsecurity')
+      window.location.assign('/auth/sign-in?return_to=%2Fdata-privacy')
     } catch (cause) {
       setError(cause instanceof Error ? tt(cause.message) : tt('Unable to sign out.'))
       setPending(false)
@@ -48,16 +47,8 @@ export function DeleteAccountPanel() {
   }
 
   return (
-    <section className="settingsPanel">
-      <PanelTitle
-        icon={<Trash2 />}
-        title={tt('Delete account')}
-        description={tt('Permanently delete your Realmroot account. This cannot be undone.')}
-      />
-      <SettingsAction
-        icon={<Trash2 />}
-        title={tt('Delete account')}
-        meta={tt('Your personal Agents and access will also be revoked.')}
+    <>
+      <AccountRow
         action={
           <Button
             ref={triggerRef}
@@ -71,6 +62,11 @@ export function DeleteAccountPanel() {
             {tt('Delete account')}
           </Button>
         }
+        description={tt(
+          'Permanently delete your Realmroot account. This cannot be undone. Your personal Agents and access will also be revoked.',
+        )}
+        label={tt('Delete account')}
+        value={tt('Permanent')}
       />
       <DestructiveConfirmation
         returnFocusRef={triggerRef}
@@ -97,6 +93,6 @@ export function DeleteAccountPanel() {
           </>
         }
       />
-    </section>
+    </>
   )
 }

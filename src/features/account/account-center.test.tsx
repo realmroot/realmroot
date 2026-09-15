@@ -2,7 +2,12 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { AccountConnectionsPage, AccountProfilePage, AccountSecurityPage } from '@/features/account/account-center'
+import {
+  AccountConnectionsPage,
+  AccountDataPrivacyPage,
+  AccountProfilePage,
+  AccountSecurityPage,
+} from '@/features/account/account-center'
 import { AccountCenterLayout } from '@/features/account/account-surface'
 import {
   asRecord,
@@ -93,6 +98,20 @@ describe('account pages', () => {
     fireEvent.mouseDown(screen.getByRole('tab', { name: 'MFA' }), { button: 0, ctrlKey: false })
     await waitFor(() => expect(screen.getByText('Multi-factor authentication')).toBeTruthy())
     expect(requests).toHaveLength(loadedRequestCount)
+    expect(screen.queryByRole('button', { name: 'Delete account' })).toBeNull()
+  })
+
+  it('data and privacy page owns export and deletion actions [spec: account-center/account-data-export]', async () => {
+    const requests = mockAccountFetch()
+    renderWithClient(<AccountDataPrivacyPage />)
+
+    expect(await screen.findByRole('heading', { name: 'Data & privacy' })).toBeTruthy()
+    expect(screen.getByText('Export account data')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Download data' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Delete account' })).toBeTruthy()
+    await waitFor(() =>
+      expect(requests).toEqual(['/api/configz', '/api/account/profile', '/api/account/developer-console-access']),
+    )
   })
 
   it('connections page loads connection-owned account data', async () => {

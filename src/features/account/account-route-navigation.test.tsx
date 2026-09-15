@@ -36,4 +36,22 @@ describe('Account Center route navigation', () => {
       '/api/account/provider-connections?page=1&pageSize=100',
     ])
   })
+
+  it('opens Data & privacy as a route-backed account section', async () => {
+    queryClient.setDefaultOptions(queryClientDefaultOptions)
+    vi.spyOn(window, 'fetch').mockImplementation(accountRouteFetch)
+    window.history.pushState(null, '', '/data-privacy')
+
+    render(<AppRouter />)
+
+    expect(await screen.findByRole('heading', { name: 'Data & privacy' })).toBeTruthy()
+    const activeLink = screen.getByRole('link', { name: 'Data & privacy' })
+    expect(activeLink.getAttribute('href')).toBe('/data-privacy')
+    expect(activeLink.getAttribute('aria-current')).toBe('page')
+    const linkNames = screen.getAllByRole('link').map((link) => link.textContent?.trim())
+    const securityLinkIndex = linkNames.indexOf('Sign-in & security')
+    expect(linkNames.slice(securityLinkIndex, securityLinkIndex + 2)).toEqual(['Sign-in & security', 'Data & privacy'])
+    expect(screen.getByText('Export account data')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Delete account' })).toBeTruthy()
+  })
 })

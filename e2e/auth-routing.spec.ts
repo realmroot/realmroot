@@ -122,6 +122,10 @@ test.describe('signed-out routing', { tag: '@production-safe' }, () => {
     await page.goto('/profile')
     await expect(page).toHaveURL(/\/auth\/sign-in/)
     expect(new URL(page.url()).searchParams.get('return_to')).toBe('/profile')
+
+    await page.goto('/data-privacy')
+    await expect(page).toHaveURL(/\/auth\/sign-in/)
+    expect(new URL(page.url()).searchParams.get('return_to')).toBe('/data-privacy')
   })
 })
 

@@ -8,6 +8,7 @@ import {
   BookOpen,
   Bot,
   Building2,
+  Database,
   Folder,
   Gauge,
   HelpCircle,
@@ -44,6 +45,7 @@ const accountNavGroups = [
       { section: 'overview' as const, href: '/', label: 'Overview', icon: Gauge },
       { section: 'profile' as const, href: '/profile', label: 'Profile', icon: UserRound },
       { section: 'security' as const, href: '/security', label: 'Sign-in & security', icon: Shield },
+      { section: 'data-privacy' as const, href: '/data-privacy', label: 'Data & privacy', icon: Database },
     ],
   },
   {
@@ -166,7 +168,7 @@ export function AccountPageShell({
         <section
           className={cn(
             'accountContent',
-            (section === 'profile' || section === 'security') && 'is-settings',
+            (section === 'profile' || section === 'security' || section === 'data-privacy') && 'is-settings',
             organizationId && 'is-workspace',
           )}
           id="account-content"
