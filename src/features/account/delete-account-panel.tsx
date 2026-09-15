@@ -3,7 +3,6 @@ import { useRef, useState } from 'react'
 import { DestructiveConfirmation } from '@/components/destructive-confirmation'
 import { Button } from '@/components/ui/button'
 import { deleteOwnAccount } from '@/lib/api/account'
-import { signOut } from '@/lib/auth-client'
 import { tt } from '@/lib/i18n'
 import { AccountRow } from './account-page'
 
@@ -31,19 +30,6 @@ export function DeleteAccountPanel() {
     setOpen(false)
     // Navigate away from all private UI. The server has already invalidated credentials.
     window.location.replace('/auth/account-deleted')
-  }
-
-  async function reauthenticate() {
-    setPending(true)
-    setError(null)
-    try {
-      await signOut()
-      queryClient.clear()
-      window.location.assign('/auth/sign-in?return_to=%2Fdata-privacy')
-    } catch (cause) {
-      setError(cause instanceof Error ? tt(cause.message) : tt('Unable to sign out.'))
-      setPending(false)
-    }
   }
 
   return (
@@ -74,23 +60,18 @@ export function DeleteAccountPanel() {
         pending={pending}
         title={tt('Permanently delete account?')}
         description={tt(
-          'Your profile and sign-in credentials will be erased, your Agents and personal access revoked, and you will be signed out. Necessary identity history is retained. External cleanup may take additional time. Organizations and their shared resources are not deleted. Sign in within the last five minutes before continuing.',
+          'You will no longer be able to sign in to this account. Your profile and sign-in credentials will be deleted, and your personal Agents and access will be revoked. This cannot be undone. Organizations you belong to and their shared resources will not be deleted.',
         )}
         confirmLabel={pending ? tt('Deleting…') : tt('Permanently delete account')}
         cancelLabel={tt('Cancel')}
         onClose={() => setOpen(false)}
         onConfirm={() => void erase()}
         error={
-          <>
-            {error ? (
-              <p role="alert" className="text-destructive">
-                {error}
-              </p>
-            ) : null}
-            <Button variant="outline" disabled={pending} onClick={() => void reauthenticate()}>
-              {tt('Sign in again')}
-            </Button>
-          </>
+          error ? (
+            <p role="alert" className="text-destructive">
+              {error}
+            </p>
+          ) : null
         }
       />
     </>

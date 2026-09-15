@@ -45,19 +45,12 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers())
 
 describe('permanent deletion orchestration', () => {
-  it.each([
-    null,
-    { createdAt: new Date(now.getTime() - 300_001) },
-    { createdAt: 'invalid' },
-    { createdAt: now, impersonatedBy: 'admin' },
-  ])('rejects missing, stale, invalid or impersonated authentication: %j', (session) => {
-    expect(() => assertDeletionAuthentication(session)).toThrow('Sign in again')
+  it.each([null, { impersonatedBy: 'admin' }])('rejects missing or impersonated authentication: %j', (session) => {
+    expect(() => assertDeletionAuthentication(session)).toThrow('Account deletion requires signing in as yourself.')
   })
-  it('accepts fresh non-impersonated authentication, including the five-minute boundary', () => {
-    expect(() => assertDeletionAuthentication({ createdAt: now.toISOString() })).not.toThrow()
-    expect(() =>
-      assertDeletionAuthentication({ createdAt: new Date(now.getTime() - 300_000), impersonatedBy: null }),
-    ).not.toThrow()
+  it('accepts non-impersonated authentication', () => {
+    expect(() => assertDeletionAuthentication({})).not.toThrow()
+    expect(() => assertDeletionAuthentication({ impersonatedBy: null })).not.toThrow()
   })
   it('commits deletion at the repository boundary and propagates rejection', async () => {
     const { deps, repository } = setup()

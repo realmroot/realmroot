@@ -111,16 +111,20 @@ describe('permanent account deletion', () => {
     expect(await h.db.select().from(member).where(eq(member.userId, replacement))).toEqual([])
   })
 
-  it('requires explicit confirmation and a recent non-impersonated browser session', async () => {
-    const { h, userId, remove } = await setup()
+  it('requires explicit confirmation and authentication', async () => {
+    const { remove } = await setup()
     expect((await remove({}, { cookie: '', origin: baseURL, platformOrganizationId })).status).toBe(401)
     expect((await remove({ confirmation: 'no' })).status).toBe(400)
+  })
+
+  it('accepts a valid session older than five minutes [spec: account-center/account-deletion-session-age]', async () => {
+    const { h, userId, remove } = await setup()
     await h.db
       .update(session)
       .set({ createdAt: new Date(Date.now() - 600_000) })
       .where(eq(session.userId, userId))
-    expect((await remove()).status).toBe(403)
-    expect((await h.db.select().from(user).where(eq(user.id, userId)))[0].deletedAt).toBeNull()
+    expect((await remove()).status).toBe(202)
+    expect((await h.db.select().from(user).where(eq(user.id, userId)))[0].deletedAt).toBeInstanceOf(Date)
   })
 
   it('protects the last owner atomically and lets deletion proceed after transfer', async () => {

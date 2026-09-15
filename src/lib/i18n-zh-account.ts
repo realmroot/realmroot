@@ -20,15 +20,13 @@ export const zhAccountTranslations: Record<string, string> = {
   'Permanently delete account?': '永久删除账户？',
   'Permanently delete account': '永久删除账户',
   'Deleting…': '正在删除…',
-  'Sign in again': '重新登录',
   'Unable to delete account.': '无法删除账户。',
-  'Your profile and sign-in credentials will be erased, your Agents and personal access revoked, and you will be signed out. Necessary identity history is retained. External cleanup may take additional time. Organizations and their shared resources are not deleted. Sign in within the last five minutes before continuing.':
-    '你的个人资料和登录凭据将被清除，Agent 和个人访问权限将被撤销，并退出登录。必要的身份历史会保留，外部数据清理可能需要额外时间。组织及其共享资源不会被删除。请在登录后五分钟内确认此操作。',
+  'You will no longer be able to sign in to this account. Your profile and sign-in credentials will be deleted, and your personal Agents and access will be revoked. This cannot be undone. Organizations you belong to and their shared resources will not be deleted.':
+    '删除后，你将无法再登录此账户。你的个人资料和登录凭据将被删除，个人 Agent 和访问权限将被撤销。此操作无法撤销。你所在的组织及其共享资源不会被删除。',
   'Your account has been deleted': '你的账户已删除',
   'Your Realmroot account cannot be restored. External credential revocation and file cleanup will continue automatically.':
     '你的 Realmroot 账户无法恢复。外部凭据撤销和文件清理将自动继续。',
-  'Sign in again before deleting your account. A sign-in within five minutes is required.':
-    '请重新登录后再删除账户，需在登录后五分钟内操作。',
+  'Account deletion requires signing in as yourself.': '请使用你自己的账户登录后再删除账户。',
   'Transfer ownership or delete organizations where you are the last owner before deleting this account.':
     '请先转移你作为唯一所有者的组织，或删除这些组织，再删除账户。',
 
