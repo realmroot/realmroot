@@ -87,6 +87,7 @@ export const team = sqliteTable(
   'team',
   {
     id: text('id').primaryKey(),
+    memberCount: integer('member_count').default(0).notNull(),
     name: text('name').notNull(),
     organizationId: text('organization_id')
       .notNull()
@@ -109,6 +110,7 @@ export const teamMember = sqliteTable(
   'team_member',
   {
     id: text('id').primaryKey(),
+    membershipKey: text('membership_key').unique(),
     teamId: text('team_id')
       .notNull()
       .references(() => team.id, { onDelete: 'cascade' }),

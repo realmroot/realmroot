@@ -163,6 +163,21 @@ export function createUserRepository(db: Database, ids: IdentifierGenerator): Us
       await assertAdminAvatarReference(db, avatarAssetId)
     },
 
+    async findLinkedAccountId(userId, providerId, providerAccountId) {
+      const [row] = await db
+        .select({ id: account.id })
+        .from(account)
+        .where(
+          and(
+            eq(account.userId, userId),
+            eq(account.providerId, providerId),
+            providerAccountId === undefined ? undefined : eq(account.accountId, providerAccountId),
+          ),
+        )
+        .limit(1)
+      return row?.id ?? null
+    },
+
     async listLinkedAccounts(userId, page) {
       const rows = await db
         .select({

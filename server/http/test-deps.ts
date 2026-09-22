@@ -467,6 +467,7 @@ export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> =
       updateProfile: vi.fn(),
       assertAccountAvatarReference: vi.fn(),
       assertAdminAvatarReference: vi.fn(),
+      findLinkedAccountId: vi.fn().mockResolvedValue(null),
       listLinkedAccounts: vi.fn().mockResolvedValue(emptyPage()),
       listSessions: vi.fn().mockResolvedValue(emptyPage()),
       getSessionToken: vi.fn().mockResolvedValue('session-token-1'),

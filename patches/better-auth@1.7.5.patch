@@ -1,0 +1,87 @@
+diff --git a/dist/plugins/jwt/index.d.mts b/dist/plugins/jwt/index.d.mts
+index 238180a4906502ca546bf9f059ecd6ace2b1ef14..78c0164d63610d56b0048f5f781fa10c854dee9e 100644
+--- a/dist/plugins/jwt/index.d.mts
++++ b/dist/plugins/jwt/index.d.mts
+@@ -187,6 +187,7 @@ declare const jwt: <O extends JwtOptions>(options?: O) => {
+           body: {
+             token: string;
+             issuer?: string;
++            audience?: string | string[];
+           };
+           response: {
+             payload: {
+@@ -200,6 +201,7 @@ declare const jwt: <O extends JwtOptions>(options?: O) => {
+       body: z.ZodObject<{
+         token: z.ZodString;
+         issuer: z.ZodOptional<z.ZodString>;
++        audience: z.ZodOptional<z.ZodUnion<readonly [z.ZodString, z.ZodArray<z.ZodString>]>>;
+       }, z.core.$strip>;
+     }, {
+       payload: (JWTPayload & Required<Pick<JWTPayload, "sub" | "aud">>) | null;
+diff --git a/dist/plugins/jwt/index.mjs b/dist/plugins/jwt/index.mjs
+index 91a04c5ff9f5cc91390bb29f51d3a57a276fa1ac..9fca59eb19d5aca5f2a1b049962cb7a890e66638 100644
+--- a/dist/plugins/jwt/index.mjs
++++ b/dist/plugins/jwt/index.mjs
+@@ -18,7 +18,8 @@ const signJWTBodySchema = z.object({
+ });
+ const verifyJWTBodySchema = z.object({
+ 	token: z.string(),
+-	issuer: z.string().optional()
++	issuer: z.string().optional(),
++	audience: z.union([z.string(), z.array(z.string())]).optional()
+ });
+ const jwt = (options) => {
+ 	if (options?.jwt?.sign && !options.jwks?.remoteUrl) throw new BetterAuthError("options.jwks.remoteUrl must be set when using options.jwt.sign");
+@@ -179,11 +180,12 @@ const jwt = (options) => {
+ 				} },
+ 				body: verifyJWTBodySchema
+ 			}, async (ctx) => {
+-				const overrideOptions = ctx.body.issuer ? {
++				const overrideOptions = ctx.body.issuer || ctx.body.audience ? {
+ 					...options,
+ 					jwt: {
+ 						...options?.jwt,
+-						issuer: ctx.body.issuer
++						...ctx.body.issuer ? { issuer: ctx.body.issuer } : {},
++						...ctx.body.audience ? { audience: ctx.body.audience } : {}
+ 					}
+ 				} : options;
+ 				const payload = await verifyJWT(ctx.body.token, overrideOptions);
+diff --git a/dist/plugins/jwt/sign.mjs b/dist/plugins/jwt/sign.mjs
+index 95dc786426b0cdd9119dd5f145415114e449ee11..aad903528bed531de6972efc40d52500bfa8283f 100644
+--- a/dist/plugins/jwt/sign.mjs
++++ b/dist/plugins/jwt/sign.mjs
+@@ -52,7 +52,7 @@ async function resolveSigningKey(ctx, options, overrides) {
+ 		}
+ 	} else {
+ 		const primaryAlg = options?.jwks?.keyPairConfig?.alg ?? "EdDSA";
+-		key = await adapter.getLatestKeyByAlg(ctx, primaryAlg) ?? await adapter.getLatestKey(ctx);
++		key = await adapter.getLatestKeyByAlg(ctx, primaryAlg);
+ 	}
+ 	if (!key || key.expiresAt && key.expiresAt < /* @__PURE__ */ new Date()) {
+ 		if (overrides?.signingKeyId !== void 0 || overrides?.signingAlgorithm !== void 0) throw new BetterAuthError("signJWT: requested signing key is expired and an explicit kid/alg was provided; not auto-minting a replacement. Rotate the key explicitly.");
+@@ -105,7 +105,8 @@ async function signJWT(ctx, config) {
+ 		signingAlgorithm: config.signingAlgorithm
+ 	});
+ 	const jwt = new SignJWT(payload).setProtectedHeader({
+-		...config.header,
++		...options?.jwt?.type ? { typ: options.jwt.type } : {},
++        ...config.header,
+ 		alg,
+ 		kid
+ 	}).setExpirationTime(exp).setIssuer(iss ?? defaultIss).setAudience(aud ?? defaultAud);
+diff --git a/dist/plugins/jwt/types.d.mts b/dist/plugins/jwt/types.d.mts
+index 8b7518de42a8c8edc053888246a79b073782e88f..d01bc31e47e05447e1543fe97a55b60c6a85646e 100644
+--- a/dist/plugins/jwt/types.d.mts
++++ b/dist/plugins/jwt/types.d.mts
+@@ -89,6 +89,10 @@ interface JwtOptions {
+     jwksPath?: string | undefined;
+   } | undefined;
+   jwt?: {
++    /**
++     * The protected header type for the JWT.
++     */
++    type?: string | undefined;
+     /**
+      * The issuer of the JWT
+      */

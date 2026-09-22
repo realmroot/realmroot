@@ -283,12 +283,11 @@ describe('OAuth token claim building over real D1', () => {
 
     const introspection = await harness.request('/api/auth/oauth2/introspect', {
       method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        token: tokenBody.access_token,
-        client_id: application.clientId,
-        client_secret: application.clientSecret,
-      }),
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+        authorization: `Basic ${btoa(`${application.clientId}:${application.clientSecret}`)}`,
+      },
+      body: new URLSearchParams({ token: tokenBody.access_token }),
     })
     expect(introspection.status, await introspection.clone().text()).toBe(200)
     expect(await introspection.json()).toMatchObject({ active: true, scope: 'openid' })
@@ -490,11 +489,12 @@ function clientCredentialsResponse(
 ) {
   return harness.request('/api/auth/oauth2/token', {
     method: 'POST',
-    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    headers: {
+      'content-type': 'application/x-www-form-urlencoded',
+      authorization: `Basic ${btoa(`${application.clientId}:${application.clientSecret}`)}`,
+    },
     body: new URLSearchParams({
       grant_type: 'client_credentials',
-      client_id: application.clientId,
-      client_secret: application.clientSecret,
       scope: 'contacts:read',
       resource,
     }),

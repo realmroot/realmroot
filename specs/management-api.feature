@@ -124,6 +124,8 @@ Feature: Unified Realmroot resource API
     When a native client requests a device authorization code with JSON or standard form encoding for openid profile email offline_access scopes
     Then Realmroot returns a device code, user code, verification URI, expiry, and polling interval
     And the native client can poll the OAuth token endpoint for OIDC-compatible tokens after browser approval
+    And requested resources are bound when the device code is issued
+    And an OAuth device code cannot be redeemed for a first-party browser session
     And confidential, disabled, or non-native clients cannot use device authorization
 
 

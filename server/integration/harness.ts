@@ -131,6 +131,8 @@ export async function createHarness(
     },
   )
 
+  await auth.$context
+
   const app = createApp(auth, deps, {
     baseURL: config.baseURL,
     trustedOrigins: config.trustedOrigins,
