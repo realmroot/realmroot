@@ -51,18 +51,30 @@ test.describe('authenticated routing', { tag: '@production-safe' }, () => {
   }) => {
     await authenticatedPage.goto('/')
     await expect(authenticatedPage).toHaveURL(/\/$/)
-    await expect(authenticatedPage.getByRole('navigation', { name: 'Account center' })).toBeVisible()
-    await expect(
-      authenticatedPage.getByRole('heading', { name: /Good (morning|afternoon|evening), .+\./ }),
-    ).toBeVisible()
+    await expect(authenticatedPage.getByRole('navigation', { name: /^Account [Cc]enter$/ })).toBeVisible()
+    await expect(authenticatedPage.getByRole('heading', { name: 'Workbench' })).toBeVisible()
   })
 
   test('[spec: account-center/account-center] Account Center loads account navigation', async ({
     authenticatedPage,
   }) => {
-    await expect(authenticatedPage.getByRole('navigation', { name: 'Account center' })).toBeVisible()
-    await expect(authenticatedPage.getByRole('heading', { name: 'Profile' })).toBeVisible()
-    await expect(authenticatedPage.getByLabel('Identity details')).toBeVisible()
+    await expect(authenticatedPage.getByRole('navigation', { name: /^Account [Cc]enter$/ })).toBeVisible()
+    await expect(authenticatedPage.getByRole('heading', { name: 'Account settings' })).toBeVisible()
+    await expect(authenticatedPage.getByRole('link', { name: 'Personal profile', exact: true })).toBeVisible()
+    for (const [path, heading] of [
+      ['/agents', 'Agents'],
+      ['/applications', 'Access management'],
+      ['/connections', 'Access management'],
+      ['/security', 'Account settings'],
+    ]) {
+      await authenticatedPage.goto(path!)
+      await expect(authenticatedPage.getByRole('heading', { name: heading, exact: true })).toBeVisible()
+    }
+    await authenticatedPage.getByRole('button', { name: 'Manage passkeys' }).click()
+    await expect(authenticatedPage.getByRole('dialog', { name: 'Passkeys', exact: true })).toBeVisible()
+    await expect(authenticatedPage.getByRole('heading', { name: 'Your passkeys' })).toBeVisible()
+    await authenticatedPage.keyboard.press('Escape')
+    await expect(authenticatedPage.getByRole('button', { name: 'Manage passkeys' })).toBeFocused()
     const response = await authenticatedPage.request.get('/api/configz')
     expect(response.status()).toBe(200)
     const config = configzConfigResponseSchema.parse(await response.json())

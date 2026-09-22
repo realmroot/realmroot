@@ -64,40 +64,20 @@ describe('account pages', () => {
     const requests = mockAccountFetch()
     renderWithClient(<AccountProfilePage />)
 
-    expect(await screen.findByRole('heading', { name: 'Profile' })).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'Account settings' })).toBeTruthy()
     await waitFor(() =>
       expect(requests).toEqual(['/api/configz', '/api/account/profile', '/api/account/developer-console-access']),
     )
   })
 
-  it('security page loads only the active tab data', async () => {
+  it('security page loads summaries once and reuses data when opening a drawer', async () => {
     const requests = mockAccountFetch()
     renderWithClient(<AccountSecurityPage />)
-
-    expect(await screen.findByRole('heading', { name: 'Sign-in & security' })).toBeTruthy()
-    await waitFor(() =>
-      expect(requests).toEqual([
-        '/api/configz',
-        '/api/account/profile',
-        '/api/account/developer-console-access',
-        '/api/account/linked-accounts',
-        '/api/account/provider-connections?page=1&pageSize=100',
-      ]),
-    )
-
-    fireEvent.mouseDown(screen.getByRole('tab', { name: 'MFA' }), { button: 0, ctrlKey: false })
-    await waitFor(() => expect(requests.at(-1)).toBe('/api/account/security'))
-
-    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Passkeys' }), { button: 0, ctrlKey: false })
-    await waitFor(() => expect(requests.at(-1)).toBe('/api/account/security/passkeys'))
-
-    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Sessions' }), { button: 0, ctrlKey: false })
-    await waitFor(() => expect(requests.at(-1)).toBe('/api/account/sessions'))
-
-    const loadedRequestCount = requests.length
-    fireEvent.mouseDown(screen.getByRole('tab', { name: 'MFA' }), { button: 0, ctrlKey: false })
-    await waitFor(() => expect(screen.getByText('Multi-factor authentication')).toBeTruthy())
-    expect(requests).toHaveLength(loadedRequestCount)
+    expect(await screen.findByRole('heading', { name: 'Account settings' })).toBeTruthy()
+    await waitFor(() => expect(requests).toContain('/api/account/security/passkeys'))
+    fireEvent.click(await screen.findByRole('button', { name: 'Manage passkeys' }))
+    expect(await screen.findByRole('heading', { name: 'Your passkeys' })).toBeTruthy()
+    expect(requests.filter((path) => path === '/api/account/security/passkeys')).toHaveLength(1)
     expect(screen.queryByRole('button', { name: 'Delete account' })).toBeNull()
   })
 
@@ -118,7 +98,7 @@ describe('account pages', () => {
     const requests = mockAccountFetch()
     renderWithClient(<AccountConnectionsPage />)
 
-    expect(await screen.findByRole('heading', { name: 'Connections' })).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'Access management' })).toBeTruthy()
     await waitFor(() =>
       expect(requests).toEqual([
         '/api/configz',

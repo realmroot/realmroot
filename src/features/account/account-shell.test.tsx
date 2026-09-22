@@ -257,7 +257,7 @@ describe('AccountPageShell', () => {
     renderShell(profile())
     fireEvent.click(screen.getByRole('button', { name: 'Open Account Center navigation' }))
     const accountDialog = screen.getByRole('dialog', { name: 'Account Center' })
-    fireEvent.click(within(accountDialog).getByRole('link', { name: 'Profile' }))
+    fireEvent.click(within(accountDialog).getByRole('link', { name: 'Account settings' }))
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Account Center' })).toBeNull())
 
     cleanup()

@@ -2,16 +2,9 @@ import { KeyRound, Mail, Upload, UserRound } from 'lucide-react'
 import type { FormEvent } from 'react'
 import { Field, TextInput } from '@/components/product-form'
 import { Button } from '@/components/ui/button'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import { Status } from '@/components/ui/status'
 import { tt } from '@/lib/i18n'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './account-drawer'
 import type { UserProfile } from './types'
 
 type ProfileDialog = 'avatar' | 'displayName' | 'username' | 'email' | 'password' | null
@@ -30,6 +23,8 @@ export function ProfileDialogs({
   emailStep,
   newPassword,
   passwordError,
+  revokeSessions = true,
+  setRevokeSessions,
   profile,
   saveProfile,
   setConfirmPassword,
@@ -56,6 +51,8 @@ export function ProfileDialogs({
   emailStep: 'request' | 'confirm'
   newPassword: string
   passwordError: string | null
+  revokeSessions?: boolean
+  setRevokeSessions?: (value: boolean) => void
   profile: UserProfile
   saveProfile: (event: FormEvent) => void
   setConfirmPassword: (value: string) => void
@@ -106,6 +103,8 @@ export function ProfileDialogs({
         dialog={dialog}
         newPassword={newPassword}
         passwordError={passwordError}
+        revokeSessions={revokeSessions}
+        setRevokeSessions={setRevokeSessions}
         profile={profile}
         setConfirmPassword={setConfirmPassword}
         setCurrentPassword={setCurrentPassword}
@@ -334,6 +333,8 @@ function PasswordDialog({
   dialog,
   newPassword,
   passwordError,
+  revokeSessions = true,
+  setRevokeSessions,
   profile,
   setConfirmPassword,
   setCurrentPassword,
@@ -346,6 +347,8 @@ function PasswordDialog({
   dialog: ProfileDialog
   newPassword: string
   passwordError: string | null
+  revokeSessions?: boolean
+  setRevokeSessions?: (value: boolean) => void
   profile: UserProfile
   setConfirmPassword: (value: string) => void
   setCurrentPassword: (value: string) => void
@@ -396,6 +399,14 @@ function PasswordDialog({
                 value={confirmPassword}
               />
             </Field>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={revokeSessions}
+                onChange={(event) => setRevokeSessions?.(event.target.checked)}
+              />
+              {tt('Sign out other sessions after changing password')}
+            </label>
           </div>
           <DialogFooter>
             <Button onClick={closeDialog} type="button" variant="secondary">

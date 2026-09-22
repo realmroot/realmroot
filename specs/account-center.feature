@@ -10,13 +10,20 @@ Feature: Account Center
   @e2e @entrypoint:product-ui @journey:account-center @proof:e2e
   Scenario: Account Center loads account navigation
     When I open /profile
-    Then I see the account navigation and the single Profile settings card
+    Then I see the account navigation and the Personal profile settings surface
+    And I can navigate Agents, applications, connections, and security
+    And passkey management opens in a right-side drawer and restores focus when closed
     And the sidebar does not show placeholder Realm identity details
 
   @entrypoint:product-ui @journey:account-section-routes @proof:unit
   Scenario: Account Center groups related sections into route-backed pages
     When I open /, /profile, /security, /data-privacy, /applications, /connections, /agents, or /organizations
-    Then I see only the grouped account page in the account content area
+    Then I see the Workbench, Agents, Access management, and Account settings navigation
+    And applications and connections share route-backed Access management tabs
+    And profile and security share route-backed Account settings tabs
+    And Agent, application, and security management details open in right-side drawers
+    And the Agent enrollment guide explains self-enrollment without creating an Agent in the browser
+    And organization details retain their existing workspace navigation
     And every Account Center section is a root-level sibling route
 
   @entrypoint:product-ui @journey:account-admin-console-entry @proof:unit
@@ -106,6 +113,7 @@ Feature: Account Center
   Scenario: Passkey enrollment completes with WebAuthn
     When I register a passkey from Account Center
     Then WebAuthn completes and the credential appears in security settings
+    And I can rename individual passkeys without changing other credentials
 
   @entrypoint:product-ui @journey:passkey-sign-in @proof:unit
   Scenario: Hosted passkey sign-in authenticates an enrolled passkey

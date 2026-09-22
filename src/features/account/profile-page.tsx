@@ -1,18 +1,10 @@
 import { Link } from '@tanstack/react-router'
-import { ChevronsUpDown, Globe2, LockKeyhole, Mail, Plus, Trash2, UserRound } from 'lucide-react'
+import { AlignLeft, ChevronsUpDown, Globe2, LockKeyhole, Mail, MapPin, Plus, Trash2, UserRound } from 'lucide-react'
 import { type FormEvent, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Field, SelectInput, TextArea, TextInput } from '@/components/product-form'
 import { Button } from '@/components/ui/button'
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import {
   changeAccountPassword,
@@ -22,8 +14,11 @@ import {
   uploadAccountAvatar,
 } from '@/lib/api/account'
 import { i18n, normalizeLanguage, type SupportedLanguage, tt } from '@/lib/i18n'
-import { AccountPageHeader, AccountRow, AccountRows, AccountTabContent, AccountTabs } from './account-page'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './account-drawer'
+import { AccountSettingsNavigation } from './account-navigation'
+import { AccountPageHeader, AccountRow, AccountRows } from './account-page'
 import { useAccountCenterLayout } from './account-surface'
+import { IdentityMark } from './identity-mark'
 import { SettingsAction, UnavailableSection } from './primitives'
 import { ProfileDialogs } from './profile-dialogs'
 import { accountQueryKeys, useAccountMutation, useLinkedAccounts } from './queries'
@@ -34,32 +29,23 @@ import { accountTimeZones, readAccountTimeZone, saveAccountTimeZone } from './ut
 export function AccountProfilePage() {
   const { accountCenter, profile } = useAccountCenterLayout()
   const mutate = useAccountMutation()
-  const [tab, setTab] = useState('details')
   const [action, setAction] = useState<'language' | 'timezone' | null>(null)
   const [language, setLanguage] = useState<SupportedLanguage>(() => normalizeLanguage(i18n.language))
   const [timezone, setTimezone] = useState(readAccountTimeZone)
   return (
     <>
-      <AccountPageHeader
-        description={tt('Manage the identity information Realmroot shares with trusted applications.')}
-        title={tt('Profile')}
-      />
-      <AccountTabs
-        onValueChange={setTab}
-        tabs={[
-          { value: 'details', label: tt('Identity details') },
-          { value: 'preferences', label: tt('Preferences') },
-        ]}
-        value={tab}
-      >
-        <AccountTabContent surface value="details">
+      <AccountPageHeader description={tt('Manage your profile and sign-in security.')} title={tt('Account settings')} />
+      <AccountSettingsNavigation section="profile" />
+      <div className="accountProfileSettings">
+        <section className="accountSettingsSurface">
           {profile && accountCenter.profileEditingEnabled ? (
             <ProfileSections accountCenter={accountCenter} profile={profile} mutate={mutate} />
           ) : (
             <UnavailableSection message={tt('Profile editing is disabled for this account center.')} />
           )}
-        </AccountTabContent>
-        <AccountTabContent surface value="preferences">
+        </section>
+        <details className="accountSecondarySettings">
+          <summary>{tt('Preferences')}</summary>
           <AccountRows>
             <AccountRow
               action={
@@ -80,8 +66,8 @@ export function AccountProfilePage() {
               value={timezone}
             />
           </AccountRows>
-        </AccountTabContent>
-      </AccountTabs>
+        </details>
+      </div>
       <ProfileActionDialog
         action={action}
         language={language}
@@ -242,6 +228,7 @@ function ProfileSections({
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [passwordError, setPasswordError] = useState<string | null>(null)
+  const [revokeSessions, setRevokeSessions] = useState(true)
   const linkedAccountsQuery = useLinkedAccounts(publicProfileOpen && accountCenter.connectedAccountsEnabled)
   const projectableAccounts = (linkedAccountsQuery.data?.items ?? []).filter(
     (account) => account.providerId !== 'credential',
@@ -336,7 +323,7 @@ function ProfileSections({
     }
     const result = await mutate(
       'Password changed.',
-      () => changeAccountPassword({ currentPassword, newPassword, revokeOtherSessions: true }),
+      () => changeAccountPassword({ currentPassword, newPassword, revokeOtherSessions: revokeSessions }),
       { invalidate: [accountQueryKeys.sessions], onError: setPasswordError },
     )
     if (result) {
@@ -362,8 +349,31 @@ function ProfileSections({
       {mode === 'profile-account' ? (
         <>
           <ProfileIdentityRows accountCenter={accountCenter} profile={profile} setDialog={setDialog} />
-          <ProfileIdentifierRows accountCenter={accountCenter} profile={profile} setDialog={setDialog} />
-          <section className="settingsPanel">
+
+          <section className="settingsPanel accountPublicProfileRows">
+            <header className="accountInlineHeading">
+              <h2>{tt('Public profile')}</h2>
+            </header>
+            <SettingsAction
+              icon={<AlignLeft />}
+              title={tt('Bio')}
+              meta={profile.bio || tt('Not set')}
+              action={
+                <Button variant="outline" onClick={() => setPublicProfileOpen(true)}>
+                  {tt('Edit')}
+                </Button>
+              }
+            />
+            <SettingsAction
+              icon={<MapPin />}
+              title={tt('Location')}
+              meta={profile.location || tt('Not set')}
+              action={
+                <Button variant="outline" onClick={() => setPublicProfileOpen(true)}>
+                  {tt('Edit')}
+                </Button>
+              }
+            />
             <SettingsAction
               action={
                 <Button
@@ -394,6 +404,7 @@ function ProfileSections({
               }
             />
           </section>
+          <ProfileIdentifierRows accountCenter={accountCenter} profile={profile} setDialog={setDialog} />
         </>
       ) : null}
       {accountCenter.passwordChangeEnabled && mode === 'password' ? (
@@ -411,13 +422,15 @@ function ProfileSections({
               </Button>
             }
             icon={<LockKeyhole size={18} />}
-            meta={tt('Use this when you need to rotate your hosted sign-in password.')}
+            meta={tt('Sign in with your account password.')}
             title={tt('Password')}
-            value={tt('Hosted sign-in')}
+            value={tt('Configured')}
           />
         </section>
       ) : null}
       <ProfileDialogs
+        revokeSessions={revokeSessions}
+        setRevokeSessions={setRevokeSessions}
         avatarPreview={avatarPreview}
         changeEmail={changeEmail}
         changePassword={changePassword}
@@ -610,52 +623,25 @@ function ProfileIdentityRows({
   setDialog: (dialog: 'avatar' | 'displayName') => void
 }) {
   return (
-    <section className="settingsPanel">
-      {accountCenter.avatarEditable ? (
-        <SettingsAction
-          action={
-            <Button
-              aria-label={tt('Edit avatar')}
-              onClick={() => setDialog('avatar')}
-              size="sm"
-              type="button"
-              variant="outline"
-            >
-              {tt('Edit')}
-            </Button>
-          }
-          icon={
-            profile.image ? (
-              <img alt="" className="accountProfileRowAvatar" src={profile.image} width="36" height="36" />
-            ) : (
-              <UserRound size={18} />
-            )
-          }
-          meta={tt('Shown across trusted applications.')}
-          title={tt('Avatar')}
-          value={profile.image ? tt('Custom image') : tt('Default avatar')}
-        />
-      ) : null}
+    <div className="accountProfileHero">
+      <button
+        type="button"
+        aria-label={tt('Edit avatar')}
+        disabled={!accountCenter.avatarEditable}
+        onClick={() => setDialog('avatar')}
+      >
+        <IdentityMark name={profile.displayName} image={profile.image} />
+      </button>
+      <div>
+        <h2>{profile.displayName}</h2>
+        <span>{profile.username ? `@${profile.username}` : profile.email}</span>
+      </div>
       {accountCenter.displayNameEditable ? (
-        <SettingsAction
-          action={
-            <Button
-              aria-label={tt('Edit display name')}
-              onClick={() => setDialog('displayName')}
-              size="sm"
-              type="button"
-              variant="outline"
-            >
-              {tt('Edit')}
-            </Button>
-          }
-          icon={<UserRound size={18} />}
-          meta={tt('Shown across trusted applications.')}
-          title={tt('Display name')}
-          value={profile.displayName}
-        />
+        <Button variant="outline" onClick={() => setDialog('displayName')}>
+          {tt('Edit display name')}
+        </Button>
       ) : null}
-    </section>
+    </div>
   )
 }
 

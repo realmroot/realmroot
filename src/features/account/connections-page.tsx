@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { createProviderConnectionIntent, disconnectAccountProviderConnection, linkAccount } from '@/lib/api/account'
 import { tt } from '@/lib/i18n'
+import { AccountAccessNavigation } from './account-navigation'
 import { AccountEmptyState, AccountObjectSection, AccountPageHeader, AccountRow, AccountRows } from './account-page'
 import { AccountSurface } from './account-surface'
 import { DestructiveConfirmationDialog, useDestructiveConfirmation } from './primitives'
@@ -90,8 +91,9 @@ export function AccountConnectionsPage() {
         <>
           <AccountPageHeader
             description={tt('Connect external accounts once for sign-in and delegated Agent access.')}
-            title={tt('Connections')}
+            title={tt('Access management')}
           />
+          <AccountAccessNavigation section="connections" />
           {loading ? <p className="text-sm text-muted-foreground">{tt('Loading Provider Connections…')}</p> : null}
           {error ? (
             <p className="text-sm text-destructive" role="alert">
@@ -230,7 +232,7 @@ function ConnectionSheet({
 }) {
   return (
     <Sheet onOpenChange={(open) => !open && onClose()} open={connection !== null}>
-      <SheetContent className="flex h-full flex-col overflow-hidden sm:max-w-xl">
+      <SheetContent className="accountDetailDrawer flex h-full flex-col overflow-hidden">
         <SheetHeader className="border-b">
           <SheetTitle>{connection?.connector.displayName ?? tt('Provider Connection')}</SheetTitle>
           <SheetDescription>

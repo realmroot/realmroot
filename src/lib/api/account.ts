@@ -503,6 +503,17 @@ export async function verifyPasskeyRegistration(input: Record<string, unknown>) 
   )
 }
 
+export async function renamePasskey(id: string, name: string) {
+  return readJsonResponse<{ status: boolean }>(
+    await fetch(`/api/account/security/passkeys/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      credentials: 'same-origin',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name }),
+    }),
+  )
+}
+
 export function deletePasskey(id: string) {
   return readRpcResponse(apiClient.api.account.security.passkeys[':id'].$delete({ param: { id } }))
 }

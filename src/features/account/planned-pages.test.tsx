@@ -122,11 +122,9 @@ describe('planned Account Center journeys', () => {
 
     renderWithClient(<AccountOverviewPage />)
 
-    expect(await screen.findByRole('heading', { name: 'Good morning, Jane.' })).toBeTruthy()
-    expect(await screen.findByText('Strong')).toBeTruthy()
-    expect(screen.getByText('Chrome on macOS')).toBeTruthy()
-    expect(screen.getByText('Unknown device')).toBeTruthy()
-    expect(screen.getByText('Acme')).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'Workbench' })).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'Workbench' })).toBeTruthy()
+    expect(screen.getByText('Join Acme')).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: 'Review request' }))
     expect(await screen.findByRole('heading', { name: 'Review Agent access request' })).toBeTruthy()
@@ -149,16 +147,15 @@ describe('planned Account Center journeys', () => {
   })
 
   it.each([
-    [14, 'Good afternoon, Jane.'],
-    [20, 'Good evening, Jane.'],
+    [14, 'Workbench'],
+    [20, 'Workbench'],
   ])('renders empty overview states at hour %s', async (hour, heading) => {
     vi.spyOn(Date.prototype, 'getHours').mockReturnValue(hour)
     server.use(http.get(`${base}/api/account/access-requests`, () => json({ items: [], pagination: pagination(0) })))
     renderWithClient(<AccountOverviewPage />)
     expect(await screen.findByRole('heading', { name: heading })).toBeTruthy()
     expect(await screen.findByText("You're all caught up")).toBeTruthy()
-    expect(screen.getByText('No active sessions')).toBeTruthy()
-    expect(screen.getByText('Basic')).toBeTruthy()
+    expect(screen.getByText('Start with your first Agent')).toBeTruthy()
   })
 
   it('keeps overview metrics pending until their resources load', async () => {
@@ -177,8 +174,8 @@ describe('planned Account Center journeys', () => {
     )
 
     renderWithClient(<AccountOverviewPage />)
-    expect(await screen.findByRole('heading', { name: /Jane\.$/ })).toBeTruthy()
-    expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(3)
+    expect(await screen.findByRole('heading', { name: 'Workbench' })).toBeTruthy()
+    expect(screen.getByText('Loading Agents…')).toBeTruthy()
   })
 
   it('keeps an overview access request open when denial fails', async () => {
@@ -200,7 +197,7 @@ describe('planned Account Center journeys', () => {
     server.use(http.get(`${base}/api/account/access-requests`, () => json({ items: [], pagination: pagination(0) })))
     const overview = renderWithClient(<AccountOverviewPage />)
     expect(screen.getByText('Loading account center')).toBeTruthy()
-    expect(await screen.findByRole('heading', { name: /Jane\.$/ })).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'Workbench' })).toBeTruthy()
     overview.unmount()
 
     renderWithClient(<AccountAgentsPage />)
