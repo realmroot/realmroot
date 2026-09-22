@@ -306,6 +306,28 @@ describe('AccountSecurityPage', () => {
     expect(screen.getByText('Backup key')).toBeTruthy()
   })
 
+  it('preserves an unnamed passkey and its draft when rename fails, then allows cancellation', async () => {
+    store.passkeys = [{ id: 'key-1', name: null, deviceType: 'singleDevice', backedUp: false, createdAt: null }]
+    server.use(
+      http.patch(`${base}/api/account/security/passkeys/:id`, () =>
+        HttpResponse.json({ message: 'Rename unavailable.' }, { status: 503 }),
+      ),
+    )
+    renderWithClient(<AccountSecurityPage />)
+    await openSecurityTab('Passkeys')
+    fireEvent.click(screen.getByRole('button', { name: 'Rename' }))
+    expect((screen.getByLabelText('Passkey name') as HTMLInputElement).value).toBe('')
+    expect((screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.change(screen.getByLabelText('Passkey name'), { target: { value: 'Replacement name' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect((await screen.findByRole('alert')).textContent).toContain('Rename unavailable.')
+    expect((screen.getByLabelText('Passkey name') as HTMLInputElement).value).toBe('Replacement name')
+    expect(screen.getByRole('heading', { name: 'Unnamed passkey' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByLabelText('Passkey name')).toBeNull()
+    expect(success).not.toHaveBeenCalled()
+  })
+
   it('enrolls a passkey from the add-passkey dialog', async () => {
     const create = vi.fn().mockResolvedValue({
       id: 'cred-1',

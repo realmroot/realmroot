@@ -35,7 +35,7 @@ test('permanent deletion through account settings [spec: account-center/account-
     animations: 'disabled',
   })
   await page.goto('/security')
-  await expect(page.getByRole('heading', { name: 'Sign-in & security' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Account settings' })).toBeVisible()
   await page.screenshot({
     path: 'test-results/account-security-reference-desktop.png',
     fullPage: true,
@@ -47,8 +47,8 @@ test('permanent deletion through account settings [spec: account-center/account-
   const linkNames = await navigation
     .getByRole('link')
     .evaluateAll((links) => links.map((link) => link.textContent?.trim() ?? ''))
-  const securityLinkIndex = linkNames.indexOf('Sign-in & security')
-  expect(linkNames.slice(securityLinkIndex, securityLinkIndex + 2)).toEqual(['Sign-in & security', 'Data & privacy'])
+  const settingsLinkIndex = linkNames.indexOf('Account settings')
+  expect(linkNames.slice(settingsLinkIndex, settingsLinkIndex + 2)).toEqual(['Account settings', 'Data & privacy'])
   await expect(navigation.getByRole('link', { name: 'Data & privacy' })).toHaveAttribute('aria-current', 'page')
   await expect(page.getByText('Export account data')).toBeVisible()
   await page.reload()
@@ -69,7 +69,7 @@ test('permanent deletion through account settings [spec: account-center/account-
     animations: 'disabled',
   })
   await page.goto('/security')
-  await expect(page.getByRole('heading', { name: 'Sign-in & security' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Account settings' })).toBeVisible()
   await page.screenshot({
     path: 'test-results/account-security-reference-mobile.png',
     fullPage: true,

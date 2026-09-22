@@ -1,6 +1,6 @@
 import type { AccessRequestApproval } from '@shared/api/agent-api'
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
-import { delay } from 'msw'
+import { delay, type HttpResponseResolver } from 'msw'
 import type { ReactNode } from 'react'
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import {
@@ -795,6 +795,162 @@ describe('planned Account Center journeys', () => {
     await openOrganizationSection('teams')
     expect((await screen.findAllByText('read-only-team')).length).toBeGreaterThan(0)
     expect(screen.queryByRole('button', { name: 'Rename' })).toBeNull()
+  })
+})
+
+describe('Workbench actions and failures', () => {
+  it.each(['active', 'inactive'] as const)('changes an %s Agent status from its card', async (status) => {
+    store.agentIdentities = [agent('agent-active', 'Build Agent', status)]
+    const change = vi.fn(() => {
+      store.agentIdentities[0]!.status = status === 'active' ? 'inactive' : 'active'
+      return new Response(null, { status: 204 })
+    })
+    server.use(
+      http.get(`${base}/api/account/access-requests`, () => json({ items: [], pagination: pagination(0) })),
+      http.delete(`${base}/api/account/agents/agent-active/activation`, change),
+      http.put(`${base}/api/account/agents/agent-active/activation`, change),
+    )
+    renderWithClient(<AccountOverviewPage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Manage Build Agent' }))
+    fireEvent.click(screen.getByRole('button', { name: status === 'active' ? 'Deactivate Agent' : 'Activate Agent' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(change).toHaveBeenCalledOnce()
+    expect(await screen.findByText(status === 'active' ? 'Disabled' : 'Enabled')).toBeTruthy()
+  })
+
+  it('keeps an Agent drawer open after a failed status change', async () => {
+    store.agentIdentities = [agent('agent-active', 'Build Agent', 'active')]
+    const change = vi.fn(() => json({ message: 'Status change unavailable.' }, { status: 503 }))
+    server.use(
+      http.get(`${base}/api/account/access-requests`, () => json({ items: [], pagination: pagination(0) })),
+      http.delete(`${base}/api/account/agents/agent-active/activation`, change),
+    )
+    renderWithClient(<AccountOverviewPage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Manage Build Agent' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Deactivate Agent' }))
+    await waitFor(() => expect(change).toHaveBeenCalledOnce())
+    expect(screen.getByRole('dialog', { name: 'Build Agent' })).toBeTruthy()
+    closeDialogWithEscape()
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  })
+
+  it('preserves a failed deletion and removes the Agent only after a successful retry', async () => {
+    store.agentIdentities = [agent('agent-active', 'Build Agent', 'active')]
+    let fail = true
+    server.use(
+      http.get(`${base}/api/account/access-requests`, () => json({ items: [], pagination: pagination(0) })),
+      http.delete(`${base}/api/account/agents/agent-active`, () => {
+        if (fail) return json({ message: 'Deletion unavailable.' }, { status: 503 })
+        store.agentIdentities = []
+        return new Response(null, { status: 204 })
+      }),
+    )
+    renderWithClient(<AccountOverviewPage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Manage Build Agent' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Agent' }))
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete Agent' }))
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+    expect(screen.getByRole('dialog', { name: 'Build Agent' })).toBeTruthy()
+    fail = false
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Agent' }))
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete Agent' }))
+    expect(await screen.findByText('Start with your first Agent')).toBeTruthy()
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  })
+
+  it('opens a card request and removes it after denial', async () => {
+    store.agentIdentities = [agent('agent-active', 'Build Agent', 'active')]
+    let pending = true
+    server.use(
+      http.get(`${base}/api/account/access-requests`, () =>
+        json({ items: pending ? [accessRequest()] : [], pagination: pagination(pending ? 1 : 0) }),
+      ),
+      http.put(`${base}/api/account/access-requests/request-1/decision`, () => {
+        pending = false
+        return json({ id: 'request-1', status: 'denied' })
+      }),
+    )
+    renderWithClient(<AccountOverviewPage />)
+    fireEvent.click(await screen.findByRole('button', { name: '1 requests to review' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Deny' }))
+    expect(await screen.findByText("You're all caught up")).toBeTruthy()
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it.each(['accept', 'reject'] as const)('can retry a failed invitation %s without losing it', async (action) => {
+    let pending = true
+    let fail = true
+    const invitation = {
+      id: 'invitation-1',
+      organizationName: 'Acme',
+      role: 'member',
+      status: 'pending',
+      createdAt: '2026-08-01T00:00:00.000Z',
+      expiresAt: '2099-01-01T00:00:00.000Z',
+    }
+    const decision = vi.fn<HttpResponseResolver>(async ({ request }) => {
+      expect(await request.json()).toEqual({ invitationId: 'invitation-1' })
+      if (fail) return json({ message: 'Invitation unavailable.' }, { status: 503 })
+      pending = false
+      return json({ invitation: { ...invitation, status: action === 'accept' ? 'accepted' : 'rejected' } })
+    })
+    server.use(
+      http.get(`${base}/api/account/access-requests`, () => json({ items: [], pagination: pagination(0) })),
+      http.get(`${base}/api/auth/organization/list-user-invitations`, () => json(pending ? [invitation] : [])),
+      http.post(`${base}/api/auth/organization/${action}-invitation`, decision),
+    )
+    renderWithClient(<AccountOverviewPage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Review invitation' }))
+    closeDialogWithEscape()
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    fireEvent.click(screen.getByRole('button', { name: 'Review invitation' }))
+    const label = action === 'accept' ? 'Accept' : 'Decline'
+    fireEvent.click(screen.getByRole('button', { name: label }))
+    await waitFor(() => expect(decision).toHaveBeenCalledOnce())
+    expect(screen.getByRole('dialog', { name: 'Organization invitation' })).toBeTruthy()
+    fail = false
+    fireEvent.click(screen.getByRole('button', { name: label }))
+    expect(await screen.findByText("You're all caught up")).toBeTruthy()
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it.each([
+    'agents',
+    'requests',
+    'invitations',
+  ] as const)('shows a failed %s load without claiming the inbox is clear', async (resource) => {
+    store.agentIdentities = [agent('agent-active', 'Build Agent', 'active')]
+    const endpoints = {
+      agents: '/api/account/agents',
+      requests: '/api/account/access-requests',
+      invitations: '/api/auth/organization/list-user-invitations',
+    }
+    server.use(
+      http.get(`${base}${endpoints[resource]}`, () =>
+        json({ message: 'Workbench data unavailable.' }, { status: 503 }),
+      ),
+      http.get(`${base}/api/account/access-requests`, () => json({ items: [], pagination: pagination(0) })),
+    )
+    renderWithClient(<AccountOverviewPage />)
+    expect(await screen.findByText('Workbench data unavailable.')).toBeTruthy()
+    if (resource === 'agents') expect(screen.queryByText('Start with your first Agent')).toBeNull()
+    else expect(screen.queryByText("You're all caught up")).toBeNull()
+    if (resource === 'requests') expect(screen.getByText('Unable to load requests')).toBeTruthy()
+  })
+
+  it('does not label a card clear while its requests are loading', async () => {
+    store.agentIdentities = [agent('agent-active', 'Build Agent', 'active')]
+    server.use(
+      http.get(`${base}/api/account/access-requests`, async () => {
+        await delay(150)
+        return json({ items: [], pagination: pagination(0) })
+      }),
+    )
+    renderWithClient(<AccountOverviewPage />)
+    await screen.findByRole('button', { name: 'Manage Build Agent' })
+    expect(screen.getAllByText('Loading requests…').length).toBeGreaterThan(0)
+    expect(screen.queryByText('No pending requests')).toBeNull()
+    expect(await screen.findByText('No pending requests')).toBeTruthy()
   })
 })
 
