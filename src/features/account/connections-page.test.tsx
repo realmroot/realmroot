@@ -310,7 +310,7 @@ describe('AccountConnectionsPage', () => {
       http.get(`${base}/api/account/provider-connections`, () =>
         HttpResponse.json({ items: [], pagination: { ...pagination, totalItems: 0, totalPages: 0 } }),
       ),
-      http.post(`${base}/api/auth/oauth2/link`, async ({ request }) => {
+      http.post(`${base}/api/auth/link-social`, async ({ request }) => {
         linkedBody = await request.json()
         return HttpResponse.json({ url: 'https://provider.example.com/authorize' })
       }),
@@ -321,7 +321,7 @@ describe('AccountConnectionsPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Connect' }))
     await waitFor(() => expect(assign).toHaveBeenCalledWith('https://provider.example.com/authorize'))
     expect(linkedBody).toMatchObject({
-      providerId: 'github',
+      provider: 'github',
       callbackURL: 'http://localhost:3000/connections',
     })
   })

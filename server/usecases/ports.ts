@@ -242,6 +242,7 @@ export interface UserRepository {
   updateProfile(userId: string, input: AccountProfileUpdateInput): Promise<UserProfile>
   assertAccountAvatarReference(userId: string, avatarAssetId: string | null | undefined): Promise<void>
   assertAdminAvatarReference(avatarAssetId: string | null | undefined): Promise<void>
+  findLinkedAccountId(userId: string, providerId: string, providerAccountId?: string): Promise<string | null>
   listLinkedAccounts(userId: string, page: PaginationInput): Promise<PaginatedResult<LinkedAccount>>
   listSessions(userId: string, page: PaginationInput): Promise<PaginatedResult<UserSessionDevice>>
   getSessionToken(userId: string, sessionId: string): Promise<string>

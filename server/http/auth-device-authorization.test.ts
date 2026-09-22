@@ -1,5 +1,5 @@
-import { oauthProvider } from '@better-auth/oauth-provider'
-import { createDeviceAuthorizationOptions, normalizeDeviceAuthorizationRequest } from '@server/auth'
+import { oauthDeviceAuthorization, oauthProvider } from '@better-auth/oauth-provider'
+import { createDeviceAuthorizationOptions } from '@server/auth'
 import type { ApplicationAggregate } from '@server/usecases/ports'
 import { deviceCodeGrantType } from '@shared/api/applications'
 import { betterAuth } from 'better-auth'
@@ -98,12 +98,12 @@ describe('auth device authorization endpoints', () => {
     expect(verify.status).toBe(200)
     await expect(verify.json()).resolves.toMatchObject({ user_code: 'USERCODE', status: 'pending' })
 
-    const approval = await requestJson(auth, '/device/approve', { userCode: 'USER-CODE' }, { cookie })
+    const approval = await requestJson(auth, '/device/approve', { userCode: 'USERCODE' }, { cookie })
     expect(approval.status).toBe(200)
     await expect(approval.json()).resolves.toEqual({ success: true })
 
     const token = await pollDeviceToken(auth)
-    expect(token.status).toBe(200)
+    expect(token.status, await token.clone().text()).toBe(200)
     const body = (await token.json()) as Record<string, unknown>
     expect(body).toMatchObject({
       access_token: expect.any(String),
@@ -121,6 +121,7 @@ describe('auth device authorization endpoints', () => {
     const code = await requestJson(auth, '/device/code', {
       client_id: client.client_id,
       scope: 'openid email offline_access',
+      resource: 'https://auth.example.com/api/auth',
     })
     expect(code.status).toBe(200)
     await expect(code.json()).resolves.toMatchObject({
@@ -140,7 +141,7 @@ describe('auth device authorization endpoints', () => {
       device_code: 'device-code-1',
       resource: 'https://auth.example.com/api/auth',
     })
-    expect(token.status).toBe(200)
+    expect(token.status, await token.clone().text()).toBe(200)
     const body = (await token.json()) as Record<string, string>
     expect(body).toMatchObject({
       token_type: 'Bearer',
@@ -226,11 +227,12 @@ describe('auth device authorization endpoints', () => {
       grant_types: ['authorization_code'],
       response_types: ['code'],
     })
-    await requestOAuthDeviceCode(grantAuth, clientWithoutGrant.client_id)
-
-    const disallowedGrant = await pollOAuthDeviceToken(grantAuth, clientWithoutGrant.client_id)
+    const disallowedGrant = await requestJson(grantAuth, '/device/code', {
+      client_id: clientWithoutGrant.client_id,
+      scope: 'openid email offline_access',
+    })
     expect(disallowedGrant.status).toBe(400)
-    await expect(disallowedGrant.json()).resolves.toMatchObject({ error: 'invalid_client' })
+    await expect(disallowedGrant.json()).resolves.toMatchObject({ error: 'unauthorized_client' })
   })
 
   it('returns denial and expiration polling errors through the Better Auth token endpoint', async () => {
@@ -317,7 +319,7 @@ function createDeviceOAuthAuth(options: { expiresIn?: '1s' | '30m' } = {}) {
           },
         },
       }),
-      deviceAuthorization({
+      oauthDeviceAuthorization({
         verificationUri: '/auth/device',
         expiresIn: options.expiresIn ?? '30m',
         deviceCodeLength: 12,
@@ -333,10 +335,8 @@ function createDeviceOAuthAuth(options: { expiresIn?: '1s' | '30m' } = {}) {
         allowDynamicClientRegistration: true,
         allowUnauthenticatedClientRegistration: true,
         scopes: ['openid', 'profile', 'email', 'offline_access'],
-        silenceWarnings: {
-          oauthAuthServerConfig: true,
-          openidConfig: true,
-        },
+        resources: ['https://auth.example.com/api/auth'],
+        enforcePerClientResources: false,
       }),
     ],
   })
@@ -359,12 +359,12 @@ async function registerDeviceClient(
     client_name: overrides.client_name ?? 'Native Device Client',
     redirect_uris: ['com.example.app:/callback'],
     token_endpoint_auth_method: 'none',
-    grant_types: overrides.grant_types ?? [grantType],
+    grant_types: overrides.grant_types ?? [grantType, 'refresh_token'],
     response_types: overrides.response_types ?? [],
     scope: 'openid email offline_access',
-    type: 'native',
+    application_type: 'native',
   })
-  expect(response.status).toBe(200)
+  expect(response.status, await response.clone().text()).toBe(201)
   return response.json() as Promise<{ client_id: string }>
 }
 
@@ -390,8 +390,9 @@ async function requestOAuthDeviceCode(auth: TestAuth, clientId: string) {
   const response = await requestJson(auth, '/device/code', {
     client_id: clientId,
     scope: 'openid email offline_access',
+    resource: 'https://auth.example.com/api/auth',
   })
-  expect(response.status).toBe(200)
+  expect(response.status, await response.clone().text()).toBe(200)
   return response
 }
 
@@ -410,7 +411,7 @@ async function approveOAuthDeviceLogin(auth: TestAuth, clientId: string, cookie:
   const approval = await requestJson(auth, '/device/approve', { userCode: 'USERCODE' }, { cookie })
   expect(approval.status).toBe(200)
   const token = await pollOAuthDeviceToken(auth, clientId)
-  expect(token.status).toBe(200)
+  expect(token.status, await token.clone().text()).toBe(200)
   return token.json() as Promise<{ refresh_token: string }>
 }
 
@@ -457,7 +458,7 @@ async function requestDeviceForm(auth: TestAuth, body: Record<string, string>) {
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams(body),
   })
-  return auth.handler(await normalizeDeviceAuthorizationRequest(request))
+  return auth.handler(request)
 }
 
 function getCookieHeader(response: Response) {

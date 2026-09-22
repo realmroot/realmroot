@@ -498,6 +498,13 @@
       "when": 1788891464889,
       "tag": "20260908181744_loose_lilandra",
       "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "6",
+      "when": 1790094816552,
+      "tag": "20260922163336_better_auth_1_7",
+      "breakpoints": true
     }
   ]
 }

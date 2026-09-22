@@ -64,6 +64,7 @@ export function createUserRepositoryMock(): UserRepository {
     updateProfile: vi.fn().mockResolvedValue({ id: 'user-1' }),
     assertAccountAvatarReference: vi.fn().mockResolvedValue(undefined),
     assertAdminAvatarReference: vi.fn().mockResolvedValue(undefined),
+    findLinkedAccountId: vi.fn().mockResolvedValue(null),
     listLinkedAccounts: vi.fn().mockResolvedValue(createPage({ limit: 50, offset: 0 })),
     listSessions: vi.fn().mockResolvedValue(createPage({ limit: 50, offset: 0 })),
     getSessionToken: vi.fn().mockResolvedValue('session-token-1'),

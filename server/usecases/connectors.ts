@@ -27,7 +27,6 @@ export interface GenericOAuthProviderConfig {
   providerId: string
   clientId: string
   clientSecret?: string
-  issuer?: string
   discoveryUrl?: string
   authorizationUrl?: string
   tokenUrl?: string
@@ -259,7 +258,6 @@ export async function loadAuthConnectorConfig(repository: ConnectorRepository): 
       providerId: connector.providerId,
       clientId,
       clientSecret,
-      issuer: connector.issuer ?? undefined,
       discoveryUrl: connector.issuer ? oidcDiscoveryUrl(connector.issuer) : undefined,
       authorizationUrl: connector.authorizationEndpoint ?? undefined,
       tokenUrl: connector.tokenEndpoint ?? undefined,

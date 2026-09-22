@@ -137,3 +137,5 @@ allowed scope, and federated-credential status.
 
 [ADR 0002](../adr/0002-one-deployment-is-one-realm.md) explains why this entire
 protocol and storage boundary belongs to one deployment.
+
+The [Better Auth 1.7 upgrade audit](better-auth-upgrade.md) records upstream replacements, retained patches, and migration requirements.

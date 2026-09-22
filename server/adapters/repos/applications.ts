@@ -156,6 +156,9 @@ export function createDrizzleApplicationRepository(db: Database, ids: Identifier
         ...(patch.allowedGrantTypes !== undefined ? { grantTypes: serializeList(patch.allowedGrantTypes) } : {}),
         ...(patch.oidcScopes !== undefined || patch.resourceScopes !== undefined
           ? {
+              clientCredentialsScopes: serializeList([
+                ...new Set((patch.resourceScopes ?? current.resourceScopes).flatMap((resource) => resource.scopes)),
+              ]),
               scopes: serializeList([
                 ...(patch.oidcScopes ?? current.oidcScopes),
                 ...new Set((patch.resourceScopes ?? current.resourceScopes).flatMap((resource) => resource.scopes)),
