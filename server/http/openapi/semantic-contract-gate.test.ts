@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { openApiSemanticSnapshot } from '../../../scripts/openapi-semantic-snapshot'
-import { unifiedOpenApi } from './management'
+import { getUnifiedOpenApi } from './management'
 
 describe('OpenAPI semantic contract gate', () => {
   it('matches origin/main except for approved contract changes', () => {
@@ -259,6 +259,8 @@ describe('OpenAPI semantic contract gate', () => {
       ...contextIDContract,
     ].sort((left, right) => `${left.path}:${left.method}`.localeCompare(`${right.path}:${right.method}`))
 
-    expect(openApiSemanticSnapshot(unifiedOpenApi as unknown as Record<string, unknown>, () => true)).toEqual(baseline)
+    expect(openApiSemanticSnapshot(getUnifiedOpenApi() as unknown as Record<string, unknown>, () => true)).toEqual(
+      baseline,
+    )
   })
 })

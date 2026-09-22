@@ -52,12 +52,6 @@ interface RestishCliConfig {
   command_layout: 'tags'
 }
 
-export const unifiedOpenApiPath = '/api/openapi.json'
-export const unifiedOpenApiLinkHeader = [
-  `<${unifiedOpenApiPath}>; rel="service-desc"; type="application/openapi+json"`,
-  `<${unifiedOpenApiPath}>; rel="describedby"; type="application/openapi+json"`,
-].join(', ')
-
 const managementOpenApiTags = [
   { name: 'Assets', description: 'Uploaded assets used by Realmroot resources.' },
   { name: 'Agent', description: 'Authenticated Agent bootstrap and access protocol resources.' },
@@ -211,8 +205,11 @@ const managementRoutes: ManagementRouteConfig[] = [
   ...platformWebhookRoutes,
   ...platformRuntimeRoutes,
 ]
-const openApiApp = createManagementOpenApiApp()
-export const unifiedOpenApi = buildUnifiedOpenApi()
+let cachedOpenApi: UnifiedOpenApiDocument | undefined
+export function getUnifiedOpenApi(): UnifiedOpenApiDocument {
+  cachedOpenApi ??= buildUnifiedOpenApi()
+  return cachedOpenApi
+}
 
 function createManagementOpenApiApp() {
   const app = new OpenAPIHono()
@@ -247,7 +244,7 @@ function createManagementOpenApiApp() {
 }
 
 function buildUnifiedOpenApi(): UnifiedOpenApiDocument {
-  const document = openApiApp.getOpenAPI31Document(
+  const document = createManagementOpenApiApp().getOpenAPI31Document(
     {
       openapi: '3.1.0',
       info: {

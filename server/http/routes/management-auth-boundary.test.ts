@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { notFound } from '@server/domain/errors'
 import { createApp } from '@server/http/app'
-import { unifiedOpenApi } from '@server/http/openapi/management'
+import { getUnifiedOpenApi } from '@server/http/openapi/management'
 import * as agentIdentitiesUsecase from '@server/usecases/agent-identities'
 import { protectedResourceCollectionRoutes } from '@shared/api/management'
 import { requiredProtectedScope } from '@shared/authz'
@@ -70,19 +70,19 @@ describe('management routes 1', () => {
     const operationIds = openApiOperationObjects().map((operation) => operation.operationId)
     expect(operationIds).not.toContain(undefined)
     expect(new Set(operationIds).size).toBe(operationIds.length)
-    expect(unifiedOpenApi.security).toBeUndefined()
-    expect(unifiedOpenApi.components.securitySchemes).not.toHaveProperty('agentAuth')
-    expect(unifiedOpenApi.components.securitySchemes.agentAssertion).toMatchObject({
+    expect(getUnifiedOpenApi().security).toBeUndefined()
+    expect(getUnifiedOpenApi().components.securitySchemes).not.toHaveProperty('agentAuth')
+    expect(getUnifiedOpenApi().components.securitySchemes.agentAssertion).toMatchObject({
       type: 'http',
       scheme: 'bearer',
     })
-    expect(unifiedOpenApi.components.securitySchemes.oauth2).toMatchObject({
+    expect(getUnifiedOpenApi().components.securitySchemes.oauth2).toMatchObject({
       type: 'oauth2',
     })
-    expect(unifiedOpenApi.components.securitySchemes.oauth2).not.toHaveProperty('x-dpop-required')
-    expect(unifiedOpenApi.components.securitySchemes.sessionCookie).toMatchObject({ type: 'apiKey', in: 'cookie' })
-    expect(unifiedOpenApi.components.securitySchemes).not.toHaveProperty('dpop')
-    expect(unifiedOpenApi['x-cli-config']).toEqual({ command_layout: 'tags' })
+    expect(getUnifiedOpenApi().components.securitySchemes.oauth2).not.toHaveProperty('x-dpop-required')
+    expect(getUnifiedOpenApi().components.securitySchemes.sessionCookie).toMatchObject({ type: 'apiKey', in: 'cookie' })
+    expect(getUnifiedOpenApi().components.securitySchemes).not.toHaveProperty('dpop')
+    expect(getUnifiedOpenApi()['x-cli-config']).toEqual({ command_layout: 'tags' })
 
     for (const operation of openApiOperationObjects()) {
       if (operation.key === managementOpenApiOperationKey) {
@@ -163,7 +163,7 @@ describe('management routes 1', () => {
     expect(contract.status).toBe(200)
     expect(contract.headers.get('content-type')).toContain('application/json')
     expect(contract.headers.get('link')).toBeNull()
-    await expect(contract.json()).resolves.toEqual(unifiedOpenApi)
+    await expect(contract.json()).resolves.toEqual(getUnifiedOpenApi())
     expect(documentation.status).toBe(200)
     expect(documentation.headers.get('content-type')).toContain('text/html')
     const documentationHtml = await documentation.text()
@@ -172,7 +172,7 @@ describe('management routes 1', () => {
     expect(documentationHtml).toContain('@scalar/api-reference@1.64.0')
 
     const declaredTags = new Set(
-      ((unifiedOpenApi as { tags?: Array<{ name: string }> }).tags ?? []).map((tag) => tag.name),
+      ((getUnifiedOpenApi() as { tags?: Array<{ name: string }> }).tags ?? []).map((tag) => tag.name),
     )
     expect(declaredTags.size).toBeGreaterThan(1)
     for (const operation of openApiOperationObjects()) {
@@ -192,13 +192,13 @@ describe('management routes 1', () => {
     }
     expect(declaredTags.has('Security')).toBe(false)
     expect(declaredTags.has('Audit Events')).toBe(false)
-    expect(unifiedOpenApi.paths).not.toHaveProperty('/onboarding/status')
-    expect(unifiedOpenApi.paths).not.toHaveProperty('/onboarding/admin-users')
-    expect(unifiedOpenApi.paths).not.toHaveProperty('/health')
-    expect(unifiedOpenApi.paths).not.toHaveProperty('/configz')
-    expect(unifiedOpenApi.paths).not.toHaveProperty('/oauth/consent')
-    expect(unifiedOpenApi.paths).not.toHaveProperty('/account-connections/oauth/callback')
-    expect(unifiedOpenApi.paths).not.toHaveProperty('/provider-connection-events/{eventId}')
+    expect(getUnifiedOpenApi().paths).not.toHaveProperty('/onboarding/status')
+    expect(getUnifiedOpenApi().paths).not.toHaveProperty('/onboarding/admin-users')
+    expect(getUnifiedOpenApi().paths).not.toHaveProperty('/health')
+    expect(getUnifiedOpenApi().paths).not.toHaveProperty('/configz')
+    expect(getUnifiedOpenApi().paths).not.toHaveProperty('/oauth/consent')
+    expect(getUnifiedOpenApi().paths).not.toHaveProperty('/account-connections/oauth/callback')
+    expect(getUnifiedOpenApi().paths).not.toHaveProperty('/provider-connection-events/{eventId}')
 
     const accessRequest = openApiOperationObjects().find((operation) => operation.key === 'POST /agent/access-requests')
     const standaloneRequestSchema = requestBodyContent(accessRequest?.requestBody).schema

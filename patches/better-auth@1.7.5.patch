@@ -85,3 +85,65 @@ index 8b7518de42a8c8edc053888246a79b073782e88f..d01bc31e47e05447e1543fe97a55b60c
      /**
       * The issuer of the JWT
       */
+diff --git a/dist/plugins/jwt/verify.mjs b/dist/plugins/jwt/verify.mjs
+index affac8aed86df6e972641cd786c7e55c8cdad8af..b14522dff7a3fe6864bfdecd7dd3f02f4c7104e4 100644
+--- a/dist/plugins/jwt/verify.mjs
++++ b/dist/plugins/jwt/verify.mjs
+@@ -1,7 +1,7 @@
+ import { getJwksAdapter } from "./adapter.mjs";
+ import { getCurrentAuthEndpointContext } from "@better-auth/core/context";
+ import { base64 } from "@better-auth/utils/base64";
+-import { importJWK, jwtVerify } from "jose";
++import { errors, importJWK, jwtVerify } from "jose";
+ //#region src/plugins/jwt/verify.ts
+ /**
+ * Verify a JWT token using the JWKS public keys
+@@ -9,27 +9,23 @@ import { importJWK, jwtVerify } from "jose";
+ */
+ async function verifyJWT(token, options) {
+ 	const ctx = getCurrentAuthEndpointContext();
++	let kid;
+ 	try {
+ 		const parts = token.split(".");
+ 		if (parts.length !== 3) return null;
+ 		const headerStr = new TextDecoder().decode(base64.decode(parts[0]));
+-		const kid = JSON.parse(headerStr).kid;
+-		if (!kid) {
+-			ctx.context.logger.debug("JWT missing kid in header");
+-			return null;
+-		}
+-		const keys = await getJwksAdapter(ctx.context.adapter, options).getAllKeys(ctx);
+-		if (!keys || keys.length === 0) {
+-			ctx.context.logger.debug("No JWKS keys available");
+-			return null;
+-		}
+-		const key = keys.find((k) => k.id === kid);
+-		if (!key) {
+-			ctx.context.logger.debug(`No JWKS key found for kid: ${kid}`);
+-			return null;
+-		}
+-		const cryptoKey = await importJWK(JSON.parse(key.publicKey), key.alg ?? options?.jwks?.keyPairConfig?.alg ?? "EdDSA");
+-		const baseURLOrigin = typeof ctx.context.options.baseURL === "string" ? ctx.context.options.baseURL : void 0;
++		kid = JSON.parse(headerStr).kid;
++	} catch {
++		return null;
++	}
++	if (typeof kid !== "string" || !kid) return null;
++	// Storage and stored-key failures are service errors, not invalid credentials.
++	const keys = await getJwksAdapter(ctx.context.adapter, options).getAllKeys(ctx);
++	const key = keys?.find((key) => key.id === kid);
++	if (!key) return null;
++	const cryptoKey = await importJWK(JSON.parse(key.publicKey), key.alg ?? options?.jwks?.keyPairConfig?.alg ?? "EdDSA");
++	const baseURLOrigin = typeof ctx.context.options.baseURL === "string" ? ctx.context.options.baseURL : void 0;
++	try {
+ 		const { payload } = await jwtVerify(token, cryptoKey, {
+ 			issuer: options?.jwt?.issuer ?? baseURLOrigin,
+ 			audience: options?.jwt?.audience ?? baseURLOrigin
+@@ -37,6 +33,7 @@ async function verifyJWT(token, options) {
+ 		if (!payload.sub || !payload.aud) return null;
+ 		return payload;
+ 	} catch (error) {
++		if (!(error instanceof errors.JOSEError)) throw error;
+ 		ctx.context.logger.debug("JWT verification failed", error);
+ 		return null;
+ 	}

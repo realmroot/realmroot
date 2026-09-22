@@ -231,7 +231,7 @@ export async function deleteConnector(deps: Deps, id: string) {
 }
 
 export async function loadAuthConnectorConfig(repository: ConnectorRepository): Promise<AuthConnectorConfig> {
-  const connectors = await repository.listEnabled()
+  const connectors = await repository.listEnabled({ purpose: 'authentication' })
   const socialProviders: Record<string, Record<string, unknown>> = {}
   const genericOAuthProviders: GenericOAuthProviderConfig[] = []
   const trustedProviders: string[] = []

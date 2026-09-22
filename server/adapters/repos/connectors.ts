@@ -1,5 +1,5 @@
 import type { ConnectorRepository, SecretCipher } from '@server/usecases/ports'
-import { and, count, desc, eq } from 'drizzle-orm'
+import { and, count, desc, eq, getTableColumns } from 'drizzle-orm'
 import type { Database } from '../../db/client'
 import { apiResource, identityProviderConnector } from '../../db/schema'
 
@@ -23,7 +23,32 @@ export function createConnectorRepository(db: Database, secrets: SecretCipher): 
       }
     },
 
-    async listEnabled() {
+    async listEnabled(options) {
+      if (options?.purpose === 'authentication') {
+        const {
+          registrationAccessToken: _registration,
+          resourceClientSecret: _resourceSecret,
+          resourceRegistrationAccessToken: _resourceRegistration,
+          ...columns
+        } = getTableColumns(identityProviderConnector)
+        const rows = await db
+          .select(columns)
+          .from(identityProviderConnector)
+          .where(
+            and(eq(identityProviderConnector.enabled, true), eq(identityProviderConnector.authenticationEnabled, true)),
+          )
+        return Promise.all(
+          rows.map(async (row) => {
+            const connector = {
+              ...row,
+              registrationAccessToken: null,
+              resourceClientSecret: null,
+              resourceRegistrationAccessToken: null,
+            }
+            return { ...connector, clientSecret: await readConnectorSecret(db, connector, secrets) }
+          }),
+        )
+      }
       const rows = await db.select().from(identityProviderConnector).where(eq(identityProviderConnector.enabled, true))
       return Promise.all(rows.map((row) => decryptConnector(db, row, secrets)))
     },

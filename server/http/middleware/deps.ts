@@ -7,9 +7,9 @@ declare module 'hono' {
   }
 }
 
-export function depsMiddleware(deps: Deps): MiddlewareHandler {
+export function depsMiddleware(deps: Deps | ((c: Context) => Deps)): MiddlewareHandler {
   return async (c, next) => {
-    c.set('deps', deps)
+    c.set('deps', typeof deps === 'function' ? deps(c) : deps)
     await next()
   }
 }

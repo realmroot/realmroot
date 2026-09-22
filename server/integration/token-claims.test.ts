@@ -3,7 +3,7 @@ import { filterOAuthAccessTokenScopes } from '@server/auth'
 import { buildTokenClaims, ensureRealmrootResourceServer } from '@server/usecases/authorization'
 import { realmrootOrganizationClaim } from '@shared/oauth-token-profile'
 import { decodeProtectedHeader } from 'jose'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   baseURL,
   createHarness,
@@ -16,6 +16,7 @@ import {
 } from './harness'
 
 afterEach(async () => {
+  vi.restoreAllMocks()
   await reset()
   await applyD1Migrations(env.DB, env.TEST_MIGRATIONS)
 })
@@ -305,7 +306,7 @@ describe('OAuth token claim building over real D1', () => {
     expect(claims.authorization?.audience).toBeUndefined()
   })
 
-  it('attenuates client credentials scopes at the Application owner Organization boundary [spec: admin-console/oidc-claim-emission]', async () => {
+  it('attenuates client credentials scopes at the Application owner Organization boundary [spec: admin-console/oidc-claim-emission] [spec: management-api/oauth-resource-initialization]', async () => {
     harness.deps.externalHttp.fetch = contactsScopeOpenApiFetch
     const cookie = await signInAdmin(harness)
     const ownerOrganization = (await (
@@ -352,7 +353,16 @@ describe('OAuth token claim building over real D1', () => {
 
     harness = await createHarness({ validAudiences: [baseURL, audience, ownerAudience] })
     harness.deps.externalHttp.fetch = contactsScopeOpenApiFetch
-    const ownerToken = await issueClientCredentials(harness, application, ownerAudience)
+    expect(await env.DB.prepare('SELECT count(*) AS n FROM oauth_resource').first('n')).toBe(0)
+    const other = await createHarness({ validAudiences: [baseURL, audience, ownerAudience] })
+    other.deps.externalHttp.fetch = contactsScopeOpenApiFetch
+    const [ownerToken, concurrentToken] = await Promise.all([
+      issueClientCredentials(harness, application, ownerAudience),
+      issueClientCredentials(other, application, ownerAudience),
+    ])
+    expect(concurrentToken.scope).toBe('contacts:read')
+    const resources = await env.DB.prepare('SELECT identifier FROM oauth_resource').all()
+    expect(resources.results).toEqual([{ identifier: ownerAudience }])
     expect(ownerToken.scope).toBe('contacts:read')
     const ownerPayload = decodeJwtPayload(ownerToken.access_token)
     expect(ownerPayload).toMatchObject({
@@ -366,9 +376,20 @@ describe('OAuth token claim building over real D1', () => {
     const token = await clientCredentialsResponse(harness, application, audience)
     expect(token.status).toBe(400)
     await expect(token.json()).resolves.toMatchObject({ error: 'invalid_target' })
+    await env.DB.prepare('UPDATE oauth_resource SET access_token_ttl = 123 WHERE identifier = ?')
+      .bind(ownerAudience)
+      .run()
+    harness = await createHarness({ validAudiences: [baseURL, audience, ownerAudience] })
+    const limited = await issueClientCredentials(harness, application, ownerAudience)
+    const claims = decodeJwtPayload(limited.access_token)
+    expect(Number(claims.exp) - Number(claims.iat)).toBe(123)
+    await env.DB.prepare('UPDATE oauth_resource SET disabled = 1 WHERE identifier = ?').bind(ownerAudience).run()
+    const disabled = await clientCredentialsResponse(harness, application, ownerAudience)
+    expect(disabled.status).toBe(400)
+    await expect(disabled.json()).resolves.toMatchObject({ error: 'invalid_target' })
   })
 
-  it('issues a signed Bearer Realmroot resource token to a machine Application', async () => {
+  it('issues a signed Bearer token and rejects an unregistered target [spec: management-api/oauth-resource-initialization]', async () => {
     const cookie = await signInAdmin(harness)
     const realmrootResource = await ensureRealmrootResourceServer(harness.deps, baseURL)
     const application = (await (
@@ -400,6 +421,7 @@ describe('OAuth token claim building over real D1', () => {
       )
       .run()
 
+    const prepare = vi.spyOn(env.DB, 'prepare')
     const token = await harness.request('/api/auth/oauth2/token', {
       method: 'POST',
       headers: {
@@ -424,6 +446,22 @@ describe('OAuth token claim building over real D1', () => {
       [realmrootOrganizationClaim]: platformOrganizationId,
     })
     expect(decodeJwtPayload(body.access_token)).not.toHaveProperty('cnf')
+    expect(prepare.mock.calls.filter(([sql]) => sql.includes('"oauth_resource"'))).toHaveLength(0)
+
+    const rejected = await harness.request('/api/auth/oauth2/token', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+        authorization: `Basic ${btoa(`${application.clientId}:${application.clientSecret}`)}`,
+      },
+      body: new URLSearchParams({
+        grant_type: 'client_credentials',
+        resource: 'https://unregistered.example.com',
+        scope: 'applications:read',
+      }),
+    })
+    expect(rejected.status).toBe(400)
+    expect(await rejected.json()).toMatchObject({ error: 'invalid_target' })
   })
 })
 

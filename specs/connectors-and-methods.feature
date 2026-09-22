@@ -79,3 +79,11 @@ Feature: Connectors and hosted method availability
     Given hosted auth providers are disabled by policy
     When I call their native auth endpoints directly
     Then the endpoints reject the request
+
+  @journey:authentication-config-loading @entrypoint:product-ui @proof:integration
+  Scenario: Auth configuration loads only login credentials
+    Given enabled login and resource-only Connectors with independently encrypted credentials
+    When authentication configuration is initialized
+    Then only authentication-enabled Connectors are loaded
+    And only their login client secrets are decrypted
+    And unrelated resource or registration secrets do not block authentication

@@ -10,6 +10,8 @@ import { type Env, type RuntimeConfig, validateEnv } from '@server/env'
 import { createApp, healthStatus } from '@server/http/app'
 import { readCorrelationId } from '@server/http/correlation'
 import { withRequestErrorBoundary } from '@server/http/request-error-boundary'
+import { withWorkerRequestMetrics } from '@server/http/worker-request-metrics'
+import { withinInitializationDeadline } from '@server/initialization-deadline'
 import { processAccountDeletionCleanup } from '@server/usecases/account-deletion'
 import {
   reconcileRealmrootResourceServer,
@@ -20,6 +22,7 @@ import { loadAuthConnectorConfig } from '@server/usecases/connectors'
 import { publishWebhookEvent } from '@server/usecases/webhooks'
 import { managementBuiltInProviderSettingsSchema } from '@shared/api/management'
 
+const routers = new WeakMap<Auth, ReturnType<typeof createApp>>()
 let cachedAuth: Auth | null = null
 let cachedKey: string | null = null
 let cachedStaticKey: string | null = null
@@ -41,61 +44,68 @@ const emailVerificationPolicyPaths = new Set([
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-    return withRequestErrorBoundary(request, async () => {
-      // Liveness probe answers from the process alone — before any D1 read — so it
-      // reports the worker is up even when the database is unmigrated or down.
-      const path = new URL(request.url).pathname
-      if (path === '/api/health') return Response.json(healthStatus)
-      const publicMetadataCache =
-        request.method === 'GET' && cachedPublicMetadataPaths.has(path)
-          ? await caches.open('realmroot-public-metadata')
-          : null
-      const cached = await publicMetadataCache?.match(request)
-      if (cached) return cached
-      return tracing.enterSpan('realmroot.request.prepare', async (span) => {
-        span.setAttribute('url.path', path)
-        const config = validateEnv(env, request.url)
-        const correlationId = readCorrelationId(request.headers.get('x-correlation-id')) ?? undefined
-        if (correlationId) span.setAttribute('realmroot.correlation_id', correlationId)
-        const deps = createDeps(env, config, correlationId)
-        const resourceTokenRequest = request.headers.get('authorization')?.startsWith('DPoP ') ?? false
-        const [, securityPolicy] = await Promise.all([
-          reconcileResourceOnce(deps, config.baseURL),
-          tracing.enterSpan('realmroot.security-policy.load', () =>
-            resourceTokenRequest
-              ? Promise.resolve(cachedSecurityPolicy ?? config.securityPolicy)
-              : loadSecurityPolicy(env, deps),
-          ),
-        ])
-        const auth = await tracing.enterSpan('realmroot.auth.prepare', () =>
-          getAuth(
-            env,
-            { ...config, securityPolicy },
-            deps,
-            resourceTokenRequest,
-            emailVerificationPolicyPaths.has(path),
-          ),
-        )
-        const response = await tracing.enterSpan('realmroot.router.dispatch', () =>
-          createApp(auth, deps, {
-            baseURL: config.baseURL,
-            trustedOrigins: config.trustedOrigins,
-            securityPolicy,
-            realmrootResourceReconciled: true,
-          }).fetch(request, env, ctx),
-        )
-        if (!publicMetadataCache || !response.ok) return response
-        const headers = new Headers(response.headers)
-        headers.set('Cache-Control', publicMetadataCacheControl)
-        const cacheable = new Response(response.body, {
-          status: response.status,
-          statusText: response.statusText,
-          headers,
+    return withWorkerRequestMetrics(request, () =>
+      withRequestErrorBoundary(request, async () => {
+        // Liveness probe answers from the process alone — before any D1 read — so it
+        // reports the worker is up even when the database is unmigrated or down.
+        const path = new URL(request.url).pathname
+        if (path === '/api/health') return Response.json(healthStatus)
+        const publicMetadataCache =
+          request.method === 'GET' && cachedPublicMetadataPaths.has(path)
+            ? await caches.open('realmroot-public-metadata')
+            : null
+        const cached = await publicMetadataCache?.match(request)
+        if (cached) return cached
+        return tracing.enterSpan('realmroot.request.prepare', async (span) => {
+          span.setAttribute('url.path', path)
+          const config = validateEnv(env, request.url)
+          const correlationId = readCorrelationId(request.headers.get('x-correlation-id')) ?? undefined
+          if (correlationId) span.setAttribute('realmroot.correlation_id', correlationId)
+          const deps = createDeps(env, config, correlationId)
+          const resourceTokenRequest = request.headers.get('authorization')?.startsWith('DPoP ') ?? false
+          const [, securityPolicy] = await Promise.all([
+            reconcileResourceOnce(deps, config.baseURL),
+            tracing.enterSpan('realmroot.security-policy.load', () =>
+              resourceTokenRequest
+                ? Promise.resolve(cachedSecurityPolicy ?? config.securityPolicy)
+                : loadSecurityPolicy(env, deps),
+            ),
+          ])
+          const auth = await tracing.enterSpan('realmroot.auth.prepare', () =>
+            getAuth(
+              env,
+              { ...config, securityPolicy },
+              deps,
+              resourceTokenRequest,
+              emailVerificationPolicyPaths.has(path),
+            ),
+          )
+          let app = routers.get(auth)
+          if (!app) {
+            app = createApp(auth, (c) => c.env.realmrootRequestDeps, {
+              baseURL: config.baseURL,
+              trustedOrigins: config.trustedOrigins,
+              securityPolicy,
+              realmrootResourceReconciled: true,
+            })
+            routers.set(auth, app)
+          }
+          const response = await tracing.enterSpan('realmroot.router.dispatch', () =>
+            app.fetch(request, { ...env, realmrootRequestDeps: deps }, ctx),
+          )
+          if (!publicMetadataCache || !response.ok) return response
+          const headers = new Headers(response.headers)
+          headers.set('Cache-Control', publicMetadataCacheControl)
+          const cacheable = new Response(response.body, {
+            status: response.status,
+            statusText: response.statusText,
+            headers,
+          })
+          ctx.waitUntil(publicMetadataCache.put(request, cacheable.clone()))
+          return cacheable
         })
-        ctx.waitUntil(publicMetadataCache.put(request, cacheable.clone()))
-        return cacheable
-      })
-    })
+      }),
+    )
   },
   async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext) {
     const config = validateEnv(env, env.BETTER_AUTH_URL ?? 'https://scheduled.realmroot.invalid')
@@ -132,12 +142,15 @@ async function getAuth(
   }
   const db = createDb(env.DB)
   const configz = createDrizzleConfigzRepository(db)
-  const [connectors, validAudiences, settings, emailSettings] = await Promise.all([
-    loadAuthConnectorConfig(createConnectorRepository(db, createSecretCipher(config.credentialEncryptionKey))),
-    loadValidAudiences(env.DB, config.baseURL),
-    configz.getSettings(),
-    configz.getEmailSettings(),
-  ])
+  const [connectors, validAudiences, settings, emailSettings] = await withinInitializationDeadline(
+    Promise.all([
+      loadAuthConnectorConfig(createConnectorRepository(db, createSecretCipher(config.credentialEncryptionKey))),
+      loadValidAudiences(env.DB, config.baseURL),
+      configz.getSettings(),
+      configz.getEmailSettings(),
+    ]),
+    'configuration',
+  )
   const storedBuiltInProviders = settings?.metadata?.builtInProviders
   const builtInProviders = managementBuiltInProviderSettingsSchema.parse(
     mergeBuiltInProviders(defaultBuiltInProviders, storedBuiltInProviders),
@@ -161,7 +174,7 @@ async function getAuth(
       : undefined
     const emailSender = createConfiguredEmailSender(env.EMAIL, () => configz.getEmailSettings(), fallbackEmailSender)
 
-    cachedAuth = createAuth(
+    const auth = createAuth(
       db,
       deps.ids,
       config.authSecret,
@@ -181,6 +194,10 @@ async function getAuth(
         },
       },
     )
+    // Better Auth now performs database I/O during initialization. Share only a
+    // ready instance: a failed/cancelled request must not own later requests' I/O.
+    await withinInitializationDeadline(auth.$context, 'provider')
+    cachedAuth = auth
     cachedKey = cacheKey
     cachedStaticKey = staticKey
     cachedDb = env.DB
@@ -199,7 +216,7 @@ async function loadSecurityPolicy(env: Env, deps: ReturnType<typeof createDeps>)
   ) {
     return cachedSecurityPolicy
   }
-  cachedSecurityPolicy = await deps.security.getPolicy()
+  cachedSecurityPolicy = await withinInitializationDeadline(deps.security.getPolicy(), 'security policy')
   cachedSecurityPolicyDb = env.DB
   cachedSecurityPolicyAt = Date.now()
   return cachedSecurityPolicy
@@ -207,7 +224,10 @@ async function loadSecurityPolicy(env: Env, deps: ReturnType<typeof createDeps>)
 
 async function reconcileResourceOnce(deps: ReturnType<typeof createDeps>, baseURL: string) {
   if (reconciledBaseURL === baseURL) return
-  await tracing.enterSpan('realmroot.resource.reconcile', () => reconcileRealmrootResourceServer(deps, baseURL))
+  await withinInitializationDeadline(
+    tracing.enterSpan('realmroot.resource.reconcile', () => reconcileRealmrootResourceServer(deps, baseURL)),
+    'resource reconciliation',
+  )
   reconciledBaseURL = baseURL
 }
 

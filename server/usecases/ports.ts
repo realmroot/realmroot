@@ -447,7 +447,7 @@ export interface RetiredOAuthClientGeneration {
 
 export interface ConnectorRepository {
   list(page: PaginationInput): Promise<{ items: ConnectorRecord[]; total: number }>
-  listEnabled(): Promise<ConnectorRecord[]>
+  listEnabled(options?: { purpose: 'authentication' }): Promise<ConnectorRecord[]>
   findById(id: string): Promise<ConnectorRecord | null>
   findByProviderId(providerId: string): Promise<ConnectorRecord | null>
   countResourceReferences(id: string): Promise<number>
