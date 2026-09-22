@@ -1,6 +1,6 @@
 import { agentAuth } from '@better-auth/agent-auth'
 import { i18n } from '@better-auth/i18n'
-import { oauthProvider } from '@better-auth/oauth-provider'
+import { oauthDeviceAuthorization, oauthProvider } from '@better-auth/oauth-provider'
 import { passkey } from '@better-auth/passkey'
 import type { TransactionalEmailSender } from '@server/adapters/gateways/email/sender'
 import { verifyStoredPassword } from '@server/adapters/gateways/migrated-password'
@@ -19,7 +19,7 @@ import type { ApplicationRepository } from '@server/usecases/ports'
 import { findPlatformOrganization } from '@server/usecases/system-resources'
 import { APIError, betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
-import { deviceAuthorization, genericOAuth, jwt, oneTap, phoneNumber, siwe, twoFactor } from 'better-auth/plugins'
+import { genericOAuth, jwt, oneTap, phoneNumber, siwe, twoFactor } from 'better-auth/plugins'
 import { emailOTP } from 'better-auth/plugins/email-otp'
 import { organization } from 'better-auth/plugins/organization'
 import { username } from 'better-auth/plugins/username'
@@ -122,13 +122,11 @@ export function createAuth(
     advanced: {
       database: {
         generateId: () => ids.generate(),
+        joins: true,
       },
     },
     secret,
     baseURL,
-    experimental: {
-      joins: true,
-    },
     disabledPaths: [
       '/token',
       ...(!securityPolicy.passkeys.enabled
@@ -375,7 +373,7 @@ export function createAuth(
           })
         },
       }),
-      deviceAuthorization({
+      oauthDeviceAuthorization({
         verificationUri: '/auth/device',
         schema: {},
         ...createDeviceAuthorizationOptions(applications),
@@ -502,7 +500,8 @@ export function createAuth(
         loginPage: '/auth/sign-in',
         consentPage: '/auth/consent',
         scopes: oauthScopes,
-        validAudiences: options.validAudiences,
+        resources: options.validAudiences,
+        enforcePerClientResources: false,
         postLogin: {
           page: '/auth/context',
           consentReferenceId: async ({ referenceId, user }) => {
@@ -551,17 +550,20 @@ export function createAuth(
           },
         },
         filterAccessTokenScopes: (input) => filterOAuthAccessTokenScopes(deps, input),
-        customAccessTokenClaims: (input) => buildOAuthAccessTokenClaims(deps, input),
-        customIdTokenClaims: (input) => buildOAuthIdTokenClaims(deps, input),
+        customAccessTokenClaims: (input) =>
+          buildOAuthAccessTokenClaims(deps, { ...input, resource: input.resources?.[0] }),
+        extensions: [
+          {
+            claims: {
+              idToken: (input) => (input.user ? buildOAuthIdTokenClaims(deps, { ...input, user: input.user }) : {}),
+            },
+          },
+        ],
         idTokenExpiresIn: 10 * 60,
         clientRegistrationDefaultScopes: ['openid', 'profile', 'email', 'groups'],
         clientRegistrationAllowedScopes: [...userConfigurableApplicationScopes],
         storeClientSecret: 'hashed',
         storeTokens: 'hashed',
-        silenceWarnings: {
-          oauthAuthServerConfig: true,
-          openidConfig: true,
-        },
       }),
     ],
   })
@@ -626,16 +628,15 @@ export function createAuth(
             )
         }
       }
-      const normalizedRequest = await normalizeDeviceAuthorizationRequest(request)
       const deviceAdmissionError = await enforceDeviceApprovalAccess(
-        normalizedRequest,
+        request,
         (headers) => auth.api.getSession({ headers, asResponse: false }),
         db,
         applications,
         deps,
       )
       if (deviceAdmissionError) return deviceAdmissionError
-      const response = await auth.handler(await withOAuthConsentContext(normalizedRequest))
+      const response = await auth.handler(await withOAuthConsentContext(request))
       if (new URL(request.url).pathname.endsWith('/oauth2/introspect') && response.ok) {
         const result = (await response.clone().json()) as { active?: boolean; sub?: string }
         if (result.active && result.sub) {
@@ -646,7 +647,7 @@ export function createAuth(
           if (subject?.deletedAt) return Response.json({ active: false }, { headers: { 'Cache-Control': 'no-store' } })
         }
       }
-      return translateNonInteractiveConsentError(normalizedRequest, response)
+      return translateNonInteractiveConsentError(request, response)
     },
   }
 }
@@ -702,23 +703,6 @@ async function validateTeamName(db: Database, organizationId: string, name: stri
   if (duplicate.length) {
     throw new APIError('CONFLICT', { message: 'A Team with this name already exists in the Organization.' })
   }
-}
-
-export async function normalizeDeviceAuthorizationRequest(request: Request) {
-  const url = new URL(request.url)
-  if (request.method !== 'POST' || !url.pathname.endsWith('/device/code')) return request
-
-  const mediaType = request.headers.get('content-type')?.split(';', 1)[0]?.trim().toLowerCase()
-  if (mediaType !== 'application/x-www-form-urlencoded') return request
-
-  const parameters = await request.clone().formData()
-  const headers = new Headers(request.headers)
-  headers.set('content-type', 'application/json')
-  headers.delete('content-length')
-  return new Request(request, {
-    headers,
-    body: JSON.stringify(Object.fromEntries(parameters.entries())),
-  })
 }
 
 async function withOAuthConsentContext(request: Request) {

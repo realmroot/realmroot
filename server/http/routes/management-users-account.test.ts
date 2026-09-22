@@ -275,9 +275,9 @@ describe('management users and account routes', () => {
       },
       headers: expect.any(Headers),
     })
-    expect(auth.api.oAuth2LinkAccount).toHaveBeenCalledWith({
+    expect(auth.api.linkSocialAccount).toHaveBeenCalledWith({
       body: {
-        providerId: 'okta-main',
+        provider: 'okta-main',
         callbackURL: '/account/linked-accounts',
         errorCallbackURL: undefined,
         scopes: undefined,
@@ -286,8 +286,7 @@ describe('management users and account routes', () => {
     })
     expect(auth.api.unlinkAccount).toHaveBeenCalledWith({
       body: {
-        providerId: 'google',
-        accountId: 'google-account-1',
+        accountId: 'local-account-1',
       },
       headers: expect.any(Headers),
     })
@@ -359,6 +358,7 @@ function createUserRepositoryMock(): UserRepository {
     updateProfile: vi.fn().mockResolvedValue({ id: 'user-1' }),
     assertAccountAvatarReference: vi.fn().mockResolvedValue(undefined),
     assertAdminAvatarReference: vi.fn().mockResolvedValue(undefined),
+    findLinkedAccountId: vi.fn().mockResolvedValue('local-account-1'),
     listLinkedAccounts: vi.fn().mockImplementation((_userId, page) => Promise.resolve(createPage(page))),
     listSessions: vi.fn().mockImplementation((_userId, page) => Promise.resolve(createPage(page))),
     getSessionToken: vi.fn().mockResolvedValue('session-token-1'),

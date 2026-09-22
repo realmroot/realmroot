@@ -9,6 +9,9 @@ system, not as a second copy of executable contracts or product behaviour.
 - [Value proposition](product/value-proposition.md): the Agent tool plane,
   identity and trust infrastructure, product thesis, and responsibility
   boundaries, in English and Chinese.
+- [Connector candidate catalog](product/connector-candidate-catalog.md): the
+  prioritized discovery queue for Resource providers that could become
+  available through Realmroot Toolbox.
 
 ## Architecture
 

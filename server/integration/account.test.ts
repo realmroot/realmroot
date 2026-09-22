@@ -587,6 +587,30 @@ describe('account self-service over real D1', () => {
     expect(apps.status).toBe(200)
   })
 
+  it('resolves legacy unlink selectors to local account IDs within the signed-in user', async () => {
+    const { cookie, userId } = await signedInUser(harness)
+    await harness.db.insert(authAccount).values({
+      id: 'local-linked-account',
+      providerId: 'github',
+      accountId: 'provider-subject',
+      userId,
+    })
+    const missing = await harness.request('/api/account/linked-accounts/google?accountId=provider-subject', {
+      method: 'DELETE',
+      headers: { cookie },
+    })
+    expect(missing.status).toBe(400)
+    const unlinked = await harness.request('/api/account/linked-accounts/github?accountId=provider-subject', {
+      method: 'DELETE',
+      headers: { cookie },
+    })
+    expect(unlinked.status, await unlinked.clone().text()).toBe(200)
+    expect(await harness.db.select().from(authAccount).where(eq(authAccount.id, 'local-linked-account'))).toEqual([])
+    expect((await harness.db.select().from(authAccount).where(eq(authAccount.userId, userId))).length).toBeGreaterThan(
+      0,
+    )
+  })
+
   it('[spec: account-center/provider-connections] creates a provider connection intent through real HTTP and D1', async () => {
     const { cookie, userId } = await signedInUser(harness)
     const now = new Date()

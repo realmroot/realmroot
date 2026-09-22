@@ -157,10 +157,10 @@ describe('account API client over the real network boundary', () => {
     expect((body as { provider: string }).provider).toBe('github')
   })
 
-  it('links a generic oauth provider via the oauth2 link endpoint', async () => {
+  it('links a generic oauth provider via the social link endpoint', async () => {
     let body: unknown = null
     realClientServer.use(
-      http.post(`${base}/api/auth/oauth2/link`, async ({ request }) => {
+      http.post(`${base}/api/auth/link-social`, async ({ request }) => {
         body = await request.json()
         return HttpResponse.json({ url: '/oauth-redirect' })
       }),
@@ -172,7 +172,7 @@ describe('account API client over the real network boundary', () => {
       scopes: ['email'],
     })
     expect(result).toEqual({ url: '/oauth-redirect' })
-    expect((body as { providerId: string }).providerId).toBe('custom')
+    expect((body as { provider: string }).provider).toBe('custom')
   })
 
   it('builds the register-options query and posts verification', async () => {

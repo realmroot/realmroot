@@ -1,0 +1,391 @@
+diff --git a/dist/authorize-riRRCSbC.mjs b/dist/authorize-riRRCSbC.mjs
+index 3242d48eb31e844240b0cd9f5931580f3c5367c2..e8f19013d01dc55e74f0b37647a496fa11723892 100644
+--- a/dist/authorize-riRRCSbC.mjs
++++ b/dist/authorize-riRRCSbC.mjs
+@@ -64,10 +64,18 @@ async function consentEndpoint(ctx, opts, authorize) {
+ 		ctx.query = searchParamsToQuery(query);
+ 		return await authorize(ctx);
+ 	}
++	const postLoginCleared = oauthRequest?.postLoginClearedForSession === session?.session.id;
++	const contextSelected = postLoginCleared && query.get("ba_ctx") === "1";
++	const selectedReferenceId = contextSelected ? query.get("ba_ref") ?? void 0 : void 0;
++	if (contextSelected && !selectedReferenceId) throw new APIError("BAD_REQUEST", {
++		error_description: "missing post-login consent reference id",
++		error: "invalid_request"
++	});
+ 	const referenceId = await opts.postLogin?.consentReferenceId?.({
+ 		user: session?.user,
+ 		session: session?.session,
+-		scopes: requestedScopes ?? originalRequestedScopes
++		scopes: requestedScopes ?? originalRequestedScopes,
++		referenceId: selectedReferenceId
+ 	});
+ 	const foundConsent = await ctx.context.adapter.findOne({
+ 		model: "oauthConsent",
+@@ -130,14 +138,14 @@ async function consentEndpoint(ctx, opts, authorize) {
+ 		authorizationQuery = removeMaxAgeFromQuery(authorizationQuery);
+ 	}
+ 	ctx.query = searchParamsToQuery(authorizationQuery);
+-	return await authorize(ctx, { postLogin: oauthRequest?.postLoginClearedForSession !== void 0 && oauthRequest.postLoginClearedForSession === session?.session.id });
++	return await authorize(ctx, { postLogin: postLoginCleared, contextSelected, referenceId });
+ }
+ //#endregion
+ //#region src/continue.ts
+-async function continueEndpoint(ctx, authorize) {
++async function continueEndpoint(ctx, authorize, opts) {
+ 	if (ctx.body.selected === true) return await selected(ctx, authorize);
+ 	else if (ctx.body.created === true) return await created(ctx, authorize);
+-	else if (ctx.body.postLogin === true) return await postLogin(ctx, authorize);
++	else if (ctx.body.postLogin === true) return await postLogin(ctx, authorize, opts);
+ 	else throw new APIError("BAD_REQUEST", {
+ 		error_description: "Missing parameters",
+ 		error: "invalid_request"
+@@ -164,7 +172,7 @@ async function created(ctx, authorize) {
+ 	ctx.query = searchParamsToQuery(removePromptFromQuery(query, "create"));
+ 	return await authorize(ctx);
+ }
+-async function postLogin(ctx, authorize) {
++async function postLogin(ctx, authorize, opts) {
+ 	const state = await oAuthState.get();
+ 	const _query = state?.query;
+ 	if (!_query) throw new APIError("BAD_REQUEST", {
+@@ -172,12 +180,54 @@ async function postLogin(ctx, authorize) {
+ 		error: "invalid_request"
+ 	});
+ 	const query = new URLSearchParams(_query);
++	const referenceId = ctx.body.consentReferenceId;
++	if (typeof referenceId !== "string" || !referenceId) throw new APIError("BAD_REQUEST", {
++		error_description: "missing consent reference id",
++		error: "invalid_request"
++	});
++	const signature = new URLSearchParams(ctx.body.oauth_query).get("sig");
++	const session = await getSessionFromCtx(ctx);
++	const identifier = signature ? `oauth_post_login:${signature}` : "";
++	const attempt = identifier ? await ctx.context.internalAdapter.findVerificationValue(identifier) : null;
++	if (!attempt) throw new APIError("BAD_REQUEST", {
++		error_description: "post-login authorization attempt is missing or already used",
++		error: "invalid_request"
++	});
++	let attemptSessionId;
++	try {
++		attemptSessionId = JSON.parse(attempt.value).sessionId;
++	} catch {}
++	if (!session?.session.id || attemptSessionId !== session.session.id) throw new APIError("FORBIDDEN", {
++		error_description: "post-login authorization attempt belongs to another session",
++		error: "access_denied"
++	});
++	const validatedReferenceId = await opts.postLogin?.consentReferenceId?.({
++		user: session.user,
++		session: session.session,
++		scopes: (query.get("scope") ?? "").split(/\s+/).filter(Boolean),
++		referenceId
++	});
++	if (!validatedReferenceId) throw new APIError("FORBIDDEN", {
++		error_description: "the selected authorization Context is unavailable",
++		error: "access_denied"
++	});
++	const consumedAttempt = await ctx.context.internalAdapter.consumeVerificationValue(identifier);
++	if (!consumedAttempt) throw new APIError("BAD_REQUEST", {
++		error_description: "post-login authorization attempt is missing or already used",
++		error: "invalid_request"
++	});
++	query.set("ba_ref", validatedReferenceId);
+ 	ctx.headers?.set("accept", "application/json");
+ 	ctx.query = searchParamsToQuery(query);
+-	const session = await getSessionFromCtx(ctx);
+-	return await authorize(ctx, { postLogin: state?.postLoginClearedForSession !== void 0 && state.postLoginClearedForSession === session?.session.id });
++	return await authorize(ctx, {
++		postLogin: true,
++		contextSelected: true,
++		referenceId: validatedReferenceId
++	});
+ }
+ //#endregion
++//#region src/types/zod.ts
++//#endregion
+ //#region src/logout.ts
+ const BACKCHANNEL_LOGOUT_EVENT_URI = "http://schemas.openid.net/event/backchannel-logout";
+ const LOGOUT_TOKEN_JWT_TYP = "logout+jwt";
+@@ -4557,6 +4607,7 @@ const oauthProvider = (options) => {
+ 				body: z.object({
+ 					selected: z.boolean().optional().meta({ description: "Confirms an account has been selected and authorization can proceed." }),
+ 					created: z.boolean().optional().meta({ description: "Confirms an account was registered" }),
++					consentReferenceId: z.string().optional(),
+ 					postLogin: z.boolean().optional().meta({ description: "Confirms organization and/or team selection." }),
+ 					oauth_query: z.string().optional().meta({ description: "The redirected page's query parameters" })
+ 				}),
+@@ -4577,7 +4628,7 @@ const oauthProvider = (options) => {
+ 					} }
+ 				} }
+ 			}, async (ctx) => {
+-				return continueEndpoint(ctx, runOAuth2Authorize);
++				return continueEndpoint(ctx, runOAuth2Authorize, opts);
+ 			}),
+ 			oauth2Token: createOAuthEndpoint("/oauth2/token", {
+ 				method: "POST",
+@@ -5631,22 +5682,34 @@ async function authorizeEndpoint(ctx, opts, settings) {
+ 			return redirectWithPromptCode(ctx, opts, "create", { page: typeof signupRedirect === "string" ? signupRedirect : void 0 });
+ 		}
+ 	}
++	let postLoginReferenceId;
+ 	if (!settings?.postLogin && opts.postLogin) {
+-		if (await opts.postLogin.shouldRedirect({
++		const postLoginResult = await opts.postLogin.shouldRedirect({
+ 			headers: request.headers,
+ 			user: session.user,
+ 			session: session.session,
+ 			scopes: requestedScopes
+-		})) {
++		});
++		if (postLoginResult === true) {
+ 			if (promptNone) return redirectWithPromptNoneError(ctx, opts, query, "interaction_required", "End-User interaction is required");
+-			return redirectWithPromptCode(ctx, opts, "post_login");
+-		}
++			return redirectWithPromptCode(ctx, opts, "post_login", { sessionId: session.session.id });
++		} else if (typeof postLoginResult === "string") postLoginReferenceId = postLoginResult;
+ 	}
+-	if (promptSet?.has("consent")) return redirectWithPromptCode(ctx, opts, "consent", { sessionId: session.session.id });
++	const contextSelected = postLoginReferenceId !== void 0 || settings?.contextSelected === true || settings?.postLogin && query.ba_ctx === "1";
++	const selectedReferenceId = postLoginReferenceId ?? (contextSelected ? settings?.referenceId ?? (typeof query.ba_ref === "string" ? query.ba_ref : void 0) : void 0);
++	if (contextSelected && !selectedReferenceId) throw new APIError$1("BAD_REQUEST", {
++		error_description: "missing post-login consent reference id",
++		error: "invalid_request"
++	});
++	if (promptSet?.has("consent")) return redirectWithPromptCode(ctx, opts, "consent", {
++		sessionId: session.session.id,
++		referenceId: selectedReferenceId
++	});
+ 	const referenceId = await opts.postLogin?.consentReferenceId?.({
+ 		user: session.user,
+ 		session: session.session,
+-		scopes: requestedScopes
++		scopes: requestedScopes,
++		referenceId: selectedReferenceId
+ 	});
+ 	if (client.skipConsent) return redirectWithAuthorizationCode(ctx, opts, {
+ 		query,
+@@ -5676,12 +5739,12 @@ async function authorizeEndpoint(ctx, opts, settings) {
+ 	});
+ 	if (!consent || !requestedScopes.every((val) => consent.scopes.includes(val)) || !requestedUserInfoClaims.every((claim) => (consent.requestedUserInfoClaims ?? []).includes(claim))) {
+ 		if (promptNone) return redirectWithPromptNoneError(ctx, opts, query, "consent_required", "End-User consent is required");
+-		return redirectWithPromptCode(ctx, opts, "consent", { sessionId: session.session.id });
++		return redirectWithPromptCode(ctx, opts, "consent", { sessionId: session.session.id, referenceId });
+ 	}
+ 	const consentedResources = consent?.resources ?? [];
+ 	if (requestedResources.some((requestedResource) => !consentedResources.includes(requestedResource))) {
+ 		if (promptNone) return redirectWithPromptNoneError(ctx, opts, query, "consent_required", "End-User consent is required");
+-		return redirectWithPromptCode(ctx, opts, "consent", { sessionId: session.session.id });
++		return redirectWithPromptCode(ctx, opts, "consent", { sessionId: session.session.id, referenceId });
+ 	}
+ 	return redirectWithAuthorizationCode(ctx, opts, {
+ 		query,
+@@ -5732,7 +5795,24 @@ async function redirectWithAuthorizationCode(ctx, opts, verificationValue) {
+ 	return handleRedirect(ctx, redirectUriWithCode.toString());
+ }
+ async function redirectWithPromptCode(ctx, opts, type, options) {
+-	const queryParams = await signParams(ctx, opts, { postLoginClearedForSession: type === "consent" && opts.postLogin ? options?.sessionId : void 0 });
++	const queryParams = await signParams(ctx, opts, {
++		postLoginClearedForSession: type === "consent" && opts.postLogin ? options?.sessionId : void 0,
++		consentReferenceId: type === "consent" && opts.postLogin ? options?.referenceId : void 0
++	});
++	if (type === "post_login") {
++		const signed = new URLSearchParams(queryParams);
++		const signature = signed.get("sig");
++		const expiresAt = new Date(Number(signed.get("exp")) * 1e3);
++		if (!signature || !options?.sessionId || !Number.isFinite(expiresAt.getTime())) throw new APIError$1("INTERNAL_SERVER_ERROR", { error_description: "unable to create post-login authorization attempt" });
++		const now = /* @__PURE__ */ new Date();
++		await ctx.context.internalAdapter.createVerificationValue({
++			identifier: `oauth_post_login:${signature}`,
++			value: JSON.stringify({ sessionId: options.sessionId }),
++			createdAt: now,
++			updatedAt: now,
++			expiresAt
++		});
++	}
+ 	let path = opts.loginPage;
+ 	if (type === "select_account") path = opts.selectAccount?.page ?? opts.loginPage;
+ 	else if (type === "post_login") {
+@@ -5750,7 +5830,13 @@ async function signParams(ctx, opts, flags) {
+ 	params.set(signedQueryIssuedAtParam, String(issuedAt));
+ 	params.delete("sig");
+ 	params.delete(postLoginClearedParam);
++	params.delete("ba_ref");
++	params.delete("ba_ctx");
+ 	if (flags?.postLoginClearedForSession) params.set(postLoginClearedParam, flags.postLoginClearedForSession);
++	if (flags?.consentReferenceId) {
++		params.set("ba_ctx", "1");
++		params.set("ba_ref", flags.consentReferenceId);
++	}
+ 	setSignedOAuthQueryParameterNames(params);
+ 	const signature = await makeSignature(canonicalizeOAuthQueryParams(params).toString(), ctx.context.secret);
+ 	params.set("sig", signature);
+diff --git a/dist/introspect-njKASm3q.mjs b/dist/introspect-njKASm3q.mjs
+index c8d635e57ca4cd3fe8f7cbfd5c769d61b7e96874..9189fb06336de345bc17a279b591391d2c7f4487 100644
+--- a/dist/introspect-njKASm3q.mjs
++++ b/dist/introspect-njKASm3q.mjs
+@@ -829,7 +829,9 @@ async function seedResources(ctx, opts) {
+ 				}]
+ 			});
+ 		} catch (err) {
+-			const message = err instanceof Error ? err.message : String(err);
++			let cause = err;
++            while (cause instanceof Error && cause.cause instanceof Error) cause = cause.cause;
++            const message = cause instanceof Error ? cause.message : String(cause);
+ 			if (MISSING_TABLE_PATTERN.test(message)) {
+ 				logger.debug("oauth-provider: oauthResource table not yet created; deferring resource seed to first access.");
+ 				return;
+@@ -844,7 +846,9 @@ async function seedResources(ctx, opts) {
+ 					data: buildSeedRow(input, now)
+ 				});
+ 			} catch (err) {
+-				const message = err instanceof Error ? err.message : String(err);
++				let cause = err;
++            while (cause instanceof Error && cause.cause instanceof Error) cause = cause.cause;
++            const message = cause instanceof Error ? cause.message : String(cause);
+ 				if (/unique|duplicate|UNIQUE/i.test(message)) {
+ 					logger.debug(`oauth-provider: resource ${input.identifier} already inserted by a concurrent process — skipping.`);
+ 					continue;
+@@ -1350,7 +1354,7 @@ async function createJwtAccessToken(ctx, opts, user, client, audienceClaim, scop
+ 	const iat = overrides?.iat ?? Math.floor(Date.now() / 1e3);
+ 	const exp = overrides?.exp ?? iat + (opts.accessTokenExpiresIn ?? 3600);
+ 	const jwtPluginOptions = getJwtPlugin(ctx.context).options;
+-	const subject = user?.id ?? client.clientId;
++	const subject = user?.id ?? parseClientMetadata(client.metadata)?.applicationId ?? client.clientId;
+ 	return signJWT(ctx, {
+ 		options: jwtPluginOptions,
+ 		header: { typ: JWT_ACCESS_TOKEN_TYPE },
+@@ -1361,7 +1365,6 @@ async function createJwtAccessToken(ctx, opts, user, client, audienceClaim, scop
+ 			sub: subject,
+ 			aud: toAudienceClaim(audienceClaim),
+ 			client_id: client.clientId,
+-			azp: client.clientId,
+ 			scope: scopes.join(" "),
+ 			sid: overrides?.sid,
+ 			iss: jwtPluginOptions?.jwt?.issuer ?? ctx.context.baseURL,
+@@ -1792,8 +1795,16 @@ async function createUserTokens(ctx, opts, params) {
+ 		iat,
+ 		scopeExpiresAtSeconds: scopeExp
+ 	});
+-	const audienceClaim = grantIssuance.audienceClaim;
+-	const effectiveScopes = grantIssuance.effectiveScopes;
++	const audienceClaim = params.resources?.[0] ?? (scopes.includes("openid") ? `${ctx.context.baseURL}/oauth2/userinfo` : ctx.context.baseURL);
++	if ((params.resources?.length ?? 0) > 1) throw new APIError("BAD_REQUEST", {
++        error: "invalid_target", error_description: "request one resource per access token"
++    });
++    const filteredScopes = opts.filterAccessTokenScopes ? await opts.filterAccessTokenScopes({
++        user, scopes: grantIssuance.effectiveScopes, resource: params.resources?.[0],
++        referenceId, metadata: parseClientMetadata(client.metadata), grantType
++    }) : grantIssuance.effectiveScopes;
++    const allowedScopes = new Set(filteredScopes);
++    const effectiveScopes = grantIssuance.effectiveScopes.filter((scope) => allowedScopes.has(scope));
+ 	const exp = grantIssuance.accessTokenExpiresAtSeconds;
+ 	const refreshTokenExp = grantIssuance.refreshTokenExpiresAtSeconds;
+ 	const isRefreshToken = user && clientAllowsGrant(client, "refresh_token") && (existingRefreshToken?.scopes?.includes("offline_access") || scopes.includes("offline_access"));
+@@ -1830,7 +1841,7 @@ async function createUserTokens(ctx, opts, params) {
+ 		refreshToken: existingRefreshToken
+ 	});
+ 	const requestedUserInfoClaims = params.requestedUserInfoClaims ?? existingRefreshToken?.requestedUserInfoClaims ?? [];
+-	const earlyRefreshToken = isRefreshToken && user && !isJwtAccessToken ? await createRefreshToken(ctx, opts, user, referenceId, params.authorizationCodeId, client, effectiveScopes, {
++	const earlyRefreshToken = isRefreshToken && user && !isJwtAccessToken ? await createRefreshToken(ctx, opts, user, referenceId, params.authorizationCodeId, client, scopes, {
+ 		iat,
+ 		exp: refreshTokenExp,
+ 		sid: sessionId
+@@ -1861,7 +1872,7 @@ async function createUserTokens(ctx, opts, params) {
+ 		iat,
+ 		exp,
+ 		sid: sessionId
+-	}, params?.resources, referenceId, params.authorizationCodeId, earlyRefreshToken?.id, confirmation, requestedUserInfoClaims), earlyRefreshToken ? earlyRefreshToken : isRefreshToken && user ? createRefreshToken(ctx, opts, user, referenceId, params.authorizationCodeId, client, effectiveScopes, {
++	}, params?.resources, referenceId, params.authorizationCodeId, earlyRefreshToken?.id, confirmation, requestedUserInfoClaims), earlyRefreshToken ? earlyRefreshToken : isRefreshToken && user ? createRefreshToken(ctx, opts, user, referenceId, params.authorizationCodeId, client, scopes, {
+ 		iat,
+ 		exp: refreshTokenExp,
+ 		sid: sessionId
+@@ -2157,7 +2168,6 @@ async function handleRefreshTokenGrant(ctx, opts) {
+ 				error: "invalid_grant"
+ 			});
+ 		}
+-		await invalidateRefreshFamily(ctx, client_id, refreshToken.userId);
+ 		throw new APIError("BAD_REQUEST", {
+ 			error_description: "invalid refresh token",
+ 			error: "invalid_grant"
+@@ -2261,12 +2271,13 @@ async function validateJwtAccessToken(ctx, opts, token, clientId) {
+ 	}
+ 	const rawAud = jwtPayload.aud;
+ 	if (!await isAudienceClaimAllowed(ctx, opts, rawAud, [userInfoAud])) return { active: false };
+-	if (!jwtPayload.azp) return { active: false };
+-	const client = await getClient(ctx, opts, jwtPayload.azp);
++	const tokenClientId = jwtPayload.client_id ?? jwtPayload.azp;
++	if (typeof tokenClientId !== "string") return { active: false };
++	const client = await getClient(ctx, opts, tokenClientId);
+ 	if (!client || client?.disabled) return { active: false };
+ 	if (!await isIntrospectionAuthorized(ctx, opts, {
+ 		introspectingClientId: clientId,
+-		issuerClientId: jwtPayload.azp,
++		issuerClientId: tokenClientId,
+ 		audienceResources: audienceResourceIdentifiers(rawAud, userInfoAud)
+ 	})) return { active: false };
+ 	const sessionId = jwtPayload.sid;
+@@ -2280,7 +2291,8 @@ async function validateJwtAccessToken(ctx, opts, token, clientId) {
+ 		});
+ 		if (!session || session.expiresAt < /* @__PURE__ */ new Date()) return { active: false };
+ 	}
+-	jwtPayload.client_id = jwtPayload.azp;
++	jwtPayload.client_id = tokenClientId;
++	delete jwtPayload.azp;
+ 	jwtPayload.active = true;
+ 	jwtPayload.token_type = confirmationTokenType(jwtPayload.cnf);
+ 	return jwtPayload;
+diff --git a/dist/oauth-1Ud-hvZY.d.mts b/dist/oauth-1Ud-hvZY.d.mts
+index 130fd5d8f3ddd36d1b776338367af5b8cb7f0e79..c6efe3c77216b6067ddf2cf4e73fca9482470499 100644
+--- a/dist/oauth-1Ud-hvZY.d.mts
++++ b/dist/oauth-1Ud-hvZY.d.mts
+@@ -1552,6 +1552,7 @@ interface OAuthOptions<Scopes extends readonly Scope[] = InternallySupportedScop
+       user: User & Record<string, unknown>;
+       session: Session & Record<string, unknown>;
+       scopes: Scopes;
++      referenceId?: string;
+     }) => Awaitable<string | undefined>;
+     /**
+      * After login and before consent, request the user to
+@@ -1564,13 +1565,14 @@ interface OAuthOptions<Scopes extends readonly Scope[] = InternallySupportedScop
+      * @returns
+      * - `true`: account is not selected and needs selection
+      * - `false`: intended user or account selected
++     * - `string`: the sole consent reference ID selected without interaction
+      */
+     shouldRedirect: (context: {
+       headers: Headers;
+       user: User & Record<string, unknown>;
+       session: Session & Record<string, unknown>;
+       scopes: Scopes;
+-    }) => Awaitable<boolean>;
++    }) => Awaitable<boolean | string>;
+   };
+   /**
+    * Format your refresh tokens the returned to oauth clients.
+@@ -1695,6 +1697,14 @@ interface OAuthOptions<Scopes extends readonly Scope[] = InternallySupportedScop
+    *
+    * @param info - context that may be useful when creating custom claims
+    */
++  filterAccessTokenScopes?: (info: {
++    user?: (User & Record<string, unknown>) | null;
++    scopes: Scopes;
++    resource?: string;
++    referenceId?: string;
++    metadata?: Record<string, any>;
++    grantType: GrantType;
++  }) => Awaitable<Scopes>;
+   customAccessTokenClaims?: (info: {
+     /** The user object if token is associated to a user. Null if user doesn't exist. Undefined if user not applicable. */user?: (User & Record<string, unknown>) | null; /** reference of the consent/authorization */
+     referenceId?: string; /** Scopes granted for this token */
+diff --git a/dist/oauth-CJ85_W0W.d.mts b/dist/oauth-CJ85_W0W.d.mts
+index 4e3c1a512ab3a3658e4a22516d2dfcea0b001ac5..261c2beb6bbb1607cd0d7f92182ddd431b8a0ee9 100644
+--- a/dist/oauth-CJ85_W0W.d.mts
++++ b/dist/oauth-CJ85_W0W.d.mts
+@@ -943,6 +943,7 @@ declare const oauthProvider: <O extends OAuthOptions<Scope[]>>(options: O) => {
+         selected: z.ZodOptional<z.ZodBoolean>;
+         created: z.ZodOptional<z.ZodBoolean>;
+         postLogin: z.ZodOptional<z.ZodBoolean>;
++        consentReferenceId: z.ZodOptional<z.ZodString>;
+         oauth_query: z.ZodOptional<z.ZodString>;
+       }, z.core.$strip>;
+       use: _$better_call0.Middleware<_$better_call0.MiddlewareOptions, (inputContext: _$better_call0.MiddlewareInputContext<_$better_call0.MiddlewareOptions>) => Promise<{

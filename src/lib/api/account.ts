@@ -238,15 +238,6 @@ export function linkAccount(input: {
   errorCallbackURL?: string
   scopes?: string[]
 }) {
-  if (input.providerType === 'generic_oauth') {
-    return nativeAuth('/oauth2/link', {
-      providerId: input.providerId,
-      callbackURL: input.callbackURL,
-      errorCallbackURL: input.errorCallbackURL,
-      scopes: input.scopes,
-    })
-  }
-
   return nativeAuth('/link-social', {
     provider: input.providerId,
     callbackURL: input.callbackURL,

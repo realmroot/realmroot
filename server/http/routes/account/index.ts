@@ -305,20 +305,6 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
     const body = await readJson(c, linkAccountRequestSchema)
 
     try {
-      if (body.providerType === 'generic_oauth') {
-        return c.json(
-          await authApi.oAuth2LinkAccount({
-            body: {
-              providerId: body.providerId,
-              callbackURL: body.callbackURL,
-              errorCallbackURL: body.errorCallbackURL,
-              scopes: body.scopes,
-            },
-            headers: c.req.raw.headers,
-          }),
-        )
-      }
-
       return c.json(
         await authApi.linkSocialAccount({
           body: {
@@ -343,13 +329,18 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
       securityPolicy,
     )
     const query = readQuery(c, unlinkAccountQuerySchema)
+    const accountId = await getDeps(c).users.findLinkedAccountId(
+      getPrincipal(c).user!.id,
+      c.req.param('providerId'),
+      query.accountId,
+    )
+    if (!accountId) throw badRequest('Account not found.')
 
     try {
       return c.json(
         await authApi.unlinkAccount({
           body: {
-            providerId: c.req.param('providerId'),
-            accountId: query.accountId,
+            accountId,
           },
           headers: c.req.raw.headers,
         }),

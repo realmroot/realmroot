@@ -149,6 +149,7 @@ Feature: Account Center
     And the Provider account uses a different verified email from my Realmroot account
     When I link sign-in from the existing Provider Connection
     Then Realmroot redirects me through the Provider account-linking flow
+    And social and generic OAuth Connectors use the same social account-linking endpoint
     And the existing Provider Connection gains sign-in without creating a second connection
     And the connection keeps the account label returned by the Provider
 

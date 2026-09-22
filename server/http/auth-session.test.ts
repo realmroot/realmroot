@@ -74,7 +74,7 @@ describe('auth.test 1', () => {
       ],
       code_challenge_methods_supported: ['S256'],
       scopes_supported: ['openid', 'profile', 'email', 'groups', 'offline_access'],
-      token_endpoint_auth_methods_supported: ['client_secret_basic', 'client_secret_post'],
+      token_endpoint_auth_methods_supported: ['client_secret_basic', 'client_secret_post', 'private_key_jwt'],
       id_token_signing_alg_values_supported: ['RS256'],
     })
     expect(metadata.token_endpoint_auth_methods_supported).not.toContain('none')
@@ -102,7 +102,7 @@ describe('auth.test 1', () => {
     expect(response.status).toBe(400)
     await expect(response.json()).resolves.toMatchObject({
       error: 'invalid_request',
-      error_description: 'client_id is required',
+      error_description: 'device_code is required',
     })
   })
 
@@ -125,8 +125,8 @@ describe('auth.test 1', () => {
 
     expect(response.status).toBe(400)
     await expect(response.json()).resolves.toMatchObject({
-      code: 'VALIDATION_ERROR',
-      message: expect.stringContaining('body.client_id'),
+      error: 'invalid_request',
+      error_description: 'client_id is required',
     })
   })
 

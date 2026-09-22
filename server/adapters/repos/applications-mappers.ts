@@ -67,6 +67,8 @@ export function toOAuthClientInsert(
     responseTypes: serializeList(['code']),
     public: input.public,
     type: input.clientType,
+    applicationType: input.clientType === 'public_native' ? 'native' : 'web',
+    clientCredentialsScopes: serializeList([...new Set(input.resourceScopes.flatMap((resource) => resource.scopes))]),
     requirePKCE: input.requirePkce,
     scopes: serializeList([
       ...input.oidcScopes,
