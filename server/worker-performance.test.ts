@@ -27,6 +27,7 @@ vi.mock('@server/adapters/gateways/email/sender', () => ({
   isEmailDeliveryReady: () => false,
 }))
 vi.mock('@server/adapters/repos/configz', () => ({
+  readBuiltInProviderSettings: async () => undefined,
   createDrizzleConfigzRepository: () => ({ getSettings: async () => null, getEmailSettings: async () => null }),
 }))
 vi.mock('@server/adapters/repos/connectors', () => ({ createConnectorRepository: vi.fn() }))

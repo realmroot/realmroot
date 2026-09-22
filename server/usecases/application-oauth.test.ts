@@ -155,6 +155,7 @@ async function fixture(
       findOrganization: vi
         .fn()
         .mockResolvedValue({ id: 'org_platform', disabled: options.organizationDisabled ?? false }),
+      findResourceByIdentifier: vi.fn().mockResolvedValue(options.resource === undefined ? resource : options.resource),
       listResources: vi.fn().mockResolvedValue({
         items: options.resource === null ? [] : [options.resource === undefined ? resource : options.resource],
         pagination: {

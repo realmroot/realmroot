@@ -75,6 +75,11 @@ export function createDrizzleAuthorizationRepository(db: Database, ids: Identifi
       return { items: rows.map(toOrganization), pagination: toPagination(pagination, total) }
     },
 
+    async findOrganizationBySlug(slug) {
+      const rows = await db.select().from(organization).where(eq(organization.slug, slug)).limit(1)
+      return rows[0] ? toOrganization(rows[0]) : null
+    },
+
     async findOrganization(id) {
       const rows = await db.select().from(organization).where(eq(organization.id, id)).limit(1)
       return rows[0] ? toOrganization(rows[0]) : null
@@ -395,6 +400,15 @@ export function createDrizzleAuthorizationRepository(db: Database, ids: Identifi
       const row = rows[0]
       if (!row) return null
       return toResource(row)
+    },
+
+    async findResourceByIdentifier(identifier) {
+      const rows = await db
+        .select()
+        .from(apiResource)
+        .where(and(eq(apiResource.identifier, identifier), isNull(apiResource.deletedAt)))
+        .limit(1)
+      return rows[0] ? toResource(rows[0]) : null
     },
 
     async findResourceByResourceUrl(resourceUrl) {

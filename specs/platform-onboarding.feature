@@ -98,3 +98,11 @@ Feature: Platform bootstrap and route access
     Then the route graph is built once for that authentication instance
     And each request retains its own dependencies and correlation context
     And changed authentication configuration receives a new router
+
+  @entrypoint:product-ui @journey:system-resource-lookup @proof:integration
+  Scenario: Built-in identity lookup does not enumerate tenant directories
+    Given the deployment has a platform Organization and a Realmroot Resource Server
+    When authentication preparation resolves these built-in records
+    Then it queries their unique slug and identifier directly
+    And it does not list or count unrelated Organizations and Resource Servers
+    And deleted Resource Servers remain unavailable

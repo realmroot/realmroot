@@ -209,6 +209,7 @@ export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> =
       }),
       listEnabledResources: vi.fn().mockResolvedValue([]),
       findResources: vi.fn().mockResolvedValue([]),
+      findResourceByIdentifier: vi.fn().mockResolvedValue(realmrootResource),
       findResourceByResourceUrl: vi.fn().mockResolvedValue(null),
       listUserMemberships: vi
         .fn()
@@ -230,6 +231,21 @@ export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> =
             ? platformOwnerMembership
             : null,
         ),
+      findOrganizationBySlug: vi.fn().mockImplementation(async (slug) =>
+        slug === platformOrganization.slug
+          ? {
+              id: platformOrganizationId,
+              slug: platformOrganization.slug,
+              name: platformOrganization.name,
+              displayName: null,
+              logo: null,
+              disabled: false,
+              disabledReason: null,
+              createdAt: '2026-01-01T00:00:00.000Z',
+              updatedAt: '2026-01-01T00:00:00.000Z',
+            }
+          : null,
+      ),
       findOrganization: vi.fn().mockImplementation(async (id) =>
         id === platformOrganizationId
           ? {

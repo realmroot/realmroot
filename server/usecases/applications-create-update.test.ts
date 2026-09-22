@@ -32,6 +32,12 @@ function createApplication(
   const ownerOrganizationId = input.ownerOrganizationId ?? 'org_platform'
   deps.authorization = {
     ...deps.authorization,
+    findOrganizationBySlug:
+      deps.authorization?.findOrganizationBySlug ??
+      (async (slug) => {
+        const page = await deps.authorization.listOrganizations({ limit: 100, offset: 0 })
+        return page.items.find((organization) => organization.slug === slug) ?? null
+      }),
     findOrganization: deps.authorization?.findOrganization ?? (async () => ({ disabled: false })),
     listOrganizations:
       deps.authorization?.listOrganizations ??

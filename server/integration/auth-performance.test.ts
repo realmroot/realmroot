@@ -1,9 +1,12 @@
 import { applyD1Migrations, env, reset } from 'cloudflare:test'
-import { identityProviderConnector } from '@server/db/schema'
+import { readBuiltInProviderSettings } from '@server/adapters/repos/configz'
+import { apiResource, identityProviderConnector } from '@server/db/schema'
 import { loadAuthConnectorConfig } from '@server/usecases/connectors'
+import { findPlatformOrganization, findRealmrootResourceServer } from '@server/usecases/system-resources'
+import { eq } from 'drizzle-orm'
 import { decodeProtectedHeader } from 'jose'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { baseURL, createHarness } from './harness'
+import { baseURL, createHarness, signInAdmin } from './harness'
 
 afterEach(async () => {
   vi.restoreAllMocks()
@@ -88,4 +91,28 @@ describe('[spec: connectors-and-methods/authentication-config-loading]', () => {
     expect(config.socialProviders.google).toMatchObject({ clientId: 'login-client', clientSecret: 'login-secret' })
     await expect(harness.deps.connectors.findById('login')).rejects.toThrow()
   })
+})
+
+it('uses indexed system identifiers and excludes deleted resources [spec: platform-onboarding/system-resource-lookup]', async () => {
+  const harness = await createHarness()
+  await signInAdmin(harness)
+  const prepare = vi.spyOn(env.DB, 'prepare')
+  const platform = await findPlatformOrganization(harness.deps)
+  const resource = await findRealmrootResourceServer(harness.deps)
+  expect(platform?.slug).toBe('realmroot')
+  expect(resource?.identifier).toBe('realmroot')
+  const queries = prepare.mock.calls.map(([sql]) => sql)
+  expect(queries).toHaveLength(2)
+  expect(queries[0]).toContain('"organization"."slug" = ?')
+  expect(queries[1]).toContain('"api_resource"."identifier" = ?')
+  expect(queries.some((sql) => sql.includes('count('))).toBe(false)
+  await harness.db.update(apiResource).set({ deletedAt: new Date() }).where(eq(apiResource.id, resource!.id))
+  expect(await findRealmrootResourceServer(harness.deps)).toBeNull()
+})
+
+it('reads only sign-in settings for provider configuration [spec: connectors-and-methods/authentication-config-loading]', async () => {
+  const harness = await createHarness()
+  const prepare = vi.spyOn(env.DB, 'prepare')
+  await readBuiltInProviderSettings(harness.db)
+  expect(prepare).toHaveBeenCalledOnce()
 })

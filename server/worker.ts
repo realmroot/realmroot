@@ -1,7 +1,7 @@
 import { tracing } from 'cloudflare:workers'
 import { createConfiguredEmailSender, isEmailDeliveryReady } from '@server/adapters/gateways/email/sender'
 import { createSecretCipher } from '@server/adapters/gateways/secrets'
-import { createDrizzleConfigzRepository } from '@server/adapters/repos/configz'
+import { createDrizzleConfigzRepository, readBuiltInProviderSettings } from '@server/adapters/repos/configz'
 import { createConnectorRepository } from '@server/adapters/repos/connectors'
 import { type Auth, createAuth } from '@server/auth'
 import { createDeps } from '@server/composition'
@@ -142,16 +142,15 @@ async function getAuth(
   }
   const db = createDb(env.DB)
   const configz = createDrizzleConfigzRepository(db)
-  const [connectors, validAudiences, settings, emailSettings] = await withinInitializationDeadline(
+  const [connectors, validAudiences, storedBuiltInProviders, emailSettings] = await withinInitializationDeadline(
     Promise.all([
       loadAuthConnectorConfig(createConnectorRepository(db, createSecretCipher(config.credentialEncryptionKey))),
       loadValidAudiences(env.DB, config.baseURL),
-      configz.getSettings(),
+      readBuiltInProviderSettings(db),
       configz.getEmailSettings(),
     ]),
     'configuration',
   )
-  const storedBuiltInProviders = settings?.metadata?.builtInProviders
   const builtInProviders = managementBuiltInProviderSettingsSchema.parse(
     mergeBuiltInProviders(defaultBuiltInProviders, storedBuiltInProviders),
   )

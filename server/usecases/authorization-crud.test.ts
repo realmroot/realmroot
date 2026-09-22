@@ -116,7 +116,7 @@ describe('authorization CRUD and assignment policy', () => {
   it(`persists one immutable built-in Realmroot Resource Server and reconciles its deployment contract
       [spec: management-api/management-realmroot-resource-server-origin]`, async () => {
     const authorization = repository()
-    authorization.listResources.mockResolvedValueOnce({ items: [], pagination })
+    authorization.findResourceByIdentifier.mockResolvedValueOnce(null)
     authorization.listEnabledResources.mockResolvedValue([])
     authorization.createResource.mockImplementation(async (input) => ({
       ...input,
@@ -134,21 +134,21 @@ describe('authorization CRUD and assignment policy', () => {
       ownerOrganizationId: platformOrganization.id,
     })
 
-    authorization.listResources.mockResolvedValue({ items: [created], pagination })
+    authorization.findResourceByIdentifier.mockResolvedValue(created)
     authorization.findResource.mockResolvedValue(created)
     await expect(ensureRealmrootResourceServer(deps, 'https://auth.example.com')).resolves.toEqual(created)
     expect(authorization.updateResource).not.toHaveBeenCalled()
 
     const stale = { ...created, resourceUrl: 'https://previous.example.com/api' }
     const reconciled = { ...created, resourceUrl: 'https://auth.example.com/api' }
-    authorization.listResources.mockResolvedValueOnce({ items: [stale], pagination })
+    authorization.findResourceByIdentifier.mockResolvedValueOnce(stale)
     await expect(ensureRealmrootResourceServer(deps, 'https://auth.example.com')).resolves.toEqual(reconciled)
     expect(authorization.updateResource).toHaveBeenCalledWith(created.id, {
       resourceUrl: 'https://auth.example.com/api',
     })
 
     const staleRegistry = { ...created, scopeRegistry: null }
-    authorization.listResources.mockResolvedValueOnce({ items: [staleRegistry], pagination })
+    authorization.findResourceByIdentifier.mockResolvedValueOnce(staleRegistry)
     await expect(ensureRealmrootResourceServer(deps, 'https://auth.example.com')).resolves.toEqual(created)
     expect(authorization.replaceResourceDiscovery).toHaveBeenCalledWith(
       created.id,
@@ -163,25 +163,25 @@ describe('authorization CRUD and assignment policy', () => {
       }),
     )
 
-    authorization.listResources.mockResolvedValueOnce({ items: [staleRegistry], pagination })
+    authorization.findResourceByIdentifier.mockResolvedValueOnce(staleRegistry)
     authorization.replaceResourceDiscovery.mockResolvedValueOnce(false)
     await expect(ensureRealmrootResourceServer(deps, 'https://auth.example.com')).rejects.toThrow(
       'could not be reconciled',
     )
 
-    authorization.listResources.mockResolvedValueOnce({ items: [staleRegistry], pagination })
+    authorization.findResourceByIdentifier.mockResolvedValueOnce(staleRegistry)
     authorization.findResource.mockResolvedValueOnce(null)
     await expect(ensureRealmrootResourceServer(deps, 'https://auth.example.com')).rejects.toThrow(
       'could not be reconciled',
     )
 
-    authorization.listResources.mockResolvedValueOnce({ items: [stale], pagination })
+    authorization.findResourceByIdentifier.mockResolvedValueOnce(stale)
     authorization.updateResource.mockResolvedValueOnce(false)
     await expect(ensureRealmrootResourceServer(deps, 'https://auth.example.com')).rejects.toThrow(
       'could not be reconciled',
     )
 
-    authorization.listResources.mockResolvedValueOnce({ items: [stale], pagination })
+    authorization.findResourceByIdentifier.mockResolvedValueOnce(stale)
     authorization.findResource.mockResolvedValueOnce(stale)
     await expect(ensureRealmrootResourceServer(deps, 'https://auth.example.com')).rejects.toThrow(
       'could not be reconciled',
@@ -194,7 +194,7 @@ describe('authorization CRUD and assignment policy', () => {
       { ...created, ownerOrganizationId: 'org-other' },
       { ...created, connectorId: 'connector-1' },
     ]) {
-      authorization.listResources.mockResolvedValueOnce({ items: [invalid], pagination })
+      authorization.findResourceByIdentifier.mockResolvedValueOnce(invalid)
       await expect(ensureRealmrootResourceServer(deps, 'https://auth.example.com')).rejects.toThrow(
         'does not match this deployment',
       )
@@ -676,6 +676,7 @@ describe('authorization CRUD and assignment policy', () => {
       createdAt: timestamp,
       updatedAt: timestamp,
     }))
+    authorization.findResourceByIdentifier.mockResolvedValue(resource)
     authorization.listResources.mockResolvedValue({ items: [resource], pagination })
     authorization.findResource.mockResolvedValue(resource)
 
@@ -1427,6 +1428,7 @@ describe('authorization CRUD and assignment policy', () => {
 function repository() {
   return {
     createOrganization: vi.fn(),
+    findOrganizationBySlug: vi.fn().mockResolvedValue(platformOrganization),
     listOrganizations: vi.fn().mockResolvedValue({ items: [platformOrganization], pagination }),
     findOrganization: vi.fn().mockResolvedValue(null),
     updateOrganization: vi.fn(),
@@ -1448,6 +1450,7 @@ function repository() {
     findInvitation: vi.fn().mockResolvedValue(null),
     cancelInvitation: vi.fn(),
     createResource: vi.fn(),
+    findResourceByIdentifier: vi.fn().mockResolvedValue(realmrootResource),
     listResources: vi.fn().mockResolvedValue({ items: [realmrootResource], pagination }),
     listEnabledResources: vi.fn(),
     findResource: vi.fn().mockResolvedValue(null),

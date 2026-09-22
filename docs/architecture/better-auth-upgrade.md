@@ -162,3 +162,8 @@ invalidation, so changed provider settings do not retain old handlers.
 Management OpenAPI generation is also deferred to its first consumer and cached.
 Importing the Worker no longer converts the complete Zod schema graph into an
 OpenAPI document. Existing semantic-contract tests verify identical output.
+
+Built-in Organization and Resource Server resolution uses their unique slug and
+identifier, with the existing soft-delete filter. It no longer paginates tenant
+directories or counts their rows. Provider initialization reads sign-in settings
+without loading general page settings.

@@ -87,3 +87,4 @@ Feature: Connectors and hosted method availability
     Then only authentication-enabled Connectors are loaded
     And only their login client secrets are decrypted
     And unrelated resource or registration secrets do not block authentication
+    And general page settings are not loaded for provider initialization
