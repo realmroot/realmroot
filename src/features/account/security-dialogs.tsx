@@ -2,16 +2,9 @@ import { Fingerprint } from 'lucide-react'
 import { useState } from 'react'
 import { Field, TextInput } from '@/components/product-form'
 import { Button } from '@/components/ui/button'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import { disableTotp, startTotpEnrollment, verifyTotp } from '@/lib/api/account'
 import { tt } from '@/lib/i18n'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './account-drawer'
 import { accountQueryKeys } from './queries'
 import type { MutationHandler, SecurityState } from './types'
 import { enrollPasskey, readTotpEnrollment, type TotpEnrollmentDisplay, withTotpQrCode } from './utils'

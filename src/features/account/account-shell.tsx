@@ -1,3 +1,4 @@
+import './account-redesign.css'
 import type { DeveloperConsoleAccessResponse } from '@shared/api/account'
 import type { SiteNavigation } from '@shared/api/navigation'
 import { useQueryClient } from '@tanstack/react-query'
@@ -10,13 +11,11 @@ import {
   Building2,
   Database,
   Folder,
-  Gauge,
   HelpCircle,
   LayoutDashboard,
   Link2,
   LoaderCircle,
   Menu,
-  Shield,
   UserRound,
   Wallet,
 } from 'lucide-react'
@@ -25,7 +24,6 @@ import { toast } from 'sonner'
 import { brandingStyle } from '@/components/layout/auth-layout'
 import { ProductAccountMenu } from '@/components/product-account-menu'
 import { RealmrootWordmark } from '@/components/realmroot-brand'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Status } from '@/components/ui/status'
@@ -38,26 +36,13 @@ import type { UserProfile } from './types'
 
 type AccountCenterSettings = typeof defaultAccountCenterSettings
 
-const accountNavGroups = [
-  {
-    label: 'Your account',
-    items: [
-      { section: 'overview' as const, href: '/', label: 'Overview', icon: Gauge },
-      { section: 'profile' as const, href: '/profile', label: 'Profile', icon: UserRound },
-      { section: 'security' as const, href: '/security', label: 'Sign-in & security', icon: Shield },
-      { section: 'data-privacy' as const, href: '/data-privacy', label: 'Data & privacy', icon: Database },
-    ],
-  },
-  {
-    label: 'Access & authority',
-    items: [
-      { section: 'connections' as const, href: '/connections', label: 'Connections', icon: Link2 },
-      { section: 'applications' as const, href: '/applications', label: 'Applications', icon: AppWindow },
-      { section: 'agents' as const, href: '/agents', label: 'Agents', icon: Bot },
-      { section: 'organizations' as const, href: '/organizations', label: 'Organizations', icon: Building2 },
-    ],
-  },
-]
+const accountNavigation = [
+  { section: 'overview', href: '/', label: 'Workbench', icon: LayoutDashboard },
+  { section: 'agents', href: '/agents', label: 'Agents', icon: Bot },
+  { section: 'applications', href: '/applications', label: 'Access management', icon: Link2 },
+  { section: 'profile', href: '/profile', label: 'Account settings', icon: UserRound },
+  { section: 'data-privacy', href: '/data-privacy', label: 'Data & privacy', icon: Database },
+] as const
 
 export function AccountPageShell({
   access,
@@ -102,7 +87,7 @@ export function AccountPageShell({
   }
 
   return (
-    <main className="accountShell" style={brandingStyle(config)}>
+    <main className={cn('accountShell', !organizationId && 'accountRedesign')} style={brandingStyle(config)}>
       <a className="skipLink" href="#account-content">
         {tt('Skip to content')}
       </a>
@@ -129,7 +114,16 @@ export function AccountPageShell({
             </Link>
           ) : (
             <Link aria-label={tt('Account Center home')} to="/">
-              <RealmrootWordmark context={tt(productName)} />
+              <span className="accountBreadcrumb">
+                {tt('Account Center')} <span aria-hidden="true">›</span>{' '}
+                {tt(
+                  accountNavigation.find(
+                    (item) =>
+                      item.section ===
+                      (section === 'security' ? 'profile' : section === 'connections' ? 'applications' : section),
+                  )?.label ?? 'Developer Center',
+                )}
+              </span>
             </Link>
           )}
         </div>
@@ -263,39 +257,26 @@ function AccountSidebar({
   profile: UserProfile
   section: AccountCenterSection
 }) {
+  void profile
+  const activeSection = section === 'security' ? 'profile' : section === 'connections' ? 'applications' : section
+  const organizationId = access.consoleOrganizations[0]?.organizationId
   return (
     <aside className="accountSidebar">
-      <div className="accountSidebarIdentity">
-        <Avatar className="size-11">
-          {profile.image ? <AvatarImage alt="" src={profile.image} /> : null}
-          <AvatarFallback className="bg-primary/10 text-xs font-semibold text-primary">
-            {profile.displayName.slice(0, 2).toUpperCase()}
-          </AvatarFallback>
-        </Avatar>
-        <div>
-          <strong>{profile.displayName}</strong>
-          <span>{profile.email}</span>
-        </div>
-      </div>
+      <Link className="accountSidebarBrand" aria-label={tt('Account Center home')} to="/">
+        <RealmrootWordmark />
+      </Link>
       <nav aria-label={tt('Account Center')} className="accountNav">
-        {accountNavGroups.map((group) => (
-          <div className="accountNavGroup" key={group.label}>
-            <p>{tt(group.label)}</p>
-            {group.items
-              .filter((item) => item.section !== 'organizations' || access.showOrganizations)
-              .map((item) => (
-                <Link
-                  aria-current={section === item.section ? 'page' : undefined}
-                  className={cn('accountNavItem', section === item.section && 'is-active')}
-                  key={item.section}
-                  onClick={onNavigate}
-                  to={item.href}
-                >
-                  <item.icon aria-hidden="true" />
-                  <span>{tt(item.label)}</span>
-                </Link>
-              ))}
-          </div>
+        {accountNavigation.map((item) => (
+          <Link
+            key={item.section}
+            to={item.href}
+            onClick={onNavigate}
+            aria-current={activeSection === item.section ? 'page' : undefined}
+            className={cn('accountNavItem', activeSection === item.section && 'is-active')}
+          >
+            <item.icon aria-hidden="true" />
+            <span>{tt(item.label)}</span>
+          </Link>
         ))}
         {externalLinks.length > 0 ? (
           <div className="accountNavGroup">
@@ -313,6 +294,26 @@ function AccountSidebar({
           </div>
         ) : null}
       </nav>
+      {access.showOrganizations || access.canCreateOrganization ? (
+        <div className="accountDeveloperEntry">
+          {organizationId ? (
+            <Link
+              className="accountNavItem"
+              onClick={onNavigate}
+              to="/organizations/$organizationId/overview"
+              params={{ organizationId }}
+            >
+              <Building2 />
+              <span>{tt('Developer Center')}</span>
+            </Link>
+          ) : (
+            <Link className="accountNavItem" onClick={onNavigate} to="/organizations">
+              <Building2 />
+              <span>{tt('Developer Center')}</span>
+            </Link>
+          )}
+        </div>
+      ) : null}
     </aside>
   )
 }

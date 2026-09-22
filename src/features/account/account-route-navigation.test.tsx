@@ -21,20 +21,19 @@ describe('Account Center route navigation', () => {
 
     render(<AppRouter />)
 
-    expect(await screen.findByRole('heading', { name: 'Profile' })).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'Account settings' })).toBeTruthy()
     const shell = document.querySelector('.accountShell')
     const topbar = document.querySelector('.accountProductTopbar')
     fetchSpy.mockClear()
 
     await userEvent.click(screen.getByRole('link', { name: 'Sign-in & security' }))
 
-    expect(await screen.findByRole('heading', { name: 'Sign-in & security' })).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'Account settings' })).toBeTruthy()
     await waitFor(() => expect(window.location.pathname).toBe('/security'))
     expect(document.querySelector('.accountShell')).toBe(shell)
     expect(document.querySelector('.accountProductTopbar')).toBe(topbar)
-    expect(fetchSpy.mock.calls.map(([input]) => String(input))).toEqual([
-      '/api/account/provider-connections?page=1&pageSize=100',
-    ])
+    expect(fetchSpy.mock.calls.map(([input]) => String(input))).not.toContain('/api/account/profile')
+    expect(fetchSpy.mock.calls.map(([input]) => String(input))).toContain('/api/account/security/passkeys')
   })
 
   it('opens Data & privacy as a route-backed account section', async () => {
@@ -49,8 +48,8 @@ describe('Account Center route navigation', () => {
     expect(activeLink.getAttribute('href')).toBe('/data-privacy')
     expect(activeLink.getAttribute('aria-current')).toBe('page')
     const linkNames = screen.getAllByRole('link').map((link) => link.textContent?.trim())
-    const securityLinkIndex = linkNames.indexOf('Sign-in & security')
-    expect(linkNames.slice(securityLinkIndex, securityLinkIndex + 2)).toEqual(['Sign-in & security', 'Data & privacy'])
+    const settingsLinkIndex = linkNames.indexOf('Account settings')
+    expect(linkNames.slice(settingsLinkIndex, settingsLinkIndex + 2)).toEqual(['Account settings', 'Data & privacy'])
     expect(screen.getByText('Export account data')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Delete account' })).toBeTruthy()
   })

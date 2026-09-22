@@ -30,9 +30,17 @@ vi.mock('@tanstack/react-router', () => ({
 const store = createAccountStore()
 const server = createAccountServer(store)
 
-async function openSecurityTab(name: 'MFA' | 'Passkeys' | 'Sessions') {
-  fireEvent.mouseDown(await screen.findByRole('tab', { name }), { button: 0, ctrlKey: false })
-  await waitFor(() => expect(screen.queryByText('Loading security settings')).toBeNull())
+async function openSecurityTab(name: 'MFA' | 'Passkeys' | 'Sessions' | 'Wallet') {
+  const existing = screen.queryByRole('button', { name: 'Done' })
+  if (existing) fireEvent.click(existing)
+  const labels = {
+    MFA: 'Manage authenticator',
+    Passkeys: 'Manage passkeys',
+    Sessions: 'Manage sessions',
+    Wallet: 'Manage wallet',
+  }
+  fireEvent.click(await screen.findByRole('button', { name: labels[name] }))
+  await waitFor(() => expect(screen.queryAllByText('Loading security settings')).toHaveLength(0))
 }
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'bypass' }))
@@ -49,7 +57,7 @@ describe('AccountSecurityPage', () => {
   it('renders the security panels with password, MFA, passkeys, and sessions', async () => {
     renderWithClient(<AccountSecurityPage />)
     expect(await screen.findByRole('button', { name: /Change password/ })).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Manage Connections' }).closest('.accountPanelActions')).toBeTruthy()
+    expect((await screen.findByRole('link', { name: 'Manage Connections' })).getAttribute('href')).toBe('/connections')
     await openSecurityTab('MFA')
     expect(screen.getByText('Multi-factor authentication')).toBeTruthy()
     expect(screen.getByRole('button', { name: /Set up authenticator app/ })).toBeTruthy()
@@ -108,7 +116,7 @@ describe('AccountSecurityPage', () => {
 
     renderWithClient(<AccountSecurityPage />)
     expect(await screen.findByText('GitHub')).toBeTruthy()
-    expect(screen.getByText('Octocat')).toBeTruthy()
+    await openSecurityTab('Wallet')
     fireEvent.click(screen.getByRole('button', { name: 'Unlink' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Unlink wallet' }))
     await waitFor(() => expect(unlinked).toBe(true))
@@ -116,6 +124,7 @@ describe('AccountSecurityPage', () => {
 
   it('surfaces a missing wallet provider when linking a wallet', async () => {
     renderWithClient(<AccountSecurityPage />)
+    await openSecurityTab('Wallet')
     fireEvent.click(await screen.findByRole('button', { name: 'Link wallet' }))
     await waitFor(() => expect(errorToast).toHaveBeenCalled())
   })
@@ -123,8 +132,7 @@ describe('AccountSecurityPage', () => {
   it('renders an error state when a security request fails', async () => {
     server.use(http.get(`${base}/api/account/security`, () => HttpResponse.json({ error: 'no' }, { status: 500 })))
     renderWithClient(<AccountSecurityPage />)
-    fireEvent.mouseDown(await screen.findByRole('tab', { name: 'MFA' }), { button: 0, ctrlKey: false })
-    expect(await screen.findByText('no')).toBeTruthy()
+    expect((await screen.findAllByText('no')).length).toBeGreaterThan(0)
   })
 
   it('keeps the Account Center shell visible while a Security tab loads', async () => {
@@ -139,15 +147,14 @@ describe('AccountSecurityPage', () => {
     )
     renderWithClient(<AccountSecurityPage />)
 
-    expect(await screen.findByRole('heading', { name: 'Sign-in & security' })).toBeTruthy()
-    fireEvent.mouseDown(screen.getByRole('tab', { name: 'MFA' }), { button: 0, ctrlKey: false })
+    expect(await screen.findByRole('heading', { name: 'Account settings' })).toBeTruthy()
 
-    expect(await screen.findByText('Loading security settings')).toBeTruthy()
+    expect((await screen.findAllByText('Loading security settings')).length).toBeGreaterThan(0)
     expect(screen.getByRole('navigation', { name: 'Account Center' })).toBeTruthy()
-    expect(screen.getByRole('heading', { name: 'Sign-in & security' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Account settings' })).toBeTruthy()
 
     finishSecurityRequest()
-    expect(await screen.findByText('Multi-factor authentication')).toBeTruthy()
+    expect(await screen.findByText('Authenticator app')).toBeTruthy()
   })
 
   it('shows the account-load error when the profile is missing', async () => {
@@ -231,7 +238,7 @@ describe('AccountSecurityPage', () => {
     expect(await screen.findByRole('heading', { name: 'Save backup codes' })).toBeTruthy()
     expect(screen.getByText('code-1')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Done' }))
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Save backup codes' })).toBeNull())
   })
 
   it('verifies an MFA challenge for an enrolled account', async () => {
@@ -273,6 +280,52 @@ describe('AccountSecurityPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Remove' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Remove passkey' }))
     await waitFor(() => expect(success).toHaveBeenCalledWith('Passkey removed.'))
+  })
+
+  it('renames one of multiple passkeys and refreshes the drawer [spec: account-center/passkey-flow]', async () => {
+    store.passkeys = [
+      { id: 'key-1', name: 'Laptop', deviceType: 'multiDevice', backedUp: true, createdAt: null },
+      { id: 'key-2', name: 'Backup key', deviceType: 'singleDevice', backedUp: false, createdAt: null },
+    ]
+    const rename = vi.fn()
+    server.use(
+      http.patch(`${base}/api/account/security/passkeys/:id`, async ({ request, params }) => {
+        const body = (await request.json()) as { name: string }
+        rename(params.id, body.name)
+        store.passkeys[0]!.name = body.name
+        return HttpResponse.json({ status: true })
+      }),
+    )
+    renderWithClient(<AccountSecurityPage />)
+    await openSecurityTab('Passkeys')
+    fireEvent.click(screen.getAllByRole('button', { name: 'Rename' })[0]!)
+    fireEvent.change(screen.getByLabelText('Passkey name'), { target: { value: 'Personal laptop' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(rename).toHaveBeenCalledWith('key-1', 'Personal laptop'))
+    expect(await screen.findByText('Personal laptop')).toBeTruthy()
+    expect(screen.getByText('Backup key')).toBeTruthy()
+  })
+
+  it('preserves an unnamed passkey and its draft when rename fails, then allows cancellation', async () => {
+    store.passkeys = [{ id: 'key-1', name: null, deviceType: 'singleDevice', backedUp: false, createdAt: null }]
+    server.use(
+      http.patch(`${base}/api/account/security/passkeys/:id`, () =>
+        HttpResponse.json({ message: 'Rename unavailable.' }, { status: 503 }),
+      ),
+    )
+    renderWithClient(<AccountSecurityPage />)
+    await openSecurityTab('Passkeys')
+    fireEvent.click(screen.getByRole('button', { name: 'Rename' }))
+    expect((screen.getByLabelText('Passkey name') as HTMLInputElement).value).toBe('')
+    expect((screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.change(screen.getByLabelText('Passkey name'), { target: { value: 'Replacement name' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect((await screen.findByRole('alert')).textContent).toContain('Rename unavailable.')
+    expect((screen.getByLabelText('Passkey name') as HTMLInputElement).value).toBe('Replacement name')
+    expect(screen.getByRole('heading', { name: 'Unnamed passkey' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByLabelText('Passkey name')).toBeNull()
+    expect(success).not.toHaveBeenCalled()
   })
 
   it('enrolls a passkey from the add-passkey dialog', async () => {
@@ -332,7 +385,7 @@ describe('AccountSecurityPage', () => {
     Object.assign(store, withSession)
     renderWithClient(<AccountSecurityPage />)
     await openSecurityTab('Sessions')
-    expect(await screen.findByText('Unknown device')).toBeTruthy()
+    expect((await screen.findAllByText('Unknown device')).length).toBeGreaterThan(0)
     expect(screen.getByText('Current')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Revoke' })).toBeNull()
   })
@@ -519,8 +572,8 @@ describe('AccountSecurityPage', () => {
     disabled.accountCenter = { ...disabled.accountCenter, sessionsViewEnabled: false }
     server.use(http.get(`${base}/api/configz`, () => HttpResponse.json(disabled)))
     renderWithClient(<AccountSecurityPage />)
-    expect(await screen.findByRole('tab', { name: 'MFA' })).toBeTruthy()
-    expect(screen.queryByRole('tab', { name: 'Sessions' })).toBeNull()
+    expect(await screen.findByRole('button', { name: 'Manage authenticator' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Manage sessions' })).toBeNull()
   })
 
   it('hides the password panel when password change is disabled', async () => {
@@ -528,7 +581,7 @@ describe('AccountSecurityPage', () => {
     disabled.accountCenter = { ...disabled.accountCenter, passwordChangeEnabled: false }
     server.use(http.get(`${base}/api/configz`, () => HttpResponse.json(disabled)))
     renderWithClient(<AccountSecurityPage />)
-    expect(await screen.findByRole('tab', { name: 'MFA' })).toBeTruthy()
+    expect(await screen.findByRole('button', { name: 'Manage authenticator' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: /Change password/ })).toBeNull()
   })
 
@@ -541,7 +594,7 @@ describe('AccountSecurityPage', () => {
     Object.assign(store, withPasskeys)
     renderWithClient(<AccountSecurityPage />)
     await openSecurityTab('Passkeys')
-    expect(await screen.findByText('2 passkeys added for passwordless sign-in.')).toBeTruthy()
+    expect(await screen.findByText('2 registered keys, managed individually.')).toBeTruthy()
     expect(screen.getByText('Unnamed passkey')).toBeTruthy()
   })
 

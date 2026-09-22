@@ -1,12 +1,12 @@
 export { AccountCenterLayout } from './account-surface'
 export { AccountConnectionsPage } from './connections-page'
 export { AccountDataPrivacyPage } from './data-privacy-page'
+export { AccountOverviewPage } from './overview-page'
 export {
   AccountAgentsPage,
   AccountApplicationsPage,
   AccountOrganizationDetailPage,
   AccountOrganizationsPage,
-  AccountOverviewPage,
 } from './planned-pages'
 export { AccountProfilePage } from './profile-page'
 export { AccountSecurityPage } from './security-page'

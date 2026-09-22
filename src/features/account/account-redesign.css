@@ -1,0 +1,180 @@
+.accountRedesign {
+  --primary: light-dark(#007b83, #69dbd4);
+  --primary-foreground: light-dark(#fff, #12302e);
+  --background: light-dark(#fff, #141d20);
+  --foreground: light-dark(#192b2e, #eaf1f1);
+  --muted: light-dark(#f5f7f8, #101719);
+  --muted-foreground: light-dark(#627579, #a2b5ba);
+  --border: light-dark(#e2e9ea, #304145);
+  --secondary: light-dark(#e5f3f0, #203d37);
+  --secondary-foreground: var(--primary);
+  background: var(--muted);
+  font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color: var(--foreground);
+}
+.accountRedesign .accountShellLayout { grid-template-columns: 184px minmax(0, 1fr); }
+.accountRedesign .accountProductTopbar { margin-left: 184px; background: var(--muted); padding: 0 28px; backdrop-filter: none; }
+.accountRedesign .accountProductTopbar .realmrootWordmark { font-size: 13px; }
+.accountRedesign .accountSidebar { top: 0; height: 100dvh; margin-top: -64px; padding: 25px 12px 16px; background: light-dark(#f0f3f3, #172124); display: flex; flex-direction: column; gap: 36px; }
+.accountSidebarBrand { display: flex; min-height: 36px; padding: 0 9px; }
+.accountRedesign .accountNav { display: flex; flex-direction: column; gap: 6px; }
+.accountRedesign .accountNavItem { padding: 12px; min-height: 44px; gap: 11px; border: 0; border-radius: 8px; font-size: 13px; font-weight: 500; color: var(--muted-foreground); }
+.accountRedesign .accountNavItem.is-active { background: var(--background); color: var(--foreground); box-shadow: none; }
+.accountRedesign .accountNavItem svg { width: 16px; height: 16px; }
+.accountDeveloperEntry { margin-top: auto; border-top: 1px solid var(--border); padding-top: 10px; }
+.accountRedesign .accountContent, .accountRedesign .accountContent.is-settings { width: 100%; max-width: 1260px; padding: 32px 28px 50px; }
+.accountRedesign .accountPageHeader { margin-bottom: 30px; align-items: flex-start; }
+.accountRedesign .accountPageHeader h1 { font-size: 30px; font-weight: 500; letter-spacing: -1px; line-height: 1.25; }
+.accountRedesign .accountPageHeader p { font-size: 13px; line-height: 1.7; margin-top: 10px; }
+.accountRedesign button { font-weight: 500; }
+.accountRouteTabs { display: flex; gap: 24px; border-bottom: 1px solid var(--border); margin: 0 0 24px; }
+.accountRouteTabs a { padding: 0 0 15px; margin-bottom: -1px; font-size: 13px; color: var(--muted-foreground); border-bottom: 2px solid transparent; }
+.accountRouteTabs a[aria-current=page] { color: var(--foreground); border-color: var(--primary); font-weight: 500; }
+.accountRedesign .accountTabs [role=tablist] { justify-content: flex-start; }
+.accountRedesign .accountTabPanel, .accountRedesign .accountObjectSection.is-surface { border-radius: 12px; background: var(--background); padding: 22px; box-shadow: none; }
+.accountRedesign .accountObjectSection>header h2 { font-size: 15px; font-weight: 500; }
+.accountRedesign .accountObjectSection>header p { font-size: 12px; }
+.accountIdentityMark { width: 44px; height: 44px; flex-shrink: 0; }
+.accountIdentityMark [data-slot=avatar-fallback] { background: light-dark(#dcefe8, #203d37); color: light-dark(#27634e, #a6e2c8); font-size: 15px; font-weight: 500; }
+.accountIdentityMark.is-application, .accountIdentityMark.is-application [data-slot=avatar-fallback] { border-radius: 10px; }
+.accountIdentityLabel { display: flex; align-items: center; gap: 12px; }
+.accountWorkbench { display: flex; flex-direction: column; gap: 38px; margin-top: 32px; }
+.accountWorkbenchHeading { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 16px; }
+.accountWorkbenchHeading>div { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.accountWorkbenchHeading h2 { font-size: 17px; font-weight: 500; }
+.accountWorkbenchHeading span { font-size: 12px; color: var(--muted-foreground); }
+.accountWorkbenchHeading>a { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--primary); }
+.accountWorkbenchHeading>a svg { width: 15px; height: 15px; }
+.accountAgentCards { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 14px; }
+.accountAgentCard { border: 1px solid var(--border); border-radius: 12px; background: var(--background); overflow: hidden; }
+.accountAgentCard:has(button:hover) { border-color: var(--primary); }
+.accountAgentCardMain { width: 100%; display: block; padding: 20px; text-align: left; cursor: pointer; }
+.accountAgentCardTop { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 22px; }
+.accountAgentCardMain h3 { font-size: 20px; font-weight: 500; letter-spacing: -.5px; }
+.accountAgentCardMain p { font-size: 12px; color: var(--muted-foreground); overflow-wrap: anywhere; margin-top: 2px; }
+.accountAgentCardMeta { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 22px; font-size: 12px; color: var(--muted-foreground); }
+.accountAgentCardMeta svg { width: 15px; height: 15px; }
+.accountAgentCardBottom { border-top: 1px solid var(--border); min-height: 45px; background: var(--muted); font-size: 12px; }
+.accountAgentCardBottom>span, .accountAgentCardBottom>button { display: flex; align-items: center; gap: 6px; padding: 12px 16px; color: var(--muted-foreground); }
+.accountAgentCardBottom>button { width: 100%; text-align: left; background: var(--secondary); color: var(--primary); cursor: pointer; }
+.accountAgentCardBottom button span { flex: 1; }
+.accountAgentCardBottom svg { width: 14px; height: 14px; flex-shrink: 0; }
+.accountInbox { border: 1px solid var(--border); border-radius: 12px; background: var(--background); overflow: hidden; }
+.accountInboxRow { display: flex; align-items: center; gap: 16px; padding: 22px; }
+.accountInboxRow+.accountInboxRow { border-top: 1px solid var(--border); }
+.accountInboxIcon { width: 36px; height: 36px; border-radius: 9px; background: var(--muted); display: grid; place-items: center; color: var(--muted-foreground); flex-shrink: 0; align-self: flex-start; }
+.accountInboxIcon svg { width: 18px; height: 18px; }
+.accountInboxRow>div { flex: 1; min-width: 0; }
+.accountInboxRow strong { font-size: 14px; font-weight: 500; }
+.accountInboxRow p { font-size: 12px; color: var(--muted-foreground); margin-top: 5px; }
+.accountInboxRow code { display: inline-block; font-size: 11px; background: var(--muted); padding: 1px 6px; border-radius: 4px; margin-top: 9px; color: var(--muted-foreground); overflow-wrap: anywhere; }
+.accountOnboarding { padding: 26px; background: var(--background); border: 1px solid var(--border); border-radius: 12px; }
+.accountSettingsSurface { background: var(--background); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.accountSettingsGroup { padding: 24px; }
+.accountSettingsGroup+.accountSettingsGroup { border-top: 1px solid var(--border); }
+.accountSettingsGroup>header { margin-bottom: 14px; }
+.accountSettingsGroup h2 { font-size: 14px; font-weight: 500; }
+.accountSettingsGroup>header p { font-size: 12px; color: var(--muted-foreground); margin-top: 4px; }
+.accountRedesign .accountSettingsSurface .settingsPanel { padding: 0; border: 0; background: transparent; box-shadow: none; }
+.accountRedesign .accountSettingsSurface .settingsAction { padding: 20px 0; }
+.accountRedesign .settingsAction .accountRowLabel { display: grid; grid-template-columns: 22px minmax(0,1fr); gap: 3px 12px; }
+.accountSettingIcon { grid-row: span 2; color: var(--muted-foreground); align-self: center; }
+.accountSettingIcon svg { width: 17px; height: 17px; }
+.accountRedesign .accountRowLabel strong { font-size: 13px; font-weight: 500; }
+.accountRedesign .accountRowLabel>span:not(.accountSettingIcon), .accountRedesign .accountRowValue { font-size: 12px; }
+.accountProfileHero { display: flex; gap: 14px; align-items: center; padding: 24px; border-bottom: 1px solid var(--border); }
+.accountProfileHero>div { flex: 1; min-width: 0; }
+.accountProfileHero h2 { font-size: 20px; font-weight: 500; }
+.accountProfileHero span { font-size: 12px; color: var(--muted-foreground); }
+.accountProfileSettings>.accountSettingsSurface>section { padding: 0 24px !important; }
+.accountSecondarySettings { margin-top: 20px; border-bottom: 1px solid var(--border); padding: 10px 0; }
+.accountSecondarySettings summary { font-size: 13px; cursor: pointer; color: var(--muted-foreground); }
+.accountDetailDrawer[data-slot=sheet-content] { width: min(100%,450px); max-width: 450px; gap: 0; padding: 0; overflow-y: auto; background: var(--background); }
+.accountDetailDrawer>[data-slot=sheet-header], .accountDetailDrawer>form>[data-slot=sheet-header] { padding: 26px; padding-right: 56px; border-bottom: 1px solid var(--border); margin-bottom: 26px; }
+.accountDetailDrawer>form { display: flex; flex-direction: column; min-height: 100%; }
+.accountDetailDrawer>:not([data-slot]):not(form):not(button), .accountDetailDrawer>form>:not([data-slot]) { margin-left: 26px; margin-right: 26px; }
+.accountDetailDrawer [data-slot=sheet-footer] { display: flex; flex-direction: row; justify-content: flex-end; flex-wrap: wrap; padding: 20px 26px; border-top: 1px solid var(--border); margin-top: auto; background: var(--background); }
+.accountDetailDrawer .accountRow { grid-template-columns: minmax(80px,1fr) minmax(0,1fr); gap: 14px; padding: 15px 0; }
+.accountDetailDrawer .settingsAction { display: block; }
+.accountDetailDrawer .accountRowAction { grid-column: 1/-1; justify-self: end; }
+.accountDetailDrawer .accountRowValue { text-align: right; overflow-wrap: anywhere; }
+.accountDrawerIntro h2 { font-size: 24px; font-weight: 500; }
+.accountDrawerIntro p, .accountDrawerHelp { font-size: 13px; line-height: 1.8; color: var(--muted-foreground); }
+.accountDrawerIntro { margin-bottom: 26px; }
+.accountDrawerHelp { margin: 20px 0 30px; }
+.accountCredentialCard { padding: 18px; border: 1px solid var(--border); border-radius: 10px; margin: 12px 0; }
+.accountCredentialHeading { display: flex; align-items: center; gap: 12px; }
+.accountCredentialHeading>svg { width: 38px; height: 38px; padding: 10px; border-radius: 9px; background: var(--muted); }
+.accountCredentialHeading h3 { font-size: 15px; font-weight: 500; }
+.accountCredentialHeading p { font-size: 12px; color: var(--muted-foreground); margin-top: 4px; }
+.accountCredentialFooter { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; border-top: 1px solid var(--border); padding-top: 12px; margin-top: 18px; }
+.accountCredentialFooter>span { font-size: 12px; color: var(--muted-foreground); }
+.accountCredentialFooter>div { display: flex; gap: 8px; }
+.accountPanelActions { display: flex; justify-content: flex-end; gap: 8px; margin: 16px 0; }
+@media(max-width:900px) { .accountAgentCards { grid-template-columns: 1fr; } .accountRedesign .accountContent, .accountRedesign .accountContent.is-settings { padding: 28px 20px; } }
+@media(max-width:700px) {
+  .accountRedesign .accountShellLayout { grid-template-columns: minmax(0,1fr); }
+  .accountRedesign .accountShellLayout>.accountSidebar { display: none; }
+  .accountRedesign .accountProductTopbar { margin-left: 0; padding: 0 16px; }
+  .accountRedesign .accountMobileMenu { display: inline-flex; }
+  .accountRedesign .accountPageHeader { flex-wrap: wrap; gap: 18px; }
+  .accountWorkbenchHeading>div { gap: 4px 10px; }
+  .accountInboxRow { flex-wrap: wrap; padding: 18px; gap: 12px; }
+  .accountInboxRow>div { flex-basis: calc(100% - 48px); }
+  .accountInboxRow>button { margin-left: 48px; }
+  .accountSettingsGroup { padding: 20px; }
+  .accountRedesign .settingsAction { grid-template-columns: minmax(0,1fr) auto; }
+  .accountRedesign .settingsAction .accountRowLabel { grid-column: 1/-1; }
+  .accountRedesign .settingsAction .accountRowValue { padding-left: 34px; text-align: left; }
+  .accountProfileHero { flex-wrap: wrap; padding: 20px; }
+}
+.accountMobileNavSheet .accountSidebar { position: static; height: auto; flex: 1; display: flex; flex-direction: column; gap: 20px; }
+.accountBreadcrumb { display: flex; gap: 14px; align-items: center; font-size: 12px; color: var(--muted-foreground); }
+.accountSidebarBrand strong { font-size: 21px; font-weight: 500; letter-spacing: -.8px; }
+.accountInlineHeading { padding-top: 24px; }
+.accountInlineHeading h2 { font-size: 14px; font-weight: 500; }
+.accountSettingsSurface>.settingsPanel+.settingsPanel { border-top: 1px solid var(--border) !important; }
+.accountRedesign .accountContent { background: var(--muted); }
+.accountRedesign .accountSettingsGroup .accountRow { grid-template-columns: minmax(0,1fr) auto 72px; gap: 20px; min-height: 80px; }
+.accountRedesign .accountSettingsGroup .accountRowValue { text-align: right; }
+.accountRedesign .accountSettingsGroup>header+.accountRow, .accountRedesign .accountSettingsGroup>header+.settingsAction { border-top: 0; }
+.accountRedesign .accountSettingsGroup .settingsPanel { margin: 0; }
+.accountRedesign .accountSettingsGroup .settingsPanel .accountRow { border-top: 1px solid var(--border); }
+.accountRedesign .accountSettingsGroup .accountRowAction a { font-size: 12px; }
+.accountRedesign [data-slot=button] { min-height: 38px; font-size: 12px; border-radius: 7px; }
+.accountRedesign .accountSettingsGroup { padding-top: 22px; padding-bottom: 12px; }
+.accountDetailDrawer {
+  --background: light-dark(#fff, #141d20);
+  --foreground: light-dark(#192b2e, #eaf1f1);
+  --muted: light-dark(#f5f7f8, #101719);
+  --muted-foreground: light-dark(#627579, #a2b5ba);
+  --border: light-dark(#e2e9ea, #304145);
+  --primary: light-dark(#007b83, #69dbd4);
+  --primary-foreground: light-dark(#fff, #12302e);
+  color: var(--foreground);
+  font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+.accountDetailDrawer[data-slot=sheet-content] [data-slot=button] { font-size: 12px; min-height: 36px; }
+body:has(.accountDetailDrawer) [data-slot=sheet-overlay] { backdrop-filter: none; background: light-dark(#203a3e40, #0008); }
+.accountDetailDrawer .accountCredentialHeading>svg { background: var(--muted); color: var(--muted-foreground); }
+@media(max-width:700px) {
+  .accountRedesign .accountSettingsGroup .accountRow { grid-template-columns: minmax(0,1fr) auto; gap: 8px; }
+  .accountRedesign .accountSettingsGroup .accountRowValue { text-align: left; }
+}
+.accountIdentityLabel>span:last-child { display: flex; flex-direction: column; gap: 5px; }
+.accountIdentityLabel small { font-size: 12px; color: var(--muted-foreground); font-weight: 400; }
+.accountRedesign .accountIdentityLabel .accountIdentityMark { width: 38px; height: 38px; }
+.accountDrawerIdentity { display: flex; align-items: center; gap: 14px; margin-bottom: 24px; }
+.accountDrawerIdentity h2 { font-size: 22px; font-weight: 500; }
+
+@media(max-width:700px) {
+  .accountRedesign .accountContent .settingsAction .accountRowLabel { grid-column: 1/-1; }
+  .accountRedesign .accountContent .settingsAction .accountRowValue { grid-column: 1; width: auto; }
+  .accountRedesign .accountContent .settingsAction .accountRowAction { grid-column: 2; width: auto; justify-self: end; }
+  .accountRedesign .accountContent .settingsAction .accountRowAction>* { width: auto; }
+}
+.accountDetailDrawer .settingsPanel { border: 0; border-radius: 0; padding: 0; background: transparent; box-shadow: none; }
+.accountSessionDates { display: grid; grid-template-columns: auto 1fr; gap: 6px 18px; margin-top: 18px; font-size: 12px; color: var(--muted-foreground); }
+.accountSessionDates dd { text-align: right; }
+.accountCurrentSession { margin-left: auto; font-size: 11px; color: var(--primary); background: var(--muted); padding: 3px 6px; border-radius: 5px; }
+.accountCredentialHeading>div { min-width: 0; }

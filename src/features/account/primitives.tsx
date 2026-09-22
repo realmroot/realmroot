@@ -58,7 +58,7 @@ export function SettingsAction({
   return (
     <article className="accountRow settingsAction">
       <div className="accountRowLabel">
-        <span className="sr-only" aria-hidden="true">
+        <span className="accountSettingIcon" aria-hidden="true">
           {icon}
         </span>
         <strong>{title}</strong>

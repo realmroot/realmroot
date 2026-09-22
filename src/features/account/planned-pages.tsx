@@ -41,6 +41,8 @@ import {
 } from '@/lib/api/account'
 import { toLocalDateTimeValue } from '@/lib/date-time'
 import { tt } from '@/lib/i18n'
+import * as Drawer from './account-drawer'
+import { AccountAccessNavigation } from './account-navigation'
 import {
   AccountEmptyState,
   AccountObjectSection,
@@ -52,6 +54,8 @@ import {
   AccountTabs,
 } from './account-page'
 import { AccountSurface } from './account-surface'
+import { AgentEnrollmentGuide } from './agent-enrollment-guide'
+import { IdentityMark } from './identity-mark'
 import { DestructiveConfirmationDialog, useDestructiveConfirmation } from './primitives'
 import {
   accountQueryKeys,
@@ -65,170 +69,9 @@ import {
   useAccountOrganizations,
   useAccountOrganizationTeamMembers,
   useAccountOrganizationTeams,
-  useAccountSecurity,
-  useAccountSessions,
 } from './queries'
 import type { AccountApplicationAuthorization } from './types'
-import { formatDate, formatSessionDevice } from './utils'
-
-export function AccountOverviewPage() {
-  const agentsQuery = useAccountAgents()
-  const organizationsQuery = useAccountOrganizations()
-  const requestsQuery = useAccountAccessRequests()
-  const invitationsQuery = useAccountOrganizationInvitations()
-  const securityQuery = useAccountSecurity()
-  const sessionsQuery = useAccountSessions(true)
-  const mutate = useAccountMutation()
-  const [request, setRequest] = useState<AccessRequestApproval | null>(null)
-  const agents = agentsQuery.data?.items ?? []
-  const organizations = organizationsQuery.data ?? []
-  const requests = requestsQuery.data?.items ?? []
-  const invitations = (invitationsQuery.data ?? []).filter((invitation) => invitation.status === 'pending')
-  const security = securityQuery.data?.security
-  const sessions = sessionsQuery.data?.items ?? []
-  const securityStrong = Boolean(security?.mfa.enabled || security?.passkeys.count)
-  return (
-    <AccountSurface>
-      {(profile) => (
-        <>
-          <AccountPageHeader
-            description={tt('Review your identity, security, and delegated authority in this realm.')}
-            title={tt('{{greeting}}, {{name}}.', {
-              greeting: accountGreeting(),
-              name: profile.displayName.split(' ')[0],
-            })}
-          />
-          <div className="accountMetricGrid">
-            <AccountMetric
-              detail={
-                securityStrong
-                  ? tt('At least one additional sign-in factor is enrolled.')
-                  : tt('Add MFA or a passkey to strengthen sign-in.')
-              }
-              label={tt('Security')}
-              value={securityQuery.isLoading ? '—' : securityStrong ? tt('Strong') : tt('Basic')}
-            />
-            <AccountMetric
-              detail={tt('{{count}} total Agent identities', { count: agents.length })}
-              label={tt('Active Agents')}
-              value={agentsQuery.isLoading ? '—' : String(agents.filter((agent) => agent.status === 'active').length)}
-            />
-            <AccountMetric
-              detail={tt('Shared identity and authorization spaces you belong to.')}
-              label={tt('Organizations')}
-              value={organizationsQuery.isLoading ? '—' : String(organizations.length)}
-            />
-          </div>
-          <div className="accountOverviewFlow">
-            <AccountObjectSection surface title={tt('Needs your attention')}>
-              <AccountRows>
-                {requests.map((item) => (
-                  <AccountRow
-                    action={<Button onClick={() => setRequest(item)}>{tt('Review request')}</Button>}
-                    description={tt('{{resource}} · {{scopes}}', {
-                      resource: item.authorizationDetail?.name ?? item.resourceServer.name,
-                      scopes: item.scopes.join(' '),
-                    })}
-                    key={item.id}
-                    label={item.agent.name}
-                    value={
-                      <Badge
-                        className="bg-amber-50 text-amber-800 dark:bg-amber-950 dark:text-amber-200"
-                        variant="secondary"
-                      >
-                        {tt('Approval required')}
-                      </Badge>
-                    }
-                  />
-                ))}
-                {invitations.map((invitation) => (
-                  <AccountRow
-                    action={
-                      <Button asChild variant="outline">
-                        <Link to="/organizations">{tt('Review invitation')}</Link>
-                      </Button>
-                    }
-                    description={tt('Organization invitation expires {{date}}', {
-                      date: formatDate(invitation.expiresAt),
-                    })}
-                    key={invitation.id}
-                    label={invitation.organizationName}
-                    value={
-                      <Badge variant="outline">
-                        {organizationAccessLevelLabel(organizationAccessLevel(invitation.role))}
-                      </Badge>
-                    }
-                  />
-                ))}
-                {!requestsQuery.isLoading && !invitationsQuery.isLoading && !requests.length && !invitations.length ? (
-                  <AccountEmptyState
-                    description={tt('There are no pending Agent access decisions or Organization invitations.')}
-                    title={tt("You're all caught up")}
-                  />
-                ) : null}
-              </AccountRows>
-            </AccountObjectSection>
-            <AccountObjectSection surface title={tt('Recent sessions')}>
-              <AccountRows>
-                {sessions.slice(0, 3).map((session) => (
-                  <AccountRow
-                    description={session.ipAddress ?? tt('No IP address recorded')}
-                    key={session.id}
-                    label={formatSessionDevice(session.userAgent)}
-                    value={
-                      session.current ? tt('Current') : tt('Expires {{date}}', { date: formatDate(session.expiresAt) })
-                    }
-                  />
-                ))}
-                {!sessionsQuery.isLoading && !sessions.length ? (
-                  <AccountEmptyState
-                    description={tt('New sign-ins will appear here.')}
-                    title={tt('No active sessions')}
-                  />
-                ) : null}
-              </AccountRows>
-            </AccountObjectSection>
-          </div>
-          <AgentRequestDialog
-            onClose={() => setRequest(null)}
-            onDecision={async (item, input) => {
-              let failed = false
-              await mutate(
-                input.decision === 'approve' ? 'Request approved.' : 'Request denied.',
-                () => decideAccountAgentResourceRequest(item.id, input),
-                {
-                  invalidate: [accountQueryKeys.accessRequests],
-                  onError: () => {
-                    failed = true
-                  },
-                },
-              )
-              if (!failed) setRequest(null)
-            }}
-            request={request}
-          />
-        </>
-      )}
-    </AccountSurface>
-  )
-}
-
-function accountGreeting() {
-  const hour = new Date().getHours()
-  if (hour < 12) return tt('Good morning')
-  if (hour < 18) return tt('Good afternoon')
-  return tt('Good evening')
-}
-
-function AccountMetric({ detail, label, value }: { detail: string; label: string; value: string }) {
-  return (
-    <article className="accountMetric">
-      <span>{label}</span>
-      <strong>{value}</strong>
-      <small>{detail}</small>
-    </article>
-  )
-}
+import { formatDate } from './utils'
 
 export function AccountApplicationsPage() {
   const applicationsQuery = useAccountApplicationAuthorizations(true)
@@ -242,8 +85,9 @@ export function AccountApplicationsPage() {
         <>
           <AccountPageHeader
             description={tt('Review applications authorized to access your Realmroot identity.')}
-            title={tt('Authorized applications')}
+            title={tt('Access management')}
           />
+          <AccountAccessNavigation section="applications" />
           <AccountObjectSection
             description={tt('Provider accounts used by Realmroot and Agents are managed separately in Connections.')}
             surface
@@ -270,7 +114,12 @@ export function AccountApplicationsPage() {
                     }
                     description={tt('Authorized {{date}}', { date: formatDate(application.grantedAt) })}
                     key={application.id}
-                    label={application.application.name}
+                    label={
+                      <span className="accountIdentityLabel">
+                        <IdentityMark name={application.application.name} application />
+                        <span>{application.application.name}</span>
+                      </span>
+                    }
                     value={<code>{application.scopes.join(' ')}</code>}
                   />
                 ))}
@@ -327,16 +176,20 @@ function ApplicationReviewDialog({
   onRevoke: (application: AccountApplicationAuthorization) => void
 }) {
   return (
-    <Dialog onOpenChange={(open) => !open && onClose()} open={application !== null}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{application?.application.name}</DialogTitle>
-          <DialogDescription>
+    <Drawer.Dialog onOpenChange={(open) => !open && onClose()} open={application !== null}>
+      <Drawer.DialogContent>
+        <Drawer.DialogHeader>
+          <Drawer.DialogTitle>{tt('Application authorization')}</Drawer.DialogTitle>
+          <Drawer.DialogDescription>
             {tt('Review the identity access this application can use on your behalf.')}
-          </DialogDescription>
-        </DialogHeader>
+          </Drawer.DialogDescription>
+        </Drawer.DialogHeader>
         {application ? (
-          <AccountRows className="rounded-lg border px-2">
+          <AccountRows className="accountDetailFacts">
+            <div className="accountDrawerIdentity">
+              <IdentityMark name={application.application.name} application />
+              <h2>{application.application.name}</h2>
+            </div>
             <AccountRow label={tt('Application')} value={application.application.name} />
             <AccountRow label={tt('Authorized')} value={formatDate(application.grantedAt)} />
             <AccountRow
@@ -346,7 +199,7 @@ function ApplicationReviewDialog({
             <AccountRow label={tt('Scopes')} value={<code>{application.scopes.join(' ')}</code>} />
           </AccountRows>
         ) : null}
-        <DialogFooter>
+        <Drawer.DialogFooter>
           <Button onClick={onClose} variant="outline">
             {tt('Close')}
           </Button>
@@ -355,9 +208,9 @@ function ApplicationReviewDialog({
               {tt('Revoke access')}
             </Button>
           ) : null}
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </Drawer.DialogFooter>
+      </Drawer.DialogContent>
+    </Drawer.Dialog>
   )
 }
 
@@ -378,6 +231,7 @@ export function AccountAgentsPage() {
           <AccountPageHeader
             description={tt('Review Agent identities you control and approve new resource access requests.')}
             title={tt('Agents')}
+            action={<AgentEnrollmentGuide />}
           />
           <AccountTabs
             onValueChange={setTab}
@@ -389,6 +243,12 @@ export function AccountAgentsPage() {
             value={tab}
           >
             <AccountTabContent surface value="identities">
+              {agentsQuery.isLoading ? <p role="status">{tt('Loading Agents…')}</p> : null}
+              {agentsQuery.error ? (
+                <p role="alert" className="text-destructive">
+                  {agentsQuery.error.message}
+                </p>
+              ) : null}
               <AccountRows>
                 {agents.map((agent) => (
                   <AccountRow
@@ -397,18 +257,24 @@ export function AccountAgentsPage() {
                         {tt('Manage')}
                       </Button>
                     }
-                    description={tt('{{subject}} · Created {{date}}', {
-                      subject: agent.subject,
-                      date: formatDate(agent.createdAt),
-                    })}
                     key={agent.id}
-                    label={agent.name}
+                    label={
+                      <span className="accountIdentityLabel">
+                        <IdentityMark name={agent.name} />
+                        <span>
+                          <span>{agent.name}</span>
+                          <small>{agent.subject}</small>
+                        </span>
+                      </span>
+                    }
                     value={
-                      <Badge variant={agent.status === 'active' ? 'secondary' : 'outline'}>{tt(agent.status)}</Badge>
+                      <Badge variant={agent.status === 'active' ? 'secondary' : 'outline'}>
+                        {tt(agent.status === 'active' ? 'Enabled' : 'Disabled')}
+                      </Badge>
                     }
                   />
                 ))}
-                {!agentsQuery.isLoading && !agents.length ? (
+                {!agentsQuery.isLoading && !agentsQuery.error && !agents.length ? (
                   <AccountEmptyState
                     description={tt('Agent identities you control will appear here.')}
                     title={tt('No Agent identities')}
@@ -417,6 +283,12 @@ export function AccountAgentsPage() {
               </AccountRows>
             </AccountTabContent>
             <AccountTabContent surface value="requests">
+              {requestsQuery.isLoading ? <p role="status">{tt('Loading requests…')}</p> : null}
+              {requestsQuery.error ? (
+                <p role="alert" className="text-destructive">
+                  {requestsQuery.error.message}
+                </p>
+              ) : null}
               <AccountRows>
                 {requests.map((item) => (
                   <AccountRow
@@ -434,7 +306,7 @@ export function AccountAgentsPage() {
                     }
                   />
                 ))}
-                {!requestsQuery.isLoading && !requests.length ? (
+                {!requestsQuery.isLoading && !requestsQuery.error && !requests.length ? (
                   <AccountEmptyState
                     description={tt('New resource access requests will appear here.')}
                     title={tt('No pending requests')}
@@ -504,7 +376,7 @@ export function AccountAgentsPage() {
   )
 }
 
-function AgentDialog({
+export function AgentDialog({
   agent,
   onClose,
   onDelete,
@@ -516,12 +388,12 @@ function AgentDialog({
   onStatusChange: (agent: Agent) => void
 }) {
   return (
-    <Dialog onOpenChange={(open) => !open && onClose()} open={agent !== null}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>{agent?.name}</DialogTitle>
-          <DialogDescription>{agent?.id}</DialogDescription>
-        </DialogHeader>
+    <Drawer.Dialog onOpenChange={(open) => !open && onClose()} open={agent !== null}>
+      <Drawer.DialogContent className="sm:max-w-lg">
+        <Drawer.DialogHeader>
+          <Drawer.DialogTitle>{agent?.name}</Drawer.DialogTitle>
+          <Drawer.DialogDescription>{agent?.id}</Drawer.DialogDescription>
+        </Drawer.DialogHeader>
         {agent ? (
           <AccountRows className="rounded-lg border px-2">
             <AccountRow label={tt('Stable subject')} value={<code>{agent.subject}</code>} />
@@ -531,7 +403,7 @@ function AgentDialog({
             <AccountRow label={tt('Last updated')} value={formatDate(agent.updatedAt)} />
           </AccountRows>
         ) : null}
-        <DialogFooter>
+        <Drawer.DialogFooter>
           <Button onClick={onClose} variant="outline">
             {tt('Close')}
           </Button>
@@ -545,13 +417,13 @@ function AgentDialog({
               </Button>
             </>
           ) : null}
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </Drawer.DialogFooter>
+      </Drawer.DialogContent>
+    </Drawer.Dialog>
   )
 }
 
-function AgentRequestDialog({
+export function AgentRequestDialog({
   onClose,
   onDecision,
   request,
@@ -570,14 +442,14 @@ function AgentRequestDialog({
   }, [requestId])
   const expiryIsValid = mode !== 'until' || (expiresAt.length > 0 && new Date(expiresAt).getTime() > Date.now())
   return (
-    <Dialog onOpenChange={(next) => !next && onClose()} open={request !== null}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>{tt('Review Agent access request')}</DialogTitle>
-          <DialogDescription>
+    <Drawer.Dialog onOpenChange={(next) => !next && onClose()} open={request !== null}>
+      <Drawer.DialogContent className="sm:max-w-md">
+        <Drawer.DialogHeader>
+          <Drawer.DialogTitle>{tt('Review Agent access request')}</Drawer.DialogTitle>
+          <Drawer.DialogDescription>
             {tt('Confirm the Agent, resource, permissions, and access duration before deciding.')}
-          </DialogDescription>
-        </DialogHeader>
+          </Drawer.DialogDescription>
+        </Drawer.DialogHeader>
         {request ? (
           <div className="grid gap-4">
             <dl className="grid divide-y">
@@ -636,7 +508,7 @@ function AgentRequestDialog({
             ) : null}
           </div>
         ) : null}
-        <DialogFooter>
+        <Drawer.DialogFooter>
           <Button onClick={onClose} variant="outline">
             {tt('Cancel')}
           </Button>
@@ -660,9 +532,9 @@ function AgentRequestDialog({
               {tt('Approve')}
             </Button>
           ) : null}
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </Drawer.DialogFooter>
+      </Drawer.DialogContent>
+    </Drawer.Dialog>
   )
 }
 
@@ -1892,3 +1764,5 @@ function InviteOrganizationMemberDialog({
     </Dialog>
   )
 }
+
+export { AccountOverviewPage } from './overview-page'

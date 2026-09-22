@@ -66,7 +66,7 @@ afterAll(() => server.close())
 describe('AccountProfilePage', () => {
   it('persists the selected time zone for Account Center dates [spec: account-center/account-preferences]', async () => {
     renderWithClient(<AccountProfilePage />)
-    fireEvent.mouseDown(await screen.findByRole('tab', { name: 'Preferences' }), { button: 0, ctrlKey: false })
+    fireEvent.click(await screen.findByText('Preferences', { selector: 'summary' }))
     fireEvent.click((await screen.findAllByRole('button', { name: 'Change' }))[1]!)
     fireEvent.click(await screen.findByRole('combobox', { name: 'Time zone' }))
     fireEvent.change(await screen.findByPlaceholderText('Search time zones…'), { target: { value: 'Europe/London' } })
@@ -79,7 +79,7 @@ describe('AccountProfilePage', () => {
 
   it('changes the Account Center language from the preferences dialog', async () => {
     renderWithClient(<AccountProfilePage />)
-    fireEvent.mouseDown(await screen.findByRole('tab', { name: 'Preferences' }), { button: 0, ctrlKey: false })
+    fireEvent.click(await screen.findByText('Preferences', { selector: 'summary' }))
     fireEvent.click((await screen.findAllByRole('button', { name: 'Change' }))[0]!)
     fireEvent.change(await screen.findByLabelText('Language'), { target: { value: 'zh' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
@@ -91,7 +91,7 @@ describe('AccountProfilePage', () => {
 
   it('shows a loading state then renders profile sections', async () => {
     renderWithClient(<AccountProfilePage />)
-    expect(await screen.findByRole('heading', { name: 'Profile' })).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'Account settings' })).toBeTruthy()
     expect(screen.queryByText('Export account data')).toBeNull()
     expect(screen.getByRole('button', { name: /Edit avatar/ })).toBeTruthy()
     expect(screen.getByRole('button', { name: /Edit display name/ })).toBeTruthy()
@@ -431,8 +431,8 @@ describe('AccountProfilePage', () => {
     }
     server.use(http.get(`${base}/api/configz`, () => HttpResponse.json(limited)))
     renderWithClient(<AccountProfilePage />)
-    expect(await screen.findByRole('heading', { name: 'Profile' })).toBeTruthy()
-    expect(screen.queryByRole('button', { name: /Edit avatar/ })).toBeNull()
+    expect(await screen.findByRole('heading', { name: 'Account settings' })).toBeTruthy()
+    expect((screen.getByRole('button', { name: /Edit avatar/ }) as HTMLButtonElement).disabled).toBe(true)
     expect(screen.queryByRole('button', { name: /Edit display name/ })).toBeNull()
     expect(screen.queryByRole('button', { name: /Edit username/ })).toBeNull()
     expect(screen.queryByRole('button', { name: /Edit email/ })).toBeNull()
@@ -456,9 +456,11 @@ describe('AccountProfilePage', () => {
     withImage.profile.image = 'https://cdn.example.com/a.png'
     Object.assign(store, withImage)
     renderWithClient(<AccountProfilePage />)
-    expect(await screen.findByText('Custom image')).toBeTruthy()
-    const avatarRow = screen.getByText('Custom image').closest('article') as HTMLElement
-    expect(avatarRow.querySelector('img')?.getAttribute('src')).toBe('https://cdn.example.com/a.png')
+    expect(await screen.findByRole('button', { name: 'Edit avatar' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Edit avatar' }))
+    expect((await screen.findByRole('dialog')).querySelector('img')?.getAttribute('src')).toBe(
+      'https://cdn.example.com/a.png',
+    )
   })
 
   it('renders the unavailable profile section when no profile is returned', async () => {
@@ -495,7 +497,7 @@ describe('AccountProfilePage', () => {
     // password dialog lives on the profile page only when password panel is shown via security page;
     // here we exercise the profile-account password-less path and confirm no password dialog leaks
     renderWithClient(<AccountProfilePage />)
-    expect(await screen.findByRole('heading', { name: 'Profile' })).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'Account settings' })).toBeTruthy()
     expect(screen.queryByLabelText('Current password')).toBeNull()
   })
 })
