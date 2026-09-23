@@ -69,3 +69,40 @@ Feature: Platform bootstrap and route access
     Given I am signed in
     When I open /
     Then I am redirected to /profile
+
+  @entrypoint:product-ui @journey:auth-initialization-recovery @proof:unit
+  Scenario: Authentication initialization is bounded and recoverable
+    Given authentication initialization requires database access
+    When initialization fails or exceeds its five second deadline
+    Then the request returns a service error without publishing the unfinished authentication instance
+    And the next request can initialize independently
+    And concurrent requests never share request-owned pending initialization I/O
+
+  @entrypoint:product-ui @journey:worker-request-duration @proof:unit
+  Scenario: Request timing includes initialization and failures
+    When a request passes through Worker initialization and application routing
+    Then the Worker records the complete duration and response status
+    And the response exposes the complete duration through Server-Timing
+    And failed initialization is included in the same measurements
+
+  @journey:lazy-secret-derivation @entrypoint:product-ui @proof:unit
+  Scenario: Requests without encrypted-secret operations avoid key derivation
+    When a request constructs its dependencies without reading or writing encrypted secrets
+    Then no encryption key is derived
+    And the first secret operation derives one reusable key for that cipher
+
+  @journey:worker-router-reuse @entrypoint:product-ui @proof:unit
+  Scenario: Ready authentication instances reuse their HTTP router
+    Given requests use the same resolved authentication configuration
+    When the Worker dispatches concurrent requests
+    Then the route graph is built once for that authentication instance
+    And each request retains its own dependencies and correlation context
+    And changed authentication configuration receives a new router
+
+  @entrypoint:product-ui @journey:system-resource-lookup @proof:integration
+  Scenario: Built-in identity lookup does not enumerate tenant directories
+    Given the deployment has a platform Organization and a Realmroot Resource Server
+    When authentication preparation resolves these built-in records
+    Then it queries their unique slug and identifier directly
+    And it does not list or count unrelated Organizations and Resource Servers
+    And deleted Resource Servers remain unavailable

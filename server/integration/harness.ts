@@ -92,6 +92,7 @@ function integrationSecurityPolicy(): SecurityPolicy {
 }
 
 export interface Harness {
+  auth: ReturnType<typeof createAuth>
   app: ReturnType<typeof createApp>
   request: (input: string, init?: RequestInit) => Promise<Response>
   db: ReturnType<typeof createDb>
@@ -140,6 +141,7 @@ export async function createHarness(
   })
 
   return {
+    auth,
     app,
     request: async (input, init) => app.request(new URL(input, baseURL).toString(), init, runtimeEnv),
     db,

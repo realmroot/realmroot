@@ -1,16 +1,9 @@
-import { isPlatformOrganization } from '@server/domain/platform-organization'
-import { isRealmrootResourceServer } from '@server/domain/realmroot-resource-server'
+import { platformOrganization } from '@server/domain/platform-organization'
+import { realmrootResourceServer } from '@server/domain/realmroot-resource-server'
 import type { Deps } from '@server/usecases/deps'
 
-const pageSize = 100
-
-export async function findPlatformOrganization(deps: Pick<Deps, 'authorization'>) {
-  for (let offset = 0; ; offset += pageSize) {
-    const page = await deps.authorization.listOrganizations({ limit: pageSize, offset })
-    const organization = page.items.find(isPlatformOrganization)
-    if (organization) return organization
-    if (page.pagination.page >= page.pagination.totalPages) return null
-  }
+export function findPlatformOrganization(deps: Pick<Deps, 'authorization'>) {
+  return deps.authorization.findOrganizationBySlug(platformOrganization.slug)
 }
 
 export async function requirePlatformOrganization(deps: Pick<Deps, 'authorization'>) {
@@ -19,11 +12,6 @@ export async function requirePlatformOrganization(deps: Pick<Deps, 'authorizatio
   return organization
 }
 
-export async function findRealmrootResourceServer(deps: Pick<Deps, 'authorization'>) {
-  for (let offset = 0; ; offset += pageSize) {
-    const page = await deps.authorization.listResources({ limit: pageSize, offset })
-    const resource = page.items.find(isRealmrootResourceServer)
-    if (resource) return resource
-    if (page.pagination.page >= page.pagination.totalPages) return null
-  }
+export function findRealmrootResourceServer(deps: Pick<Deps, 'authorization'>) {
+  return deps.authorization.findResourceByIdentifier(realmrootResourceServer.identifier)
 }

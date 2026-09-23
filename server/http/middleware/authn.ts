@@ -180,9 +180,7 @@ async function authenticateOAuthApplication(
   const accessToken = authorization.slice('Bearer '.length).trim()
   const issuer = oauth.issuer(c.req.url)
   const audience = oauth.audience(c.req.url)
-  const verified = await auth.api
-    .verifyJWT({ body: { token: accessToken, issuer, audience }, asResponse: false })
-    .catch(() => null)
+  const verified = await auth.api.verifyJWT({ body: { token: accessToken, issuer, audience }, asResponse: false })
   const payload = verified?.payload
   if (!payload) throw unauthorized('OAuth access token is invalid.')
   const tokenSubject = stringClaim(payload, 'sub')
@@ -242,9 +240,7 @@ async function authenticateOAuthAgent(
   const accessToken = authorization.slice('DPoP '.length).trim()
   const issuer = oauth.issuer(c.req.url)
   const audience = oauth.audience(c.req.url)
-  const verified = await auth.api
-    .verifyJWT({ body: { token: accessToken, issuer, audience }, asResponse: false })
-    .catch(() => null)
+  const verified = await auth.api.verifyJWT({ body: { token: accessToken, issuer, audience }, asResponse: false })
   const payload = verified?.payload
   if (!payload) throw unauthorized('OAuth access token is invalid.')
   const clientId = stringClaim(payload, 'client_id')

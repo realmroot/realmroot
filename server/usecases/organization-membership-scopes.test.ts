@@ -165,6 +165,7 @@ function dependencies() {
     authorization: {
       findMemberByOrganizationUser: vi.fn().mockResolvedValue(null),
       findResource: vi.fn().mockImplementation(async (id) => (id === internalResource.id ? internalResource : null)),
+      findResourceByIdentifier: vi.fn().mockResolvedValue(internalResource),
       listResources: vi.fn().mockResolvedValue({
         items: [internalResource],
         pagination: { page: Math.floor(0 / 100) + 1, pageSize: 100, totalItems: 1, totalPages: Math.ceil(1 / 100) },

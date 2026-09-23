@@ -114,3 +114,56 @@ a token, remove a permission, and verify refresh cannot restore that permission.
   passing evidence; the initial timeout is retained as a local flake).
 
 Deployment is separate; no remote database migrations were applied.
+
+## Initialization and verification performance (2026-09-22)
+
+Production traces exposed 24 serial resource reads during provider initialization
+(6.3 seconds from SIN to D1 EWR). Insert-only resource configuration now performs
+no resource-table I/O at plugin initialization. Token authorization looks up only
+the requested target and materializes its configured defaults if the row is absent.
+Existing policies and disabled flags remain authoritative, unregistered targets
+remain rejected, and concurrent inserts retain unique-conflict handling. Explicit
+merge/overwrite seed modes retain upstream initialization semantics. No pending
+request-owned initialization promise is shared across Worker invocations.
+
+The Worker publishes only authentication instances whose `$context` has resolved.
+Failed, abandoned, and timed-out initializers cannot enter the global cache.
+Resource reconciliation, security-policy loading, configuration loading and
+provider initialization each have a five-second deadline. This is a failure
+boundary, not a performance target: timeout returns HTTP 503 without stale-policy
+fallback or automatic retries. D1 queries cannot be cancelled; their late results
+are not published into these caches. Business handlers are not raced against a
+timeout, avoiding ambiguous results for committed mutations.
+
+JWT verification treats key-store failures and corrupt stored keys as server
+errors. Malformed tokens, unknown key IDs, signature failures and invalid claims
+remain authentication failures. The core patch narrows the catch around token
+verification; Resource API authentication no longer catches all errors as null.
+
+`worker.request.complete` records preparation plus routing, including initialization
+failures and health/cache responses. `Server-Timing: total;dur=...` reports the same
+interval. Existing `request.complete` remains the narrower router measurement;
+operators must use the Worker event or root trace for end-to-end latency.
+
+Regression proof: `server/worker-performance.test.ts`,
+`server/integration/auth-performance.test.ts`, and the machine-token journey in
+`server/integration/token-claims.test.ts`. Deployment requires the patched lockfile
+and normal backend, type, specification, and build checks, followed by live
+protocol and authenticated boundary probes.
+
+The cold/request-path audit also removes unnecessary CPU work: login configuration
+selects authentication-enabled Connectors and decrypts only login client secrets;
+resource and registration credentials remain owned by their respective operations.
+Secret ciphers derive their AES key on first encryption/decryption, not construction.
+Ready auth instances retain a router via a WeakMap, while dependency injection and
+security state remain request-local. Router invalidation follows auth configuration
+invalidation, so changed provider settings do not retain old handlers.
+
+Management OpenAPI generation is also deferred to its first consumer and cached.
+Importing the Worker no longer converts the complete Zod schema graph into an
+OpenAPI document. Existing semantic-contract tests verify identical output.
+
+Built-in Organization and Resource Server resolution uses their unique slug and
+identifier, with the existing soft-delete filter. It no longer paginates tenant
+directories or counts their rows. Provider initialization reads sign-in settings
+without loading general page settings.

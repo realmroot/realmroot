@@ -1,6 +1,6 @@
 import type { SecurityRepository, UserRepository } from '@server/usecases/ports'
 import { vi } from 'vitest'
-import { unifiedOpenApi } from '../openapi/management'
+import { getUnifiedOpenApi } from '../openapi/management'
 import { createPage, securityPolicy, updatedSecurityPolicy } from './management.fixture-test-utils'
 
 export function createAuthMock() {
@@ -127,7 +127,7 @@ export function openApiOperations() {
 }
 
 export function openApiOperationObjects() {
-  return Object.entries(unifiedOpenApi.paths).flatMap(([path, pathItem]) =>
+  return Object.entries(getUnifiedOpenApi().paths).flatMap(([path, pathItem]) =>
     Object.entries(resolveOpenApiPathItem(pathItem))
       .filter(([method]) => isManagementOpenApiMethod(method))
       .map(([method, operation]) => {
@@ -163,7 +163,7 @@ export function resolveOpenApiPathItem(pathItem: unknown) {
     return record
   }
 
-  const pathItems = unifiedOpenApi.components.pathItems as Record<string, unknown>
+  const pathItems = getUnifiedOpenApi().components.pathItems as Record<string, unknown>
   return openApiRecord(pathItems[ref.replace('#/components/pathItems/', '')])
 }
 
@@ -216,7 +216,7 @@ export function openApiParameters(value: unknown) {
       return record as unknown as OpenApiParameter
     }
 
-    const parameters = unifiedOpenApi.components.parameters as Record<string, unknown>
+    const parameters = getUnifiedOpenApi().components.parameters as Record<string, unknown>
     return openApiRecord(parameters[ref.replace('#/components/parameters/', '')]) as unknown as OpenApiParameter
   })
 }
@@ -290,7 +290,7 @@ export function assertConstrainedOpenApiSchema(value: unknown, path: string, see
 }
 
 export function resolveOpenApiSchemaRef(ref: string) {
-  const schemas = unifiedOpenApi.components.schemas as Record<string, unknown>
+  const schemas = getUnifiedOpenApi().components.schemas as Record<string, unknown>
   return schemas[ref.replace('#/components/schemas/', '')]
 }
 
@@ -326,7 +326,7 @@ export function openApiJsonResponseSchema(value: unknown) {
 }
 
 export function openApiResponses() {
-  return unifiedOpenApi.components.responses as Record<string, unknown>
+  return getUnifiedOpenApi().components.responses as Record<string, unknown>
 }
 
 export function isManagementOpenApiMethod(method: string): method is ManagementOpenApiMethod {

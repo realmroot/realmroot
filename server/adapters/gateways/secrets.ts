@@ -7,7 +7,8 @@ export function createSecretCipher(masterSecret: string): SecretCipher {
     throw new Error('CREDENTIAL_ENCRYPTION_KEY must contain at least 32 characters.')
   }
 
-  const key = deriveKey(masterSecret)
+  let key: Promise<CryptoKey> | undefined
+  const getKey = () => (key ??= deriveKey(masterSecret))
 
   return {
     isSealed(value) {
@@ -18,7 +19,7 @@ export function createSecretCipher(masterSecret: string): SecretCipher {
       const iv = crypto.getRandomValues(new Uint8Array(12))
       const ciphertext = await crypto.subtle.encrypt(
         { name: 'AES-GCM', iv, additionalData: encode(context) },
-        await key,
+        await getKey(),
         encode(plaintext),
       )
       return `${envelopeVersion}.${base64Url(iv)}.${base64Url(new Uint8Array(ciphertext))}`
@@ -35,7 +36,7 @@ export function createSecretCipher(masterSecret: string): SecretCipher {
           iv: fromBase64Url(encodedIv),
           additionalData: encode(context),
         },
-        await key,
+        await getKey(),
         fromBase64Url(encodedCiphertext),
       )
       return new TextDecoder().decode(plaintext)

@@ -1,5 +1,5 @@
 import { createSecretCipher } from '@server/adapters/gateways/secrets'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 describe('secret cipher', () => {
   it('encrypts with randomized authenticated envelopes and requires the original context', async () => {
@@ -14,6 +14,20 @@ describe('secret cipher', () => {
     expect(cipher.isSealed('legacy-client-secret')).toBe(false)
     await expect(cipher.open(first, 'connector:one:client-secret')).resolves.toBe('client-secret')
     await expect(cipher.open(first, 'connector:two:client-secret')).rejects.toThrow()
+  })
+
+  it('derives a key only for actual secret operations [spec: platform-onboarding/lazy-secret-derivation]', async () => {
+    const digest = vi.spyOn(crypto.subtle, 'digest')
+    try {
+      const cipher = createSecretCipher('credential-encryption-master-key-for-tests')
+      expect(cipher.isSealed('v1.envelope')).toBe(true)
+      expect(digest).not.toHaveBeenCalled()
+      const sealed = await cipher.seal('secret', 'context')
+      expect(await cipher.open(sealed, 'context')).toBe('secret')
+      expect(digest).toHaveBeenCalledOnce()
+    } finally {
+      digest.mockRestore()
+    }
   })
 
   it('fails fast when the master secret is too short', () => {

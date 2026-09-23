@@ -1,5 +1,5 @@
 diff --git a/dist/authorize-riRRCSbC.mjs b/dist/authorize-riRRCSbC.mjs
-index 3242d48eb31e844240b0cd9f5931580f3c5367c2..e8f19013d01dc55e74f0b37647a496fa11723892 100644
+index 3242d48eb31e844240b0cd9f5931580f3c5367c2..da6484ccc22c47d59a5b79b9f20d01ac829f00a5 100644
 --- a/dist/authorize-riRRCSbC.mjs
 +++ b/dist/authorize-riRRCSbC.mjs
 @@ -64,10 +64,18 @@ async function consentEndpoint(ctx, opts, authorize) {
@@ -106,7 +106,17 @@ index 3242d48eb31e844240b0cd9f5931580f3c5367c2..e8f19013d01dc55e74f0b37647a496fa
  //#region src/logout.ts
  const BACKCHANNEL_LOGOUT_EVENT_URI = "http://schemas.openid.net/event/backchannel-logout";
  const LOGOUT_TOKEN_JWT_TYP = "logout+jwt";
-@@ -4557,6 +4607,7 @@ const oauthProvider = (options) => {
+@@ -4404,7 +4454,8 @@ const oauthProvider = (options) => {
+ 		onRequest: handleIssuerMetadataRequest,
+ 		init: async (ctx) => {
+ 			if (ctx.options.secondaryStorage && ctx.options.session?.storeSessionInDatabase !== true) throw new BetterAuthError("OAuth Provider requires `session.storeSessionInDatabase: true` when using secondaryStorage");
+-			await seedResources(ctx, opts);
++			// Realmroot uses insert-only defaults: unrelated requests must not scan the resource catalog.
++			if (opts.resourceSeedMode && opts.resourceSeedMode !== "insertOnly") await seedResources(ctx, opts);
+ 			logEnforcePerClientResourcesResolution(opts);
+ 			if (!opts.disableJwtPlugin) {
+ 				const jwtPluginOptions = getJwtPlugin(ctx)?.options;
+@@ -4557,6 +4608,7 @@ const oauthProvider = (options) => {
  				body: z.object({
  					selected: z.boolean().optional().meta({ description: "Confirms an account has been selected and authorization can proceed." }),
  					created: z.boolean().optional().meta({ description: "Confirms an account was registered" }),
@@ -114,7 +124,7 @@ index 3242d48eb31e844240b0cd9f5931580f3c5367c2..e8f19013d01dc55e74f0b37647a496fa
  					postLogin: z.boolean().optional().meta({ description: "Confirms organization and/or team selection." }),
  					oauth_query: z.string().optional().meta({ description: "The redirected page's query parameters" })
  				}),
-@@ -4577,7 +4628,7 @@ const oauthProvider = (options) => {
+@@ -4577,7 +4629,7 @@ const oauthProvider = (options) => {
  					} }
  				} }
  			}, async (ctx) => {
@@ -123,7 +133,7 @@ index 3242d48eb31e844240b0cd9f5931580f3c5367c2..e8f19013d01dc55e74f0b37647a496fa
  			}),
  			oauth2Token: createOAuthEndpoint("/oauth2/token", {
  				method: "POST",
-@@ -5631,22 +5682,34 @@ async function authorizeEndpoint(ctx, opts, settings) {
+@@ -5631,22 +5683,34 @@ async function authorizeEndpoint(ctx, opts, settings) {
  			return redirectWithPromptCode(ctx, opts, "create", { page: typeof signupRedirect === "string" ? signupRedirect : void 0 });
  		}
  	}
@@ -164,7 +174,7 @@ index 3242d48eb31e844240b0cd9f5931580f3c5367c2..e8f19013d01dc55e74f0b37647a496fa
  	});
  	if (client.skipConsent) return redirectWithAuthorizationCode(ctx, opts, {
  		query,
-@@ -5676,12 +5739,12 @@ async function authorizeEndpoint(ctx, opts, settings) {
+@@ -5676,12 +5740,12 @@ async function authorizeEndpoint(ctx, opts, settings) {
  	});
  	if (!consent || !requestedScopes.every((val) => consent.scopes.includes(val)) || !requestedUserInfoClaims.every((claim) => (consent.requestedUserInfoClaims ?? []).includes(claim))) {
  		if (promptNone) return redirectWithPromptNoneError(ctx, opts, query, "consent_required", "End-User consent is required");
@@ -179,7 +189,7 @@ index 3242d48eb31e844240b0cd9f5931580f3c5367c2..e8f19013d01dc55e74f0b37647a496fa
  	}
  	return redirectWithAuthorizationCode(ctx, opts, {
  		query,
-@@ -5732,7 +5795,24 @@ async function redirectWithAuthorizationCode(ctx, opts, verificationValue) {
+@@ -5732,7 +5796,24 @@ async function redirectWithAuthorizationCode(ctx, opts, verificationValue) {
  	return handleRedirect(ctx, redirectUriWithCode.toString());
  }
  async function redirectWithPromptCode(ctx, opts, type, options) {
@@ -205,7 +215,7 @@ index 3242d48eb31e844240b0cd9f5931580f3c5367c2..e8f19013d01dc55e74f0b37647a496fa
  	let path = opts.loginPage;
  	if (type === "select_account") path = opts.selectAccount?.page ?? opts.loginPage;
  	else if (type === "post_login") {
-@@ -5750,7 +5830,13 @@ async function signParams(ctx, opts, flags) {
+@@ -5750,7 +5831,13 @@ async function signParams(ctx, opts, flags) {
  	params.set(signedQueryIssuedAtParam, String(issuedAt));
  	params.delete("sig");
  	params.delete(postLoginClearedParam);
@@ -220,21 +230,137 @@ index 3242d48eb31e844240b0cd9f5931580f3c5367c2..e8f19013d01dc55e74f0b37647a496fa
  	const signature = await makeSignature(canonicalizeOAuthQueryParams(params).toString(), ctx.context.secret);
  	params.set("sig", signature);
 diff --git a/dist/introspect-njKASm3q.mjs b/dist/introspect-njKASm3q.mjs
-index c8d635e57ca4cd3fe8f7cbfd5c769d61b7e96874..9189fb06336de345bc17a279b591391d2c7f4487 100644
+index c8d635e57ca4cd3fe8f7cbfd5c769d61b7e96874..943d37e98b73035e6c5c89ac4756150d33522fe4 100644
 --- a/dist/introspect-njKASm3q.mjs
 +++ b/dist/introspect-njKASm3q.mjs
-@@ -829,7 +829,9 @@ async function seedResources(ctx, opts) {
- 				}]
- 			});
- 		} catch (err) {
+@@ -654,28 +654,35 @@ function invalidateResourceCache(identifier) {
+ * Looks up an {@link OAuthResource} by `identifier`, consulting the in-process
+ * cache when the identifier is in {@link OAuthOptions.cachedResources}.
+ *
+-* Triggers the lazy seed via {@link seedResourcesOnce} on first call — this
+-* is the safety net for deployments where migrations run after plugin init
+-* (so seeding at init couldn't see the table yet). The seed is idempotent
+-* and coalesced, so the cost is paid only once per process.
++* Insert-only defaults are materialized on demand for this identifier only.
++* Discovery, session reads, and plugin initialization do not need the catalog.
+ *
+ * Returns a defensive copy so callers can't mutate cached state.
+ *
+ * @internal
+ */
+ async function getResource(ctx, opts, identifier) {
+-	await seedResourcesOnce(ctx.context, opts);
+ 	if (opts.cachedResources?.has(identifier)) {
+ 		const cached = resourceCache.get(identifier);
+ 		if (cached) return Object.assign({}, cached);
+ 	}
+-	const dbResource = await ctx.context.adapter.findOne({
++	let dbResource = await ctx.context.adapter.findOne({
+ 		model: opts.schema?.oauthResource?.modelName ?? "oauthResource",
+ 		where: [{
+ 			field: "identifier",
+ 			value: identifier
+ 		}]
+ 	});
++	if (!dbResource) {
++		const configured = collectResourceInputs(opts).find((input) => input.identifier === identifier);
++		if (configured) {
++			await seedResources(ctx.context, { ...opts, resources: [configured] });
++			dbResource = await ctx.context.adapter.findOne({
++				model: opts.schema?.oauthResource?.modelName ?? "oauthResource",
++				where: [{ field: "identifier", value: identifier }]
++			});
++		}
++	}
+ 	if (dbResource && opts.cachedResources?.has(identifier)) resourceCache.set(identifier, Object.assign({}, dbResource));
+ 	return dbResource;
+ }
+@@ -756,24 +763,6 @@ function buildSeedUpdate(input, mode, now) {
+ */
+ const MISSING_TABLE_PATTERN = /no such table|relation.*does not exist|table.*does(?: not|n[''']?t) exist/i;
+ /**
+-* Per-adapter state for the lazy-seed path. A module-level boolean would let
+-* one Better Auth instance suppress seeding for every later instance in the same
+-* process. Endpoint `AuthContext` objects are not guaranteed to be stable across
+-* requests, so keying by the adapter keeps one seed state per backing store.
+-*/
+-let seedStates = /* @__PURE__ */ new WeakMap();
+-function getSeedState(ctx) {
+-	const key = ctx.adapter;
+-	const existing = seedStates.get(key);
+-	if (existing) return existing;
+-	const created = {
+-		completed: false,
+-		promise: null
+-	};
+-	seedStates.set(key, created);
+-	return created;
+-}
+-/**
+ * Seeds `oauthResource` rows from plugin config.
+ *
+ * Behavior is controlled by {@link OAuthOptions.resourceSeedMode}:
+@@ -795,7 +784,7 @@ function getSeedState(ctx) {
+ * Migration ordering: at plugin `init` time, tables may not exist yet
+ * (Better Auth's test harness, and many deployment setups, run migrations
+ * after auth construction). Seeding tolerates "no such table" errors and
+-* defers — the lazy {@link seedResourcesOnce} path picks up the work on
++* defers — the lazy {@link getResource} path picks up the work on
+ * the first resource access.
+ *
+ * Idempotent: safe to call multiple times.
+@@ -807,6 +796,25 @@ async function seedResources(ctx, opts) {
+ 	if (inputs.length === 0) return;
+ 	const mode = opts.resourceSeedMode ?? "insertOnly";
+ 	const modelName = opts.schema?.oauthResource?.modelName ?? "oauthResource";
++	// Bound SQL parameters as well as round trips (D1 accepts at most 100 bindings).
++	const existingByIdentifier = new Map();
++	try {
++		for (let offset = 0; offset < inputs.length; offset += 80) {
++			const identifiers = inputs.slice(offset, offset + 80).map((input) => input.identifier);
++			const existing = await ctx.adapter.findMany({
++				model: modelName,
++				where: [{ field: "identifier", operator: "in", value: identifiers }],
++				limit: identifiers.length
++			});
++			for (const row of existing) existingByIdentifier.set(row.identifier, row);
++		}
++	} catch (err) {
++		let cause = err;
++		while (cause instanceof Error && cause.cause instanceof Error) cause = cause.cause;
++		const message = cause instanceof Error ? cause.message : String(cause);
++		if (MISSING_TABLE_PATTERN.test(message)) return;
++		throw err;
++	}
+ 	for (const rawInput of inputs) {
+ 		const check = await checkIdentifier(opts, rawInput.identifier);
+ 		if (!check.ok) {
+@@ -819,23 +827,7 @@ async function seedResources(ctx, opts) {
+ 			const { signingAlgorithm: _, ...rest } = input;
+ 			input = rest;
+ 		}
+-		let existing;
+-		try {
+-			existing = await ctx.adapter.findOne({
+-				model: modelName,
+-				where: [{
+-					field: "identifier",
+-					value: input.identifier
+-				}]
+-			});
+-		} catch (err) {
 -			const message = err instanceof Error ? err.message : String(err);
-+			let cause = err;
-+            while (cause instanceof Error && cause.cause instanceof Error) cause = cause.cause;
-+            const message = cause instanceof Error ? cause.message : String(cause);
- 			if (MISSING_TABLE_PATTERN.test(message)) {
- 				logger.debug("oauth-provider: oauthResource table not yet created; deferring resource seed to first access.");
- 				return;
-@@ -844,7 +846,9 @@ async function seedResources(ctx, opts) {
+-			if (MISSING_TABLE_PATTERN.test(message)) {
+-				logger.debug("oauth-provider: oauthResource table not yet created; deferring resource seed to first access.");
+-				return;
+-			}
+-			throw err;
+-		}
++		const existing = existingByIdentifier.get(input.identifier);
+ 		const now = /* @__PURE__ */ new Date();
+ 		if (!existing) {
+ 			try {
+@@ -844,7 +836,9 @@ async function seedResources(ctx, opts) {
  					data: buildSeedRow(input, now)
  				});
  			} catch (err) {
@@ -245,7 +371,38 @@ index c8d635e57ca4cd3fe8f7cbfd5c769d61b7e96874..9189fb06336de345bc17a279b591391d
  				if (/unique|duplicate|UNIQUE/i.test(message)) {
  					logger.debug(`oauth-provider: resource ${input.identifier} already inserted by a concurrent process — skipping.`);
  					continue;
-@@ -1350,7 +1354,7 @@ async function createJwtAccessToken(ctx, opts, user, client, audienceClaim, scop
+@@ -869,30 +863,6 @@ async function seedResources(ctx, opts) {
+ 	}
+ }
+ /**
+-* Idempotent, coalesced wrapper around {@link seedResources} for the
+-* lazy-seed path. Safe to call from every resource lookup — the first call
+-* runs the seed, concurrent calls await the same promise, and subsequent
+-* calls become no-ops.
+-*
+-* The endpoint context shape (`{ context: AuthContext }`) is what
+-* `getResource` receives, so this is a convenience overload that unwraps
+-* for callers.
+-*
+-* @internal
+-*/
+-async function seedResourcesOnce(ctx, opts) {
+-	const state = getSeedState(ctx);
+-	if (state.completed === true) return;
+-	if (state.promise !== null) return state.promise;
+-	state.promise = seedResources(ctx, opts).then(() => {
+-		state.completed = true;
+-	}).catch((err) => {
+-		state.promise = null;
+-		throw err;
+-	});
+-	return state.promise;
+-}
+-/**
+ * Logs the resolved value of {@link OAuthOptions.enforcePerClientResources}
+ * so deployment admins see which default applied at init. Separated from
+ * {@link resolveEnforcePerClientResources} so the latter stays pure and
+@@ -1350,7 +1320,7 @@ async function createJwtAccessToken(ctx, opts, user, client, audienceClaim, scop
  	const iat = overrides?.iat ?? Math.floor(Date.now() / 1e3);
  	const exp = overrides?.exp ?? iat + (opts.accessTokenExpiresIn ?? 3600);
  	const jwtPluginOptions = getJwtPlugin(ctx.context).options;
@@ -254,7 +411,7 @@ index c8d635e57ca4cd3fe8f7cbfd5c769d61b7e96874..9189fb06336de345bc17a279b591391d
  	return signJWT(ctx, {
  		options: jwtPluginOptions,
  		header: { typ: JWT_ACCESS_TOKEN_TYPE },
-@@ -1361,7 +1365,6 @@ async function createJwtAccessToken(ctx, opts, user, client, audienceClaim, scop
+@@ -1361,7 +1331,6 @@ async function createJwtAccessToken(ctx, opts, user, client, audienceClaim, scop
  			sub: subject,
  			aud: toAudienceClaim(audienceClaim),
  			client_id: client.clientId,
@@ -262,7 +419,7 @@ index c8d635e57ca4cd3fe8f7cbfd5c769d61b7e96874..9189fb06336de345bc17a279b591391d
  			scope: scopes.join(" "),
  			sid: overrides?.sid,
  			iss: jwtPluginOptions?.jwt?.issuer ?? ctx.context.baseURL,
-@@ -1792,8 +1795,16 @@ async function createUserTokens(ctx, opts, params) {
+@@ -1792,8 +1761,16 @@ async function createUserTokens(ctx, opts, params) {
  		iat,
  		scopeExpiresAtSeconds: scopeExp
  	});
@@ -281,7 +438,7 @@ index c8d635e57ca4cd3fe8f7cbfd5c769d61b7e96874..9189fb06336de345bc17a279b591391d
  	const exp = grantIssuance.accessTokenExpiresAtSeconds;
  	const refreshTokenExp = grantIssuance.refreshTokenExpiresAtSeconds;
  	const isRefreshToken = user && clientAllowsGrant(client, "refresh_token") && (existingRefreshToken?.scopes?.includes("offline_access") || scopes.includes("offline_access"));
-@@ -1830,7 +1841,7 @@ async function createUserTokens(ctx, opts, params) {
+@@ -1830,7 +1807,7 @@ async function createUserTokens(ctx, opts, params) {
  		refreshToken: existingRefreshToken
  	});
  	const requestedUserInfoClaims = params.requestedUserInfoClaims ?? existingRefreshToken?.requestedUserInfoClaims ?? [];
@@ -290,7 +447,7 @@ index c8d635e57ca4cd3fe8f7cbfd5c769d61b7e96874..9189fb06336de345bc17a279b591391d
  		iat,
  		exp: refreshTokenExp,
  		sid: sessionId
-@@ -1861,7 +1872,7 @@ async function createUserTokens(ctx, opts, params) {
+@@ -1861,7 +1838,7 @@ async function createUserTokens(ctx, opts, params) {
  		iat,
  		exp,
  		sid: sessionId
@@ -299,7 +456,7 @@ index c8d635e57ca4cd3fe8f7cbfd5c769d61b7e96874..9189fb06336de345bc17a279b591391d
  		iat,
  		exp: refreshTokenExp,
  		sid: sessionId
-@@ -2157,7 +2168,6 @@ async function handleRefreshTokenGrant(ctx, opts) {
+@@ -2157,7 +2134,6 @@ async function handleRefreshTokenGrant(ctx, opts) {
  				error: "invalid_grant"
  			});
  		}
@@ -307,7 +464,7 @@ index c8d635e57ca4cd3fe8f7cbfd5c769d61b7e96874..9189fb06336de345bc17a279b591391d
  		throw new APIError("BAD_REQUEST", {
  			error_description: "invalid refresh token",
  			error: "invalid_grant"
-@@ -2261,12 +2271,13 @@ async function validateJwtAccessToken(ctx, opts, token, clientId) {
+@@ -2261,12 +2237,13 @@ async function validateJwtAccessToken(ctx, opts, token, clientId) {
  	}
  	const rawAud = jwtPayload.aud;
  	if (!await isAudienceClaimAllowed(ctx, opts, rawAud, [userInfoAud])) return { active: false };
@@ -324,7 +481,7 @@ index c8d635e57ca4cd3fe8f7cbfd5c769d61b7e96874..9189fb06336de345bc17a279b591391d
  		audienceResources: audienceResourceIdentifiers(rawAud, userInfoAud)
  	})) return { active: false };
  	const sessionId = jwtPayload.sid;
-@@ -2280,7 +2291,8 @@ async function validateJwtAccessToken(ctx, opts, token, clientId) {
+@@ -2280,7 +2257,8 @@ async function validateJwtAccessToken(ctx, opts, token, clientId) {
  		});
  		if (!session || session.expiresAt < /* @__PURE__ */ new Date()) return { active: false };
  	}

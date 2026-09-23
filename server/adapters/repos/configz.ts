@@ -26,6 +26,11 @@ import {
   storedEmailSettingsSchema,
 } from './site-settings-schemas'
 
+export async function readBuiltInProviderSettings(db: Database) {
+  const signIn = await readSiteSettings(db, 'sign_in', signInSettingsSchema)
+  return signIn?.value.metadata?.builtInProviders
+}
+
 export function createDrizzleConfigzRepository(db: Database): ConfigzRepository {
   return {
     async getNavigation() {

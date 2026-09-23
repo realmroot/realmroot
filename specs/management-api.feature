@@ -244,3 +244,27 @@ Feature: Unified Realmroot resource API
     When I update branding, Account Center, sign-in, Realm, Organization creation policy, Developer Console access policy, Email delivery configuration, and security resources with Restish
     Then the unified API persists each tenant setting change
     And replacing Realm, Organization creation, Developer Console access, or Email delivery state requires the current strong entity tag
+
+  @entrypoint:agent-protocol @journey:oauth-resource-initialization @proof:integration
+  Scenario: Only resource authorization accesses OAuth resource policies
+    Given many OAuth resources are configured
+    When a new authentication instance serves discovery or session requests
+    Then initialization and these requests do not read or write the OAuth resource table
+    When a token request addresses a configured resource
+    Then only that target resource is read and created if missing
+    And existing resource policies are preserved
+    And unregistered or disabled audiences are rejected
+
+  @entrypoint:agent-protocol @journey:jwt-storage-failure @proof:integration
+  Scenario: Signing key storage failures are not reported as invalid credentials
+    Given a client presents an OAuth access token
+    When reading its verification keys fails
+    Then the protected API returns a server error rather than an authentication failure
+    And malformed or invalid tokens still return an authentication failure
+
+  @entrypoint:product-ui @journey:lazy-openapi-generation @proof:unit
+  Scenario: Authentication startup does not generate the management contract
+    When the Worker loads its route definitions
+    Then the OpenAPI document is not generated
+    When a caller requests the management contract
+    Then the unchanged contract is generated once and reused

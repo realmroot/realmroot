@@ -447,7 +447,7 @@ export interface RetiredOAuthClientGeneration {
 
 export interface ConnectorRepository {
   list(page: PaginationInput): Promise<{ items: ConnectorRecord[]; total: number }>
-  listEnabled(): Promise<ConnectorRecord[]>
+  listEnabled(options?: { purpose: 'authentication' }): Promise<ConnectorRecord[]>
   findById(id: string): Promise<ConnectorRecord | null>
   findByProviderId(providerId: string): Promise<ConnectorRecord | null>
   countResourceReferences(id: string): Promise<number>
@@ -1401,6 +1401,7 @@ export interface AuthorizationRepository {
     pagination: PaginationInput,
     organizationIds?: string[],
   ): Promise<AuthorizationPaginatedResult<OrganizationResponse>>
+  findOrganizationBySlug(slug: string): Promise<OrganizationResponse | null>
   findOrganization(id: string): Promise<OrganizationResponse | null>
   updateOrganization(id: string, patch: UpdateOrganizationRequest): Promise<void>
   deleteOrganization(id: string): Promise<void>
@@ -1447,6 +1448,7 @@ export interface AuthorizationRepository {
   listEnabledResources(): Promise<ApiResourceResponse[]>
   findResources(ids: string[]): Promise<ApiResourceResponse[]>
   findResource(id: string): Promise<ApiResourceResponse | null>
+  findResourceByIdentifier(identifier: string): Promise<ApiResourceResponse | null>
   findResourceByResourceUrl(resourceUrl: string): Promise<ApiResourceResponse | null>
   updateResource(
     id: string,

@@ -101,7 +101,7 @@ describe('OIDC authorization over real D1', () => {
     harness = await createHarness()
   })
 
-  it('initializes the same OAuth resource concurrently without failing either auth context', async () => {
+  it('initializes concurrent auth contexts without materializing OAuth resources [spec: management-api/oauth-resource-initialization]', async () => {
     const resource = 'https://concurrent-startup.example.com'
     const contexts = await Promise.all([
       createHarness({ validAudiences: [resource] }),
@@ -114,7 +114,7 @@ describe('OIDC authorization over real D1', () => {
     const result = await env.DB.prepare('SELECT count(*) AS total FROM oauth_resource WHERE identifier = ?')
       .bind(resource)
       .first<{ total: number }>()
-    expect(result?.total).toBe(1)
+    expect(result?.total).toBe(0)
   })
 
   it('enforces private Application membership at authorization and refresh [spec: hosted-auth/application-visibility-admission]', async () => {

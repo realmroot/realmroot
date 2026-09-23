@@ -1,3 +1,5 @@
+// Install Zod's OpenAPI extension before shared schemas are constructed.
+import '@hono/zod-openapi'
 import { oauthProviderAuthServerMetadata, oauthProviderOpenIdConfigMetadata } from '@better-auth/oauth-provider'
 import { Scalar } from '@scalar/hono-api-reference'
 import type { Auth } from '@server/auth'
@@ -42,7 +44,7 @@ import { hostedAuthErrors } from './middleware/hosted-auth-errors'
 import { paginationLinkHeader, responsePagination } from './middleware/pagination'
 import { requestContext } from './middleware/request-context'
 import { requireSecurityPolicy } from './middleware/security-policy'
-import { unifiedOpenApi, unifiedOpenApiLinkHeader, unifiedOpenApiPath } from './openapi/management'
+import { unifiedOpenApiLinkHeader, unifiedOpenApiPath } from './openapi/management-links'
 import { accountRoutes } from './routes/account'
 import { createAgentProtocolRoutes } from './routes/agent-protocol'
 import { createAccountAssetRoutes, createAssetRoutes, createProtectedResourceAssetRoutes } from './routes/assets'
@@ -79,7 +81,7 @@ type AuthHandler = Pick<Auth, 'handler'> & {
 // before constructing deps — a liveness probe must not depend on the database.
 export const healthStatus = { ok: true, service: 'realmroot' } as const
 
-export function createApp(auth: AuthHandler, deps: Deps, config: AppConfig = {}) {
+export function createApp(auth: AuthHandler, deps: Deps | ((c: Context) => Deps), config: AppConfig = {}) {
   // Registration order is load-bearing: middleware only guards routes registered
   // after it (public routes like /api/health stay public by registering before the
   // auth/security walls), and static paths must precede parameter paths. Preserve
@@ -100,7 +102,7 @@ export function createApp(auth: AuthHandler, deps: Deps, config: AppConfig = {})
   app.use('/api/*', cors)
   for (const path of publicIssuerMetadataPaths) app.use(path, cors)
   app.use('/api/*', authn(auth))
-  app.use('/api/*', requireSecurityPolicy(deps.security, config.securityPolicy))
+  app.use('/api/*', (c, next) => requireSecurityPolicy(c.get('deps').security, config.securityPolicy)(c, next))
 
   app.onError((error, c) => {
     if (error instanceof ApiError && error.status === 401 && c.req.path.startsWith('/api/')) {
@@ -293,7 +295,10 @@ function realmrootOAuth(config: AppConfig) {
 function createUnifiedApiRoutes(_auth: AuthHandler, _config: AppConfig) {
   const app = new Hono()
 
-  app.get('/openapi.json', (c) => c.json(unifiedOpenApi))
+  app.get('/openapi.json', async (c) => {
+    const { getUnifiedOpenApi } = await import('./openapi/management')
+    return c.json(getUnifiedOpenApi())
+  })
   app.get(
     '/docs',
     Scalar({
