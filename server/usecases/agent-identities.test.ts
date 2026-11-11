@@ -19,12 +19,10 @@ import {
   getPersonalAgent,
   getProtocolAgentEnrollment,
   getPublicAgentEnrollment,
-  listAllAgentIdentities,
   listAllAgents,
   listManagementAgentAuthorizedResourceServers,
   listManagementAgentInstallations,
   listManagementAgentPermissions,
-  listPersonalAgentIdentities,
   listPersonalAgents,
   recoverAgentIdentity,
   requireActiveAgentIdentity,
@@ -45,6 +43,47 @@ import { exportJWK, generateKeyPair } from 'jose'
 import { describe, expect, it, vi } from 'vitest'
 
 describe('Agent login identity', () => {
+  it('[spec: agent-identity/agent-owner-pagination] intersects requested owners with authority', async () => {
+    for (const [scope, requested, expected] of [
+      [undefined, undefined, undefined],
+      [undefined, 'other', 'other'],
+      [{ ownerUserId: 'owner' }, undefined, 'owner'],
+      [{ ownerUserId: 'owner' }, 'owner', 'owner'],
+      [{ ownerUserId: 'owner' }, 'other', null],
+      [{}, undefined, null],
+      [{}, 'other', null],
+    ] as const) {
+      const deps = identityDeps()
+      const page = { limit: 20, offset: 20 }
+      vi.mocked(deps.agentIdentities.list).mockResolvedValue({ items: [], total: 0, ...page })
+      const result = await listAllAgents(deps, page, scope, requested)
+      expect(result.pagination.totalItems).toBe(0)
+      if (expected === null) expect(deps.agentIdentities.list).not.toHaveBeenCalled()
+      else
+        expect(deps.agentIdentities.list).toHaveBeenCalledWith({
+          ...page,
+          ownerUserId: expected,
+          sortBy: 'createdAt',
+          sortDirection: 'desc',
+        })
+    }
+  })
+
+  it('[spec: agent-identity/agent-account-pagination] queries owned pages with explicit global sorting', async () => {
+    const deps = identityDeps()
+    const page = { limit: 20, offset: 20 }
+    vi.mocked(deps.agentIdentities.list).mockResolvedValue({ items: [], total: 41, ...page })
+    expect(
+      (await listPersonalAgents(deps, 'owner', page, { sortBy: 'name', sortDirection: 'desc' })).pagination.totalItems,
+    ).toBe(41)
+    expect(deps.agentIdentities.list).toHaveBeenCalledWith({
+      ...page,
+      ownerUserId: 'owner',
+      sortBy: 'name',
+      sortDirection: 'desc',
+    })
+  })
+
   it('projects an already-normalized Agent identity', () => {
     expect(
       toAgent({
@@ -618,31 +657,10 @@ describe('Agent identity lifecycle', () => {
     )
   })
 
-  it('lists personal and inventory identities', async () => {
-    const deps = identityDeps()
-    const personal = aggregate()
-    vi.mocked(deps.agentIdentities.listPersonal).mockResolvedValue([personal])
-    vi.mocked(deps.agentIdentities.listAll).mockResolvedValue({
-      items: [personal],
-      total: 1,
-      limit: 20,
-      offset: 5,
-    })
-    await expect(listPersonalAgentIdentities(deps, 'user-1')).resolves.toMatchObject({
-      items: [{ homeSpace: { type: 'personal', userId: 'user-1' } }],
-    })
-    await expect(listAllAgentIdentities(deps, { limit: 20, offset: 5 })).resolves.toMatchObject({
-      total: 1,
-      limit: 20,
-      offset: 5,
-    })
-  })
-
   it('maps paginated Agent resources and public enrollment views', async () => {
     const deps = identityDeps()
     const stored = aggregate()
-    vi.mocked(deps.agentIdentities.listPersonal).mockResolvedValue([stored])
-    vi.mocked(deps.agentIdentities.listAll).mockResolvedValue({
+    vi.mocked(deps.agentIdentities.list).mockResolvedValue({
       items: [stored],
       total: 1,
       limit: 10,
@@ -912,7 +930,7 @@ describe('Agent identity lifecycle', () => {
 
   it('maps User-owned management Agents and validates summary invariants', async () => {
     const deps = managementDeps()
-    vi.mocked(deps.agentIdentities.listOwned).mockResolvedValue({
+    vi.mocked(deps.agentIdentities.list).mockResolvedValue({
       items: [aggregate()],
       total: 1,
       limit: 20,
@@ -922,7 +940,7 @@ describe('Agent identity lifecycle', () => {
       items: [{ owner: { id: 'user-1', type: 'user' } }],
     })
 
-    vi.mocked(deps.agentIdentities.listAll).mockResolvedValue({
+    vi.mocked(deps.agentIdentities.list).mockResolvedValue({
       items: [aggregate()],
       total: 1,
       limit: 20,
@@ -941,7 +959,7 @@ describe('Agent identity lifecycle', () => {
   it('batches access summaries within the production D1 parameter limit', async () => {
     const deps = managementDeps()
     const items = Array.from({ length: 100 }, (_, index) => aggregate({ id: `identity-${index}` }))
-    vi.mocked(deps.agentIdentities.listAll).mockResolvedValue({ items, total: items.length, limit: 100, offset: 0 })
+    vi.mocked(deps.agentIdentities.list).mockResolvedValue({ items, total: items.length, limit: 100, offset: 0 })
 
     const result = await listAllAgents(deps, { limit: 100, offset: 0 })
     expect(result.items.map((item) => item.id)).toEqual(items.map((item) => item.identity.id))

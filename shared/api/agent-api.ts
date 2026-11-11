@@ -119,7 +119,14 @@ export const managementAgentsResponseSchema = z.object({
   items: z.array(managementAgentSchema),
   pagination: paginationMetadataSchema,
 })
-export const listAgentsQuerySchema = paginationQuerySchema
+export const listAgentsQuerySchema = paginationQuerySchema.extend({ ownerUserId: nonEmptyString.optional() })
+export const listAccountAgentsQuerySchema = paginationQuerySchema
+  .extend({
+    sortBy: z.enum(['createdAt', 'name']).optional(),
+    sortDirection: z.enum(['asc', 'desc']).optional(),
+  })
+  .strict()
+export type ListAccountAgentsQuery = z.infer<typeof listAccountAgentsQuerySchema>
 export type ListAgentsQuery = z.infer<typeof listAgentsQuerySchema>
 export const managementAgentAuditEventSchema = agentAuditEventSchema.extend({
   resource: z
