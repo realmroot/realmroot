@@ -193,6 +193,54 @@ describe('planned Account Center journeys', () => {
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Review Agent access request' })).toBeTruthy())
   })
 
+  it('returns to the preceding page after deleting its sole last-page Agent', async () => {
+    let deleted = false
+    const pages: number[] = []
+    server.use(
+      http.get(`${base}/api/account/agents`, ({ request }) => {
+        const page = Number(new URL(request.url).searchParams.get('page'))
+        pages.push(page)
+        return json({
+          items: deleted && page === 2 ? [] : [agent('agent-last', 'Last Agent', 'active')],
+          pagination: { page, pageSize: 20, totalItems: deleted ? 20 : 21, totalPages: deleted ? 1 : 2 },
+        })
+      }),
+      http.delete(`${base}/api/account/agents/agent-last`, () => {
+        deleted = true
+        return new Response(null, { status: 204 })
+      }),
+    )
+    renderWithClient(<AccountAgentsPage />)
+    await screen.findByRole('button', { name: 'Manage' })
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }))
+    await waitFor(() => expect(pages.at(-1)).toBe(2))
+    fireEvent.click(await screen.findByRole('button', { name: 'Manage' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Agent' }))
+    fireEvent.click(screen.getAllByRole('button', { name: 'Delete Agent' }).at(-1)!)
+    await waitFor(() => expect(deleted).toBe(true))
+    await waitFor(() => expect(pages.at(-1)).toBe(1))
+    expect(screen.getByRole('button', { name: 'Previous' }).hasAttribute('disabled')).toBe(true)
+  })
+
+  it('pages Agents and resets the page when global sort changes', async () => {
+    const queries: string[] = []
+    server.use(
+      http.get(`${base}/api/account/agents`, ({ request }) => {
+        const url = new URL(request.url)
+        queries.push(url.search)
+        const page = Number(url.searchParams.get('page'))
+        return json({ items: [], pagination: { page, pageSize: 20, totalItems: 21, totalPages: 2 } })
+      }),
+    )
+    renderWithClient(<AccountAgentsPage />)
+    await waitFor(() => expect(queries).toHaveLength(1))
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }))
+    await waitFor(() => expect(queries.at(-1)).toContain('page=2'))
+    fireEvent.change(screen.getByRole('combobox', { name: 'Sort Agents' }), { target: { value: 'name:desc' } })
+    await waitFor(() => expect(queries.at(-1)).toBe('?page=1&pageSize=20&sortBy=name&sortDirection=desc'))
+    expect(screen.getByRole('button', { name: 'Previous' }).hasAttribute('disabled')).toBe(true)
+  })
+
   it('renders collection loading, failure, and empty Agent states', async () => {
     server.use(http.get(`${base}/api/account/access-requests`, () => json({ items: [], pagination: pagination(0) })))
     const overview = renderWithClient(<AccountOverviewPage />)

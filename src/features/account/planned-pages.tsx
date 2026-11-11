@@ -218,7 +218,19 @@ export function AccountAgentsPage() {
   const [tab, setTab] = useState('identities')
   const [selected, setSelected] = useState<Agent | null>(null)
   const [request, setRequest] = useState<AccessRequestApproval | null>(null)
-  const agentsQuery = useAccountAgents()
+  const [query, setQuery] = useState<import('@shared/api/agent-api').ListAccountAgentsQuery>({
+    page: 1,
+    pageSize: 20,
+    sortBy: 'createdAt',
+    sortDirection: 'asc',
+  })
+  const agentsQuery = useAccountAgents(query)
+  useEffect(() => {
+    const pagination = agentsQuery.data?.pagination
+    if (pagination && query.page > Math.max(1, pagination.totalPages)) {
+      setQuery((current) => ({ ...current, page: Math.max(1, pagination.totalPages) }))
+    }
+  }, [agentsQuery.data, query.page])
   const requestsQuery = useAccountAccessRequests()
   const mutate = useAccountMutation()
   const [confirmation, setConfirmation] = useDestructiveConfirmation()
@@ -243,6 +255,43 @@ export function AccountAgentsPage() {
             value={tab}
           >
             <AccountTabContent surface value="identities">
+              <label htmlFor="agent-sort">
+                {tt('Sort Agents')}
+                <SelectInput
+                  id="agent-sort"
+                  aria-label={tt('Sort Agents')}
+                  value={`${query.sortBy}:${query.sortDirection}`}
+                  onChange={(event) => {
+                    const [sortBy, sortDirection] = event.target.value.split(':') as [
+                      'createdAt' | 'name',
+                      'asc' | 'desc',
+                    ]
+                    setQuery({ page: 1, pageSize: 20, sortBy, sortDirection })
+                  }}
+                >
+                  <option value="createdAt:asc">{tt('Oldest first')}</option>
+                  <option value="createdAt:desc">{tt('Newest first')}</option>
+                  <option value="name:asc">{tt('Name A to Z')}</option>
+                  <option value="name:desc">{tt('Name Z to A')}</option>
+                </SelectInput>
+              </label>
+              <Button
+                disabled={agentsQuery.isFetching || query.page <= 1}
+                onClick={() => setQuery({ ...query, page: query.page - 1 })}
+              >
+                {tt('Previous')}
+              </Button>
+              <span>
+                {query.page} / {agentsQuery.data?.pagination.totalPages ?? 0}
+              </span>
+              <Button
+                disabled={
+                  agentsQuery.isFetching || !agentsQuery.data || query.page >= agentsQuery.data.pagination.totalPages
+                }
+                onClick={() => setQuery({ ...query, page: query.page + 1 })}
+              >
+                {tt('Next')}
+              </Button>
               {agentsQuery.isLoading ? <p role="status">{tt('Loading Agents…')}</p> : null}
               {agentsQuery.error ? (
                 <p role="alert" className="text-destructive">

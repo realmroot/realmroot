@@ -62,9 +62,15 @@ export function UserDetailPage({ userId, section = 'overview' }: { userId: strin
     queryKey: [...consoleQueryKeys.users, userId, 'passkeys'],
     queryFn: () => listUserPasskeys(userId),
   })
+  const [agentPaging, setAgentPaging] = useState({ userId, page: 1 })
+  useEffect(() => {
+    setAgentPaging({ userId, page: 1 })
+  }, [userId])
+  const agentPage = agentPaging.userId === userId ? agentPaging.page : 1
+  const setAgentPage = (page: number) => setAgentPaging({ userId, page })
   const agents = useQuery({
-    queryKey: [...consoleQueryKeys.agents, { purpose: 'user-detail' }],
-    queryFn: () => getAgentInventory(),
+    queryKey: [...consoleQueryKeys.agents, { ownerUserId: userId, page: agentPage, pageSize: 20 }],
+    queryFn: () => getAgentInventory({ ownerUserId: userId, page: agentPage, pageSize: 20 }),
   })
   const user = userQuery.data?.user
   const update = useAdminMutation({
@@ -149,9 +155,7 @@ export function UserDetailPage({ userId, section = 'overview' }: { userId: strin
       />
     )
   if (!user) return <ErrorState error={new Error(tt('User not found.'))} />
-  const userAgents = agents.data!.items.filter(
-    (agent) => agent.homeSpace.type === 'personal' && agent.homeSpace.userId === userId,
-  )
+  const userAgents = agents.data!.items
   return (
     <>
       <div className="consoleDetailStack">
@@ -195,7 +199,7 @@ export function UserDetailPage({ userId, section = 'overview' }: { userId: strin
           <TabsContent className="mt-5" value="overview">
             <UserOverview
               applications={applications.data!.items.length}
-              agents={userAgents.length}
+              agents={agents.data!.pagination.totalItems}
               linked={linkedAccounts.data!.items.length}
               realmDetails
               sessions={sessions.data!.items.length}
@@ -222,6 +226,18 @@ export function UserDetailPage({ userId, section = 'overview' }: { userId: strin
           </TabsContent>
           <TabsContent className="mt-5" value="agents">
             <UserAgents agents={userAgents} />
+            <Button disabled={agents.isFetching || agentPage <= 1} onClick={() => setAgentPage(agentPage - 1)}>
+              {tt('Previous')}
+            </Button>
+            <span>
+              {agentPage} / {agents.data!.pagination.totalPages}
+            </span>
+            <Button
+              disabled={agents.isFetching || agentPage >= agents.data!.pagination.totalPages}
+              onClick={() => setAgentPage(agentPage + 1)}
+            >
+              {tt('Next')}
+            </Button>
           </TabsContent>
           <TabsContent className="mt-5" value="authorized-apps">
             <UserApplications applications={applications.data!.items} />
