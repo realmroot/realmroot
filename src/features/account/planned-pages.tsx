@@ -255,8 +255,8 @@ export function AccountAgentsPage() {
             value={tab}
           >
             <AccountTabContent surface value="identities">
-              <label htmlFor="agent-sort">
-                {tt('Sort Agents')}
+              <label className="grid w-full gap-2 sm:max-w-xs" htmlFor="agent-sort">
+                <span className="text-sm font-medium">{tt('Sort Agents')}</span>
                 <SelectInput
                   id="agent-sort"
                   aria-label={tt('Sort Agents')}
@@ -275,23 +275,39 @@ export function AccountAgentsPage() {
                   <option value="name:desc">{tt('Name Z to A')}</option>
                 </SelectInput>
               </label>
-              <Button
-                disabled={agentsQuery.isFetching || query.page <= 1}
-                onClick={() => setQuery({ ...query, page: query.page - 1 })}
-              >
-                {tt('Previous')}
-              </Button>
-              <span>
-                {query.page} / {agentsQuery.data?.pagination.totalPages ?? 0}
-              </span>
-              <Button
-                disabled={
-                  agentsQuery.isFetching || !agentsQuery.data || query.page >= agentsQuery.data.pagination.totalPages
-                }
-                onClick={() => setQuery({ ...query, page: query.page + 1 })}
-              >
-                {tt('Next')}
-              </Button>
+              {agentsQuery.data && agentsQuery.data.pagination.totalPages > 1 ? (
+                <nav
+                  aria-label={tt('Agent pagination')}
+                  className="flex flex-wrap items-center justify-between gap-3 py-3"
+                >
+                  <span className="text-sm text-muted-foreground">
+                    {tt('Page {{page}} of {{total}}', {
+                      page: query.page,
+                      total: agentsQuery.data.pagination.totalPages,
+                    })}
+                  </span>
+                  <div className="flex gap-2">
+                    <Button
+                      disabled={agentsQuery.isFetching || query.page <= 1}
+                      onClick={() => setQuery({ ...query, page: query.page - 1 })}
+                      size="sm"
+                      type="button"
+                      variant="outline"
+                    >
+                      {tt('Previous')}
+                    </Button>
+                    <Button
+                      disabled={agentsQuery.isFetching || query.page >= agentsQuery.data.pagination.totalPages}
+                      onClick={() => setQuery({ ...query, page: query.page + 1 })}
+                      size="sm"
+                      type="button"
+                      variant="outline"
+                    >
+                      {tt('Next')}
+                    </Button>
+                  </div>
+                </nav>
+              ) : null}
               {agentsQuery.isLoading ? <p role="status">{tt('Loading Agents…')}</p> : null}
               {agentsQuery.error ? (
                 <p role="alert" className="text-destructive">

@@ -17,6 +17,7 @@ import type {
   AgentPermission,
   ApiResource,
   createApiResourceSchema,
+  ListAccountAgentsQuery,
   ListAgentAuditEventsQuery,
   ListAgentPermissionsQuery,
   ListAgentsQuery,
@@ -216,7 +217,7 @@ export type RpcSchema = {
   }
   '/api/account/agents': {
     $get: RpcEndpoint<
-      { query?: Partial<Record<keyof PaginationQuery, string>> },
+      { query?: Partial<Record<keyof ListAccountAgentsQuery, string>> },
       { items: Agent[]; pagination: PaginationMetadata }
     >
   }

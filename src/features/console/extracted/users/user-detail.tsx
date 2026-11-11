@@ -226,18 +226,39 @@ export function UserDetailPage({ userId, section = 'overview' }: { userId: strin
           </TabsContent>
           <TabsContent className="mt-5" value="agents">
             <UserAgents agents={userAgents} />
-            <Button disabled={agents.isFetching || agentPage <= 1} onClick={() => setAgentPage(agentPage - 1)}>
-              {tt('Previous')}
-            </Button>
-            <span>
-              {agentPage} / {agents.data!.pagination.totalPages}
-            </span>
-            <Button
-              disabled={agents.isFetching || agentPage >= agents.data!.pagination.totalPages}
-              onClick={() => setAgentPage(agentPage + 1)}
-            >
-              {tt('Next')}
-            </Button>
+            {agents.data!.pagination.totalPages > 1 ? (
+              <nav
+                aria-label={tt('Agent pagination')}
+                className="flex flex-wrap items-center justify-between gap-3 pt-4"
+              >
+                <span className="text-sm text-muted-foreground">
+                  {tt('Page {{page}} of {{total}}', {
+                    page: agentPage,
+                    total: agents.data!.pagination.totalPages,
+                  })}
+                </span>
+                <div className="flex gap-2">
+                  <Button
+                    disabled={agents.isFetching || agentPage <= 1}
+                    onClick={() => setAgentPage(agentPage - 1)}
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    {tt('Previous')}
+                  </Button>
+                  <Button
+                    disabled={agents.isFetching || agentPage >= agents.data!.pagination.totalPages}
+                    onClick={() => setAgentPage(agentPage + 1)}
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    {tt('Next')}
+                  </Button>
+                </div>
+              </nav>
+            ) : null}
           </TabsContent>
           <TabsContent className="mt-5" value="authorized-apps">
             <UserApplications applications={applications.data!.items} />

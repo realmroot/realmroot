@@ -219,7 +219,7 @@ describe('planned Account Center journeys', () => {
     fireEvent.click(screen.getAllByRole('button', { name: 'Delete Agent' }).at(-1)!)
     await waitFor(() => expect(deleted).toBe(true))
     await waitFor(() => expect(pages.at(-1)).toBe(1))
-    expect(screen.getByRole('button', { name: 'Previous' }).hasAttribute('disabled')).toBe(true)
+    expect(screen.queryByRole('navigation', { name: 'Agent pagination' })).toBeNull()
   })
 
   it('pages Agents and resets the page when global sort changes', async () => {
