@@ -277,11 +277,27 @@ export function listAccountSessions() {
   return readRpcResponse(apiClient.api.account.sessions.$get())
 }
 
-export function listAccountAgents(): Promise<{
+export function listAccountAgents(
+  query: Partial<import('@shared/api/agent-api').ListAccountAgentsQuery> = {},
+): Promise<{
   items: Agent[]
   pagination: import('@shared/api/pagination').PaginationMetadata
 }> {
-  return readRpcResponse(apiClient.api.account.agents.$get())
+  const serialized = Object.fromEntries(
+    Object.entries(query)
+      .filter(([, value]) => value !== undefined)
+      .map(([key, value]) => [key, String(value)]),
+  )
+  return readRpcResponse(apiClient.api.account.agents.$get({ query: serialized }))
+}
+
+export async function listAllAccountAgents() {
+  const first = await listAccountAgents({ page: 1, pageSize: 100 })
+  const items = [...first.items]
+  for (let page = 2; page <= first.pagination.totalPages; page++) {
+    items.push(...(await listAccountAgents({ page, pageSize: 100 })).items)
+  }
+  return { items }
 }
 
 export function getAgentEnrollment(enrollmentId: string): Promise<AgentEnrollment> {

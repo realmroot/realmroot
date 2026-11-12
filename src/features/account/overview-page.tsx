@@ -65,9 +65,8 @@ export function AccountOverviewPage() {
             <div>
               <h2>{tt('Your Agents')}</h2>
               <span>
-                {tt('{{count}} identities · {{active}} enabled', {
-                  count: agents.length,
-                  active: agents.filter((agent) => agent.status === 'active').length,
+                {tt('{{count}} identities', {
+                  count: agentsQuery.data?.pagination.totalItems ?? 0,
                 })}
               </span>
             </div>

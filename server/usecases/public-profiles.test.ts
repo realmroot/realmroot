@@ -20,7 +20,7 @@ describe('Public profiles', () => {
       joinedAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-08-02T00:00:00.000Z',
     })
-    expect(deps.agentIdentities.listOwned).not.toHaveBeenCalled()
+    expect(deps.agentIdentities.list).not.toHaveBeenCalled()
     expect(deps.agentAudit.list).not.toHaveBeenCalled()
   })
 
@@ -53,7 +53,7 @@ describe('Public profiles', () => {
   it('adds bounded public relationships to the full User view', async () => {
     const deps = createTestDeps()
     vi.mocked(deps.users.findPublicProfileByUsername).mockResolvedValue(userProfile())
-    vi.mocked(deps.agentIdentities.listOwned).mockResolvedValue({
+    vi.mocked(deps.agentIdentities.list).mockResolvedValue({
       items: [{ identity: agentIdentity(), bindings: [] }],
       total: 1,
       limit: 6,

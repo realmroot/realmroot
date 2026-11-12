@@ -68,6 +68,32 @@ describe('account query hooks', () => {
     expect(passkeys.result.current.data?.passkeys).toEqual([])
   })
 
+  it('keeps Agent pages and sort orders in separate cache entries', async () => {
+    const requested: string[] = []
+    server.use(
+      http.get(`${base}/api/account/agents`, ({ request }) => {
+        const url = new URL(request.url)
+        requested.push(url.search)
+        return json({
+          items: [{ id: url.search }],
+          pagination: { page: Number(url.searchParams.get('page')), pageSize: 20, totalItems: 40, totalPages: 2 },
+        })
+      }),
+    )
+    const client = newClient()
+    const first = renderHook(() => useAccountAgents({ page: 1, pageSize: 20, sortBy: 'name', sortDirection: 'asc' }), {
+      wrapper: wrapper(client),
+    })
+    const second = renderHook(
+      () => useAccountAgents({ page: 2, pageSize: 20, sortBy: 'name', sortDirection: 'desc' }),
+      { wrapper: wrapper(client) },
+    )
+    await waitFor(() => expect(first.result.current.isSuccess && second.result.current.isSuccess).toBe(true))
+    expect(requested).toHaveLength(2)
+    expect(first.result.current.data?.items[0].id).toContain('page=1')
+    expect(second.result.current.data?.items[0].id).toContain('page=2')
+  })
+
   it('respects the enabled flag for gated queries', async () => {
     const client = newClient()
     const disabled = renderHook(() => useAccountSessions(false), { wrapper: wrapper(client) })

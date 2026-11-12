@@ -99,7 +99,7 @@ export function consoleSharedFetch(input: RequestInfo | URL, init?: RequestInit)
       jsonResponse({ admin: { setupRequired: false, setupHref: '/console/applications', missing: [] } }),
     )
   }
-  if (url === '/api/agents') {
+  if (url === '/api/agents' || url.startsWith('/api/agents?')) {
     return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
   }
   if (url === '/api/realm/audit-events') {

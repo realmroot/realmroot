@@ -1,4 +1,5 @@
 import { applyD1Migrations, env, reset } from 'cloudflare:test'
+import { agentIdentity } from '@server/db/schema'
 import { createAgentLoginIdentity } from '@server/usecases/agent-identities'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
@@ -23,6 +24,89 @@ describe('agent protocol management over real D1', () => {
   beforeEach(async () => {
     harness = await createHarness()
     harness.deps.externalHttp.fetch = resourceOpenApiFetch
+  })
+
+  it('filters before paging and counts with stable global sort over real D1', async () => {
+    const cookie = await signInAdmin(harness)
+    const owner = await createUser(harness, cookie, {
+      email: 'pages@example.com',
+      username: 'pages',
+      displayName: 'Pages',
+      password: 'password-pages-2026',
+    })
+    const other = await createUser(harness, cookie, {
+      email: 'other@example.com',
+      username: 'other',
+      displayName: 'Other',
+      password: 'password-other-2026',
+    })
+    const now = new Date()
+    await harness.db.insert(agentIdentity).values([
+      ...['c', 'a', 'b'].map((id) => ({
+        id,
+        issuer: 'http://localhost',
+        subject: id,
+        username: `agent-${id}`,
+        name: id === 'c' ? 'Alpha' : 'Same',
+        ownerUserId: owner,
+        createdAt: now,
+        updatedAt: now,
+      })),
+      {
+        id: 'z',
+        issuer: 'http://localhost',
+        subject: 'z',
+        username: 'agent-z',
+        name: 'Other',
+        ownerUserId: other,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: 'deleted',
+        issuer: 'http://localhost',
+        subject: 'deleted',
+        username: 'agent-deleted',
+        name: 'Deleted',
+        ownerUserId: owner,
+        deletedAt: now,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ])
+    const response = await harness.request(`/api/agents?ownerUserId=${owner}&page=2&pageSize=1`, {
+      headers: { cookie },
+    })
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({ items: [{ id: 'b' }], pagination: { totalItems: 3, totalPages: 3 } })
+    for (const sortBy of ['name', 'createdAt'] as const) {
+      for (const sortDirection of ['asc', 'desc'] as const) {
+        const result = await harness.deps.agentIdentities.list({
+          ownerUserId: owner,
+          limit: 1,
+          offset: 0,
+          sortBy,
+          sortDirection,
+        })
+        expect(result.total).toBe(3)
+        expect(result.items.map((item) => item.identity.id)).toEqual([
+          sortBy === 'name' ? (sortDirection === 'asc' ? 'c' : 'b') : sortDirection === 'asc' ? 'a' : 'c',
+        ])
+      }
+    }
+    expect((await harness.request('/api/agents?ownerUserId=', { headers: { cookie } })).status).toBe(400)
+    const ownerCookie = await signIn(harness, 'pages@example.com', 'password-pages-2026')
+    const account = await harness.request('/api/account/agents?page=2&pageSize=1&sortBy=name&sortDirection=asc', {
+      headers: { cookie: ownerCookie },
+    })
+    expect(account.status).toBe(200)
+    expect(await account.json()).toMatchObject({ items: [{ id: 'a' }], pagination: { totalItems: 3 } })
+    expect(
+      (await harness.request('/api/account/agents?ownerUserId=other', { headers: { cookie: ownerCookie } })).status,
+    ).toBe(400)
+    expect(
+      (await harness.request('/api/account/agents?sortBy=status', { headers: { cookie: ownerCookie } })).status,
+    ).toBe(400)
   })
 
   it('rejects anonymous stable Agent reads with 401', async () => {
