@@ -27,7 +27,7 @@ export default async function globalSetup(config: FullConfig) {
       `--user-data-dir=${profilePath}`,
       '--no-first-run',
       '--no-default-browser-check',
-      `${baseURL}/auth/sign-in`,
+      'about:blank',
     ],
     { stdio: 'ignore' },
   )
