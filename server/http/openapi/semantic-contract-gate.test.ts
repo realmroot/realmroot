@@ -233,7 +233,13 @@ describe('OpenAPI semantic contract gate', () => {
     const navigationContract = JSON.parse(
       readFileSync(new URL('./approved-site-navigation-semantic-baseline.json', import.meta.url), 'utf8'),
     ) as typeof unchanged
-    const baseline = [
+    const organizationMembershipScopeContract = JSON.parse(
+      readFileSync(new URL('./approved-organization-membership-scope-semantic-baseline.json', import.meta.url), 'utf8'),
+    ) as typeof unchanged
+    const organizationMembershipScopeChanges = new Set(
+      organizationMembershipScopeContract.map(({ method, path }) => `${method}:${path}`),
+    )
+    const preOrganizationMembershipScopeBaseline = [
       ...navigationContract,
       ...preLifecycleConflictBaseline.filter(
         ({ method, path }) =>
@@ -257,6 +263,12 @@ describe('OpenAPI semantic contract gate', () => {
       ),
       ...agentUserOwnershipContract.filter(({ method, path }) => !contextIDChanges.has(`${method}:${path}`)),
       ...contextIDContract,
+    ].sort((left, right) => `${left.path}:${left.method}`.localeCompare(`${right.path}:${right.method}`))
+    const baseline = [
+      ...preOrganizationMembershipScopeBaseline.filter(
+        ({ method, path }) => !organizationMembershipScopeChanges.has(`${method}:${path}`),
+      ),
+      ...organizationMembershipScopeContract,
     ].sort((left, right) => `${left.path}:${left.method}`.localeCompare(`${right.path}:${right.method}`))
 
     expect(openApiSemanticSnapshot(getUnifiedOpenApi() as unknown as Record<string, unknown>, () => true)).toEqual(

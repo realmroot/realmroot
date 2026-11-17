@@ -4,7 +4,7 @@ import { createApp } from '@server/http/app'
 import { getUnifiedOpenApi } from '@server/http/openapi/management'
 import * as agentIdentitiesUsecase from '@server/usecases/agent-identities'
 import { protectedResourceCollectionRoutes } from '@shared/api/management'
-import { requiredProtectedScope } from '@shared/authz'
+import { protectedResourceScopes, requiredProtectedScope } from '@shared/authz'
 import { realmrootCliClientId } from '@shared/oauth-token-profile'
 import { calculateJwkThumbprint, exportJWK, generateKeyPair, SignJWT } from 'jose'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -719,6 +719,71 @@ describe('management routes 1', () => {
 
     expect(response.status, await response.clone().text()).toBe(403)
     expect(deps.users.listManagedUsers).not.toHaveBeenCalled()
+  })
+
+  it('declares the scopes each Organization member and invitation operation enforces [spec: management-api/management-organization-declared-scopes]', async () => {
+    const auth = createAuthMock()
+    const dpop = await createTestDpopKey()
+    let scopes: string[] = []
+    Object.assign(auth.api, {
+      verifyJWT: vi.fn().mockImplementation(async () => ({
+        payload: {
+          iss: 'https://auth.example.com/api/auth',
+          sub: 'controller-1',
+          client_id: realmrootCliClientId,
+          act: { iss: 'https://auth.example.com/api/auth', sub: 'agt_1' },
+          scope: scopes.join(' '),
+          cnf: { jkt: dpop.thumbprint },
+          realmroot_authority: { type: 'realmroot_authority', authority: 'organization', id: 'org-platform' },
+        },
+      })),
+    })
+    const identity = agentIdentity()
+    const app = createApp(
+      auth,
+      createTestDeps({
+        agentIdentities: {
+          findByIssuerSubject: vi.fn().mockResolvedValue(identity.identity),
+          findActiveBindingByProtocolAgent: vi
+            .fn()
+            .mockResolvedValue({ identity: identity.identity, binding: identity.bindings[0] }),
+          findActiveByProtocolAgent: vi.fn().mockResolvedValue(identity),
+          findIdentity: vi.fn().mockResolvedValue(identity),
+        },
+        externalResources: {
+          findActiveTokenLeaseByTokenHash: vi.fn().mockResolvedValue({ bindingId: 'binding-1' }),
+        },
+      }),
+    )
+    const call = async (method: string, path: string) => {
+      const url = `https://auth.example.com/api${path}`
+      return app.request(url, {
+        method,
+        headers: { ...(await dpop.headers(method, url)), 'content-type': 'application/json' },
+        ...(method === 'GET' || method === 'DELETE' ? {} : { body: '{}' }),
+      })
+    }
+    const operations = openApiOperationObjects().filter(({ key }) =>
+      /^\w+ \/organizations\/\{param\}\/(members|invitations)(\/|$)/.test(key),
+    )
+    expect(operations.map(({ key }) => key)).toContain('POST /organizations/{param}/members')
+
+    for (const operation of operations) {
+      const declared = (operation.security as { oauth2?: string[] }[]).flatMap((entry) => entry.oauth2 ?? [])
+      expect(declared, operation.key).toHaveLength(1)
+      const path = operation.key
+        .slice(operation.method.length + 1)
+        .replace('{param}', 'org-platform')
+        .replaceAll('{param}', 'missing')
+
+      scopes = declared
+      const allowed = await call(operation.method, path)
+      expect(allowed.status, `${operation.key} with ${declared}: ${await allowed.clone().text()}`).not.toBe(403)
+
+      scopes = protectedResourceScopes.filter((scope) => !declared.includes(scope))
+      const denied = await call(operation.method, path)
+      expect(denied.status, `${operation.key} without ${declared}`).toBe(403)
+    }
   })
 
   it('does not expose the removed capability request resource', async () => {
