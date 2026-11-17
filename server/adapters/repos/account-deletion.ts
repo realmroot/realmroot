@@ -52,7 +52,6 @@ export function createAccountDeletionRepository(db: D1Database): AccountDeletion
           'oauth_access_token',
           'oauth_refresh_token',
           'oauth_consent',
-          'oauth_context_selection',
           'device_code',
           'application_consent',
           'team_member',

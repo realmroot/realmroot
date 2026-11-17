@@ -1357,9 +1357,6 @@ export interface ApplicationRepository {
     userId: string,
     referenceIds: string[],
   ): Promise<Array<{ referenceId: string; scopes: string[]; resources: string[] }>>
-  /** The authorization Context this User last chose for the client, if any. */
-  findOAuthContextSelection(clientId: string, userId: string): Promise<string | null>
-  rememberOAuthContextSelection(clientId: string, userId: string, referenceId: string): Promise<void>
   revokeConsent(consentId: string, userId: string): Promise<boolean>
   createConsent(input: {
     applicationId: string

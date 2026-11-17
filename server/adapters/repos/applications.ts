@@ -12,7 +12,6 @@ import {
   oauthAccessToken,
   oauthClient,
   oauthConsent,
-  oauthContextSelection,
   oauthRefreshToken,
   user,
 } from '../../db/schema'
@@ -408,26 +407,6 @@ export function createDrizzleApplicationRepository(db: Database, ids: Identifier
       }))
     },
 
-    async findOAuthContextSelection(clientId, userId) {
-      const [row] = await db
-        .select({ referenceId: oauthContextSelection.referenceId })
-        .from(oauthContextSelection)
-        .where(and(eq(oauthContextSelection.clientId, clientId), eq(oauthContextSelection.userId, userId)))
-        .limit(1)
-      return row?.referenceId ?? null
-    },
-
-    async rememberOAuthContextSelection(clientId, userId, referenceId) {
-      const selectedAt = new Date()
-      await db
-        .insert(oauthContextSelection)
-        .values({ clientId, userId, referenceId, selectedAt })
-        .onConflictDoUpdate({
-          target: [oauthContextSelection.clientId, oauthContextSelection.userId],
-          set: { referenceId, selectedAt },
-        })
-    },
-
     async revokeConsent(consentId, userId) {
       const row = await findAuthorizationGrant(db, { authorizationId: consentId, userId })
       if (!row) return false
@@ -633,9 +612,6 @@ async function revokeAuthorizationGrant(
     db
       .delete(oauthAccessToken)
       .where(and(eq(oauthAccessToken.clientId, grant.clientId), eq(oauthAccessToken.userId, grant.userId))),
-    db
-      .delete(oauthContextSelection)
-      .where(and(eq(oauthContextSelection.clientId, grant.clientId), eq(oauthContextSelection.userId, grant.userId))),
     db
       .update(oauthRefreshToken)
       .set({ revoked: now })

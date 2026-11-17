@@ -507,15 +507,15 @@ export async function resolveOAuthAuthorizationContexts(
  *
  * A Context is eligible when the User needs no new consent there: any candidate for an Application
  * without a consent step, otherwise only a Context whose consent covers every requested scope and
- * Resource. One eligible Context is used as is; several resolve to the Context the User last chose
- * for the Application on the Context picker. Anything else needs the User.
+ * Resource. One eligible Context is used as is; several resolve to `remembered`, the Context this
+ * browser last picked for the Application, while it is still eligible. Anything else needs the User.
  */
 export async function resolveSilentOAuthAuthorizationContext(
   deps: Deps,
   application: ApplicationAggregate,
   contexts: Array<{ id: string }>,
   userId: string,
-  request: { scopes: string[]; resources: string[] },
+  request: { scopes: string[]; resources: string[]; remembered: string | null },
 ): Promise<{ contextId: string } | { error: 'consent_required' | 'interaction_required' }> {
   const candidateIds = contexts.map((context) => context.id)
   const eligibleIds = application.consentRequired
@@ -529,7 +529,7 @@ export async function resolveSilentOAuthAuthorizationContext(
     : candidateIds
   if (eligibleIds.length === 0) return { error: 'consent_required' }
   if (eligibleIds.length === 1) return { contextId: eligibleIds[0]! }
-  const remembered = await deps.applications.findOAuthContextSelection(application.clientId, userId)
+  const { remembered } = request
   return remembered && eligibleIds.includes(remembered) ? { contextId: remembered } : { error: 'interaction_required' }
 }
 

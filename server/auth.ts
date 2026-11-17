@@ -44,6 +44,7 @@ import { betterAuthTranslations } from './auth-i18n'
 import type { Database } from './db/client'
 import * as schema from './db/schema'
 import { hashPassword } from './domain/password'
+import { rememberedOAuthContext, rememberOAuthContextCookie } from './oauth-context-cookie'
 import { resolveOAuthAuthorizationContexts, resolveSilentOAuthAuthorizationContext } from './usecases/applications'
 
 export {
@@ -548,9 +549,11 @@ export function createAuth(
             const contexts = await resolveOAuthAuthorizationContexts(deps, application, resourceUrls, user)
             if (contexts.length === 1) return contexts[0]!.id
             if (headers.get('x-realmroot-oauth-prompt-none') !== '1') return true
+            const remembered = await rememberedOAuthContext(headers.get('cookie'), secret, clientId)
             const silent = await resolveSilentOAuthAuthorizationContext(deps, application, contexts, user.id, {
               scopes,
               resources: resourceUrls,
+              remembered,
             })
             if ('contextId' in silent) return silent.contextId
             nonInteractiveContextErrors.set(headers, silent.error)
@@ -646,12 +649,17 @@ export function createAuth(
       if (deviceAdmissionError) return deviceAdmissionError
       const contextSelection = await oauthContextSelectionFromRequest(request)
       const oauthRequest = await withOAuthConsentContext(request)
-      const response = await auth.handler(oauthRequest)
+      let response = await auth.handler(oauthRequest)
       if (contextSelection && cachedSession?.user && response.ok) {
-        await applications.rememberOAuthContextSelection(
-          contextSelection.clientId,
-          cachedSession.user.id,
-          contextSelection.referenceId,
+        response = new Response(response.body, response)
+        response.headers.append(
+          'set-cookie',
+          await rememberOAuthContextCookie(
+            request.headers.get('cookie'),
+            secret,
+            contextSelection.clientId,
+            contextSelection.referenceId,
+          ),
         )
       }
       if (new URL(request.url).pathname.endsWith('/oauth2/introspect') && response.ok) {
@@ -739,7 +747,7 @@ async function withOAuthConsentContext(request: Request) {
   return new Request(request, { headers })
 }
 
-/** A Context the User picked on the post-login Context page, remembered once the provider accepts it. */
+/** A Context the User picked on the post-login Context page, remembered in this browser once the provider accepts it. */
 async function oauthContextSelectionFromRequest(request: Request) {
   const url = new URL(request.url)
   if (request.method !== 'POST' || !url.pathname.endsWith('/oauth2/continue')) return null

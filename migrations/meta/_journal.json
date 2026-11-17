@@ -505,13 +505,6 @@
       "when": 1790094816552,
       "tag": "20260922163336_better_auth_1_7",
       "breakpoints": true
-    },
-    {
-      "idx": 72,
-      "version": "6",
-      "when": 1794933633971,
-      "tag": "20261117164033_oauth_context_selection",
-      "breakpoints": true
     }
   ]
 }

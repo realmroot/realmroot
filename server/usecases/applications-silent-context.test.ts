@@ -4,7 +4,8 @@ import type { ApplicationAggregate, ApplicationRepository } from '@server/usecas
 import { describe, expect, it, vi } from 'vitest'
 
 const contexts = [{ id: 'user:u1' }, { id: 'organization:a' }, { id: 'organization:b' }]
-const request = { scopes: ['openid', 'notes:read'], resources: ['https://api.example.com'] }
+const scopes = ['openid', 'notes:read']
+const resources = ['https://api.example.com']
 
 function setUp(input: {
   consentRequired: boolean
@@ -13,13 +14,17 @@ function setUp(input: {
 }) {
   const applications = {
     listOAuthContextConsents: vi.fn().mockResolvedValue(input.consents ?? []),
-    findOAuthContextSelection: vi.fn().mockResolvedValue(input.selection ?? null),
   }
   const deps = { applications } as unknown as Deps
   const application = { clientId: 'client-1', consentRequired: input.consentRequired } as ApplicationAggregate
   return {
     applications,
-    resolve: () => resolveSilentOAuthAuthorizationContext(deps, application, contexts, 'u1', request),
+    resolve: () =>
+      resolveSilentOAuthAuthorizationContext(deps, application, contexts, 'u1', {
+        scopes,
+        resources,
+        remembered: input.selection ?? null,
+      }),
   }
 }
 
@@ -45,7 +50,6 @@ describe('[spec: hosted-auth/oauth-silent-authorization-context] silent authoriz
       'organization:a',
       'organization:b',
     ])
-    expect(flow.applications.findOAuthContextSelection).not.toHaveBeenCalled()
   })
 
   it('needs consent when no Context covers the request', async () => {

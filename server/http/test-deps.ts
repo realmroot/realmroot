@@ -172,8 +172,6 @@ export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> =
       revokeAuthorization: vi.fn().mockResolvedValue(true),
       findConsent: vi.fn().mockResolvedValue(null),
       listOAuthContextConsents: vi.fn().mockResolvedValue([]),
-      findOAuthContextSelection: vi.fn().mockResolvedValue(null),
-      rememberOAuthContextSelection: vi.fn().mockResolvedValue(undefined),
       revokeConsent: vi.fn().mockResolvedValue(true),
       createConsent: vi.fn(),
       recordPolicyAuthorization: vi.fn(),
