@@ -187,6 +187,16 @@ Feature: Hosted authentication
     And the refresh token remains bound to the full original resource grant
     But a token request for a resource outside the original grant is rejected
 
+  @entrypoint:product-ui @journey:oauth-incremental-resource-consent @proof:integration
+  Scenario: Newly requested Resource scopes are never silently narrowed by an earlier consent
+    Given I approved a consent-required application for scopes on two protected resources in one request
+    And the application is later allowed a further automatic scope on one of those resources
+    When the application requests the earlier and the new scope for that resource
+    Then Realmroot asks me to consent to the expanded request instead of reusing the earlier consent
+    And a non-interactive request for it fails with consent_required instead of issuing a narrowed code
+    When I approve the expanded request
+    Then the access token for that resource carries every approved scope
+
   @entrypoint:product-ui @journey:oidc-native-token-verification @proof:integration
   Scenario: Native OIDC clients can verify issued identity tokens
     Given a native OIDC client uses a standards-compliant JOSE verifier

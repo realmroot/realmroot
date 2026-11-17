@@ -37,6 +37,7 @@ import {
   buildOAuthIdTokenClaims,
   createNonce,
   filterOAuthAccessTokenScopes,
+  oauthResourceConsentCoversRequest,
   sendPasswordChangedNotification,
   sendSmsOtp,
   siweDomain,
@@ -534,6 +535,8 @@ export function createAuth(
             }
             return referenceId
           },
+          consentCoversRequest: ({ user, clientId, scopes, resources }) =>
+            oauthResourceConsentCoversRequest(deps, { clientId, userId: user.id, scopes, resources }),
           shouldRedirect: async ({ headers, user }) => {
             const clientId = headers.get('x-realmroot-oauth-client-id')
             if (!clientId) return false
