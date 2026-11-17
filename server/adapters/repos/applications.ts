@@ -12,10 +12,12 @@ import {
   oauthAccessToken,
   oauthClient,
   oauthConsent,
+  oauthContextSelection,
   oauthRefreshToken,
   user,
 } from '../../db/schema'
 import {
+  parseList,
   serializeList,
   toAggregate,
   toApplicationInsert,
@@ -383,6 +385,49 @@ export function createDrizzleApplicationRepository(db: Database, ids: Identifier
       return rows[0] ? toConsent(rows[0]) : null
     },
 
+    async listOAuthContextConsents(clientId, userId, referenceIds) {
+      if (referenceIds.length === 0) return []
+      const rows = await db
+        .select({
+          referenceId: oauthConsent.referenceId,
+          scopes: oauthConsent.scopes,
+          resources: oauthConsent.resources,
+        })
+        .from(oauthConsent)
+        .where(
+          and(
+            eq(oauthConsent.clientId, clientId),
+            eq(oauthConsent.userId, userId),
+            inArray(oauthConsent.referenceId, referenceIds),
+          ),
+        )
+      return rows.map((row) => ({
+        referenceId: row.referenceId!,
+        scopes: parseList(row.scopes),
+        resources: parseList(row.resources),
+      }))
+    },
+
+    async findOAuthContextSelection(clientId, userId) {
+      const [row] = await db
+        .select({ referenceId: oauthContextSelection.referenceId })
+        .from(oauthContextSelection)
+        .where(and(eq(oauthContextSelection.clientId, clientId), eq(oauthContextSelection.userId, userId)))
+        .limit(1)
+      return row?.referenceId ?? null
+    },
+
+    async rememberOAuthContextSelection(clientId, userId, referenceId) {
+      const selectedAt = new Date()
+      await db
+        .insert(oauthContextSelection)
+        .values({ clientId, userId, referenceId, selectedAt })
+        .onConflictDoUpdate({
+          target: [oauthContextSelection.clientId, oauthContextSelection.userId],
+          set: { referenceId, selectedAt },
+        })
+    },
+
     async revokeConsent(consentId, userId) {
       const row = await findAuthorizationGrant(db, { authorizationId: consentId, userId })
       if (!row) return false
@@ -588,6 +633,9 @@ async function revokeAuthorizationGrant(
     db
       .delete(oauthAccessToken)
       .where(and(eq(oauthAccessToken.clientId, grant.clientId), eq(oauthAccessToken.userId, grant.userId))),
+    db
+      .delete(oauthContextSelection)
+      .where(and(eq(oauthContextSelection.clientId, grant.clientId), eq(oauthContextSelection.userId, grant.userId))),
     db
       .update(oauthRefreshToken)
       .set({ revoked: now })

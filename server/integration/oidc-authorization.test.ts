@@ -1214,6 +1214,154 @@ describe('OIDC authorization over real D1', () => {
     await expect(outsideGrant.json()).resolves.toMatchObject({ error: 'invalid_target' })
   })
 
+  describe('[spec: hosted-auth/oauth-silent-authorization-context] silent authorization for a multi-Context User', () => {
+    const resource = 'https://silent-context-resource.example.com'
+    const redirectUri = 'http://localhost/silent-context-callback'
+
+    async function setUp(consentRequired: boolean) {
+      harness = await createHarness({ validAudiences: [baseURL, resource] })
+      harness.deps.externalHttp.fetch = resourceOpenApiFetch
+      const cookie = await signInAdmin(harness)
+      const admin = await env.DB.prepare('SELECT user_id AS userId FROM member WHERE organization_id = ? LIMIT 1')
+        .bind(platformOrganizationId)
+        .first<{ userId: string }>()
+      const now = Date.now()
+      for (const organizationId of ['org-silent-a', 'org-silent-b']) {
+        await env.DB.prepare(
+          'INSERT INTO organization (id, slug, name, disabled, created_at, updated_at) VALUES (?, ?, ?, 0, ?, ?)',
+        )
+          .bind(organizationId, organizationId, organizationId, now, now)
+          .run()
+        await env.DB.prepare(
+          'INSERT INTO member (id, organization_id, user_id, role, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+        )
+          .bind(`member-${organizationId}`, organizationId, admin!.userId, 'member', now, now)
+          .run()
+      }
+      const createResource = await harness.request('/api/resource-servers', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', cookie },
+        body: JSON.stringify({
+          identifier: 'silent-context-resource',
+          resourceUrl: resource,
+          authorizationModel: 'native',
+          ownerOrganizationId: platformOrganizationId,
+          visibility: 'public',
+        }),
+      })
+      expect(createResource.status, await createResource.clone().text()).toBe(201)
+      const createApplication = await harness.request('/api/applications', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', cookie },
+        body: JSON.stringify({
+          name: 'Silent Context App',
+          clientType: 'public_spa',
+          redirectUris: [redirectUri],
+          ownerOrganizationId: platformOrganizationId,
+          visibility: 'public',
+          consentRequired,
+        }),
+      })
+      expect(createApplication.status, await createApplication.clone().text()).toBe(201)
+      const { clientId } = (await createApplication.json()) as { clientId: string }
+      const verifier = 'silent-context-verifier-0123456789abcdefghijklmnop'
+      const challenge = await pkceChallenge(verifier)
+
+      const authorize = (prompt?: string) => {
+        const params = new URLSearchParams({
+          response_type: 'code',
+          client_id: clientId,
+          redirect_uri: redirectUri,
+          scope: 'openid',
+          state: 'silent-state',
+          code_challenge: challenge,
+          code_challenge_method: 'S256',
+          resource,
+        })
+        if (prompt) params.set('prompt', prompt)
+        return harness.request(`/api/auth/oauth2/authorize?${params}`, { headers: { cookie }, redirect: 'manual' })
+      }
+      const exchange = async (callback: URL) => {
+        expect(callback.pathname).toBe('/silent-context-callback')
+        const token = await harness.request('/api/auth/oauth2/token', {
+          method: 'POST',
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({
+            grant_type: 'authorization_code',
+            client_id: clientId,
+            redirect_uri: redirectUri,
+            code: callback.searchParams.get('code') ?? '',
+            code_verifier: verifier,
+            resource,
+          }),
+        })
+        expect(token.status, await token.clone().text()).toBe(200)
+        const body = (await token.json()) as { access_token: string; id_token: string }
+        return decodeJwtPayload(body.id_token)[organizationClaim]
+      }
+      const authorizeInteractively = async (organizationId: string) => {
+        const picker = await authorize()
+        let callback = await continueOAuthContext(harness, cookie, picker, `organization:${organizationId}`)
+        if (callback.pathname === '/auth/consent') {
+          const approval = await harness.request('/api/auth/oauth2/consent', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', cookie, origin: baseURL },
+            body: JSON.stringify({ accept: true, scope: 'openid', oauth_query: callback.search.slice(1) }),
+          })
+          expect(approval.status, await approval.clone().text()).toBe(200)
+          callback = new URL(((await approval.json()) as { url: string }).url, baseURL)
+        }
+        return exchange(callback)
+      }
+      const silentCallback = async () => {
+        const response = await authorize('none')
+        expect(response.status, await response.clone().text()).toBe(302)
+        return new URL(response.headers.get('location') ?? '', baseURL)
+      }
+      return { authorize, authorizeInteractively, exchange, silentCallback }
+    }
+
+    it('completes prompt=none in the only Context holding a covering consent', async () => {
+      const flow = await setUp(true)
+      const beforeConsent = await flow.silentCallback()
+      expect(beforeConsent.pathname).toBe('/silent-context-callback')
+      expect(beforeConsent.searchParams.get('error')).toBe('consent_required')
+
+      expect(await flow.authorizeInteractively('org-silent-a')).toBe('org-silent-a')
+
+      const silent = await flow.silentCallback()
+      expect(silent.searchParams.get('error'), silent.toString()).toBeNull()
+      expect(silent.searchParams.get('state')).toBe('silent-state')
+      expect(await flow.exchange(silent)).toBe('org-silent-a')
+
+      const interactive = await flow.authorize()
+      expect(new URL(interactive.headers.get('location') ?? '', baseURL).pathname).toBe('/auth/context')
+    })
+
+    it('uses the most recently chosen Context when several Contexts hold a consent', async () => {
+      const flow = await setUp(true)
+      expect(await flow.authorizeInteractively('org-silent-a')).toBe('org-silent-a')
+      expect(await flow.authorizeInteractively('org-silent-b')).toBe('org-silent-b')
+      expect(await flow.exchange(await flow.silentCallback())).toBe('org-silent-b')
+      expect(await flow.authorizeInteractively('org-silent-a')).toBe('org-silent-a')
+      expect(await flow.exchange(await flow.silentCallback())).toBe('org-silent-a')
+
+      await env.DB.prepare('DELETE FROM oauth_context_selection').run()
+      const ambiguous = await flow.silentCallback()
+      expect(ambiguous.pathname).toBe('/silent-context-callback')
+      expect(ambiguous.searchParams.get('error')).toBe('interaction_required')
+    })
+
+    it('reuses the remembered Context for an Application without a consent step', async () => {
+      const flow = await setUp(false)
+      const unknown = await flow.silentCallback()
+      expect(unknown.searchParams.get('error')).toBe('interaction_required')
+
+      expect(await flow.authorizeInteractively('org-silent-b')).toBe('org-silent-b')
+      expect(await flow.exchange(await flow.silentCallback())).toBe('org-silent-b')
+    })
+  })
+
   it('expires the provider browser session during RP-initiated logout [spec: hosted-auth/oidc-provider-logout]', async () => {
     const cookie = await signInAdmin(harness)
     const admin = await env.DB.prepare('SELECT user_id AS userId FROM member WHERE organization_id = ? LIMIT 1')

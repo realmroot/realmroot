@@ -1,7 +1,7 @@
 import type { ResourceScopeRegistry } from '@shared/api/authorization'
 import type { AuthorizationDetail } from '@shared/api/authorization-details'
 import { sql } from 'drizzle-orm'
-import { index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
+import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import { uploadedAsset } from './agent-tables'
 import { oauthClient, user } from './auth-tables'
 import { identityProviderConnector } from './connector-tables'
@@ -292,6 +292,25 @@ export const applicationConsent = sqliteTable(
     uniqueIndex('applicationConsent_activeOidcPrincipal_unique')
       .on(table.applicationId, table.userId)
       .where(sql`${table.revokedAt} is null and ${table.resourceServerId} is null`),
+  ],
+)
+
+/** The authorization Context a User last chose for an OAuth client; `prompt=none` may reuse it. */
+export const oauthContextSelection = sqliteTable(
+  'oauth_context_selection',
+  {
+    clientId: text('client_id')
+      .notNull()
+      .references(() => oauthClient.clientId, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    referenceId: text('reference_id').notNull(),
+    selectedAt: integer('selected_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.clientId, table.userId] }),
+    index('oauthContextSelection_userId_idx').on(table.userId),
   ],
 )
 
