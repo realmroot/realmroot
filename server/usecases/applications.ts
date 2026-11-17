@@ -13,6 +13,7 @@ import {
 } from '@server/usecases/applications-utils'
 import type { Deps } from '@server/usecases/deps'
 import type { ApplicationAggregate, ApplicationAuthorizationRecord, ClientSecretRecord } from '@server/usecases/ports'
+import { matchesAnyRegisteredUri } from '@server/usecases/registered-uri-patterns'
 import { requirePlatformOrganization } from '@server/usecases/system-resources'
 import {
   type ApplicationResponse,
@@ -353,7 +354,7 @@ export async function loadConsentRequest(
   if (!application || application.disabled) {
     throw notFound('OAuth client was not found.')
   }
-  if (!application.redirectUris.includes(input.redirectUri)) {
+  if (!matchesAnyRegisteredUri(application.redirectUris, input.redirectUri)) {
     throw badRequest('redirect_uri is not registered for this client.')
   }
   const resourceUrls = authorizationParameterValues(input.authorizationParams, 'resource')

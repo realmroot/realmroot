@@ -1353,4 +1353,109 @@ describe('OIDC authorization over real D1', () => {
     expect(authorizeAfterLogout.status).toBe(302)
     expect(new URL(authorizeAfterLogout.headers.get('location') ?? '', baseURL).pathname).toBe('/auth/sign-in')
   })
+
+  it('signs in a per-branch preview through one wildcard host [spec: hosted-auth/oidc-preview-wildcard-redirect]', async () => {
+    const cookie = await signInAdmin(harness)
+    const createApp = await harness.request('/api/applications', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({
+        name: 'Preview SPA',
+        clientType: 'public_spa',
+        redirectUris: ['https://*-app.example.com/callback', 'https://app.example.com/callback'],
+        postLogoutRedirectUris: ['https://*-app.example.com/'],
+        corsOrigins: ['https://*-app.example.com'],
+        ownerOrganizationId: platformOrganizationId,
+        consentRequired: false,
+      }),
+    })
+    expect(createApp.status, await createApp.clone().text()).toBe(201)
+    const application = (await createApp.json()) as { clientId: string }
+    const previewOrigin = 'https://feature-1-app.example.com'
+    const previewCallback = `${previewOrigin}/callback`
+    const verifier = 'preview-wildcard-pkce-verifier-0123456789abcdefghijk'
+    const authorizeFor = async (redirectUri: string) =>
+      harness.request(
+        `/api/auth/oauth2/authorize?${new URLSearchParams({
+          response_type: 'code',
+          client_id: application.clientId,
+          redirect_uri: redirectUri,
+          scope: 'openid profile',
+          state: 'preview-state',
+          code_challenge: await pkceChallenge(verifier),
+          code_challenge_method: 'S256',
+        })}`,
+        { headers: { cookie }, redirect: 'manual' },
+      )
+
+    const authorized = await authorizeFor(previewCallback)
+    expect(authorized.status, await authorized.clone().text()).toBe(302)
+    const callback = new URL(authorized.headers.get('location') ?? '', baseURL)
+    expect(`${callback.origin}${callback.pathname}`).toBe(previewCallback)
+    expect(callback.searchParams.get('state')).toBe('preview-state')
+    const code = callback.searchParams.get('code')
+    expect(code).toBeTruthy()
+
+    const preflight = await harness.request('/api/auth/oauth2/token', {
+      method: 'OPTIONS',
+      headers: { origin: previewOrigin, 'access-control-request-method': 'POST' },
+    })
+    expect(preflight.status).toBe(204)
+    expect(preflight.headers.get('access-control-allow-origin')).toBe(previewOrigin)
+    const token = await harness.request('/api/auth/oauth2/token', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded', origin: previewOrigin },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        client_id: application.clientId,
+        redirect_uri: previewCallback,
+        code: code ?? '',
+        code_verifier: verifier,
+      }),
+    })
+    expect(token.status, await token.clone().text()).toBe(200)
+    const { id_token: idToken } = (await token.json()) as { id_token: string }
+
+    for (const rejected of [
+      'https://a.b-app.example.com/callback',
+      'https://-app.example.com/callback',
+      'http://feature-1-app.example.com/callback',
+      'https://feature-1-app.example.com:8443/callback',
+      'https://feature-1-app.example.com/other',
+      'https://feature-1-app.example.org/callback',
+      'https://app.example.com/callback/',
+    ]) {
+      const response = await authorizeFor(rejected)
+      expect(response.status, rejected).toBe(302)
+      const location = response.headers.get('location') ?? ''
+      expect(location.startsWith(rejected), rejected).toBe(false)
+      expect(new URL(location, baseURL).pathname, rejected).toBe('/auth/error')
+      expect(new URL(location, baseURL).searchParams.get('error'), rejected).toMatch(/^invalid_(redirect|request)$/)
+    }
+    const exact = await authorizeFor('https://app.example.com/callback')
+    expect(new URL(exact.headers.get('location') ?? '', baseURL).origin).toBe('https://app.example.com')
+    const foreignPreflight = await harness.request('/api/auth/oauth2/token', {
+      method: 'OPTIONS',
+      headers: { origin: 'https://a.b-app.example.com', 'access-control-request-method': 'POST' },
+    })
+    expect(foreignPreflight.status).toBe(403)
+
+    const jwks = await harness.request('/api/auth/jwks')
+    const jwksBody = await jwks.text()
+    vi.stubGlobal('fetch', async (input: RequestInfo | URL) => {
+      if (new URL(input instanceof Request ? input.url : input.toString()).pathname === '/api/auth/jwks') {
+        return new Response(jwksBody, { headers: { 'content-type': 'application/json' } })
+      }
+      throw new Error(`unexpected integration fetch: ${input.toString()}`)
+    })
+    const logout = await harness.request(
+      `/api/auth/oauth2/end-session?${new URLSearchParams({
+        id_token_hint: idToken,
+        post_logout_redirect_uri: `${previewOrigin}/`,
+      })}`,
+      { headers: { cookie }, redirect: 'manual' },
+    )
+    expect(logout.status, await logout.clone().text()).toBe(302)
+    expect(logout.headers.get('location')).toBe(`${previewOrigin}/`)
+  })
 })
