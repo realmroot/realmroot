@@ -1,5 +1,5 @@
 diff --git a/dist/authorize-riRRCSbC.mjs b/dist/authorize-riRRCSbC.mjs
-index 3242d48eb31e844240b0cd9f5931580f3c5367c2..da6484ccc22c47d59a5b79b9f20d01ac829f00a5 100644
+index 3242d48eb31e844240b0cd9f5931580f3c5367c2..3808ef9ba607880e2292d024322e08aabbbc7af7 100644
 --- a/dist/authorize-riRRCSbC.mjs
 +++ b/dist/authorize-riRRCSbC.mjs
 @@ -64,10 +64,18 @@ async function consentEndpoint(ctx, opts, authorize) {
@@ -106,6 +106,66 @@ index 3242d48eb31e844240b0cd9f5931580f3c5367c2..da6484ccc22c47d59a5b79b9f20d01ac
  //#region src/logout.ts
  const BACKCHANNEL_LOGOUT_EVENT_URI = "http://schemas.openid.net/event/backchannel-logout";
  const LOGOUT_TOKEN_JWT_TYP = "logout+jwt";
+@@ -555,9 +605,9 @@ async function verifyLogoutHint(ctx, opts, hint, client) {
+ 		return null;
+ 	}
+ }
+-function getRegisteredLogoutRedirect(client, requestedURI, state) {
++function getRegisteredLogoutRedirect(opts, client, requestedURI, state) {
+ 	if (!requestedURI) return { invalid: false };
+-	if (!client.postLogoutRedirectUris?.includes(requestedURI)) return { invalid: true };
++	if (!client.postLogoutRedirectUris?.some((url) => url === requestedURI || opts.matchRegisteredUri?.(url, requestedURI) === true)) return { invalid: true };
+ 	if (!state) return {
+ 		uri: requestedURI,
+ 		invalid: false
+@@ -573,9 +623,9 @@ function getRegisteredLogoutRedirect(client, requestedURI, state) {
+ 		return { invalid: true };
+ 	}
+ }
+-function getLogoutConfirmationContext(client, request) {
++function getLogoutConfirmationContext(opts, client, request) {
+ 	if (!request.post_logout_redirect_uri) return {};
+-	if (getRegisteredLogoutRedirect(client, request.post_logout_redirect_uri, request.state).invalid) return { redirectInvalid: true };
++	if (getRegisteredLogoutRedirect(opts, client, request.post_logout_redirect_uri, request.state).invalid) return { redirectInvalid: true };
+ 	return {
+ 		clientId: client.clientId,
+ 		postLogoutRedirectUri: request.post_logout_redirect_uri,
+@@ -587,7 +637,7 @@ async function getConfirmedLogoutRedirect(ctx, opts, state) {
+ 	if (!state.clientId || !state.postLogoutRedirectUri) return { invalid: false };
+ 	const client = await getLogoutClient(ctx, opts, state.clientId);
+ 	if (!client || client.disabled || !client.enableEndSession) return { invalid: true };
+-	return getRegisteredLogoutRedirect(client, state.postLogoutRedirectUri, state.state);
++	return getRegisteredLogoutRedirect(opts, client, state.postLogoutRedirectUri, state.state);
+ }
+ async function confirmationRequired(ctx, currentSession, confirmation = {}) {
+ 	if (!currentSession) {
+@@ -646,7 +696,7 @@ async function rpInitiatedLogoutEndpoint(ctx, opts) {
+ 			if (!client) return logoutProtocolError(ctx, "BAD_REQUEST", "invalid_client", "The logout client does not exist");
+ 			if (client.disabled) return logoutProtocolError(ctx, "BAD_REQUEST", "invalid_client", "The logout client is disabled");
+ 			if (!client.enableEndSession) return logoutProtocolError(ctx, "UNAUTHORIZED", "invalid_client", "The client is not allowed to initiate logout");
+-			confirmation = getLogoutConfirmationContext(client, request);
++			confirmation = getLogoutConfirmationContext(opts, client, request);
+ 		}
+ 		return confirmationRequired(ctx, currentSession, confirmation);
+ 	}
+@@ -659,14 +709,14 @@ async function rpInitiatedLogoutEndpoint(ctx, opts) {
+ 	if (!client.enableEndSession) return logoutProtocolError(ctx, "UNAUTHORIZED", "invalid_client", "The client is not allowed to initiate logout");
+ 	const idTokenPayload = await verifyLogoutHint(ctx, opts, request.id_token_hint, client);
+ 	if (!idTokenPayload) {
+-		if (currentSession && isBrowserNavigation(ctx)) return confirmationRequired(ctx, currentSession, request.client_id ? getLogoutConfirmationContext(client, request) : {});
++		if (currentSession && isBrowserNavigation(ctx)) return confirmationRequired(ctx, currentSession, request.client_id ? getLogoutConfirmationContext(opts, client, request) : {});
+ 		return logoutProtocolError(ctx, "UNAUTHORIZED", "invalid_token", "The id_token_hint is invalid");
+ 	}
+ 	const sessionId = idTokenPayload.sid;
+ 	const hintedSession = await findHintedSession(ctx, sessionId);
+ 	const matchesCurrentSession = currentSession?.session.id === sessionId;
+-	if (currentSession && !matchesCurrentSession) return confirmationRequired(ctx, currentSession, getLogoutConfirmationContext(client, request));
+-	const redirect = getRegisteredLogoutRedirect(client, request.post_logout_redirect_uri, request.state);
++	if (currentSession && !matchesCurrentSession) return confirmationRequired(ctx, currentSession, getLogoutConfirmationContext(opts, client, request));
++	const redirect = getRegisteredLogoutRedirect(opts, client, request.post_logout_redirect_uri, request.state);
+ 	const sessionToDelete = hintedSession ?? (matchesCurrentSession ? currentSession?.session : null);
+ 	if (sessionToDelete) await deleteLogoutSession(ctx, sessionToDelete);
+ 	if (matchesCurrentSession) deleteSessionCookie(ctx);
 @@ -4404,7 +4454,8 @@ const oauthProvider = (options) => {
  		onRequest: handleIssuerMetadataRequest,
  		init: async (ctx) => {
@@ -133,7 +193,42 @@ index 3242d48eb31e844240b0cd9f5931580f3c5367c2..da6484ccc22c47d59a5b79b9f20d01ac
  			}),
  			oauth2Token: createOAuthEndpoint("/oauth2/token", {
  				method: "POST",
-@@ -5631,22 +5683,34 @@ async function authorizeEndpoint(ctx, opts, settings) {
+@@ -5424,7 +5476,7 @@ function stripLoopbackRedirectPort(uri) {
+ * @see https://www.rfc-editor.org/rfc/rfc9700.html#section-4.1.3
+ * @see https://www.rfc-editor.org/rfc/rfc8252.html#section-8.3
+ */
+-function findRegisteredRedirectUri(registered, requested) {
++function findRegisteredRedirectUri(opts, registered, requested) {
+ 	if (!registered || !requested) return void 0;
+ 	let requestedUrl;
+ 	try {
+@@ -5441,6 +5493,7 @@ function findRegisteredRedirectUri(registered, requested) {
+ 	const requestedWithoutPort = stripLoopbackRedirectPort(requested);
+ 	return registered.find((url) => {
+ 		if (url === requested) return true;
++		if (opts.matchRegisteredUri?.(url, requested) === true) return true;
+ 		if (!requestedWithoutPort) return false;
+ 		return stripLoopbackRedirectPort(url) === requestedWithoutPort;
+ 	});
+@@ -5460,7 +5513,7 @@ async function resolveTrustedRedirectUri(ctx, opts, clientId, redirectUri) {
+ 		return null;
+ 	}
+ 	if (!client || client.disabled) return null;
+-	return findRegisteredRedirectUri(client.redirectUris, redirectUri) ? redirectUri : null;
++	return findRegisteredRedirectUri(opts, client.redirectUris, redirectUri) ? redirectUri : null;
+ }
+ /**
+ * `redirectOnError` callback for `/oauth2/authorize`. Per RFC 6749 §4.1.2.1,
+@@ -5552,7 +5605,7 @@ async function authorizeEndpoint(ctx, opts, settings) {
+ 	if (!client) return handleRedirect(ctx, getErrorURL(ctx, "invalid_client", "client_id is required"));
+ 	if (client.disabled) return handleRedirect(ctx, getErrorURL(ctx, "client_disabled", "client is disabled"));
+ 	if (!clientAllowsGrant(client, "authorization_code")) return handleRedirect(ctx, getErrorURL(ctx, "unauthorized_client", "client is not authorized to use the authorization_code grant"));
+-	if (!findRegisteredRedirectUri(client.redirectUris, query.redirect_uri) || !query.redirect_uri) return handleRedirect(ctx, getErrorURL(ctx, "invalid_redirect", "invalid redirect uri"));
++	if (!findRegisteredRedirectUri(opts, client.redirectUris, query.redirect_uri) || !query.redirect_uri) return handleRedirect(ctx, getErrorURL(ctx, "invalid_redirect", "invalid redirect uri"));
+ 	let requestedScopes = query.scope?.split(" ").filter((s) => s);
+ 	if (requestedScopes) {
+ 		const validScopes = new Set(client.scopes ?? opts.scopes);
+@@ -5631,22 +5684,34 @@ async function authorizeEndpoint(ctx, opts, settings) {
  			return redirectWithPromptCode(ctx, opts, "create", { page: typeof signupRedirect === "string" ? signupRedirect : void 0 });
  		}
  	}
@@ -174,7 +269,7 @@ index 3242d48eb31e844240b0cd9f5931580f3c5367c2..da6484ccc22c47d59a5b79b9f20d01ac
  	});
  	if (client.skipConsent) return redirectWithAuthorizationCode(ctx, opts, {
  		query,
-@@ -5676,12 +5740,12 @@ async function authorizeEndpoint(ctx, opts, settings) {
+@@ -5676,12 +5741,24 @@ async function authorizeEndpoint(ctx, opts, settings) {
  	});
  	if (!consent || !requestedScopes.every((val) => consent.scopes.includes(val)) || !requestedUserInfoClaims.every((claim) => (consent.requestedUserInfoClaims ?? []).includes(claim))) {
  		if (promptNone) return redirectWithPromptNoneError(ctx, opts, query, "consent_required", "End-User consent is required");
@@ -186,10 +281,22 @@ index 3242d48eb31e844240b0cd9f5931580f3c5367c2..da6484ccc22c47d59a5b79b9f20d01ac
  		if (promptNone) return redirectWithPromptNoneError(ctx, opts, query, "consent_required", "End-User consent is required");
 -		return redirectWithPromptCode(ctx, opts, "consent", { sessionId: session.session.id });
 +		return redirectWithPromptCode(ctx, opts, "consent", { sessionId: session.session.id, referenceId });
++	}
++	// Realmroot keeps consent per Resource Server; the flat provider record must not stand in for it.
++	if (opts.postLogin?.consentCoversRequest && !await opts.postLogin.consentCoversRequest({
++		user: session.user,
++		session: session.session,
++		clientId: client.clientId,
++		scopes: requestedScopes,
++		resources: requestedResources,
++		referenceId
++	})) {
++		if (promptNone) return redirectWithPromptNoneError(ctx, opts, query, "consent_required", "End-User consent is required");
++		return redirectWithPromptCode(ctx, opts, "consent", { sessionId: session.session.id, referenceId });
  	}
  	return redirectWithAuthorizationCode(ctx, opts, {
  		query,
-@@ -5732,7 +5796,24 @@ async function redirectWithAuthorizationCode(ctx, opts, verificationValue) {
+@@ -5732,7 +5809,24 @@ async function redirectWithAuthorizationCode(ctx, opts, verificationValue) {
  	return handleRedirect(ctx, redirectUriWithCode.toString());
  }
  async function redirectWithPromptCode(ctx, opts, type, options) {
@@ -215,7 +322,7 @@ index 3242d48eb31e844240b0cd9f5931580f3c5367c2..da6484ccc22c47d59a5b79b9f20d01ac
  	let path = opts.loginPage;
  	if (type === "select_account") path = opts.selectAccount?.page ?? opts.loginPage;
  	else if (type === "post_login") {
-@@ -5750,7 +5831,13 @@ async function signParams(ctx, opts, flags) {
+@@ -5750,7 +5844,13 @@ async function signParams(ctx, opts, flags) {
  	params.set(signedQueryIssuedAtParam, String(issuedAt));
  	params.delete("sig");
  	params.delete(postLoginClearedParam);
@@ -492,18 +599,45 @@ index c8d635e57ca4cd3fe8f7cbfd5c769d61b7e96874..943d37e98b73035e6c5c89ac4756150d
  	jwtPayload.token_type = confirmationTokenType(jwtPayload.cnf);
  	return jwtPayload;
 diff --git a/dist/oauth-1Ud-hvZY.d.mts b/dist/oauth-1Ud-hvZY.d.mts
-index 130fd5d8f3ddd36d1b776338367af5b8cb7f0e79..c6efe3c77216b6067ddf2cf4e73fca9482470499 100644
+index 130fd5d8f3ddd36d1b776338367af5b8cb7f0e79..4b4c4b5f23e9dadf638e211b46b3169cf97ddb3f 100644
 --- a/dist/oauth-1Ud-hvZY.d.mts
 +++ b/dist/oauth-1Ud-hvZY.d.mts
-@@ -1552,6 +1552,7 @@ interface OAuthOptions<Scopes extends readonly Scope[] = InternallySupportedScop
+@@ -1534,6 +1534,12 @@ interface OAuthOptions<Scopes extends readonly Scope[] = InternallySupportedScop
+       scopes: Scopes;
+     }) => Awaitable<boolean>;
+   };
++  /**
++   * Decides whether a requested redirect URI or post-logout redirect URI is
++   * covered by a registered value that is not byte-for-byte equal to it, such
++   * as a constrained wildcard pattern. Exact matches never reach this hook.
++   */
++  matchRegisteredUri?: (registered: string, requested: string) => boolean;
+   /**
+    * Post login page settings
+    */
+@@ -1552,7 +1558,21 @@ interface OAuthOptions<Scopes extends readonly Scope[] = InternallySupportedScop
        user: User & Record<string, unknown>;
        session: Session & Record<string, unknown>;
        scopes: Scopes;
 +      referenceId?: string;
      }) => Awaitable<string | undefined>;
++    /**
++     * Confirms that the stored consent covers this request after the
++     * provider's own consent record matched. Returning `false` prompts
++     * for consent again (or fails `prompt=none` with `consent_required`).
++     */
++    consentCoversRequest?: (context: {
++      user: User & Record<string, unknown>;
++      session: Session & Record<string, unknown>;
++      clientId: string;
++      scopes: Scopes;
++      resources: string[];
++      referenceId?: string;
++    }) => Awaitable<boolean>;
      /**
       * After login and before consent, request the user to
-@@ -1564,13 +1565,14 @@ interface OAuthOptions<Scopes extends readonly Scope[] = InternallySupportedScop
+      * select an additional choice for `/oauth2/authorize`.
+@@ -1564,13 +1584,14 @@ interface OAuthOptions<Scopes extends readonly Scope[] = InternallySupportedScop
       * @returns
       * - `true`: account is not selected and needs selection
       * - `false`: intended user or account selected
@@ -519,7 +653,7 @@ index 130fd5d8f3ddd36d1b776338367af5b8cb7f0e79..c6efe3c77216b6067ddf2cf4e73fca94
    };
    /**
     * Format your refresh tokens the returned to oauth clients.
-@@ -1695,6 +1697,14 @@ interface OAuthOptions<Scopes extends readonly Scope[] = InternallySupportedScop
+@@ -1695,6 +1716,14 @@ interface OAuthOptions<Scopes extends readonly Scope[] = InternallySupportedScop
     *
     * @param info - context that may be useful when creating custom claims
     */

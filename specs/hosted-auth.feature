@@ -203,6 +203,16 @@ Feature: Hosted authentication
     And the refresh token remains bound to the full original resource grant
     But a token request for a resource outside the original grant is rejected
 
+  @entrypoint:product-ui @journey:oauth-incremental-resource-consent @proof:integration
+  Scenario: Newly requested Resource scopes are never silently narrowed by an earlier consent
+    Given I approved a consent-required application for scopes on two protected resources in one request
+    And the application is later allowed a further automatic scope on one of those resources
+    When the application requests the earlier and the new scope for that resource
+    Then Realmroot asks me to consent to the expanded request instead of reusing the earlier consent
+    And a non-interactive request for it fails with consent_required instead of issuing a narrowed code
+    When I approve the expanded request
+    Then the access token for that resource carries every approved scope
+
   @entrypoint:product-ui @journey:oidc-native-token-verification @proof:integration
   Scenario: Native OIDC clients can verify issued identity tokens
     Given a native OIDC client uses a standards-compliant JOSE verifier
@@ -212,6 +222,18 @@ Feature: Hosted authentication
     And the JWKS endpoints support metadata probes
     And the published RSA public key declares signature verification usage
     And the token can be verified with that key
+
+  @entrypoint:product-ui @journey:oidc-preview-wildcard-redirect @proof:integration
+  Scenario: Per-branch preview deployments sign in through one wildcard host
+    Given an Application registers "https://*-app.example.com/callback" as a redirect URI
+    And it registers "https://*-app.example.com/" as a post sign-out redirect URI
+    And it registers "https://*-app.example.com" as a CORS origin
+    When a preview at "https://feature-1-app.example.com" starts authorization with its own callback
+    Then Realmroot issues the authorization code to that callback
+    And the preview origin may call the token endpoint cross-origin
+    And RP-initiated logout returns to the preview's post sign-out redirect URI
+    But a host that adds a label, drops the label prefix, or changes the scheme, port, path, or fixed suffix is not registered
+    And URIs registered without a wildcard still match exactly
 
   @entrypoint:product-ui @journey:oidc-provider-logout @proof:integration
   Scenario: OIDC provider logout ends the browser session

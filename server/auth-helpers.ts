@@ -275,6 +275,38 @@ export async function filterOAuthAccessTokenScopes(
   return authorizedScopes
 }
 
+/**
+ * The provider's consent record is one flat scope list per Context, while Realmroot consent is
+ * kept per Resource Server and decides what an access token carries. A request is covered only
+ * when every requested scope the Application may use on each requested Resource Server is in that
+ * Resource Server's consent; otherwise the user must consent again rather than get a narrowed token.
+ */
+export async function oauthResourceConsentCoversRequest(
+  deps: Deps,
+  input: { clientId: string; userId: string; scopes: Iterable<string>; resources: Iterable<string> },
+) {
+  const resourceUrls = [...new Set(input.resources)]
+  if (resourceUrls.length === 0) return true
+  const application = await deps.applications.findByClientId(input.clientId)
+  if (!application) throw new Error('OAuth consent does not reference an Application.')
+  if (!application.consentRequired) return true
+  const requestedScopes = new Set(input.scopes)
+  for (const resourceUrl of resourceUrls) {
+    const resource = await deps.authorization.findResourceByResourceUrl(resourceUrl)
+    // Token issuance rejects an unknown or inactive target; there is no consent to compare here.
+    if (!resource?.scopeRegistry) continue
+    const declaredScopes = new Set(resource.scopeRegistry.scopes.map((scope) => scope.value))
+    const allowedScopes = application.resourceScopes.find((item) => item.resourceServerId === resource.id)?.scopes ?? []
+    const consent = await deps.applications.findConsent(application.id, input.userId, resource.id)
+    const consentedScopes = new Set(consent?.scopes ?? [])
+    const uncovered = allowedScopes.some(
+      (scope) => requestedScopes.has(scope) && declaredScopes.has(scope) && !consentedScopes.has(scope),
+    )
+    if (uncovered) return false
+  }
+  return true
+}
+
 async function resolveOAuthOrganizationId(
   deps: Deps,
   input: { user?: ({ id?: string } & Record<string, unknown>) | null; resource?: string; referenceId?: string },

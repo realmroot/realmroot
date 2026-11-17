@@ -1,4 +1,5 @@
 import { forbidden } from '@server/domain/errors'
+import { matchesAnyRegisteredUri } from '@server/usecases/registered-uri-patterns'
 import type { Context, MiddlewareHandler } from 'hono'
 
 const corsMethods = 'GET,POST,PUT,PATCH,DELETE,OPTIONS'
@@ -44,7 +45,7 @@ export function trustedOriginCors(trustedOrigins: string[], options: TrustedOrig
       ? []
       : await (options.resolveAllowedOrigins?.({ path: c.req.path, context: c }) ?? [])
 
-    if (!allowedOrigins.has(origin) && !dynamicOrigins.includes(origin)) {
+    if (!allowedOrigins.has(origin) && !matchesAnyRegisteredUri(dynamicOrigins, origin)) {
       throw forbidden('Origin is not trusted for this issuer.')
     }
 

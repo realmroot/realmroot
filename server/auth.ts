@@ -16,6 +16,7 @@ import { mayCreateOrganization } from '@server/usecases/developer-access'
 import type { IdentifierGenerator } from '@server/usecases/identifier-generator'
 import { organizationUserHasScope } from '@server/usecases/organization-membership-scopes'
 import type { ApplicationRepository } from '@server/usecases/ports'
+import { matchesRegisteredUri } from '@server/usecases/registered-uri-patterns'
 import { findPlatformOrganization } from '@server/usecases/system-resources'
 import { APIError, betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
@@ -36,6 +37,7 @@ import {
   buildOAuthIdTokenClaims,
   createNonce,
   filterOAuthAccessTokenScopes,
+  oauthResourceConsentCoversRequest,
   sendPasswordChangedNotification,
   sendSmsOtp,
   siweDomain,
@@ -503,6 +505,7 @@ export function createAuth(
         scopes: oauthScopes,
         resources: options.validAudiences,
         enforcePerClientResources: false,
+        matchRegisteredUri: matchesRegisteredUri,
         postLogin: {
           page: '/auth/context',
           consentReferenceId: async ({ referenceId, user }) => {
@@ -533,6 +536,8 @@ export function createAuth(
             }
             return referenceId
           },
+          consentCoversRequest: ({ user, clientId, scopes, resources }) =>
+            oauthResourceConsentCoversRequest(deps, { clientId, userId: user.id, scopes, resources }),
           shouldRedirect: async ({ headers, user, scopes }) => {
             const clientId = headers.get('x-realmroot-oauth-client-id')
             if (!clientId) return false

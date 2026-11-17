@@ -341,6 +341,85 @@ describe('service.test 2', () => {
       ),
     ).rejects.toMatchObject({ status: 400, message: 'Scope is not allowed for this client: bad-scope' })
   })
+
+  it('accepts only one leftmost-label wildcard in Application URIs [spec: management-api/management-application-wildcard-uris]', async () => {
+    const repository = new InMemoryApplicationRepository()
+    const deps = { ids: createIdentifierGeneratorFake(), applications: repository } as unknown as Deps
+    const issuer = 'https://auth.example.com'
+    const created = await createApplication(
+      deps,
+      issuer,
+      {
+        name: 'Preview SPA',
+        clientType: 'public_spa',
+        redirectUris: ['https://*-app.example.com/callback'],
+        postLogoutRedirectUris: ['https://*-app.example.com/'],
+        corsOrigins: ['https://*-app.example.com'],
+      },
+      'admin-1',
+    )
+    expect(created).toMatchObject({
+      redirectUris: ['https://*-app.example.com/callback'],
+      postLogoutRedirectUris: ['https://*-app.example.com/'],
+      corsOrigins: ['https://*-app.example.com'],
+    })
+
+    const invalid: [Parameters<typeof updateApplication>[3], string][] = [
+      [{ redirectUris: ['https://*.workers.dev/callback'] }, 'Redirect URIs must keep a wildcard host'],
+      [{ redirectUris: ['https://app.example.com/*'] }, 'Redirect URIs may use "*" only at the start'],
+      [{ redirectUris: ['http://*-app.example.com/callback'] }, 'Redirect URIs may use "*" only at the start'],
+      [
+        { postLogoutRedirectUris: ['https://*-*.example.com/'] },
+        'Post sign-out redirect URIs may contain only one "*".',
+      ],
+      [{ corsOrigins: ['https://app-*.example.com'] }, 'CORS origins may use "*" only at the start'],
+      [
+        { corsOrigins: ['https://*-app.example.com/callback'] },
+        'CORS origins must include scheme, host, and optional port only.',
+      ],
+    ]
+    for (const [patch, message] of invalid) {
+      await expect(updateApplication(deps, issuer, created.id, patch)).rejects.toMatchObject({
+        status: 400,
+        message: expect.stringContaining(message),
+      })
+    }
+    await expect(
+      createApplication(
+        deps,
+        issuer,
+        { name: 'Native Wildcard', clientType: 'public_native', redirectUris: ['com.example.*:/callback'] },
+        'admin-1',
+      ),
+    ).rejects.toMatchObject({ status: 400, message: expect.stringContaining('Redirect URIs may use "*" only') })
+  })
+
+  it('loads consent for a callback covered by a wildcard redirect URI [spec: hosted-auth/oidc-preview-wildcard-redirect]', async () => {
+    const repository = new InMemoryApplicationRepository()
+    const deps = { ids: createIdentifierGeneratorFake(), applications: repository } as unknown as Deps
+    const issuer = 'https://auth.example.com'
+    const created = await createApplication(
+      deps,
+      issuer,
+      { name: 'Preview SPA', clientType: 'public_spa', redirectUris: ['https://*-app.example.com/callback'] },
+      'admin-1',
+    )
+    const consent = await loadConsentRequest(
+      deps,
+      issuer,
+      { clientId: created.clientId, redirectUri: 'https://pr-1-app.example.com/callback', scope: 'openid' },
+      { id: 'user-1' },
+    )
+    expect(consent.redirects.denyUrl).toMatch(/^https:\/\/pr-1-app\.example\.com\/callback\?error=access_denied/)
+    await expect(
+      loadConsentRequest(
+        deps,
+        issuer,
+        { clientId: created.clientId, redirectUri: 'https://a.b-app.example.com/callback', scope: 'openid' },
+        { id: 'user-1' },
+      ),
+    ).rejects.toMatchObject({ status: 400, message: 'redirect_uri is not registered for this client.' })
+  })
 })
 
 class InMemoryApplicationRepository implements ApplicationRepository {
