@@ -172,6 +172,22 @@ Feature: Hosted authentication
     And the authorization code and access token retain only that Context
     And selecting the User Context issues no Organization claim
 
+  @entrypoint:product-ui @journey:oauth-silent-authorization-context @proof:integration
+  Scenario: Silent authorization reuses the Context the User already authorized
+    Given a public OIDC Application requests a public native Resource Server
+    And the signed-in User belongs to multiple active Organizations
+    And the User authorized the Application for those scopes and that Resource in one Context
+    When the Application sends the same authorization request with prompt=none
+    Then Realmroot issues an authorization code in that Context without showing the Context picker
+    When the User has authorized the Application in several Contexts
+    Then a prompt=none request uses the Context last picked for that Application in this browser
+    But without a remembered pick in this browser it fails with interaction_required
+    And a remembered pick naming a Context without current membership or a covering authorization is ignored
+    And a forged or unsigned remembered pick is ignored
+    And it fails with consent_required when no Context holds a covering authorization
+    And an interactive request still offers the Context picker
+    And a User with a single Context is authorized in it without the Context picker
+
   @entrypoint:product-ui @journey:oidc-resource-authorization @proof:integration
   Scenario: Hosted OIDC authorization preserves the requested resource identifier
     Given an OIDC client starts authorization with a protected resource URL

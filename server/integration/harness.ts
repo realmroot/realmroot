@@ -13,7 +13,7 @@ import { makeSignature } from 'better-auth/crypto'
 export const baseURL = 'http://localhost'
 export let platformOrganizationId = ''
 export let realmrootResourceServerId = ''
-const authSecret = 'integration-secret-with-enough-entropy-2026-realmroot'
+export const authSecret = 'integration-secret-with-enough-entropy-2026-realmroot'
 
 export async function resignOAuthQuery(oauthQuery: string): Promise<string> {
   const params = new URLSearchParams(oauthQuery)

@@ -503,6 +503,37 @@ export async function resolveOAuthAuthorizationContexts(
   return listOAuthAuthorizationContexts(deps, application, resources, user)
 }
 
+/**
+ * Chooses the authorization Context for a non-interactive (`prompt=none`) request without a picker.
+ *
+ * A Context is eligible when the User needs no new consent there: any candidate for an Application
+ * without a consent step, otherwise only a Context whose consent covers every requested scope and
+ * Resource. One eligible Context is used as is; several resolve to `remembered`, the Context this
+ * browser last picked for the Application, while it is still eligible. Anything else needs the User.
+ */
+export async function resolveSilentOAuthAuthorizationContext(
+  deps: Deps,
+  application: ApplicationAggregate,
+  contexts: Array<{ id: string }>,
+  userId: string,
+  request: { scopes: string[]; resources: string[]; remembered: string | null },
+): Promise<{ contextId: string } | { error: 'consent_required' | 'interaction_required' }> {
+  const candidateIds = contexts.map((context) => context.id)
+  const eligibleIds = application.consentRequired
+    ? (await deps.applications.listOAuthContextConsents(application.clientId, userId, candidateIds))
+        .filter(
+          (consent) =>
+            request.scopes.every((scope) => consent.scopes.includes(scope)) &&
+            request.resources.every((resource) => consent.resources.includes(resource)),
+        )
+        .map((consent) => consent.referenceId)
+    : candidateIds
+  if (eligibleIds.length === 0) return { error: 'consent_required' }
+  if (eligibleIds.length === 1) return { contextId: eligibleIds[0]! }
+  const { remembered } = request
+  return remembered && eligibleIds.includes(remembered) ? { contextId: remembered } : { error: 'interaction_required' }
+}
+
 export async function createConsent(deps: Deps, input: CreateConsentRequest, userId: string) {
   const application = await deps.applications.findByClientId(input.clientId)
   if (!application || application.disabled) {

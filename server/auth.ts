@@ -46,7 +46,8 @@ import { betterAuthTranslations } from './auth-i18n'
 import type { Database } from './db/client'
 import * as schema from './db/schema'
 import { hashPassword } from './domain/password'
-import { resolveOAuthAuthorizationContexts } from './usecases/applications'
+import { rememberedOAuthContext, rememberOAuthContextCookie } from './oauth-context-cookie'
+import { resolveOAuthAuthorizationContexts, resolveSilentOAuthAuthorizationContext } from './usecases/applications'
 
 export {
   buildOAuthAccessTokenClaims,
@@ -537,7 +538,7 @@ export function createAuth(
           },
           consentCoversRequest: ({ user, clientId, scopes, resources }) =>
             oauthResourceConsentCoversRequest(deps, { clientId, userId: user.id, scopes, resources }),
-          shouldRedirect: async ({ headers, user }) => {
+          shouldRedirect: async ({ headers, user, scopes }) => {
             const clientId = headers.get('x-realmroot-oauth-client-id')
             if (!clientId) return false
             const application = await applications.findByClientId(clientId)
@@ -551,7 +552,17 @@ export function createAuth(
             const resourceUrls = oauthResourceUrlsFromHeader(headers)
             if (resourceUrls.length === 0) return false
             const contexts = await resolveOAuthAuthorizationContexts(deps, application, resourceUrls, user)
-            return contexts.length === 1 ? contexts[0]!.id : true
+            if (contexts.length === 1) return contexts[0]!.id
+            if (headers.get('x-realmroot-oauth-prompt-none') !== '1') return true
+            const remembered = await rememberedOAuthContext(headers.get('cookie'), secret, clientId)
+            const silent = await resolveSilentOAuthAuthorizationContext(deps, application, contexts, user.id, {
+              scopes,
+              resources: resourceUrls,
+              remembered,
+            })
+            if ('contextId' in silent) return silent.contextId
+            nonInteractiveContextErrors.set(headers, silent.error)
+            return true
           },
         },
         filterAccessTokenScopes: (input) => filterOAuthAccessTokenScopes(deps, input),
@@ -641,7 +652,21 @@ export function createAuth(
         deps,
       )
       if (deviceAdmissionError) return deviceAdmissionError
-      const response = await auth.handler(await withOAuthConsentContext(request))
+      const contextSelection = await oauthContextSelectionFromRequest(request)
+      const oauthRequest = await withOAuthConsentContext(request)
+      let response = await auth.handler(oauthRequest)
+      if (contextSelection && cachedSession?.user && response.ok) {
+        response = new Response(response.body, response)
+        response.headers.append(
+          'set-cookie',
+          await rememberOAuthContextCookie(
+            request.headers.get('cookie'),
+            secret,
+            contextSelection.clientId,
+            contextSelection.referenceId,
+          ),
+        )
+      }
       if (new URL(request.url).pathname.endsWith('/oauth2/introspect') && response.ok) {
         const result = (await response.clone().json()) as { active?: boolean; sub?: string }
         if (result.active && result.sub) {
@@ -652,7 +677,7 @@ export function createAuth(
           if (subject?.deletedAt) return Response.json({ active: false }, { headers: { 'Cache-Control': 'no-store' } })
         }
       }
-      return translateNonInteractiveConsentError(request, response)
+      return translateNonInteractiveContextError(oauthRequest, response)
     },
   }
 }
@@ -722,7 +747,27 @@ async function withOAuthConsentContext(request: Request) {
   else headers.delete('x-realmroot-oauth-client-id')
   if (resources.length) headers.set('x-realmroot-oauth-resources', JSON.stringify(resources))
   else headers.delete('x-realmroot-oauth-resources')
+  if (new Set((params.get('prompt') ?? '').split(/\s+/)).has('none')) headers.set('x-realmroot-oauth-prompt-none', '1')
+  else headers.delete('x-realmroot-oauth-prompt-none')
   return new Request(request, { headers })
+}
+
+/** A Context the User picked on the post-login Context page, remembered in this browser once the provider accepts it. */
+async function oauthContextSelectionFromRequest(request: Request) {
+  const url = new URL(request.url)
+  if (request.method !== 'POST' || !url.pathname.endsWith('/oauth2/continue')) return null
+  if (!request.headers.get('content-type')?.toLowerCase().startsWith('application/json')) return null
+  let body: unknown
+  try {
+    body = await request.clone().json()
+  } catch {
+    return null
+  }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return null
+  const { postLogin, consentReferenceId, oauth_query: oauthQuery } = body as Record<string, unknown>
+  if (postLogin !== true || typeof consentReferenceId !== 'string' || typeof oauthQuery !== 'string') return null
+  const clientId = new URLSearchParams(oauthQuery).get('client_id')
+  return clientId ? { clientId, referenceId: consentReferenceId } : null
 }
 
 function oauthResourceUrlsFromHeader(headers: Headers) {
@@ -751,9 +796,15 @@ async function oauthAuthorizationParams(request: Request, url: URL) {
   return typeof oauthQuery === 'string' ? new URLSearchParams(oauthQuery) : null
 }
 
-function translateNonInteractiveConsentError(request: Request, response: Response) {
-  const requestUrl = new URL(request.url)
-  if (!new Set((requestUrl.searchParams.get('prompt') ?? '').split(/\s+/)).has('none')) return response
+/**
+ * The provider answers every unresolved post-login Context with `interaction_required`. When the
+ * silent Context resolution found that no Context holds a covering consent, the accurate OIDC error
+ * is `consent_required`; an ambiguous Context choice keeps `interaction_required`.
+ */
+const nonInteractiveContextErrors = new WeakMap<Headers, 'consent_required' | 'interaction_required'>()
+
+function translateNonInteractiveContextError(request: Request, response: Response) {
+  if (nonInteractiveContextErrors.get(request.headers) !== 'consent_required') return response
 
   const location = response.headers.get('location')
   if (!location) return response

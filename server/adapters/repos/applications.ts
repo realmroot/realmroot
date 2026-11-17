@@ -16,6 +16,7 @@ import {
   user,
 } from '../../db/schema'
 import {
+  parseList,
   serializeList,
   toAggregate,
   toApplicationInsert,
@@ -381,6 +382,29 @@ export function createDrizzleApplicationRepository(db: Database, ids: Identifier
         .orderBy(desc(applicationConsent.grantedAt))
         .limit(1)
       return rows[0] ? toConsent(rows[0]) : null
+    },
+
+    async listOAuthContextConsents(clientId, userId, referenceIds) {
+      if (referenceIds.length === 0) return []
+      const rows = await db
+        .select({
+          referenceId: oauthConsent.referenceId,
+          scopes: oauthConsent.scopes,
+          resources: oauthConsent.resources,
+        })
+        .from(oauthConsent)
+        .where(
+          and(
+            eq(oauthConsent.clientId, clientId),
+            eq(oauthConsent.userId, userId),
+            inArray(oauthConsent.referenceId, referenceIds),
+          ),
+        )
+      return rows.map((row) => ({
+        referenceId: row.referenceId!,
+        scopes: parseList(row.scopes),
+        resources: parseList(row.resources),
+      }))
     },
 
     async revokeConsent(consentId, userId) {

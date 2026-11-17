@@ -719,6 +719,10 @@ class InMemoryApplicationRepository implements ApplicationRepository {
     return nextSecret
   }
 
+  async listOAuthContextConsents() {
+    return []
+  }
+
   async findConsent(applicationId: string, userId: string, resourceServerId: string | null) {
     return this.consents.get(consentKey(applicationId, userId, resourceServerId)) ?? null
   }

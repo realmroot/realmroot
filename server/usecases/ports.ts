@@ -1351,6 +1351,12 @@ export interface ApplicationRepository {
   findAuthorization(authorizationId: string): Promise<ApplicationAuthorizationRecord | null>
   revokeAuthorization(authorizationId: string): Promise<boolean>
   findConsent(applicationId: string, userId: string, resourceServerId: string | null): Promise<ConsentRecord | null>
+  /** OAuth provider consents this User granted the client, one per authorization Context reference. */
+  listOAuthContextConsents(
+    clientId: string,
+    userId: string,
+    referenceIds: string[],
+  ): Promise<Array<{ referenceId: string; scopes: string[]; resources: string[] }>>
   revokeConsent(consentId: string, userId: string): Promise<boolean>
   createConsent(input: {
     applicationId: string
