@@ -25,6 +25,15 @@ Feature: Unified Realmroot resource API
     And existing prefixed identifiers remain valid resource references
     And credentials, tokens, protocol nonce values, and request trace identifiers retain their dedicated formats
 
+  @entrypoint:restish @journey:management-application-wildcard-uris @proof:unit
+  Scenario: Application URI wildcards are limited to one leftmost host label
+    When an administrator writes an Application's redirect URIs, post sign-out redirect URIs, or CORS origins
+    Then a value may contain one "*" only as the whole leftmost host label or as that label's prefix, such as "https://*-app.example.com/callback"
+    And the wildcard value must use HTTPS under a fixed registrable domain that is not itself a public suffix
+    But a wildcard in the scheme, port, path, query, another label, the middle of a label, or across dots is rejected with 400
+    And so is more than one "*" or a wildcard directly under a public suffix such as "https://*.workers.dev"
+    And nothing is stored that authorization would never honor
+
   @entrypoint:restish @journey:management-openapi-discovery @proof:unit
   Scenario: The unified API contract is discoverable
     When an API client requests service discovery
