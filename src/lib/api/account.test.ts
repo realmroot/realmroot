@@ -11,6 +11,7 @@ import {
   linkAccount,
   listAccountAgents,
   listAccountConnections,
+  listAllAccountAgents,
   listApprovalAccountConnections,
   listApprovalAuthorizationDetailCatalog,
   listExternalApiResources,
@@ -129,6 +130,22 @@ describe('account API client over the real network boundary', () => {
   beforeAll(() => realClientServer.listen({ onUnhandledRequest: 'error' }))
   afterEach(() => realClientServer.resetHandlers())
   afterAll(() => realClientServer.close())
+
+  it('fetches every Agent page for data export only', async () => {
+    const pages: number[] = []
+    realClientServer.use(
+      http.get(`${base}/api/account/agents`, ({ request }) => {
+        const page = Number(new URL(request.url).searchParams.get('page'))
+        pages.push(page)
+        return HttpResponse.json({
+          items: [{ id: `agent-${page}` }],
+          pagination: { page, pageSize: 100, totalItems: 201, totalPages: 3 },
+        })
+      }),
+    )
+    expect((await listAllAccountAgents()).items.map((item) => item.id)).toEqual(['agent-1', 'agent-2', 'agent-3'])
+    expect(pages).toEqual([1, 2, 3])
+  })
 
   it('lists and deletes stable Agents', async () => {
     realClientServer.use(

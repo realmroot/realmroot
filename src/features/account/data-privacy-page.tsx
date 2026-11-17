@@ -1,10 +1,10 @@
 import { Download } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
-  listAccountAgents,
   listAccountApplicationAuthorizations,
   listAccountOrganizations,
   listAccountSessions,
+  listAllAccountAgents,
   listLinkedAccounts,
 } from '@/lib/api/account'
 import { tt } from '@/lib/i18n'
@@ -61,7 +61,7 @@ async function downloadAccountData(
 ) {
   const [organizations, agents, applications, linkedAccounts, sessions] = await Promise.all([
     listAccountOrganizations(),
-    listAccountAgents(),
+    listAllAccountAgents(),
     options.includeApplications
       ? listAccountApplicationAuthorizations()
       : Promise.resolve({ items: [], pagination: null }),

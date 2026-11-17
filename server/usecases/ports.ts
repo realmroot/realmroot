@@ -1092,13 +1092,14 @@ export interface AgentApplicationCreationRecord {
   createdAt: Date
 }
 
+export interface AgentIdentityListQuery extends PaginationInput {
+  ownerUserId?: string
+  sortBy: 'createdAt' | 'name'
+  sortDirection: 'asc' | 'desc'
+}
+
 export interface AgentIdentityRepository {
-  listPersonal(userId: string): Promise<AgentIdentityAggregate[]>
-  listOwned(
-    scope: AgentAuthorityInventoryScope,
-    page: PaginationInput,
-  ): Promise<PaginatedResult<AgentIdentityAggregate>>
-  listAll(page: PaginationInput): Promise<PaginatedResult<AgentIdentityAggregate>>
+  list(query: AgentIdentityListQuery): Promise<PaginatedResult<AgentIdentityAggregate>>
   findIdentity(id: string): Promise<AgentIdentityAggregate | null>
   findByIssuerSubject(issuer: string, subject: string): Promise<AgentIdentityRecord | null>
   findByIssuerUsername(issuer: string, username: string): Promise<AgentIdentityRecord | null>

@@ -25,6 +25,15 @@ Feature: Unified Realmroot resource API
     And existing prefixed identifiers remain valid resource references
     And credentials, tokens, protocol nonce values, and request trace identifiers retain their dedicated formats
 
+  @entrypoint:restish @journey:management-application-wildcard-uris @proof:unit
+  Scenario: Application URI wildcards are limited to one leftmost host label
+    When an administrator writes an Application's redirect URIs, post sign-out redirect URIs, or CORS origins
+    Then a value may contain one "*" only as the whole leftmost host label or as that label's prefix, such as "https://*-app.example.com/callback"
+    And the wildcard value must use HTTPS under a fixed registrable domain that is not itself a public suffix
+    But a wildcard in the scheme, port, path, query, another label, the middle of a label, or across dots is rejected with 400
+    And so is more than one "*" or a wildcard directly under a public suffix such as "https://*.workers.dev"
+    And nothing is stored that authorization would never honor
+
   @entrypoint:restish @journey:management-openapi-discovery @proof:unit
   Scenario: The unified API contract is discoverable
     When an API client requests service discovery
@@ -167,6 +176,16 @@ Feature: Unified Realmroot resource API
     And Organization creation requires platform Organization authority
     And Organization deletion requires authority over the owning Organization
     And Organization, member, and invitation creation return their canonical locations
+
+
+  @entrypoint:restish @journey:management-organization-declared-scopes @proof:unit
+  Scenario: Organization member and invitation operations declare the scopes the server enforces
+    Given an Agent bound to an Organization holds exactly the OAuth scopes an Organization member or invitation operation declares in OpenAPI
+    When it calls that operation with a per-operation token from the Realmroot CLI
+    Then the server does not reject it for a missing scope
+    And an Agent holding every other management scope but the declared one is rejected
+    And adding a member, changing or removing a member, and creating or cancelling an invitation declare role-assignments:write
+    And listing and reading members and invitations declare users:read
 
 
   @entrypoint:restish @journey:management-restish-role-crud @proof:unit

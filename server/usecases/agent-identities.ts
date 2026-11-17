@@ -13,7 +13,13 @@ import type {
   AgentRecord,
 } from '@server/usecases/ports'
 import { resourceScopeEntitlementLifecycle } from '@server/usecases/resource-scope-entitlements'
-import type { Agent, AgentEnrollment, CreateAgent, ListAgentPermissionsQuery } from '@shared/api/agent-api'
+import type {
+  Agent,
+  AgentEnrollment,
+  CreateAgent,
+  ListAccountAgentsQuery,
+  ListAgentPermissionsQuery,
+} from '@shared/api/agent-api'
 import type {
   AgentEnrollmentIntent,
   AgentHomeSpace,
@@ -26,16 +32,19 @@ import { importJWK } from 'jose'
 
 const enrollmentLifetimeMs = 10 * 60 * 1000
 
-export async function listPersonalAgentIdentities(deps: Deps, userId: string): Promise<{ items: AgentIdentity[] }> {
-  return { items: (await deps.agentIdentities.listPersonal(userId)).map(toIdentity) }
-}
-
-export async function listPersonalAgents(deps: Deps, userId: string, page: PaginationInput) {
-  const agents = (await deps.agentIdentities.listPersonal(userId)).map(toAgent)
-  return {
-    items: agents.slice(page.offset, page.offset + page.limit),
-    pagination: paginationMetadata({ ...page, total: agents.length }),
-  }
+export async function listPersonalAgents(
+  deps: Deps,
+  userId: string,
+  page: PaginationInput,
+  sort: Partial<Pick<ListAccountAgentsQuery, 'sortBy' | 'sortDirection'>> = {},
+) {
+  const result = await deps.agentIdentities.list({
+    ...page,
+    ownerUserId: userId,
+    sortBy: sort.sortBy ?? 'createdAt',
+    sortDirection: sort.sortDirection ?? 'asc',
+  })
+  return { items: result.items.map(toAgent), pagination: paginationMetadata(result) }
 }
 
 export async function getPersonalAgent(deps: Deps, agentId: string, actorUserId: string): Promise<Agent> {
@@ -46,13 +55,21 @@ export async function getAgent(deps: Deps, agentId: string): Promise<Agent> {
   return toAgent(await requireIdentity(deps, agentId))
 }
 
-export async function listAllAgentIdentities(deps: Deps, page: { limit: number; offset: number }) {
-  const result = await deps.agentIdentities.listAll(page)
-  return { items: result.items.map(toIdentity), total: result.total, ...page }
-}
-
-export async function listAllAgents(deps: Deps, page: PaginationInput, scope?: AgentAuthorityInventoryScope) {
-  const result = scope ? await deps.agentIdentities.listOwned(scope, page) : await deps.agentIdentities.listAll(page)
+export async function listAllAgents(
+  deps: Deps,
+  page: PaginationInput,
+  scope?: AgentAuthorityInventoryScope,
+  ownerUserId?: string,
+) {
+  if (scope && (!scope.ownerUserId || (ownerUserId !== undefined && ownerUserId !== scope.ownerUserId))) {
+    return { items: [], pagination: paginationMetadata({ ...page, total: 0 }) }
+  }
+  const result = await deps.agentIdentities.list({
+    ...page,
+    ownerUserId: scope?.ownerUserId ?? ownerUserId,
+    sortBy: 'createdAt',
+    sortDirection: 'desc',
+  })
   const summaries = await loadManagementSummaries(deps, result.items)
   return {
     items: result.items.map((aggregate) => toManagementAgent(aggregate, summaries)),

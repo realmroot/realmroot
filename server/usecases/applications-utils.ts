@@ -1,5 +1,6 @@
 import { badRequest } from '@server/domain/errors'
 import type { ClientSecretRecord } from '@server/usecases/ports'
+import { wildcardPatternProblem } from '@server/usecases/registered-uri-patterns'
 import { type ApplicationResponse, deviceCodeGrantType, tokenExchangeGrantType } from '@shared/api/applications'
 import type { PaginationInput } from '@shared/api/pagination'
 
@@ -116,6 +117,7 @@ export function validateRedirectUri(
   value: string,
   label = 'Redirect URIs',
 ) {
+  rejectUnhonoredWildcard(value, label)
   let url: URL
   try {
     url = new URL(value)
@@ -141,6 +143,7 @@ export function validateRedirectUri(
 }
 
 export function validateCorsOrigin(value: string) {
+  rejectUnhonoredWildcard(value, 'CORS origins')
   let url: URL
   try {
     url = new URL(value)
@@ -158,6 +161,11 @@ export function validateCorsOrigin(value: string) {
   }
 
   throw badRequest('CORS origins must use HTTPS except localhost development origins.')
+}
+
+function rejectUnhonoredWildcard(value: string, label: string) {
+  const problem = wildcardPatternProblem(value)
+  if (problem) throw badRequest(`${label} ${problem}`)
 }
 
 export function validateNativeRedirectScheme(protocol: string) {

@@ -77,7 +77,7 @@ managementAgentsRoute.get('/agents', async (c) => {
   const query = readQuery(c, listAgentsQuerySchema)
   return c.json(
     managementAgentsResponseSchema.parse(
-      await listAllAgents(getDeps(c), paginationInput(query), await agentInventoryScope(c)),
+      await listAllAgents(getDeps(c), paginationInput(query), await agentInventoryScope(c), query.ownerUserId),
     ),
   )
 })

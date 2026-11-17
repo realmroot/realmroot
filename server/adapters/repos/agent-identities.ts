@@ -4,7 +4,7 @@ import type {
   AgentIdentityAggregate,
   AgentIdentityRepository,
 } from '@server/usecases/ports'
-import { and, count, desc, eq, inArray, isNull } from 'drizzle-orm'
+import { and, asc, count, desc, eq, inArray, isNull } from 'drizzle-orm'
 import type { BatchItem } from 'drizzle-orm/batch'
 import type { Database } from '../../db/client'
 import {
@@ -21,47 +21,28 @@ import {
 
 export function createDrizzleAgentIdentityRepository(db: Database): AgentIdentityRepository {
   return {
-    async listPersonal(userId) {
-      const identities = await db
-        .select()
-        .from(agentIdentity)
-        .where(and(eq(agentIdentity.ownerUserId, userId), isNull(agentIdentity.deletedAt)))
-        .orderBy(agentIdentity.createdAt, agentIdentity.id)
-      return aggregates(db, identities)
-    },
-
-    async listOwned(scope, page) {
-      if (!scope.ownerUserId) return { items: [], total: 0, ...page }
-      const visibleCondition = and(eq(agentIdentity.ownerUserId, scope.ownerUserId), isNull(agentIdentity.deletedAt))
+    async list(query) {
+      const condition = and(
+        isNull(agentIdentity.deletedAt),
+        query.ownerUserId === undefined ? undefined : eq(agentIdentity.ownerUserId, query.ownerUserId),
+      )
+      const direction = query.sortDirection === 'asc' ? asc : desc
+      const column = query.sortBy === 'name' ? agentIdentity.name : agentIdentity.createdAt
       const [identities, totals] = await Promise.all([
         db
           .select()
           .from(agentIdentity)
-          .where(visibleCondition)
-          .orderBy(desc(agentIdentity.createdAt), desc(agentIdentity.id))
-          .limit(page.limit)
-          .offset(page.offset),
-        db.select({ value: count() }).from(agentIdentity).where(visibleCondition),
-      ])
-      return { items: await aggregates(db, identities), total: totals[0]?.value ?? 0, ...page }
-    },
-
-    async listAll(page) {
-      const [identities, totals] = await Promise.all([
-        db
-          .select()
-          .from(agentIdentity)
-          .where(isNull(agentIdentity.deletedAt))
-          .orderBy(desc(agentIdentity.createdAt), desc(agentIdentity.id))
-          .limit(page.limit)
-          .offset(page.offset),
-        db.select({ value: count() }).from(agentIdentity).where(isNull(agentIdentity.deletedAt)),
+          .where(condition)
+          .orderBy(direction(column), direction(agentIdentity.id))
+          .limit(query.limit)
+          .offset(query.offset),
+        db.select({ value: count() }).from(agentIdentity).where(condition),
       ])
       return {
         items: await aggregates(db, identities),
-        total: totals[0]?.value ?? 0,
-        limit: page.limit,
-        offset: page.offset,
+        total: totals[0].value,
+        limit: query.limit,
+        offset: query.offset,
       }
     },
 

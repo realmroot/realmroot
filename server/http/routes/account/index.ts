@@ -65,6 +65,7 @@ import {
   createAccountConnectionSchema,
   decideAccessRequestSchema,
   decideAgentEnrollmentSchema,
+  listAccountAgentsQuerySchema,
 } from '@shared/api/agent-api'
 import { agentApprovalPreviewSchema, decideAgentApprovalResponseSchema } from '@shared/api/agents'
 import {
@@ -403,13 +404,10 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
   })
 
   app.get('/agents', async (c) => {
+    const query = readQuery(c, listAccountAgentsQuerySchema)
     return c.json(
       agentsResponseSchema.parse(
-        await listPersonalAgents(
-          getDeps(c),
-          getPrincipal(c).user!.id,
-          paginationInput(readQuery(c, paginationQuerySchema)),
-        ),
+        await listPersonalAgents(getDeps(c), getPrincipal(c).user!.id, paginationInput(query), query),
       ),
     )
   })

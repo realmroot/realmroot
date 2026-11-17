@@ -701,3 +701,19 @@ Feature: Agent identity and delegated API authorization
     And anonymous and other-user writes are rejected
     And invalid permission bodies are rejected
     And equivalent Contexts reuse existing permissions regardless of JSON object key order
+
+  Rule: Agent collections filter and sort before pagination
+
+    @entrypoint:restish @journey:agent-owner-pagination @proof:unit
+    Scenario: Inventory owner filters intersect authority
+      Given an inventory caller has global or owner-scoped authority
+      When the caller requests an optional owner and a page
+      Then only the authorized owner's Agents contribute to rows and total
+      And an absent scoped owner or different requested owner returns an empty page
+
+    @entrypoint:product-ui @journey:agent-account-pagination @proof:unit
+    Scenario: Controllers browse globally sorted pages
+      Given a controller owns more than one page of Agents
+      When the controller selects creation time or name order
+      Then the owned collection is sorted before selecting the page
+      And equal sort values use the Agent identifier in the same direction

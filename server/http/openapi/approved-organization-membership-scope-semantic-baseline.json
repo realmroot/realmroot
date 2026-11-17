@@ -1,0 +1,56 @@
+[
+  {
+    "method": "GET",
+    "path": "/organizations/{organizationId}/invitations",
+    "operationId": "listOrganizationInvitations",
+    "semanticHash": "f4bf454d3eea55a35525cc86f44ea0c90be890a53f4a4ae56fe62e76cd40f262"
+  },
+  {
+    "method": "POST",
+    "path": "/organizations/{organizationId}/invitations",
+    "operationId": "createOrganizationInvitation",
+    "semanticHash": "64f4a821c4fe42e4f52227254d6b8f196e4b6fce94541ff944db735c6bc53143"
+  },
+  {
+    "method": "DELETE",
+    "path": "/organizations/{organizationId}/invitations/{invitationId}",
+    "operationId": "deleteOrganizationInvitation",
+    "semanticHash": "b640b8443fb299c886efa5299b730713a0feb8e1f0e9afb1acb9b28e8c52c4d0"
+  },
+  {
+    "method": "GET",
+    "path": "/organizations/{organizationId}/invitations/{invitationId}",
+    "operationId": "getOrganizationInvitation",
+    "semanticHash": "9fac1dc1eb93b6b149b8ef2fe73a89b3baa85d429270f33c4135e2c33decca87"
+  },
+  {
+    "method": "GET",
+    "path": "/organizations/{organizationId}/members",
+    "operationId": "listOrganizationMembers",
+    "semanticHash": "7e6194d548f419716443e6b711f337ab90d7d423408ede83370c30d85a63ed35"
+  },
+  {
+    "method": "POST",
+    "path": "/organizations/{organizationId}/members",
+    "operationId": "createOrganizationMember",
+    "semanticHash": "d99371d3cfae69ce6fa460808678d96a8c3d98d5bc7d4f531730920871a4e797"
+  },
+  {
+    "method": "DELETE",
+    "path": "/organizations/{organizationId}/members/{memberId}",
+    "operationId": "deleteOrganizationMember",
+    "semanticHash": "da0ccfb0d260ac65e6a2f6216e9ca67f3d8e86d1fd940f4dd611467a93b58f63"
+  },
+  {
+    "method": "GET",
+    "path": "/organizations/{organizationId}/members/{memberId}",
+    "operationId": "getOrganizationMember",
+    "semanticHash": "d635b20437d90b0d43b3f42c01d0cdf8b5f40bc9e6c68127061d8de08c264994"
+  },
+  {
+    "method": "PATCH",
+    "path": "/organizations/{organizationId}/members/{memberId}",
+    "operationId": "updateOrganizationMember",
+    "semanticHash": "093a3263f0a65746c568d29614d25c64d02f857eed27fcad165554550707fa7a"
+  }
+]

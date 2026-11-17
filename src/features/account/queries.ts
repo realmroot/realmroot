@@ -170,10 +170,10 @@ export function useAccountApplicationAuthorizations(enabled: boolean) {
   })
 }
 
-export function useAccountAgents() {
+export function useAccountAgents(query: Partial<import('@shared/api/agent-api').ListAccountAgentsQuery> = {}) {
   return useQuery({
-    queryKey: accountQueryKeys.agents,
-    queryFn: listAccountAgents,
+    queryKey: [...accountQueryKeys.agents, query],
+    queryFn: () => listAccountAgents(query),
     ...accountQueryOptions,
   })
 }

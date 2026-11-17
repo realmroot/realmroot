@@ -207,6 +207,18 @@ Feature: Hosted authentication
     And the published RSA public key declares signature verification usage
     And the token can be verified with that key
 
+  @entrypoint:product-ui @journey:oidc-preview-wildcard-redirect @proof:integration
+  Scenario: Per-branch preview deployments sign in through one wildcard host
+    Given an Application registers "https://*-app.example.com/callback" as a redirect URI
+    And it registers "https://*-app.example.com/" as a post sign-out redirect URI
+    And it registers "https://*-app.example.com" as a CORS origin
+    When a preview at "https://feature-1-app.example.com" starts authorization with its own callback
+    Then Realmroot issues the authorization code to that callback
+    And the preview origin may call the token endpoint cross-origin
+    And RP-initiated logout returns to the preview's post sign-out redirect URI
+    But a host that adds a label, drops the label prefix, or changes the scheme, port, path, or fixed suffix is not registered
+    And URIs registered without a wildcard still match exactly
+
   @entrypoint:product-ui @journey:oidc-provider-logout @proof:integration
   Scenario: OIDC provider logout ends the browser session
     Given I am signed in through an OIDC application

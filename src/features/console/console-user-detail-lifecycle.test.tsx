@@ -189,19 +189,11 @@ describe('admin console user detail lifecycle', () => {
         )
       }
       if (url === '/api/agents') {
+        const query = new URL(requestUrl, 'http://localhost').searchParams
+        expect(query.get('ownerUserId')).toBe('user-1')
+        const page = Number(query.get('page'))
         return Promise.resolve(
-          jsonResponse({
-            items: [
-              personalAgent,
-              {
-                ...personalAgent,
-                id: 'agent-secondary',
-                name: 'Secondary Agent',
-                homeSpace: { type: 'personal', userId: 'user-2' },
-              },
-            ],
-            pagination,
-          }),
+          jsonResponse({ items: [personalAgent], pagination: { page, pageSize: 20, totalItems: 21, totalPages: 2 } }),
         )
       }
       if (url === '/api/resource-servers') {
@@ -254,7 +246,7 @@ describe('admin console user detail lifecycle', () => {
     renderWithQuery(<UserDetailPage userId="user-1" />)
 
     expect(await screen.findByRole('heading', { name: 'Jane Stone' })).toBeTruthy()
-    expect(screen.getAllByText('2', { selector: '.detailFlatRow > span' }).length).toBeGreaterThan(0)
+    expect(screen.getByText('21', { selector: '.detailFlatRow > span' })).toBeTruthy()
 
     fireEvent.mouseDown(screen.getByRole('tab', { name: 'Authentication' }), { button: 0, ctrlKey: false })
     expect(await screen.findByText('Enrolled factors')).toBeTruthy()
@@ -292,6 +284,11 @@ describe('admin console user detail lifecycle', () => {
     fireEvent.mouseDown(screen.getByRole('tab', { name: 'Agents' }), { button: 0, ctrlKey: false })
     expect(await screen.findByText('Personal Agent')).toBeTruthy()
     expect(screen.queryByText('Secondary Agent')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }))
+    await waitFor(() => expect(requestedUrls).toContain('/api/agents?ownerUserId=user-1&page=2&pageSize=20'))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Next' }).hasAttribute('disabled')).toBe(true))
+    fireEvent.click(screen.getByRole('button', { name: 'Previous' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Previous' }).hasAttribute('disabled')).toBe(true))
 
     fireEvent.mouseDown(screen.getByRole('tab', { name: 'Authorized apps' }), { button: 0, ctrlKey: false })
     expect(await screen.findByText('Customer portal')).toBeTruthy()

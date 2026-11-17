@@ -154,6 +154,7 @@ describe('management Agent routes', () => {
       expect.anything(),
       { limit: 10, offset: 20 },
       undefined,
+      undefined,
     )
   })
 })

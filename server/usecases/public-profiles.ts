@@ -60,7 +60,13 @@ export async function getPublicUserProfile(
   if (view === 'summary') return { ...base, view }
 
   const [identities, activity] = await Promise.all([
-    deps.agentIdentities.listOwned({ ownerUserId: profile.user.id }, { limit: publicAgentLimit, offset: 0 }),
+    deps.agentIdentities.list({
+      ownerUserId: profile.user.id,
+      limit: publicAgentLimit,
+      offset: 0,
+      sortBy: 'createdAt',
+      sortDirection: 'desc',
+    }),
     deps.agentAudit.list(
       { limit: recentActivityLimit, offset: 0 },
       { actions: publicActivityActions, ownerUserId: profile.user.id },
