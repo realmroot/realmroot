@@ -169,6 +169,16 @@ Feature: Unified Realmroot resource API
     And Organization, member, and invitation creation return their canonical locations
 
 
+  @entrypoint:restish @journey:management-organization-declared-scopes @proof:unit
+  Scenario: Organization member and invitation operations declare the scopes the server enforces
+    Given an Agent bound to an Organization holds exactly the OAuth scopes an Organization member or invitation operation declares in OpenAPI
+    When it calls that operation with a per-operation token from the Realmroot CLI
+    Then the server does not reject it for a missing scope
+    And an Agent holding every other management scope but the declared one is rejected
+    And adding a member, changing or removing a member, and creating or cancelling an invitation declare role-assignments:write
+    And listing and reading members and invitations declare users:read
+
+
   @entrypoint:restish @journey:management-restish-role-crud @proof:unit
   Scenario: An authorized Organization user manages dynamic Roles through the unified API
     Given the Organization membership maps Better Auth Roles to roles:read and roles:write scopes

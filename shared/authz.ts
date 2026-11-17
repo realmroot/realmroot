@@ -86,6 +86,10 @@ export function requiredProtectedScope(method: string, path: string): string | n
   if (/^organizations\/[^/]+\/members\/[^/]+\/roles$/.test(normalized)) {
     return method === 'GET' || method === 'HEAD' ? 'role-assignments:read' : 'role-assignments:write'
   }
+  // A membership or invitation carries Organization Roles, so changing one is a role assignment.
+  if (/^organizations\/[^/]+\/(?:members|invitations)(?:\/[^/]+)?$/.test(normalized)) {
+    return method === 'GET' || method === 'HEAD' ? 'users:read' : 'role-assignments:write'
+  }
   if (/^organizations\/[^/]+$/.test(normalized) && method === 'DELETE') return 'organizations:delete'
   const resource = protectedResourceForPath(path)
   if (!resource) return null
