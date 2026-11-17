@@ -2,7 +2,11 @@ import type { Deps } from '@server/usecases/deps'
 import type { ApplicationAggregate } from '@server/usecases/ports'
 import type { ApiResourceResponse } from '@shared/api/authorization'
 import { describe, expect, it, vi } from 'vitest'
-import { applicationUserHasAccess, filterOAuthAccessTokenScopes } from './auth-helpers'
+import {
+  applicationUserHasAccess,
+  filterOAuthAccessTokenScopes,
+  oauthResourceConsentCoversRequest,
+} from './auth-helpers'
 
 const resource: ApiResourceResponse = {
   id: 'res_orders',
@@ -51,6 +55,7 @@ function createDeps(input?: {
   return {
     applications: {
       findById: vi.fn().mockResolvedValue(application),
+      findByClientId: vi.fn().mockResolvedValue(application),
       findConsent: vi.fn().mockResolvedValue({
         id: 'consent_1',
         resourceServerId: resource.id,
@@ -261,5 +266,59 @@ describe('filterOAuthAccessTokenScopes', () => {
         metadata: { applicationId: application.id },
       }),
     ).rejects.toMatchObject({ body: { error: 'access_denied' } })
+  })
+})
+
+describe('oauthResourceConsentCoversRequest [spec: hosted-auth/oauth-incremental-resource-consent]', () => {
+  const request = {
+    clientId: 'client_orders',
+    userId: 'user_1',
+    scopes: ['openid', 'orders:read', 'orders:admin'],
+    resources: [resource.resourceUrl],
+  }
+
+  it('is covered when each requested Resource Server consent holds its requested scopes', async () => {
+    await expect(oauthResourceConsentCoversRequest(createDeps(), request)).resolves.toBe(true)
+  })
+
+  it('is not covered when a requested scope the Application may use is missing from that consent', async () => {
+    const deps = createDeps()
+    vi.mocked(deps.applications.findConsent).mockResolvedValue({
+      id: 'consent_1',
+      resourceServerId: resource.id,
+      scopes: ['openid', 'orders:read'],
+      authorizationSource: 'user_consent',
+      grantedAt: new Date(),
+    } as never)
+    await expect(oauthResourceConsentCoversRequest(deps, request)).resolves.toBe(false)
+    vi.mocked(deps.applications.findConsent).mockResolvedValue(null)
+    await expect(oauthResourceConsentCoversRequest(deps, request)).resolves.toBe(false)
+  })
+
+  it('ignores scopes the Application or Resource Server does not offer and unknown targets', async () => {
+    const deps = createDeps()
+    vi.mocked(deps.applications.findConsent).mockResolvedValue(null)
+    await expect(
+      oauthResourceConsentCoversRequest(deps, { ...request, scopes: ['openid', 'orders:write'] }),
+    ).resolves.toBe(true)
+    vi.mocked(deps.authorization.findResourceByResourceUrl).mockResolvedValue(null)
+    await expect(oauthResourceConsentCoversRequest(deps, request)).resolves.toBe(true)
+  })
+
+  it('needs no comparison without a Resource target or when the Application skips consent', async () => {
+    const deps = createDeps()
+    await expect(oauthResourceConsentCoversRequest(deps, { ...request, resources: [] })).resolves.toBe(true)
+    expect(deps.applications.findByClientId).not.toHaveBeenCalled()
+    vi.mocked(deps.applications.findByClientId).mockResolvedValue({ ...application, consentRequired: false })
+    vi.mocked(deps.applications.findConsent).mockResolvedValue(null)
+    await expect(oauthResourceConsentCoversRequest(deps, request)).resolves.toBe(true)
+  })
+
+  it('fails when the client no longer references an Application', async () => {
+    const deps = createDeps()
+    vi.mocked(deps.applications.findByClientId).mockResolvedValue(null)
+    await expect(oauthResourceConsentCoversRequest(deps, request)).rejects.toThrow(
+      'OAuth consent does not reference an Application.',
+    )
   })
 })

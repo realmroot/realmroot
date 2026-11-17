@@ -1,5 +1,5 @@
 diff --git a/dist/authorize-riRRCSbC.mjs b/dist/authorize-riRRCSbC.mjs
-index 3242d48eb31e844240b0cd9f5931580f3c5367c2..da6484ccc22c47d59a5b79b9f20d01ac829f00a5 100644
+index 3242d48eb31e844240b0cd9f5931580f3c5367c2..185cabd033f13b41e3db76b09542a279ec15bd24 100644
 --- a/dist/authorize-riRRCSbC.mjs
 +++ b/dist/authorize-riRRCSbC.mjs
 @@ -64,10 +64,18 @@ async function consentEndpoint(ctx, opts, authorize) {
@@ -174,7 +174,7 @@ index 3242d48eb31e844240b0cd9f5931580f3c5367c2..da6484ccc22c47d59a5b79b9f20d01ac
  	});
  	if (client.skipConsent) return redirectWithAuthorizationCode(ctx, opts, {
  		query,
-@@ -5676,12 +5740,12 @@ async function authorizeEndpoint(ctx, opts, settings) {
+@@ -5676,12 +5740,24 @@ async function authorizeEndpoint(ctx, opts, settings) {
  	});
  	if (!consent || !requestedScopes.every((val) => consent.scopes.includes(val)) || !requestedUserInfoClaims.every((claim) => (consent.requestedUserInfoClaims ?? []).includes(claim))) {
  		if (promptNone) return redirectWithPromptNoneError(ctx, opts, query, "consent_required", "End-User consent is required");
@@ -186,10 +186,22 @@ index 3242d48eb31e844240b0cd9f5931580f3c5367c2..da6484ccc22c47d59a5b79b9f20d01ac
  		if (promptNone) return redirectWithPromptNoneError(ctx, opts, query, "consent_required", "End-User consent is required");
 -		return redirectWithPromptCode(ctx, opts, "consent", { sessionId: session.session.id });
 +		return redirectWithPromptCode(ctx, opts, "consent", { sessionId: session.session.id, referenceId });
++	}
++	// Realmroot keeps consent per Resource Server; the flat provider record must not stand in for it.
++	if (opts.postLogin?.consentCoversRequest && !await opts.postLogin.consentCoversRequest({
++		user: session.user,
++		session: session.session,
++		clientId: client.clientId,
++		scopes: requestedScopes,
++		resources: requestedResources,
++		referenceId
++	})) {
++		if (promptNone) return redirectWithPromptNoneError(ctx, opts, query, "consent_required", "End-User consent is required");
++		return redirectWithPromptCode(ctx, opts, "consent", { sessionId: session.session.id, referenceId });
  	}
  	return redirectWithAuthorizationCode(ctx, opts, {
  		query,
-@@ -5732,7 +5796,24 @@ async function redirectWithAuthorizationCode(ctx, opts, verificationValue) {
+@@ -5732,7 +5808,24 @@ async function redirectWithAuthorizationCode(ctx, opts, verificationValue) {
  	return handleRedirect(ctx, redirectUriWithCode.toString());
  }
  async function redirectWithPromptCode(ctx, opts, type, options) {
@@ -215,7 +227,7 @@ index 3242d48eb31e844240b0cd9f5931580f3c5367c2..da6484ccc22c47d59a5b79b9f20d01ac
  	let path = opts.loginPage;
  	if (type === "select_account") path = opts.selectAccount?.page ?? opts.loginPage;
  	else if (type === "post_login") {
-@@ -5750,7 +5831,13 @@ async function signParams(ctx, opts, flags) {
+@@ -5750,7 +5843,13 @@ async function signParams(ctx, opts, flags) {
  	params.set(signedQueryIssuedAtParam, String(issuedAt));
  	params.delete("sig");
  	params.delete(postLoginClearedParam);
@@ -492,18 +504,32 @@ index c8d635e57ca4cd3fe8f7cbfd5c769d61b7e96874..943d37e98b73035e6c5c89ac4756150d
  	jwtPayload.token_type = confirmationTokenType(jwtPayload.cnf);
  	return jwtPayload;
 diff --git a/dist/oauth-1Ud-hvZY.d.mts b/dist/oauth-1Ud-hvZY.d.mts
-index 130fd5d8f3ddd36d1b776338367af5b8cb7f0e79..c6efe3c77216b6067ddf2cf4e73fca9482470499 100644
+index 130fd5d8f3ddd36d1b776338367af5b8cb7f0e79..bd4fe1bdf810f6fc416de0f7dd60e8bb24605937 100644
 --- a/dist/oauth-1Ud-hvZY.d.mts
 +++ b/dist/oauth-1Ud-hvZY.d.mts
-@@ -1552,6 +1552,7 @@ interface OAuthOptions<Scopes extends readonly Scope[] = InternallySupportedScop
+@@ -1552,7 +1552,21 @@ interface OAuthOptions<Scopes extends readonly Scope[] = InternallySupportedScop
        user: User & Record<string, unknown>;
        session: Session & Record<string, unknown>;
        scopes: Scopes;
 +      referenceId?: string;
      }) => Awaitable<string | undefined>;
++    /**
++     * Confirms that the stored consent covers this request after the
++     * provider's own consent record matched. Returning `false` prompts
++     * for consent again (or fails `prompt=none` with `consent_required`).
++     */
++    consentCoversRequest?: (context: {
++      user: User & Record<string, unknown>;
++      session: Session & Record<string, unknown>;
++      clientId: string;
++      scopes: Scopes;
++      resources: string[];
++      referenceId?: string;
++    }) => Awaitable<boolean>;
      /**
       * After login and before consent, request the user to
-@@ -1564,13 +1565,14 @@ interface OAuthOptions<Scopes extends readonly Scope[] = InternallySupportedScop
+      * select an additional choice for `/oauth2/authorize`.
+@@ -1564,13 +1578,14 @@ interface OAuthOptions<Scopes extends readonly Scope[] = InternallySupportedScop
       * @returns
       * - `true`: account is not selected and needs selection
       * - `false`: intended user or account selected
@@ -519,7 +545,7 @@ index 130fd5d8f3ddd36d1b776338367af5b8cb7f0e79..c6efe3c77216b6067ddf2cf4e73fca94
    };
    /**
     * Format your refresh tokens the returned to oauth clients.
-@@ -1695,6 +1697,14 @@ interface OAuthOptions<Scopes extends readonly Scope[] = InternallySupportedScop
+@@ -1695,6 +1710,14 @@ interface OAuthOptions<Scopes extends readonly Scope[] = InternallySupportedScop
     *
     * @param info - context that may be useful when creating custom claims
     */

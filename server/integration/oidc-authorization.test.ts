@@ -1214,6 +1214,179 @@ describe('OIDC authorization over real D1', () => {
     await expect(outsideGrant.json()).resolves.toMatchObject({ error: 'invalid_target' })
   })
 
+  it('asks for consent instead of narrowing a newly allowed automatic scope [spec: hosted-auth/oauth-incremental-resource-consent]', async () => {
+    const calendar = { url: 'https://incremental-calendar.example.com', scopes: ['calendar:read', 'shared:read'] }
+    const contacts = { url: 'https://incremental-contacts.example.com', scopes: ['shared:read'] }
+    harness = await createHarness({ validAudiences: [baseURL, calendar.url, contacts.url] })
+    harness.deps.externalHttp.fetch = async (request) => {
+      const target = [calendar, contacts].find((resource) => request.url.includes(new URL(resource.url).host))
+      if (!target) throw new Error(`Unexpected resource discovery request: ${request.url}`)
+      if (request.url.includes('/.well-known/oauth-protected-resource')) {
+        return Response.json({ resource: target.url, scopes_supported: target.scopes })
+      }
+      if (new URL(request.url).pathname.endsWith('/openapi.json')) {
+        return Response.json({ openapi: '3.1.0', info: { title: 'Incremental API', version: '1.0.0' }, paths: {} })
+      }
+      return new Response(null, { headers: { link: '</openapi.json>; rel="service-desc"' } })
+    }
+    const adminCookie = await signInAdmin(harness)
+    const resourceIds: string[] = []
+    for (const [index, target] of [calendar, contacts].entries()) {
+      const created = await harness.request('/api/resource-servers', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', cookie: adminCookie },
+        body: JSON.stringify({
+          identifier: `incremental-resource-${index + 1}`,
+          resourceUrl: target.url,
+          authorizationModel: 'native',
+          ownerOrganizationId: platformOrganizationId,
+          visibility: 'public',
+        }),
+      })
+      expect(created.status, await created.clone().text()).toBe(201)
+      const resource = (await created.json()) as { id: string }
+      resourceIds.push(resource.id)
+      const update = await harness.request(`/api/resource-servers/${resource.id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json', cookie: adminCookie },
+        body: JSON.stringify({ scopeGrantModes: target.scopes.map((scope) => ({ scope, grantMode: 'automatic' })) }),
+      })
+      expect(update.status, await update.clone().text()).toBe(200)
+    }
+    const [calendarId, contactsId] = resourceIds as [string, string]
+    const redirectUri = 'http://localhost/incremental-consent-callback'
+    const createApp = await harness.request('/api/applications', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie: adminCookie },
+      body: JSON.stringify({
+        name: 'Incremental Consent SPA',
+        clientType: 'public_spa',
+        redirectUris: [redirectUri],
+        ownerOrganizationId: platformOrganizationId,
+        visibility: 'public',
+        consentRequired: true,
+        resourceScopes: [
+          { resourceServerId: calendarId, scopes: ['calendar:read'] },
+          { resourceServerId: contactsId, scopes: ['shared:read'] },
+        ],
+      }),
+    })
+    expect(createApp.status, await createApp.clone().text()).toBe(201)
+    const application = (await createApp.json()) as { id: string; clientId: string }
+    await createUser(harness, adminCookie, {
+      email: 'incremental-consent@example.com',
+      username: 'incremental-consent',
+      displayName: 'Incremental Consent',
+      password: 'incremental-consent-password-2026',
+    })
+    const cookie = await signIn(harness, 'incremental-consent@example.com', 'incremental-consent-password-2026')
+
+    const verifier = 'incremental-consent-pkce-verifier-0123456789abcdefghijklmnop'
+    const authorizeUrl = async (scope: string, resources: string[], extra: Record<string, string> = {}) => {
+      const params = new URLSearchParams({
+        response_type: 'code',
+        client_id: application.clientId,
+        redirect_uri: redirectUri,
+        scope,
+        code_challenge: await pkceChallenge(verifier),
+        code_challenge_method: 'S256',
+        ...extra,
+      })
+      for (const resource of resources) params.append('resource', resource)
+      return `/api/auth/oauth2/authorize?${params}`
+    }
+    const approveHostedConsent = async (consentLocation: URL, scope: string, grants: Record<string, string[]>) => {
+      for (const [resourceServerId, scopes] of Object.entries(grants)) {
+        const saved = await harness.request('/api/account/application-authorizations', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', cookie, origin: baseURL },
+          body: JSON.stringify({ clientId: application.clientId, resourceServerId, scopes }),
+        })
+        expect(saved.status, await saved.clone().text()).toBe(201)
+      }
+      const approval = await harness.request('/api/auth/oauth2/consent', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', cookie, origin: baseURL },
+        body: JSON.stringify({ accept: true, scope, oauth_query: consentLocation.search.slice(1) }),
+      })
+      expect(approval.status, await approval.clone().text()).toBe(200)
+      return new URL(((await approval.json()) as { url: string }).url, redirectUri)
+    }
+
+    const first = await harness.request(
+      await authorizeUrl('openid calendar:read shared:read', [calendar.url, contacts.url]),
+      { headers: { cookie }, redirect: 'manual' },
+    )
+    expect(first.status, await first.clone().text()).toBe(302)
+    const firstConsent = new URL(first.headers.get('location') ?? '', baseURL)
+    expect(firstConsent.pathname).toBe('/auth/consent')
+    const firstCallback = await approveHostedConsent(firstConsent, 'openid calendar:read shared:read', {
+      [calendarId]: ['openid', 'calendar:read'],
+      [contactsId]: ['openid', 'shared:read'],
+    })
+    expect(firstCallback.pathname).toBe('/incremental-consent-callback')
+
+    const expand = await harness.request(`/api/applications/${application.id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', cookie: adminCookie },
+      body: JSON.stringify({
+        resourceScopes: [
+          { resourceServerId: calendarId, scopes: ['calendar:read', 'shared:read'] },
+          { resourceServerId: contactsId, scopes: ['shared:read'] },
+        ],
+      }),
+    })
+    expect(expand.status, await expand.clone().text()).toBe(200)
+
+    const expandedScope = 'openid calendar:read shared:read'
+    const silent = await harness.request(await authorizeUrl(expandedScope, [calendar.url], { prompt: 'none' }), {
+      headers: { cookie },
+      redirect: 'manual',
+    })
+    expect(silent.status, await silent.clone().text()).toBe(302)
+    const silentCallback = new URL(silent.headers.get('location') ?? '', baseURL)
+    expect(silentCallback.searchParams.get('code')).toBeNull()
+    expect(silentCallback.searchParams.get('error')).toBe('consent_required')
+
+    const expanded = await harness.request(await authorizeUrl(expandedScope, [calendar.url]), {
+      headers: { cookie },
+      redirect: 'manual',
+    })
+    expect(expanded.status, await expanded.clone().text()).toBe(302)
+    const expandedConsent = new URL(expanded.headers.get('location') ?? '', baseURL)
+    expect(expandedConsent.pathname).toBe('/auth/consent')
+    const consentRequest = await harness.request(
+      `/api/account/application-authorization-request?${expandedConsent.searchParams}`,
+      { headers: { cookie } },
+    )
+    expect(consentRequest.status, await consentRequest.clone().text()).toBe(200)
+    await expect(consentRequest.json()).resolves.toMatchObject({
+      consentReason: 'expanded',
+      addedScopes: ['shared:read'],
+    })
+
+    const callback = await approveHostedConsent(expandedConsent, expandedScope, {
+      [calendarId]: ['openid', 'calendar:read', 'shared:read'],
+    })
+    expect(callback.pathname).toBe('/incremental-consent-callback')
+    const token = await harness.request('/api/auth/oauth2/token', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        client_id: application.clientId,
+        redirect_uri: redirectUri,
+        code: callback.searchParams.get('code') ?? '',
+        code_verifier: verifier,
+        resource: calendar.url,
+      }),
+    })
+    expect(token.status, await token.clone().text()).toBe(200)
+    const body = (await token.json()) as { access_token: string; scope: string }
+    expect(jwtAudiences(body.access_token)).toEqual([calendar.url])
+    expect(body.scope.split(' ').sort()).toEqual(['calendar:read', 'openid', 'shared:read'])
+  })
+
   it('expires the provider browser session during RP-initiated logout [spec: hosted-auth/oidc-provider-logout]', async () => {
     const cookie = await signInAdmin(harness)
     const admin = await env.DB.prepare('SELECT user_id AS userId FROM member WHERE organization_id = ? LIMIT 1')
